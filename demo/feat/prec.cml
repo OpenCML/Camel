@@ -1,0 +1,8 @@
+# precedence and associativity
+
+ident.1->fn
+nf->ident.1
+nf->ident.1->fn
+ident.1.id->fn
+
+a->b->c

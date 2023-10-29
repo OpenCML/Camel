@@ -1,0 +1,6 @@
+[requires]
+antlr4-cppruntime/4.13.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
