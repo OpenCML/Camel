@@ -1,0 +1,9 @@
+with <capture: any, condition: functor, update: functor>
+sync func test(target: functor) {
+    return ifexpr(condition<capture>(), {
+        exec<{
+            update<capture>
+            test<capture, condition, update>(target)
+        }>(target)
+    }, null)
+}

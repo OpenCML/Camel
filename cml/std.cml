@@ -16,8 +16,8 @@
  */
 
 /**
- * This PSL module will be imported by interpreter automatically,
- * and can be accessed anywhere in any PSL script.
+ * This CML module will be imported by interpreter automatically,
+ * and can be accessed anywhere in any CML script.
  */
 
 # psl, json, phtc, xml, toml

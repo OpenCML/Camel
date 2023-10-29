@@ -40,7 +40,7 @@ scoped func PowerControlEl(input : ElSignal) \
 
 # Electrical domain
 @{boxed=true, color="blue"}
-scoped func SignalGenEl(): ElSignal {
+scoped func SignalGenEl() -> ElSignal {
     "Electrical domain"@(10, 0)
     let linearSignal : ElSignal = Rx_El_mQAM_BER->PowerControlEl->Linearizer
     let dcSource = DC_Source<0.5`V`>

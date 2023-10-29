@@ -17,7 +17,7 @@ stmt : letStmt
 letStmt : LET carrier (':' type)? '='? entityExpr stmtEnd ;
 useStmt : USE carrier '='? entityExpr stmtEnd ;
 withDef : WITH (entityRef | withDecl) LINE_END? ;
-funcDef : annotations withDef? modifiers FUNC identRef paramDef (':' type)? '='? LINE_END? stmtPack stmtEnd ;
+funcDef : annotations withDef? modifiers FUNC identRef paramDef ('->' type)? '='? LINE_END? stmtPack stmtEnd ;
 typeDef : TYPE identRef '='? (type | typePack) stmtEnd ;
 enumDef : ENUM identRef '='? dictUnpack stmtEnd ;
 retStmt : RETURN entityExpr? stmtEnd ;
