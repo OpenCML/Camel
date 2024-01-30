@@ -4,9 +4,9 @@ sync func test(target: functor) {
         exec<{
             update<capture>;
             test<capture, condition, update>(target)
-        }>(target)
-    }, null)
-}
+        }>(target);
+    }, null);
+};
 
 use { Point } from<psl> 'types';
 use { LaserCW, Analyzer } from<vtms> 'comps';
@@ -26,6 +26,6 @@ sync func placeComponents(
         # connect laser to analyzer
         laser()->analyzer;
         # move to next position
-        pos.y += pos.y + dist.y + laserRect.height
-    }
-}
+        pos.y += pos.y + dist.y + laserRect.height;
+    };
+};

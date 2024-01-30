@@ -16,24 +16,24 @@ stmt : letStmt
      | useSimple
      ;
 
-letStmt : LET carrier (':' type)? '='? entityExpr ;
-useStmt : USE carrier '='? entityExpr ;
-letSimple : carrier (':' type)? ':=' entityExpr ;
-useSimple : carrier '::' entityExpr ;
+letStmt : LET carrier (':' type)? '='? expr ;
+useStmt : USE carrier '='? expr ;
+letSimple : carrier (':' type)? ':=' expr ;
+useSimple : carrier '::' expr ;
 withDef : WITH (entityRef | withDecl) ;
 funcDef : annotations withDef? modifiers FUNC identRef paramDef ('->' type)? '='? stmtPack ;
 typeDef : TYPE identRef '='? (type | typePack) ;
 enumDef : ENUM identRef '='? dictUnpack ;
-retStmt : RETURN entityExpr? ;
-exprStmt : annotations entityExpr ;
+retStmt : RETURN expr? ;
+exprStmt : annotations expr ;
 
 carrier : identRef
         | listUnpack
         | dictUnpack
         ;
 
-biasAnno : '(' INTEGER ',' INTEGER ')' ;
-sizeAnno : '[' INTEGER ',' INTEGER ']' ;
+biasAnno : '(' expr ',' expr ')' ;
+sizeAnno : '[' expr ',' expr ']' ;
 annotation : '@' (identRef | dictPack | biasAnno | sizeAnno) ;
 annotations : (annotation SEP?)* ;
 modifiers : (INNER | OUTER | SYNC | SCOPED | STATIC | ATOMIC)* ;
@@ -42,19 +42,19 @@ withDecl : '<' keyValDecl (',' keyValDecl)* '>' ;
 paramDef : '(' (keyValDecl (',' keyValDecl)*)? ')' ;
 argsList : '(' (argument (',' argument)*)? ')' ;
 argument : identRef | entity
-         | keyValExpr | entityExpr
+         | keyValExpr | expr
          ;
 
 typePack : '{' (keyValDecl (',' keyValDecl)*)? '}' ;
-keyValDecl : identRef (annotation)? ':' nullableType ('=' entityExpr)? ;
-keyValExpr : identRef (annotation)? '=' entityExpr ;
+keyValDecl : identRef (annotation)? ':' nullableType ('=' expr)? ;
+keyValExpr : identRef (annotation)? '=' expr ;
 
 entityRef : identRef ('.' (INTEGER | identRef))* annotation? ;
 functorRef: identRef (withList)? annotation? ;
 listUnpack : '[' (identRef (',' identRef)*)? ']' ;
 dictUnpack : '{' (identRef (',' identRef)*)? '}' ;
 dictPack : '{' (keyValExpr (',' keyValExpr)*)? '}' ;
-listPack : '[' (entityExpr (',' entityExpr)*)? ']' ;
+listPack : '[' (expr (',' expr)*)? ']' ;
 stmtPack : '{' stmtList?  '}' ;
 lambda   : (paramDef '=>')? stmtPack ;
 
@@ -68,6 +68,56 @@ linkCall : linkCall '->' (identRef | functorRef | entity | normCall)
          | identRef | entityRef | entity | functorRef | normCall
          ;
 
+calcExpr
+    : relaExpr
+    | calcExpr '*=' relaExpr
+    | calcExpr '/=' relaExpr
+    | calcExpr '%=' relaExpr
+    | calcExpr '+=' relaExpr
+    | calcExpr '-=' relaExpr
+    ;
+
+relaExpr
+    : addExpr
+    | relaExpr '<' addExpr
+    | relaExpr '>' addExpr
+    | relaExpr '<=' addExpr
+    | relaExpr '>=' addExpr
+    | relaExpr '==' addExpr
+    | relaExpr '!=' addExpr
+    ;
+
+addExpr
+    : multiExpr
+    | addExpr '+' multiExpr
+    | addExpr '-' multiExpr
+    ;
+
+multiExpr
+    : unaryExpr
+    | multiExpr '*' unaryExpr
+    | multiExpr '/' unaryExpr
+    | multiExpr '%' unaryExpr
+    ;
+
+unaryExpr
+    : primExpr
+    | '++' primExpr
+    | '--' primExpr
+    | primExpr '++'
+    | primExpr '--'
+    | '!' primExpr
+    | '-' primExpr
+    ;
+
+primExpr
+    : literal
+    | entity
+    | entityExpr
+    | '(' calcExpr ')'
+    ;
+
+expr : entityExpr | calcExpr ;
 
 literal : value
         | STRING
