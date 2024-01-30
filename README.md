@@ -39,15 +39,20 @@ compiler.runtime=static
 os=Windows
 ```
 
-```Clang
+```Clang (MSVC-like)
 [settings]
+os=Windows
 arch=x86_64
 build_type=Release
 compiler=clang
+compiler.version=16
 compiler.cppstd=20
 compiler.runtime=dynamic
-compiler.version=17
-os=Windows
+compiler.runtime_type=Release
+compiler.runtime_version=v143
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Visual Studio 17
 ```
 
 查看msvc版本：[Visual Studio版本号、MSVC版本、工具集版本号_查看msvc版本_sanqima的博客-CSDN博客](https://blog.csdn.net/sanqima/article/details/117849324)

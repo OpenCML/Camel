@@ -2,6 +2,7 @@ lexer grammar OpenCMLLex;
 // 纯词法的语法声明
 // PSL的词法规则定义，它定义了一些词法规则来识别PSL源码中的不同类型的词法单元。
 
+SEP         : ';';
 AS          : 'as';
 LET         : 'let';
 USE         : 'use';
@@ -40,15 +41,11 @@ LIST_TYPE       : 'list';
 DICT_TYPE       : 'dict';
 
 SKIP_
- : ( BLANK | LIN_CMT | BLK_CMT | LINE_MID ) -> skip
- ;
-
-LINE_END
- : [\r\n]+
+ : ( BLANK | LIN_CMT | BLK_CMT ) -> skip
  ;
 
 fragment BLANK
- : [ \t\u000C]+
+ : [ \n\r\t\u000C]+
  ;
 
 fragment LIN_CMT
@@ -59,10 +56,6 @@ fragment LIN_CMT
 fragment BLK_CMT
  : '/*' .*? '*/'
  | '```' .*? '```'
- ;
-
-fragment LINE_MID
- : '\\' ('\r'? '\n')
  ;
 
 MULTI_STR

@@ -1,9 +1,9 @@
 grammar OpenCML;
 import OpenCMLLex;
 
-program : stmtList? EOF;
+program : sepMark? stmtList? stmtSep+;
 
-stmtList : stmt (SEP stmt)* SEP? ;
+stmtList : stmt (stmtSep stmt)* ;
 
 stmt : letStmt
      | useStmt
@@ -12,16 +12,14 @@ stmt : letStmt
      | enumDef
      | retStmt
      | exprStmt
-     | letSimple
-     | useSimple
      ;
 
 letStmt : LET carrier (':' type)? '='? entityExpr ;
 useStmt : USE carrier '='? entityExpr ;
-letSimple : carrier (':' type)? ':=' entityExpr ;
-useSimple : carrier '::' entityExpr ;
-withDef : WITH (entityRef | withDecl) ;
-funcDef : annotations withDef? modifiers FUNC identRef paramDef ('->' type)? '='? stmtPack ;
+letSimple : carrier ':=' entityExpr ;
+useSimple : carrier '=' entityExpr ;
+withDef : WITH (entityRef | withDecl) LINE_END? ;
+funcDef : annotations withDef? modifiers FUNC identRef paramDef ('->' type)? '='? LINE_END? stmtPack ;
 typeDef : TYPE identRef '='? (type | typePack) ;
 enumDef : ENUM identRef '='? dictUnpack ;
 retStmt : RETURN entityExpr? ;
@@ -35,27 +33,27 @@ carrier : identRef
 biasAnno : '(' INTEGER ',' INTEGER ')' ;
 sizeAnno : '[' INTEGER ',' INTEGER ']' ;
 annotation : '@' (identRef | dictPack | biasAnno | sizeAnno) ;
-annotations : (annotation SEP?)* ;
+annotations : (annotation LINE_END)* ;
 modifiers : (INNER | OUTER | SYNC | SCOPED | STATIC | ATOMIC)* ;
-withList : '<' argument (','  argument)* '>' ;
-withDecl : '<' keyValDecl (',' keyValDecl)* '>' ;
-paramDef : '(' (keyValDecl (',' keyValDecl)*)? ')' ;
-argsList : '(' (argument (',' argument)*)? ')' ;
+withList : '<' sepMark? argument (',' sepMark? argument)* sepMark? '>' ;
+withDecl : '<' sepMark? keyValDecl (',' sepMark? keyValDecl)* sepMark? '>' ;
+paramDef : '(' sepMark? (keyValDecl (',' sepMark? keyValDecl)*)? sepMark? ')' ;
+argsList : '(' sepMark? (argument (',' sepMark? argument)*)? sepMark? ')' ;
 argument : identRef | entity
          | keyValExpr | entityExpr
          ;
 
-typePack : '{' (keyValDecl (',' keyValDecl)*)? '}' ;
+typePack : '{' sepMark? (keyValDecl (',' sepMark? keyValDecl)*)? sepMark? '}' ;
 keyValDecl : identRef (annotation)? ':' nullableType ('=' entityExpr)? ;
-keyValExpr : identRef (annotation)? '=' entityExpr ;
+keyValExpr : identRef '=' entityExpr ;
 
 entityRef : identRef ('.' (INTEGER | identRef))* annotation? ;
 functorRef: identRef (withList)? annotation? ;
-listUnpack : '[' (identRef (',' identRef)*)? ']' ;
-dictUnpack : '{' (identRef (',' identRef)*)? '}' ;
-dictPack : '{' (keyValExpr (',' keyValExpr)*)? '}' ;
-listPack : '[' (entityExpr (',' entityExpr)*)? ']' ;
-stmtPack : '{' stmtList?  '}' ;
+listUnpack : '[' sepMark? (identRef (',' sepMark? identRef)*)? sepMark? ']' ;
+dictUnpack : '{' sepMark? (identRef (',' sepMark? identRef)*)? sepMark? '}' ;
+dictPack : '{' sepMark? (keyValExpr (',' sepMark? keyValExpr)*)? sepMark? '}' ;
+listPack : '[' sepMark? (entityExpr (',' sepMark? entityExpr)*)? sepMark? ']' ;
+stmtPack : '{' stmtList? sepMark? '}' ;
 lambda   : (paramDef '=>')? stmtPack ;
 
 entityExpr : (entity | normCall | linkCall | entityChain) (AS type)? ;
@@ -67,6 +65,9 @@ linkCall : linkCall '->' (identRef | functorRef | entity | normCall)
            '->' (identRef | functorRef | entity | normCall)
          | identRef | entityRef | entity | functorRef | normCall
          ;
+
+stmtSep : sepMark | ';' | EOF ;
+sepMark : LINE_END+ ;
 
 
 literal : value

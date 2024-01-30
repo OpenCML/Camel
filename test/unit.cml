@@ -2,8 +2,30 @@ with <capture: any, condition: functor, update: functor>
 sync func test(target: functor) {
     return ifexpr(condition<capture>(), {
         exec<{
-            update<capture>
+            update<capture>;
             test<capture, condition, update>(target)
         }>(target)
     }, null)
+}
+
+use { Point } from<psl> 'types';
+use { LaserCW, Analyzer } from<vtms> 'comps';
+
+sync func placeComponents(
+    startIndex: number, count: number,
+    dist: Point, pos: Point
+) -> void {
+    i := startIndex;
+    # loop to create instances
+    for (i, {i < startIndex + count}, {i++}) {
+        # create instance of LaserCW and place it
+        let laser = LaserCW @(pos.x, pos.y);
+        let laserRect = laser.meta.rect;
+        # create instance of Analyzer and place it
+        let analyzer = Analyzer @(pos.x + dist.x + laserRect.width, pos.y);
+        # connect laser to analyzer
+        laser()->analyzer;
+        # move to next position
+        pos.y += pos.y + dist.y + laserRect.height
+    }
 }
