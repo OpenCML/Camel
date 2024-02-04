@@ -29,7 +29,6 @@ NUMBER_TYPE     : 'number';
 STRING_TYPE     : 'string';
 BOOLEAN_TYPE    : 'bool';
 FUNCTOR_TYPE    : 'functor';
-BLOCK_TYPE      : 'block';
 
 INTEGER_TYPE    : 'int';
 REAL_TYPE       : 'real';

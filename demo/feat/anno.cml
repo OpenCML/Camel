@@ -2,13 +2,13 @@
 '''
 Impact of System Noise and Nonlinearities
 on a 16-QAM Signal in a Radio-over-Fiber Transmission
-'''
+''';
 
 '''
 The relative constellation ...
-'''@{x=2, y=3, style="alert-info"}
+'''@{x=2, y=3, style="alert-info"};
 
-ident@(2,3)
+ident@(2,3);
 
 @[3,4]
-func id() {}
+func id() {};

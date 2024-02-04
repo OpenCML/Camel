@@ -25,48 +25,48 @@
 with <loader: functor = psl>
 inner sync static func load(path: string) -> any {
     # inner func
-}
+};
 
 with <path: string, ftype: string = 'psl'>
 inner sync static func save(entity: any) {
     # inner func
-}
+};
 
-use from = load
+use from = load;
 
 with <stream: string = 'stdout'>
 inner static func print(data: any) {
     # inner func
-}
+};
 
 with <diagram: functor = eye>
 inner static func analyze(data: any) {
     # inner func
-}
+};
 
 inner static func help() {
     # inner func
-}
+};
 
 inner static func version() {
     # inner func
-}
+};
 
 inner static func about() {
     # inner func
-}
+};
 
 inner static func exit() {
     # inner func
-}
+};
 
 inner static func map() {
     # inner func
-}
+};
 
 inner static func reduce() {
     # inner func
-}
+};
 
 inner static sync func ifexpr(
     condition: bool,
@@ -74,24 +74,24 @@ inner static sync func ifexpr(
     falseValue: any
 ) {
     # return trueValue if condition is true, otherwise return falseValue
-}
+};
 
 with <after: functor>
 inner sync func exec(block: functor) -> void {
     # execute the following block synchronously
     # if after is specified, run it after execution of block
-}
+};
 
 with <after: functor>
 inner static sync func skip(entity: any) -> void {
     # skip an entity in an entity chain
-}
+};
 
-use else = skip
+use else = skip;
 
 static sync func if(condition: bool) {
     return ifexpr(condition, exec, skip<skip>)
-}
+};
 
 with <capture: any, condition: functor, update: functor>
 sync func test(target: functor) {
@@ -99,13 +99,13 @@ sync func test(target: functor) {
         exec<{
             update<capture>
             test<capture, condition, update>(target)
-        }>(target)
-    }, null)
-}
+        }>(target);
+    }, null);
+};
 
 static sync func while(condition: functor) {
     return test<condition=condition>
-}
+};
 
 static sync func for(
     capture: any,
@@ -113,26 +113,26 @@ static sync func for(
     update: functor
 ) {
     return test<capture, condition, update>
-}
+};
 
 with <f: functor>
 inner func map(entity: any) {
     # apply f to each element in entity
-}
+};
 
 with <f: functor>
 inner func foreach(entity: any) {
     # for each element in entity, apply f to it
-}
+};
 
 inner func plus(lhs: any, rhs: any) -> any {
     # return lhs + rhs
-}
+};
 
 inner func minus(lhs: any, rhs: any) -> any {
     # return lhs - rhs
-}
+};
 
 inner func leq(lhs: any, rhs: any) -> bool {
     # return lhs <= rhs
-}
+};

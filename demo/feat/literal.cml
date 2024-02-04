@@ -1,24 +1,24 @@
-ident.1.id->fn # 1./.1 should not be considered as real
+ident.1.id->fn; # 1./.1 should not be considered as real
 
-1.2
-2
-0
-03
-0x2
-0b10
-1e10
-+0xFf
--1.2e+2
+1.2;
+2;
+0;
+03;
+0x2;
+0b10;
+1e10;
++0xFf;
+-1.2e+2;
 
-"abc"
+"abc";
 
-f'abc'
+f'abc';
 
-10`v`
+10`v`;
 
-1 + 2i
-1.3e1 + 2.1i
+1 + 2i;
+1.3e1 + 2.1i;
 
 """
 haha
-"""
+""";

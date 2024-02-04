@@ -12,14 +12,12 @@ stmt : letStmt
      | enumDef
      | retStmt
      | exprStmt
-     | letSimple
-     | useSimple
      ;
 
-letStmt : LET carrier (':' type)? '='? expr ;
-useStmt : USE carrier '='? expr ;
-letSimple : carrier (':' type)? ':=' expr ;
-useSimple : carrier '::' expr ;
+letStmt : LET carrier (':' type)? '='? expr
+        | carrier (':' type)? ':=' expr ;
+useStmt : USE carrier '='? expr
+        | carrier '::' expr ;
 withDef : WITH (entityRef | withDecl) ;
 funcDef : annotations withDef? modifiers FUNC identRef paramDef ('->' type)? '='? stmtPack ;
 typeDef : TYPE identRef '='? (type | typePack) ;
@@ -139,7 +137,6 @@ innerType : NUMBER_TYPE
           | STRING_TYPE
           | BOOLEAN_TYPE
           | FUNCTOR_TYPE
-          | BLOCK_TYPE
           | numberType
           | structType
           ;
