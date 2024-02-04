@@ -12,6 +12,7 @@ stmt : letStmt
      | enumDef
      | retStmt
      | exprStmt
+     | assignStmt
      ;
 
 letStmt : LET carrier (':' type)? '='? expr
@@ -24,6 +25,7 @@ typeDef : TYPE identRef '='? (type | typePack) ;
 enumDef : ENUM identRef '='? dictUnpack ;
 retStmt : RETURN expr? ;
 exprStmt : annotations expr ;
+assignStmt : entityRef (':' type)? '='? expr ;
 
 carrier : identRef
         | listUnpack
@@ -35,24 +37,24 @@ sizeAnno : '[' expr ',' expr ']' ;
 annotation : '@' (identRef | dictPack | biasAnno | sizeAnno) ;
 annotations : (annotation SEP?)* ;
 modifiers : (INNER | OUTER | SYNC | SCOPED | STATIC | ATOMIC)* ;
-withList : '<' argument (','  argument)* '>' ;
-withDecl : '<' keyValDecl (',' keyValDecl)* '>' ;
-paramDef : '(' (keyValDecl (',' keyValDecl)*)? ')' ;
-argsList : '(' (argument (',' argument)*)? ')' ;
+withList : '<' argument (','  argument)* ','? '>' ;
+withDecl : '<' keyValDecl (',' keyValDecl)* ','? '>' ;
+paramDef : '(' (keyValDecl (',' keyValDecl)*)? ','? ')' ;
+argsList : '(' (argument (',' argument)*)? ','? ')' ;
 argument : identRef | entity
          | keyValExpr | expr
          ;
 
-typePack : '{' (keyValDecl (',' keyValDecl)*)? '}' ;
+typePack : '{' (keyValDecl (',' keyValDecl)*)? ','? '}' ;
 keyValDecl : identRef (annotation)? ':' nullableType ('=' expr)? ;
 keyValExpr : identRef (annotation)? '=' expr ;
 
 entityRef : identRef ('.' (INTEGER | identRef))* annotation? ;
 functorRef: identRef (withList)? annotation? ;
-listUnpack : '[' (identRef (',' identRef)*)? ']' ;
-dictUnpack : '{' (identRef (',' identRef)*)? '}' ;
-dictPack : '{' (keyValExpr (',' keyValExpr)*)? '}' ;
-listPack : '[' (expr (',' expr)*)? ']' ;
+listUnpack : '[' (identRef (',' identRef)*)? ','? ']' ;
+dictUnpack : '{' (identRef (',' identRef)*)? ','? '}' ;
+dictPack : '{' (keyValExpr (',' keyValExpr)*)? ','? '}' ;
+listPack : '[' (expr (',' expr)*)? ','? ']' ;
 stmtPack : '{' stmtList?  '}' ;
 lambda   : (paramDef '=>')? stmtPack ;
 
@@ -93,6 +95,7 @@ addExpr
 
 multiExpr
     : unaryExpr
+    | multiExpr '^' unaryExpr
     | multiExpr '*' unaryExpr
     | multiExpr '/' unaryExpr
     | multiExpr '%' unaryExpr
