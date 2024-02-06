@@ -1,0 +1,10 @@
+.idea/
+.vscode/
+
+antlr/.antlr
+result.json
+CMakeUserPresets.json
+cmake-build-debug/
+vendor/
+cache/
+build/
