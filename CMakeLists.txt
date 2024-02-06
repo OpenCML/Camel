@@ -6,10 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(CMAKE_MACOSX_RPATH OFF)
 
 if(MSVC)
+	message(STATUS "Using MSVC")
 	set(CMAKE_CXX_FLAGS /source-charset:utf-8)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
 	add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 	# 4003:宏定义参数不足 4005:宏重定义 4819:文件名中有非ASCII字符
     add_compile_options(/wd4003 /wd4005 /wd4819 /O2)
+else()
+	message(STATUS "Using GCC or Clang")
 endif()
 
 file(GLOB_RECURSE SRC_FILES
@@ -29,4 +33,8 @@ target_include_directories(
 	src/
 )
 
-target_link_libraries(${PROJECT_NAME} antlr4_static)
+if(TARGET antlr4_shared)
+    target_link_libraries(${PROJECT_NAME} PRIVATE antlr4_shared)
+else()
+    target_link_libraries(${PROJECT_NAME} PRIVATE antlr4_static)
+endif()

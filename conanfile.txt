@@ -1,5 +1,5 @@
 [requires]
-antlr4-cppruntime/4.13.0
+antlr4-cppruntime/4.13.1
 
 [generators]
 CMakeDeps
