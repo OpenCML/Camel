@@ -1,5 +1,5 @@
 
-// Generated from OpenCML.g4 by ANTLR 4.13.0
+// Generated from OpenCML.g4 by ANTLR 4.13.1
 
 #pragma once
 
@@ -14,15 +14,17 @@ public:
   enum {
     T__0 = 1, T__1 = 2, T__2 = 3, T__3 = 4, T__4 = 5, T__5 = 6, T__6 = 7, 
     T__7 = 8, T__8 = 9, T__9 = 10, T__10 = 11, T__11 = 12, T__12 = 13, T__13 = 14, 
-    T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, AS = 20, 
-    LET = 21, USE = 22, FUNC = 23, TYPE = 24, ENUM = 25, WITH = 26, RETURN = 27, 
-    INNER = 28, OUTER = 29, SYNC = 30, SCOPED = 31, STATIC = 32, ATOMIC = 33, 
-    NULL_ = 34, TRUE = 35, FALSE = 36, ANY_TYPE = 37, NUMBER_TYPE = 38, 
-    STRING_TYPE = 39, BOOLEAN_TYPE = 40, FUNCTOR_TYPE = 41, BLOCK_TYPE = 42, 
-    INTEGER_TYPE = 43, REAL_TYPE = 44, COMPLEX_TYPE = 45, ARRAY_TYPE = 46, 
-    MATRIX_TYPE = 47, LIST_TYPE = 48, DICT_TYPE = 49, SKIP_ = 50, LINE_END = 51, 
-    MULTI_STR = 52, IDENTIFIER = 53, UNIT = 54, STRING = 55, FSTRING = 56, 
-    INTEGER = 57, REAL = 58
+    T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, T__19 = 20, 
+    T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
+    T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
+    T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, SEP = 37, AS = 38, LET = 39, 
+    USE = 40, FUNC = 41, TYPE = 42, ENUM = 43, WITH = 44, RETURN = 45, INNER = 46, 
+    OUTER = 47, SYNC = 48, SCOPED = 49, STATIC = 50, ATOMIC = 51, NULL_ = 52, 
+    TRUE = 53, FALSE = 54, ANY_TYPE = 55, NUMBER_TYPE = 56, STRING_TYPE = 57, 
+    BOOLEAN_TYPE = 58, FUNCTOR_TYPE = 59, INTEGER_TYPE = 60, REAL_TYPE = 61, 
+    COMPLEX_TYPE = 62, ARRAY_TYPE = 63, MATRIX_TYPE = 64, LIST_TYPE = 65, 
+    DICT_TYPE = 66, SKIP_ = 67, MULTI_STR = 68, IDENTIFIER = 69, UNIT = 70, 
+    STRING = 71, FSTRING = 72, INTEGER = 73, REAL = 74
   };
 
   explicit OpenCMLLexer(antlr4::CharStream *input);

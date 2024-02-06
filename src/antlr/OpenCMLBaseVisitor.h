@@ -1,5 +1,5 @@
 
-// Generated from OpenCML.g4 by ANTLR 4.13.0
+// Generated from OpenCML.g4 by ANTLR 4.13.1
 
 #pragma once
 
@@ -56,6 +56,10 @@ public:
   }
 
   virtual std::any visitExprStmt(OpenCMLParser::ExprStmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -143,6 +147,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitLambda(OpenCMLParser::LambdaContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitEntityExpr(OpenCMLParser::EntityExprContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -163,11 +171,31 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitStmtEnd(OpenCMLParser::StmtEndContext *ctx) override {
+  virtual std::any visitCalcExpr(OpenCMLParser::CalcExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitSepMark(OpenCMLParser::SepMarkContext *ctx) override {
+  virtual std::any visitRelaExpr(OpenCMLParser::RelaExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAddExpr(OpenCMLParser::AddExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitMultiExpr(OpenCMLParser::MultiExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitPrimExpr(OpenCMLParser::PrimExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitExpr(OpenCMLParser::ExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -192,10 +220,6 @@ public:
   }
 
   virtual std::any visitScalarType(OpenCMLParser::ScalarTypeContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitComplex(OpenCMLParser::ComplexContext *ctx) override {
     return visitChildren(ctx);
   }
 

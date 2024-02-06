@@ -50,7 +50,7 @@ int main(int argc, const char *argv[])
         tree::ParseTree *tree = parser.program();
         endTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-        std::cout << "函数运行时间：" << duration << " 毫秒" << std::endl;
+        std::cout << "Time used " << duration << " ms" << std::endl;
     }
 
     // auto s = tree->toStringTree(&parser);

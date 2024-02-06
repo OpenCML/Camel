@@ -1,5 +1,5 @@
 
-// Generated from OpenCML.g4 by ANTLR 4.13.0
+// Generated from OpenCML.g4 by ANTLR 4.13.1
 
 #pragma once
 
@@ -40,6 +40,8 @@ public:
     virtual std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) = 0;
 
     virtual std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) = 0;
+
+    virtual std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *context) = 0;
 
     virtual std::any visitCarrier(OpenCMLParser::CarrierContext *context) = 0;
 
@@ -83,6 +85,8 @@ public:
 
     virtual std::any visitStmtPack(OpenCMLParser::StmtPackContext *context) = 0;
 
+    virtual std::any visitLambda(OpenCMLParser::LambdaContext *context) = 0;
+
     virtual std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) = 0;
 
     virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) = 0;
@@ -93,9 +97,19 @@ public:
 
     virtual std::any visitLinkCall(OpenCMLParser::LinkCallContext *context) = 0;
 
-    virtual std::any visitStmtEnd(OpenCMLParser::StmtEndContext *context) = 0;
+    virtual std::any visitCalcExpr(OpenCMLParser::CalcExprContext *context) = 0;
 
-    virtual std::any visitSepMark(OpenCMLParser::SepMarkContext *context) = 0;
+    virtual std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context) = 0;
+
+    virtual std::any visitAddExpr(OpenCMLParser::AddExprContext *context) = 0;
+
+    virtual std::any visitMultiExpr(OpenCMLParser::MultiExprContext *context) = 0;
+
+    virtual std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) = 0;
+
+    virtual std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context) = 0;
+
+    virtual std::any visitExpr(OpenCMLParser::ExprContext *context) = 0;
 
     virtual std::any visitLiteral(OpenCMLParser::LiteralContext *context) = 0;
 
@@ -108,8 +122,6 @@ public:
     virtual std::any visitNumberType(OpenCMLParser::NumberTypeContext *context) = 0;
 
     virtual std::any visitScalarType(OpenCMLParser::ScalarTypeContext *context) = 0;
-
-    virtual std::any visitComplex(OpenCMLParser::ComplexContext *context) = 0;
 
     virtual std::any visitVectorType(OpenCMLParser::VectorTypeContext *context) = 0;
 
