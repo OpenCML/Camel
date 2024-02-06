@@ -24,6 +24,7 @@ file(GLOB_RECURSE SRC_FILES
 )
 
 find_package(antlr4-runtime CONFIG REQUIRED)
+find_package(clipp REQUIRED)
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
@@ -32,6 +33,8 @@ target_include_directories(
 	lib/
 	src/
 )
+
+target_link_libraries(YOUR_TARGET clipp::clipp)
 
 if(TARGET antlr4_shared)
     target_link_libraries(${PROJECT_NAME} PRIVATE antlr4_shared)

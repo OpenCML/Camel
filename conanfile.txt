@@ -1,5 +1,6 @@
 [requires]
 antlr4-cppruntime/4.13.1
+clipp/1.2.3
 
 [generators]
 CMakeDeps
