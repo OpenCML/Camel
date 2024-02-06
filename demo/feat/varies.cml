@@ -1,0 +1,20 @@
+return input->ParameterController<
+    [powerInput, powerOutput]->Sub
+>->AmpSysEl;
+
+@[14, 7]
+@{boxed=true, color="blue"}
+scoped func PowerControlEl(input : ElSignal)
+-> ElSignal
+{
+    "Power control"@(6, 0);
+};
+
+with <
+    loader: functor = psl,
+    loader: functor = psl
+>
+inner sync static func load(path: string) -> any
+{
+    # inner func
+}
