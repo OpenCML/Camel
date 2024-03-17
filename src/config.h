@@ -26,6 +26,7 @@ extern std::string outputFile;
 extern std::vector<std::string> includeDirs;
 extern std::vector<std::string> scriptsDirs;
 
+extern bool profile;
 extern bool verbose;
 extern bool noCache;
 

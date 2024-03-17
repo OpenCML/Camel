@@ -28,6 +28,7 @@ string targetFile = "";
 string outputFile = "";
 vector<string> includeDirs = {};
 vector<string> scriptsDirs = {};
+bool profile = false;
 bool verbose = false;
 bool noCache = false;
 bool dumpCST = false, dumpAST = false, dumpGIR = false;
@@ -74,6 +75,7 @@ bool parseArgs(int argc, char *argv[]) {
               .set(verbose)
               .doc("show verbose information"),
           option("-n", "--no-cache").set(noCache).doc("do not use cache"),
+          option("-p", "--profile").set(profile).doc("profile the perf"),
           (option("-I", "--include") & values("include dir", includeDirs))
               .doc("add include directory"),
           (option("-S", "--scripts") &

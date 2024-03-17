@@ -25,33 +25,50 @@
 
 #include "config.h"
 
+#include "dump/visitor.h"
+
 using namespace antlr4;
 
 int main(int argc, char *argv[]) {
     std::chrono::high_resolution_clock::time_point startTime, endTime;
-    
+
     if (!parseArgs(argc, argv)) {
         return 0;
     }
 
-    for (int i = 0; i < 10; i++) {
-        startTime = std::chrono::high_resolution_clock::now();
-        auto src = std::ifstream();
-        src.open(targetFile);
-        ANTLRInputStream input(src);
-        OpenCMLLexer lexer(&input);
-        CommonTokenStream tokens(&lexer);
-        OpenCMLParser parser(&tokens);
-        tree::ParseTree *tree = parser.program();
-        endTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            endTime - startTime)
-                            .count();
-        std::cout << "Time used " << duration << " ms" << std::endl;
+    if (profile) {
+        for (int i = 0; i < 10; i++) {
+            startTime = std::chrono::high_resolution_clock::now();
+            auto src = std::ifstream();
+            src.open(targetFile);
+            ANTLRInputStream input(src);
+            OpenCMLLexer lexer(&input);
+            CommonTokenStream tokens(&lexer);
+            OpenCMLParser parser(&tokens);
+            tree::ParseTree *tree = parser.program();
+            endTime = std::chrono::high_resolution_clock::now();
+            auto duration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(endTime -
+                                                                      startTime)
+                    .count();
+            std::cout << "Time used " << duration << " ms" << std::endl;
+        }
+        return 0;
     }
 
-    // auto s = tree->toStringTree(&parser);
-    // std::cout << "Parse Tree: " << s << std::endl;
+    auto src = std::ifstream();
+    src.open(targetFile);
+    ANTLRInputStream input(src);
+    OpenCMLLexer lexer(&input);
+    CommonTokenStream tokens(&lexer);
+    OpenCMLParser parser(&tokens);
+    tree::ParseTree *tree = parser.program();
+
+    if (dumpCST) {
+        auto visitor = CSTDumpVisitor();
+        visitor.visit(tree);
+        return 0;
+    }
 
     return 0;
 }
