@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 project(camel)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(CMAKE_MACOSX_RPATH OFF)
 
@@ -34,7 +34,7 @@ target_include_directories(
 	src/
 )
 
-target_link_libraries(YOUR_TARGET clipp::clipp)
+target_link_libraries(${PROJECT_NAME} PRIVATE clipp::clipp)
 
 if(TARGET antlr4_shared)
     target_link_libraries(${PROJECT_NAME} PRIVATE antlr4_shared)

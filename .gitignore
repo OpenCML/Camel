@@ -6,5 +6,6 @@ result.json
 CMakeUserPresets.json
 cmake-build-debug/
 vendor/
-.cache/
+**/.cache/
+*.cmo
 build/
