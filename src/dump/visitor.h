@@ -293,11 +293,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return visitChildren(context);
     };
 
-    std::any visitNullableType(OpenCMLParser::NullableTypeContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
-    };
-
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) {
         cout << context->getText() << endl;
         return visitChildren(context);

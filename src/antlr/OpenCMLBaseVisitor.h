@@ -231,10 +231,6 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitNullableType(OpenCMLParser::NullableTypeContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitIdentRef(OpenCMLParser::IdentRefContext *ctx) override {
     return visitChildren(ctx);
   }

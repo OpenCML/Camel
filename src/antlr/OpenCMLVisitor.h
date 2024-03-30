@@ -127,8 +127,6 @@ public:
 
     virtual std::any visitStructType(OpenCMLParser::StructTypeContext *context) = 0;
 
-    virtual std::any visitNullableType(OpenCMLParser::NullableTypeContext *context) = 0;
-
     virtual std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) = 0;
 
 

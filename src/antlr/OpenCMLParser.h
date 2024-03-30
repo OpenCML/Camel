@@ -41,7 +41,7 @@ public:
     RuleAddExpr = 41, RuleMultiExpr = 42, RuleUnaryExpr = 43, RulePrimExpr = 44, 
     RuleExpr = 45, RuleLiteral = 46, RuleValue = 47, RuleType = 48, RuleInnerType = 49, 
     RuleNumberType = 50, RuleScalarType = 51, RuleVectorType = 52, RuleStructType = 53, 
-    RuleNullableType = 54, RuleIdentRef = 55
+    RuleIdentRef = 54
   };
 
   explicit OpenCMLParser(antlr4::TokenStream *input);
@@ -115,7 +115,6 @@ public:
   class ScalarTypeContext;
   class VectorTypeContext;
   class StructTypeContext;
-  class NullableTypeContext;
   class IdentRefContext; 
 
   class  ProgramContext : public antlr4::ParserRuleContext {
@@ -498,7 +497,7 @@ public:
     KeyValDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     IdentRefContext *identRef();
-    NullableTypeContext *nullableType();
+    TypeContext *type();
     AnnotationContext *annotation();
     ExprContext *expr();
 
@@ -713,15 +712,11 @@ public:
   public:
     LinkCallContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<IdentRefContext *> identRef();
-    IdentRefContext* identRef(size_t i);
+    IdentRefContext *identRef();
     EntityRefContext *entityRef();
-    std::vector<EntityContext *> entity();
-    EntityContext* entity(size_t i);
-    std::vector<FunctorRefContext *> functorRef();
-    FunctorRefContext* functorRef(size_t i);
-    std::vector<NormCallContext *> normCall();
-    NormCallContext* normCall(size_t i);
+    EntityContext *entity();
+    FunctorRefContext *functorRef();
+    NormCallContext *normCall();
     LinkCallContext *linkCall();
 
 
@@ -948,11 +943,10 @@ public:
     StructTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *LIST_TYPE();
-    std::vector<NullableTypeContext *> nullableType();
-    NullableTypeContext* nullableType(size_t i);
+    std::vector<TypeContext *> type();
+    TypeContext* type(size_t i);
     antlr4::tree::TerminalNode *INTEGER();
     antlr4::tree::TerminalNode *DICT_TYPE();
-    TypeContext *type();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -960,19 +954,6 @@ public:
   };
 
   StructTypeContext* structType();
-
-  class  NullableTypeContext : public antlr4::ParserRuleContext {
-  public:
-    NullableTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
-    virtual size_t getRuleIndex() const override;
-    TypeContext *type();
-
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
-   
-  };
-
-  NullableTypeContext* nullableType();
 
   class  IdentRefContext : public antlr4::ParserRuleContext {
   public:
