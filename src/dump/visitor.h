@@ -17,284 +17,285 @@
  */
 
 #include <iostream>
+#include <regex>
+#include <string>
 
 #include "antlr/OpenCMLVisitor.h"
+#include "antlr4-runtime.h"
 
 using namespace std;
 
 class CSTDumpVisitor : public OpenCMLVisitor {
-    std::any visitProgram(OpenCMLParser::ProgramContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    int depth = 0;
+    vector<bool> visible;
+
+    any dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
+        bool isLast = false;
+        if (visible.size() <= depth)
+            visible.push_back(true);
+        if (depth > 0) {
+            auto siblings = context->parent->children;
+            if (siblings[siblings.size() - 1] == context) {
+                isLast = true;
+                visible[depth - 1] = false;
+            }
+        }
+        auto getHead = [=]() -> string {
+            int i = 0;
+            string ret = "";
+            while (i < depth - 1) {
+                if (visible[i])
+                    ret += "|  ";
+                else
+                    ret += "   ";
+                i++;
+            }
+            if (depth > 0) {
+                if (isLast)
+                    ret += "\\-";
+                else
+                    ret += "|-";
+            }
+            return ret;
+        };
+        cout << getHead();
+        cout << nodeName;
+        auto children = context->children;
+        if (children.size() > 0) {
+            if (children[0]->children.size() == 0) {
+                string raw = children[0]->getText();
+                string text =
+                    std::regex_replace(raw, std::regex(R"(\n)"), "\\n");
+                cout << " : " << text;
+            }
+        }
+        cout << endl;
+        if (depth > 0)
+            for (int i = depth; i < visible.size(); i++)
+                visible[i] = true;
+        depth++;
+        any parentResult = OpenCMLVisitor::visitChildren(context);
+        depth--;
+        return parentResult;
     };
 
-    std::any visitStmtList(OpenCMLParser::StmtListContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitProgram(OpenCMLParser::ProgramContext *context) {
+        return dumpCST(context, "Program");
     };
 
-    std::any visitStmt(OpenCMLParser::StmtContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitStmtList(OpenCMLParser::StmtListContext *context) {
+        return dumpCST(context, "StmtList");
     };
 
-    std::any visitLetStmt(OpenCMLParser::LetStmtContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitStmt(OpenCMLParser::StmtContext *context) {
+        return dumpCST(context, "Stmt");
     };
 
-    std::any visitUseStmt(OpenCMLParser::UseStmtContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitLetStmt(OpenCMLParser::LetStmtContext *context) {
+        return dumpCST(context, "LetStmt");
     };
 
-    std::any visitWithDef(OpenCMLParser::WithDefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitUseStmt(OpenCMLParser::UseStmtContext *context) {
+        return dumpCST(context, "UseStmt");
     };
 
-    std::any visitFuncDef(OpenCMLParser::FuncDefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitWithDef(OpenCMLParser::WithDefContext *context) {
+        return dumpCST(context, "WithDef");
     };
 
-    std::any visitTypeDef(OpenCMLParser::TypeDefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitFuncDef(OpenCMLParser::FuncDefContext *context) {
+        return dumpCST(context, "FuncDef");
     };
 
-    std::any visitEnumDef(OpenCMLParser::EnumDefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitTypeDef(OpenCMLParser::TypeDefContext *context) {
+        return dumpCST(context, "TypeDef");
     };
 
-    std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitEnumDef(OpenCMLParser::EnumDefContext *context) {
+        return dumpCST(context, "EnumDef");
     };
 
-    std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitRetStmt(OpenCMLParser::RetStmtContext *context) {
+        return dumpCST(context, "RetStmt");
     };
 
-    std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitExprStmt(OpenCMLParser::ExprStmtContext *context) {
+        return dumpCST(context, "ExprStmt");
     };
 
-    std::any visitCarrier(OpenCMLParser::CarrierContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitAssignStmt(OpenCMLParser::AssignStmtContext *context) {
+        return dumpCST(context, "AssignStmt");
     };
 
-    std::any visitBiasAnno(OpenCMLParser::BiasAnnoContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitCarrier(OpenCMLParser::CarrierContext *context) {
+        return dumpCST(context, "Carrier");
     };
 
-    std::any visitSizeAnno(OpenCMLParser::SizeAnnoContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitBiasAnno(OpenCMLParser::BiasAnnoContext *context) {
+        return dumpCST(context, "BiasAnno");
     };
 
-    std::any visitAnnotation(OpenCMLParser::AnnotationContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitSizeAnno(OpenCMLParser::SizeAnnoContext *context) {
+        return dumpCST(context, "SizeAnno");
     };
 
-    std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitAnnotation(OpenCMLParser::AnnotationContext *context) {
+        return dumpCST(context, "Annotation");
     };
 
-    std::any visitModifiers(OpenCMLParser::ModifiersContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
+        return dumpCST(context, "Annotations");
     };
 
-    std::any visitWithList(OpenCMLParser::WithListContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitModifiers(OpenCMLParser::ModifiersContext *context) {
+        return dumpCST(context, "Modifiers");
     };
 
-    std::any visitWithDecl(OpenCMLParser::WithDeclContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitWithList(OpenCMLParser::WithListContext *context) {
+        return dumpCST(context, "WithList");
     };
 
-    std::any visitParamDef(OpenCMLParser::ParamDefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitWithDecl(OpenCMLParser::WithDeclContext *context) {
+        return dumpCST(context, "WithDecl");
     };
 
-    std::any visitArgsList(OpenCMLParser::ArgsListContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitParamDef(OpenCMLParser::ParamDefContext *context) {
+        return dumpCST(context, "ParamDef");
     };
 
-    std::any visitArgument(OpenCMLParser::ArgumentContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitArgsList(OpenCMLParser::ArgsListContext *context) {
+        return dumpCST(context, "ArgsList");
     };
 
-    std::any visitTypePack(OpenCMLParser::TypePackContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitArgument(OpenCMLParser::ArgumentContext *context) {
+        return dumpCST(context, "Argument");
     };
 
-    std::any visitKeyValDecl(OpenCMLParser::KeyValDeclContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitTypePack(OpenCMLParser::TypePackContext *context) {
+        return dumpCST(context, "TypePack");
     };
 
-    std::any visitKeyValExpr(OpenCMLParser::KeyValExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitKeyValDecl(OpenCMLParser::KeyValDeclContext *context) {
+        return dumpCST(context, "KeyValDecl");
     };
 
-    std::any visitEntityRef(OpenCMLParser::EntityRefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitKeyValExpr(OpenCMLParser::KeyValExprContext *context) {
+        return dumpCST(context, "KeyValExpr");
     };
 
-    std::any visitFunctorRef(OpenCMLParser::FunctorRefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitEntityRef(OpenCMLParser::EntityRefContext *context) {
+        return dumpCST(context, "EntityRef");
     };
 
-    std::any visitListUnpack(OpenCMLParser::ListUnpackContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitFunctorRef(OpenCMLParser::FunctorRefContext *context) {
+        return dumpCST(context, "FunctorRef");
     };
 
-    std::any visitDictUnpack(OpenCMLParser::DictUnpackContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitListUnpack(OpenCMLParser::ListUnpackContext *context) {
+        return dumpCST(context, "ListUnpack");
     };
 
-    std::any visitDictPack(OpenCMLParser::DictPackContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitDictUnpack(OpenCMLParser::DictUnpackContext *context) {
+        return dumpCST(context, "DictUnpack");
     };
 
-    std::any visitListPack(OpenCMLParser::ListPackContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitDictPack(OpenCMLParser::DictPackContext *context) {
+        return dumpCST(context, "DictPack");
     };
 
-    std::any visitStmtPack(OpenCMLParser::StmtPackContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitListPack(OpenCMLParser::ListPackContext *context) {
+        return dumpCST(context, "ListPack");
     };
 
-    std::any visitLambda(OpenCMLParser::LambdaContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitStmtPack(OpenCMLParser::StmtPackContext *context) {
+        return dumpCST(context, "StmtPack");
     };
 
-    std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitLambda(OpenCMLParser::LambdaContext *context) {
+        return dumpCST(context, "Lambda");
     };
 
-    std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
+        return dumpCST(context, "EntityExpr");
     };
 
-    std::any visitEntity(OpenCMLParser::EntityContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitEntityChain(OpenCMLParser::EntityChainContext *context) {
+        return dumpCST(context, "EntityChain");
     };
 
-    std::any visitNormCall(OpenCMLParser::NormCallContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitEntity(OpenCMLParser::EntityContext *context) {
+        return dumpCST(context, "Entity");
     };
 
-    std::any visitLinkCall(OpenCMLParser::LinkCallContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitNormCall(OpenCMLParser::NormCallContext *context) {
+        return dumpCST(context, "NormCall");
     };
 
-    std::any visitCalcExpr(OpenCMLParser::CalcExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitLinkCall(OpenCMLParser::LinkCallContext *context) {
+        return dumpCST(context, "LinkCall");
     };
 
-    std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitCalcExpr(OpenCMLParser::CalcExprContext *context) {
+        return dumpCST(context, "CalcExpr");
     };
 
-    std::any visitAddExpr(OpenCMLParser::AddExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitRelaExpr(OpenCMLParser::RelaExprContext *context) {
+        return dumpCST(context, "RelaExpr");
     };
 
-    std::any visitMultiExpr(OpenCMLParser::MultiExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitAddExpr(OpenCMLParser::AddExprContext *context) {
+        return dumpCST(context, "AddExpr");
     };
 
-    std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitMultiExpr(OpenCMLParser::MultiExprContext *context) {
+        return dumpCST(context, "MultiExpr");
     };
 
-    std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
+        return dumpCST(context, "UnaryExpr");
     };
 
-    std::any visitExpr(OpenCMLParser::ExprContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitPrimExpr(OpenCMLParser::PrimExprContext *context) {
+        return dumpCST(context, "PrimExpr");
     };
 
-    std::any visitLiteral(OpenCMLParser::LiteralContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitExpr(OpenCMLParser::ExprContext *context) {
+        return dumpCST(context, "Expr");
     };
 
-    std::any visitValue(OpenCMLParser::ValueContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitLiteral(OpenCMLParser::LiteralContext *context) {
+        return dumpCST(context, "Literal");
     };
 
-    std::any visitType(OpenCMLParser::TypeContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitValue(OpenCMLParser::ValueContext *context) {
+        return dumpCST(context, "Value");
     };
 
-    std::any visitInnerType(OpenCMLParser::InnerTypeContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitType(OpenCMLParser::TypeContext *context) {
+        return dumpCST(context, "Type");
     };
 
-    std::any visitNumberType(OpenCMLParser::NumberTypeContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitInnerType(OpenCMLParser::InnerTypeContext *context) {
+        return dumpCST(context, "InnerType");
     };
 
-    std::any visitScalarType(OpenCMLParser::ScalarTypeContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitNumberType(OpenCMLParser::NumberTypeContext *context) {
+        return dumpCST(context, "NumberType");
     };
 
-    std::any visitVectorType(OpenCMLParser::VectorTypeContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitScalarType(OpenCMLParser::ScalarTypeContext *context) {
+        return dumpCST(context, "ScalarType");
     };
 
-    std::any visitStructType(OpenCMLParser::StructTypeContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitVectorType(OpenCMLParser::VectorTypeContext *context) {
+        return dumpCST(context, "VectorType");
     };
 
-    std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) {
-        cout << context->getText() << endl;
-        return visitChildren(context);
+    any visitStructType(OpenCMLParser::StructTypeContext *context) {
+        return dumpCST(context, "StructType");
+    };
+
+    any visitIdentRef(OpenCMLParser::IdentRefContext *context) {
+        return dumpCST(context, "IdentRef");
     };
 };
