@@ -37,6 +37,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (profile) {
+        std::cout << "Profiling mode" << std::endl;
         for (int i = 0; i < 10; i++) {
             startTime = std::chrono::high_resolution_clock::now();
             auto src = std::ifstream();
@@ -45,7 +46,23 @@ int main(int argc, char *argv[]) {
             OpenCMLLexer lexer(&input);
             CommonTokenStream tokens(&lexer);
             OpenCMLParser parser(&tokens);
-            tree::ParseTree *tree = parser.program();
+            parser.getInterpreter<atn::ParserATNSimulator>()->setPredictionMode(
+                atn::PredictionMode::SLL);
+            parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
+            // parser.removeErrorListeners();
+            std::cout << "Parsing " << targetFile << "..." << std::endl;
+            try {
+                tree::ParseTree *tree = parser.program();
+            } catch (ParseCancellationException &e) {
+                std::cout << "Parse cancelled" << std::endl;
+                parser.reset();
+                tokens.reset();
+                // parser.addErrorListener(new ProxyErrorListener());
+                parser.getInterpreter<atn::ParserATNSimulator>()->setPredictionMode(
+                    atn::PredictionMode::LL);
+                tree::ParseTree *tree = parser.program();
+            }
+            std::cout << "Parsed " << targetFile << "..." << std::endl;
             endTime = std::chrono::high_resolution_clock::now();
             auto duration =
                 std::chrono::duration_cast<std::chrono::milliseconds>(endTime -

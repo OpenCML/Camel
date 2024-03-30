@@ -46,8 +46,8 @@ argument : identRef | entity
          ;
 
 typePack : '{' (keyValDecl (',' keyValDecl)*)? ','? '}' ;
-keyValDecl : identRef (annotation)? ':' nullableType ('=' expr)? ;
-keyValExpr : identRef (annotation)? '=' expr ;
+keyValDecl : identRef '?'? annotation? ':' type ('=' expr)? ;
+keyValExpr : identRef annotation? '=' expr ;
 
 entityRef : identRef ('.' (INTEGER | identRef))* annotation? ;
 functorRef: identRef (withList)? annotation? ;
@@ -63,8 +63,6 @@ entityChain : (identRef | entity | linkCall)+ ;
 entity : ((identRef | literal | listPack | dictPack | lambda) annotation?) | entityRef | functorRef ;
 normCall : functorRef argsList ;
 linkCall : linkCall '->' (identRef | functorRef | entity | normCall)
-         | (identRef | entityRef | entity | functorRef | normCall)
-           '->' (identRef | functorRef | entity | normCall)
          | identRef | entityRef | entity | functorRef | normCall
          ;
 
@@ -153,9 +151,8 @@ scalarType : INTEGER_TYPE
 vectorType : ARRAY_TYPE ('<' scalarType '>')? ('[' INTEGER ']')?
            | MATRIX_TYPE ('<' scalarType '>')? ('[' INTEGER']')*
               ;
-structType : LIST_TYPE ('<' nullableType (',' nullableType)* '>')? ('[' INTEGER ']')?
-           | DICT_TYPE ('<' type ',' nullableType '>')?
+structType : LIST_TYPE ('<' type (',' type)* '>')? ('[' INTEGER ']')?
+           | DICT_TYPE ('<' type ',' type '>')?
            ;
-nullableType : type '?'? ;
 
 identRef : IDENTIFIER ;
