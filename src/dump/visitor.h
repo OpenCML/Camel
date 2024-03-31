@@ -31,8 +31,11 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     any dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
         bool isLast = false;
+        auto children = context->children;
+
         if (visible.size() <= depth)
             visible.push_back(true);
+
         if (depth > 0) {
             auto siblings = context->parent->children;
             if (siblings[siblings.size() - 1] == context) {
@@ -40,7 +43,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
                 visible[depth - 1] = false;
             }
         }
-        auto getHead = [=]() -> string {
+
+        auto getHead = [=](bool last) -> string {
             int i = 0;
             string ret = "";
             while (i < depth - 1) {
@@ -51,32 +55,45 @@ class CSTDumpVisitor : public OpenCMLVisitor {
                 i++;
             }
             if (depth > 0) {
-                if (isLast)
+                if (last)
                     ret += "\\-";
                 else
                     ret += "|-";
             }
             return ret;
         };
-        cout << getHead();
+
+        cout << getHead(isLast);
         cout << nodeName;
-        auto children = context->children;
-        if (children.size() > 0) {
-            if (children[0]->children.size() == 0) {
-                string raw = children[0]->getText();
-                string text =
-                    std::regex_replace(raw, std::regex(R"(\n)"), "\\n");
-                cout << " : " << text;
-            }
+        if (children.size() == 0) {
+            string raw = context->getText();
+            string text = std::regex_replace(raw, std::regex(R"(\n)"), "\\n");
+            cout << " " << text;
         }
         cout << endl;
+
         if (depth > 0)
             for (int i = depth; i < visible.size(); i++)
                 visible[i] = true;
+
         depth++;
-        any parentResult = OpenCMLVisitor::visitChildren(context);
+
+        std::any result = defaultResult();
+        size_t n = children.size();
+        for (size_t i = 0; i < n; i++) {
+            if (children[i]->getTreeType() ==
+                antlr4::tree::ParseTreeType::RULE) {
+                std::any childResult = context->children[i]->accept(this);
+                result =
+                    aggregateResult(std::move(result), std::move(childResult));
+            } else {
+                dumpCST(context->children[i], "");
+            }
+        }
+
         depth--;
-        return parentResult;
+
+        return result;
     };
 
     any visitProgram(OpenCMLParser::ProgramContext *context) {
