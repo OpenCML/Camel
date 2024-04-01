@@ -24,7 +24,6 @@
 #include "antlr4-runtime.h"
 
 #include "config.h"
-
 #include "dump/visitor.h"
 
 using namespace antlr4;
@@ -46,21 +45,34 @@ int main(int argc, char *argv[]) {
         OpenCMLLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
         OpenCMLParser parser(&tokens);
-        tree::ParseTree *tree = parser.program();
+        auto interpreter = parser.getInterpreter<atn::ParserATNSimulator>();
+        tree::ParseTree *tree = nullptr;
+
+        try {
+            interpreter->setPredictionMode(atn::PredictionMode::SLL);
+            parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
+            tree = parser.program();
+        } catch (ParseCancellationException &e) {
+            parser.reset();
+            tokens.reset();
+            interpreter->setPredictionMode(atn::PredictionMode::LL);
+            parser.setErrorHandler(std::make_shared<DefaultErrorStrategy>());
+            parser.addErrorListener(new ProxyErrorListener());
+            tree = parser.program();
+        }
 
         if (dumpCST) {
             auto visitor = CSTDumpVisitor();
             visitor.visit(tree);
-            return 0;
         }
 
         if (profile) {
             endTime = std::chrono::high_resolution_clock::now();
             auto duration =
-                std::chrono::duration_cast<std::chrono::milliseconds>(endTime -
+                std::chrono::duration_cast<std::chrono::microseconds>(endTime -
                                                                       startTime)
                     .count();
-            std::cout << "Time used " << duration << " ms" << std::endl;
+            std::cout << "Time used " << duration << " us" << std::endl;
         }
     }
 
