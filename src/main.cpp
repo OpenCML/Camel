@@ -23,22 +23,23 @@
 #include "antlr/OpenCMLParser.h"
 #include "antlr4-runtime.h"
 
+#include "utils/log.h"
 #include "config.h"
 #include "dump/visitor.h"
 
 using namespace antlr4;
 
 int main(int argc, char *argv[]) {
-    std::chrono::high_resolution_clock::time_point startTime, endTime;
-
-    if (!parseArgs(argc, argv)) {
+    if (!parseArgs(argc, argv))
         return 0;
-    }
+
+    std::chrono::high_resolution_clock::time_point startTime, endTime;
 
     while (repeat--) {
         if (profile) {
             startTime = std::chrono::high_resolution_clock::now();
         }
+
         auto src = std::ifstream();
         src.open(targetFile);
         ANTLRInputStream input(src);
@@ -53,6 +54,7 @@ int main(int argc, char *argv[]) {
             parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
             tree = parser.program();
         } catch (ParseCancellationException &e) {
+            error << "Parse failed, retrying with LL mode" << std::endl;
             parser.reset();
             tokens.reset();
             interpreter->setPredictionMode(atn::PredictionMode::LL);
@@ -72,7 +74,7 @@ int main(int argc, char *argv[]) {
                 std::chrono::duration_cast<std::chrono::microseconds>(endTime -
                                                                       startTime)
                     .count();
-            std::cout << "Time used " << duration << " us" << std::endl;
+            info << "Time used " << duration << " us" << std::endl;
         }
     }
 
