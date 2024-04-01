@@ -8,16 +8,52 @@ The relative constellation ...
 '''
 @{x=2, y=3, style="alert-info"};
 
+a b c(f) d;
+a->b->c->d;
+a b<v> c a->b->c;
+a->b a b a<e>->b;
+a(b,d(f)->e(g));
+let a = d+(a+b)*c/2;
+
+/*
+* This PSL module will be imported by interpreter automatically,
+* and can be accessed anywhere in any PSL script.
+*/
+
+with <loader: functor = psl>
+inner sync static func load(path: string) : any {
+    # inner func
+};
+
+with <path: string, ftype: string = 'psl'>
+inner sync static func save(entity: any) {
+    # inner func
+};
+
+use from = load;
+
+with <stream: string = 'stdout'>
+inner static func print(data: any) {
+    # inner func
+};
+
+with <diagram: functor = eye>
+inner static func analyze(data: any) {
+    # inner func
+};
+
+ident.1->fn;
+nf->ident.1;
+nf->ident.1->fn;
+ident.1.id->fn;
+a->b->c;
+
 use { Const, Ground, Sub } from "phot/units" as module;
-use { AmpSysEl, DC_Source, Linearizer, Resample } from<psl> "phot/el";
-use { ParameterController } from "phot/ctrl";
 use { Rx_El_mQAM_BER, Tx_El_mQAM } from "phot/tr";
 
 let photodiodeSetting : PhotodiodeSettingTemplate = {
     temperature = 300`K`
 };
-
-let powerInput = Const<5`V`>;
 
 let Power = {
     dcOutput : ElSignal,
@@ -47,9 +83,6 @@ sync func test(target: functor) {
     }, null);
 };
 
-use { Point } from<psl> 'types';
-use { LaserCW, Analyzer } from<vtms> 'comps';
-
 sync func placeComponents(
     startIndex: number, count: number,
     dist: Point, pos: Point
@@ -57,14 +90,10 @@ sync func placeComponents(
     i := startIndex;
     # loop to create instances
     for (i, {i << startIndex + count;}, {i = i + 1;}) {
-        # create instance of LaserCW and place it
         let laser = LaserCW @[pos.x, pos.y];
         let laserRect = laser.meta.rect;
-        # create instance of Analyzer and place it
         let analyzer = Analyzer @[pos.x + dist.x + laserRect.width, pos.y];
-        # connect laser to analyzer
         laser()->analyzer.(i + 1);
-        # move to next position
         pos.y += pos.y + dist.y + laserRect.height;
     };
 };
