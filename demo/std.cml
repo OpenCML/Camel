@@ -21,17 +21,16 @@ let photodiodeSetting : PhotodiodeSettingTemplate = {
 
 let powerInput = Const<5`V`>;
 
-type Power = {
+let Power = {
     dcOutput : ElSignal,
     powerOutput : ElSignal
 };
 
 @[14, 7]
 @{boxed=true, color="blue"}
-scoped func PowerControlEl(input : ElSignal)
--> ElSignal
+scoped func PowerControlEl(input : ElSignal) : ElSignal
 {
-    "Power control"@(6, 0);
+    "Power control"@[6, 0];
     let [dcOutput, powerOutput] = input->PowerMeterEl;
     dcOutput->Ground;
     return input->ParameterController<
@@ -41,19 +40,19 @@ scoped func PowerControlEl(input : ElSignal)
 
 # Electrical domain
 @{boxed=true, color="blue"}
-scoped func SignalGenEl() -> ElSignal {
-    "Electrical domain"@(10, 0);
+scoped func SignalGenEl() : ElSignal {
+    "Electrical domain"@[10, 0];
     let linearSignal : ElSignal = Rx_El_mQAM_BER->PowerControlEl->Linearizer;
-    let dcSource = DC_Source<0.5`V`>;
+    let dcSource = DC_Source<...{a=0.5`V`}>;
     return [linearSignal, dcSource]->AddSignalsEl;
 };
 
 # Optical domain
 @{boxed=true, color="blue"}
-scoped func SignalProcOp(input@(0, 0) : ElSignal) -> ElSignal {
-    "Optical domain"@(10, 0);
+scoped func SignalProcOp(input@[0, 0] : ElSignal) : ElSignal {
+    "Optical domain"@[10, 0];
     let modulatedOpSig = [input, LaserCW<azimuth=0`deg`>]->ModulatorMZ<30`dB`>;
-    modulatedOpSig->Resample<centerFrequency=192.1e12`Hz`>@(2, 2)->SignalAnalyzer<eye>@(4, 5);
+    modulatedOpSig->Resample<centerFrequency=192.1e12`Hz`>@[2, 2]->SignalAnalyzer<eye>@[4, 5];
     let opSig : OpSignal = modulatedOpSig->FiberNLS<10`KM`>->WDM_MUX_N_1_Ideal<NoiseWhiteGaussOpt>;
     return opSig->Photodiode<photodiodeSetting>;
 };
@@ -61,7 +60,7 @@ scoped func SignalProcOp(input@(0, 0) : ElSignal) -> ElSignal {
 # Electrical domain
 @{boxed=true, color="blue"}
 scoped func SignalRecvEl(input : ElSignal) {
-    "Electrical domain"@(0, 0);
+    "Electrical domain"@[0, 0];
     let samples = input->Resample<centerFrequency=193.1e12`Hz`>;
     let ber = samples->Rx_El_mQAM_BER;
     [powerInput, ber]->NumericalAnalyzer2D;

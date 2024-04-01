@@ -32,6 +32,7 @@ bool profile = false;
 bool verbose = false;
 bool noCache = false;
 bool dumpCST = false, dumpAST = false, dumpGIR = false;
+unsigned int repeat = 1;
 unsigned int maxThreads = 1;
 unsigned int serverPort = 0;
 
@@ -53,6 +54,8 @@ void _printArgs() {
     cout << "Dump CST: " << dumpCST << endl;
     cout << "Dump AST: " << dumpAST << endl;
     cout << "Dump GIR: " << dumpGIR << endl;
+    cout << "Profile: " << profile << endl;
+    cout << "Repeat: " << repeat << endl;
     cout << "Max threads: " << maxThreads << endl;
     cout << "Server port: " << serverPort << endl;
 }
@@ -67,6 +70,8 @@ bool parseArgs(int argc, char *argv[]) {
           option("-v", "--version").set(showVersion).doc("show version")) |
          ((option("-o", "--output") & value("output file", outputFile))
               .doc("output file"),
+          (option("-r", "--repeat") & integer("repeat", repeat))
+              .doc("repeat times"),
           (option("-t", "--threads") & integer("max threads", maxThreads))
               .doc("max threads"),
           (option("-p", "--port") & integer("server port", serverPort))
@@ -75,7 +80,7 @@ bool parseArgs(int argc, char *argv[]) {
               .set(verbose)
               .doc("show verbose information"),
           option("-n", "--no-cache").set(noCache).doc("do not use cache"),
-          option("-p", "--profile").set(profile).doc("profile the perf"),
+          option("-P", "--profile").set(profile).doc("profile the perf"),
           (option("-I", "--include") & values("include dir", includeDirs))
               .doc("add include directory"),
           (option("-S", "--scripts") &

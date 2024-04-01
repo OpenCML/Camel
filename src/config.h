@@ -32,6 +32,8 @@ extern bool noCache;
 
 extern bool dumpCST, dumpAST, dumpGIR;
 
+extern unsigned int repeat;
+
 extern unsigned int maxThreads;
 extern unsigned int serverPort;
 

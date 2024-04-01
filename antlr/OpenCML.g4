@@ -3,82 +3,73 @@ import OpenCMLLex;
 
 program : stmtList? EOF;
 
-stmtList : stmt (SEP stmt)* SEP? ;
+stmtList : stmt+ ;
 
-stmt : letStmt
-     | useStmt
-     | funcDef
-     | typeDef
-     | enumDef
-     | retStmt
-     | exprStmt
-     | assignStmt
+stmt : letStmt SEP
+     | useStmt SEP
+     | funcDef SEP
+     | retStmt SEP
+     | exprStmt SEP
+     | assignStmt SEP
      ;
 
 letStmt : LET carrier (':' type)? '='? expr
         | carrier (':' type)? ':=' expr ;
 useStmt : USE carrier '='? expr
         | carrier '::' expr ;
-withDef : WITH (entityRef | withDecl) ;
-funcDef : annotations withDef? modifiers FUNC identRef paramDef ('->' type)? '='? stmtPack ;
-typeDef : TYPE identRef '='? (type | typePack) ;
-enumDef : ENUM identRef '='? dictUnpack ;
+
+exprStmt : annotations? expr ;
+assignStmt : entity '=' expr ;
+
+withDef : WITH (entity | withDecl) ;
+funcDef : annotations? withDef? modifiers? FUNC identRef argsDecl (':' type)? stmtPack ;
 retStmt : RETURN expr? ;
-exprStmt : annotations expr ;
-assignStmt : entityRef (':' type)? '='? expr ;
 
-carrier : identRef
-        | listUnpack
-        | dictUnpack
-        ;
+lambda : (argsDecl (':' type)? '=>')? stmtPack ;
 
-biasAnno : '(' expr ',' expr ')' ;
-sizeAnno : '[' expr ',' expr ']' ;
-annotation : '@' (identRef | dictPack | biasAnno | sizeAnno) ;
-annotations : (annotation SEP?)* ;
-modifiers : (INNER | OUTER | SYNC | SCOPED | STATIC | ATOMIC)* ;
-withList : '<' argument (','  argument)* ','? '>' ;
-withDecl : '<' keyValDecl (',' keyValDecl)* ','? '>' ;
-paramDef : '(' (keyValDecl (',' keyValDecl)*)? ','? ')' ;
-argsList : '(' (argument (',' argument)*)? ','? ')' ;
-argument : identRef | entity
-         | keyValExpr | expr
-         ;
+carrier : identRef | listPack | dictPack ;
 
-typePack : '{' (keyValDecl (',' keyValDecl)*)? ','? '}' ;
-keyValDecl : identRef '?'? annotation? ':' type ('=' expr)? ;
-keyValExpr : identRef annotation? '=' expr ;
+annotation : '@' carrier ;
+annotations : (annotation SEP?)+ ;
+modifiers : (INNER | OUTER | SYNC | SCOPED | STATIC | ATOMIC)+ ;
 
-entityRef : identRef ('.' (INTEGER | identRef))* annotation? ;
-functorRef: identRef (withList)? annotation? ;
-listUnpack : '[' (identRef (',' identRef)*)? ','? ']' ;
-dictUnpack : '{' (identRef (',' identRef)*)? ','? '}' ;
-dictPack : '{' (keyValExpr (',' keyValExpr)*)? ','? '}' ;
-listPack : '[' (expr (',' expr)*)? ','? ']' ;
-stmtPack : '{' stmtList?  '}' ;
-lambda   : (paramDef '=>')? stmtPack ;
+argument : expr | (identRef '=' expr) | entityUnpack ;
+argsList : argument (',' argument)* ;
+exprList : (expr | entityUnpack) (',' (expr | entityUnpack))* ;
 
-entityExpr : (entity | normCall | linkCall | entityChain) (AS type)? ;
-entityChain : (identRef | entity | linkCall)+ ;
-entity : ((identRef | literal | listPack | dictPack | lambda) annotation?) | entityRef | functorRef ;
-normCall : functorRef argsList ;
-linkCall : linkCall '->' (identRef | functorRef | entity | normCall)
-         | identRef | entityRef | entity | functorRef | normCall
-         ;
+keyValExpr : identRef '?'? annotation? (':' type)? ('=' expr)? ;
+keyValList : (keyValExpr | entityUnpack) (',' (keyValExpr | entityUnpack))* ;
 
-calcExpr
+dictPack : '{' keyValList? '}' ;
+listPack : '[' exprList? ']' ;
+withDecl : '<' keyValList? '>' ;
+withPack : '<' argsList? '>' ;
+argsDecl : '(' keyValList? ')' ;
+argsPack : '(' argsList? ')' ;
+stmtPack : '{' stmtList? '}' ;
+
+primEntity : identRef | literal | listPack | dictPack | lambda ;
+memberAccess : ('.' (identRef | INTEGER | '(' expr ')'))+ ;
+entity : primEntity memberAccess? withPack? argsPack? annotation? ;
+
+entityLink : entityLink '->' entity | entity ;
+entityChain : entityLink+ ;
+entityUnpack : '...' entity ;
+entityExpr : entityChain (AS type)? ;
+
+expr
     : relaExpr
-    | calcExpr '*=' relaExpr
-    | calcExpr '/=' relaExpr
-    | calcExpr '%=' relaExpr
-    | calcExpr '+=' relaExpr
-    | calcExpr '-=' relaExpr
+    | expr '*=' relaExpr
+    | expr '/=' relaExpr
+    | expr '%=' relaExpr
+    | expr '+=' relaExpr
+    | expr '-=' relaExpr
     ;
 
 relaExpr
     : addExpr
-    | relaExpr '<' addExpr
-    | relaExpr '>' addExpr
+    | relaExpr '<<' addExpr
+    | relaExpr '>>' addExpr
     | relaExpr '<=' addExpr
     | relaExpr '>=' addExpr
     | relaExpr '==' addExpr
@@ -101,22 +92,14 @@ multiExpr
 
 unaryExpr
     : primExpr
-    | '++' primExpr
-    | '--' primExpr
-    | primExpr '++'
-    | primExpr '--'
     | '!' primExpr
     | '-' primExpr
     ;
 
 primExpr
-    : literal
-    | entity
-    | entityExpr
-    | '(' calcExpr ')'
+    : entityExpr
+    | '(' expr ')'
     ;
-
-expr : entityExpr | calcExpr ;
 
 literal : value
         | STRING
@@ -126,6 +109,7 @@ literal : value
         | TRUE
         | FALSE
         ;
+
 value : (INTEGER | REAL) UNIT? ;
 
 

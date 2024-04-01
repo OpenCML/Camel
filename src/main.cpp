@@ -36,33 +36,25 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    if (profile) {
-        std::cout << "Profiling mode" << std::endl;
-        for (int i = 0; i < 10; i++) {
+    while (repeat--) {
+        if (profile) {
             startTime = std::chrono::high_resolution_clock::now();
-            auto src = std::ifstream();
-            src.open(targetFile);
-            ANTLRInputStream input(src);
-            OpenCMLLexer lexer(&input);
-            CommonTokenStream tokens(&lexer);
-            OpenCMLParser parser(&tokens);
-            parser.getInterpreter<atn::ParserATNSimulator>()->setPredictionMode(
-                atn::PredictionMode::SLL);
-            parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
-            // parser.removeErrorListeners();
-            std::cout << "Parsing " << targetFile << "..." << std::endl;
-            try {
-                tree::ParseTree *tree = parser.program();
-            } catch (ParseCancellationException &e) {
-                std::cout << "Parse cancelled" << std::endl;
-                parser.reset();
-                tokens.reset();
-                // parser.addErrorListener(new ProxyErrorListener());
-                parser.getInterpreter<atn::ParserATNSimulator>()->setPredictionMode(
-                    atn::PredictionMode::LL);
-                tree::ParseTree *tree = parser.program();
-            }
-            std::cout << "Parsed " << targetFile << "..." << std::endl;
+        }
+        auto src = std::ifstream();
+        src.open(targetFile);
+        ANTLRInputStream input(src);
+        OpenCMLLexer lexer(&input);
+        CommonTokenStream tokens(&lexer);
+        OpenCMLParser parser(&tokens);
+        tree::ParseTree *tree = parser.program();
+
+        if (dumpCST) {
+            auto visitor = CSTDumpVisitor();
+            visitor.visit(tree);
+            return 0;
+        }
+
+        if (profile) {
             endTime = std::chrono::high_resolution_clock::now();
             auto duration =
                 std::chrono::duration_cast<std::chrono::milliseconds>(endTime -
@@ -70,21 +62,6 @@ int main(int argc, char *argv[]) {
                     .count();
             std::cout << "Time used " << duration << " ms" << std::endl;
         }
-        return 0;
-    }
-
-    auto src = std::ifstream();
-    src.open(targetFile);
-    ANTLRInputStream input(src);
-    OpenCMLLexer lexer(&input);
-    CommonTokenStream tokens(&lexer);
-    OpenCMLParser parser(&tokens);
-    tree::ParseTree *tree = parser.program();
-
-    if (dumpCST) {
-        auto visitor = CSTDumpVisitor();
-        visitor.visit(tree);
-        return 0;
     }
 
     return 0;

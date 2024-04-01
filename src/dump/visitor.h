@@ -116,26 +116,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpCST(context, "UseStmt");
     };
 
-    any visitWithDef(OpenCMLParser::WithDefContext *context) {
-        return dumpCST(context, "WithDef");
-    };
-
-    any visitFuncDef(OpenCMLParser::FuncDefContext *context) {
-        return dumpCST(context, "FuncDef");
-    };
-
-    any visitTypeDef(OpenCMLParser::TypeDefContext *context) {
-        return dumpCST(context, "TypeDef");
-    };
-
-    any visitEnumDef(OpenCMLParser::EnumDefContext *context) {
-        return dumpCST(context, "EnumDef");
-    };
-
-    any visitRetStmt(OpenCMLParser::RetStmtContext *context) {
-        return dumpCST(context, "RetStmt");
-    };
-
     any visitExprStmt(OpenCMLParser::ExprStmtContext *context) {
         return dumpCST(context, "ExprStmt");
     };
@@ -144,16 +124,24 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpCST(context, "AssignStmt");
     };
 
+    any visitWithDef(OpenCMLParser::WithDefContext *context) {
+        return dumpCST(context, "WithDef");
+    };
+
+    any visitFuncDef(OpenCMLParser::FuncDefContext *context) {
+        return dumpCST(context, "FuncDef");
+    };
+
+    any visitRetStmt(OpenCMLParser::RetStmtContext *context) {
+        return dumpCST(context, "RetStmt");
+    };
+
+    any visitLambda(OpenCMLParser::LambdaContext *context) {
+        return dumpCST(context, "Lambda");
+    };
+
     any visitCarrier(OpenCMLParser::CarrierContext *context) {
         return dumpCST(context, "Carrier");
-    };
-
-    any visitBiasAnno(OpenCMLParser::BiasAnnoContext *context) {
-        return dumpCST(context, "BiasAnno");
-    };
-
-    any visitSizeAnno(OpenCMLParser::SizeAnnoContext *context) {
-        return dumpCST(context, "SizeAnno");
     };
 
     any visitAnnotation(OpenCMLParser::AnnotationContext *context) {
@@ -168,52 +156,24 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpCST(context, "Modifiers");
     };
 
-    any visitWithList(OpenCMLParser::WithListContext *context) {
-        return dumpCST(context, "WithList");
-    };
-
-    any visitWithDecl(OpenCMLParser::WithDeclContext *context) {
-        return dumpCST(context, "WithDecl");
-    };
-
-    any visitParamDef(OpenCMLParser::ParamDefContext *context) {
-        return dumpCST(context, "ParamDef");
+    any visitArgument(OpenCMLParser::ArgumentContext *context) {
+        return dumpCST(context, "Argument");
     };
 
     any visitArgsList(OpenCMLParser::ArgsListContext *context) {
         return dumpCST(context, "ArgsList");
     };
 
-    any visitArgument(OpenCMLParser::ArgumentContext *context) {
-        return dumpCST(context, "Argument");
-    };
-
-    any visitTypePack(OpenCMLParser::TypePackContext *context) {
-        return dumpCST(context, "TypePack");
-    };
-
-    any visitKeyValDecl(OpenCMLParser::KeyValDeclContext *context) {
-        return dumpCST(context, "KeyValDecl");
+    any visitExprList(OpenCMLParser::ExprListContext *context) {
+        return dumpCST(context, "ExprList");
     };
 
     any visitKeyValExpr(OpenCMLParser::KeyValExprContext *context) {
         return dumpCST(context, "KeyValExpr");
     };
 
-    any visitEntityRef(OpenCMLParser::EntityRefContext *context) {
-        return dumpCST(context, "EntityRef");
-    };
-
-    any visitFunctorRef(OpenCMLParser::FunctorRefContext *context) {
-        return dumpCST(context, "FunctorRef");
-    };
-
-    any visitListUnpack(OpenCMLParser::ListUnpackContext *context) {
-        return dumpCST(context, "ListUnpack");
-    };
-
-    any visitDictUnpack(OpenCMLParser::DictUnpackContext *context) {
-        return dumpCST(context, "DictUnpack");
+    any visitKeyValList(OpenCMLParser::KeyValListContext *context) {
+        return dumpCST(context, "KeyValList");
     };
 
     any visitDictPack(OpenCMLParser::DictPackContext *context) {
@@ -224,36 +184,56 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpCST(context, "ListPack");
     };
 
+    any visitWithDecl(OpenCMLParser::WithDeclContext *context) {
+        return dumpCST(context, "WithDecl");
+    };
+
+    any visitWithPack(OpenCMLParser::WithPackContext *context) {
+        return dumpCST(context, "WithPack");
+    };
+
+    any visitArgsDecl(OpenCMLParser::ArgsDeclContext *context) {
+        return dumpCST(context, "ArgsDecl");
+    };
+
+    any visitArgsPack(OpenCMLParser::ArgsPackContext *context) {
+        return dumpCST(context, "ArgsPack");
+    };
+
     any visitStmtPack(OpenCMLParser::StmtPackContext *context) {
         return dumpCST(context, "StmtPack");
     };
 
-    any visitLambda(OpenCMLParser::LambdaContext *context) {
-        return dumpCST(context, "Lambda");
+    any visitPrimEntity(OpenCMLParser::PrimEntityContext *context) {
+        return dumpCST(context, "PrimEntity");
     };
 
-    any visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
-        return dumpCST(context, "EntityExpr");
-    };
-
-    any visitEntityChain(OpenCMLParser::EntityChainContext *context) {
-        return dumpCST(context, "EntityChain");
+    any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
+        return dumpCST(context, "MemberAccess");
     };
 
     any visitEntity(OpenCMLParser::EntityContext *context) {
         return dumpCST(context, "Entity");
     };
 
-    any visitNormCall(OpenCMLParser::NormCallContext *context) {
-        return dumpCST(context, "NormCall");
+    any visitEntityLink(OpenCMLParser::EntityLinkContext *context) {
+        return dumpCST(context, "EntityLink");
     };
 
-    any visitLinkCall(OpenCMLParser::LinkCallContext *context) {
-        return dumpCST(context, "LinkCall");
+    any visitEntityChain(OpenCMLParser::EntityChainContext *context) {
+        return dumpCST(context, "EntityChain");
     };
 
-    any visitCalcExpr(OpenCMLParser::CalcExprContext *context) {
-        return dumpCST(context, "CalcExpr");
+    any visitEntityUnpack(OpenCMLParser::EntityUnpackContext *context) {
+        return dumpCST(context, "EntityUnpack");
+    };
+
+    any visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
+        return dumpCST(context, "EntityExpr");
+    };
+
+    any visitExpr(OpenCMLParser::ExprContext *context) {
+        return dumpCST(context, "Expr");
     };
 
     any visitRelaExpr(OpenCMLParser::RelaExprContext *context) {
@@ -274,10 +254,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     any visitPrimExpr(OpenCMLParser::PrimExprContext *context) {
         return dumpCST(context, "PrimExpr");
-    };
-
-    any visitExpr(OpenCMLParser::ExprContext *context) {
-        return dumpCST(context, "Expr");
     };
 
     any visitLiteral(OpenCMLParser::LiteralContext *context) {
