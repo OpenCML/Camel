@@ -25,7 +25,7 @@ withDef : WITH (entity | withDecl) ;
 funcDef : annotations? withDef? modifiers? FUNC identRef argsDecl (':' type)? stmtPack ;
 retStmt : RETURN expr? ;
 
-lambda : (argsDecl (':' type)? '=>')? stmtPack ;
+lambda : modifiers? (argsDecl (':' type)? '=>')? stmtPack ;
 
 carrier : identRef | listPack | dictPack ;
 
@@ -134,7 +134,7 @@ scalarType : INTEGER_TYPE
            ;
 vectorType : ARRAY_TYPE ('<' scalarType '>')? ('[' INTEGER ']')?
            | MATRIX_TYPE ('<' scalarType '>')? ('[' INTEGER']')*
-              ;
+           ;
 structType : LIST_TYPE ('<' type (',' type)* '>')? ('[' INTEGER ']')?
            | DICT_TYPE ('<' type ',' type '>')?
            ;

@@ -97,3 +97,24 @@ sync func placeComponents(
         pos.y += pos.y + dist.y + laserRect.height;
     };
 };
+
+bus.on('ask-for-authorization', sync (event: string): list<string> => {
+    otp.value = '';
+    cancelled = true;
+    isActive.value = true;
+    wrongOtp.value = false;
+    targetEvent = event;
+
+    return await new Promise((resolve, reject) => {
+        let stopWatch = watch(isActive, (newVal) => {
+            if (!newVal) {
+                stopWatch();
+                if (cancelled) {
+                    reject();
+                } else {
+                    resolve(otp.value);
+                };
+            };
+        });
+    });
+});
