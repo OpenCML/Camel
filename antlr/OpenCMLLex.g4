@@ -24,15 +24,18 @@ TRUE        : 'true';
 FALSE       : 'false';
 
 ANY_TYPE    : 'any';
-
-NUMBER_TYPE     : 'number';
-STRING_TYPE     : 'string';
-BOOLEAN_TYPE    : 'bool';
-FUNCTOR_TYPE    : 'functor';
+VOID_TYPE   : 'void';
 
 INTEGER_TYPE    : 'int';
+INTEGER32_TYPE  : 'int32';
+INTEGER64_TYPE  : 'int64';
 REAL_TYPE       : 'real';
-COMPLEX_TYPE    : 'complex';
+FLOAT_TYPE      : 'float';
+DOUBLE_TYPE     : 'double';
+NUMBER_TYPE     : 'number';
+STRING_TYPE     : 'str';
+BOOLEAN_TYPE    : 'bool';
+FUNCTOR_TYPE    : 'functor';
 
 ARRAY_TYPE      : 'array';
 MATRIX_TYPE     : 'matrix';
@@ -40,86 +43,85 @@ LIST_TYPE       : 'list';
 DICT_TYPE       : 'dict';
 
 SKIP_
- : ( BLANK | LIN_CMT | BLK_CMT ) -> skip
- ;
+    : ( BLANK | LIN_CMT | BLK_CMT ) -> skip
+    ;
 
 fragment BLANK
- : [ \n\r\t\u000C]+
- ;
+    : [ \n\r\t\u000C]+
+    ;
 
 fragment LIN_CMT
- : '//' ~[\r\n]*
- | '# ' ~[\r\n\f]*
- ;
+    : '//' ~[\r\n]*
+    | '# ' ~[\r\n\f]*
+    ;
 
 fragment BLK_CMT
- : '/*' .*? '*/'
- | '```' .*? '```'
- ;
+    : '/*' .*? '*/'
+    ;
 
 MULTI_STR
- : '\'\'\'' .*? '\'\'\''
- | '"""' .*? '"""'
- ;
+    : '\'\'\'' .*? '\'\'\''
+    | '"""' .*? '"""'
+    ;
 
 IDENTIFIER
- : [a-zA-Z_] [a-zA-Z_0-9]*
- ;
+    : [a-zA-Z_] [a-zA-Z_0-9]*
+    ;
 
 UNIT
- : '`' ('\\`' | '\\\\' | .)*? '`'
- ;
+    : '`' ('\\`' | '\\\\' | .)*? '`'
+    ;
 
 STRING
- : '"' ('\\"' | '\\\\' | .)*? '"'
- | '\'' ('\\\'' | '\\\\' | .)*? '\''
- ;
+    : '"' ('\\"' | '\\\\' | .)*? '"'
+    | '\'' ('\\\'' | '\\\\' | .)*? '\''
+    ;
 
 FSTRING
  : 'f' STRING
  ;
 
 INTEGER
- : DECIMAL
- | OCTAL
- | HEXADECIMAL
- | BINARY
- | EXPONENT_DECIMAL
- ;
+    : DECIMAL
+    | OCTAL
+    | HEXADECIMAL
+    | BINARY
+    | EXPONENT_DECIMAL
+    ;
 
 REAL
- : FLOAT
- | EXPONENT_FLOAT
- ;
+    : FLOAT
+    | EXPONENT_FLOAT
+    ;
 
 fragment DECIMAL
- : [+-]? ([1-9] [0-9]* | '0')
- ;
+    : [+-]? ([1-9] [0-9]* | '0')
+    ;
 
 fragment OCTAL
- : [+-]? '0' [0-7]+
- ;
+    : [+-]? '0' [0-7]+
+    ;
 
 fragment HEXADECIMAL
- : [+-]? '0x' [0-9a-fA-F]+
- ;
+    : [+-]? '0x' [0-9a-fA-F]+
+    ;
 
 fragment BINARY
- : [+-]? '0b' [01]+
- ;
+    : [+-]? '0b' [01]+
+    ;
 
 fragment FLOAT
- : [+-]? [0-9]+ '.' [0-9]+
- ;
+    : [+-]? [0-9]+ '.' [0-9]+
+    ;
 
 fragment EXPONENT_FLOAT
- : FLOAT EXPONENT
- ;
+    : FLOAT EXPONENT
+    ;
 
 fragment EXPONENT_DECIMAL
- : DECIMAL EXPONENT
- ;
+    : DECIMAL EXPONENT
+    ;
 
 fragment EXPONENT
- : [eE] [+-]? [0-9]+
- ;
+    : [eE] [+-]? [0-9]+
+    ;

@@ -5,13 +5,14 @@ program : stmtList? EOF;
 
 stmtList : stmt+ ;
 
-stmt : letStmt SEP
-     | useStmt SEP
-     | funcDef SEP
-     | retStmt SEP
-     | exprStmt SEP
-     | assignStmt SEP
-     ;
+stmt
+    : letStmt SEP
+    | useStmt SEP
+    | funcDef SEP
+    | retStmt SEP
+    | exprStmt SEP
+    | assignStmt SEP
+    ;
 
 letStmt : LET carrier (':' type)? '='? expr
         | carrier (':' type)? ':=' expr ;
@@ -101,42 +102,58 @@ primExpr
     | '(' expr ')'
     ;
 
-literal : value
-        | STRING
-        | MULTI_STR
-        | FSTRING
-        | NULL
-        | TRUE
-        | FALSE
-        ;
+literal
+    : value
+    | STRING
+    | MULTI_STR
+    | FSTRING
+    | NULL
+    | TRUE
+    | FALSE
+    ;
 
 value : (INTEGER | REAL) UNIT? ;
 
+type
+    : typeUnit
+    | typeUnit '|' type
+    | typeUnit '&' type
+    ;
 
-type : innerType
-     | identRef
-     | ANY_TYPE
-     ;
+typeUnit
+    : innerType
+    | identRef
+    ;
 
-innerType : NUMBER_TYPE
-          | STRING_TYPE
-          | BOOLEAN_TYPE
-          | FUNCTOR_TYPE
-          | numberType
-          | structType
-          ;
-numberType : scalarType
-           | vectorType
-           ;
-scalarType : INTEGER_TYPE
-           | REAL_TYPE
-           | COMPLEX_TYPE
-           ;
-vectorType : ARRAY_TYPE ('<' scalarType '>')? ('[' INTEGER ']')?
-           | MATRIX_TYPE ('<' scalarType '>')? ('[' INTEGER']')*
-           ;
-structType : LIST_TYPE ('<' type (',' type)* '>')? ('[' INTEGER ']')?
-           | DICT_TYPE ('<' type ',' type '>')?
-           ;
+innerType
+    : ANY_TYPE
+    | VOID_TYPE
+    | STRING_TYPE
+    | BOOLEAN_TYPE
+    | FUNCTOR_TYPE
+    | scalarType
+    | vectorType
+    | structType
+    ;
+
+scalarType
+    : INTEGER_TYPE
+    | INTEGER32_TYPE
+    | INTEGER64_TYPE
+    | REAL_TYPE
+    | FLOAT_TYPE
+    | DOUBLE_TYPE
+    | NUMBER_TYPE
+    ;
+
+vectorType
+    : ARRAY_TYPE ('<' scalarType '>')? ('[' INTEGER ']')?
+    | MATRIX_TYPE ('<' scalarType '>')? ('[' INTEGER']')*
+    ;
+
+structType
+    : LIST_TYPE ('<' type (',' type)* '>')? ('[' INTEGER ']')?
+    | DICT_TYPE ('<' type ',' type '>')?
+    ;
 
 identRef : IDENTIFIER ;

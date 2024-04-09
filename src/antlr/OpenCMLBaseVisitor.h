@@ -187,11 +187,11 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitInnerType(OpenCMLParser::InnerTypeContext *ctx) override {
+  virtual std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitNumberType(OpenCMLParser::NumberTypeContext *ctx) override {
+  virtual std::any visitInnerType(OpenCMLParser::InnerTypeContext *ctx) override {
     return visitChildren(ctx);
   }
 

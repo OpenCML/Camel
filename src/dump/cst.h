@@ -268,12 +268,12 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpCST(context, "Type");
     };
 
-    any visitInnerType(OpenCMLParser::InnerTypeContext *context) {
-        return dumpCST(context, "InnerType");
+    any visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
+        return dumpCST(context, "TypeUnit");
     };
 
-    any visitNumberType(OpenCMLParser::NumberTypeContext *context) {
-        return dumpCST(context, "NumberType");
+    any visitInnerType(OpenCMLParser::InnerTypeContext *context) {
+        return dumpCST(context, "InnerType");
     };
 
     any visitScalarType(OpenCMLParser::ScalarTypeContext *context) {

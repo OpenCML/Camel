@@ -17,14 +17,16 @@ public:
     T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, T__19 = 20, 
     T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
-    T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, SEP = 38, 
-    AS = 39, LET = 40, USE = 41, FUNC = 42, TYPE = 43, ENUM = 44, WITH = 45, 
-    RETURN = 46, INNER = 47, OUTER = 48, SYNC = 49, SCOPED = 50, STATIC = 51, 
-    ATOMIC = 52, NULL_ = 53, TRUE = 54, FALSE = 55, ANY_TYPE = 56, NUMBER_TYPE = 57, 
-    STRING_TYPE = 58, BOOLEAN_TYPE = 59, FUNCTOR_TYPE = 60, INTEGER_TYPE = 61, 
-    REAL_TYPE = 62, COMPLEX_TYPE = 63, ARRAY_TYPE = 64, MATRIX_TYPE = 65, 
-    LIST_TYPE = 66, DICT_TYPE = 67, SKIP_ = 68, MULTI_STR = 69, IDENTIFIER = 70, 
-    UNIT = 71, STRING = 72, FSTRING = 73, INTEGER = 74, REAL = 75
+    T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
+    T__38 = 39, SEP = 40, AS = 41, LET = 42, USE = 43, FUNC = 44, TYPE = 45, 
+    ENUM = 46, WITH = 47, RETURN = 48, INNER = 49, OUTER = 50, SYNC = 51, 
+    SCOPED = 52, STATIC = 53, ATOMIC = 54, NULL_ = 55, TRUE = 56, FALSE = 57, 
+    ANY_TYPE = 58, VOID_TYPE = 59, INTEGER_TYPE = 60, INTEGER32_TYPE = 61, 
+    INTEGER64_TYPE = 62, REAL_TYPE = 63, FLOAT_TYPE = 64, DOUBLE_TYPE = 65, 
+    NUMBER_TYPE = 66, STRING_TYPE = 67, BOOLEAN_TYPE = 68, FUNCTOR_TYPE = 69, 
+    ARRAY_TYPE = 70, MATRIX_TYPE = 71, LIST_TYPE = 72, DICT_TYPE = 73, SKIP_ = 74, 
+    MULTI_STR = 75, IDENTIFIER = 76, UNIT = 77, STRING = 78, FSTRING = 79, 
+    INTEGER = 80, REAL = 81
   };
 
   enum {
@@ -38,7 +40,7 @@ public:
     RuleEntity = 29, RuleEntityLink = 30, RuleEntityChain = 31, RuleEntityUnpack = 32, 
     RuleEntityExpr = 33, RuleExpr = 34, RuleRelaExpr = 35, RuleAddExpr = 36, 
     RuleMultiExpr = 37, RuleUnaryExpr = 38, RulePrimExpr = 39, RuleLiteral = 40, 
-    RuleValue = 41, RuleType = 42, RuleInnerType = 43, RuleNumberType = 44, 
+    RuleValue = 41, RuleType = 42, RuleTypeUnit = 43, RuleInnerType = 44, 
     RuleScalarType = 45, RuleVectorType = 46, RuleStructType = 47, RuleIdentRef = 48
   };
 
@@ -102,8 +104,8 @@ public:
   class LiteralContext;
   class ValueContext;
   class TypeContext;
+  class TypeUnitContext;
   class InnerTypeContext;
-  class NumberTypeContext;
   class ScalarTypeContext;
   class VectorTypeContext;
   class StructTypeContext;
@@ -745,9 +747,8 @@ public:
   public:
     TypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    InnerTypeContext *innerType();
-    IdentRefContext *identRef();
-    antlr4::tree::TerminalNode *ANY_TYPE();
+    TypeUnitContext *typeUnit();
+    TypeContext *type();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -756,15 +757,31 @@ public:
 
   TypeContext* type();
 
+  class  TypeUnitContext : public antlr4::ParserRuleContext {
+  public:
+    TypeUnitContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    InnerTypeContext *innerType();
+    IdentRefContext *identRef();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  TypeUnitContext* typeUnit();
+
   class  InnerTypeContext : public antlr4::ParserRuleContext {
   public:
     InnerTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode *NUMBER_TYPE();
+    antlr4::tree::TerminalNode *ANY_TYPE();
+    antlr4::tree::TerminalNode *VOID_TYPE();
     antlr4::tree::TerminalNode *STRING_TYPE();
     antlr4::tree::TerminalNode *BOOLEAN_TYPE();
     antlr4::tree::TerminalNode *FUNCTOR_TYPE();
-    NumberTypeContext *numberType();
+    ScalarTypeContext *scalarType();
+    VectorTypeContext *vectorType();
     StructTypeContext *structType();
 
 
@@ -774,27 +791,17 @@ public:
 
   InnerTypeContext* innerType();
 
-  class  NumberTypeContext : public antlr4::ParserRuleContext {
-  public:
-    NumberTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
-    virtual size_t getRuleIndex() const override;
-    ScalarTypeContext *scalarType();
-    VectorTypeContext *vectorType();
-
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
-   
-  };
-
-  NumberTypeContext* numberType();
-
   class  ScalarTypeContext : public antlr4::ParserRuleContext {
   public:
     ScalarTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *INTEGER_TYPE();
+    antlr4::tree::TerminalNode *INTEGER32_TYPE();
+    antlr4::tree::TerminalNode *INTEGER64_TYPE();
     antlr4::tree::TerminalNode *REAL_TYPE();
-    antlr4::tree::TerminalNode *COMPLEX_TYPE();
+    antlr4::tree::TerminalNode *FLOAT_TYPE();
+    antlr4::tree::TerminalNode *DOUBLE_TYPE();
+    antlr4::tree::TerminalNode *NUMBER_TYPE();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

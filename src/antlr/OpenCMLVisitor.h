@@ -105,9 +105,9 @@ public:
 
     virtual std::any visitType(OpenCMLParser::TypeContext *context) = 0;
 
-    virtual std::any visitInnerType(OpenCMLParser::InnerTypeContext *context) = 0;
+    virtual std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *context) = 0;
 
-    virtual std::any visitNumberType(OpenCMLParser::NumberTypeContext *context) = 0;
+    virtual std::any visitInnerType(OpenCMLParser::InnerTypeContext *context) = 0;
 
     virtual std::any visitScalarType(OpenCMLParser::ScalarTypeContext *context) = 0;
 
