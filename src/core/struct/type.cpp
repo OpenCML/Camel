@@ -12,29 +12,11 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: Mar. 17, 2024
+ * Created: Apr. 9, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#define CAMEL_VERSION "0.1.0"
+#include "type.h"
 
-#include <string>
 
-extern std::string targetFile;
-extern std::string outputFile;
 
-extern std::vector<std::string> includeDirs;
-extern std::vector<std::string> scriptsDirs;
-
-extern bool profile;
-extern bool verbose;
-extern bool noCache;
-
-extern bool dumpCST, dumpAST, dumpGIR, dumpONNX;
-
-extern unsigned int repeat;
-
-extern unsigned int maxThreads;
-extern unsigned int serverPort;
-
-bool parseArgs(int argc, char *argv[]);

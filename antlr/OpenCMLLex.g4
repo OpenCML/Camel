@@ -4,6 +4,7 @@ lexer grammar OpenCMLLex;
 
 SEP         : ';';
 AS          : 'as';
+IS          : 'is';
 LET         : 'let';
 USE         : 'use';
 FUNC        : 'func';
@@ -25,6 +26,7 @@ FALSE       : 'false';
 
 ANY_TYPE    : 'any';
 VOID_TYPE   : 'void';
+UNION_TYPE  : 'union';
 
 INTEGER_TYPE    : 'int';
 INTEGER32_TYPE  : 'int32';
@@ -33,11 +35,11 @@ REAL_TYPE       : 'real';
 FLOAT_TYPE      : 'float';
 DOUBLE_TYPE     : 'double';
 NUMBER_TYPE     : 'number';
-STRING_TYPE     : 'str';
-BOOLEAN_TYPE    : 'bool';
+STRING_TYPE     : 'string';
+BOOLEAN_TYPE    : 'boolean';
 FUNCTOR_TYPE    : 'functor';
 
-ARRAY_TYPE      : 'array';
+ARRAY_TYPE      : 'vector';
 MATRIX_TYPE     : 'matrix';
 LIST_TYPE       : 'list';
 DICT_TYPE       : 'dict';

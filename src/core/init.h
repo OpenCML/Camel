@@ -12,29 +12,19 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: Mar. 17, 2024
+ * Created: Apr. 9, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#define CAMEL_VERSION "0.1.0"
+#pragma once
 
 #include <string>
 
-extern std::string targetFile;
-extern std::string outputFile;
+#include "struct/value.h"
+#include "struct/scope.h"
 
-extern std::vector<std::string> includeDirs;
-extern std::vector<std::string> scriptsDirs;
+using scope_ptr_t = std::shared_ptr<Scope<std::string, value_ptr_t>>;
 
-extern bool profile;
-extern bool verbose;
-extern bool noCache;
+extern Scope<std::string, value_ptr_t> globalRootScope;
 
-extern bool dumpCST, dumpAST, dumpGIR, dumpONNX;
-
-extern unsigned int repeat;
-
-extern unsigned int maxThreads;
-extern unsigned int serverPort;
-
-bool parseArgs(int argc, char *argv[]);
+void initGlobalRootScope();

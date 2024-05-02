@@ -15,3 +15,14 @@
  * Created: Apr. 9, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#pragma once
+
+class Value {
+  public:
+    bool isNull;
+    std::shared_ptr<void> data;
+};
+
+using value_ptr_t = std::shared_ptr<Value>;
+// #define make_value_ptr(ptr)

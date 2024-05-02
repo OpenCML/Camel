@@ -31,7 +31,7 @@ vector<string> scriptsDirs = {};
 bool profile = false;
 bool verbose = false;
 bool noCache = false;
-bool dumpCST = false, dumpAST = false, dumpGIR = false;
+bool dumpCST = false, dumpAST = false, dumpGIR = false, dumpONNX = false;
 unsigned int repeat = 1;
 unsigned int maxThreads = 1;
 unsigned int serverPort = 0;
@@ -95,6 +95,9 @@ bool parseArgs(int argc, char *argv[]) {
           option("-G", "--dump-gir")
               .set(dumpGIR)
               .doc("dump graph intermediate representation"),
+          option("-X", "--dump-onnx")
+              .set(dumpGIR)
+              .doc("dump ONNX model"),
           option("-R", "--print-args").set(printArgs).doc("print arguments"),
           value("target file", targetFile)));
 

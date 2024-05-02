@@ -56,7 +56,7 @@ entity : primEntity memberAccess? withPack? argsPack? annotation? ;
 entityLink : entityLink '->' entity | entity ;
 entityChain : entityLink+ ;
 entityUnpack : '...' entity ;
-entityExpr : entityChain (AS type)? ;
+entityExpr : entityChain ((AS | IS) type)? ;
 
 expr
     : relaExpr
@@ -81,6 +81,8 @@ addExpr
     : multiExpr
     | addExpr '+' multiExpr
     | addExpr '-' multiExpr
+    | addExpr '&' multiExpr
+    | addExpr '|' multiExpr
     ;
 
 multiExpr
@@ -115,12 +117,6 @@ literal
 value : (INTEGER | REAL) UNIT? ;
 
 type
-    : typeUnit
-    | typeUnit '|' type
-    | typeUnit '&' type
-    ;
-
-typeUnit
     : innerType
     | identRef
     ;
@@ -154,6 +150,7 @@ vectorType
 structType
     : LIST_TYPE ('<' type (',' type)* '>')? ('[' INTEGER ']')?
     | DICT_TYPE ('<' type ',' type '>')?
+    | UNION_TYPE ('<' type (',' type)* '>')?
     ;
 
 identRef : IDENTIFIER ;

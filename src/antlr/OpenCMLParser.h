@@ -18,15 +18,15 @@ public:
     T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
-    T__38 = 39, SEP = 40, AS = 41, LET = 42, USE = 43, FUNC = 44, TYPE = 45, 
-    ENUM = 46, WITH = 47, RETURN = 48, INNER = 49, OUTER = 50, SYNC = 51, 
-    SCOPED = 52, STATIC = 53, ATOMIC = 54, NULL_ = 55, TRUE = 56, FALSE = 57, 
-    ANY_TYPE = 58, VOID_TYPE = 59, INTEGER_TYPE = 60, INTEGER32_TYPE = 61, 
-    INTEGER64_TYPE = 62, REAL_TYPE = 63, FLOAT_TYPE = 64, DOUBLE_TYPE = 65, 
-    NUMBER_TYPE = 66, STRING_TYPE = 67, BOOLEAN_TYPE = 68, FUNCTOR_TYPE = 69, 
-    ARRAY_TYPE = 70, MATRIX_TYPE = 71, LIST_TYPE = 72, DICT_TYPE = 73, SKIP_ = 74, 
-    MULTI_STR = 75, IDENTIFIER = 76, UNIT = 77, STRING = 78, FSTRING = 79, 
-    INTEGER = 80, REAL = 81
+    T__38 = 39, SEP = 40, AS = 41, IS = 42, LET = 43, USE = 44, FUNC = 45, 
+    TYPE = 46, ENUM = 47, WITH = 48, RETURN = 49, INNER = 50, OUTER = 51, 
+    SYNC = 52, SCOPED = 53, STATIC = 54, ATOMIC = 55, NULL_ = 56, TRUE = 57, 
+    FALSE = 58, ANY_TYPE = 59, VOID_TYPE = 60, INTEGER_TYPE = 61, INTEGER32_TYPE = 62, 
+    INTEGER64_TYPE = 63, REAL_TYPE = 64, FLOAT_TYPE = 65, DOUBLE_TYPE = 66, 
+    NUMBER_TYPE = 67, STRING_TYPE = 68, BOOLEAN_TYPE = 69, FUNCTOR_TYPE = 70, 
+    ARRAY_TYPE = 71, MATRIX_TYPE = 72, LIST_TYPE = 73, DICT_TYPE = 74, SKIP_ = 75, 
+    MULTI_STR = 76, IDENTIFIER = 77, UNIT = 78, STRING = 79, FSTRING = 80, 
+    INTEGER = 81, REAL = 82
   };
 
   enum {
@@ -616,8 +616,9 @@ public:
     EntityExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     EntityChainContext *entityChain();
-    antlr4::tree::TerminalNode *AS();
     TypeContext *type();
+    antlr4::tree::TerminalNode *AS();
+    antlr4::tree::TerminalNode *IS();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
