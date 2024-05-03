@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "value.h"
+#include <set>
 
 template <typename T> T parseNumber(const std::string &input) {
     bool isNegative = false;
@@ -132,10 +133,12 @@ template <typename T> T parseNumber(const std::string &input) {
 
 enum class PrimeType {
     ANY,
+    MAP,
     VOID,
-    UNION,
-    DICT,
     LIST,
+    DICT,
+    ARRAY,
+    UNION,
     INT32,
     INT64,
     FLOAT,
@@ -143,7 +146,6 @@ enum class PrimeType {
     STRING,
     VECTOR,
     MATRIX,
-    OBJECT,
     BOOLEAN,
     FUNCTOR
 };
@@ -156,11 +158,16 @@ class Type {
     Type() = delete;
     Type(PrimeType type) : type_(type) {}
 
-    PrimeType type() const { return type_; }
+    const PrimeType &type() const { return type_; }
 
-    bool operator==(const Type &other) const { return type_ == other.type_; }
-    bool operator!=(const Type &other) const { return type_ != other.type_; }
-    bool equals(const type_ptr_t &type) const { return type_ == type->type(); }
+    virtual bool operator==(const Type &other) const {
+        return type_ == other.type_;
+    }
+    virtual bool operator!=(const Type &other) const {
+        return type_ != other.type_;
+    }
+
+    bool equals(const type_ptr_t &type) const { return *type == *this; }
 };
 
 using type_ptr_t = std::shared_ptr<Type>;
@@ -236,100 +243,110 @@ class BooleanType : public Type {
 
 class UnionType : public Type {
   private:
-    std::vector<type_ptr_t> types_; // any
+    std::set<type_ptr_t> types_;
 
   public:
     UnionType() = delete;
-    UnionType(const std::vector<type_ptr_t> &types)
-        : types_(types), Type(PrimeType::UNION) {}
+    UnionType() : Type(PrimeType::UNION) {}
+    UnionType(const std::initializer_list<type_ptr_t> &types)
+        : Type(PrimeType::UNION) {
+        for (const auto &type : types) {
+            types_.insert(type);
+        }
+    }
+    UnionType(const std::vector<type_ptr_t> &types) : Type(PrimeType::UNION) {
+        for (const auto &type : types) {
+            types_.insert(type);
+        }
+    }
 
-    bool operator==(const UnionType &other) const {
-        if (types_.size() != other.types_.size()) {
+    bool operator==(const Type &other) const override {
+        if (other.type() != PrimeType::UNION) {
             return false;
         }
-        for (const auto &t : types_) {
-            if (!other.hasType(t)) {
+        const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
+
+        if (types_.size() != otherUnion.types_.size()) {
+            return false;
+        }
+        for (const auto &type : otherUnion.types_) {
+            if (types_.find(type) == types_.end()) {
                 return false;
             }
         }
         return true;
     }
-    bool operator!=(const UnionType &other) const { return !(*this == other); }
-    bool equals(const type_ptr_t &type) const {
-        if (type->type() != PrimeType::UNION) {
-            return false;
-        }
-        const auto &other = std::dynamic_pointer_cast<UnionType>(type);
-        return *this == *other;
+    bool operator!=(const Type &other) const override {
+        return !(*this == other);
     }
 
-    void addType(const type_ptr_t &type) { types_.push_back(type); }
-    bool hasType(const type_ptr_t &type) const {
-        for (const auto &t : types_) {
-            if (t == type) {
-                return true;
-            }
-            if (t->equals(type)) {
-                return true;
-            }
-        }
-        return false;
+    void add(const type_ptr_t &type) { types_.insert(type); }
+    bool has(const type_ptr_t &type) const {
+        return types_.find(type) != types_.end();
     }
 };
 
-class DictType : public Type {
+class MapType : public Type {
   private:
     type_ptr_t keyType_;
     type_ptr_t valueType_;
 
   public:
-    DictType() = delete;
-    DictType(const type_ptr_t &keyType, const type_ptr_t &valueType)
+    MapType() = delete;
+    MapType(const type_ptr_t &keyType, const type_ptr_t &valueType)
         : keyType_(keyType), valueType_(valueType), Type(PrimeType::DICT) {}
 
     type_ptr_t keyType() const { return keyType_; }
     type_ptr_t valueType() const { return valueType_; }
 
-    bool operator==(const DictType &other) const {
-        return keyType_->equals(other.keyType_) &&
-               valueType_->equals(other.valueType_);
-    }
-    bool operator!=(const DictType &other) const {
-        return !keyType_->equals(other.keyType_) ||
-               !valueType_->equals(other.valueType_);
-    }
-    bool equals(const type_ptr_t &type) const {
-        if (type->type() != PrimeType::DICT) {
+    bool operator==(const Type &other) const override {
+        if (other.type() != PrimeType::DICT) {
             return false;
         }
-        const auto &other = std::dynamic_pointer_cast<DictType>(type);
-        return *this == *other;
+        const MapType &otherMap = dynamic_cast<const MapType &>(other);
+
+        return keyType_->equals(otherMap.keyType_) &&
+               valueType_->equals(otherMap.valueType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.type() != PrimeType::DICT) {
+            return true;
+        }
+        const MapType &otherMap = dynamic_cast<const MapType &>(other);
+
+        return !keyType_->equals(otherMap.keyType_) ||
+               !valueType_->equals(otherMap.valueType_);
     }
 };
 
-class ListType : public Type {
+class ArrayType : public Type {
   private:
     type_ptr_t elementType_;
+    size_t size_;
 
   public:
-    ListType() = delete;
-    ListType(const type_ptr_t &elementType)
-        : elementType_(elementType), Type(PrimeType::LIST) {}
+    ArrayType() = delete;
+    ArrayType(const type_ptr_t &elementType, size_t size)
+        : elementType_(elementType), size_(size), Type(PrimeType::LIST) {}
 
+    size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
 
-    bool operator==(const ListType &other) const {
-        return elementType_->equals(other.elementType_);
-    }
-    bool operator!=(const ListType &other) const {
-        return !elementType_->equals(other.elementType_);
-    }
-    bool equals(const type_ptr_t &type) const {
-        if (type->type() != PrimeType::LIST) {
+    bool operator==(const Type &other) const override {
+        if (other.type() != PrimeType::LIST) {
             return false;
         }
-        const auto &other = std::dynamic_pointer_cast<ListType>(type);
-        return *this == *other;
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return size_ == otherArray.size_ &&
+               elementType_->equals(otherArray.elementType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.type() != PrimeType::LIST) {
+            return true;
+        }
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return size_ != otherArray.size_ ||
+               !elementType_->equals(otherArray.elementType_);
     }
 };
 
@@ -357,19 +374,21 @@ class VectorType : public Type {
     size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
 
-    bool operator==(const VectorType &other) const {
-        return size_ == other.size_ && elementType_->equals(other.elementType_)
-    }
-    bool operator!=(const VectorType &other) const {
-        return size_ != other.size_ ||
-               !elementType_->equals(other.elementType_);
-    }
-    bool equals(const type_ptr_t &type) const {
-        if (type->type() != PrimeType::VECTOR) {
+    bool operator==(const Type &other) const override {
+        if (other.type() != PrimeType::VECTOR) {
             return false;
         }
-        const auto &other = std::dynamic_pointer_cast<VectorType>(type);
-        return *this == *other;
+        const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+        return size_ == otherVector.size_ &&
+               elementType_->equals(otherVector.elementType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.type() != PrimeType::VECTOR) {
+            return true;
+        }
+        const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+        return size_ != otherVector.size_ ||
+               !elementType_->equals(otherVector.elementType_);
     }
 };
 
@@ -401,37 +420,52 @@ class MatrixType : public Type {
     size_t cols() const { return cols_; }
     type_ptr_t elementType() const { return elementType_; }
 
-    bool operator==(const MatrixType &other) const {
-        return rows_ == other.rows_ && cols_ == other.cols_ &&
-               elementType_->equals(other.elementType_);
-    }
-    bool operator!=(const MatrixType &other) const {
-        return rows_ != other.rows_ || cols_ != other.cols_ ||
-               !elementType_->equals(other.elementType_);
-    }
-    bool equals(const type_ptr_t &type) const {
-        if (type->type() != PrimeType::MATRIX) {
+    bool operator==(const Type &other) const override {
+        if (other.type() != PrimeType::MATRIX) {
             return false;
         }
-        const auto &other = std::dynamic_pointer_cast<MatrixType>(type);
-        return *this == *other;
+        const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        return rows_ == otherMatrix.rows_ && cols_ == otherMatrix.cols_ &&
+               elementType_->equals(otherMatrix.elementType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.type() != PrimeType::MATRIX) {
+            return true;
+        }
+        const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        return rows_ != otherMatrix.rows_ || cols_ != otherMatrix.cols_ ||
+               !elementType_->equals(otherMatrix.elementType_);
     }
 };
 
-class ObjectType : public Type {
+class ListType : public Type {
+  public:
+    ListType() = delete;
+    ListType() : Type(PrimeType::LIST) {}
+
+    bool operator==(const Type &other) const override { return true; }
+    bool operator!=(const Type &other) const override { return false; }
+};
+
+class DictType : public Type {
   private:
     // field name -> field type with default value
     std::unordered_map<std::string, std::pair<type_ptr_t, std::any>> fields_;
 
   public:
-    ObjectType() = delete;
-    ObjectType() : Type(PrimeType::OBJECT) {}
+    DictType() = delete;
+    DictType() : Type(PrimeType::DICT) {}
 
-    bool operator==(const ObjectType &other) const {
-        if (fields_.size() != other.fields_.size()) {
+    bool operator==(const Type &other) const override {
+        if (other.type() != PrimeType::DICT) {
             return false;
         }
-        for (const auto &field : other.fields_) {
+        const DictType &otherDict = dynamic_cast<const DictType &>(other);
+
+        if (fields_.size() != otherDict.fields_.size()) {
+            return false;
+        }
+        for (const auto &field : otherDict.fields_) {
             const auto &ident = field.first;
             const auto &type = field.second.first;
             if (!fields_.count(ident)) {
@@ -444,13 +478,8 @@ class ObjectType : public Type {
         }
         return true;
     }
-    bool operator!=(const ObjectType &other) const { return !(*this == other); }
-    bool equals(const type_ptr_t &type) const {
-        if (type->type() != PrimeType::OBJECT) {
-            return false;
-        }
-        const auto &other = std::dynamic_pointer_cast<ObjectType>(type);
-        return *this == *other;
+    bool operator!=(const Type &other) const override {
+        return !(*this == other);
     }
 
     bool add(const std::string &name, const type_ptr_t &type,
@@ -477,8 +506,8 @@ class ObjectType : public Type {
         return fields_.at(name);
     }
 
-    type_ptr_t operator|(const ObjectType &other) const {
-        auto result = std::make_shared<ObjectType>();
+    type_ptr_t operator|(const DictType &other) const {
+        auto result = std::make_shared<DictType>();
         for (const auto &field : fields_) {
             result->add(field.first, field.second.first, field.second.second);
         }
@@ -496,13 +525,13 @@ class ObjectType : public Type {
         return result;
     }
 
-    type_ptr_t operator&(const ObjectType &other) const {
-        auto result = std::make_shared<ObjectType>();
+    type_ptr_t operator&(const DictType &other) const {
+        auto result = std::make_shared<DictType>();
         for (const auto &field : fields_) {
             const auto &ident = field.first;
             if (other.has(ident)) {
-                const auto &otherType = other.get(ident).first;
-                const auto &otherValue = other.get(ident).second;
+                const type_ptr_t &otherType = other.get(ident).first;
+                const std::any &otherValue = other.get(ident).second;
                 result->add(ident, otherType, otherValue);
             }
         }
