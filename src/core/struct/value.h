@@ -18,11 +18,16 @@
 
 #pragma once
 
+#include <type.h>
+
 class Value {
+  protected:
+    type_ptr_t type_ = nullptr;
+    std::shared_ptr<std::any> data_ = nullptr;
+
   public:
-    bool isNull;
-    std::shared_ptr<void> data;
+    bool isNull() const { return data_ == nullptr; }
+    virtual const value_ptr_t convert(type_ptr_t target) const = 0;
 };
 
 using value_ptr_t = std::shared_ptr<Value>;
-// #define make_value_ptr(ptr)

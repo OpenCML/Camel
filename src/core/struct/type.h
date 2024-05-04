@@ -18,250 +18,480 @@
 
 #include <any>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "value.h"
-#include <set>
+#include "scope.h"
 
-template <typename T> T parseNumber(const std::string &input) {
-    bool isNegative = false;
-    T result = 0;
-    int base = 10;
-    int exponent = 0;
-    size_t i = 0;
+enum class TypeCode {
+    // primitive types
+    INT32 = 0b00'000000,
+    INT64 = 0b00'000001,
+    FLOAT = 0b00'000010,
+    DOUBLE = 0b00'000011,
+    STRING = 0b00'000100,
+    BOOL = 0b00'000101,
+    CHAR = 0b00'000110,
+    // structured types
+    SET = 0b01'000000,
+    MAP = 0b01'000001,
+    ARRAY = 0b01'000010,
+    LIST = 0b01'000011,
+    DICT = 0b01'000100,
+    UNION = 0b01'000101,
+    VECTOR = 0b01'000110,
+    MATRIX = 0b01'000111,
+    // special types
+    ANY = 0b10'000000,
+    VOID = 0b10'000001,
+    FUNCTOR = 0b10'000010,
+};
 
-    // Handle sign
-    if (input[0] == '-') {
-        isNegative = true;
-        i++;
-    } else if (input[0] == '+') {
-        i++;
-    }
+enum class TypeConv {
+    SAFE = 1,
+    UNSAFE = -1,
+    FORBIDDEN = 0,
+};
 
-    // Handle different bases
-    if (input.substr(i, 2) == "0x") {
-        base = 16;
-        i += 2;
-    } else if (input.substr(i, 2) == "0b") {
-        base = 2;
-        i += 2;
-    } else if (input[i] == '0') {
-        base = 8;
-        i++;
-    }
+std::string typeCodeToString(TypeCode code);
 
-    // Parse the number part
-    while (i < input.length()) {
-        if (base == 10 && input[i] == '.') {
-            // For integer types, discard the fractional part
-            if (std::is_integral<T>::value) {
-                // Skip the fractional part
-                while (i < input.length() && isdigit(input[i])) {
-                    i++;
-                }
-                break;
-            }
-            // Parse floating point
-            i++;
-            double fractional = 0.0;
-            double weight = 0.1;
-            while (i < input.length() && isdigit(input[i])) {
-                fractional += (input[i] - '0') * weight;
-                weight *= 0.1;
-                i++;
-            }
-            result += fractional;
-        } else if (base == 10 && (input[i] == 'e' || input[i] == 'E')) {
-            // Parse exponent part
-            i++;
-            bool isNegativeExponent = false;
-            if (input[i] == '-') {
-                isNegativeExponent = true;
-                i++;
-            } else if (input[i] == '+') {
-                i++;
-            }
-            while (i < input.length() && isdigit(input[i])) {
-                exponent = exponent * 10 + (input[i] - '0');
-                i++;
-            }
-            if (isNegativeExponent) {
-                exponent = -exponent;
-            }
-        } else if (isdigit(input[i])) {
-            // Parse integer part
-            result = result * base + (input[i] - '0');
-            i++;
-        } else if (base == 16 && isxdigit(input[i])) {
-            // Parse hexadecimal
-            result = result * 16 +
-                     (toupper(input[i]) - (isdigit(input[i]) ? '0' : 'A' - 10));
-            i++;
-        } else if (base == 2 && (input[i] == '0' || input[i] == '1')) {
-            // Parse binary
-            result = result * 2 + (input[i] - '0');
-            i++;
-        } else if (base == 8 && (input[i] >= '0' && input[i] <= '7')) {
-            // Parse octal
-            result = result * 8 + (input[i] - '0');
-            i++;
-        } else {
-            // Encountered an invalid character
-            throw std::invalid_argument("Invalid number format: " + input);
-        }
-    }
+extern const signed char primeTypeConvMatrix[7][7];
 
-    // Apply exponent
-    result *= std::pow(10.0, exponent);
-
-    // Handle sign
-    if (isNegative) {
-        result = -result;
-    }
-
-    // Check for overflow/underflow
-    if (result > std::numeric_limits<T>::max() ||
-        result < std::numeric_limits<T>::min()) {
-        throw std::overflow_error("Number out of range");
-    }
-
-    return result;
+inline bool isPrimitive(TypeCode type) {
+    return (static_cast<int>(type) & 0b11'000000) == 0b00'000000;
 }
 
-enum class PrimeType {
-    ANY,
-    MAP,
-    VOID,
-    LIST,
-    DICT,
-    ARRAY,
-    UNION,
-    INT32,
-    INT64,
-    FLOAT,
-    DOUBLE,
-    STRING,
-    VECTOR,
-    MATRIX,
-    BOOLEAN,
-    FUNCTOR
-};
+inline bool isStructured(TypeCode type) {
+    return (static_cast<int>(type) & 0b11'000000) == 0b01'000000;
+}
+
+inline bool isSpecial(TypeCode type) {
+    return (static_cast<int>(type) & 0b11'000000) == 0b10'000000;
+}
 
 class Type {
   protected:
-    PrimeType type_;
+    TypeCode code_;
 
   public:
     Type() = delete;
-    Type(PrimeType type) : type_(type) {}
+    Type(TypeCode type) : code_(type) {}
 
-    const PrimeType &type() const { return type_; }
+    const TypeCode &code() const { return code_; }
+
+    bool primitive() const { return isPrimitive(code_); }
+    bool structured() const { return isStructured(code_); }
+    bool special() const { return isSpecial(code_); }
+
+    virtual std::string toString() const { return typeCodeToString(code_); }
 
     virtual bool operator==(const Type &other) const {
-        return type_ == other.type_;
+        return code_ == other.code_;
     }
     virtual bool operator!=(const Type &other) const {
-        return type_ != other.type_;
+        return code_ != other.code_;
     }
 
     bool equals(const type_ptr_t &type) const { return *type == *this; }
+
+    virtual TypeConv convertibility(const Type &other) const {
+        if (code_ == other.code_) {
+            return TypeConv::SAFE;
+        }
+        return TypeConv::FORBIDDEN;
+    }
 };
 
 using type_ptr_t = std::shared_ptr<Type>;
 
-class AnyType : public Type {
+class PrimeType : public Type {
   public:
-    AnyType() = delete;
-    AnyType() : Type(PrimeType::ANY) {}
-};
+    PrimeType() = delete;
+    PrimeType(TypeCode code) : Type(code) {}
 
-class VoidType : public Type {
-  public:
-    VoidType() = delete;
-    VoidType() : Type(PrimeType::VOID) {}
-};
-
-class Int32Type : public Type {
-  public:
-    Int32Type() = delete;
-    Int32Type() : Type(PrimeType::INT32) {}
-
-    static int32_t parseToken(const std::string &str) {
-        return parseNumber<int32_t>(str);
+    TypeConv convertibility(const Type &other) const override {
+        const TypeCode otherCode = other.code();
+        if (otherCode == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            const int thisIndex = static_cast<int>(code_) & 0b00'000111;
+            const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
+            return static_cast<TypeConv>(
+                primeTypeConvMatrix[thisIndex][otherIndex]);
+        }
+        if (other.structured()) {
+            switch (otherCode) {
+            case TypeCode::UNION:
+            case TypeCode::LIST:
+            case TypeCode::ARRAY:
+            case TypeCode::VECTOR:
+            case TypeCode::MATRIX:
+            case TypeCode::SET:
+                return TypeConv::SAFE;
+            case TypeCode::MAP:
+            case TypeCode::DICT:
+                return TypeConv::FORBIDDEN;
+            }
+        }
+        if (other.special()) {
+            switch (otherCode) {
+            case TypeCode::ANY:
+                return TypeConv::SAFE;
+            case TypeCode::VOID:
+                return TypeConv::UNSAFE;
+            case TypeCode::FUNCTOR:
+                return TypeConv::FORBIDDEN;
+            }
+        }
+        return TypeConv::FORBIDDEN;
     }
 };
 
-class Int64Type : public Type {
+class StructType : public Type {
   public:
-    Int64Type() = delete;
-    Int64Type() : Type(PrimeType::INT64) {}
+    StructType() = delete;
+    StructType(TypeCode code) : Type(code) {}
 
-    static int64_t parseToken(const std::string &str) {
-        return parseNumber<int64_t>(str);
+    virtual std::string toString() const override {
+        throw std::runtime_error("Method not overridden");
+    }
+
+    virtual bool operator==(const Type &other) const override {
+        throw std::runtime_error("Method not overridden");
+    }
+    virtual bool operator!=(const Type &other) const override {
+        throw std::runtime_error("Method not overridden");
+    }
+
+    virtual TypeConv convertibility(const Type &other) const override {
+        throw std::runtime_error("Method not overridden");
     }
 };
 
-class FloatType : public Type {
+class SpecialType : public Type {
   public:
-    FloatType() = delete;
-    FloatType() : Type(PrimeType::FLOAT) {}
+    SpecialType() = delete;
+    SpecialType(TypeCode code) : Type(code) {}
 
-    static float parseToken(const std::string &str) {
-        return parseNumber<float>(str);
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive() || other.structured()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.code() == TypeCode::VOID)
+            return TypeConv::UNSAFE;
+        return TypeConv::FORBIDDEN;
     }
 };
 
-class DoubleType : public Type {
-  public:
-    DoubleType() = delete;
-    DoubleType() : Type(PrimeType::DOUBLE) {}
-
-    static double parseToken(const std::string &str) {
-        return parseNumber<double>(str);
-    }
-};
-
-class StringType : public Type {
-  public:
-    StringType() = delete;
-    StringType() : Type(PrimeType::STRING) {}
-
-    static std::string parseToken(const std::string &str) {
-        // remove the quotes
-        return str.substr(1, str.size() - 2);
-    }
-};
-
-class BooleanType : public Type {
-  public:
-    BooleanType() = delete;
-    BooleanType() : Type(PrimeType::BOOLEAN) {}
-};
-
-class UnionType : public Type {
+class SetType : public StructType {
   private:
-    std::set<type_ptr_t> types_;
+    type_ptr_t valueType_;
 
   public:
-    UnionType() = delete;
-    UnionType() : Type(PrimeType::UNION) {}
-    UnionType(const std::initializer_list<type_ptr_t> &types)
-        : Type(PrimeType::UNION) {
-        for (const auto &type : types) {
-            types_.insert(type);
-        }
-    }
-    UnionType(const std::vector<type_ptr_t> &types) : Type(PrimeType::UNION) {
-        for (const auto &type : types) {
-            types_.insert(type);
-        }
+    SetType() = delete;
+    SetType(const type_ptr_t &valueType)
+        : valueType_(valueType), StructType(TypeCode::DICT) {}
+
+    type_ptr_t valueType() const { return valueType_; }
+
+    std::string toString() const override {
+        return "set<" + valueType_->toString() + ">";
     }
 
     bool operator==(const Type &other) const override {
-        if (other.type() != PrimeType::UNION) {
+        if (other.code() != TypeCode::DICT) {
+            return false;
+        }
+        const SetType &otherMap = dynamic_cast<const SetType &>(other);
+
+        return valueType_->equals(otherMap.valueType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.code() != TypeCode::DICT) {
+            return true;
+        }
+        const SetType &otherMap = dynamic_cast<const SetType &>(other);
+
+        return !valueType_->equals(otherMap.valueType_);
+    }
+
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.structured()) {
+        }
+        return TypeConv::FORBIDDEN;
+    }
+};
+
+class MapType : public StructType {
+  private:
+    type_ptr_t keyType_;
+    type_ptr_t valueType_;
+
+  public:
+    MapType() = delete;
+    MapType(const type_ptr_t &keyType, const type_ptr_t &valueType)
+        : keyType_(keyType), valueType_(valueType), StructType(TypeCode::DICT) {
+    }
+
+    type_ptr_t keyType() const { return keyType_; }
+    type_ptr_t valueType() const { return valueType_; }
+
+    std::string toString() const override {
+        return "map<" + keyType_->toString() + ", " + valueType_->toString() +
+               ">";
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::DICT) {
+            return false;
+        }
+        const MapType &otherMap = dynamic_cast<const MapType &>(other);
+
+        return keyType_->equals(otherMap.keyType_) &&
+               valueType_->equals(otherMap.valueType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.code() != TypeCode::DICT) {
+            return true;
+        }
+        const MapType &otherMap = dynamic_cast<const MapType &>(other);
+
+        return !keyType_->equals(otherMap.keyType_) ||
+               !valueType_->equals(otherMap.valueType_);
+    }
+
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.structured()) {
+        }
+        return TypeConv::FORBIDDEN;
+    }
+};
+
+class ArrayType : public StructType {
+  private:
+    type_ptr_t elementType_;
+    size_t size_;
+
+  public:
+    ArrayType() = delete;
+    ArrayType(const type_ptr_t &elementType, size_t size)
+        : elementType_(elementType), size_(size), StructType(TypeCode::LIST) {}
+
+    size_t size() const { return size_; }
+    type_ptr_t elementType() const { return elementType_; }
+
+    std::string toString() const override {
+        return "array<" + elementType_->toString() + ", " +
+               std::to_string(size_) + ">";
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::LIST) {
+            return false;
+        }
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return size_ == otherArray.size_ &&
+               elementType_->equals(otherArray.elementType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.code() != TypeCode::LIST) {
+            return true;
+        }
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return size_ != otherArray.size_ ||
+               !elementType_->equals(otherArray.elementType_);
+    }
+
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.structured()) {
+        }
+        return TypeConv::FORBIDDEN;
+    }
+};
+
+class DictType : public StructType {
+  private:
+    // field name -> field type with default value
+    std::unordered_map<std::string, type_ptr_t> fields_;
+
+  public:
+    DictType() = delete;
+    DictType() : StructType(TypeCode::DICT) {}
+
+    std::string toString() const override {
+        std::string result = "{";
+        for (const auto &field : fields_) {
+            result += field.first + ": " + field.second->toString() + ", ";
+        }
+        result.pop_back();
+        result.pop_back();
+        result += "}";
+        return result;
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::DICT) {
+            return false;
+        }
+        const DictType &otherDict = dynamic_cast<const DictType &>(other);
+
+        if (fields_.size() != otherDict.fields_.size()) {
+            return false;
+        }
+        for (const auto &field : otherDict.fields_) {
+            const auto &ident = field.first;
+            const auto &type = field.second;
+            if (!fields_.count(ident)) {
+                return false;
+            }
+            const auto &fieldType = fields_.at(ident);
+            if (fieldType->code() != type->code()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    bool operator!=(const Type &other) const override {
+        return !(*this == other);
+    }
+
+    bool add(const std::string &name, const type_ptr_t &type) {
+        if (has(name)) {
+            return false;
+        }
+        fields_[name] = type;
+        return true;
+    }
+
+    bool del(const std::string &name) { return fields_.erase(name) > 0; }
+
+    bool has(const std::string &name) const {
+        return fields_.find(name) != fields_.end();
+    }
+
+    void set(const std::string &name, const type_ptr_t &type) {
+        fields_.at(name) = type;
+    }
+
+    type_ptr_t get(const std::string &name) const { return fields_.at(name); }
+
+    type_ptr_t operator|(const DictType &other) const {
+        auto result = std::make_shared<DictType>();
+        for (const auto &field : fields_) {
+            result->add(field.first, field.second);
+        }
+        for (const auto &field : other.fields_) {
+            const auto &ident = field.first;
+            const auto &type = field.second;
+            if (!result->has(ident)) {
+                result->add(ident, type);
+            } else {
+                // if the field already exists, use the rhs type and value
+                result->set(ident, type);
+            }
+        }
+        return result;
+    }
+
+    type_ptr_t operator&(const DictType &other) const {
+        auto result = std::make_shared<DictType>();
+        for (const auto &field : fields_) {
+            const auto &ident = field.first;
+            if (other.has(ident)) {
+                const type_ptr_t &otherType = other.get(ident);
+                result->add(ident, otherType);
+            }
+        }
+        return result;
+    }
+
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.structured()) {
+        }
+        return TypeConv::FORBIDDEN;
+    }
+};
+
+class UnionType : public StructType {
+  private:
+    std::set<type_ptr_t> types_;
+
+    void insertUnion(const UnionType &other) {
+        // flatten the union type
+        for (const auto &type : other.types_) {
+            if (type->code() == TypeCode::UNION)
+                insertUnion(dynamic_cast<const UnionType &>(*type));
+            else
+                types_.insert(type);
+        }
+    }
+
+  public:
+    UnionType() = delete;
+    UnionType() : StructType(TypeCode::UNION) {}
+    UnionType(const std::initializer_list<type_ptr_t> &types)
+        : StructType(TypeCode::UNION) {
+        for (const auto &type : types) {
+            if (type->code() == TypeCode::UNION)
+                insertUnion(dynamic_cast<const UnionType &>(*type));
+            else
+                types_.insert(type);
+        }
+    }
+    UnionType(const std::vector<type_ptr_t> &types)
+        : StructType(TypeCode::UNION) {
+        for (const auto &type : types) {
+            if (type->code() == TypeCode::UNION)
+                insertUnion(dynamic_cast<const UnionType &>(*type));
+            else
+                types_.insert(type);
+        }
+    }
+
+    std::string toString() const override {
+        std::string result = "";
+        for (const auto &type : types_) {
+            result += type->toString() + " | ";
+        }
+        result.pop_back();
+        result.pop_back();
+        result.pop_back();
+        return result;
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::UNION) {
             return false;
         }
         const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
@@ -284,73 +514,36 @@ class UnionType : public Type {
     bool has(const type_ptr_t &type) const {
         return types_.find(type) != types_.end();
     }
-};
 
-class MapType : public Type {
-  private:
-    type_ptr_t keyType_;
-    type_ptr_t valueType_;
-
-  public:
-    MapType() = delete;
-    MapType(const type_ptr_t &keyType, const type_ptr_t &valueType)
-        : keyType_(keyType), valueType_(valueType), Type(PrimeType::DICT) {}
-
-    type_ptr_t keyType() const { return keyType_; }
-    type_ptr_t valueType() const { return valueType_; }
-
-    bool operator==(const Type &other) const override {
-        if (other.type() != PrimeType::DICT) {
-            return false;
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
         }
-        const MapType &otherMap = dynamic_cast<const MapType &>(other);
-
-        return keyType_->equals(otherMap.keyType_) &&
-               valueType_->equals(otherMap.valueType_);
-    }
-    bool operator!=(const Type &other) const override {
-        if (other.type() != PrimeType::DICT) {
-            return true;
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
         }
-        const MapType &otherMap = dynamic_cast<const MapType &>(other);
-
-        return !keyType_->equals(otherMap.keyType_) ||
-               !valueType_->equals(otherMap.valueType_);
+        if (other.structured()) {
+            if (other.code() == TypeCode::UNION) {
+                const UnionType &otherUnion =
+                    dynamic_cast<const UnionType &>(other);
+                for (const auto &type : otherUnion.types_) {
+                    if (types_.find(type) == types_.end()) {
+                        return TypeConv::FORBIDDEN;
+                    }
+                }
+                return TypeConv::SAFE;
+            }
+            for (const auto &type : types_) {
+                if (type->convertibility(other) == TypeConv::SAFE) {
+                    return TypeConv::SAFE;
+                }
+            }
+        }
+        return TypeConv::FORBIDDEN;
     }
 };
 
-class ArrayType : public Type {
-  private:
-    type_ptr_t elementType_;
-    size_t size_;
-
-  public:
-    ArrayType() = delete;
-    ArrayType(const type_ptr_t &elementType, size_t size)
-        : elementType_(elementType), size_(size), Type(PrimeType::LIST) {}
-
-    size_t size() const { return size_; }
-    type_ptr_t elementType() const { return elementType_; }
-
-    bool operator==(const Type &other) const override {
-        if (other.type() != PrimeType::LIST) {
-            return false;
-        }
-        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return size_ == otherArray.size_ &&
-               elementType_->equals(otherArray.elementType_);
-    }
-    bool operator!=(const Type &other) const override {
-        if (other.type() != PrimeType::LIST) {
-            return true;
-        }
-        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return size_ != otherArray.size_ ||
-               !elementType_->equals(otherArray.elementType_);
-    }
-};
-
-class VectorType : public Type {
+class VectorType : public StructType {
   private:
     type_ptr_t elementType_;
     size_t size_;
@@ -358,14 +551,9 @@ class VectorType : public Type {
   public:
     VectorType() = delete;
     VectorType(const type_ptr_t &elementType, size_t size)
-        : elementType_(elementType), size_(size), Type(PrimeType::VECTOR) {
-        if (size == 0) {
-            throw std::invalid_argument("Vector size must be greater than 0");
-        }
+        : elementType_(elementType), size_(size), StructType(TypeCode::VECTOR) {
         // element type must be a primitive type
-        const PrimeType type = elementType->type();
-        if (type != PrimeType::INT32 && type != PrimeType::INT64 &&
-            type != PrimeType::FLOAT && type != PrimeType::DOUBLE) {
+        if (!elementType->primitive()) {
             throw std::invalid_argument(
                 "Vector element type must be primitive");
         }
@@ -374,8 +562,13 @@ class VectorType : public Type {
     size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
 
+    std::string toString() const override {
+        return "vector<" + elementType_->toString() + ", " +
+               std::to_string(size_) + ">";
+    }
+
     bool operator==(const Type &other) const override {
-        if (other.type() != PrimeType::VECTOR) {
+        if (other.code() != TypeCode::VECTOR) {
             return false;
         }
         const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
@@ -383,158 +576,134 @@ class VectorType : public Type {
                elementType_->equals(otherVector.elementType_);
     }
     bool operator!=(const Type &other) const override {
-        if (other.type() != PrimeType::VECTOR) {
+        if (other.code() != TypeCode::VECTOR) {
             return true;
         }
         const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
         return size_ != otherVector.size_ ||
                !elementType_->equals(otherVector.elementType_);
     }
+
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.structured()) {
+        }
+        return TypeConv::FORBIDDEN;
+    }
 };
 
-class MatrixType : public Type {
+class MatrixType : public StructType {
   private:
     type_ptr_t elementType_;
-    size_t rows_;
-    size_t cols_;
+    std::vector<size_t> shape_;
 
   public:
     MatrixType() = delete;
-    MatrixType(const type_ptr_t &elementType, size_t rows, size_t cols)
-        : elementType_(elementType), rows_(rows), cols_(cols),
-          Type(PrimeType::MATRIX) {
-        if (rows == 0 || cols == 0) {
+    MatrixType(const type_ptr_t &elementType, const std::vector<size_t> &shape)
+        : elementType_(elementType), shape_(shape),
+          StructType(TypeCode::MATRIX) {
+        if (shape_.size() == 0) {
             throw std::invalid_argument(
-                "Matrix rows and columns must be greater than 0");
+                "Matrix shape must at least have 1 dim");
         }
         // element type must be a primitive type
-        const PrimeType type = elementType->type();
-        if (type != PrimeType::INT32 && type != PrimeType::INT64 &&
-            type != PrimeType::FLOAT && type != PrimeType::DOUBLE) {
+        if (!elementType->primitive()) {
             throw std::invalid_argument(
                 "Matrix element type must be primitive");
         }
     }
 
-    size_t rows() const { return rows_; }
-    size_t cols() const { return cols_; }
+    std::vector<size_t> shape() const { return shape_; }
     type_ptr_t elementType() const { return elementType_; }
 
+    std::string toString() const override {
+        std::string result = "matrix<" + elementType_->toString() + ", [";
+        for (const auto &dim : shape_) {
+            result += std::to_string(dim) + ", ";
+        }
+        result.pop_back();
+        result.pop_back();
+        result += "]>";
+        return result;
+    }
+
     bool operator==(const Type &other) const override {
-        if (other.type() != PrimeType::MATRIX) {
+        if (other.code() != TypeCode::MATRIX) {
             return false;
         }
         const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
-        return rows_ == otherMatrix.rows_ && cols_ == otherMatrix.cols_ &&
+        return shape_ == otherMatrix.shape_ &&
                elementType_->equals(otherMatrix.elementType_);
     }
     bool operator!=(const Type &other) const override {
-        if (other.type() != PrimeType::MATRIX) {
+        if (other.code() != TypeCode::MATRIX) {
             return true;
         }
         const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
-        return rows_ != otherMatrix.rows_ || cols_ != otherMatrix.cols_ ||
+        return shape_ != otherMatrix.shape_ ||
                !elementType_->equals(otherMatrix.elementType_);
+    }
+
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.structured()) {
+        }
+        return TypeConv::FORBIDDEN;
     }
 };
 
-class ListType : public Type {
+class ListType : public StructType {
   public:
     ListType() = delete;
-    ListType() : Type(PrimeType::LIST) {}
+    ListType() : StructType(TypeCode::LIST) {}
+
+    std::string toString() const override {
+        return "list";
+    }
 
     bool operator==(const Type &other) const override { return true; }
     bool operator!=(const Type &other) const override { return false; }
+
+    TypeConv convertibility(const Type &other) const override {
+        if (other.code() == code_) {
+            return TypeConv::SAFE;
+        }
+        if (other.primitive()) {
+            return TypeConv::FORBIDDEN;
+        }
+        if (other.structured()) {
+        }
+        return TypeConv::FORBIDDEN;
+    }
 };
 
-class DictType : public Type {
-  private:
-    // field name -> field type with default value
-    std::unordered_map<std::string, std::pair<type_ptr_t, std::any>> fields_;
+extern type_ptr_t anyTypePtr;
+extern type_ptr_t voidTypePtr;
+extern type_ptr_t int32TypePtr;
+extern type_ptr_t int64TypePtr;
+extern type_ptr_t floatTypePtr;
+extern type_ptr_t doubleTypePtr;
+extern type_ptr_t stringTypePtr;
+extern type_ptr_t booleanTypePtr;
 
-  public:
-    DictType() = delete;
-    DictType() : Type(PrimeType::DICT) {}
+extern type_ptr_t intTypePtr;
+extern type_ptr_t realTypePtr;
+extern type_ptr_t numberTypePtr;
 
-    bool operator==(const Type &other) const override {
-        if (other.type() != PrimeType::DICT) {
-            return false;
-        }
-        const DictType &otherDict = dynamic_cast<const DictType &>(other);
+extern type_ptr_t anyTypePtr;
+extern type_ptr_t voidTypePtr;
+extern type_ptr_t functorTypePtr;
 
-        if (fields_.size() != otherDict.fields_.size()) {
-            return false;
-        }
-        for (const auto &field : otherDict.fields_) {
-            const auto &ident = field.first;
-            const auto &type = field.second.first;
-            if (!fields_.count(ident)) {
-                return false;
-            }
-            const auto &fieldType = fields_.at(ident).first;
-            if (fieldType->type() != type->type()) {
-                return false;
-            }
-        }
-        return true;
-    }
-    bool operator!=(const Type &other) const override {
-        return !(*this == other);
-    }
+extern scope_ptr_t<std::string, type_ptr_t> globalTypeScope;
 
-    bool add(const std::string &name, const type_ptr_t &type,
-             const std::any &value = std::any()) {
-        if (has(name)) {
-            return false;
-        }
-        fields_[name] = std::make_pair(type, value);
-        return true;
-    }
-
-    bool del(const std::string &name) { return fields_.erase(name) > 0; }
-
-    bool has(const std::string &name) const {
-        return fields_.find(name) != fields_.end();
-    }
-
-    void set(const std::string &name, const type_ptr_t &type,
-             const std::any &value = std::any()) {
-        fields_.at(name) = std::make_pair(type, value);
-    }
-
-    std::pair<type_ptr_t, std::any> get(const std::string &name) const {
-        return fields_.at(name);
-    }
-
-    type_ptr_t operator|(const DictType &other) const {
-        auto result = std::make_shared<DictType>();
-        for (const auto &field : fields_) {
-            result->add(field.first, field.second.first, field.second.second);
-        }
-        for (const auto &field : other.fields_) {
-            const auto &ident = field.first;
-            const auto &type = field.second.first;
-            const auto &value = field.second.second;
-            if (!result->has(ident)) {
-                result->add(ident, type, value);
-            } else {
-                // if the field already exists, use the rhs type and value
-                result->set(ident, type, value);
-            }
-        }
-        return result;
-    }
-
-    type_ptr_t operator&(const DictType &other) const {
-        auto result = std::make_shared<DictType>();
-        for (const auto &field : fields_) {
-            const auto &ident = field.first;
-            if (other.has(ident)) {
-                const type_ptr_t &otherType = other.get(ident).first;
-                const std::any &otherValue = other.get(ident).second;
-                result->add(ident, otherType, otherValue);
-            }
-        }
-        return result;
-    }
-};
+void initTypes();

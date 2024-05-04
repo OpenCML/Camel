@@ -17,3 +17,16 @@
  */
 
 #pragma once
+
+#include "type.h"
+#include "value.h"
+
+class Entity {
+  public:
+    size_t refs = 0;
+    type_ptr_t type = nullptr;
+    value_ptr_t meta = nullptr;
+    value_ptr_t data = nullptr;
+};
+
+using entity_ptr_t = std::shared_ptr<Entity>;

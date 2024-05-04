@@ -27,21 +27,21 @@ void initGlobalRootScope() {
     auto scope = globalRootScope;
 
     scope->insert("any",
-                  make_value_ptr(make_type_ptr(PrimeType::ANY), std::any()));
-    basicTypeMap["any"] = make_type_ptr(PrimeType::ANY);
-    basicTypeMap["void"] = make_type_ptr(PrimeType::VOID);
-    basicTypeMap["dict"] = make_type_ptr(PrimeType::DICT);
-    basicTypeMap["list"] = make_type_ptr(PrimeType::LIST);
-    basicTypeMap["union"] = make_type_ptr(PrimeType::UNION);
-    basicTypeMap["int32"] = make_type_ptr(PrimeType::INT32);
-    basicTypeMap["int64"] = make_type_ptr(PrimeType::INT64);
-    basicTypeMap["float"] = make_type_ptr(PrimeType::FLOAT);
-    basicTypeMap["double"] = make_type_ptr(PrimeType::DOUBLE);
-    basicTypeMap["string"] = make_type_ptr(PrimeType::STRING);
-    basicTypeMap["vector"] = make_type_ptr(PrimeType::VECTOR);
-    basicTypeMap["matrix"] = make_type_ptr(PrimeType::MATRIX);
-    basicTypeMap["boolean"] = make_type_ptr(PrimeType::BOOLEAN);
-    basicTypeMap["functor"] = make_type_ptr(PrimeType::FUNCTOR);
+                  make_value_ptr(make_type_ptr(TypeCode::ANY), std::any()));
+    basicTypeMap["any"] = make_type_ptr(TypeCode::ANY);
+    basicTypeMap["void"] = make_type_ptr(TypeCode::VOID);
+    basicTypeMap["dict"] = make_type_ptr(TypeCode::DICT);
+    basicTypeMap["list"] = make_type_ptr(TypeCode::LIST);
+    basicTypeMap["union"] = make_type_ptr(TypeCode::UNION);
+    basicTypeMap["int32"] = make_type_ptr(TypeCode::INT32);
+    basicTypeMap["int64"] = make_type_ptr(TypeCode::INT64);
+    basicTypeMap["float"] = make_type_ptr(TypeCode::FLOAT);
+    basicTypeMap["double"] = make_type_ptr(TypeCode::DOUBLE);
+    basicTypeMap["string"] = make_type_ptr(TypeCode::STRING);
+    basicTypeMap["vector"] = make_type_ptr(TypeCode::VECTOR);
+    basicTypeMap["matrix"] = make_type_ptr(TypeCode::MATRIX);
+    basicTypeMap["boolean"] = make_type_ptr(TypeCode::BOOL);
+    basicTypeMap["functor"] = make_type_ptr(TypeCode::FUNCTOR);
 
     basicTypeMap["int"] = std::make_shared<UnionType>(
         std::vector<type_ptr_t>{basicTypeMap["int32"], basicTypeMap["int64"]});
