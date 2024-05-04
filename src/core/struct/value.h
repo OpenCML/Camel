@@ -27,7 +27,8 @@ class Value {
 
   public:
     Value() = delete;
-    Value(type_ptr_t type) : type_(type) {}
+    Value(type_ptr_t type = nullptr, std::shared_ptr<std::any> data = nullptr)
+        : type_(type), data_(data) {}
     virtual ~Value() = default;
 
     bool isNull() const { return data_ == nullptr; }
@@ -39,10 +40,30 @@ class Value {
 
 using value_ptr_t = std::shared_ptr<Value>;
 
-class PrimeValue : public Value {
+template <typename T> class PrimeValue : public Value {
   public:
     PrimeValue() = delete;
-    PrimeValue(type_ptr_t type) : Value(type) {}
+    PrimeValue(const T &data) : Value() {
+        if constexpr (std::is_same_v<T, int32_t>) {
+            type_ = int32TypePtr;
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            type_ = int64TypePtr;
+        } else if constexpr (std::is_same_v<T, float>) {
+            type_ = floatTypePtr;
+        } else if constexpr (std::is_same_v<T, double>) {
+            type_ = doubleTypePtr;
+        } else if constexpr (std::is_same_v<T, bool>) {
+            type_ = boolTypePtr;
+        } else if constexpr (std::is_same_v<T, char>) {
+            type_ = boolTypePtr;
+        } else if constexpr (std::is_same_v<T, std::string>) {
+            type_ = stringTypePtr;
+        } else {
+            type_ = nullptr;
+            throw std::runtime_error("Unsupported type");
+        }
+        data_ = std::make_shared<std::any>(data);
+    }
 
     virtual const value_ptr_t convert(type_ptr_t target) const override = 0;
 };
@@ -53,11 +74,4 @@ class StructValue : public Value {
     StructValue(type_ptr_t type) : Value(type) {}
 
     virtual const value_ptr_t convert(type_ptr_t target) const override = 0;
-};
-
-class Int32Value : public PrimeValue {
-  public:
-    Int32Value(int32_t data) : PrimeValue(int32TypePtr) {
-        data_ = std::make_shared<std::any>(data);
-    }
 };
