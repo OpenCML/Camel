@@ -25,7 +25,7 @@
 
 #include "utils/log.h"
 #include "config.h"
-#include "dump/visitor.h"
+#include "dump/cst.h"
 
 using namespace antlr4;
 

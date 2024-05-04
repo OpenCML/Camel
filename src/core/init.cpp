@@ -19,36 +19,6 @@
 #include "init.h"
 #include "struct/type.h"
 
+Scope<std::string, value_ptr_t> globalRootScope;
 
-scope_ptr_t globalRootScope;
-
-void initGlobalRootScope() {
-    globalRootScope = std::make_shared<Scope<std::string, value_ptr_t>>();
-    auto scope = globalRootScope;
-
-    scope->insert("any",
-                  make_value_ptr(make_type_ptr(TypeCode::ANY), std::any()));
-    basicTypeMap["any"] = make_type_ptr(TypeCode::ANY);
-    basicTypeMap["void"] = make_type_ptr(TypeCode::VOID);
-    basicTypeMap["dict"] = make_type_ptr(TypeCode::DICT);
-    basicTypeMap["list"] = make_type_ptr(TypeCode::LIST);
-    basicTypeMap["union"] = make_type_ptr(TypeCode::UNION);
-    basicTypeMap["int32"] = make_type_ptr(TypeCode::INT32);
-    basicTypeMap["int64"] = make_type_ptr(TypeCode::INT64);
-    basicTypeMap["float"] = make_type_ptr(TypeCode::FLOAT);
-    basicTypeMap["double"] = make_type_ptr(TypeCode::DOUBLE);
-    basicTypeMap["string"] = make_type_ptr(TypeCode::STRING);
-    basicTypeMap["vector"] = make_type_ptr(TypeCode::VECTOR);
-    basicTypeMap["matrix"] = make_type_ptr(TypeCode::MATRIX);
-    basicTypeMap["boolean"] = make_type_ptr(TypeCode::BOOL);
-    basicTypeMap["functor"] = make_type_ptr(TypeCode::FUNCTOR);
-
-    basicTypeMap["int"] = std::make_shared<UnionType>(
-        std::vector<type_ptr_t>{basicTypeMap["int32"], basicTypeMap["int64"]});
-
-    basicTypeMap["real"] = std::make_shared<UnionType>(
-        std::vector<type_ptr_t>{basicTypeMap["float"], basicTypeMap["double"]});
-
-    basicTypeMap["number"] = std::make_shared<UnionType>(
-        std::vector<type_ptr_t>{basicTypeMap["int"], basicTypeMap["real"]});
-};
+void initGlobalRootScope(){};

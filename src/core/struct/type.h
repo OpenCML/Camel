@@ -16,13 +16,15 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#pragma once
+
 #include <any>
-#include <set>
 #include <memory>
-#include <string>
-#include <vector>
+#include <set>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 enum class TypeCode {
     // primitive types
@@ -58,18 +60,6 @@ std::string typeCodeToString(TypeCode code);
 
 extern const signed char primeTypeConvMatrix[7][7];
 
-inline bool isPrimitive(TypeCode type) {
-    return (static_cast<int>(type) & 0b11'000000) == 0b00'000000;
-}
-
-inline bool isStructured(TypeCode type) {
-    return (static_cast<int>(type) & 0b11'000000) == 0b01'000000;
-}
-
-inline bool isSpecial(TypeCode type) {
-    return (static_cast<int>(type) & 0b11'000000) == 0b10'000000;
-}
-
 class Type {
   protected:
     TypeCode code_;
@@ -77,12 +67,19 @@ class Type {
   public:
     Type() = delete;
     Type(TypeCode type) : code_(type) {}
+    virtual ~Type() = default;
 
     const TypeCode &code() const { return code_; }
 
-    bool primitive() const { return isPrimitive(code_); }
-    bool structured() const { return isStructured(code_); }
-    bool special() const { return isSpecial(code_); }
+    bool primitive() const {
+        return (static_cast<int>(code_) & 0b11'000000) == 0b00'000000;
+    }
+    bool structured() const {
+        return (static_cast<int>(code_) & 0b11'000000) == 0b01'000000;
+    }
+    bool special() const {
+        return (static_cast<int>(code_) & 0b11'000000) == 0b10'000000;
+    }
 
     virtual std::string toString() const { return typeCodeToString(code_); }
 
@@ -93,7 +90,9 @@ class Type {
         return code_ != other.code_;
     }
 
-    bool equals(const type_ptr_t &type) const { return *type == *this; }
+    bool equals(const std::shared_ptr<Type> &type) const {
+        return *type == *this;
+    }
 
     virtual TypeConv convertibility(const Type &other) const {
         if (code_ == other.code_) {
@@ -124,14 +123,22 @@ class PrimeType : public Type {
         if (other.structured()) {
             switch (otherCode) {
             case TypeCode::UNION:
+                [[fallthrough]];
             case TypeCode::LIST:
+                [[fallthrough]];
             case TypeCode::ARRAY:
+                [[fallthrough]];
             case TypeCode::VECTOR:
+                [[fallthrough]];
             case TypeCode::MATRIX:
+                [[fallthrough]];
             case TypeCode::SET:
                 return TypeConv::SAFE;
             case TypeCode::MAP:
+                [[fallthrough]];
             case TypeCode::DICT:
+                return TypeConv::FORBIDDEN;
+            default:
                 return TypeConv::FORBIDDEN;
             }
         }
@@ -142,6 +149,8 @@ class PrimeType : public Type {
             case TypeCode::VOID:
                 return TypeConv::UNSAFE;
             case TypeCode::FUNCTOR:
+                return TypeConv::FORBIDDEN;
+            default:
                 return TypeConv::FORBIDDEN;
             }
         }
@@ -154,20 +163,12 @@ class StructType : public Type {
     StructType() = delete;
     StructType(TypeCode code) : Type(code) {}
 
-    virtual std::string toString() const override {
-        throw std::runtime_error("Method not overridden");
-    }
+    virtual std::string toString() const override = 0;
 
-    virtual bool operator==(const Type &other) const override {
-        throw std::runtime_error("Method not overridden");
-    }
-    virtual bool operator!=(const Type &other) const override {
-        throw std::runtime_error("Method not overridden");
-    }
+    virtual bool operator==(const Type &other) const override = 0;
+    virtual bool operator!=(const Type &other) const override = 0;
 
-    virtual TypeConv convertibility(const Type &other) const override {
-        throw std::runtime_error("Method not overridden");
-    }
+    virtual TypeConv convertibility(const Type &other) const override = 0;
 };
 
 class SpecialType : public Type {
@@ -195,7 +196,7 @@ class SetType : public StructType {
   public:
     SetType() = delete;
     SetType(const type_ptr_t &valueType)
-        : valueType_(valueType), StructType(TypeCode::DICT) {}
+        : StructType(TypeCode::SET), valueType_(valueType) {}
 
     type_ptr_t valueType() const { return valueType_; }
 
@@ -204,7 +205,7 @@ class SetType : public StructType {
     }
 
     bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::DICT) {
+        if (other.code() != TypeCode::SET) {
             return false;
         }
         const SetType &otherMap = dynamic_cast<const SetType &>(other);
@@ -212,7 +213,7 @@ class SetType : public StructType {
         return valueType_->equals(otherMap.valueType_);
     }
     bool operator!=(const Type &other) const override {
-        if (other.code() != TypeCode::DICT) {
+        if (other.code() != TypeCode::SET) {
             return true;
         }
         const SetType &otherMap = dynamic_cast<const SetType &>(other);
@@ -221,7 +222,8 @@ class SetType : public StructType {
     }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::SET) {
+            // TODO
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
@@ -241,8 +243,7 @@ class MapType : public StructType {
   public:
     MapType() = delete;
     MapType(const type_ptr_t &keyType, const type_ptr_t &valueType)
-        : keyType_(keyType), valueType_(valueType), StructType(TypeCode::DICT) {
-    }
+        : StructType(TypeCode::MAP), keyType_(keyType), valueType_(valueType) {}
 
     type_ptr_t keyType() const { return keyType_; }
     type_ptr_t valueType() const { return valueType_; }
@@ -253,7 +254,7 @@ class MapType : public StructType {
     }
 
     bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::DICT) {
+        if (other.code() != TypeCode::MAP) {
             return false;
         }
         const MapType &otherMap = dynamic_cast<const MapType &>(other);
@@ -262,7 +263,7 @@ class MapType : public StructType {
                valueType_->equals(otherMap.valueType_);
     }
     bool operator!=(const Type &other) const override {
-        if (other.code() != TypeCode::DICT) {
+        if (other.code() != TypeCode::MAP) {
             return true;
         }
         const MapType &otherMap = dynamic_cast<const MapType &>(other);
@@ -272,7 +273,8 @@ class MapType : public StructType {
     }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::MAP) {
+            // TODO
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
@@ -292,7 +294,7 @@ class ArrayType : public StructType {
   public:
     ArrayType() = delete;
     ArrayType(const type_ptr_t &elementType, size_t size)
-        : elementType_(elementType), size_(size), StructType(TypeCode::LIST) {}
+        : StructType(TypeCode::ARRAY), elementType_(elementType), size_(size) {}
 
     size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
@@ -303,7 +305,7 @@ class ArrayType : public StructType {
     }
 
     bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::LIST) {
+        if (other.code() != TypeCode::ARRAY) {
             return false;
         }
         const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
@@ -311,7 +313,7 @@ class ArrayType : public StructType {
                elementType_->equals(otherArray.elementType_);
     }
     bool operator!=(const Type &other) const override {
-        if (other.code() != TypeCode::LIST) {
+        if (other.code() != TypeCode::ARRAY) {
             return true;
         }
         const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
@@ -320,7 +322,8 @@ class ArrayType : public StructType {
     }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::ARRAY) {
+            // TODO
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
@@ -338,7 +341,6 @@ class DictType : public StructType {
     std::unordered_map<std::string, type_ptr_t> fields_;
 
   public:
-    DictType() = delete;
     DictType() : StructType(TypeCode::DICT) {}
 
     std::string toString() const override {
@@ -429,7 +431,8 @@ class DictType : public StructType {
     }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::DICT) {
+            // TODO
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
@@ -456,7 +459,6 @@ class UnionType : public StructType {
     }
 
   public:
-    UnionType() = delete;
     UnionType() : StructType(TypeCode::UNION) {}
     UnionType(const std::initializer_list<type_ptr_t> &types)
         : StructType(TypeCode::UNION) {
@@ -514,7 +516,8 @@ class UnionType : public StructType {
     }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::UNION) {
+            // TODO
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
@@ -547,9 +550,8 @@ class VectorType : public StructType {
     size_t size_;
 
   public:
-    VectorType() = delete;
     VectorType(const type_ptr_t &elementType, size_t size)
-        : elementType_(elementType), size_(size), StructType(TypeCode::VECTOR) {
+        : StructType(TypeCode::VECTOR), elementType_(elementType), size_(size) {
         // element type must be a primitive type
         if (!elementType->primitive()) {
             throw std::invalid_argument(
@@ -583,7 +585,8 @@ class VectorType : public StructType {
     }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::VECTOR) {
+            // TODO
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
@@ -601,10 +604,9 @@ class MatrixType : public StructType {
     std::vector<size_t> shape_;
 
   public:
-    MatrixType() = delete;
     MatrixType(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-        : elementType_(elementType), shape_(shape),
-          StructType(TypeCode::MATRIX) {
+        : StructType(TypeCode::MATRIX), elementType_(elementType),
+          shape_(shape) {
         if (shape_.size() == 0) {
             throw std::invalid_argument(
                 "Matrix shape must at least have 1 dim");
@@ -648,7 +650,8 @@ class MatrixType : public StructType {
     }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::MATRIX) {
+            // TODO
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
@@ -662,24 +665,22 @@ class MatrixType : public StructType {
 
 class ListType : public StructType {
   public:
-    ListType() = delete;
     ListType() : StructType(TypeCode::LIST) {}
 
-    std::string toString() const override {
-        return "list";
-    }
+    std::string toString() const override { return "list"; }
 
     bool operator==(const Type &other) const override { return true; }
     bool operator!=(const Type &other) const override { return false; }
 
     TypeConv convertibility(const Type &other) const override {
-        if (other.code() == code_) {
+        if (other.code() == TypeCode::LIST) {
             return TypeConv::SAFE;
         }
         if (other.primitive()) {
             return TypeConv::FORBIDDEN;
         }
         if (other.structured()) {
+            // TODO
         }
         return TypeConv::FORBIDDEN;
     }

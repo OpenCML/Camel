@@ -23,8 +23,6 @@
 #include "struct/value.h"
 #include "struct/scope.h"
 
-using scope_ptr_t = std::shared_ptr<Scope<std::string, value_ptr_t>>;
-
 extern Scope<std::string, value_ptr_t> globalRootScope;
 
 void initGlobalRootScope();

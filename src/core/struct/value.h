@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <type.h>
+#include "type.h"
 
 class Value {
   protected:
@@ -26,8 +26,38 @@ class Value {
     std::shared_ptr<std::any> data_ = nullptr;
 
   public:
+    Value() = delete;
+    Value(type_ptr_t type) : type_(type) {}
+    virtual ~Value() = default;
+
     bool isNull() const { return data_ == nullptr; }
-    virtual const value_ptr_t convert(type_ptr_t target) const = 0;
+    type_ptr_t type() const { return type_; }
+    std::shared_ptr<std::any> data() const { return data_; }
+
+    virtual const std::shared_ptr<Value> convert(type_ptr_t target) const = 0;
 };
 
 using value_ptr_t = std::shared_ptr<Value>;
+
+class PrimeValue : public Value {
+  public:
+    PrimeValue() = delete;
+    PrimeValue(type_ptr_t type) : Value(type) {}
+
+    virtual const value_ptr_t convert(type_ptr_t target) const override = 0;
+};
+
+class StructValue : public Value {
+  public:
+    StructValue() = delete;
+    StructValue(type_ptr_t type) : Value(type) {}
+
+    virtual const value_ptr_t convert(type_ptr_t target) const override = 0;
+};
+
+class Int32Value : public PrimeValue {
+  public:
+    Int32Value(int32_t data) : PrimeValue(int32TypePtr) {
+        data_ = std::make_shared<std::any>(data);
+    }
+};
