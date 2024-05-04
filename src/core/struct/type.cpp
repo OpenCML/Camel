@@ -18,14 +18,13 @@
 
 #include "type.h"
 
-type_ptr_t anyTypePtr;
-type_ptr_t voidTypePtr;
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
 type_ptr_t floatTypePtr;
 type_ptr_t doubleTypePtr;
 type_ptr_t stringTypePtr;
-type_ptr_t booleanTypePtr;
+type_ptr_t boolTypePtr;
+type_ptr_t charTypePtr;
 
 type_ptr_t intTypePtr;
 type_ptr_t realTypePtr;
@@ -34,8 +33,6 @@ type_ptr_t numberTypePtr;
 type_ptr_t anyTypePtr;
 type_ptr_t voidTypePtr;
 type_ptr_t functorTypePtr;
-
-scope_ptr_t<std::string, type_ptr_t> globalTypeScope;
 
 const signed char primeTypeConvMatrix[7][7] = {
     // INT32, INT64, FLOAT, DOUBLE, STRING, BOOL, CHAR
@@ -93,16 +90,14 @@ std::string typeCodeToString(TypeCode code) {
 }
 
 void initTypes() {
-    globalTypeScope = std::make_shared<Scope<std::string, type_ptr_t>>();
     // initialize primitive types
-    anyTypePtr = std::make_shared<PrimeType>(TypeCode::ANY);
-    voidTypePtr = std::make_shared<PrimeType>(TypeCode::VOID);
     int32TypePtr = std::make_shared<PrimeType>(TypeCode::INT32);
     int64TypePtr = std::make_shared<PrimeType>(TypeCode::INT64);
     floatTypePtr = std::make_shared<PrimeType>(TypeCode::FLOAT);
     doubleTypePtr = std::make_shared<PrimeType>(TypeCode::DOUBLE);
     stringTypePtr = std::make_shared<PrimeType>(TypeCode::STRING);
-    booleanTypePtr = std::make_shared<PrimeType>(TypeCode::BOOL);
+    boolTypePtr = std::make_shared<PrimeType>(TypeCode::BOOL);
+    boolTypePtr = std::make_shared<PrimeType>(TypeCode::CHAR);
 
     // initialize structured types
     intTypePtr = std::make_shared<UnionType>(

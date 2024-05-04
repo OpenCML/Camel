@@ -17,14 +17,12 @@
  */
 
 #include <any>
-#include <memory>
 #include <set>
-#include <stdexcept>
+#include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
-
-#include "scope.h"
+#include <stdexcept>
+#include <unordered_map>
 
 enum class TypeCode {
     // primitive types
@@ -687,14 +685,13 @@ class ListType : public StructType {
     }
 };
 
-extern type_ptr_t anyTypePtr;
-extern type_ptr_t voidTypePtr;
 extern type_ptr_t int32TypePtr;
 extern type_ptr_t int64TypePtr;
 extern type_ptr_t floatTypePtr;
 extern type_ptr_t doubleTypePtr;
 extern type_ptr_t stringTypePtr;
-extern type_ptr_t booleanTypePtr;
+extern type_ptr_t boolTypePtr;
+extern type_ptr_t charTypePtr;
 
 extern type_ptr_t intTypePtr;
 extern type_ptr_t realTypePtr;
@@ -703,7 +700,5 @@ extern type_ptr_t numberTypePtr;
 extern type_ptr_t anyTypePtr;
 extern type_ptr_t voidTypePtr;
 extern type_ptr_t functorTypePtr;
-
-extern scope_ptr_t<std::string, type_ptr_t> globalTypeScope;
 
 void initTypes();
