@@ -125,7 +125,7 @@ innerType
     : ANY_TYPE
     | VOID_TYPE
     | STRING_TYPE
-    | BOOLEAN_TYPE
+    | BOOL_TYPE
     | FUNCTOR_TYPE
     | scalarType
     | vectorType

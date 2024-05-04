@@ -36,7 +36,8 @@ FLOAT_TYPE      : 'float';
 DOUBLE_TYPE     : 'double';
 NUMBER_TYPE     : 'number';
 STRING_TYPE     : 'string';
-BOOLEAN_TYPE    : 'boolean';
+BOOL_TYPE       : 'bool';
+CHAR_TYPE       : 'char';
 FUNCTOR_TYPE    : 'functor';
 
 ARRAY_TYPE      : 'vector';

@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include <vector>
 
+
 enum class TypeCode {
     // primitive types
     INT32 = 0b00'000000,
@@ -916,7 +917,8 @@ class MatrixType : public StructType {
             case TypeCode::VECTOR: {
                 const VectorType &otherVector =
                     dynamic_cast<const VectorType &>(other);
-                if (shape_.size() == 1 && shape_.front() == otherVector.size()) {
+                if (shape_.size() == 1 &&
+                    shape_.front() == otherVector.size()) {
                     return elementType_->convertibility(
                         *otherVector.elementType());
                 }

@@ -40,7 +40,7 @@ const signed char primeTypeConvMatrix[7][7] = {
     {-1, 01, -1, 01, 00, 01, -1}, // INT64
     {-1, -1, 01, 01, 00, 01, -1}, // FLOAT
     {-1, -1, -1, 01, 00, 01, -1}, // DOUBLE
-    {00, 00, 00, 00, 01, 01, -1}, // STRING
+    {00, 00, 00, 00, 01, 01, 00}, // STRING
     {01, 01, 01, 01, 01, 01, 01}, // BOOL
     {01, 01, 01, 01, 01, 01, 01}  // CHAR
 };
@@ -97,7 +97,7 @@ void initTypes() {
     doubleTypePtr = std::make_shared<PrimeType>(TypeCode::DOUBLE);
     stringTypePtr = std::make_shared<PrimeType>(TypeCode::STRING);
     boolTypePtr = std::make_shared<PrimeType>(TypeCode::BOOL);
-    boolTypePtr = std::make_shared<PrimeType>(TypeCode::CHAR);
+    charTypePtr = std::make_shared<PrimeType>(TypeCode::CHAR);
 
     // initialize structured types
     intTypePtr = std::make_shared<UnionType>(
