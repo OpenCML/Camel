@@ -28,10 +28,12 @@ class ValueConvError : public std::exception {
 
   public:
     ValueConvError() = delete;
-    ValueConvError(const std::string &message) : message_(message) {}
+    ValueConvError(const std::string &message) {
+        message_ = "Value conversion failed: " + message;
+    }
 
     virtual const char *what() const noexcept override {
-        return std::string("Value conversion failed: " + message_).c_str();
+        return message_.c_str();
     }
 };
 
@@ -86,7 +88,7 @@ template <typename T> class PrimeValue : public Value {
         } else if constexpr (std::is_same_v<T, std::string>) {
             type_ = stringTypePtr;
         } else {
-            static_assert(always_false<T>, "Unsupported type");
+            static_assert(std::always_false<T>, "Unsupported type");
         }
     }
 
@@ -167,7 +169,7 @@ template <typename T> class PrimeValue : public Value {
                         throw UnsupportedConvError();
                     }
                 } else {
-                    static_assert(always_false<T>, "Unsupported type");
+                    static_assert(std::always_false<T>, "Unsupported type");
                 }
             }
         } catch (const UnsupportedConvError &e) {

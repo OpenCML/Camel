@@ -16,6 +16,4 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
-
 #include "entity.h"

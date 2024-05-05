@@ -34,7 +34,7 @@ class Entity : public std::enable_shared_from_this<Entity> {
   public:
     Entity() = delete;
     Entity(type_ptr_t type = nullptr, value_ptr_t data = nullptr, value_ptr_t meta = nullptr)
-        : type_(type), data_(data), meta_(meta) {}
+        : type_(type), meta_(meta), data_(data) {}
     virtual ~Entity() = default;
 
     bool resolved() const { return resolved_; }

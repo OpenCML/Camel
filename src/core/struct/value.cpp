@@ -16,12 +16,10 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
-
 #include "value.h"
 #include "entity.h"
 
-const value_ptr_t SetValue::convert(type_ptr_t target, bool inplace = false) const {
+const value_ptr_t SetValue::convert(type_ptr_t target, bool inplace) const {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();

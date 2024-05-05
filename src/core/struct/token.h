@@ -130,6 +130,6 @@ template <typename T> T parseToken(const std::string &token) {
     } else if constexpr (std::is_same<T, std::string>) {
         return str.substr(1, str.size() - 2);
     } else {
-        static_assert(always_false<T>, "Unsupported token type");
+        static_assert(std::always_false<T>, "Unsupported token type");
     }
 }
