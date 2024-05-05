@@ -24,7 +24,6 @@
 class Entity : public std::enable_shared_from_this<Entity> {
   private:
     size_t refs_ = 0;
-    bool resolved_ = true;
 
     // nullptr type means null entity
     type_ptr_t type_ = nullptr;
@@ -37,9 +36,9 @@ class Entity : public std::enable_shared_from_this<Entity> {
         : type_(type), meta_(meta), data_(data) {}
     virtual ~Entity() = default;
 
-    bool resolved() const { return resolved_; }
-    void resolve() { resolved_ = true; }
-    void pending() { resolved_ = false; }
+    bool resolved() const { data_->resolved(); }
+    void resolve() { data_->resolve(); }
+    void pending() { data_->pending(); }
 
     type_ptr_t type() const { return type_; }
     value_ptr_t meta() const { return meta_; }

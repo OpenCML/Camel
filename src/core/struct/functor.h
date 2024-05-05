@@ -28,8 +28,8 @@ enum class FunctorModifier {
     INNER,
     OUTER,
     ATOMIC,
-    SYNC,
     STATIC,
+    SYNC,
 };
 
 class Functor : Entity {
@@ -37,8 +37,8 @@ class Functor : Entity {
     bool inner_ = false;
     bool outer_ = false;
     bool atomic_ = false;
-    bool sync_ = false;
     bool static_ = false;
+    bool sync_ = false;
 
     entity_ptr_t input;
     entity_ptr_t output;
@@ -56,10 +56,10 @@ class Functor : Entity {
             outer_ = value;
         } else if constexpr (std::is_same_v<T, FunctorModifier::ATOMIC>) {
             atomic_ = value;
-        } else if constexpr (std::is_same_v<T, FunctorModifier::SYNC>) {
-            sync_ = value;
         } else if constexpr (std::is_same_v<T, FunctorModifier::STATIC>) {
             static_ = value;
+        } else if constexpr (std::is_same_v<T, FunctorModifier::SYNC>) {
+            sync_ = value;
         } else {
             static_assert(std::always_false<T>, "Unsupported flag type");
         }

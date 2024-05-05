@@ -19,7 +19,7 @@
 #include "value.h"
 #include "entity.h"
 
-const value_ptr_t SetValue::convert(type_ptr_t target, bool inplace) const {
+const value_ptr_t SetValue::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();

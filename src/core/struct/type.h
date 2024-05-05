@@ -73,7 +73,7 @@ class UnionType;
 class VectorType;
 class MatrixType;
 
-using type_ptr_t = std::shared_ptr<const Type>;
+using type_ptr_t = std::shared_ptr<Type>;
 
 class Type {
   protected:

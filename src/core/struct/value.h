@@ -28,20 +28,16 @@ class ValueConvError : public std::exception {
 
   public:
     ValueConvError() = delete;
-    ValueConvError(const std::string &message) {
-        message_ = "Value conversion failed: " + message;
-    }
+    ValueConvError(const std::string &message) { message_ = "Value conversion failed: " + message; }
 
-    virtual const char *what() const noexcept override {
-        return message_.c_str();
-    }
+    virtual const char *what() const noexcept override { return message_.c_str(); }
 };
 
 class Value;
 class Entity;
 
-using value_ptr_t = std::shared_ptr<const Value>;
-using entity_ptr_t = std::shared_ptr<const Entity>;
+using value_ptr_t = std::shared_ptr<Value>;
+using entity_ptr_t = std::shared_ptr<Entity>;
 
 class Value : public std::enable_shared_from_this<Value> {
   protected:
@@ -55,8 +51,12 @@ class Value : public std::enable_shared_from_this<Value> {
     bool isNull() const { return type_ == nullptr; }
     type_ptr_t type() const { return type_; }
 
+    virtual bool resolved() = 0;
+    virtual void resolve() = 0;
+    virtual void pending() = 0;
+
     virtual const value_ptr_t clone() const = 0;
-    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) const = 0;
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) = 0;
 };
 
 template <typename Dest, typename Src> std::shared_ptr<Dest> convertAndMakeShared(const Src &value) {
@@ -94,7 +94,9 @@ template <typename T> class PrimeValue : public Value {
 
     const T &data() const { return data_; }
 
-    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) const override {
+    bool resolved() const override { return true; }
+
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
             return shared_from_this();
@@ -186,16 +188,38 @@ class StructValue : public Value {
     StructValue() = delete;
     StructValue(type_ptr_t type) : Value(type) {}
 
-    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) const override = 0;
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
 };
 
 class SetValue : public StructValue {
   private:
+    bool resolved_ = false;
     std::set<entity_ptr_t> data_;
 
   public:
     SetValue() = delete;
     SetValue(type_ptr_t type) : StructValue(type) {}
 
-    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) const override;
+    bool resolved() override {
+        if (resolved_) {
+            return true;
+        }
+        for (const auto &e : data_) {
+            if (!e->resolved()) {
+                return false;
+            }
+        }
+        resolved_ = true;
+        return true;
+    }
+
+    // bool add(const entity_ptr_t &e) {
+    //     if (e->type() == type_->elementType()) {
+    //         data_.insert(e);
+    //         return true;
+    //     }
+    //     return false;
+    // }
+
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
 };
