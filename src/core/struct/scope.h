@@ -20,24 +20,20 @@
 
 #include <map>
 #include <memory>
-#include <optional>
-#include <unordered_map>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
+#include <unordered_map>
 
-template <typename T, typename = std::void_t<>>
-struct hashable : std::false_type {};
+
+template <typename T, typename = std::void_t<>> struct hashable : std::false_type {};
 
 template <typename T>
-struct hashable<
-    T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declval<T>()))>>
-    : std::true_type {};
+struct hashable<T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declval<T>()))>> : std::true_type {};
 
 template <typename K, typename V> class Scope {
   public:
-    using Map =
-        typename std::conditional<hashable<K>::value, std::unordered_map<K, V>,
-                                  std::map<K, V>>::type;
+    using Map = typename std::conditional<hashable<K>::value, std::unordered_map<K, V>, std::map<K, V>>::type;
 
   protected:
     mutable std::shared_mutex rwMutex;
@@ -47,12 +43,9 @@ template <typename K, typename V> class Scope {
   public:
     Scope() = default;
 
-    explicit Scope(std::shared_ptr<Scope<K, V>> outer)
-        : map(), outer(std::move(outer)) {}
+    explicit Scope(std::shared_ptr<Scope<K, V>> outer) : map(), outer(std::move(outer)) {}
 
-
-    std::optional<std::reference_wrapper<V>> at(const K &k,
-                                                bool recursive = true) const {
+    std::optional<std::reference_wrapper<V>> at(const K &k, bool recursive = true) const {
         std::shared_lock<std::shared_mutex> lock(rwMutex);
         auto it = map.find(k);
         if (it != map.end()) {
@@ -91,14 +84,9 @@ template <typename K, typename V> class Scope {
         return false;
     }
 
-    bool isRoot() const {
-        return !outer;
-    }
+    bool isRoot() const { return !outer; }
 
-    Map self() const {
-        return map;
-    }
+    Map self() const { return map; }
 };
 
-template <typename K, typename V>
-using scope_ptr_t = std::shared_ptr<Scope<K, V>>;
+template <typename K, typename V> using scope_ptr_t = std::shared_ptr<Scope<K, V>>;

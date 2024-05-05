@@ -91,8 +91,7 @@ template <typename T> T parseNumber(const std::string &input) {
             i++;
         } else if (base == 16 && isxdigit(input[i])) {
             // Parse hexadecimal
-            result = result * 16 +
-                     (toupper(input[i]) - (isdigit(input[i]) ? '0' : 'A' - 10));
+            result = result * 16 + (toupper(input[i]) - (isdigit(input[i]) ? '0' : 'A' - 10));
             i++;
         } else if (base == 2 && (input[i] == '0' || input[i] == '1')) {
             // Parse binary
@@ -117,8 +116,7 @@ template <typename T> T parseNumber(const std::string &input) {
     }
 
     // Check for overflow/underflow
-    if (result > std::numeric_limits<T>::max() ||
-        result < std::numeric_limits<T>::min()) {
+    if (result > std::numeric_limits<T>::max() || result < std::numeric_limits<T>::min()) {
         throw std::overflow_error("Number out of range");
     }
 
@@ -126,8 +124,8 @@ template <typename T> T parseNumber(const std::string &input) {
 }
 
 template <typename T> T parseToken(const std::string &token) {
-    if constexpr (std::is_same<T, int32_t> || std::is_same<T, int64_t> ||
-        std::is_same<T, float> || std::is_same<T, double>) {
+    if constexpr (std::is_same<T, int32_t> || std::is_same<T, int64_t> || std::is_same<T, float> ||
+                  std::is_same<T, double>) {
         return parseNumber<T>(token);
     } else if constexpr (std::is_same<T, std::string>) {
         return str.substr(1, str.size() - 2);

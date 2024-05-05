@@ -89,6 +89,438 @@ std::string typeCodeToString(TypeCode code) {
     }
 }
 
+TypeConv PrimeType::convertibility(const Type &other) const {
+    const TypeCode otherCode = other.code();
+    if (otherCode == code_) {
+        return TypeConv::SAFE;
+    }
+    if (other.primitive()) {
+        const int thisIndex = static_cast<int>(code_) & 0b00'000111;
+        const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
+        return static_cast<TypeConv>(primeTypeConvMatrix[thisIndex][otherIndex]);
+    }
+    if (other.structured()) {
+        switch (otherCode) {
+        case TypeCode::UNION:
+            [[fallthrough]];
+        case TypeCode::LIST:
+            [[fallthrough]];
+        case TypeCode::ARRAY:
+            [[fallthrough]];
+        case TypeCode::VECTOR:
+            [[fallthrough]];
+        case TypeCode::MATRIX:
+            [[fallthrough]];
+        case TypeCode::SET:
+            return TypeConv::SAFE;
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            return TypeConv::FORBIDDEN;
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    if (other.special()) {
+        switch (otherCode) {
+        case TypeCode::ANY:
+            return TypeConv::SAFE;
+        case TypeCode::VOID:
+            return TypeConv::UNSAFE;
+        case TypeCode::FUNCTOR:
+            return TypeConv::FORBIDDEN;
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv SpecialType::convertibility(const Type &other) const {
+    if (other.code() == code_) {
+        return TypeConv::SAFE;
+    }
+    if (other.primitive() || other.structured()) {
+        return TypeConv::FORBIDDEN;
+    }
+    if (other.code() == TypeCode::VOID)
+        return TypeConv::UNSAFE;
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv SetType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::SET:
+            return valueType_->convertibility(*(dynamic_cast<const SetType &>(other).valueType_));
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::ARRAY: {
+            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+            if (otherArray.size() == 0) {
+                // if the array size is 0
+                // it indicates that the array is dynamic
+                return valueType_->convertibility(*otherArray.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            [[fallthrough]];
+        case TypeCode::VECTOR:
+            [[fallthrough]];
+        case TypeCode::MATRIX:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv MapType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::MAP: {
+            const MapType &otherMap = dynamic_cast<const MapType &>(other);
+            const TypeConv keyConv = keyType_->convertibility(*otherMap.keyType_);
+            const TypeConv valueConv = valueType_->convertibility(*otherMap.valueType_);
+            if (keyConv == TypeConv::FORBIDDEN || valueConv == TypeConv::FORBIDDEN) {
+                return TypeConv::FORBIDDEN;
+            }
+            if (keyConv == TypeConv::SAFE && valueConv == TypeConv::SAFE) {
+                return TypeConv::SAFE;
+            }
+            return TypeConv::UNSAFE;
+        }
+        case TypeCode::SET:
+            [[fallthrough]];
+        case TypeCode::ARRAY:
+            [[fallthrough]];
+        case TypeCode::LIST:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            [[fallthrough]];
+        case TypeCode::VECTOR:
+            [[fallthrough]];
+        case TypeCode::MATRIX:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv ArrayType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::ARRAY: {
+            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+            if (size_ == otherArray.size()) {
+                return elementType_->convertibility(*otherArray.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET: {
+            const SetType &otherSet = dynamic_cast<const SetType &>(other);
+            return elementType_->convertibility(*otherSet.valueType());
+        }
+        case TypeCode::VECTOR: {
+            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+            if (size_ == otherVector.size()) {
+                return elementType_->convertibility(*otherVector.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::MATRIX: {
+            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+            const auto &shape = otherMatrix.shape();
+            if (shape.size() == 1 && size_ == shape.front()) {
+                return elementType_->convertibility(*otherMatrix.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv DictType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::DICT: {
+            const DictType &otherDict = dynamic_cast<const DictType &>(other);
+            TypeConv result = TypeConv::SAFE;
+            for (const auto &field : otherDict.fields_) {
+                const auto &ident = field.first;
+                const auto &type = field.second;
+                if (!fields_.count(ident)) {
+                    return TypeConv::FORBIDDEN;
+                }
+                const auto &fieldType = fields_.at(ident);
+                const TypeConv fieldConv = fieldType->convertibility(*type);
+                if (fieldConv == TypeConv::FORBIDDEN) {
+                    return TypeConv::FORBIDDEN;
+                }
+                if (fieldConv == TypeConv::UNSAFE) {
+                    result = TypeConv::UNSAFE;
+                }
+            }
+            return result;
+        }
+        case TypeCode::SET:
+            [[fallthrough]];
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::ARRAY:
+            [[fallthrough]];
+        case TypeCode::LIST:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            [[fallthrough]];
+        case TypeCode::VECTOR:
+            [[fallthrough]];
+        case TypeCode::MATRIX:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv UnionType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::UNION: {
+            const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
+            TypeConv result = TypeConv::SAFE;
+            for (const auto &type : types_) {
+                TypeConv typeConv = TypeConv::FORBIDDEN;
+                for (const auto &otherType : otherUnion.types_) {
+                    TypeConv tempConv = type->convertibility(*otherType);
+                    if (tempConv == TypeConv::SAFE) {
+                        typeConv = TypeConv::SAFE;
+                        break;
+                    }
+                    if (tempConv == TypeConv::UNSAFE) {
+                        typeConv = TypeConv::UNSAFE;
+                    }
+                }
+                if (typeConv == TypeConv::FORBIDDEN) {
+                    return TypeConv::FORBIDDEN;
+                }
+                if (typeConv == TypeConv::UNSAFE) {
+                    result = TypeConv::UNSAFE;
+                }
+            }
+            return result;
+        }
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET: {
+            const type_ptr_t &otherType = dynamic_cast<const SetType &>(other).valueType();
+            if (otherType->code() == TypeCode::UNION) {
+                const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
+                return convertibility(otherUnion);
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::ARRAY: {
+            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+            if (otherArray.size() > 1) {
+                // 0 or 1 size array is allowed
+                return TypeConv::FORBIDDEN;
+            }
+            const type_ptr_t &otherType = otherArray.elementType();
+            if (otherType->code() == TypeCode::UNION) {
+                const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
+                return convertibility(otherUnion);
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::VECTOR: {
+            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+            if (otherVector.size() > 1) {
+                // 0 or 1 size vector is allowed
+                return TypeConv::FORBIDDEN;
+            }
+            const type_ptr_t &otherType = otherVector.elementType();
+            if (otherType->code() == TypeCode::UNION) {
+                const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
+                return convertibility(otherUnion);
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::MATRIX: {
+            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+            const auto &shape = otherMatrix.shape();
+            if (shape.size() != 1 || shape.front() > 1) {
+                return TypeConv::FORBIDDEN;
+            }
+            const type_ptr_t &otherType = otherMatrix.elementType();
+            if (otherType->code() == TypeCode::UNION) {
+                const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
+                return convertibility(otherUnion);
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv VectorType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::VECTOR: {
+            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+            if (size_ == otherVector.size()) {
+                return elementType_->convertibility(*otherVector.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::ARRAY: {
+            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+            if (otherArray.size() == 0 || otherArray.size() == size_) {
+                return elementType_->convertibility(*otherArray.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::MATRIX: {
+            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+            const auto &shape = otherMatrix.shape();
+            if (shape.size() == 1 && shape.front() == size_) {
+                return elementType_->convertibility(*otherMatrix.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::SET: {
+            const SetType &otherSet = dynamic_cast<const SetType &>(other);
+            return elementType_->convertibility(*otherSet.valueType());
+        }
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv MatrixType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::MATRIX: {
+            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+            if (shape_ == otherMatrix.shape()) {
+                return elementType_->convertibility(*otherMatrix.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::VECTOR: {
+            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+            if (shape_.size() == 1 && shape_.front() == otherVector.size()) {
+                return elementType_->convertibility(*otherVector.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::ARRAY: {
+            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+            if (shape_.size() == 1 && (otherArray.size() == 0 || otherArray.size() == shape_.front())) {
+                return elementType_->convertibility(*otherArray.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::SET: {
+            const SetType &otherSet = dynamic_cast<const SetType &>(other);
+            return elementType_->convertibility(*otherSet.valueType());
+        }
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv ListType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET:
+            [[fallthrough]];
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::ARRAY:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            [[fallthrough]];
+        case TypeCode::VECTOR:
+            [[fallthrough]];
+        case TypeCode::MATRIX:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
 void initTypes() {
     // initialize primitive types
     int32TypePtr = std::make_shared<PrimeType>(TypeCode::INT32);
@@ -100,13 +532,10 @@ void initTypes() {
     charTypePtr = std::make_shared<PrimeType>(TypeCode::CHAR);
 
     // initialize structured types
-    intTypePtr = std::make_shared<UnionType>(
-        std::initializer_list<type_ptr_t>{int32TypePtr, int64TypePtr});
-    realTypePtr = std::make_shared<UnionType>(
-        std::initializer_list<type_ptr_t>{floatTypePtr, doubleTypePtr});
-    numberTypePtr =
-        std::make_shared<UnionType>(std::initializer_list<type_ptr_t>{
-            int32TypePtr, int64TypePtr, floatTypePtr, doubleTypePtr});
+    intTypePtr = std::make_shared<UnionType>(std::initializer_list<type_ptr_t>{int32TypePtr, int64TypePtr});
+    realTypePtr = std::make_shared<UnionType>(std::initializer_list<type_ptr_t>{floatTypePtr, doubleTypePtr});
+    numberTypePtr = std::make_shared<UnionType>(
+        std::initializer_list<type_ptr_t>{int32TypePtr, int64TypePtr, floatTypePtr, doubleTypePtr});
 
     // initialize special types
     anyTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);
