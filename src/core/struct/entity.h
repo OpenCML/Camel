@@ -32,7 +32,7 @@ class Entity : public std::enable_shared_from_this<Entity> {
 
   public:
     Entity() = delete;
-    Entity(type_ptr_t type, value_ptr_t meta, value_ptr_t data) : type_(type), meta_(meta), data_(data) {}
+    Entity(type_ptr_t type, value_ptr_t data, value_ptr_t meta = nullptr) : type_(type), data_(data), meta_(meta) {}
     virtual ~Entity() = default;
 
     bool resolved() const { return resolved_; }
@@ -64,8 +64,14 @@ class Entity : public std::enable_shared_from_this<Entity> {
     void setMeta(value_ptr_t meta) { meta_ = meta; }
     void setData(value_ptr_t data) { data_ = data; }
 
-    const entity_ptr_t convert(type_ptr_t target, bool inplace = false) const {
-        const value_ptr_t newData = data_->convert(target);
+    const entity_ptr_t convert(type_ptr_t target, bool inplace = false) {
+        const value_ptr_t newData = data_->convert(target, inplace);
+        if (inplace) {
+            data_ = newData;
+            return shared_from_this();
+        } else {
+            return std::make_shared<Entity>(target, newData, meta_);
+        }
     }
 };
 
