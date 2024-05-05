@@ -512,6 +512,7 @@ extern type_ptr_t numberTypePtr;
 
 extern type_ptr_t anyTypePtr;
 extern type_ptr_t voidTypePtr;
+extern type_ptr_t entityTypePtr;
 extern type_ptr_t functorTypePtr;
 
 void initTypes();

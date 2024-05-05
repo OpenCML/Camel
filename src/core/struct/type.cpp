@@ -32,6 +32,7 @@ type_ptr_t numberTypePtr;
 
 type_ptr_t anyTypePtr;
 type_ptr_t voidTypePtr;
+type_ptr_t entityTypePtr;
 type_ptr_t functorTypePtr;
 
 const signed char primeTypeConvMatrix[7][7] = {
@@ -539,6 +540,7 @@ void initTypes() {
 
     // initialize special types
     anyTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);
+    entityTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);
     voidTypePtr = std::make_shared<SpecialType>(TypeCode::VOID);
     functorTypePtr = std::make_shared<SpecialType>(TypeCode::FUNCTOR);
 }
