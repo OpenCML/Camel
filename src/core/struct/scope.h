@@ -33,7 +33,7 @@ struct hashable<T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declva
 
 template <typename K, typename V> class Scope {
   public:
-    using Map = typename std::conditional<hashable<K>::value, std::unordered_map<K, V>, std::map<K, V>>::type;
+    using Map = typename std::conditional<hashable<K>, std::unordered_map<K, V>, std::map<K, V>>::type;
 
   protected:
     mutable std::shared_mutex rwMutex;

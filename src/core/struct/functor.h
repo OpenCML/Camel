@@ -61,7 +61,7 @@ class Functor : Entity {
         } else if constexpr (std::is_same_v<T, FunctorModifier::STATIC>) {
             static_ = value;
         } else {
-            static_assert(always_false<T>::value, "Unsupported flag type");
+            static_assert(always_false<T>, "Unsupported flag type");
         }
     }
 
