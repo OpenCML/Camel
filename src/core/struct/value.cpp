@@ -19,6 +19,19 @@
 #include "value.h"
 #include "entity.h"
 
+bool SetValue::resolved() {
+    if (resolved_) {
+        return true;
+    }
+    for (const auto &e : data_) {
+        if (!e->resolved()) {
+            return false;
+        }
+    }
+    resolved_ = true;
+    return true;
+}
+
 const value_ptr_t SetValue::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert

@@ -20,15 +20,15 @@
 
 #include "entity.h"
 
-class Stmt;
+class StaticStmt;
 class StmtList;
-using stmt_ptr_t = std::shared_ptr<const Stmt>;
+using stmt_ptr_t = std::shared_ptr<const StaticStmt>;
 using stmt_list_ptr_t = std::shared_ptr<const StmtList>;
 
-class Stmt {
+class StaticStmt {
   public:
-    Stmt() = default;
-    virtual ~Stmt() = default;
+    StaticStmt() = default;
+    virtual ~StaticStmt() = default;
 
     virtual void execute() = 0;
 };

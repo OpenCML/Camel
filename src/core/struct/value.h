@@ -94,7 +94,7 @@ template <typename T> class PrimeValue : public Value {
 
     const T &data() const { return data_; }
 
-    bool resolved() const override { return true; }
+    bool resolved() override { return true; }
 
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
@@ -200,18 +200,7 @@ class SetValue : public StructValue {
     SetValue() = delete;
     SetValue(type_ptr_t type) : StructValue(type) {}
 
-    bool resolved() override {
-        if (resolved_) {
-            return true;
-        }
-        for (const auto &e : data_) {
-            if (!e->resolved()) {
-                return false;
-            }
-        }
-        resolved_ = true;
-        return true;
-    }
+    bool resolved() override;
 
     // bool add(const entity_ptr_t &e) {
     //     if (e->type() == type_->elementType()) {

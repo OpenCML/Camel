@@ -36,7 +36,7 @@ class Entity : public std::enable_shared_from_this<Entity> {
         : type_(type), meta_(meta), data_(data) {}
     virtual ~Entity() = default;
 
-    bool resolved() const { data_->resolved(); }
+    bool resolved() const { return data_->resolved(); }
     void resolve() { data_->resolve(); }
     void pending() { data_->pending(); }
 
