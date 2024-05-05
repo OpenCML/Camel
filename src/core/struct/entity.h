@@ -26,13 +26,15 @@ class Entity : public std::enable_shared_from_this<Entity> {
     size_t refs_ = 0;
     bool resolved_ = true;
 
+    // nullptr type means null entity
     type_ptr_t type_ = nullptr;
     value_ptr_t meta_ = nullptr;
     value_ptr_t data_ = nullptr;
 
   public:
     Entity() = delete;
-    Entity(type_ptr_t type, value_ptr_t data, value_ptr_t meta = nullptr) : type_(type), data_(data), meta_(meta) {}
+    Entity(type_ptr_t type = nullptr, value_ptr_t data = nullptr, value_ptr_t meta = nullptr)
+        : type_(type), data_(data), meta_(meta) {}
     virtual ~Entity() = default;
 
     bool resolved() const { return resolved_; }

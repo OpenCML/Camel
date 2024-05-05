@@ -59,7 +59,7 @@ class Value : public std::enable_shared_from_this<Value> {
 
 template <typename Dest, typename Src> std::shared_ptr<Dest> convertAndMakeShared(const Src &value) {
     if constexpr (std::is_same_v<Dest, Src>) {
-        throw ValueConvError("This path should not be reached");
+        static_assert(always_false<Dest>::value, "This path should not be reached");
     }
     return std::make_shared<Dest>(static_cast<Dest>(value));
 }
@@ -86,8 +86,7 @@ template <typename T> class PrimeValue : public Value {
         } else if constexpr (std::is_same_v<T, std::string>) {
             type_ = stringTypePtr;
         } else {
-            type_ = nullptr;
-            throw std::runtime_error("Unsupported type");
+            static_assert(always_false<T>::value, "Unsupported type");
         }
     }
 
@@ -168,7 +167,7 @@ template <typename T> class PrimeValue : public Value {
                         throw UnsupportedConvError();
                     }
                 } else {
-                    throw UnsupportedConvError();
+                    static_assert(always_false<T>::value, "Unsupported type");
                 }
             }
         } catch (const UnsupportedConvError &e) {
