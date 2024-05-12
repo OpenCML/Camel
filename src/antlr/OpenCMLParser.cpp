@@ -71,10 +71,10 @@ void opencmlParserInitialize() {
       "'=='", "'!='", "'+'", "'-'", "'&'", "'|'", "'^'", "'*'", "'/'", "'%'", 
       "'!'", "';'", "'as'", "'is'", "'let'", "'use'", "'func'", "'type'", 
       "'with'", "'return'", "'inner'", "'outer'", "'atomic'", "'static'", 
-      "'sync'", "'null'", "'true'", "'false'", "'int'", "'int32'", "'int64'", 
-      "'real'", "'float'", "'double'", "'number'", "'string'", "'bool'", 
-      "'char'", "'set'", "'map'", "'list'", "'dict'", "'tuple'", "'vector'", 
-      "'tensor'", "'any'", "'void'", "'functor'"
+      "'sync'", "'null'", "'true'", "'false'", "'Int'", "'Int32'", "'Int64'", 
+      "'Real'", "'Float'", "'Double'", "'Number'", "'String'", "'Bool'", 
+      "'Char'", "'Set'", "'Map'", "'List'", "'Dict'", "'Tuple'", "'Vector'", 
+      "'Tensor'", "'Any'", "'Void'", "'Functor'"
     },
     std::vector<std::string>{
       "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 

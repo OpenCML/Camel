@@ -22,28 +22,28 @@ NULL        : 'null';
 TRUE        : 'true';
 FALSE       : 'false';
 
-INTEGER_TYPE    : 'int';
-INTEGER32_TYPE  : 'int32';
-INTEGER64_TYPE  : 'int64';
-REAL_TYPE       : 'real';
-FLOAT_TYPE      : 'float';
-DOUBLE_TYPE     : 'double';
-NUMBER_TYPE     : 'number';
-STRING_TYPE     : 'string';
-BOOL_TYPE       : 'bool';
-CHAR_TYPE       : 'char';
+INTEGER_TYPE    : 'Int';
+INTEGER32_TYPE  : 'Int32';
+INTEGER64_TYPE  : 'Int64';
+REAL_TYPE       : 'Real';
+FLOAT_TYPE      : 'Float';
+DOUBLE_TYPE     : 'Double';
+NUMBER_TYPE     : 'Number';
+STRING_TYPE     : 'String';
+BOOL_TYPE       : 'Bool';
+CHAR_TYPE       : 'Char';
 
-SET_TYPE        : 'set';
-MAP_TYPE        : 'map';
-LIST_TYPE       : 'list';
-DICT_TYPE       : 'dict';
-TUPLE_TYPE      : 'tuple';
-VECTOR_TYPE     : 'vector';
-TENSOR_TYPE     : 'tensor';
+SET_TYPE        : 'Set';
+MAP_TYPE        : 'Map';
+LIST_TYPE       : 'List';
+DICT_TYPE       : 'Dict';
+TUPLE_TYPE      : 'Tuple';
+VECTOR_TYPE     : 'Vector';
+TENSOR_TYPE     : 'Tensor';
 
-ANY_TYPE      : 'any';
-VOID_TYPE     : 'void';
-FUNCTOR_TYPE  : 'functor';
+ANY_TYPE      : 'Any';
+VOID_TYPE     : 'Void';
+FUNCTOR_TYPE  : 'Functor';
 
 SKIP_
     : ( BLANK | LIN_CMT | BLK_CMT ) -> skip
