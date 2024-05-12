@@ -31,7 +31,7 @@ lambda : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
 
 carrier : identRef | bracedIdents | bracketIdents ;
 
-annotation  : '@' entityExpr ;
+annotation  : '@' primEntity ;
 annotations : (annotation SEP?)+ ;
 modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
@@ -65,12 +65,13 @@ parentValues : '(' argumentList? ','? ')' ; // for functor arguments
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 
-primEntity   : identRef | literal | bracketValues | bracedValues | bracedPairedValues | bracedIndexKVPairs | lambda ;
-memberAccess : ('.' (identRef | INTEGER | '(' entityExpr ')'))+ ;
-entity       : primEntity memberAccess? angledValues? annotation? parentValues? ;
+primEntity   : identRef | literal | bracketValues | bracedValues | bracedPairedValues | bracedIndexKVPairs | lambda | '(' entityExpr ')' ;
+memberAccess : '[' entityExpr ']' ;
+entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
 
-entityLink   : entityLink '->' entity | entity ;
 entityChain  : entityLink+ ;
+entityLink   : entityCall | entityLink '->' entityCall ;
+entityCall   : entity | entityCall '.' entity ;
 entitySpread : '...' entity ;
 
 entityExpr
@@ -162,6 +163,7 @@ primType
 structType
     : SET_TYPE ('<' typeExpr '>')?
     | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
+    | '{' indexKTPair '}' // concrete map type
     | LIST_TYPE
     | DICT_TYPE // universal dict type
     | '{' pairedTypes? ','? '}' // concrete dict type

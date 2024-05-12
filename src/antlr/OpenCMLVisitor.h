@@ -105,9 +105,11 @@ public:
 
     virtual std::any visitEntity(OpenCMLParser::EntityContext *context) = 0;
 
+    virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) = 0;
+
     virtual std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context) = 0;
 
-    virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) = 0;
+    virtual std::any visitEntityCall(OpenCMLParser::EntityCallContext *context) = 0;
 
     virtual std::any visitEntitySpread(OpenCMLParser::EntitySpreadContext *context) = 0;
 

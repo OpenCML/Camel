@@ -182,9 +182,11 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitEntity(OpenCMLParser::EntityContext *context) { return dumpCST(context, "Entity"); };
 
+    std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) { return dumpCST(context, "EntityChain"); };
+
     std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context) { return dumpCST(context, "EntityLink"); };
 
-    std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) { return dumpCST(context, "EntityChain"); };
+    std::any visitEntityCall(OpenCMLParser::EntityCallContext *context) { return dumpCST(context, "EntityCall"); };
 
     std::any visitEntitySpread(OpenCMLParser::EntitySpreadContext *context) { return dumpCST(context, "EntitySpread"); };
 

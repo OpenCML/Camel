@@ -187,11 +187,15 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitEntityLink(OpenCMLParser::EntityLinkContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *ctx) override {
+  virtual std::any visitEntityCall(OpenCMLParser::EntityCallContext *ctx) override {
     return visitChildren(ctx);
   }
 
