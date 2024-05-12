@@ -66,13 +66,13 @@ template <typename Dest, typename Src> std::shared_ptr<Dest> convertAndMakeShare
     return std::make_shared<Dest>(static_cast<Dest>(value));
 }
 
-template <typename T> class PrimeValue : public Value {
+template <typename T> class PrimValue : public Value {
   private:
     T data_;
 
   public:
-    PrimeValue() = delete;
-    PrimeValue(const T &data) : Value(), data_(data) {
+    PrimValue() = delete;
+    PrimValue(const T &data) : Value(), data_(data) {
         if constexpr (std::is_same_v<T, int32_t>) {
             type_ = int32TypePtr;
         } else if constexpr (std::is_same_v<T, int64_t>) {

@@ -61,7 +61,7 @@ std::string typeCodeToString(TypeCode code);
 extern const signed char primeTypeConvMatrix[7][7];
 
 class Type;
-class PrimeType;
+class PrimType;
 class StructType;
 class SpecialType;
 class SetType;
@@ -105,10 +105,10 @@ class Type {
     }
 };
 
-class PrimeType : public Type {
+class PrimType : public Type {
   public:
-    PrimeType() = delete;
-    PrimeType(TypeCode code) : Type(code) {}
+    PrimType() = delete;
+    PrimType(TypeCode code) : Type(code) {}
 
     TypeConv convertibility(const Type &other) const override;
 };
@@ -512,7 +512,6 @@ extern type_ptr_t numberTypePtr;
 
 extern type_ptr_t anyTypePtr;
 extern type_ptr_t voidTypePtr;
-extern type_ptr_t entityTypePtr;
 extern type_ptr_t functorTypePtr;
 
 void initTypes();

@@ -9,24 +9,18 @@ LET         : 'let';
 USE         : 'use';
 FUNC        : 'func';
 TYPE        : 'type';
-ENUM        : 'enum';
 WITH        : 'with';
 RETURN      : 'return';
 
 INNER       : 'inner';
 OUTER       : 'outer';
-SYNC        : 'sync';
-SCOPED      : 'scoped';
-STATIC      : 'static';
 ATOMIC      : 'atomic';
+STATIC      : 'static';
+SYNC        : 'sync';
 
 NULL        : 'null';
 TRUE        : 'true';
 FALSE       : 'false';
-
-ANY_TYPE    : 'any';
-VOID_TYPE   : 'void';
-UNION_TYPE  : 'union';
 
 INTEGER_TYPE    : 'int';
 INTEGER32_TYPE  : 'int32';
@@ -38,12 +32,18 @@ NUMBER_TYPE     : 'number';
 STRING_TYPE     : 'string';
 BOOL_TYPE       : 'bool';
 CHAR_TYPE       : 'char';
-FUNCTOR_TYPE    : 'functor';
 
-ARRAY_TYPE      : 'vector';
-MATRIX_TYPE     : 'matrix';
+SET_TYPE        : 'set';
+MAP_TYPE        : 'map';
 LIST_TYPE       : 'list';
 DICT_TYPE       : 'dict';
+TUPLE_TYPE      : 'tuple';
+VECTOR_TYPE     : 'vector';
+TENSOR_TYPE     : 'tensor';
+
+ANY_TYPE      : 'any';
+VOID_TYPE     : 'void';
+FUNCTOR_TYPE  : 'functor';
 
 SKIP_
     : ( BLANK | LIN_CMT | BLK_CMT ) -> skip

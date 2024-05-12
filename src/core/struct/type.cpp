@@ -32,7 +32,6 @@ type_ptr_t numberTypePtr;
 
 type_ptr_t anyTypePtr;
 type_ptr_t voidTypePtr;
-type_ptr_t entityTypePtr;
 type_ptr_t functorTypePtr;
 
 const signed char primeTypeConvMatrix[7][7] = {
@@ -90,7 +89,7 @@ std::string typeCodeToString(TypeCode code) {
     }
 }
 
-TypeConv PrimeType::convertibility(const Type &other) const {
+TypeConv PrimType::convertibility(const Type &other) const {
     const TypeCode otherCode = other.code();
     if (otherCode == code_) {
         return TypeConv::SAFE;
@@ -524,23 +523,21 @@ TypeConv ListType::convertibility(const Type &other) const {
 
 void initTypes() {
     // initialize primitive types
-    int32TypePtr = std::make_shared<PrimeType>(TypeCode::INT32);
-    int64TypePtr = std::make_shared<PrimeType>(TypeCode::INT64);
-    floatTypePtr = std::make_shared<PrimeType>(TypeCode::FLOAT);
-    doubleTypePtr = std::make_shared<PrimeType>(TypeCode::DOUBLE);
-    stringTypePtr = std::make_shared<PrimeType>(TypeCode::STRING);
-    boolTypePtr = std::make_shared<PrimeType>(TypeCode::BOOL);
-    charTypePtr = std::make_shared<PrimeType>(TypeCode::CHAR);
+    int32TypePtr = std::make_shared<PrimType>(TypeCode::INT32);
+    int64TypePtr = std::make_shared<PrimType>(TypeCode::INT64);
+    floatTypePtr = std::make_shared<PrimType>(TypeCode::FLOAT);
+    doubleTypePtr = std::make_shared<PrimType>(TypeCode::DOUBLE);
+    stringTypePtr = std::make_shared<PrimType>(TypeCode::STRING);
+    boolTypePtr = std::make_shared<PrimType>(TypeCode::BOOL);
+    charTypePtr = std::make_shared<PrimType>(TypeCode::CHAR);
 
-    // initialize structured types
-    intTypePtr = std::make_shared<UnionType>(std::initializer_list<type_ptr_t>{int32TypePtr, int64TypePtr});
-    realTypePtr = std::make_shared<UnionType>(std::initializer_list<type_ptr_t>{floatTypePtr, doubleTypePtr});
-    numberTypePtr = std::make_shared<UnionType>(
-        std::initializer_list<type_ptr_t>{int32TypePtr, int64TypePtr, floatTypePtr, doubleTypePtr});
+    // initialize alias types
+    intTypePtr = int32TypePtr;
+    realTypePtr = floatTypePtr;
+    numberTypePtr = doubleTypePtr;
 
     // initialize special types
     anyTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);
-    entityTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);
     voidTypePtr = std::make_shared<SpecialType>(TypeCode::VOID);
     functorTypePtr = std::make_shared<SpecialType>(TypeCode::FUNCTOR);
 }
