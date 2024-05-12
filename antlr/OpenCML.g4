@@ -133,9 +133,9 @@ literal
     ;
 
 typeExpr
-    : type
-    | typeExpr '|' type
-    | typeExpr '&' type
+    : type ('[' ']')?
+    | typeExpr '|' typeExpr
+    | typeExpr '&' typeExpr
     ;
 
 type
@@ -165,7 +165,8 @@ structType
     | LIST_TYPE
     | DICT_TYPE // universal dict type
     | '{' pairedTypes? ','? '}' // concrete dict type
-    | TUPLE_TYPE '<' typeList? ','? '>'?
+    | ARRAY_TYPE ('<' typeExpr '>')?
+    | TUPLE_TYPE ('<' typeList? ','? '>')?
     | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? ','? '>')?
     | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? ','? '>')?
     ;

@@ -23,10 +23,10 @@ public:
     SYNC = 52, NULL_ = 53, TRUE = 54, FALSE = 55, INTEGER_TYPE = 56, INTEGER32_TYPE = 57, 
     INTEGER64_TYPE = 58, REAL_TYPE = 59, FLOAT_TYPE = 60, DOUBLE_TYPE = 61, 
     NUMBER_TYPE = 62, STRING_TYPE = 63, BOOL_TYPE = 64, CHAR_TYPE = 65, 
-    SET_TYPE = 66, MAP_TYPE = 67, LIST_TYPE = 68, DICT_TYPE = 69, TUPLE_TYPE = 70, 
-    VECTOR_TYPE = 71, TENSOR_TYPE = 72, ANY_TYPE = 73, VOID_TYPE = 74, FUNCTOR_TYPE = 75, 
-    SKIP_ = 76, MULTI_STR = 77, IDENTIFIER = 78, UNIT = 79, STRING = 80, 
-    FSTRING = 81, INTEGER = 82, REAL = 83
+    SET_TYPE = 66, MAP_TYPE = 67, LIST_TYPE = 68, DICT_TYPE = 69, ARRAY_TYPE = 70, 
+    TUPLE_TYPE = 71, VECTOR_TYPE = 72, TENSOR_TYPE = 73, ANY_TYPE = 74, 
+    VOID_TYPE = 75, FUNCTOR_TYPE = 76, SKIP_ = 77, MULTI_STR = 78, IDENTIFIER = 79, 
+    UNIT = 80, STRING = 81, FSTRING = 82, INTEGER = 83, REAL = 84
   };
 
   enum {
@@ -912,7 +912,8 @@ public:
     TypeExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     TypeContext *type();
-    TypeExprContext *typeExpr();
+    std::vector<TypeExprContext *> typeExpr();
+    TypeExprContext* typeExpr(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -971,6 +972,7 @@ public:
     antlr4::tree::TerminalNode *LIST_TYPE();
     antlr4::tree::TerminalNode *DICT_TYPE();
     PairedTypesContext *pairedTypes();
+    antlr4::tree::TerminalNode *ARRAY_TYPE();
     antlr4::tree::TerminalNode *TUPLE_TYPE();
     TypeListContext *typeList();
     antlr4::tree::TerminalNode *VECTOR_TYPE();

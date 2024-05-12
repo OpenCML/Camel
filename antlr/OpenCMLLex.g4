@@ -37,6 +37,7 @@ SET_TYPE        : 'Set';
 MAP_TYPE        : 'Map';
 LIST_TYPE       : 'List';
 DICT_TYPE       : 'Dict';
+ARRAY_TYPE      : 'Array';
 TUPLE_TYPE      : 'Tuple';
 VECTOR_TYPE     : 'Vector';
 TENSOR_TYPE     : 'Tensor';
