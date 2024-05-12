@@ -23,12 +23,17 @@
 extern std::string targetFile;
 extern std::string outputFile;
 
+extern std::string errorFormat;
+
 extern std::vector<std::string> includeDirs;
 extern std::vector<std::string> scriptsDirs;
 
 extern bool profile;
 extern bool verbose;
 extern bool noCache;
+
+extern bool syntaxOnly;
+extern bool semanticOnly;
 
 extern bool dumpCST, dumpAST, dumpGIR, dumpONNX;
 

@@ -40,7 +40,6 @@ camel `<target> `stdin/未指定默认进入交互模式
 
 -h --help
 
-
 camel host 持久运行，监听端口，保持内存，提升性能
 
 -p --port
@@ -50,6 +49,10 @@ camel host 持久运行，监听端口，保持内存，提升性能
 -m --modules 支持缓存的最大模块数
 
 -lru 内存管理策略
+
+--syntax-only 只进行语法检查
+
+--semantic-only 只进行语义检查
 
 # Enjoy!
 

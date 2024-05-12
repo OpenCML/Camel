@@ -12,4 +12,5 @@ cmake --build . --config Release
 @REM cmake --build . --config Debug
 @REM Release\camel.exe --profile --repeat 10 "D:\Projects\Camel\demo\std.cml"
 @REM Release\camel.exe --dump-cst "D:\Projects\Camel\demo\std.cml"
+@REM camel --syntax-only --error-format json "D:\Projects\Camel\demo\error.cml"
 @REM Debug\camel.exe --dump-cst "D:\Projects\Camel\test\full.cml"

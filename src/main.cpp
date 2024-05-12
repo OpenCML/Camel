@@ -23,15 +23,19 @@
 #include "antlr/OpenCMLParser.h"
 #include "antlr4-runtime.h"
 
-#include "utils/log.h"
 #include "config.h"
 #include "dump/cst.h"
+#include "utils/log.h"
+#include "core/error/json.h"
+
 
 using namespace antlr4;
 
 int main(int argc, char *argv[]) {
     if (!parseArgs(argc, argv))
         return 0;
+
+    std::ostream &os = std::cout;
 
     std::chrono::high_resolution_clock::time_point startTime, endTime;
 
@@ -54,12 +58,23 @@ int main(int argc, char *argv[]) {
             parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
             tree = parser.program();
         } catch (ParseCancellationException &e) {
-            error << "Parse failed, retrying with LL mode" << std::endl;
+            debug(1) << "Parse failed, retrying with LL mode" << std::endl;
+
+            parser.removeErrorListeners();
+
+            if (errorFormat == "text") {
+                parser.addErrorListener(new ConsoleErrorListener());
+            } else if (errorFormat == "json") {
+                parser.addErrorListener(new JSONErrorListener(targetFile, os));
+            } else {
+                error << "Unknown error format: " << errorFormat << std::endl;
+                return 1;
+            }
+
             parser.reset();
             tokens.reset();
             interpreter->setPredictionMode(atn::PredictionMode::LL);
             parser.setErrorHandler(std::make_shared<DefaultErrorStrategy>());
-            parser.addErrorListener(new ProxyErrorListener());
             tree = parser.program();
         }
 
@@ -70,10 +85,7 @@ int main(int argc, char *argv[]) {
 
         if (profile) {
             endTime = std::chrono::high_resolution_clock::now();
-            auto duration =
-                std::chrono::duration_cast<std::chrono::microseconds>(endTime -
-                                                                      startTime)
-                    .count();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
             info << "Time used " << duration << " us" << std::endl;
         }
     }

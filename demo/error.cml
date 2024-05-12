@@ -16,7 +16,7 @@ use { ParameterController } from "phot/ctrl";
 use { Rx_El_mQAM_BER, Tx_El_mQAM } from "phot/tr";
 
 let photodiodeSetting : PhotodiodeSettingTemplate = {
-    temperature: 300`K`
+    temperature: 300`K`=1 # here
 };
 
 type test = set<map<string, {a: number, b: tuple<number, list, >} & {c: any}> > | (vector<number, 5> | tensor<number, [5, 5]>);
