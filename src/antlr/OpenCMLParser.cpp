@@ -320,10 +320,10 @@ void opencmlParserInitialize() {
   	0,652,659,3,114,57,0,653,659,3,116,58,0,654,655,5,12,0,0,655,656,3,106,
   	53,0,656,657,5,13,0,0,657,659,1,0,0,0,658,650,1,0,0,0,658,651,1,0,0,0,
   	658,652,1,0,0,0,658,653,1,0,0,0,658,654,1,0,0,0,659,109,1,0,0,0,660,661,
-  	7,1,0,0,661,111,1,0,0,0,662,667,5,66,0,0,663,664,5,14,0,0,664,665,3,108,
-  	54,0,665,666,5,15,0,0,666,668,1,0,0,0,667,663,1,0,0,0,667,668,1,0,0,0,
-  	668,737,1,0,0,0,669,676,5,67,0,0,670,671,5,14,0,0,671,672,3,108,54,0,
-  	672,673,5,9,0,0,673,674,3,108,54,0,674,675,5,15,0,0,675,677,1,0,0,0,676,
+  	7,1,0,0,661,111,1,0,0,0,662,667,5,66,0,0,663,664,5,14,0,0,664,665,3,106,
+  	53,0,665,666,5,15,0,0,666,668,1,0,0,0,667,663,1,0,0,0,667,668,1,0,0,0,
+  	668,737,1,0,0,0,669,676,5,67,0,0,670,671,5,14,0,0,671,672,3,106,53,0,
+  	672,673,5,9,0,0,673,674,3,106,53,0,674,675,5,15,0,0,675,677,1,0,0,0,676,
   	670,1,0,0,0,676,677,1,0,0,0,677,737,1,0,0,0,678,737,5,68,0,0,679,737,
   	5,69,0,0,680,682,5,10,0,0,681,683,3,48,24,0,682,681,1,0,0,0,682,683,1,
   	0,0,0,683,685,1,0,0,0,684,686,5,9,0,0,685,684,1,0,0,0,685,686,1,0,0,0,
@@ -331,11 +331,11 @@ void opencmlParserInitialize() {
   	692,3,42,21,0,691,690,1,0,0,0,691,692,1,0,0,0,692,694,1,0,0,0,693,695,
   	5,9,0,0,694,693,1,0,0,0,694,695,1,0,0,0,695,697,1,0,0,0,696,698,5,15,
   	0,0,697,696,1,0,0,0,697,698,1,0,0,0,698,737,1,0,0,0,699,711,5,71,0,0,
-  	700,701,5,14,0,0,701,704,3,108,54,0,702,703,5,9,0,0,703,705,5,82,0,0,
+  	700,701,5,14,0,0,701,704,3,106,53,0,702,703,5,9,0,0,703,705,5,82,0,0,
   	704,702,1,0,0,0,704,705,1,0,0,0,705,707,1,0,0,0,706,708,5,9,0,0,707,706,
   	1,0,0,0,707,708,1,0,0,0,708,709,1,0,0,0,709,710,5,15,0,0,710,712,1,0,
   	0,0,711,700,1,0,0,0,711,712,1,0,0,0,712,737,1,0,0,0,713,734,5,72,0,0,
-  	714,715,5,14,0,0,715,727,3,108,54,0,716,717,5,9,0,0,717,718,5,7,0,0,718,
+  	714,715,5,14,0,0,715,727,3,106,53,0,716,717,5,9,0,0,717,718,5,7,0,0,718,
   	723,5,82,0,0,719,720,5,9,0,0,720,722,5,82,0,0,721,719,1,0,0,0,722,725,
   	1,0,0,0,723,721,1,0,0,0,723,724,1,0,0,0,724,726,1,0,0,0,725,723,1,0,0,
   	0,726,728,5,8,0,0,727,716,1,0,0,0,727,728,1,0,0,0,728,730,1,0,0,0,729,
@@ -5221,12 +5221,12 @@ tree::TerminalNode* OpenCMLParser::StructTypeContext::SET_TYPE() {
   return getToken(OpenCMLParser::SET_TYPE, 0);
 }
 
-std::vector<OpenCMLParser::TypeContext *> OpenCMLParser::StructTypeContext::type() {
-  return getRuleContexts<OpenCMLParser::TypeContext>();
+std::vector<OpenCMLParser::TypeExprContext *> OpenCMLParser::StructTypeContext::typeExpr() {
+  return getRuleContexts<OpenCMLParser::TypeExprContext>();
 }
 
-OpenCMLParser::TypeContext* OpenCMLParser::StructTypeContext::type(size_t i) {
-  return getRuleContext<OpenCMLParser::TypeContext>(i);
+OpenCMLParser::TypeExprContext* OpenCMLParser::StructTypeContext::typeExpr(size_t i) {
+  return getRuleContext<OpenCMLParser::TypeExprContext>(i);
 }
 
 tree::TerminalNode* OpenCMLParser::StructTypeContext::MAP_TYPE() {
@@ -5310,7 +5310,7 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
           setState(663);
           match(OpenCMLParser::T__13);
           setState(664);
-          type();
+          typeExpr(0);
           setState(665);
           match(OpenCMLParser::T__14);
           break;
@@ -5334,11 +5334,11 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
           setState(670);
           match(OpenCMLParser::T__13);
           setState(671);
-          type();
+          typeExpr(0);
           setState(672);
           match(OpenCMLParser::T__8);
           setState(673);
-          type();
+          typeExpr(0);
           setState(674);
           match(OpenCMLParser::T__14);
           break;
@@ -5449,7 +5449,7 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
           setState(700);
           match(OpenCMLParser::T__13);
           setState(701);
-          type();
+          typeExpr(0);
           setState(704);
           _errHandler->sync(this);
 
@@ -5496,7 +5496,7 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
           setState(714);
           match(OpenCMLParser::T__13);
           setState(715);
-          type();
+          typeExpr(0);
           setState(727);
           _errHandler->sync(this);
 

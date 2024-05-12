@@ -19,7 +19,7 @@ let photodiodeSetting : PhotodiodeSettingTemplate = {
     temperature: 300`K`
 };
 
-type test = set<map<string, ({a: number, b: tuple<number, list, >} & {c: any})> > | (vector<number, 5> | tensor<number, [5, 5]>);
+type test = set<map<string, {a: number, b: tuple<number, list, >} & {c: any}> > | (vector<number, 5> | tensor<number, [5, 5]>);
 
 let test = { 1, 2, } & { [a]: b }; # set construction
 

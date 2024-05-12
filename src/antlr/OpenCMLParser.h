@@ -965,8 +965,8 @@ public:
     StructTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *SET_TYPE();
-    std::vector<TypeContext *> type();
-    TypeContext* type(size_t i);
+    std::vector<TypeExprContext *> typeExpr();
+    TypeExprContext* typeExpr(size_t i);
     antlr4::tree::TerminalNode *MAP_TYPE();
     antlr4::tree::TerminalNode *LIST_TYPE();
     antlr4::tree::TerminalNode *DICT_TYPE();

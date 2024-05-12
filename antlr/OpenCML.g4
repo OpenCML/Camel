@@ -160,14 +160,14 @@ primType
     ;
 
 structType
-    : SET_TYPE ('<' type '>')?
-    | MAP_TYPE ('<' type ',' type '>')?
+    : SET_TYPE ('<' typeExpr '>')?
+    | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
     | LIST_TYPE
     | DICT_TYPE // universal dict type
     | '{' pairedTypes? ','? '}' // concrete dict type
     | TUPLE_TYPE '<' typeList? ','? '>'?
-    | VECTOR_TYPE ('<' type (',' INTEGER)? ','? '>')?
-    | TENSOR_TYPE ('<' type (',' '[' INTEGER (',' INTEGER)* ']')? ','? '>')?
+    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? ','? '>')?
+    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? ','? '>')?
     ;
 
 specialType
