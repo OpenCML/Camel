@@ -59,7 +59,7 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitLambda(OpenCMLParser::LambdaContext *ctx) override {
+  virtual std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *ctx) override {
     return visitChildren(ctx);
   }
 

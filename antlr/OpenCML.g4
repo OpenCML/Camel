@@ -27,7 +27,7 @@ withDef : WITH angledParams ;
 funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
 retStmt : RETURN entityExpr? ;
 
-lambda : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
+lambdaExpr : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
 
 carrier : identRef | bracedIdents | bracketIdents ;
 
@@ -65,7 +65,15 @@ parentValues : '(' argumentList? ','? ')' ; // for functor arguments
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 
-primEntity   : identRef | literal | bracketValues | bracedValues | bracedPairedValues | bracedIndexKVPairs | lambda | '(' entityExpr ')' ;
+primEntity
+    : identRef
+    | literal
+    | bracketValues
+    | bracedValues
+    | bracedPairedValues
+    | bracedIndexKVPairs
+    | lambdaExpr
+    | '(' entityExpr ')' ;
 memberAccess : '[' entityExpr ']' ;
 entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
 

@@ -32,7 +32,7 @@ public:
   enum {
     RuleProgram = 0, RuleStmtList = 1, RuleStmt = 2, RuleLetStmt = 3, RuleUseStmt = 4, 
     RuleTypeStmt = 5, RuleExprStmt = 6, RuleAssignStmt = 7, RuleWithDef = 8, 
-    RuleFuncDef = 9, RuleRetStmt = 10, RuleLambda = 11, RuleCarrier = 12, 
+    RuleFuncDef = 9, RuleRetStmt = 10, RuleLambdaExpr = 11, RuleCarrier = 12, 
     RuleAnnotation = 13, RuleAnnotations = 14, RuleModifiers = 15, RuleKeyTypePair = 16, 
     RuleKeyValuePair = 17, RuleKeyParamPair = 18, RuleIndexKTPair = 19, 
     RuleIndexKVPair = 20, RuleTypeList = 21, RuleIdentList = 22, RuleValueList = 23, 
@@ -77,7 +77,7 @@ public:
   class WithDefContext;
   class FuncDefContext;
   class RetStmtContext;
-  class LambdaContext;
+  class LambdaExprContext;
   class CarrierContext;
   class AnnotationContext;
   class AnnotationsContext;
@@ -298,9 +298,9 @@ public:
 
   RetStmtContext* retStmt();
 
-  class  LambdaContext : public antlr4::ParserRuleContext {
+  class  LambdaExprContext : public antlr4::ParserRuleContext {
   public:
-    LambdaContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    LambdaExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     BracedStmtsContext *bracedStmts();
     ModifiersContext *modifiers();
@@ -312,7 +312,7 @@ public:
    
   };
 
-  LambdaContext* lambda();
+  LambdaExprContext* lambdaExpr();
 
   class  CarrierContext : public antlr4::ParserRuleContext {
   public:
@@ -717,7 +717,7 @@ public:
     BracedValuesContext *bracedValues();
     BracedPairedValuesContext *bracedPairedValues();
     BracedIndexKVPairsContext *bracedIndexKVPairs();
-    LambdaContext *lambda();
+    LambdaExprContext *lambdaExpr();
     EntityExprContext *entityExpr();
 
 

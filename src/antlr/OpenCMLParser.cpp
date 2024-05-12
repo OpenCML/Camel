@@ -53,7 +53,7 @@ void opencmlParserInitialize() {
   auto staticData = std::make_unique<OpenCMLParserStaticData>(
     std::vector<std::string>{
       "program", "stmtList", "stmt", "letStmt", "useStmt", "typeStmt", "exprStmt", 
-      "assignStmt", "withDef", "funcDef", "retStmt", "lambda", "carrier", 
+      "assignStmt", "withDef", "funcDef", "retStmt", "lambdaExpr", "carrier", 
       "annotation", "annotations", "modifiers", "keyTypePair", "keyValuePair", 
       "keyParamPair", "indexKTPair", "indexKVPair", "typeList", "identList", 
       "valueList", "pairedTypes", "pairedValues", "pairedParams", "indexKVPairs", 
@@ -1327,44 +1327,44 @@ OpenCMLParser::RetStmtContext* OpenCMLParser::retStmt() {
   return _localctx;
 }
 
-//----------------- LambdaContext ------------------------------------------------------------------
+//----------------- LambdaExprContext ------------------------------------------------------------------
 
-OpenCMLParser::LambdaContext::LambdaContext(ParserRuleContext *parent, size_t invokingState)
+OpenCMLParser::LambdaExprContext::LambdaExprContext(ParserRuleContext *parent, size_t invokingState)
   : ParserRuleContext(parent, invokingState) {
 }
 
-OpenCMLParser::BracedStmtsContext* OpenCMLParser::LambdaContext::bracedStmts() {
+OpenCMLParser::BracedStmtsContext* OpenCMLParser::LambdaExprContext::bracedStmts() {
   return getRuleContext<OpenCMLParser::BracedStmtsContext>(0);
 }
 
-OpenCMLParser::ModifiersContext* OpenCMLParser::LambdaContext::modifiers() {
+OpenCMLParser::ModifiersContext* OpenCMLParser::LambdaExprContext::modifiers() {
   return getRuleContext<OpenCMLParser::ModifiersContext>(0);
 }
 
-OpenCMLParser::ParentParamsContext* OpenCMLParser::LambdaContext::parentParams() {
+OpenCMLParser::ParentParamsContext* OpenCMLParser::LambdaExprContext::parentParams() {
   return getRuleContext<OpenCMLParser::ParentParamsContext>(0);
 }
 
-OpenCMLParser::TypeExprContext* OpenCMLParser::LambdaContext::typeExpr() {
+OpenCMLParser::TypeExprContext* OpenCMLParser::LambdaExprContext::typeExpr() {
   return getRuleContext<OpenCMLParser::TypeExprContext>(0);
 }
 
 
-size_t OpenCMLParser::LambdaContext::getRuleIndex() const {
-  return OpenCMLParser::RuleLambda;
+size_t OpenCMLParser::LambdaExprContext::getRuleIndex() const {
+  return OpenCMLParser::RuleLambdaExpr;
 }
 
 
-std::any OpenCMLParser::LambdaContext::accept(tree::ParseTreeVisitor *visitor) {
+std::any OpenCMLParser::LambdaExprContext::accept(tree::ParseTreeVisitor *visitor) {
   if (auto parserVisitor = dynamic_cast<OpenCMLVisitor*>(visitor))
-    return parserVisitor->visitLambda(this);
+    return parserVisitor->visitLambdaExpr(this);
   else
     return visitor->visitChildren(this);
 }
 
-OpenCMLParser::LambdaContext* OpenCMLParser::lambda() {
-  LambdaContext *_localctx = _tracker.createInstance<LambdaContext>(_ctx, getState());
-  enterRule(_localctx, 22, OpenCMLParser::RuleLambda);
+OpenCMLParser::LambdaExprContext* OpenCMLParser::lambdaExpr() {
+  LambdaExprContext *_localctx = _tracker.createInstance<LambdaExprContext>(_ctx, getState());
+  enterRule(_localctx, 22, OpenCMLParser::RuleLambdaExpr);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -3402,8 +3402,8 @@ OpenCMLParser::BracedIndexKVPairsContext* OpenCMLParser::PrimEntityContext::brac
   return getRuleContext<OpenCMLParser::BracedIndexKVPairsContext>(0);
 }
 
-OpenCMLParser::LambdaContext* OpenCMLParser::PrimEntityContext::lambda() {
-  return getRuleContext<OpenCMLParser::LambdaContext>(0);
+OpenCMLParser::LambdaExprContext* OpenCMLParser::PrimEntityContext::lambdaExpr() {
+  return getRuleContext<OpenCMLParser::LambdaExprContext>(0);
 }
 
 OpenCMLParser::EntityExprContext* OpenCMLParser::PrimEntityContext::entityExpr() {
@@ -3483,7 +3483,7 @@ OpenCMLParser::PrimEntityContext* OpenCMLParser::primEntity() {
     case 7: {
       enterOuterAlt(_localctx, 7);
       setState(465);
-      lambda();
+      lambdaExpr();
       break;
     }
 

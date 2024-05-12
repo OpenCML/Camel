@@ -41,7 +41,7 @@ public:
 
     virtual std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) = 0;
 
-    virtual std::any visitLambda(OpenCMLParser::LambdaContext *context) = 0;
+    virtual std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) = 0;
 
     virtual std::any visitCarrier(OpenCMLParser::CarrierContext *context) = 0;
 

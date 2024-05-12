@@ -184,7 +184,7 @@ assignStmt
 withDef
 funcDef
 retStmt
-lambda
+lambdaExpr
 carrier
 annotation
 annotations

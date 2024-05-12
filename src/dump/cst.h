@@ -114,7 +114,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) { return dumpCST(context, "RetStmt"); };
 
-    std::any visitLambda(OpenCMLParser::LambdaContext *context) { return dumpCST(context, "Lambda"); };
+    std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return dumpCST(context, "LambdaExpr"); };
 
     std::any visitCarrier(OpenCMLParser::CarrierContext *context) { return dumpCST(context, "Carrier"); };
 
