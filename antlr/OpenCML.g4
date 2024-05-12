@@ -31,15 +31,15 @@ lambda : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
 
 carrier : identRef | bracedIdents | bracketIdents ;
 
-annotation : '@' entityExpr ;
+annotation  : '@' entityExpr ;
 annotations : (annotation SEP?)+ ;
-modifiers : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
-keyTypePair : identRef ':' typeExpr ;
+keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : entityExpr ':' entityExpr ;
 keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
-indexKTPair : '[' entityExpr ']' ':' typeExpr ;
-indexKVPair : '[' entityExpr ']' ':' entityExpr ;
+indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
+indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 
 typeList     : typeExpr (',' typeExpr)* ;
 identList    : identRef (',' identRef)* ;
@@ -62,15 +62,15 @@ bracketValues : '[' valueList? ','? ']' ; // for literal construction of list, v
 parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
 parentValues : '(' argumentList? ','? ')' ; // for functor arguments
 
-angledParams   : '<' pairedParams? ','? '>' ; // for functor super parameters definition
-angledValues   : '<' argumentList? ','? '>' ; // for functor super arguments
+angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
+angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 
-primEntity : identRef | literal | bracketValues | bracedValues | bracedPairedValues | bracedIndexKVPairs | lambda ;
+primEntity   : identRef | literal | bracketValues | bracedValues | bracedPairedValues | bracedIndexKVPairs | lambda ;
 memberAccess : ('.' (identRef | INTEGER | '(' entityExpr ')'))+ ;
-entity : primEntity memberAccess? angledValues? annotation? parentValues? ;
+entity       : primEntity memberAccess? angledValues? annotation? parentValues? ;
 
-entityLink : entityLink '->' entity | entity ;
-entityChain : entityLink+ ;
+entityLink   : entityLink '->' entity | entity ;
+entityChain  : entityLink+ ;
 entitySpread : '...' entity ;
 
 entityExpr
