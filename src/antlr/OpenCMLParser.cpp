@@ -75,7 +75,7 @@ void opencmlParserInitialize() {
       "'sync'", "'null'", "'true'", "'false'", "'Int'", "'Int32'", "'Int64'", 
       "'Real'", "'Float'", "'Double'", "'Number'", "'String'", "'Bool'", 
       "'Char'", "'Set'", "'Map'", "'List'", "'Dict'", "'Array'", "'Tuple'", 
-      "'Vector'", "'Tensor'", "'Any'", "'Void'", "'Functor'"
+      "'Union'", "'Vector'", "'Tensor'", "'Any'", "'Void'", "'Functor'"
     },
     std::vector<std::string>{
       "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
@@ -85,13 +85,13 @@ void opencmlParserInitialize() {
       "TRUE", "FALSE", "INTEGER_TYPE", "INTEGER32_TYPE", "INTEGER64_TYPE", 
       "REAL_TYPE", "FLOAT_TYPE", "DOUBLE_TYPE", "NUMBER_TYPE", "STRING_TYPE", 
       "BOOL_TYPE", "CHAR_TYPE", "SET_TYPE", "MAP_TYPE", "LIST_TYPE", "DICT_TYPE", 
-      "ARRAY_TYPE", "TUPLE_TYPE", "VECTOR_TYPE", "TENSOR_TYPE", "ANY_TYPE", 
-      "VOID_TYPE", "FUNCTOR_TYPE", "SKIP_", "MULTI_STR", "IDENTIFIER", "UNIT", 
-      "STRING", "FSTRING", "INTEGER", "REAL"
+      "ARRAY_TYPE", "TUPLE_TYPE", "UNION_TYPE", "VECTOR_TYPE", "TENSOR_TYPE", 
+      "ANY_TYPE", "VOID_TYPE", "FUNCTOR_TYPE", "SKIP_", "MULTI_STR", "IDENTIFIER", 
+      "UNIT", "STRING", "FSTRING", "INTEGER", "REAL"
     }
   );
   static const int32_t serializedATNSegment[] = {
-  	4,1,84,762,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,2,
+  	4,1,85,773,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,2,
   	7,7,7,2,8,7,8,2,9,7,9,2,10,7,10,2,11,7,11,2,12,7,12,2,13,7,13,2,14,7,
   	14,2,15,7,15,2,16,7,16,2,17,7,17,2,18,7,18,2,19,7,19,2,20,7,20,2,21,7,
   	21,2,22,7,22,2,23,7,23,2,24,7,24,2,25,7,25,2,26,7,26,2,27,7,27,2,28,7,
@@ -147,14 +147,15 @@ void opencmlParserInitialize() {
   	57,1,57,3,57,685,8,57,1,57,1,57,1,57,1,57,1,57,1,57,1,57,1,57,3,57,695,
   	8,57,1,57,3,57,698,8,57,1,57,1,57,1,57,1,57,1,57,1,57,3,57,706,8,57,1,
   	57,1,57,1,57,3,57,711,8,57,1,57,3,57,714,8,57,1,57,3,57,717,8,57,1,57,
-  	1,57,1,57,1,57,1,57,3,57,724,8,57,1,57,3,57,727,8,57,1,57,1,57,3,57,731,
-  	8,57,1,57,1,57,1,57,1,57,1,57,1,57,1,57,1,57,5,57,741,8,57,10,57,12,57,
-  	744,9,57,1,57,3,57,747,8,57,1,57,3,57,750,8,57,1,57,1,57,3,57,754,8,57,
-  	3,57,756,8,57,1,58,1,58,1,59,1,59,1,59,0,7,88,90,94,96,98,100,108,60,
+  	1,57,1,57,3,57,722,8,57,1,57,3,57,725,8,57,1,57,3,57,728,8,57,1,57,1,
+  	57,1,57,1,57,1,57,3,57,735,8,57,1,57,3,57,738,8,57,1,57,1,57,3,57,742,
+  	8,57,1,57,1,57,1,57,1,57,1,57,1,57,1,57,1,57,5,57,752,8,57,10,57,12,57,
+  	755,9,57,1,57,3,57,758,8,57,1,57,3,57,761,8,57,1,57,1,57,3,57,765,8,57,
+  	3,57,767,8,57,1,58,1,58,1,59,1,59,1,59,0,7,88,90,94,96,98,100,108,60,
   	0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,
   	50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,
   	96,98,100,102,104,106,108,110,112,114,116,118,0,3,1,0,48,52,1,0,56,65,
-  	1,0,74,76,842,0,121,1,0,0,0,2,126,1,0,0,0,4,151,1,0,0,0,6,172,1,0,0,0,
+  	1,0,75,77,857,0,121,1,0,0,0,2,126,1,0,0,0,4,151,1,0,0,0,6,172,1,0,0,0,
   	8,185,1,0,0,0,10,187,1,0,0,0,12,195,1,0,0,0,14,199,1,0,0,0,16,206,1,0,
   	0,0,18,210,1,0,0,0,20,227,1,0,0,0,22,232,1,0,0,0,24,248,1,0,0,0,26,250,
   	1,0,0,0,28,257,1,0,0,0,30,262,1,0,0,0,32,266,1,0,0,0,34,270,1,0,0,0,36,
@@ -166,7 +167,7 @@ void opencmlParserInitialize() {
   	1,0,0,0,84,476,1,0,0,0,86,487,1,0,0,0,88,491,1,0,0,0,90,502,1,0,0,0,92,
   	513,1,0,0,0,94,516,1,0,0,0,96,539,1,0,0,0,98,565,1,0,0,0,100,585,1,0,
   	0,0,102,616,1,0,0,0,104,623,1,0,0,0,106,639,1,0,0,0,108,641,1,0,0,0,110,
-  	666,1,0,0,0,112,668,1,0,0,0,114,755,1,0,0,0,116,757,1,0,0,0,118,759,1,
+  	666,1,0,0,0,112,668,1,0,0,0,114,766,1,0,0,0,116,768,1,0,0,0,118,770,1,
   	0,0,0,120,122,3,2,1,0,121,120,1,0,0,0,121,122,1,0,0,0,122,123,1,0,0,0,
   	123,124,5,0,0,1,124,1,1,0,0,0,125,127,3,4,2,0,126,125,1,0,0,0,127,128,
   	1,0,0,0,128,126,1,0,0,0,128,129,1,0,0,0,129,3,1,0,0,0,130,131,3,6,3,0,
@@ -310,10 +311,10 @@ void opencmlParserInitialize() {
   	0,614,615,5,31,0,0,615,617,3,104,52,0,616,611,1,0,0,0,616,612,1,0,0,0,
   	616,614,1,0,0,0,617,103,1,0,0,0,618,624,3,86,43,0,619,620,5,12,0,0,620,
   	621,3,94,47,0,621,622,5,13,0,0,622,624,1,0,0,0,623,618,1,0,0,0,623,619,
-  	1,0,0,0,624,105,1,0,0,0,625,627,5,83,0,0,626,628,5,80,0,0,627,626,1,0,
-  	0,0,627,628,1,0,0,0,628,640,1,0,0,0,629,631,5,84,0,0,630,632,5,80,0,0,
-  	631,630,1,0,0,0,631,632,1,0,0,0,632,640,1,0,0,0,633,640,5,81,0,0,634,
-  	640,5,78,0,0,635,640,5,82,0,0,636,640,5,54,0,0,637,640,5,55,0,0,638,640,
+  	1,0,0,0,624,105,1,0,0,0,625,627,5,84,0,0,626,628,5,81,0,0,627,626,1,0,
+  	0,0,627,628,1,0,0,0,628,640,1,0,0,0,629,631,5,85,0,0,630,632,5,81,0,0,
+  	631,630,1,0,0,0,631,632,1,0,0,0,632,640,1,0,0,0,633,640,5,82,0,0,634,
+  	640,5,79,0,0,635,640,5,83,0,0,636,640,5,54,0,0,637,640,5,55,0,0,638,640,
   	5,53,0,0,639,625,1,0,0,0,639,629,1,0,0,0,639,633,1,0,0,0,639,634,1,0,
   	0,0,639,635,1,0,0,0,639,636,1,0,0,0,639,637,1,0,0,0,639,638,1,0,0,0,640,
   	107,1,0,0,0,641,642,6,54,-1,0,642,645,3,110,55,0,643,644,5,7,0,0,644,
@@ -326,38 +327,41 @@ void opencmlParserInitialize() {
   	0,666,658,1,0,0,0,666,659,1,0,0,0,666,660,1,0,0,0,666,661,1,0,0,0,666,
   	662,1,0,0,0,667,111,1,0,0,0,668,669,7,1,0,0,669,113,1,0,0,0,670,675,5,
   	66,0,0,671,672,5,14,0,0,672,673,3,108,54,0,673,674,5,15,0,0,674,676,1,
-  	0,0,0,675,671,1,0,0,0,675,676,1,0,0,0,676,756,1,0,0,0,677,684,5,67,0,
+  	0,0,0,675,671,1,0,0,0,675,676,1,0,0,0,676,767,1,0,0,0,677,684,5,67,0,
   	0,678,679,5,14,0,0,679,680,3,108,54,0,680,681,5,9,0,0,681,682,3,108,54,
   	0,682,683,5,15,0,0,683,685,1,0,0,0,684,678,1,0,0,0,684,685,1,0,0,0,685,
-  	756,1,0,0,0,686,687,5,10,0,0,687,688,3,38,19,0,688,689,5,11,0,0,689,756,
-  	1,0,0,0,690,756,5,68,0,0,691,756,5,69,0,0,692,694,5,10,0,0,693,695,3,
+  	767,1,0,0,0,686,687,5,10,0,0,687,688,3,38,19,0,688,689,5,11,0,0,689,767,
+  	1,0,0,0,690,767,5,68,0,0,691,767,5,69,0,0,692,694,5,10,0,0,693,695,3,
   	48,24,0,694,693,1,0,0,0,694,695,1,0,0,0,695,697,1,0,0,0,696,698,5,9,0,
-  	0,697,696,1,0,0,0,697,698,1,0,0,0,698,699,1,0,0,0,699,756,5,11,0,0,700,
+  	0,697,696,1,0,0,0,697,698,1,0,0,0,698,699,1,0,0,0,699,767,5,11,0,0,700,
   	705,5,70,0,0,701,702,5,14,0,0,702,703,3,108,54,0,703,704,5,15,0,0,704,
-  	706,1,0,0,0,705,701,1,0,0,0,705,706,1,0,0,0,706,756,1,0,0,0,707,716,5,
+  	706,1,0,0,0,705,701,1,0,0,0,705,706,1,0,0,0,706,767,1,0,0,0,707,716,5,
   	71,0,0,708,710,5,14,0,0,709,711,3,42,21,0,710,709,1,0,0,0,710,711,1,0,
   	0,0,711,713,1,0,0,0,712,714,5,9,0,0,713,712,1,0,0,0,713,714,1,0,0,0,714,
-  	715,1,0,0,0,715,717,5,15,0,0,716,708,1,0,0,0,716,717,1,0,0,0,717,756,
-  	1,0,0,0,718,730,5,72,0,0,719,720,5,14,0,0,720,723,3,108,54,0,721,722,
-  	5,9,0,0,722,724,5,83,0,0,723,721,1,0,0,0,723,724,1,0,0,0,724,726,1,0,
-  	0,0,725,727,5,9,0,0,726,725,1,0,0,0,726,727,1,0,0,0,727,728,1,0,0,0,728,
-  	729,5,15,0,0,729,731,1,0,0,0,730,719,1,0,0,0,730,731,1,0,0,0,731,756,
-  	1,0,0,0,732,753,5,73,0,0,733,734,5,14,0,0,734,746,3,108,54,0,735,736,
-  	5,9,0,0,736,737,5,7,0,0,737,742,5,83,0,0,738,739,5,9,0,0,739,741,5,83,
-  	0,0,740,738,1,0,0,0,741,744,1,0,0,0,742,740,1,0,0,0,742,743,1,0,0,0,743,
-  	745,1,0,0,0,744,742,1,0,0,0,745,747,5,8,0,0,746,735,1,0,0,0,746,747,1,
-  	0,0,0,747,749,1,0,0,0,748,750,5,9,0,0,749,748,1,0,0,0,749,750,1,0,0,0,
-  	750,751,1,0,0,0,751,752,5,15,0,0,752,754,1,0,0,0,753,733,1,0,0,0,753,
-  	754,1,0,0,0,754,756,1,0,0,0,755,670,1,0,0,0,755,677,1,0,0,0,755,686,1,
-  	0,0,0,755,690,1,0,0,0,755,691,1,0,0,0,755,692,1,0,0,0,755,700,1,0,0,0,
-  	755,707,1,0,0,0,755,718,1,0,0,0,755,732,1,0,0,0,756,115,1,0,0,0,757,758,
-  	7,2,0,0,758,117,1,0,0,0,759,760,5,79,0,0,760,119,1,0,0,0,96,121,128,151,
-  	157,160,167,172,177,185,190,195,201,210,213,216,223,229,232,237,241,248,
-  	255,259,264,276,282,301,309,317,325,333,341,349,355,358,362,365,371,374,
-  	380,383,389,392,398,401,407,410,416,419,425,428,434,437,443,446,452,455,
-  	470,481,483,489,499,510,534,536,560,562,580,582,606,608,616,623,627,631,
-  	639,645,653,655,666,675,684,694,697,705,710,713,716,723,726,730,742,746,
-  	749,753,755
+  	715,1,0,0,0,715,717,5,15,0,0,716,708,1,0,0,0,716,717,1,0,0,0,717,767,
+  	1,0,0,0,718,727,5,72,0,0,719,721,5,14,0,0,720,722,3,42,21,0,721,720,1,
+  	0,0,0,721,722,1,0,0,0,722,724,1,0,0,0,723,725,5,9,0,0,724,723,1,0,0,0,
+  	724,725,1,0,0,0,725,726,1,0,0,0,726,728,5,15,0,0,727,719,1,0,0,0,727,
+  	728,1,0,0,0,728,767,1,0,0,0,729,741,5,73,0,0,730,731,5,14,0,0,731,734,
+  	3,108,54,0,732,733,5,9,0,0,733,735,5,84,0,0,734,732,1,0,0,0,734,735,1,
+  	0,0,0,735,737,1,0,0,0,736,738,5,9,0,0,737,736,1,0,0,0,737,738,1,0,0,0,
+  	738,739,1,0,0,0,739,740,5,15,0,0,740,742,1,0,0,0,741,730,1,0,0,0,741,
+  	742,1,0,0,0,742,767,1,0,0,0,743,764,5,74,0,0,744,745,5,14,0,0,745,757,
+  	3,108,54,0,746,747,5,9,0,0,747,748,5,7,0,0,748,753,5,84,0,0,749,750,5,
+  	9,0,0,750,752,5,84,0,0,751,749,1,0,0,0,752,755,1,0,0,0,753,751,1,0,0,
+  	0,753,754,1,0,0,0,754,756,1,0,0,0,755,753,1,0,0,0,756,758,5,8,0,0,757,
+  	746,1,0,0,0,757,758,1,0,0,0,758,760,1,0,0,0,759,761,5,9,0,0,760,759,1,
+  	0,0,0,760,761,1,0,0,0,761,762,1,0,0,0,762,763,5,15,0,0,763,765,1,0,0,
+  	0,764,744,1,0,0,0,764,765,1,0,0,0,765,767,1,0,0,0,766,670,1,0,0,0,766,
+  	677,1,0,0,0,766,686,1,0,0,0,766,690,1,0,0,0,766,691,1,0,0,0,766,692,1,
+  	0,0,0,766,700,1,0,0,0,766,707,1,0,0,0,766,718,1,0,0,0,766,729,1,0,0,0,
+  	766,743,1,0,0,0,767,115,1,0,0,0,768,769,7,2,0,0,769,117,1,0,0,0,770,771,
+  	5,80,0,0,771,119,1,0,0,0,99,121,128,151,157,160,167,172,177,185,190,195,
+  	201,210,213,216,223,229,232,237,241,248,255,259,264,276,282,301,309,317,
+  	325,333,341,349,355,358,362,365,371,374,380,383,389,392,398,401,407,410,
+  	416,419,425,428,434,437,443,446,452,455,470,481,483,489,499,510,534,536,
+  	560,562,580,582,606,608,616,623,627,631,639,645,653,655,666,675,684,694,
+  	697,705,710,713,716,721,724,727,734,737,741,753,757,760,764,766
   };
   staticData->serializedATN = antlr4::atn::SerializedATNView(serializedATNSegment, sizeof(serializedATNSegment) / sizeof(serializedATNSegment[0]));
 
@@ -452,8 +456,8 @@ OpenCMLParser::ProgramContext* OpenCMLParser::program() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 72053473016812736) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 72053473016812736) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(120);
       stmtList();
     }
@@ -521,8 +525,8 @@ OpenCMLParser::StmtListContext* OpenCMLParser::stmtList() {
       _errHandler->sync(this);
       _la = _input->LA(1);
     } while ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 72053473016812736) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0));
+      ((1ULL << _la) & 72053473016812736) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0));
    
   }
   catch (RecognitionException &e) {
@@ -1311,8 +1315,8 @@ OpenCMLParser::RetStmtContext* OpenCMLParser::retStmt() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(228);
       entityExpr(0);
     }
@@ -2656,8 +2660,8 @@ OpenCMLParser::BracedValuesContext* OpenCMLParser::bracedValues() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(361);
       valueList();
     }
@@ -2794,8 +2798,8 @@ OpenCMLParser::BracedPairedValuesContext* OpenCMLParser::bracedPairedValues() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(379);
       pairedValues();
     }
@@ -2932,8 +2936,8 @@ OpenCMLParser::BracedStmtsContext* OpenCMLParser::bracedStmts() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 72053473016812736) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 72053473016812736) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(397);
       stmtList();
     }
@@ -3070,8 +3074,8 @@ OpenCMLParser::BracketValuesContext* OpenCMLParser::bracketValues() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(415);
       valueList();
     }
@@ -3208,8 +3212,8 @@ OpenCMLParser::ParentValuesContext* OpenCMLParser::parentValues() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(433);
       argumentList();
     }
@@ -3346,8 +3350,8 @@ OpenCMLParser::AngledValuesContext* OpenCMLParser::angledValues() {
 
     _la = _input->LA(1);
     if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 78)) & 123) != 0)) {
+      ((1ULL << _la) & 71776396086613120) != 0) || ((((_la - 79) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 79)) & 123) != 0)) {
       setState(451);
       argumentList();
     }
@@ -5142,6 +5146,7 @@ OpenCMLParser::TypeContext* OpenCMLParser::type() {
       case OpenCMLParser::DICT_TYPE:
       case OpenCMLParser::ARRAY_TYPE:
       case OpenCMLParser::TUPLE_TYPE:
+      case OpenCMLParser::UNION_TYPE:
       case OpenCMLParser::VECTOR_TYPE:
       case OpenCMLParser::TENSOR_TYPE: {
         enterOuterAlt(_localctx, 2);
@@ -5335,6 +5340,10 @@ OpenCMLParser::TypeListContext* OpenCMLParser::StructTypeContext::typeList() {
   return getRuleContext<OpenCMLParser::TypeListContext>(0);
 }
 
+tree::TerminalNode* OpenCMLParser::StructTypeContext::UNION_TYPE() {
+  return getToken(OpenCMLParser::UNION_TYPE, 0);
+}
+
 tree::TerminalNode* OpenCMLParser::StructTypeContext::VECTOR_TYPE() {
   return getToken(OpenCMLParser::VECTOR_TYPE, 0);
 }
@@ -5377,9 +5386,9 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
     exitRule();
   });
   try {
-    setState(755);
+    setState(766);
     _errHandler->sync(this);
-    switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 95, _ctx)) {
+    switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 98, _ctx)) {
     case 1: {
       enterOuterAlt(_localctx, 1);
       setState(670);
@@ -5523,7 +5532,7 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
         _la = _input->LA(1);
         if ((((_la & ~ 0x3fULL) == 0) &&
           ((1ULL << _la) & -72057594037922816) != 0) || ((((_la - 64) & ~ 0x3fULL) == 0) &&
-          ((1ULL << (_la - 64)) & 40959) != 0)) {
+          ((1ULL << (_la - 64)) & 81919) != 0)) {
           setState(709);
           typeList();
         }
@@ -5549,40 +5558,33 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
     case 9: {
       enterOuterAlt(_localctx, 9);
       setState(718);
-      match(OpenCMLParser::VECTOR_TYPE);
-      setState(730);
+      match(OpenCMLParser::UNION_TYPE);
+      setState(727);
       _errHandler->sync(this);
 
       switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 90, _ctx)) {
       case 1: {
         setState(719);
         match(OpenCMLParser::T__13);
-        setState(720);
-        typeExpr(0);
-        setState(723);
+        setState(721);
         _errHandler->sync(this);
 
-        switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 88, _ctx)) {
-        case 1: {
-          setState(721);
-          match(OpenCMLParser::T__8);
-          setState(722);
-          match(OpenCMLParser::INTEGER);
-          break;
+        _la = _input->LA(1);
+        if ((((_la & ~ 0x3fULL) == 0) &&
+          ((1ULL << _la) & -72057594037922816) != 0) || ((((_la - 64) & ~ 0x3fULL) == 0) &&
+          ((1ULL << (_la - 64)) & 81919) != 0)) {
+          setState(720);
+          typeList();
         }
-
-        default:
-          break;
-        }
-        setState(726);
+        setState(724);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == OpenCMLParser::T__8) {
-          setState(725);
+          setState(723);
           match(OpenCMLParser::T__8);
         }
-        setState(728);
+        setState(726);
         match(OpenCMLParser::T__14);
         break;
       }
@@ -5595,41 +5597,88 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
 
     case 10: {
       enterOuterAlt(_localctx, 10);
-      setState(732);
-      match(OpenCMLParser::TENSOR_TYPE);
-      setState(753);
+      setState(729);
+      match(OpenCMLParser::VECTOR_TYPE);
+      setState(741);
       _errHandler->sync(this);
 
-      switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 94, _ctx)) {
+      switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 93, _ctx)) {
       case 1: {
-        setState(733);
+        setState(730);
         match(OpenCMLParser::T__13);
-        setState(734);
+        setState(731);
         typeExpr(0);
-        setState(746);
+        setState(734);
         _errHandler->sync(this);
 
-        switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 92, _ctx)) {
+        switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 91, _ctx)) {
         case 1: {
-          setState(735);
+          setState(732);
           match(OpenCMLParser::T__8);
-          setState(736);
-          match(OpenCMLParser::T__6);
-          setState(737);
+          setState(733);
           match(OpenCMLParser::INTEGER);
-          setState(742);
+          break;
+        }
+
+        default:
+          break;
+        }
+        setState(737);
+        _errHandler->sync(this);
+
+        _la = _input->LA(1);
+        if (_la == OpenCMLParser::T__8) {
+          setState(736);
+          match(OpenCMLParser::T__8);
+        }
+        setState(739);
+        match(OpenCMLParser::T__14);
+        break;
+      }
+
+      default:
+        break;
+      }
+      break;
+    }
+
+    case 11: {
+      enterOuterAlt(_localctx, 11);
+      setState(743);
+      match(OpenCMLParser::TENSOR_TYPE);
+      setState(764);
+      _errHandler->sync(this);
+
+      switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 97, _ctx)) {
+      case 1: {
+        setState(744);
+        match(OpenCMLParser::T__13);
+        setState(745);
+        typeExpr(0);
+        setState(757);
+        _errHandler->sync(this);
+
+        switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 95, _ctx)) {
+        case 1: {
+          setState(746);
+          match(OpenCMLParser::T__8);
+          setState(747);
+          match(OpenCMLParser::T__6);
+          setState(748);
+          match(OpenCMLParser::INTEGER);
+          setState(753);
           _errHandler->sync(this);
           _la = _input->LA(1);
           while (_la == OpenCMLParser::T__8) {
-            setState(738);
+            setState(749);
             match(OpenCMLParser::T__8);
-            setState(739);
+            setState(750);
             match(OpenCMLParser::INTEGER);
-            setState(744);
+            setState(755);
             _errHandler->sync(this);
             _la = _input->LA(1);
           }
-          setState(745);
+          setState(756);
           match(OpenCMLParser::T__7);
           break;
         }
@@ -5637,15 +5686,15 @@ OpenCMLParser::StructTypeContext* OpenCMLParser::structType() {
         default:
           break;
         }
-        setState(749);
+        setState(760);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == OpenCMLParser::T__8) {
-          setState(748);
+          setState(759);
           match(OpenCMLParser::T__8);
         }
-        setState(751);
+        setState(762);
         match(OpenCMLParser::T__14);
         break;
       }
@@ -5715,10 +5764,10 @@ OpenCMLParser::SpecialTypeContext* OpenCMLParser::specialType() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(757);
+    setState(768);
     _la = _input->LA(1);
-    if (!(((((_la - 74) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 74)) & 7) != 0))) {
+    if (!(((((_la - 75) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 75)) & 7) != 0))) {
     _errHandler->recoverInline(this);
     }
     else {
@@ -5772,7 +5821,7 @@ OpenCMLParser::IdentRefContext* OpenCMLParser::identRef() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(759);
+    setState(770);
     match(OpenCMLParser::IDENTIFIER);
    
   }

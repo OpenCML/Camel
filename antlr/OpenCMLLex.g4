@@ -39,6 +39,7 @@ LIST_TYPE       : 'List';
 DICT_TYPE       : 'Dict';
 ARRAY_TYPE      : 'Array';
 TUPLE_TYPE      : 'Tuple';
+UNION_TYPE      : 'Union';
 VECTOR_TYPE     : 'Vector';
 TENSOR_TYPE     : 'Tensor';
 

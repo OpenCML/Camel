@@ -177,6 +177,7 @@ structType
     | '{' pairedTypes? ','? '}' // concrete dict type
     | ARRAY_TYPE ('<' typeExpr '>')?
     | TUPLE_TYPE ('<' typeList? ','? '>')?
+    | UNION_TYPE ('<' typeList? ','? '>')?
     | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? ','? '>')?
     | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? ','? '>')?
     ;

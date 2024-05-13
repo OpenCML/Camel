@@ -24,9 +24,10 @@ public:
     INTEGER64_TYPE = 58, REAL_TYPE = 59, FLOAT_TYPE = 60, DOUBLE_TYPE = 61, 
     NUMBER_TYPE = 62, STRING_TYPE = 63, BOOL_TYPE = 64, CHAR_TYPE = 65, 
     SET_TYPE = 66, MAP_TYPE = 67, LIST_TYPE = 68, DICT_TYPE = 69, ARRAY_TYPE = 70, 
-    TUPLE_TYPE = 71, VECTOR_TYPE = 72, TENSOR_TYPE = 73, ANY_TYPE = 74, 
-    VOID_TYPE = 75, FUNCTOR_TYPE = 76, SKIP_ = 77, MULTI_STR = 78, IDENTIFIER = 79, 
-    UNIT = 80, STRING = 81, FSTRING = 82, INTEGER = 83, REAL = 84
+    TUPLE_TYPE = 71, UNION_TYPE = 72, VECTOR_TYPE = 73, TENSOR_TYPE = 74, 
+    ANY_TYPE = 75, VOID_TYPE = 76, FUNCTOR_TYPE = 77, SKIP_ = 78, MULTI_STR = 79, 
+    IDENTIFIER = 80, UNIT = 81, STRING = 82, FSTRING = 83, INTEGER = 84, 
+    REAL = 85
   };
 
   enum {
@@ -992,6 +993,7 @@ public:
     antlr4::tree::TerminalNode *ARRAY_TYPE();
     antlr4::tree::TerminalNode *TUPLE_TYPE();
     TypeListContext *typeList();
+    antlr4::tree::TerminalNode *UNION_TYPE();
     antlr4::tree::TerminalNode *VECTOR_TYPE();
     std::vector<antlr4::tree::TerminalNode *> INTEGER();
     antlr4::tree::TerminalNode* INTEGER(size_t i);
