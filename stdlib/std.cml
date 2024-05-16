@@ -23,7 +23,7 @@
 # psl, json, phtc, xml, toml
 
 with <loader: functor = psl>
-inner sync static func load(path: string) -> any {
+inner sync static func load(path: string) : any {
     # inner func
 };
 
@@ -77,13 +77,13 @@ inner static sync func ifexpr(
 };
 
 with <after: functor>
-inner sync func exec(block: functor) -> void {
+inner sync func exec(block: functor) : void {
     # execute the following block synchronously
     # if after is specified, run it after execution of block
 };
 
 with <after: functor>
-inner static sync func skip(entity: any) -> void {
+inner static sync func skip(entity: any) : void {
     # skip an entity in an entity chain
 };
 
@@ -125,14 +125,14 @@ inner func foreach(entity: any) {
     # for each element in entity, apply f to it
 };
 
-inner func plus(lhs: any, rhs: any) -> any {
+inner func plus(lhs: any, rhs: any) : any {
     # return lhs + rhs
 };
 
-inner func minus(lhs: any, rhs: any) -> any {
+inner func minus(lhs: any, rhs: any) : any {
     # return lhs - rhs
 };
 
-inner func leq(lhs: any, rhs: any) -> bool {
+inner func leq(lhs: any, rhs: any) : bool {
     # return lhs <= rhs
 };
