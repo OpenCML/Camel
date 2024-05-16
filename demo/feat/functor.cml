@@ -6,7 +6,7 @@
 # psl, json, phtc, xml, toml
 
 with <loader: functor = psl>
-inner sync static func load(path: string) -> any {
+inner sync static func load(path: string) : any {
     # inner func
 };
 

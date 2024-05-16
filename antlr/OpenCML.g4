@@ -3,84 +3,97 @@ import OpenCMLLex;
 
 program : stmtList? EOF;
 
-stmtList : stmt (SEP stmt)* SEP? ;
+stmtList : stmt+ ;
 
-stmt : letStmt
-     | useStmt
-     | funcDef
-     | typeDef
-     | enumDef
-     | retStmt
-     | exprStmt
-     | assignStmt
-     ;
+stmt
+    : letStmt SEP
+    | useStmt SEP
+    | typeStmt SEP
+    | exprStmt SEP
+    | assignStmt SEP
+    | funcDef SEP
+    | retStmt SEP
+    ;
 
-letStmt : LET carrier (':' type)? '='? expr
-        | carrier (':' type)? ':=' expr ;
-useStmt : USE carrier '='? expr
-        | carrier '::' expr ;
-withDef : WITH (entityRef | withDecl) ;
-funcDef : annotations withDef? modifiers FUNC identRef paramDef ('->' type)? '='? stmtPack ;
-typeDef : TYPE identRef '='? (type | typePack) ;
-enumDef : ENUM identRef '='? dictUnpack ;
-retStmt : RETURN expr? ;
-exprStmt : annotations expr ;
-assignStmt : entityRef (':' type)? '='? expr ;
+letStmt : LET carrier (':' typeExpr)? '='? entityExpr
+        | carrier (':' typeExpr)? ':=' entityExpr ;
+useStmt : USE carrier '='? entityExpr
+        | carrier '::' entityExpr ;
+typeStmt : TYPE identRef '='? typeExpr ;
+exprStmt : annotations? entityExpr ;
+assignStmt : identRef memberAccess? '=' entityExpr ;
 
-carrier : identRef
-        | listUnpack
-        | dictUnpack
-        ;
+withDef : WITH angledParams ;
+funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
+retStmt : RETURN entityExpr? ;
+lambdaExpr : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
 
-biasAnno : '(' expr ',' expr ')' ;
-sizeAnno : '[' expr ',' expr ']' ;
-annotation : '@' (identRef | dictPack | biasAnno | sizeAnno) ;
-annotations : (annotation SEP?)* ;
-modifiers : (INNER | OUTER | SYNC | SCOPED | STATIC | ATOMIC)* ;
-withList : '<' argument (','  argument)* ','? '>' ;
-withDecl : '<' keyValDecl (',' keyValDecl)* ','? '>' ;
-paramDef : '(' (keyValDecl (',' keyValDecl)*)? ','? ')' ;
-argsList : '(' (argument (',' argument)*)? ','? ')' ;
-argument : identRef | entity
-         | keyValExpr | expr
-         ;
+carrier : identRef | bracedIdents | bracketIdents ;
 
-typePack : '{' (keyValDecl (',' keyValDecl)*)? ','? '}' ;
-keyValDecl : identRef (annotation)? ':' nullableType ('=' expr)? ;
-keyValExpr : identRef (annotation)? '=' expr ;
+annotation  : '@' primEntity ;
+annotations : (annotation SEP?)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
-entityRef : identRef ('.' (INTEGER | identRef))* annotation? ;
-functorRef: identRef (withList)? annotation? ;
-listUnpack : '[' (identRef (',' identRef)*)? ','? ']' ;
-dictUnpack : '{' (identRef (',' identRef)*)? ','? '}' ;
-dictPack : '{' (keyValExpr (',' keyValExpr)*)? ','? '}' ;
-listPack : '[' (expr (',' expr)*)? ','? ']' ;
-stmtPack : '{' stmtList?  '}' ;
-lambda   : (paramDef '=>')? stmtPack ;
+keyTypePair  : identRef ':' typeExpr ;
+keyValuePair : entityExpr ':' entityExpr ;
+keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
+indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 
-entityExpr : (entity | normCall | linkCall | entityChain) (AS type)? ;
-entityChain : (identRef | entity | linkCall)+ ;
-entity : ((identRef | literal | listPack | dictPack | lambda) annotation?) | entityRef | functorRef ;
-normCall : functorRef argsList ;
-linkCall : linkCall '->' (identRef | functorRef | entity | normCall)
-         | (identRef | entityRef | entity | functorRef | normCall)
-           '->' (identRef | functorRef | entity | normCall)
-         | identRef | entityRef | entity | functorRef | normCall
-         ;
+typeList     : typeExpr (',' typeExpr)* ;
+identList    : identRef (',' identRef)* ;
+valueList    : entityExpr (',' entityExpr)* ;
+pairedTypes  : keyTypePair (',' keyTypePair)* ;
+pairedValues : keyValuePair (',' keyValuePair)* ;
+pairedParams : keyParamPair (',' keyParamPair)* ;
+indexKVPairs : indexKVPair (',' indexKVPair)* ;
+argumentList : valueList (',' pairedValues)? | pairedValues ;
 
-calcExpr
+bracedValues       : '{' valueList? ','? '}' ;    // for literal construction of set
+bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ; // for literal construction of map
+bracedPairedValues : '{' pairedValues? ','? '}' ; // for literal construction of dict
+bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
+bracedStmts        : '{' stmtList? ','? '}' ;     // for block statement
+
+bracketIdents : '[' identList? ','? ']' ; // for list unpacking
+bracketValues : '[' valueList? ','? ']' ; // for literal construction of list, vector, or tensor
+
+parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
+parentValues : '(' argumentList? ','? ')' ; // for functor arguments
+
+angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
+angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
+
+primEntity
+    : identRef
+    | literal
+    | bracketValues
+    | bracedValues
+    | bracedPairedValues
+    | bracedIndexKVPairs
+    | lambdaExpr
+    | '(' entityExpr ')' ;
+memberAccess : '[' entityExpr ']' ;
+entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
+
+entityChain  : entityLink+ ;
+entityLink   : entityCall | entityLink '->' entityCall ;
+entityCall   : entity | entityCall '.' entity ;
+entitySpread : '...' entity ;
+
+entityExpr
     : relaExpr
-    | calcExpr '*=' relaExpr
-    | calcExpr '/=' relaExpr
-    | calcExpr '%=' relaExpr
-    | calcExpr '+=' relaExpr
-    | calcExpr '-=' relaExpr
+    | entityExpr '*=' relaExpr
+    | entityExpr '/=' relaExpr
+    | entityExpr '%=' relaExpr
+    | entityExpr '+=' relaExpr
+    | entityExpr '-=' relaExpr
     ;
 
 relaExpr
     : addExpr
-    | relaExpr '<' addExpr
-    | relaExpr '>' addExpr
+    | relaExpr '<<' addExpr
+    | relaExpr '>>' addExpr
     | relaExpr '<=' addExpr
     | relaExpr '>=' addExpr
     | relaExpr '==' addExpr
@@ -91,6 +104,8 @@ addExpr
     : multiExpr
     | addExpr '+' multiExpr
     | addExpr '-' multiExpr
+    | addExpr '&' multiExpr
+    | addExpr '|' multiExpr
     ;
 
 multiExpr
@@ -99,63 +114,77 @@ multiExpr
     | multiExpr '*' unaryExpr
     | multiExpr '/' unaryExpr
     | multiExpr '%' unaryExpr
+    | multiExpr AS typeExpr
+    | multiExpr IS typeExpr
     ;
 
 unaryExpr
     : primExpr
-    | '++' primExpr
-    | '--' primExpr
-    | primExpr '++'
-    | primExpr '--'
     | '!' primExpr
     | '-' primExpr
     ;
 
 primExpr
-    : literal
-    | entity
-    | entityExpr
-    | '(' calcExpr ')'
+    : entityChain
+    | '(' entityExpr ')'
     ;
 
-expr : entityExpr | calcExpr ;
+literal
+    : INTEGER UNIT?
+    | REAL UNIT?
+    | STRING
+    | MULTI_STR
+    | FSTRING
+    | TRUE
+    | FALSE
+    | NULL
+    ;
 
-literal : value
-        | STRING
-        | MULTI_STR
-        | FSTRING
-        | NULL
-        | TRUE
-        | FALSE
-        ;
-value : (INTEGER | REAL) UNIT? ;
+typeExpr
+    : type ('[' ']')?
+    | typeExpr '|' typeExpr
+    | typeExpr '&' typeExpr
+    ;
 
+type
+    : primType
+    | structType
+    | specialType
+    | identRef
+    | '(' typeExpr ')'
+    ;
 
-type : innerType
-     | identRef
-     | ANY_TYPE
-     ;
+primType
+    : INTEGER_TYPE
+    | INTEGER32_TYPE
+    | INTEGER64_TYPE
+    | REAL_TYPE
+    | FLOAT_TYPE
+    | DOUBLE_TYPE
+    | NUMBER_TYPE
+    | STRING_TYPE
+    | BOOL_TYPE
+    | CHAR_TYPE
+    ;
 
-innerType : NUMBER_TYPE
-          | STRING_TYPE
-          | BOOLEAN_TYPE
-          | FUNCTOR_TYPE
-          | numberType
-          | structType
-          ;
-numberType : scalarType
-           | vectorType
-           ;
-scalarType : INTEGER_TYPE
-           | REAL_TYPE
-           | COMPLEX_TYPE
-           ;
-vectorType : ARRAY_TYPE ('<' scalarType '>')? ('[' INTEGER ']')?
-           | MATRIX_TYPE ('<' scalarType '>')? ('[' INTEGER']')*
-              ;
-structType : LIST_TYPE ('<' nullableType (',' nullableType)* '>')? ('[' INTEGER ']')?
-           | DICT_TYPE ('<' type ',' nullableType '>')?
-           ;
-nullableType : type '?'? ;
+structType
+    : SET_TYPE ('<' typeExpr '>')?
+    | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
+    | '{' indexKTPair '}' // concrete map type
+    | LIST_TYPE
+    | DICT_TYPE // universal dict type
+    | '{' pairedTypes? ','? '}' // concrete dict type
+    | ARRAY_TYPE ('<' typeExpr '>')?
+    | TUPLE_TYPE ('<' typeList? ','? '>')?
+    | UNION_TYPE ('<' typeList? ','? '>')?
+    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? ','? '>')?
+    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? ','? '>')?
+    ;
+
+specialType
+    : ANY_TYPE
+    | VOID_TYPE
+    | FUNCTOR_TYPE
+    ;
 
 identRef : IDENTIFIER ;

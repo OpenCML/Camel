@@ -1,4 +1,4 @@
-@{x=3, y=1, style="bold", color="red"}
+@{x: 3, y: 1, style: "bold", color: "red"}
 '''
 Impact of System Noise and Nonlinearities on a 16-QAM Signal in a Radio-over-Fiber Transmission
 ''';
@@ -6,7 +6,7 @@ Impact of System Noise and Nonlinearities on a 16-QAM Signal in a Radio-over-Fib
 '''
 The relative constellation ...
 '''
-@{x=2, y=3, style="alert-info"};
+@{x: 2, y: 3, style: "alert-info"};
 
 use { Const, Ground, Sub } from "phot/units" as module;
 use { AmpSysEl, DC_Source, Linearizer, Resample } from<psl> "phot/el";
@@ -16,23 +16,29 @@ use { ParameterController } from "phot/ctrl";
 use { Rx_El_mQAM_BER, Tx_El_mQAM } from "phot/tr";
 
 let photodiodeSetting : PhotodiodeSettingTemplate = {
-    temperature = 300`K`
+    temperature: 300`K`
 };
+
+type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
+type test2 = (Array<String> | Union<Int, String>[])[];
+
+let var1 = { 1, 2, } & { [a]: b }; # set construction
+let var2 = b->(a.at(b))<>()[1]()@{}() [c,];
+let var3 = c->a.b->d e;
 
 let powerInput = Const<5`V`>;
 
-type Power = {
+let Power = {
     dcOutput : ElSignal,
     powerOutput : ElSignal
 };
 
 @[14, 7]
-@{boxed=true, color="blue"}
-scoped func PowerControlEl(input : ElSignal)
--> ElSignal
+@{boxed: true, color: "blue"}
+func PowerControlEl(input : ElSignal) : ElSignal
 {
-    "Power control"@(6, 0);
-    let [dcOutput, powerOutput] = input->PowerMeterEl;
+    "Power control"@[6, 0];
+    let [dcOutput, powerOutput, ] = input->PowerMeterEl;
     dcOutput->Ground;
     return input->ParameterController<
         [powerInput, powerOutput]->Sub
@@ -40,29 +46,29 @@ scoped func PowerControlEl(input : ElSignal)
 };
 
 # Electrical domain
-@{boxed=true, color="blue"}
-scoped func SignalGenEl() -> ElSignal {
-    "Electrical domain"@(10, 0);
+@{boxed: true, color: "blue"}
+func SignalGenEl() : ElSignal {
+    "Electrical domain"@[10, 0];
     let linearSignal : ElSignal = Rx_El_mQAM_BER->PowerControlEl->Linearizer;
-    let dcSource = DC_Source<0.5`V`>;
+    let dcSource = DC_Source<{a: 0.5`V`}>;
     return [linearSignal, dcSource]->AddSignalsEl;
 };
 
 # Optical domain
-@{boxed=true, color="blue"}
-scoped func SignalProcOp(input@(0, 0) : ElSignal) -> ElSignal {
-    "Optical domain"@(10, 0);
-    let modulatedOpSig = [input, LaserCW<azimuth=0`deg`>]->ModulatorMZ<30`dB`>;
-    modulatedOpSig->Resample<centerFrequency=192.1e12`Hz`>@(2, 2)->SignalAnalyzer<eye>@(4, 5);
+@{boxed: true, color: "blue"}
+func SignalProcOp(input@[0, 0] : ElSignal) : ElSignal {
+    "Optical domain"@[10, 0];
+    let modulatedOpSig = [input, LaserCW<azimuth: 0`deg`>]->ModulatorMZ<30`dB`>;
+    modulatedOpSig->Resample<abc, centerFrequency: 192.1e12`Hz`>@[2, 2]->SignalAnalyzer<eye>@[4, 5];
     let opSig : OpSignal = modulatedOpSig->FiberNLS<10`KM`>->WDM_MUX_N_1_Ideal<NoiseWhiteGaussOpt>;
     return opSig->Photodiode<photodiodeSetting>;
 };
 
 # Electrical domain
-@{boxed=true, color="blue"}
-scoped func SignalRecvEl(input : ElSignal) {
-    "Electrical domain"@(0, 0);
-    let samples = input->Resample<centerFrequency=193.1e12`Hz`>;
+@{boxed: true, color: "blue"}
+func SignalRecvEl(input : ElSignal) {
+    "Electrical domain"@[0, 0];
+    let samples = input->Resample<centerFrequency: 193.1e12`Hz`>;
     let ber = samples->Rx_El_mQAM_BER;
     [powerInput, ber]->NumericalAnalyzer2D;
     samples->SignalAnalyzer<hist>;

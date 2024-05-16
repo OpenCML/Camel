@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 project(camel)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(CMAKE_MACOSX_RPATH OFF)
 
@@ -24,6 +24,7 @@ file(GLOB_RECURSE SRC_FILES
 )
 
 find_package(antlr4-runtime CONFIG REQUIRED)
+find_package(clipp REQUIRED)
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
@@ -32,6 +33,8 @@ target_include_directories(
 	lib/
 	src/
 )
+
+target_link_libraries(${PROJECT_NAME} PRIVATE clipp::clipp)
 
 if(TARGET antlr4_shared)
     target_link_libraries(${PROJECT_NAME} PRIVATE antlr4_shared)

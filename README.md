@@ -1,10 +1,64 @@
 # Camel
+
 An implementation of an interpreter framework based on OpenCML.
 
+## 基础用法
+
+camel `<target> `stdin/未指定默认进入交互模式
+
+-dump-ast
+
+-dump-cst
+
+-stdlib 指定标准库路径/默认安装目录下stdlib目录
+
+-i --include 其他cml库查找目录，默认target所在目录，可多选（用什么分隔？
+
+-e --extern 外部依赖项/脚本接口
+
+-o --output stdout camel自身输出
+
+-v --version
+
+-g/d --debug | --verbose | 调试模式
+
+-c --check 检查语法错误和语义错误
+
+-gen-graph
+
+-cache 是否生成缓存/缓存路径/文件名 | -nocache
+
+-sync 强制同步 | -async
+
+-engine/resolve 指定graph序列化的执行引擎
+
+-t --threads 指定最大线程数
+
+-p --port 8080 使用正在运行的server
+
+-f --out-format
+
+-h --help
+
+camel host 持久运行，监听端口，保持内存，提升性能
+
+-p --port
+
+-t --threads
+
+-m --modules 支持缓存的最大模块数
+
+-lru 内存管理策略
+
+--syntax-only 只进行语法检查
+
+--semantic-only 只进行语义检查
+
 # Enjoy!
+
 Camel riders!
 
-## 环境搭建
+# 环境搭建
 
 安装Cmake
 
@@ -39,7 +93,7 @@ compiler.runtime=static
 os=Windows
 ```
 
-```Clang (MSVC-like)
+```Clang
 [settings]
 os=Windows
 arch=x86_64
