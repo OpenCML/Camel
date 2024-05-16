@@ -26,7 +26,6 @@ assignStmt : identRef memberAccess? '=' entityExpr ;
 withDef : WITH angledParams ;
 funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
 retStmt : RETURN entityExpr? ;
-
 lambdaExpr : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
 
 carrier : identRef | bracedIdents | bracketIdents ;

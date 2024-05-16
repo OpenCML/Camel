@@ -24,10 +24,9 @@
 #include "antlr4-runtime.h"
 
 #include "config.h"
+#include "core/error/json.h"
 #include "dump/cst.h"
 #include "utils/log.h"
-#include "core/error/json.h"
-
 
 using namespace antlr4;
 
@@ -44,9 +43,20 @@ int main(int argc, char *argv[]) {
             startTime = std::chrono::high_resolution_clock::now();
         }
 
-        auto src = std::ifstream();
-        src.open(targetFile);
-        ANTLRInputStream input(src);
+        ANTLRInputStream input;
+
+        if (targetFile != "") {
+            auto src = std::ifstream();
+            src.open(targetFile);
+            if (!src.is_open()) {
+                error << "Error opening file " << targetFile << std::endl;
+                return 1;
+            }
+            input = ANTLRInputStream(src);
+        } else {
+            input = ANTLRInputStream(std::cin);
+        }
+
         OpenCMLLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
         OpenCMLParser parser(&tokens);

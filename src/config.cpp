@@ -89,7 +89,7 @@ bool parseArgs(int argc, char *argv[]) {
                  option("-A", "--dump-ast").set(dumpAST).doc("dump abstract syntax tree"),
                  option("-G", "--dump-gir").set(dumpGIR).doc("dump graph intermediate representation"),
                  option("-X", "--dump-onnx").set(dumpGIR).doc("dump ONNX model"),
-                 option("-R", "--print-args").set(printArgs).doc("print arguments"), value("target file", targetFile)));
+                 option("-R", "--print-args").set(printArgs).doc("print arguments"), opt_value("target file", targetFile)));
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;
