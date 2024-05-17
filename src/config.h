@@ -20,6 +20,8 @@
 
 #include <string>
 
+// enum class mode {run, dump, help};
+
 extern std::string targetFile;
 extern std::string outputFile;
 
@@ -35,7 +37,7 @@ extern bool noCache;
 extern bool syntaxOnly;
 extern bool semanticOnly;
 
-extern bool dumpCST, dumpAST, dumpGIR, dumpONNX;
+extern bool dumpCST, dumpAST, dumpGIR, dumpONNX, format;
 
 extern unsigned int repeat;
 

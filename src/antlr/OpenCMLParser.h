@@ -128,7 +128,7 @@ public:
   class SpecialTypeContext;
   class IdentRefContext; 
 
-  class  ProgramContext : public antlr4::ParserRuleContext {
+  class  ProgramContext : public antlr4::RuleContextWithAltNum {
   public:
     ProgramContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -142,7 +142,7 @@ public:
 
   ProgramContext* program();
 
-  class  StmtListContext : public antlr4::ParserRuleContext {
+  class  StmtListContext : public antlr4::RuleContextWithAltNum {
   public:
     StmtListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -156,7 +156,7 @@ public:
 
   StmtListContext* stmtList();
 
-  class  StmtContext : public antlr4::ParserRuleContext {
+  class  StmtContext : public antlr4::RuleContextWithAltNum {
   public:
     StmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -176,14 +176,14 @@ public:
 
   StmtContext* stmt();
 
-  class  LetStmtContext : public antlr4::ParserRuleContext {
+  class  LetStmtContext : public antlr4::RuleContextWithAltNum {
   public:
     LetStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *LET();
     CarrierContext *carrier();
-    EntityExprContext *entityExpr();
     TypeExprContext *typeExpr();
+    EntityExprContext *entityExpr();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -192,7 +192,7 @@ public:
 
   LetStmtContext* letStmt();
 
-  class  UseStmtContext : public antlr4::ParserRuleContext {
+  class  UseStmtContext : public antlr4::RuleContextWithAltNum {
   public:
     UseStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -207,7 +207,7 @@ public:
 
   UseStmtContext* useStmt();
 
-  class  TypeStmtContext : public antlr4::ParserRuleContext {
+  class  TypeStmtContext : public antlr4::RuleContextWithAltNum {
   public:
     TypeStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -222,7 +222,7 @@ public:
 
   TypeStmtContext* typeStmt();
 
-  class  ExprStmtContext : public antlr4::ParserRuleContext {
+  class  ExprStmtContext : public antlr4::RuleContextWithAltNum {
   public:
     ExprStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -236,7 +236,7 @@ public:
 
   ExprStmtContext* exprStmt();
 
-  class  AssignStmtContext : public antlr4::ParserRuleContext {
+  class  AssignStmtContext : public antlr4::RuleContextWithAltNum {
   public:
     AssignStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -251,7 +251,7 @@ public:
 
   AssignStmtContext* assignStmt();
 
-  class  WithDefContext : public antlr4::ParserRuleContext {
+  class  WithDefContext : public antlr4::RuleContextWithAltNum {
   public:
     WithDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -265,7 +265,7 @@ public:
 
   WithDefContext* withDef();
 
-  class  FuncDefContext : public antlr4::ParserRuleContext {
+  class  FuncDefContext : public antlr4::RuleContextWithAltNum {
   public:
     FuncDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -285,7 +285,7 @@ public:
 
   FuncDefContext* funcDef();
 
-  class  RetStmtContext : public antlr4::ParserRuleContext {
+  class  RetStmtContext : public antlr4::RuleContextWithAltNum {
   public:
     RetStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -299,7 +299,7 @@ public:
 
   RetStmtContext* retStmt();
 
-  class  LambdaExprContext : public antlr4::ParserRuleContext {
+  class  LambdaExprContext : public antlr4::RuleContextWithAltNum {
   public:
     LambdaExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -315,7 +315,7 @@ public:
 
   LambdaExprContext* lambdaExpr();
 
-  class  CarrierContext : public antlr4::ParserRuleContext {
+  class  CarrierContext : public antlr4::RuleContextWithAltNum {
   public:
     CarrierContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -330,7 +330,7 @@ public:
 
   CarrierContext* carrier();
 
-  class  AnnotationContext : public antlr4::ParserRuleContext {
+  class  AnnotationContext : public antlr4::RuleContextWithAltNum {
   public:
     AnnotationContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -343,7 +343,7 @@ public:
 
   AnnotationContext* annotation();
 
-  class  AnnotationsContext : public antlr4::ParserRuleContext {
+  class  AnnotationsContext : public antlr4::RuleContextWithAltNum {
   public:
     AnnotationsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -359,7 +359,7 @@ public:
 
   AnnotationsContext* annotations();
 
-  class  ModifiersContext : public antlr4::ParserRuleContext {
+  class  ModifiersContext : public antlr4::RuleContextWithAltNum {
   public:
     ModifiersContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -381,7 +381,7 @@ public:
 
   ModifiersContext* modifiers();
 
-  class  KeyTypePairContext : public antlr4::ParserRuleContext {
+  class  KeyTypePairContext : public antlr4::RuleContextWithAltNum {
   public:
     KeyTypePairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -395,7 +395,7 @@ public:
 
   KeyTypePairContext* keyTypePair();
 
-  class  KeyValuePairContext : public antlr4::ParserRuleContext {
+  class  KeyValuePairContext : public antlr4::RuleContextWithAltNum {
   public:
     KeyValuePairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -409,7 +409,7 @@ public:
 
   KeyValuePairContext* keyValuePair();
 
-  class  KeyParamPairContext : public antlr4::ParserRuleContext {
+  class  KeyParamPairContext : public antlr4::RuleContextWithAltNum {
   public:
     KeyParamPairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -425,7 +425,7 @@ public:
 
   KeyParamPairContext* keyParamPair();
 
-  class  IndexKTPairContext : public antlr4::ParserRuleContext {
+  class  IndexKTPairContext : public antlr4::RuleContextWithAltNum {
   public:
     IndexKTPairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -439,7 +439,7 @@ public:
 
   IndexKTPairContext* indexKTPair();
 
-  class  IndexKVPairContext : public antlr4::ParserRuleContext {
+  class  IndexKVPairContext : public antlr4::RuleContextWithAltNum {
   public:
     IndexKVPairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -453,7 +453,7 @@ public:
 
   IndexKVPairContext* indexKVPair();
 
-  class  TypeListContext : public antlr4::ParserRuleContext {
+  class  TypeListContext : public antlr4::RuleContextWithAltNum {
   public:
     TypeListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -467,7 +467,7 @@ public:
 
   TypeListContext* typeList();
 
-  class  IdentListContext : public antlr4::ParserRuleContext {
+  class  IdentListContext : public antlr4::RuleContextWithAltNum {
   public:
     IdentListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -481,7 +481,7 @@ public:
 
   IdentListContext* identList();
 
-  class  ValueListContext : public antlr4::ParserRuleContext {
+  class  ValueListContext : public antlr4::RuleContextWithAltNum {
   public:
     ValueListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -495,7 +495,7 @@ public:
 
   ValueListContext* valueList();
 
-  class  PairedTypesContext : public antlr4::ParserRuleContext {
+  class  PairedTypesContext : public antlr4::RuleContextWithAltNum {
   public:
     PairedTypesContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -509,7 +509,7 @@ public:
 
   PairedTypesContext* pairedTypes();
 
-  class  PairedValuesContext : public antlr4::ParserRuleContext {
+  class  PairedValuesContext : public antlr4::RuleContextWithAltNum {
   public:
     PairedValuesContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -523,7 +523,7 @@ public:
 
   PairedValuesContext* pairedValues();
 
-  class  PairedParamsContext : public antlr4::ParserRuleContext {
+  class  PairedParamsContext : public antlr4::RuleContextWithAltNum {
   public:
     PairedParamsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -537,7 +537,7 @@ public:
 
   PairedParamsContext* pairedParams();
 
-  class  IndexKVPairsContext : public antlr4::ParserRuleContext {
+  class  IndexKVPairsContext : public antlr4::RuleContextWithAltNum {
   public:
     IndexKVPairsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -551,7 +551,7 @@ public:
 
   IndexKVPairsContext* indexKVPairs();
 
-  class  ArgumentListContext : public antlr4::ParserRuleContext {
+  class  ArgumentListContext : public antlr4::RuleContextWithAltNum {
   public:
     ArgumentListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -565,7 +565,7 @@ public:
 
   ArgumentListContext* argumentList();
 
-  class  BracedValuesContext : public antlr4::ParserRuleContext {
+  class  BracedValuesContext : public antlr4::RuleContextWithAltNum {
   public:
     BracedValuesContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -578,7 +578,7 @@ public:
 
   BracedValuesContext* bracedValues();
 
-  class  BracedIndexKVPairsContext : public antlr4::ParserRuleContext {
+  class  BracedIndexKVPairsContext : public antlr4::RuleContextWithAltNum {
   public:
     BracedIndexKVPairsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -591,7 +591,7 @@ public:
 
   BracedIndexKVPairsContext* bracedIndexKVPairs();
 
-  class  BracedPairedValuesContext : public antlr4::ParserRuleContext {
+  class  BracedPairedValuesContext : public antlr4::RuleContextWithAltNum {
   public:
     BracedPairedValuesContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -604,7 +604,7 @@ public:
 
   BracedPairedValuesContext* bracedPairedValues();
 
-  class  BracedIdentsContext : public antlr4::ParserRuleContext {
+  class  BracedIdentsContext : public antlr4::RuleContextWithAltNum {
   public:
     BracedIdentsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -617,7 +617,7 @@ public:
 
   BracedIdentsContext* bracedIdents();
 
-  class  BracedStmtsContext : public antlr4::ParserRuleContext {
+  class  BracedStmtsContext : public antlr4::RuleContextWithAltNum {
   public:
     BracedStmtsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -630,7 +630,7 @@ public:
 
   BracedStmtsContext* bracedStmts();
 
-  class  BracketIdentsContext : public antlr4::ParserRuleContext {
+  class  BracketIdentsContext : public antlr4::RuleContextWithAltNum {
   public:
     BracketIdentsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -643,7 +643,7 @@ public:
 
   BracketIdentsContext* bracketIdents();
 
-  class  BracketValuesContext : public antlr4::ParserRuleContext {
+  class  BracketValuesContext : public antlr4::RuleContextWithAltNum {
   public:
     BracketValuesContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -656,7 +656,7 @@ public:
 
   BracketValuesContext* bracketValues();
 
-  class  ParentParamsContext : public antlr4::ParserRuleContext {
+  class  ParentParamsContext : public antlr4::RuleContextWithAltNum {
   public:
     ParentParamsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -669,7 +669,7 @@ public:
 
   ParentParamsContext* parentParams();
 
-  class  ParentValuesContext : public antlr4::ParserRuleContext {
+  class  ParentValuesContext : public antlr4::RuleContextWithAltNum {
   public:
     ParentValuesContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -682,7 +682,7 @@ public:
 
   ParentValuesContext* parentValues();
 
-  class  AngledParamsContext : public antlr4::ParserRuleContext {
+  class  AngledParamsContext : public antlr4::RuleContextWithAltNum {
   public:
     AngledParamsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -695,7 +695,7 @@ public:
 
   AngledParamsContext* angledParams();
 
-  class  AngledValuesContext : public antlr4::ParserRuleContext {
+  class  AngledValuesContext : public antlr4::RuleContextWithAltNum {
   public:
     AngledValuesContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -708,7 +708,7 @@ public:
 
   AngledValuesContext* angledValues();
 
-  class  PrimEntityContext : public antlr4::ParserRuleContext {
+  class  PrimEntityContext : public antlr4::RuleContextWithAltNum {
   public:
     PrimEntityContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -728,7 +728,7 @@ public:
 
   PrimEntityContext* primEntity();
 
-  class  MemberAccessContext : public antlr4::ParserRuleContext {
+  class  MemberAccessContext : public antlr4::RuleContextWithAltNum {
   public:
     MemberAccessContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -741,7 +741,7 @@ public:
 
   MemberAccessContext* memberAccess();
 
-  class  EntityContext : public antlr4::ParserRuleContext {
+  class  EntityContext : public antlr4::RuleContextWithAltNum {
   public:
     EntityContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -762,7 +762,7 @@ public:
 
   EntityContext* entity();
 
-  class  EntityChainContext : public antlr4::ParserRuleContext {
+  class  EntityChainContext : public antlr4::RuleContextWithAltNum {
   public:
     EntityChainContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -776,7 +776,7 @@ public:
 
   EntityChainContext* entityChain();
 
-  class  EntityLinkContext : public antlr4::ParserRuleContext {
+  class  EntityLinkContext : public antlr4::RuleContextWithAltNum {
   public:
     EntityLinkContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -790,7 +790,7 @@ public:
 
   EntityLinkContext* entityLink();
   EntityLinkContext* entityLink(int precedence);
-  class  EntityCallContext : public antlr4::ParserRuleContext {
+  class  EntityCallContext : public antlr4::RuleContextWithAltNum {
   public:
     EntityCallContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -804,7 +804,7 @@ public:
 
   EntityCallContext* entityCall();
   EntityCallContext* entityCall(int precedence);
-  class  EntitySpreadContext : public antlr4::ParserRuleContext {
+  class  EntitySpreadContext : public antlr4::RuleContextWithAltNum {
   public:
     EntitySpreadContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -817,7 +817,7 @@ public:
 
   EntitySpreadContext* entitySpread();
 
-  class  EntityExprContext : public antlr4::ParserRuleContext {
+  class  EntityExprContext : public antlr4::RuleContextWithAltNum {
   public:
     EntityExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -831,7 +831,7 @@ public:
 
   EntityExprContext* entityExpr();
   EntityExprContext* entityExpr(int precedence);
-  class  RelaExprContext : public antlr4::ParserRuleContext {
+  class  RelaExprContext : public antlr4::RuleContextWithAltNum {
   public:
     RelaExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -845,7 +845,7 @@ public:
 
   RelaExprContext* relaExpr();
   RelaExprContext* relaExpr(int precedence);
-  class  AddExprContext : public antlr4::ParserRuleContext {
+  class  AddExprContext : public antlr4::RuleContextWithAltNum {
   public:
     AddExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -859,7 +859,7 @@ public:
 
   AddExprContext* addExpr();
   AddExprContext* addExpr(int precedence);
-  class  MultiExprContext : public antlr4::ParserRuleContext {
+  class  MultiExprContext : public antlr4::RuleContextWithAltNum {
   public:
     MultiExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -876,7 +876,7 @@ public:
 
   MultiExprContext* multiExpr();
   MultiExprContext* multiExpr(int precedence);
-  class  UnaryExprContext : public antlr4::ParserRuleContext {
+  class  UnaryExprContext : public antlr4::RuleContextWithAltNum {
   public:
     UnaryExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -889,7 +889,7 @@ public:
 
   UnaryExprContext* unaryExpr();
 
-  class  PrimExprContext : public antlr4::ParserRuleContext {
+  class  PrimExprContext : public antlr4::RuleContextWithAltNum {
   public:
     PrimExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -903,7 +903,7 @@ public:
 
   PrimExprContext* primExpr();
 
-  class  LiteralContext : public antlr4::ParserRuleContext {
+  class  LiteralContext : public antlr4::RuleContextWithAltNum {
   public:
     LiteralContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -924,7 +924,7 @@ public:
 
   LiteralContext* literal();
 
-  class  TypeExprContext : public antlr4::ParserRuleContext {
+  class  TypeExprContext : public antlr4::RuleContextWithAltNum {
   public:
     TypeExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -939,7 +939,7 @@ public:
 
   TypeExprContext* typeExpr();
   TypeExprContext* typeExpr(int precedence);
-  class  TypeContext : public antlr4::ParserRuleContext {
+  class  TypeContext : public antlr4::RuleContextWithAltNum {
   public:
     TypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -956,7 +956,7 @@ public:
 
   TypeContext* type();
 
-  class  PrimTypeContext : public antlr4::ParserRuleContext {
+  class  PrimTypeContext : public antlr4::RuleContextWithAltNum {
   public:
     PrimTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -978,7 +978,7 @@ public:
 
   PrimTypeContext* primType();
 
-  class  StructTypeContext : public antlr4::ParserRuleContext {
+  class  StructTypeContext : public antlr4::RuleContextWithAltNum {
   public:
     StructTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -1006,7 +1006,7 @@ public:
 
   StructTypeContext* structType();
 
-  class  SpecialTypeContext : public antlr4::ParserRuleContext {
+  class  SpecialTypeContext : public antlr4::RuleContextWithAltNum {
   public:
     SpecialTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -1021,7 +1021,7 @@ public:
 
   SpecialTypeContext* specialType();
 
-  class  IdentRefContext : public antlr4::ParserRuleContext {
+  class  IdentRefContext : public antlr4::RuleContextWithAltNum {
   public:
     IdentRefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;

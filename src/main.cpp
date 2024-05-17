@@ -26,6 +26,7 @@
 #include "config.h"
 #include "core/error/json.h"
 #include "dump/cst.h"
+#include "dump/fmt.h"
 #include "utils/log.h"
 
 using namespace antlr4;
@@ -91,6 +92,12 @@ int main(int argc, char *argv[]) {
         if (dumpCST) {
             auto visitor = CSTDumpVisitor();
             visitor.visit(tree);
+        }
+
+        if (format) {
+            auto visitor = Formatter();
+            const std::string formattedCode = std::any_cast<std::string>(visitor.visit(tree));
+            os << formattedCode;
         }
 
         if (profile) {

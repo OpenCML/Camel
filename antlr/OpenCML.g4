@@ -15,7 +15,7 @@ stmt
     | retStmt SEP
     ;
 
-letStmt : LET carrier (':' typeExpr)? '='? entityExpr
+letStmt : LET carrier (':' typeExpr)? ('='? entityExpr)?
         | carrier (':' typeExpr)? ':=' entityExpr ;
 useStmt : USE carrier '='? entityExpr
         | carrier '::' entityExpr ;
@@ -53,7 +53,7 @@ bracedValues       : '{' valueList? ','? '}' ;    // for literal construction of
 bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ; // for literal construction of map
 bracedPairedValues : '{' pairedValues? ','? '}' ; // for literal construction of dict
 bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
-bracedStmts        : '{' stmtList? ','? '}' ;     // for block statement
+bracedStmts        : '{' stmtList? '}' ;     // for block statement
 
 bracketIdents : '[' identList? ','? ']' ; // for list unpacking
 bracketValues : '[' valueList? ','? ']' ; // for literal construction of list, vector, or tensor
@@ -177,8 +177,8 @@ structType
     | ARRAY_TYPE ('<' typeExpr '>')?
     | TUPLE_TYPE ('<' typeList? ','? '>')?
     | UNION_TYPE ('<' typeList? ','? '>')?
-    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? ','? '>')?
-    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? ','? '>')?
+    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? '>')?
+    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?
     ;
 
 specialType
