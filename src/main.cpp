@@ -98,6 +98,13 @@ int main(int argc, char *argv[]) {
             auto visitor = Formatter();
             const std::string formattedCode = std::any_cast<std::string>(visitor.visit(tree));
             os << formattedCode;
+
+            const auto comments = std::vector<antlr4::Token*>();
+            for (auto token : tokens.getTokens()) {
+                if (token->getChannel() == 2) {
+                    std::cout << token->getText() << " " << token->getLine() << ":" << token->getCharPositionInLine() << " at " << token->getTokenIndex() << std::endl;
+                }
+            }
         }
 
         if (profile) {

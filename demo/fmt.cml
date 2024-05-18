@@ -1,3 +1,8 @@
+/*
+* This PSL module will be imported by interpreter automatically,
+* and can be accessed Anywhere in Any PSL script.
+*/
+
 type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
 type test2 = (Array<String> | Union<Int, String>[])[];
 
@@ -8,9 +13,11 @@ sync static func if(condition: Bool) {
 
 # 换行测试
 with <capture: Any, condition: Functor, update: Functor>
+// comment
 sync func test(target: Functor) {
-    return ifexpr(condition<capture>(), {
+    return ifexpr(condition<capture>(), { # comment test
         exec<{
+            // comment
             update<capture>();
             test<capture, condition, update>(target);
         }>(target);
@@ -20,10 +27,10 @@ sync func test(target: Functor) {
 with <capture: Any, condition: Functor, update: Functor>
 sync func test(target: Functor) {
     return ifexpr(condition<capture>(), 
-    {
+    { // comment
         exec<
         {
-            update<capture>();
+            update<capture>(); // comment
             test<capture, condition, update>(target)
         }>(target);
     }, null)
