@@ -3,29 +3,53 @@
 * and can be accessed Anywhere in Any PSL script.
 */
 
+// balabala
+
+# text comment
+
 type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
 type test2 = (Array<String> | Union<Int, String>[])[];
 
+let Power = {
+    dcOutput : ElSignal,
+    // test comment
+    powerOutput : ElSignal # comment test
+};
+
+inner sync static func load(path: string) : Any
+{
+    # inner func
+};
+
 # 函子定义，修饰符顺序
 sync static func if(condition: Bool) {
+
+    # block
+    
     return ifexpr(condition, exec, skip<skip>)
 };
 
 # 换行测试
 with <capture: Any, condition: Functor, update: Functor>
-// comment
+// comment to be deleted
 sync func test(target: Functor) {
     return ifexpr(condition<capture>(), { # comment test
         exec<{
             // comment
+            // comment 2
             update<capture>();
+
+
             test<capture, condition, update>(target);
         }>(target);
     }, null)
 };
 
-with <capture: Any, condition: Functor, update: Functor>
+with <capture: Any, condition: Functor, /* block cmt */ update: Functor>
 sync func test(target: Functor) {
+    /* 
+    block cmt
+    */
     return ifexpr(condition<capture>(), 
     { // comment
         exec<
@@ -38,11 +62,13 @@ sync func test(target: Functor) {
 
 # 单语句匿名函子/单双引号测试
 sync func placeComponents(
-    startIndex: Number, count: Number,
-    dist: Point, pos: Point
+    startIndex: Number, count: Number, // best
+    dist: Point,
+    // node
+    pos: Point
 ): Void {
-    let i = startIndex;
-    for (i, {i < startIndex + count}, {i ++}) {
+    let i = startIndex; // test
+    for (i, {i < startIndex + count}, /* block cmt */ {i ++}) {
         # create instance of LaserCW and place it
         let laser = LaserCW @[pos["x"], pos["y"]];
         let laserRect = laser["meta"]["rect"];
@@ -53,4 +79,6 @@ sync func placeComponents(
         # move to next position
         pos["y"] += pos["y"] + dist["y"] + laserRect["height"];
     }
-}
+};
+
+# hahaha

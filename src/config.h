@@ -37,7 +37,7 @@ extern bool noCache;
 extern bool syntaxOnly;
 extern bool semanticOnly;
 
-extern bool dumpCST, dumpAST, dumpGIR, dumpONNX, format;
+extern bool dumpCST, dumpAST, dumpGIR, dumpONNX, dumpTokens, format;
 
 extern unsigned int repeat;
 

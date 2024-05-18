@@ -17,6 +17,7 @@
  */
 
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 
 #include "antlr/OpenCMLLexer.h"
@@ -89,22 +90,25 @@ int main(int argc, char *argv[]) {
             tree = parser.program();
         }
 
+        if (dumpTokens) {
+            for (auto &token : tokens.getTokens()) {
+                os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3) << std::right
+                   << token->getLine() << ":" << std::setw(3) << std::left << token->getCharPositionInLine() << "] ("
+                   << token->getChannel() << ") : " << token->getText() << std::endl;
+            }
+        }
+
         if (dumpCST) {
             auto visitor = CSTDumpVisitor();
             visitor.visit(tree);
         }
 
         if (format) {
-            auto visitor = Formatter();
-            const std::string formattedCode = std::any_cast<std::string>(visitor.visit(tree));
-            os << formattedCode;
+            auto formatter = Formatter(tokens.getTokens());
 
-            const auto comments = std::vector<antlr4::Token*>();
-            for (auto token : tokens.getTokens()) {
-                if (token->getChannel() == 2) {
-                    std::cout << token->getText() << " " << token->getLine() << ":" << token->getCharPositionInLine() << " at " << token->getTokenIndex() << std::endl;
-                }
-            }
+            const std::string formattedCode = std::any_cast<std::string>(formatter.visit(tree));
+
+            os << formattedCode;
         }
 
         if (profile) {

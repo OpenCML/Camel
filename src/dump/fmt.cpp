@@ -34,7 +34,7 @@ stmtList : stmt+ ;
 */
 std::any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context, bool padding, bool forceMultiLine,
                                   bool trailingComma) {
-    return visitList(context->stmt(), context, trailingComma, ";", padding, forceMultiLine);
+    return formatList(context->stmt(), context, trailingComma, ";", padding, forceMultiLine);
 };
 
 /*
@@ -316,7 +316,7 @@ typeList     : typeExpr (',' typeExpr)* ;
 */
 std::any Formatter::visitTypeList(OpenCMLParser::TypeListContext *context, bool trailingComma, bool padding,
                                   bool forceMultiLine) {
-    return visitList(context->typeExpr(), context, trailingComma, ",", padding, forceMultiLine);
+    return formatList(context->typeExpr(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
@@ -324,7 +324,7 @@ identList    : identRef (',' identRef)* ;
 */
 std::any Formatter::visitIdentList(OpenCMLParser::IdentListContext *context, bool trailingComma, bool padding,
                                    bool forceMultiLine) {
-    return visitList(context->identRef(), context, trailingComma, ",", padding, forceMultiLine);
+    return formatList(context->identRef(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
@@ -332,7 +332,7 @@ valueList    : entityExpr (',' entityExpr)* ;
 */
 std::any Formatter::visitValueList(OpenCMLParser::ValueListContext *context, bool trailingComma, bool padding,
                                    bool forceMultiLine) {
-    return visitList(context->entityExpr(), context, trailingComma, ",", padding, forceMultiLine);
+    return formatList(context->entityExpr(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
@@ -340,7 +340,7 @@ pairedTypes  : keyTypePair (',' keyTypePair)* ;
 */
 std::any Formatter::visitPairedTypes(OpenCMLParser::PairedTypesContext *context, bool trailingComma, bool padding,
                                      bool forceMultiLine) {
-    return visitList(context->keyTypePair(), context, trailingComma, ",", padding, forceMultiLine);
+    return formatList(context->keyTypePair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
@@ -348,7 +348,7 @@ pairedValues : keyValuePair (',' keyValuePair)* ;
 */
 std::any Formatter::visitPairedValues(OpenCMLParser::PairedValuesContext *context, bool trailingComma, bool padding,
                                       bool forceMultiLine) {
-    return visitList(context->keyValuePair(), context, trailingComma, ",", padding, forceMultiLine);
+    return formatList(context->keyValuePair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
@@ -356,7 +356,7 @@ pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 std::any Formatter::visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool padding,
                                       bool forceMultiLine) {
-    return visitList(context->keyParamPair(), context, trailingComma, ",", padding, forceMultiLine);
+    return formatList(context->keyParamPair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
@@ -364,7 +364,7 @@ indexKVPairs : indexKVPair (',' indexKVPair)* ;
 */
 std::any Formatter::visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool padding,
                                       bool forceMultiLine) {
-    return visitList(context->indexKVPair(), context, trailingComma, ",", padding, forceMultiLine);
+    return formatList(context->indexKVPair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
@@ -757,7 +757,7 @@ std::any Formatter::visitPrimExpr(OpenCMLParser::PrimExprContext *context) {
 };
 
 std::string Formatter::processStringLiteral(const std::string &input) {
-    char quoteChar = (quote == QuotePreference::Single) ? '\'' : '"';
+    char quoteChar = (quotePrefer == QuotePreference::Single) ? '\'' : '"';
     const std::string slicedStr = input.substr(1, input.size() - 2);
 
     bool hasSingleQuote = (slicedStr.find('\'') != std::string::npos);

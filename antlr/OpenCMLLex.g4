@@ -51,16 +51,16 @@ BLANK
     : [ \n\r\t\u000C]+ -> skip
     ;
 
-LIN_CMT1
-    : '# ' ~[\r\n\f]* -> channel(2)
+LIN_CMT_HASH
+    : '#' ~[\r\n\f]* -> channel(2)
     ;
 
-LIN_CMT2
-    : '//' ~[\r\n]* -> channel(2)
+LIN_CMT_SLASH
+    : '//' ~[\r\n]* -> channel(3)
     ;
 
 BLK_CMT
-    : '/*' .*? '*/' -> channel(2)
+    : '/*' .*? '*/' -> channel(4)
     ;
 
 MULTI_STR
