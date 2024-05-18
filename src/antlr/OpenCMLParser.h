@@ -148,6 +148,8 @@ public:
     virtual size_t getRuleIndex() const override;
     std::vector<StmtContext *> stmt();
     StmtContext* stmt(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> SEP();
+    antlr4::tree::TerminalNode* SEP(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -161,7 +163,6 @@ public:
     StmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     LetStmtContext *letStmt();
-    antlr4::tree::TerminalNode *SEP();
     UseStmtContext *useStmt();
     TypeStmtContext *typeStmt();
     ExprStmtContext *exprStmt();
@@ -349,8 +350,6 @@ public:
     virtual size_t getRuleIndex() const override;
     std::vector<AnnotationContext *> annotation();
     AnnotationContext* annotation(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> SEP();
-    antlr4::tree::TerminalNode* SEP(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

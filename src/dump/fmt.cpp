@@ -31,11 +31,10 @@ program : stmtList? EOF;
 */
 std::any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
     const auto &stmtList = context->stmtList();
-    pushIndent();
     const std::string code =
-        stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, false, false)) + this->newline : "";
-    popIndent();
-    return code;
+        stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, true, false)) + newline : "";
+    // remove first newline character
+    return code.substr(newline.size());
 };
 
 /*
@@ -703,20 +702,20 @@ multiExpr
     ;
 */
 std::any Formatter::visitMultiExpr(OpenCMLParser::MultiExprContext *context) {
-    const auto &alt = context->getAltNumber();
-    if (alt == 1) {
-        return visitUnaryExpr(context->unaryExpr());
-    } else if (alt < 6) {
+    const auto &unaryExpr = context->unaryExpr();
+    const auto &multiExpr = context->multiExpr();
+    const auto &typeExpr = context->typeExpr();
+    if (context->children.size() == 1) {
+        return visitUnaryExpr(unaryExpr);
+    } else if (typeExpr) {
         std::string result;
-        result += std::any_cast<std::string>(visitMultiExpr(context->multiExpr())) + " " +
-                  context->children[1]->getText() + " " +
-                  std::any_cast<std::string>(visitUnaryExpr(context->unaryExpr()));
+        result += std::any_cast<std::string>(visitMultiExpr(multiExpr)) + " " + context->children[1]->getText() + " " +
+                  rtrim(std::any_cast<std::string>(visitTypeExpr(typeExpr)));
         return result;
     } else {
         std::string result;
-        result += std::any_cast<std::string>(visitMultiExpr(context->multiExpr())) + " " +
-                  context->children[1]->getText() + " " +
-                  rtrim(std::any_cast<std::string>(visitTypeExpr(context->typeExpr())));
+        result += std::any_cast<std::string>(visitMultiExpr(multiExpr)) + " " + context->children[1]->getText() + " " +
+                  std::any_cast<std::string>(visitUnaryExpr(unaryExpr));
         return result;
     }
 };
@@ -750,6 +749,32 @@ std::any Formatter::visitPrimExpr(OpenCMLParser::PrimExprContext *context) {
     }
 };
 
+std::string Formatter::processStringLiteral(const std::string &input) {
+    char quoteChar = (quote == QuotePreference::Single) ? '\'' : '"';
+    const std::string slicedStr = input.substr(1, input.size() - 2);
+
+    bool hasSingleQuote = (slicedStr.find('\'') != std::string::npos);
+    bool hasDoubleQuote = (slicedStr.find('"') != std::string::npos);
+
+    if (hasSingleQuote && !hasDoubleQuote) {
+        quoteChar = '"';
+    } else if (!hasSingleQuote && hasDoubleQuote) {
+        quoteChar = '\'';
+    } else {
+        // escape all quotes
+        std::string escapedStr;
+        for (const char &c : slicedStr) {
+            if (c == quoteChar) {
+                escapedStr += '\\';
+            }
+            escapedStr += c;
+        }
+        return quoteChar + escapedStr + quoteChar;
+    }
+
+    return quoteChar + slicedStr + quoteChar;
+}
+
 /*
 literal
     : INTEGER UNIT?
@@ -762,7 +787,14 @@ literal
     | NULL
     ;
 */
-std::any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) { return context->getText(); };
+std::any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) {
+    const std::string &text = context->getText();
+    if (context->STRING()) {
+        return processStringLiteral(text);
+    } else {
+        return text;
+    }
+};
 
 /*
 typeExpr

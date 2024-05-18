@@ -26,11 +26,14 @@
 
 class Formatter : public OpenCMLVisitor {
   private:
+    enum class QuotePreference { Single, Double };
+
     bool compact = false;
     std::string indent = "    ";
     std::string currentIndent = "";
     std::string newline = "\r\n";
     unsigned int threshold = 80;
+    QuotePreference quote = QuotePreference::Single;
 
     int indentLevel = -1;
 
@@ -45,7 +48,17 @@ class Formatter : public OpenCMLVisitor {
         }
     }
 
+    std::string processStringLiteral(const std::string &input);
+
     inline std::string lineEnd() { return newline + currentIndent; }
+
+    template <typename T> bool judgeMultiLine(const std::vector<T *> &list) {
+        // force inline:
+        // 1. if the list is empty
+        // 2. if the list has only one element
+        // 3. if the list is written in one line
+        // (the last token of an element is in the same line as the first token of the next element)
+    }
 
     template <typename T>
     std::any visitList(const std::vector<T *> &list, antlr4::ParserRuleContext *context, bool trailingComma = false,
@@ -54,6 +67,7 @@ class Formatter : public OpenCMLVisitor {
         std::string result;
         const auto &firstLine = context->getStart()->getLine();
         auto lastLine = context->getStop()->getLine();
+        // auto enable multi-line if the code is too long or the first line is not the same as the last line
         const bool multiLine =
             ((firstLine < lastLine || context->getText().size() > this->threshold) && !forceInline) || forceMultiLine;
         if (multiLine) {

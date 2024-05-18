@@ -3,16 +3,16 @@ import OpenCMLLex;
 
 program : stmtList? EOF;
 
-stmtList : stmt+ ;
+stmtList : stmt (SEP stmt)* SEP? ;
 
 stmt
-    : letStmt SEP
-    | useStmt SEP
-    | typeStmt SEP
-    | exprStmt SEP
-    | assignStmt SEP
-    | funcDef SEP
-    | retStmt SEP
+    : letStmt
+    | useStmt
+    | typeStmt
+    | exprStmt
+    | assignStmt
+    | funcDef
+    | retStmt
     ;
 
 letStmt : LET carrier (':' typeExpr)? ('='? entityExpr)?
@@ -31,7 +31,7 @@ lambdaExpr : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
 carrier : identRef | bracedIdents | bracketIdents ;
 
 annotation  : '@' primEntity ;
-annotations : (annotation SEP?)+ ;
+annotations : annotation+ ;
 modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
