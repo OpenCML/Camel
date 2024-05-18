@@ -1,3 +1,6 @@
+type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
+type test2 = (Array<String> | Union<Int, String>[])[];
+
 # 函子定义，修饰符顺序
 sync static func if(condition: Bool) {
     return ifexpr(condition, exec, skip<skip>)
@@ -32,7 +35,7 @@ sync func placeComponents(
     dist: Point, pos: Point
 ): Void {
     let i = startIndex;
-    for (i, {i << startIndex + count}, {i += 1}) {
+    for (i, {i < startIndex + count}, {i ++}) {
         # create instance of LaserCW and place it
         let laser = LaserCW @[pos["x"], pos["y"]];
         let laserRect = laser["meta"]["rect"];

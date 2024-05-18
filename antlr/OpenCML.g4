@@ -83,21 +83,26 @@ entitySpread : '...' entity ;
 
 entityExpr
     : relaExpr
+    | entityExpr '+=' relaExpr
+    | entityExpr '-=' relaExpr
     | entityExpr '*=' relaExpr
     | entityExpr '/=' relaExpr
     | entityExpr '%=' relaExpr
-    | entityExpr '+=' relaExpr
-    | entityExpr '-=' relaExpr
+    | entityExpr '^=' relaExpr
+    | entityExpr '&=' relaExpr
+    | entityExpr '|=' relaExpr
     ;
 
 relaExpr
     : addExpr
-    | relaExpr '<<' addExpr
-    | relaExpr '>>' addExpr
+    | relaExpr '<' addExpr
+    | relaExpr '>' addExpr
     | relaExpr '<=' addExpr
     | relaExpr '>=' addExpr
     | relaExpr '==' addExpr
     | relaExpr '!=' addExpr
+    | relaExpr '&&' addExpr
+    | relaExpr '||' addExpr
     ;
 
 addExpr
@@ -121,7 +126,10 @@ multiExpr
 unaryExpr
     : primExpr
     | '!' primExpr
-    | '-' primExpr
+    | '++' primExpr
+    | '--' primExpr
+    | primExpr '++'
+    | primExpr '--'
     ;
 
 primExpr

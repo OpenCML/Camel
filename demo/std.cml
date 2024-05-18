@@ -84,7 +84,7 @@ with <
 inner sync static func load(path: string) : Any
 {
     # inner func
-}
+};
 
 /*
 * This PSL module will be imported by interpreter automatically,
@@ -155,7 +155,7 @@ sync func placeComponents(
     dist: Point, pos: Point
 ): Void {
     let i = startIndex;
-    for (i, {i << startIndex + count}, {i += 1}) {
+    for (i, {i < startIndex + count}, {i += 1}) {
         # create instance of LaserCW and place it
         let laser = LaserCW @[pos["x"], pos["y"]];
         let laserRect = laser["meta"]["rect"];

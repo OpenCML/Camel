@@ -81,16 +81,12 @@ class Formatter : public OpenCMLVisitor {
         for (size_t i = 0; i < list.size(); i++) {
             const auto &currLine = list[i]->getStart()->getLine();
             if (i == 0) {
-                result += rtrim(std::any_cast<std::string>(visit(list[i])));
+                result += std::any_cast<std::string>(visit(list[i]));
             } else {
                 result += separator;
                 if (currLine > lastLine + 1)
                     result += lineEnd();
-                if (i == list.size() - 1) {
-                    result += std::any_cast<std::string>(visit(list[i]));
-                } else {
-                    result += rtrim(std::any_cast<std::string>(visit(list[i])));
-                }
+                result += std::any_cast<std::string>(visit(list[i]));
                 lastLine = list[i]->getStop()->getLine();
             }
         }
