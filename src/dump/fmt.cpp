@@ -24,7 +24,7 @@ program : stmtList? EOF;
 std::any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
     const auto &stmtList = context->stmtList();
     const std::string code =
-        stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, true, false)) + newline : "";
+        stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, true, true)) + newline : "";
     // remove first newline character
     return code.substr(newline.size());
 };
@@ -32,10 +32,9 @@ std::any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
 /*
 stmtList : stmt+ ;
 */
-std::any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context, bool forceInline, bool forceMultiLine,
-                                  bool padding) {
-    const bool trailingComma = context->children.size() > 1;
-    return visitList(context->stmt(), context, trailingComma, ";", forceInline, forceMultiLine, padding);
+std::any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context, bool padding, bool forceMultiLine,
+                                  bool trailingComma) {
+    return visitList(context->stmt(), context, trailingComma, ";", padding, forceMultiLine);
 };
 
 /*
@@ -315,75 +314,89 @@ std::any Formatter::visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context)
 /*
 typeList     : typeExpr (',' typeExpr)* ;
 */
-std::any Formatter::visitTypeList(OpenCMLParser::TypeListContext *context, bool trailingComma, bool forceInline,
-                                  bool forceMultiLine, bool padding) {
-    return visitList(context->typeExpr(), context, trailingComma, ",", forceInline, forceMultiLine, padding);
+std::any Formatter::visitTypeList(OpenCMLParser::TypeListContext *context, bool trailingComma, bool padding,
+                                  bool forceMultiLine) {
+    return visitList(context->typeExpr(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
 identList    : identRef (',' identRef)* ;
 */
-std::any Formatter::visitIdentList(OpenCMLParser::IdentListContext *context, bool trailingComma, bool forceInline,
-                                   bool forceMultiLine, bool padding) {
-    return visitList(context->identRef(), context, trailingComma, ",", forceInline, forceMultiLine, padding);
+std::any Formatter::visitIdentList(OpenCMLParser::IdentListContext *context, bool trailingComma, bool padding,
+                                   bool forceMultiLine) {
+    return visitList(context->identRef(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
 valueList    : entityExpr (',' entityExpr)* ;
 */
-std::any Formatter::visitValueList(OpenCMLParser::ValueListContext *context, bool trailingComma, bool forceInline,
-                                   bool forceMultiLine, bool padding) {
-    return visitList(context->entityExpr(), context, trailingComma, ",", forceInline, forceMultiLine, padding);
+std::any Formatter::visitValueList(OpenCMLParser::ValueListContext *context, bool trailingComma, bool padding,
+                                   bool forceMultiLine) {
+    return visitList(context->entityExpr(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
 pairedTypes  : keyTypePair (',' keyTypePair)* ;
 */
-std::any Formatter::visitPairedTypes(OpenCMLParser::PairedTypesContext *context, bool trailingComma, bool forceInline,
-                                     bool forceMultiLine, bool padding) {
-    return visitList(context->keyTypePair(), context, trailingComma, ",", forceInline, forceMultiLine, padding);
+std::any Formatter::visitPairedTypes(OpenCMLParser::PairedTypesContext *context, bool trailingComma, bool padding,
+                                     bool forceMultiLine) {
+    return visitList(context->keyTypePair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
-std::any Formatter::visitPairedValues(OpenCMLParser::PairedValuesContext *context, bool trailingComma, bool forceInline,
-                                      bool forceMultiLine, bool padding) {
-    return visitList(context->keyValuePair(), context, trailingComma, ",", forceInline, forceMultiLine, padding);
+std::any Formatter::visitPairedValues(OpenCMLParser::PairedValuesContext *context, bool trailingComma, bool padding,
+                                      bool forceMultiLine) {
+    return visitList(context->keyValuePair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
-std::any Formatter::visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool forceInline,
-                                      bool forceMultiLine, bool padding) {
-    return visitList(context->keyParamPair(), context, trailingComma, ",", forceInline, forceMultiLine, padding);
+std::any Formatter::visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool padding,
+                                      bool forceMultiLine) {
+    return visitList(context->keyParamPair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
 indexKVPairs : indexKVPair (',' indexKVPair)* ;
 */
-std::any Formatter::visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool forceInline,
-                                      bool forceMultiLine, bool padding) {
-    return visitList(context->indexKVPair(), context, trailingComma, ",", forceInline, forceMultiLine, padding);
+std::any Formatter::visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool padding,
+                                      bool forceMultiLine) {
+    return visitList(context->indexKVPair(), context, trailingComma, ",", padding, forceMultiLine);
 };
 
 /*
 argumentList : valueList (',' pairedValues)? | pairedValues ;
 */
-std::any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context, bool trailingComma, bool forceInline,
-                                      bool forceMultiLine, bool padding) {
+std::any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context, bool trailingComma, bool padding,
+                                      bool forceMultiLine) {
     const auto &valueList = context->valueList();
     const auto &pairedValues = context->pairedValues();
     if (valueList && pairedValues) {
-        return std::any_cast<std::string>(visitValueList(valueList, true, false, forceMultiLine, false)) +
-               std::any_cast<std::string>(visitPairedValues(pairedValues, trailingComma, false, forceMultiLine, false));
+        return std::any_cast<std::string>(visitValueList(valueList, true, false, forceMultiLine)) +
+               std::any_cast<std::string>(visitPairedValues(pairedValues, trailingComma, false, forceMultiLine));
     } else if (valueList) {
-        return std::any_cast<std::string>(visitValueList(valueList, trailingComma, false, forceMultiLine, false));
+        return std::any_cast<std::string>(visitValueList(valueList, trailingComma, false, forceMultiLine));
     } else {
-        return std::any_cast<std::string>(visitPairedValues(pairedValues, trailingComma, false, forceMultiLine, false));
+        return std::any_cast<std::string>(visitPairedValues(pairedValues, trailingComma, false, forceMultiLine));
     }
 };
+
+inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
+    const size_t firstTokenLine = context->getStart()->getLine();
+    size_t secondTokenLine = 0;
+    // get second token
+    const auto secondToken = context->children[1];
+    if (antlr4::ParserRuleContext::is(secondToken)) {
+        const antlr4::ParserRuleContext *secondTokenContext = dynamic_cast<antlr4::ParserRuleContext *>(secondToken);
+        secondTokenLine = secondTokenContext->getStart()->getLine();
+    } else {
+        secondTokenLine = context->getStop()->getLine();
+    }
+    return firstTokenLine != secondTokenLine;
+}
 
 /*
 bracedValues       : '{' valueList? ','? '}' ;
@@ -391,9 +404,8 @@ bracedValues       : '{' valueList? ','? '}' ;
 std::any Formatter::visitBracedValues(OpenCMLParser::BracedValuesContext *context) {
     const auto &valueList = context->valueList();
     const bool hasComma = context->children.size() > 2 + (valueList ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "{" +
-           (valueList ? std::any_cast<std::string>(visitValueList(valueList, hasComma, false, forceMultiLine, true))
+           (valueList ? std::any_cast<std::string>(visitValueList(valueList, hasComma, true, isMultiLine(context)))
                       : "") +
            "}";
 };
@@ -404,10 +416,9 @@ bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ;
 std::any Formatter::visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) {
     const auto &indexKVPairs = context->indexKVPairs();
     const bool hasComma = context->children.size() > 2 + (indexKVPairs ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "{" +
            (indexKVPairs
-                ? std::any_cast<std::string>(visitIndexKVPairs(indexKVPairs, hasComma, false, forceMultiLine, true))
+                ? std::any_cast<std::string>(visitIndexKVPairs(indexKVPairs, hasComma, true, isMultiLine(context)))
                 : "") +
            "}";
 };
@@ -418,10 +429,9 @@ bracedPairedValues : '{' pairedValues? ','? '}' ;
 std::any Formatter::visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) {
     const auto &pairedValues = context->pairedValues();
     const bool hasComma = context->children.size() > 2 + (pairedValues ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "{" +
            (pairedValues
-                ? std::any_cast<std::string>(visitPairedValues(pairedValues, hasComma, false, forceMultiLine, true))
+                ? std::any_cast<std::string>(visitPairedValues(pairedValues, hasComma, true, isMultiLine(context)))
                 : "") +
            "}";
 };
@@ -432,9 +442,8 @@ bracedIdents       : '{' identList? ','? '}' ;
 std::any Formatter::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
     const auto &identList = context->identList();
     const bool hasComma = context->children.size() > 2 + (identList ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "{" +
-           (identList ? std::any_cast<std::string>(visitIdentList(identList, hasComma, false, forceMultiLine, true))
+           (identList ? std::any_cast<std::string>(visitIdentList(identList, hasComma, true, isMultiLine(context)))
                       : "") +
            "}";
 };
@@ -444,8 +453,9 @@ bracedStmts        : '{' stmtList? '}' ;
 */
 std::any Formatter::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context) {
     const auto &stmtList = context->stmtList();
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
-    return "{" + (stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, forceMultiLine, true)) : "") +
+    const bool hasComma = stmtList && stmtList->getStop()->getText() == ";";
+    return "{" +
+           (stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, true, isMultiLine(context), hasComma)) : "") +
            "}";
 };
 
@@ -455,9 +465,8 @@ bracketIdents : '[' identList? ','? ']' ;
 std::any Formatter::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
     const auto &identList = context->identList();
     const bool hasComma = context->children.size() > 2 + (identList ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "[" +
-           (identList ? std::any_cast<std::string>(visitIdentList(identList, hasComma, false, forceMultiLine, false))
+           (identList ? std::any_cast<std::string>(visitIdentList(identList, hasComma, false, isMultiLine(context)))
                       : "") +
            "]";
 };
@@ -468,9 +477,8 @@ bracketValues : '[' valueList? ','? ']' ;
 std::any Formatter::visitBracketValues(OpenCMLParser::BracketValuesContext *context) {
     const auto &valueList = context->valueList();
     const bool hasComma = context->children.size() > 2 + (valueList ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "[" +
-           (valueList ? std::any_cast<std::string>(visitValueList(valueList, hasComma, false, forceMultiLine, false))
+           (valueList ? std::any_cast<std::string>(visitValueList(valueList, hasComma, false, isMultiLine(context)))
                       : "") +
            "]";
 };
@@ -481,10 +489,9 @@ parentParams : '(' pairedParams? ','? ')' ;
 std::any Formatter::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
     const auto &pairedParams = context->pairedParams();
     const bool hasComma = context->children.size() > 2 + (pairedParams ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "(" +
            (pairedParams
-                ? std::any_cast<std::string>(visitPairedParams(pairedParams, hasComma, false, forceMultiLine, false))
+                ? std::any_cast<std::string>(visitPairedParams(pairedParams, hasComma, false, isMultiLine(context)))
                 : "") +
            ")";
 };
@@ -495,10 +502,9 @@ parentValues : '(' argumentList? ','? ')' ;
 std::any Formatter::visitParentValues(OpenCMLParser::ParentValuesContext *context) {
     const auto &argumentList = context->argumentList();
     const bool hasComma = context->children.size() > 2 + (argumentList ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "(" +
            (argumentList
-                ? std::any_cast<std::string>(visitArgumentList(argumentList, hasComma, false, forceMultiLine, false))
+                ? std::any_cast<std::string>(visitArgumentList(argumentList, hasComma, false, isMultiLine(context)))
                 : "") +
            ")";
 };
@@ -509,10 +515,9 @@ angledParams : '<' pairedParams? ','? '>' ;
 std::any Formatter::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
     const auto &pairedParams = context->pairedParams();
     const bool hasComma = context->children.size() > 2 + (pairedParams ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "<" +
            (pairedParams
-                ? std::any_cast<std::string>(visitPairedParams(pairedParams, hasComma, false, forceMultiLine, false))
+                ? std::any_cast<std::string>(visitPairedParams(pairedParams, hasComma, false, isMultiLine(context)))
                 : "") +
            ">";
 };
@@ -523,10 +528,9 @@ angledValues : '<' argumentList? ','? '>' ;
 std::any Formatter::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
     const auto &argumentList = context->argumentList();
     const bool hasComma = context->children.size() > 2 + (argumentList ? 1 : 0);
-    const bool forceMultiLine = context->getStart()->getLine() != context->getStop()->getLine();
     return "<" +
            (argumentList
-                ? std::any_cast<std::string>(visitArgumentList(argumentList, hasComma, false, forceMultiLine, false))
+                ? std::any_cast<std::string>(visitArgumentList(argumentList, hasComma, false, isMultiLine(context)))
                 : "") +
            ">";
 };
@@ -908,12 +912,18 @@ std::any Formatter::visitStructType(OpenCMLParser::StructTypeContext *context) {
     case 8: // TUPLE_TYPE ('<' typeList? ','? '>')?
     {
         const auto &typeList = context->typeList();
-        return typeList ? "Tuple<" + std::any_cast<std::string>(visitTypeList(typeList)) + ">" : "Tuple";
+        return typeList
+                   ? "Tuple<" +
+                         std::any_cast<std::string>(visitTypeList(typeList, false, false, isMultiLine(context))) + ">"
+                   : "Tuple";
     } break;
     case 9: // UNION_TYPE ('<' typeList? ','? '>')?
     {
         const auto &typeList = context->typeList();
-        return typeList ? "Union<" + std::any_cast<std::string>(visitTypeList(typeList)) + ">" : "Union";
+        return typeList
+                   ? "Union<" +
+                         std::any_cast<std::string>(visitTypeList(typeList, false, false, isMultiLine(context))) + ">"
+                   : "Union";
     } break;
     case 10: // VECTOR_TYPE ('<' typeExpr (',' INTEGER)? '>')?
     {

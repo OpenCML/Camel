@@ -12,7 +12,7 @@ sync func test(target: Functor) {
     return ifexpr(condition<capture>(), {
         exec<{
             update<capture>();
-            test<capture, condition, update>(target)
+            test<capture, condition, update>(target);
         }>(target);
     }, null)
 };
