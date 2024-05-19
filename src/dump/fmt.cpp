@@ -454,9 +454,27 @@ bracedStmts        : '{' stmtList? '}' ;
 std::any Formatter::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context) {
     const auto &stmtList = context->stmtList();
     const bool hasComma = stmtList && stmtList->getStop()->getText() == ";";
-    return "{" +
-           (stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, true, isMultiLine(context), hasComma)) : "") +
-           "}";
+    if (stmtList) {
+        return "{" + std::any_cast<std::string>(visitStmtList(stmtList, true, isMultiLine(context), hasComma)) + "}";
+    } else {
+        std::string result = "{";
+        // check if there are comments inside the braces
+        const size_t firstTokIdx = context->getStart()->getTokenIndex();
+        const size_t lastTokIdx = context->getStop()->getTokenIndex();
+        bool foundComment = false;
+        pushIndent();
+        for (int i = firstTokIdx + 1; i < lastTokIdx; i++) {
+            if (tokens[i]->getChannel() > 1) {
+                result += lineEnd() + tokens[i]->getText();
+                foundComment = true;
+            }
+        }
+        popIndent();
+        if (foundComment) {
+            result += lineEnd();
+        }
+        return result + "}";
+    }
 };
 
 /*

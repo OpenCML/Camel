@@ -63,6 +63,7 @@ class Formatter : public OpenCMLVisitor {
     template <typename T>
     std::any formatList(const std::vector<T *> &list, antlr4::ParserRuleContext *context, bool trailingComma = false,
                         std::string comma = ",", bool padding = true, bool forceMultiLine = false) {
+        std::string result;
 
         const auto findCmtRange = [&](size_t start, bool inverse = false) -> std::pair<size_t, size_t> {
             size_t predCmtStart = start;
@@ -101,7 +102,29 @@ class Formatter : public OpenCMLVisitor {
             return std::make_pair(predCmtStart, predCmtEnd);
         };
 
-        std::string result;
+        const auto insertComment = [&](const antlr4::Token *comment) {
+            const auto &commentText = comment->getText();
+            switch (comment->getChannel()) {
+            case 2: {
+                if (cmtPrefer == CommentPreference::Slash)
+                    result += hash2slash(commentText);
+                else
+                    result += commentText;
+            } break;
+            case 3: {
+                if (cmtPrefer == CommentPreference::Hash)
+                    result += slash2hash(commentText);
+                else
+                    result += commentText;
+            } break;
+            case 4:
+                result += commentText + " ";
+                break;
+
+            default:
+                break;
+            }
+        };
 
         bool multiLine = false || forceMultiLine;
         bool wrappedWithBraces = false;
@@ -121,13 +144,20 @@ class Formatter : public OpenCMLVisitor {
             }
         }
 
+        // check if the list is wrapped with braces
+        // if so, we don't need to add line breaks before and after the list
+        // that makes the code more compact
         const std::string snippet = context->getText();
         const std::string firstChar = snippet.substr(0, 1);
         const std::string lastChar = snippet.substr(snippet.size() - 1, 1);
-        if (firstChar == lastChar) {
-            if (firstChar == "{" || firstChar == "[" || firstChar == "<" || firstChar == "(") {
-                wrappedWithBraces = true;
-            }
+        if (firstChar == "{" && lastChar == "}") {
+            wrappedWithBraces = true;
+        } else if (firstChar == "[" && lastChar == "]") {
+            wrappedWithBraces = true;
+        } else if (firstChar == "<" && lastChar == ">") {
+            wrappedWithBraces = true;
+        } else if (firstChar == "(" && lastChar == ")") {
+            wrappedWithBraces = true;
         }
 
         if (multiLine) {
@@ -145,62 +175,53 @@ class Formatter : public OpenCMLVisitor {
         for (size_t i = 0; i < list.size(); i++) {
             const size_t currLine = list[i]->getStart()->getLine();
             int remainedSkips = currLine - lastLine - lastCommentLines;
-            // result += "$" + std::to_string(currLine) + " - " + std::to_string(lastLine) + " - " +
-            //           std::to_string(lastCommentLines) + " = " + std::to_string(remainedSkips) + "$";
+
+            if (multiLine && i != 0) {
+                // sometimes the elements are written in one line
+                // however, we want to keep them in separate lines
+                // if is the first element of a multi-line list
+                // we already have a line break before the first element
+                remainedSkips = std::max(remainedSkips, 1);
+            }
+
             for (int j = 0; j < remainedSkips; j++) {
                 result += lineEnd();
             }
 
+            size_t lastStopLine = list[i]->getStop()->getLine();
+
             if (i == 0) {
                 auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStart()->getTokenIndex(), true);
+                int cmtSkips = 0;
+
                 for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                     const auto &comment = tokens[j];
                     const auto &commentText = comment->getText();
-                    switch (comment->getChannel()) {
-                    case 2: {
-                        if (j != predCmtStart) {
-                            result += lineEnd();
-                        }
-                        if (cmtPrefer == CommentPreference::Slash)
-                            result += hash2slash(commentText);
-                        else
-                            result += commentText;
-                    } break;
-                    case 3: {
-                        if (j != predCmtStart) {
-                            result += lineEnd();
-                        }
-                        if (cmtPrefer == CommentPreference::Hash)
-                            result += slash2hash(commentText);
-                        else
-                            result += commentText;
-                    } break;
-                    case 4:
-                        if (j != predCmtStart) {
-                            if (multiLine) {
-                                result += lineEnd();
-                            } else {
-                                result += " ";
-                            }
-                        }
-                        result += commentText;
-                        break;
 
-                    default:
-                        break;
+                    cmtSkips = comment->getLine() - lastStopLine;
+
+                    for (int k = 0; k < cmtSkips; k++) {
+                        result += lineEnd();
                     }
+
+                    insertComment(comment);
+
+                    lastStopLine = comment->getLine() + std::count(commentText.begin(), commentText.end(), '\n');
+                }
+
+                cmtSkips = currLine - lastStopLine;
+                for (int j = 0; j < cmtSkips; j++) {
+                    result += lineEnd();
                 }
             }
 
             result += std::any_cast<std::string>(visit(list[i]));
 
-            if (i < list.size() - 1) {
+            if (i < list.size() - 1 || trailingComma) {
                 result += comma + (multiLine ? "" : " ");
-            } else if (trailingComma) {
-                result += comma;
             }
 
-            auto lastStopLine = list[i]->getStop()->getLine();
+            lastStopLine = list[i]->getStop()->getLine();
             auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStop()->getTokenIndex(), false);
 
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
@@ -209,7 +230,7 @@ class Formatter : public OpenCMLVisitor {
 
                 const int cmtSkips = comment->getLine() - lastStopLine;
                 if (cmtSkips == 0 && multiLine) {
-                    // if single, block comments are leaded by a space already
+                    // if single, block comments are leaded by a space after comma already
                     result += " ";
                 }
 
@@ -217,43 +238,18 @@ class Formatter : public OpenCMLVisitor {
                     result += lineEnd();
                 }
 
-                switch (comment->getChannel()) {
-                case 2: {
-                    if (cmtPrefer == CommentPreference::Slash)
-                        result += hash2slash(commentText) + lineEnd();
-                    else
-                        result += commentText + lineEnd();
-                } break;
-
-                case 3: {
-                    if (cmtPrefer == CommentPreference::Hash)
-                        result += slash2hash(commentText) + lineEnd();
-                    else
-                        result += commentText + lineEnd();
-                } break;
-
-                case 4:
-                    result += commentText;
-                    if (multiLine) {
-                        result += lineEnd();
-                    } else {
-                        result += " ";
-                    }
-                    break;
-
-                default:
-                    break;
-                }
+                insertComment(comment);
 
                 lastStopLine = comment->getLine() + std::count(commentText.begin(), commentText.end(), '\n');
             }
 
             if (predCmtStart < predCmtEnd) {
+                const size_t currLineEnd = list[i]->getStop()->getLine();
                 const auto &lastComment = tokens[predCmtEnd - 1];
                 const auto &lastText = lastComment->getText();
                 const size_t lastCommentLineEnd =
                     lastComment->getLine() + std::count(lastText.begin(), lastText.end(), '\n');
-                lastCommentLines = lastCommentLineEnd - lastLine;
+                lastCommentLines = lastCommentLineEnd - currLineEnd;
             } else {
                 lastCommentLines = 0;
             }

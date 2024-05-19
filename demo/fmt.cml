@@ -21,13 +21,16 @@ inner sync static func load(path: string) : Any
     # inner func
 };
 
+
 # 函子定义，修饰符顺序
 sync static func if(condition: Bool) {
 
     # block
-    
+
     return ifexpr(condition, exec, skip<skip>)
 };
+
+
 
 # 换行测试
 with <capture: Any, condition: Functor, update: Functor>
