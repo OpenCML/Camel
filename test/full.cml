@@ -16,28 +16,28 @@ let a = d + (a + b) * c / 2;
 
 /*
 * This PSL module will be imported by interpreter automatically,
-* and can be accessed anywhere in any PSL script.
+* and can be accessed Anywhere in Any PSL script.
 */ 
 
-with <loader: functor = psl>
-inner static sync func load(path: string): any {
+with <loader: Functor = psl>
+inner static sync func load(path: String): Any {
     # inner func
 };
 
-with <path: string, ftype: string = 'psl'>
-inner static sync func save(entity: any) {
+with <path: String, ftype: String = 'psl'>
+inner static sync func save(entity: Any) {
     # inner func
 };
 
 use from = load;
 
-with <stream: string = 'stdout'>
-inner static func print(data: any) {
+with <stream: String = 'stdout'>
+inner static func print(data: Any) {
     # inner func
 };
 
-with <diagram: functor = eye>
-inner static func analyze(data: any) {
+with <diagram: Functor = eye>
+inner static func analyze(data: Any) {
     # inner func
 };
 
@@ -70,8 +70,8 @@ sync func PowerControlEl(input: ElSignal): ElSignal {
     >@[2, 2]->AmpSysEl;
 };
 
-with <capture: any, condition: functor, update: functor>
-sync func test(target: functor) {
+with <capture: Any, condition: Functor, update: Functor>
+sync func test(target: Functor) {
     return ifexpr(condition<capture>(), {
         exec<{
             update<capture>;
@@ -81,11 +81,11 @@ sync func test(target: functor) {
 };
 
 sync func placeComponents(
-    startIndex: number,
-    count: number,
+    startIndex: Number,
+    count: Number,
     dist: Point,
     pos: Point
-): void {
+): Void {
     i := startIndex;
     # loop to create instances
     for(i, { i < startIndex + count; }, { i = i + 1; }) {
@@ -97,15 +97,15 @@ sync func placeComponents(
     };
 };
 
-bus.on('ask-for-authorization', sync (event: String): Array<String> =>{
+bus.on('ask-for-authorization', sync (event: String): Array<String> => {
     otp['value'] = '';
     cancelled = true;
     isActive['value'] = true;
     wrongOtp['value'] = false;
     targetEvent = event;
     
-    return await new Promise((resolve: Int, reject: Int) =>{
-        let stopWatch = watch(isActive, (newVal: Int) =>{
+    return await new Promise((resolve: Int, reject: Int) => {
+        let stopWatch = watch(isActive, (newVal: Int) => {
             if(!newVal) {
                 stopWatch();
                 if(cancelled) {

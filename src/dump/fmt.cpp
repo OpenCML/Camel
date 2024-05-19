@@ -215,7 +215,7 @@ std::any Formatter::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
         if (typeExpr) {
             result += ": " + std::any_cast<std::string>(visitTypeExpr(typeExpr));
         }
-        result += " =>";
+        result += " => ";
     }
     return result + std::any_cast<std::string>(visitBracedStmts(bracedStmts));
 };
