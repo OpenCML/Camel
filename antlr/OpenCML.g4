@@ -3,19 +3,19 @@ import OpenCMLLex;
 
 program : stmtList? EOF;
 
-stmtList : stmt+ ;
+stmtList : stmt (SEP stmt)* SEP? ;
 
 stmt
-    : letStmt SEP
-    | useStmt SEP
-    | typeStmt SEP
-    | exprStmt SEP
-    | assignStmt SEP
-    | funcDef SEP
-    | retStmt SEP
+    : letStmt
+    | useStmt
+    | typeStmt
+    | exprStmt
+    | assignStmt
+    | funcDef
+    | retStmt
     ;
 
-letStmt : LET carrier (':' typeExpr)? '='? entityExpr
+letStmt : LET carrier (':' typeExpr)? ('='? entityExpr)?
         | carrier (':' typeExpr)? ':=' entityExpr ;
 useStmt : USE carrier '='? entityExpr
         | carrier '::' entityExpr ;
@@ -31,7 +31,7 @@ lambdaExpr : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
 carrier : identRef | bracedIdents | bracketIdents ;
 
 annotation  : '@' primEntity ;
-annotations : (annotation SEP?)+ ;
+annotations : annotation+ ;
 modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
@@ -53,7 +53,7 @@ bracedValues       : '{' valueList? ','? '}' ;    // for literal construction of
 bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ; // for literal construction of map
 bracedPairedValues : '{' pairedValues? ','? '}' ; // for literal construction of dict
 bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
-bracedStmts        : '{' stmtList? ','? '}' ;     // for block statement
+bracedStmts        : '{' stmtList? '}' ;     // for block statement
 
 bracketIdents : '[' identList? ','? ']' ; // for list unpacking
 bracketValues : '[' valueList? ','? ']' ; // for literal construction of list, vector, or tensor
@@ -83,21 +83,26 @@ entitySpread : '...' entity ;
 
 entityExpr
     : relaExpr
+    | entityExpr '+=' relaExpr
+    | entityExpr '-=' relaExpr
     | entityExpr '*=' relaExpr
     | entityExpr '/=' relaExpr
     | entityExpr '%=' relaExpr
-    | entityExpr '+=' relaExpr
-    | entityExpr '-=' relaExpr
+    | entityExpr '^=' relaExpr
+    | entityExpr '&=' relaExpr
+    | entityExpr '|=' relaExpr
     ;
 
 relaExpr
     : addExpr
-    | relaExpr '<<' addExpr
-    | relaExpr '>>' addExpr
+    | relaExpr '<' addExpr
+    | relaExpr '>' addExpr
     | relaExpr '<=' addExpr
     | relaExpr '>=' addExpr
     | relaExpr '==' addExpr
     | relaExpr '!=' addExpr
+    | relaExpr '&&' addExpr
+    | relaExpr '||' addExpr
     ;
 
 addExpr
@@ -121,7 +126,10 @@ multiExpr
 unaryExpr
     : primExpr
     | '!' primExpr
-    | '-' primExpr
+    | '++' primExpr
+    | '--' primExpr
+    | primExpr '++'
+    | primExpr '--'
     ;
 
 primExpr
@@ -177,8 +185,8 @@ structType
     | ARRAY_TYPE ('<' typeExpr '>')?
     | TUPLE_TYPE ('<' typeList? ','? '>')?
     | UNION_TYPE ('<' typeList? ','? '>')?
-    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? ','? '>')?
-    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? ','? '>')?
+    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? '>')?
+    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?
     ;
 
 specialType

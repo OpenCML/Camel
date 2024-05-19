@@ -17,6 +17,7 @@
  */
 
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 
 #include "antlr/OpenCMLLexer.h"
@@ -26,6 +27,7 @@
 #include "config.h"
 #include "core/error/json.h"
 #include "dump/cst.h"
+#include "dump/fmt.h"
 #include "utils/log.h"
 
 using namespace antlr4;
@@ -63,6 +65,14 @@ int main(int argc, char *argv[]) {
         auto interpreter = parser.getInterpreter<atn::ParserATNSimulator>();
         tree::ParseTree *tree = nullptr;
 
+        if (dumpTokens) {
+            for (auto &token : tokens.getTokens()) {
+                os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3) << std::right
+                   << token->getLine() << ":" << std::setw(3) << std::left << token->getCharPositionInLine() << "] ("
+                   << token->getChannel() << ") : " << token->getText() << std::endl;
+            }
+        }
+
         try {
             interpreter->setPredictionMode(atn::PredictionMode::SLL);
             parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
@@ -85,12 +95,29 @@ int main(int argc, char *argv[]) {
             tokens.reset();
             interpreter->setPredictionMode(atn::PredictionMode::LL);
             parser.setErrorHandler(std::make_shared<DefaultErrorStrategy>());
-            tree = parser.program();
+            
+            try {
+                tree = parser.program();
+            } catch (std::exception &e) {
+                error << "Parse failed" << std::endl;
+                return 1;
+            }
+        } catch (std::exception &e) {
+            error << "Parse failed" << std::endl;
+            return 1;
         }
 
         if (dumpCST) {
             auto visitor = CSTDumpVisitor();
             visitor.visit(tree);
+        }
+
+        if (format) {
+            auto formatter = Formatter(tokens.getTokens());
+
+            const std::string formattedCode = std::any_cast<std::string>(formatter.visit(tree));
+
+            os << formattedCode;
         }
 
         if (profile) {

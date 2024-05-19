@@ -54,6 +54,32 @@ camel host 持久运行，监听端口，保持内存，提升性能
 
 --semantic-only 只进行语义检查
 
+
+run 执行（输出执行结果）
+
+format 格式化 --config（输出格式化后内容）
+
+parse（输出中间表示）
+
+build：转成中间形式cst/ast/gir/gcc
+
+stage
+
+- 
+
+help（输出帮助文档）
+
+host：开启服务监听模式（标准输入输出，执行）
+
+test：检查是否有语法语义问题（输出代码健康度检查）
+
+analysis：需要分析变量关系（怎么做
+
+version：（输出版本信息）
+
+pref：开启性能监控（运行时）（输出运行结果并保存文件）
+debug
+
 # Enjoy!
 
 Camel riders!
