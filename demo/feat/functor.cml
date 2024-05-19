@@ -1,28 +1,28 @@
 /*
 * This PSL module will be imported by interpreter automatically,
-* and can be accessed anywhere in any PSL script.
-*/
+* and can be accessed Anywhere in Any PSL script.
+*/ 
 
 # psl, json, phtc, xml, toml
 
-with <loader: functor = psl>
-inner sync static func load(path: string) : any {
+with <loader: Functor = psl>
+inner static sync func load(path: String): Any {
     # inner func
 };
 
-with <path: string, ftype: string = 'psl'>
-inner sync static func save(entity: any) {
+with <path: String, ftype: String = 'psl'>
+inner static sync func save(entity: Any) {
     # inner func
 };
 
 use from = load;
 
-with <stream: string = 'stdout'>
-inner static func print(data: any) {
+with <stream: String = 'stdout'>
+inner static func print(data: Any) {
     # inner func
 };
 
-with <diagram: functor = eye>
-inner static func analyze(data: any) {
+with <diagram: Functor = eye>
+inner static func analyze(data: Any) {
     # inner func
 };

@@ -10,14 +10,11 @@ ident.1.id->fn; # 1./.1 should not be considered as real
 +0xFf;
 -1.2e+2;
 
-"abc";
+'abc';
 
 f'abc';
 
 10`v`;
-
-1 + 2i;
-1.3e1 + 2.1i;
 
 """
 haha
