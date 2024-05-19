@@ -163,8 +163,12 @@ class Formatter : public OpenCMLVisitor {
         }
 
         if (multiLine) {
-            pushIndent();
+            // if wrapped with braces
+            // we don't need to add line breaks before and after the list
+            // and we don't need to add padding spaces
+            // it's better to use the indent level of the outer context
             if (!wrappedWithBraces) {
+                pushIndent();
                 result += lineEnd();
             }
         } else if (padding) {
@@ -249,8 +253,7 @@ class Formatter : public OpenCMLVisitor {
                 const size_t currLineEnd = list[i]->getStop()->getLine();
                 const auto &lastComment = tokens[predCmtEnd - 1];
                 const auto &lastText = lastComment->getText();
-                const size_t lastCommentLineEnd =
-                    lastComment->getLine() + countLines(lastText);
+                const size_t lastCommentLineEnd = lastComment->getLine() + countLines(lastText);
                 lastCommentLines = lastCommentLineEnd - currLineEnd;
             } else {
                 lastCommentLines = 0;
@@ -260,8 +263,8 @@ class Formatter : public OpenCMLVisitor {
         }
 
         if (multiLine) {
-            popIndent();
             if (!wrappedWithBraces) {
+                popIndent();
                 result += lineEnd();
             }
         } else if (padding && !trailingComma) {
