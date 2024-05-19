@@ -24,7 +24,7 @@ program : stmtList? EOF;
 std::any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
     const auto &stmtList = context->stmtList();
     const std::string code =
-        stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, true, true)) + newline : "";
+        stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, true, true)) : "";
     // remove first newline character
     return code.substr(newline.size());
 };

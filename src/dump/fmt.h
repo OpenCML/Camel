@@ -56,6 +56,8 @@ class Formatter : public OpenCMLVisitor {
 
     inline std::string lineEnd() { return newline + currentIndent; }
 
+    inline size_t countLines(const std::string &input) { return std::count(input.begin(), input.end(), '\n'); }
+
     inline std::string slash2hash(const std::string &input) { return std::regex_replace(input, std::regex("//"), "#"); }
 
     inline std::string hash2slash(const std::string &input) { return std::regex_replace(input, std::regex("#"), "//"); }
@@ -206,7 +208,7 @@ class Formatter : public OpenCMLVisitor {
 
                     insertComment(comment);
 
-                    lastStopLine = comment->getLine() + std::count(commentText.begin(), commentText.end(), '\n');
+                    lastStopLine = comment->getLine() + countLines(commentText);
                 }
 
                 cmtSkips = currLine - lastStopLine;
@@ -240,7 +242,7 @@ class Formatter : public OpenCMLVisitor {
 
                 insertComment(comment);
 
-                lastStopLine = comment->getLine() + std::count(commentText.begin(), commentText.end(), '\n');
+                lastStopLine = comment->getLine() + countLines(commentText);
             }
 
             if (predCmtStart < predCmtEnd) {
@@ -248,13 +250,13 @@ class Formatter : public OpenCMLVisitor {
                 const auto &lastComment = tokens[predCmtEnd - 1];
                 const auto &lastText = lastComment->getText();
                 const size_t lastCommentLineEnd =
-                    lastComment->getLine() + std::count(lastText.begin(), lastText.end(), '\n');
+                    lastComment->getLine() + countLines(lastText);
                 lastCommentLines = lastCommentLineEnd - currLineEnd;
             } else {
                 lastCommentLines = 0;
             }
 
-            lastLine = list[i]->getStop()->getLine();
+            lastLine = list[i]->getStop()->getLine() + countLines(list[i]->getStop()->getText());
         }
 
         if (multiLine) {
@@ -262,8 +264,8 @@ class Formatter : public OpenCMLVisitor {
             if (!wrappedWithBraces) {
                 result += lineEnd();
             }
-        } else {
-            result += padding ? " " : "";
+        } else if (padding && !trailingComma) {
+            result += " ";
         }
 
         return result;
