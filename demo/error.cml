@@ -1,4 +1,0 @@
-type test = Set<Int>;
-
-let a = 1;
-let b: set<int>;

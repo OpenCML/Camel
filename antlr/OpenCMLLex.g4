@@ -47,21 +47,20 @@ ANY_TYPE      : 'Any';
 VOID_TYPE     : 'Void';
 FUNCTOR_TYPE  : 'Functor';
 
-SKIP_
-    : ( BLANK | LIN_CMT | BLK_CMT ) -> skip
+BLANK
+    : [ \n\r\t\u000C]+ -> skip
     ;
 
-fragment BLANK
-    : [ \n\r\t\u000C]+
+LIN_CMT_HASH
+    : '#' ~[\r\n\f]* -> channel(2)
     ;
 
-fragment LIN_CMT
-    : '//' ~[\r\n]*
-    | '# ' ~[\r\n\f]*
+LIN_CMT_SLASH
+    : '//' ~[\r\n]* -> channel(3)
     ;
 
-fragment BLK_CMT
-    : '/*' .*? '*/'
+BLK_CMT
+    : '/*' .*? '*/' -> channel(4)
     ;
 
 MULTI_STR

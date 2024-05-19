@@ -34,7 +34,7 @@ bool verbose = false;
 bool noCache = false;
 bool syntaxOnly = false;
 bool semanticOnly = false;
-bool dumpCST = false, dumpAST = false, dumpGIR = false, dumpONNX = false;
+bool dumpCST = false, dumpAST = false, dumpGIR = false, dumpONNX = false, dumpTokens = false, format = false;
 unsigned int repeat = 1;
 unsigned int maxThreads = 1;
 unsigned int serverPort = 0;
@@ -71,25 +71,28 @@ bool parseArgs(int argc, char *argv[]) {
     bool showVersion = false;
     bool printArgs = false;
 
-    auto cli = ((option("-h", "--help").set(showHelp).doc("show this help message"),
-                 option("-v", "--version").set(showVersion).doc("show version")) |
-                ((option("-o", "--output") & value("output file", outputFile)).doc("output file"),
-                 (option("-r", "--repeat") & integer("repeat", repeat)).doc("repeat times"),
-                 (option("-t", "--threads") & integer("max threads", maxThreads)).doc("max threads"),
-                 (option("-p", "--port") & integer("server port", serverPort)).doc("server port"),
-                 option("-g", "--verbose").set(verbose).doc("show verbose information"),
-                 option("-n", "--no-cache").set(noCache).doc("do not use cache"),
-                 option("--syntax-only").set(syntaxOnly).doc("syntax only"),
-                 option("--semantic-only").set(semanticOnly).doc("semantic only"),
-                 (option("-e", "--error-format") & value("error format", errorFormat)).doc("error format"),
-                 option("-P", "--profile").set(profile).doc("profile the perf"),
-                 (option("-I", "--include") & values("include dir", includeDirs)).doc("add include directory"),
-                 (option("-S", "--scripts") & values("extern scripts dir", scriptsDirs)).doc("add scripts directory"),
-                 option("-C", "--dump-cst").set(dumpCST).doc("dump concrete syntax tree"),
-                 option("-A", "--dump-ast").set(dumpAST).doc("dump abstract syntax tree"),
-                 option("-G", "--dump-gir").set(dumpGIR).doc("dump graph intermediate representation"),
-                 option("-X", "--dump-onnx").set(dumpGIR).doc("dump ONNX model"),
-                 option("-R", "--print-args").set(printArgs).doc("print arguments"), opt_value("target file", targetFile)));
+    auto cli =
+        ((option("-h", "--help").set(showHelp).doc("show this help message"),
+          option("-v", "--version").set(showVersion).doc("show version")) |
+         ((option("-o", "--output") & value("output file", outputFile)).doc("output file"),
+          (option("-r", "--repeat") & integer("repeat", repeat)).doc("repeat times"),
+          (option("-t", "--threads") & integer("max threads", maxThreads)).doc("max threads"),
+          (option("-p", "--port") & integer("server port", serverPort)).doc("server port"),
+          option("-g", "--verbose").set(verbose).doc("show verbose information"),
+          option("-n", "--no-cache").set(noCache).doc("do not use cache"),
+          option("--syntax-only").set(syntaxOnly).doc("syntax only"),
+          option("--semantic-only").set(semanticOnly).doc("semantic only"),
+          (option("-e", "--error-format") & value("error format", errorFormat)).doc("error format"),
+          option("-P", "--profile").set(profile).doc("profile the perf"),
+          (option("-I", "--include") & values("include dir", includeDirs)).doc("add include directory"),
+          (option("-S", "--scripts") & values("extern scripts dir", scriptsDirs)).doc("add scripts directory"),
+          option("-T", "--dump-tok").set(dumpTokens).doc("dump tokens"),
+          option("-C", "--dump-cst").set(dumpCST).doc("dump concrete syntax tree"),
+          option("-A", "--dump-ast").set(dumpAST).doc("dump abstract syntax tree"),
+          option("-G", "--dump-gir").set(dumpGIR).doc("dump graph intermediate representation"),
+          option("-X", "--dump-onnx").set(dumpGIR).doc("dump ONNX model"),
+          option("-F", "--format").set(format).doc("format the code"),
+          option("-R", "--print-args").set(printArgs).doc("print arguments"), opt_value("target file", targetFile)));
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;
