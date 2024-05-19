@@ -263,7 +263,6 @@ class Formatter : public OpenCMLVisitor {
                 result += lineEnd();
             }
         } else {
-            result += trailingComma ? comma : "";
             result += padding ? " " : "";
         }
 
