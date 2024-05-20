@@ -91,14 +91,6 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitTypeList(OpenCMLParser::TypeListContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -123,19 +115,7 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitArgumentList(OpenCMLParser::ArgumentListContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBracedValues(OpenCMLParser::BracedValuesContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *ctx) override {
     return visitChildren(ctx);
   }
 

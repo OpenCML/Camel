@@ -28,7 +28,6 @@ let Power = {
     powerOutput : ElSignal # comment test
 };
 
-let var1 = { 1, 2, } & { [a]: b }; # set construction
 let var2 = b->(a.at(b))<>()[1]()@{}() [c,];
 let var3 = c->a.b->d e;
 

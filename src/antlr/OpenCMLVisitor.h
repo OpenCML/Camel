@@ -57,10 +57,6 @@ public:
 
     virtual std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) = 0;
 
-    virtual std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) = 0;
-
-    virtual std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) = 0;
-
     virtual std::any visitTypeList(OpenCMLParser::TypeListContext *context) = 0;
 
     virtual std::any visitIdentList(OpenCMLParser::IdentListContext *context) = 0;
@@ -73,13 +69,7 @@ public:
 
     virtual std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) = 0;
 
-    virtual std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) = 0;
-
     virtual std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) = 0;
-
-    virtual std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context) = 0;
-
-    virtual std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) = 0;
 
     virtual std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) = 0;
 

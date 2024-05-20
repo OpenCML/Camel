@@ -26,7 +26,7 @@ assignStmt : identRef memberAccess? '=' entityExpr ;
 withDef : WITH angledParams ;
 funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
 retStmt : RETURN entityExpr? ;
-lambdaExpr : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
+lambdaExpr : modifiers? ((parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr)) | '{' stmtList '}' ) ;
 
 carrier : identRef | bracedIdents | bracketIdents ;
 
@@ -37,8 +37,6 @@ modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : entityExpr ':' entityExpr ;
 keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
-indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
-indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 
 typeList     : typeExpr (',' typeExpr)* ;
 identList    : identRef (',' identRef)* ;
@@ -46,11 +44,8 @@ valueList    : entityExpr (',' entityExpr)* ;
 pairedTypes  : keyTypePair (',' keyTypePair)* ;
 pairedValues : keyValuePair (',' keyValuePair)* ;
 pairedParams : keyParamPair (',' keyParamPair)* ;
-indexKVPairs : indexKVPair (',' indexKVPair)* ;
 argumentList : valueList (',' pairedValues)? | pairedValues ;
 
-bracedValues       : '{' valueList? ','? '}' ;    // for literal construction of set
-bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ; // for literal construction of map
 bracedPairedValues : '{' pairedValues? ','? '}' ; // for literal construction of dict
 bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
 bracedStmts        : '{' stmtList? '}' ;     // for block statement
@@ -68,9 +63,7 @@ primEntity
     : identRef
     | literal
     | bracketValues
-    | bracedValues
     | bracedPairedValues
-    | bracedIndexKVPairs
     | lambdaExpr
     | '(' entityExpr ')' ;
 memberAccess : '[' entityExpr ']' ;
@@ -175,7 +168,6 @@ primType
 structType
     : SET_TYPE ('<' typeExpr '>')?
     | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
-    | '{' indexKTPair '}' // concrete map type
     | LIST_TYPE
     | DICT_TYPE // universal dict type
     | '{' pairedTypes? ','? '}' // concrete dict type

@@ -289,8 +289,6 @@ class Formatter : public OpenCMLVisitor {
                                bool forceMultiLine);
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool padding,
                                bool forceMultiLine);
-    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool padding,
-                               bool forceMultiLine);
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context, bool trailingComma, bool padding,
                                bool forceMultiLine);
 
@@ -318,8 +316,6 @@ class Formatter : public OpenCMLVisitor {
     std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context);
     std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context);
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context);
-    std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context);
-    std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context);
     std::any visitTypeList(OpenCMLParser::TypeListContext *context) {
         return visitTypeList(context, false, true, false);
     }
@@ -338,14 +334,9 @@ class Formatter : public OpenCMLVisitor {
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
         return visitPairedParams(context, false, true, false);
     }
-    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) {
-        return visitIndexKVPairs(context, false, true, false);
-    }
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
         return visitArgumentList(context, false, true, false);
     }
-    std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context);
-    std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context);
     std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context);
     std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
     std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context);
