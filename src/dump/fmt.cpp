@@ -23,8 +23,7 @@ program : stmtList? EOF;
 */
 std::any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
     const auto &stmtList = context->stmtList();
-    const std::string code =
-        stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, true, true)) : "";
+    const std::string code = stmtList ? std::any_cast<std::string>(visitStmtList(stmtList, false, true, true)) : "";
     // remove first newline character
     return code.substr(newline.size());
 };
@@ -743,20 +742,15 @@ std::any Formatter::visitMultiExpr(OpenCMLParser::MultiExprContext *context) {
 unaryExpr
     : primExpr
     | '!' primExpr
-    | '++' primExpr
-    | '--' primExpr
-    | primExpr '++'
-    | primExpr '--'
+    | '~' primExpr
     ;
 */
 std::any Formatter::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
-    const auto &alt = context->getAltNumber();
-    if (alt == 1) {
-        return visitPrimExpr(context->primExpr());
-    } else if (alt <= 4) {
-        return context->children[0]->getText() + std::any_cast<std::string>(visitPrimExpr(context->primExpr()));
+    const auto &primExpr = context->primExpr();
+    if (context->children.size() == 1) {
+        return visitPrimExpr(primExpr);
     } else {
-        return std::any_cast<std::string>(visitPrimExpr(context->primExpr())) + context->children[1]->getText();
+        return context->children[0]->getText() + std::any_cast<std::string>(visitPrimExpr(primExpr));
     }
 };
 

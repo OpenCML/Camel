@@ -87,7 +87,7 @@ sync func placeComponents(
     pos: Point
 ): Void {
     let i = startIndex; // test
-    for (i, {i < startIndex + count}, /* block cmt */ {i ++}) {
+    for (i, {i < startIndex + count}, /* block cmt */ {i += 1}) {
         # create instance of LaserCW and place it
         let laser = LaserCW @[pos["x"], pos["y"]];
         let laserRect = laser["meta"]["rect"];

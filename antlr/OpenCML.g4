@@ -126,10 +126,7 @@ multiExpr
 unaryExpr
     : primExpr
     | '!' primExpr
-    | '++' primExpr
-    | '--' primExpr
-    | primExpr '++'
-    | primExpr '--'
+    | '~' primExpr
     ;
 
 primExpr

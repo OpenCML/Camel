@@ -92,7 +92,7 @@ sync func placeComponents(
         let laser = LaserCW@[pos.x, pos.y];
         let laserRect = laser.meta.rect;
         let analyzer = Analyzer@[pos.x + dist.x + laserRect.width, pos.y];
-        laser()->analyzer.(i + 1);
+        laser()->analyzer[i + 1];
         pos.y += pos.y + dist.y + laserRect.height;
     };
 };
