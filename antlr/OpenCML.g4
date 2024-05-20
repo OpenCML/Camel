@@ -1,6 +1,37 @@
 grammar OpenCML;
 import OpenCMLLex;
 
+@header {
+/**
+ * Copyright (c) 2022 Beijing Jiaotong University
+ * PhotLab is licensed under [Open Source License].
+ * You can use this software according to the terms and conditions of the [Open
+ * Source License]. You may obtain a copy of [Open Source License] at:
+ * [https://open.source.license/]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the [Open Source License] for more details.
+ *
+ * Author: Zhenjie Wei
+ * Supported by: National Key Research and Development Program of China
+ */
+}
+
+@parser::members {
+bool isAdjacent() {
+    const antlr4::Token *first = _input->LT(-1);
+    const antlr4::Token *curr = _input->LT(1);
+    if (first == nullptr || curr == nullptr)
+        return false;
+    if (first->getStopIndex() + 1 != curr->getStartIndex())
+        return false;
+    return true;
+}
+}
+
 program : stmtList? EOF;
 
 stmtList : stmt (SEP stmt)* SEP? ;
@@ -67,7 +98,7 @@ primEntity
     | lambdaExpr
     | '(' entityExpr ')' ;
 memberAccess : '[' entityExpr ']' ;
-entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
+entity       : primEntity (({isAdjacent()}? (memberAccess | angledValues | parentValues)) | annotation)* ;
 
 entityChain  : entityLink+ ;
 entityLink   : entityCall | entityLink '->' entityCall ;

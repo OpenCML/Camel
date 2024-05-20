@@ -1,4 +1,22 @@
 
+/**
+ * Copyright (c) 2022 Beijing Jiaotong University
+ * PhotLab is licensed under [Open Source License].
+ * You can use this software according to the terms and conditions of the [Open
+ * Source License]. You may obtain a copy of [Open Source License] at:
+ * [https://open.source.license/]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the [Open Source License] for more details.
+ *
+ * Author: Zhenjie Wei
+ * Supported by: National Key Research and Development Program of China
+ */
+
+
 // Generated from OpenCML.g4 by ANTLR 4.13.1
 
 #pragma once
@@ -64,6 +82,17 @@ public:
   const antlr4::dfa::Vocabulary& getVocabulary() const override;
 
   antlr4::atn::SerializedATNView getSerializedATN() const override;
+
+
+  bool isAdjacent() {
+      const antlr4::Token *first = _input->LT(-1);
+      const antlr4::Token *curr = _input->LT(1);
+      if (first == nullptr || curr == nullptr)
+          return false;
+      if (first->getStopIndex() + 1 != curr->getStartIndex())
+          return false;
+      return true;
+  }
 
 
   class ProgramContext;
@@ -671,12 +700,12 @@ public:
     EntityContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrimEntityContext *primEntity();
+    std::vector<AnnotationContext *> annotation();
+    AnnotationContext* annotation(size_t i);
     std::vector<MemberAccessContext *> memberAccess();
     MemberAccessContext* memberAccess(size_t i);
     std::vector<AngledValuesContext *> angledValues();
     AngledValuesContext* angledValues(size_t i);
-    std::vector<AnnotationContext *> annotation();
-    AnnotationContext* annotation(size_t i);
     std::vector<ParentValuesContext *> parentValues();
     ParentValuesContext* parentValues(size_t i);
 
@@ -961,6 +990,7 @@ public:
 
   bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;
 
+  bool entitySempred(EntityContext *_localctx, size_t predicateIndex);
   bool entityLinkSempred(EntityLinkContext *_localctx, size_t predicateIndex);
   bool entityCallSempred(EntityCallContext *_localctx, size_t predicateIndex);
   bool entityExprSempred(EntityExprContext *_localctx, size_t predicateIndex);
