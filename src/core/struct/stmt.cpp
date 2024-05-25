@@ -15,3 +15,32 @@
  * Created: May. 5, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "stmt.h"
+
+std::string stmtTypeToString(StmtType type) {
+    switch (type) {
+    case StmtType::DATA:
+        return "DATA";
+    case StmtType::TYPE:
+        return "TYPE";
+    case StmtType::FUNC:
+        return "FUNC";
+    case StmtType::COPY:
+        return "COPY";
+    case StmtType::NREF:
+        return "NREF";
+    case StmtType::PACK:
+        return "PACK";
+    case StmtType::UNPK:
+        return "UNPK";
+    case StmtType::ANNO:
+        return "ANNO";
+    case StmtType::LINK:
+        return "LINK";
+    case StmtType::WITH:
+        return "WITH";
+    default:
+        return "UNKNOWN";
+    }
+}
