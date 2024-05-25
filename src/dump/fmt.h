@@ -362,6 +362,7 @@ class Formatter : public OpenCMLVisitor {
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
     std::any visitType(OpenCMLParser::TypeContext *context);
+    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
     std::any visitPrimType(OpenCMLParser::PrimTypeContext *context);
     std::any visitStructType(OpenCMLParser::StructTypeContext *context);
     std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *context);

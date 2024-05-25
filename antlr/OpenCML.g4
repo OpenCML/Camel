@@ -181,6 +181,11 @@ type
     | specialType
     | identRef
     | '(' typeExpr ')'
+    | lambdaType
+    ;
+
+lambdaType
+    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
     ;
 
 primType

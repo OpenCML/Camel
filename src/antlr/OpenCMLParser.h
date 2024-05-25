@@ -63,8 +63,8 @@ public:
     RuleEntityChain = 38, RuleEntityLink = 39, RuleEntityCall = 40, RuleEntitySpread = 41, 
     RuleEntityExpr = 42, RuleRelaExpr = 43, RuleAddExpr = 44, RuleMultiExpr = 45, 
     RuleUnaryExpr = 46, RulePrimExpr = 47, RuleLiteral = 48, RuleTypeExpr = 49, 
-    RuleType = 50, RulePrimType = 51, RuleStructType = 52, RuleSpecialType = 53, 
-    RuleIdentRef = 54
+    RuleType = 50, RuleLambdaType = 51, RulePrimType = 52, RuleStructType = 53, 
+    RuleSpecialType = 54, RuleIdentRef = 55
   };
 
   explicit OpenCMLParser(antlr4::TokenStream *input);
@@ -146,6 +146,7 @@ public:
   class LiteralContext;
   class TypeExprContext;
   class TypeContext;
+  class LambdaTypeContext;
   class PrimTypeContext;
   class StructTypeContext;
   class SpecialTypeContext;
@@ -902,6 +903,7 @@ public:
     SpecialTypeContext *specialType();
     IdentRefContext *identRef();
     TypeExprContext *typeExpr();
+    LambdaTypeContext *lambdaType();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -909,6 +911,21 @@ public:
   };
 
   TypeContext* type();
+
+  class  LambdaTypeContext : public antlr4::RuleContextWithAltNum {
+  public:
+    LambdaTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    TypeExprContext *typeExpr();
+    std::vector<TypeListContext *> typeList();
+    TypeListContext* typeList(size_t i);
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  LambdaTypeContext* lambdaType();
 
   class  PrimTypeContext : public antlr4::RuleContextWithAltNum {
   public:

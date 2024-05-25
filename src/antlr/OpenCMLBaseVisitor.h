@@ -237,6 +237,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitPrimType(OpenCMLParser::PrimTypeContext *ctx) override {
     return visitChildren(ctx);
   }

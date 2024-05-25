@@ -817,6 +817,25 @@ std::any Formatter::visitType(OpenCMLParser::TypeContext *context) {
 };
 
 /*
+lambdaType
+    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
+    ;
+*/
+std::any Formatter::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
+    std::string result;
+    const auto &typeList0 = context->typeList(0);
+    const auto &typeList1 = context->typeList(1);
+    const auto &typeExpr = context->typeExpr();
+    if (typeList1) {
+        result += "<" + std::any_cast<std::string>(visitTypeList(typeList0, false, false, false)) + ">";
+    }
+    result += "(";
+    result += std::any_cast<std::string>(visitTypeList(typeList1 ? typeList1 : typeList0, false, false, false));
+    result += ") => " + std::any_cast<std::string>(visitTypeExpr(typeExpr));
+    return result;
+};
+
+/*
 primType
     : INTEGER_TYPE
     | INTEGER32_TYPE

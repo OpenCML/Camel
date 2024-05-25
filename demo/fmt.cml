@@ -19,7 +19,9 @@ The relative constellation ...
 
 # text comment
 
-type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
+type test1 = Set<Map<String, { 
+    a: Number, 
+    b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
 type test2 = (Array<String> | Union<Int, String>[])[];
 
 let Power = {
@@ -31,7 +33,7 @@ let Power = {
 let var2 = b->(a.at(b))<>()[1]()@{}() [c,];
 let var3 = c->a.b->d e;
 
-inner sync static func load(path: string) : Any
+inner sync static func load(path: String) : Any
 {
     # inner func
 };

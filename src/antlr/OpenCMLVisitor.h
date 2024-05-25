@@ -139,6 +139,8 @@ public:
 
     virtual std::any visitType(OpenCMLParser::TypeContext *context) = 0;
 
+    virtual std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) = 0;
+
     virtual std::any visitPrimType(OpenCMLParser::PrimTypeContext *context) = 0;
 
     virtual std::any visitStructType(OpenCMLParser::StructTypeContext *context) = 0;

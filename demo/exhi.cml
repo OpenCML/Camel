@@ -1,0 +1,42 @@
+type Signal = Vector<Int, 2>;
+
+with <input: Signal>
+inner atomic func map(f: (Int) => Int): Signal {
+    # implemented by the camel interpreter
+};
+
+atomic func Add(sig1: Signal, sig2: Signal): Signal {
+    return [sig1[0] + sig2[0], sig1[1] + sig2[1]] as Signal;
+};
+
+atomic func Comp1(signal: Signal): Signal {
+    return signal.map((x: Int) => x + 1);
+};
+
+atomic func Comp2(signal: Signal): Signal {
+    return signal.map((x: Int) => x / 2);
+};
+
+atomic func Comp3(signal: Signal): Signal {
+    return signal.map((x: Int) => x * 3);
+};
+
+atomic func Analyzer1(signal: Signal) {
+    print('Analyzer1: ', signal);
+};
+
+atomic func Analyzer2(signal: Signal) {
+    print('Analyzer2: ', signal);
+};
+
+func process(signals: Signal[]) {
+    let res1 = signals[0]->Comp1->Comp2;
+    res1[0]->Analyzer1;
+    let res2 = signals[1]->Comp3;
+    [res1[1], res2]->Add->Analyzer2;
+};
+
+let signal1: Signal = [1, 2];
+let signal2: Signal = [3, 4];
+
+[signal1, signal2]->process->print;
