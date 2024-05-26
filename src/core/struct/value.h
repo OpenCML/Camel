@@ -57,6 +57,8 @@ class Value : public std::enable_shared_from_this<Value> {
 
     virtual const value_ptr_t clone() const = 0;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) = 0;
+
+    virtual const std::string toString() const = 0;
 };
 
 template <typename Dest, typename Src> std::shared_ptr<Dest> convertAndMakeShared(const Src &value) {
@@ -181,6 +183,16 @@ template <typename T> class PrimValue : public Value {
             throw ValueConvError(e.what());
         }
     }
+
+    virtual const value_ptr_t clone() const override { return std::make_shared<PrimValue<T>>(data_); }
+
+    virtual const std::string toString() const override {
+        if constexpr (std::is_same_v<T, std::string>) {
+            return data_;
+        } else {
+            return std::to_string(data_);
+        }
+    }
 };
 
 class StructValue : public Value {
@@ -189,6 +201,9 @@ class StructValue : public Value {
     StructValue(type_ptr_t type) : Value(type) {}
 
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
+
+    virtual const value_ptr_t clone() const override = 0;
+    virtual const std::string toString() const override = 0;
 };
 
 class SetValue : public StructValue {
