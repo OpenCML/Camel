@@ -3,18 +3,15 @@ return input->ParameterController<
 >->AmpSysEl;
 
 @[14, 7]
-@{boxed=true, color="blue"}
-scoped func PowerControlEl(input : ElSignal)
-: ElSignal
-{
-    "Power control"@(6, 0);
+@{ boxed: true, color: 'blue' }
+func PowerControlEl(input: ElSignal): ElSignal {
+    'Power control'@[6, 0];
 };
 
 with <
-    loader: functor = psl,
-    loader: functor = psl
+    loader: Functor = psl,
+    loader: Functor = psl
 >
-inner sync static func load(path: string) : any
-{
+static sync func load(path: String): Any {
     # inner func
-}
+};

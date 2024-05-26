@@ -19,7 +19,6 @@
 #pragma once
 
 #include "entity.h"
-#include "stmt.h"
 
 class Functor;
 using functor_ptr_t = std::shared_ptr<const Functor>;

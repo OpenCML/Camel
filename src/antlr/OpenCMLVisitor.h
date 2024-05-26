@@ -1,4 +1,22 @@
 
+/**
+ * Copyright (c) 2022 Beijing Jiaotong University
+ * PhotLab is licensed under [Open Source License].
+ * You can use this software according to the terms and conditions of the [Open
+ * Source License]. You may obtain a copy of [Open Source License] at:
+ * [https://open.source.license/]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the [Open Source License] for more details.
+ *
+ * Author: Zhenjie Wei
+ * Supported by: National Key Research and Development Program of China
+ */
+
+
 // Generated from OpenCML.g4 by ANTLR 4.13.1
 
 #pragma once
@@ -57,10 +75,6 @@ public:
 
     virtual std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) = 0;
 
-    virtual std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) = 0;
-
-    virtual std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) = 0;
-
     virtual std::any visitTypeList(OpenCMLParser::TypeListContext *context) = 0;
 
     virtual std::any visitIdentList(OpenCMLParser::IdentListContext *context) = 0;
@@ -73,13 +87,7 @@ public:
 
     virtual std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) = 0;
 
-    virtual std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) = 0;
-
     virtual std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) = 0;
-
-    virtual std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context) = 0;
-
-    virtual std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) = 0;
 
     virtual std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) = 0;
 
@@ -130,6 +138,8 @@ public:
     virtual std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) = 0;
 
     virtual std::any visitType(OpenCMLParser::TypeContext *context) = 0;
+
+    virtual std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) = 0;
 
     virtual std::any visitPrimType(OpenCMLParser::PrimTypeContext *context) = 0;
 

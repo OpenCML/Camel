@@ -19,7 +19,9 @@ The relative constellation ...
 
 # text comment
 
-type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
+type test1 = Set<Map<String, { 
+    a: Number, 
+    b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
 type test2 = (Array<String> | Union<Int, String>[])[];
 
 let Power = {
@@ -28,11 +30,10 @@ let Power = {
     powerOutput : ElSignal # comment test
 };
 
-let var1 = { 1, 2, } & { [a]: b }; # set construction
 let var2 = b->(a.at(b))<>()[1]()@{}() [c,];
 let var3 = c->a.b->d e;
 
-inner sync static func load(path: string) : Any
+inner sync static func load(path: String) : Any
 {
     # inner func
 };
@@ -87,12 +88,12 @@ sync func placeComponents(
     pos: Point
 ): Void {
     let i = startIndex; // test
-    for (i, {i < startIndex + count}, /* block cmt */ {i ++}) {
+    for(i, {i < startIndex + count}, /* block cmt */ {i += 1}) {
         # create instance of LaserCW and place it
-        let laser = LaserCW @[pos["x"], pos["y"]];
+        let laser = LaserCW@[pos["x"], pos["y"]];
         let laserRect = laser["meta"]["rect"];
         # create instance of Analyzer and place it
-        let analyzer = Analyzer @[pos["x"] + dist["x"] + laserRect["width"], pos["y"]];
+        let analyzer = Analyzer@[pos["x"] + dist["x"] + laserRect["width"], pos["y"]];
         # connect laser to analyzer;
         laser()->analyzer;
         # move to next position

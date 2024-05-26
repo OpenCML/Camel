@@ -130,10 +130,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return dumpCST(context, "KeyParamPair"); };
 
-    std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) { return dumpCST(context, "IndexKTPair"); };
-
-    std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) { return dumpCST(context, "IndexKVPair"); };
-
     std::any visitTypeList(OpenCMLParser::TypeListContext *context) { return dumpCST(context, "TypeList"); };
 
     std::any visitIdentList(OpenCMLParser::IdentListContext *context) { return dumpCST(context, "IdentList"); };
@@ -146,15 +142,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) { return dumpCST(context, "PairedParams"); };
 
-    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) { return dumpCST(context, "IndexKVPairs"); };
-
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return dumpCST(context, "ArgumentList"); };
-
-    std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context) { return dumpCST(context, "BracedValues"); };
-
-    std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) {
-        return dumpCST(context, "BracedIndexKVPairs");
-    };
 
     std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) {
         return dumpCST(context, "BracedPairedValues");
@@ -207,6 +195,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) { return dumpCST(context, "TypeExpr"); };
 
     std::any visitType(OpenCMLParser::TypeContext *context) { return dumpCST(context, "Type"); };
+
+    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) { return dumpCST(context, "LambdaType"); };
 
     std::any visitPrimType(OpenCMLParser::PrimTypeContext *context) { return dumpCST(context, "PrimType"); };
 

@@ -10,9 +10,10 @@
 #      >->AmpSysEl;
 #  };
 
-let var1 = { 1, 2, } & { [a]: b };
-let var2 = b->(a.at(b))<>()[1]()@{}() [c,];
-let var3 = c->a.b->d e;
+let a = a(b+c);
+
+#  let var2 = b->(a.at(b))<>()[1]()@{}() [c, ];
+#  let var3 = c->a.b->d e;
 
 #  type type1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
 #  type type2 = (Array<String> | Union<Int, String>[])[];

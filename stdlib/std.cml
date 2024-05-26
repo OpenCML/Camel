@@ -13,34 +13,34 @@
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
  * Supported by: National Key Research and Development Program of China
- */
+ */ 
 
 /**
  * This CML module will be imported by interpreter automatically,
- * and can be accessed anywhere in any CML script.
- */
+ * and can be accessed Anywhere in Any CML script.
+ */ 
 
 # psl, json, phtc, xml, toml
 
-with <loader: functor = psl>
-inner sync static func load(path: string) : any {
+with <loader: Functor = psl>
+inner static sync func load(path: String): Any {
     # inner func
 };
 
-with <path: string, ftype: string = 'psl'>
-inner sync static func save(entity: any) {
+with <path: String, ftype: String = 'psl'>
+inner static sync func save(entity: Any) {
     # inner func
 };
 
 use from = load;
 
-with <stream: string = 'stdout'>
-inner static func print(data: any) {
+with <stream: String = 'stdout'>
+inner static func print(data: Any) {
     # inner func
 };
 
-with <diagram: functor = eye>
-inner static func analyze(data: any) {
+with <diagram: Functor = eye>
+inner static func analyze(data: Any) {
     # inner func
 };
 
@@ -69,70 +69,69 @@ inner static func reduce() {
 };
 
 inner static sync func ifexpr(
-    condition: bool,
-    trueValue: any,
-    falseValue: any
+    condition: Bool,
+    trueValue: Any,
+    falseValue: Any
 ) {
     # return trueValue if condition is true, otherwise return falseValue
 };
 
-with <after: functor>
-inner sync func exec(block: functor) : void {
+with <after: Functor>
+inner sync func exec(block: Functor): Void {
     # execute the following block synchronously
     # if after is specified, run it after execution of block
 };
 
-with <after: functor>
-inner static sync func skip(entity: any) : void {
+with <after: Functor>
+inner static sync func skip(entity: Any): Void {
     # skip an entity in an entity chain
 };
 
 use else = skip;
 
-static sync func if(condition: bool) {
+static sync func if(condition: Bool) {
     return ifexpr(condition, exec, skip<skip>)
 };
 
-with <capture: any, condition: functor, update: functor>
-sync func test(target: functor) {
+with <capture: Any, condition: Functor, update: Functor>
+sync func test(target: Functor) {
     return ifexpr(condition<capture>(), {
         exec<{
-            update<capture>
-            test<capture, condition, update>(target)
+            update<capture > test < capture, condition, update>(target)
         }>(target);
     }, null);
 };
 
-static sync func while(condition: functor) {
-    return test<condition=condition>
+static sync func while(condition: Functor) {
+    return test<condition: condition>
 };
 
 static sync func for(
-    capture: any,
-    condition: functor,
-    update: functor
+    capture: Any,
+    condition: Functor,
+    update: Functor
 ) {
     return test<capture, condition, update>
 };
 
-with <f: functor>
-inner func map(entity: any) {
+with <f: Functor>
+inner func map(entity: Any) {
     # apply f to each element in entity
 };
 
-with <f: functor>
-inner func foreach(entity: any) {
+with <f: Functor>
+inner func foreach(entity: Any) {
     # for each element in entity, apply f to it
 };
 
-inner func plus(lhs: any, rhs: any) : any {
+inner func plus(lhs: Any, rhs: Any): Any {
     # return lhs + rhs
 };
 
-inner func minus(lhs: any, rhs: any) : any {
+inner func minus(lhs: Any, rhs: Any): Any {
     # return lhs - rhs
 };
 
-inner func leq(lhs: any, rhs: any) : bool {
+inner func leq(lhs: Any, rhs: Any): Bool {
     # return lhs <= rhs
 };

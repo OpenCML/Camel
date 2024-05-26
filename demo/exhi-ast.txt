@@ -1,0 +1,1031 @@
+Program
+|-LIST
+|  |-Stmt
+|  |  \-NREF: Signal
+|  |     \-TYPE: Vector<Int, 2>
+|  |-NREF: map
+|  |  \-FUNC
+|  |     |-FLAG: inner, atomic
+|  |     |-WITH
+|  |     |  \-TYPE: Params<this: Signal>
+|  |     |-IDCL
+|  |     |  \-TYPE: Params<f: (Int) => Int>
+|  |     \-ODCL
+|  |        \-TYPE: Signal
+|  |-NREF: add
+|  |  \-FUNC
+|  |     |-FLAG: atomic
+|  |     |-IDCL
+|  |     |  \-TYPE: Params<sig1: Signal, sig2: Signal>
+|  |     |-ODCL
+|  |     |  \-TYPE: Signal
+|  |     \-BODY
+|  |        |-StmtList
+|  |        |  |-Stmt
+|  |        |  |  \-RetStmt
+|  |        |  |     |- return
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 |-MultiExpr
+|  |        |  |                 |  \-UnaryExpr
+|  |        |  |                 |     \-PrimExpr
+|  |        |  |                 |        \-EntityChain
+|  |        |  |                 |           \-EntityLink
+|  |        |  |                 |              \-EntityCall
+|  |        |  |                 |                 \-Entity
+|  |        |  |                 |                    \-PrimEntity
+|  |        |  |                 |                       \-BracketValues
+|  |        |  |                 |                          |- [
+|  |        |  |                 |                          |-ValueList
+|  |        |  |                 |                          |  |-EntityExpr
+|  |        |  |                 |                          |  |  \-RelaExpr
+|  |        |  |                 |                          |  |     \-AddExpr
+|  |        |  |                 |                          |  |        |-AddExpr
+|  |        |  |                 |                          |  |        |  \-MultiExpr
+|  |        |  |                 |                          |  |        |     \-UnaryExpr
+|  |        |  |                 |                          |  |        |        \-PrimExpr
+|  |        |  |                 |                          |  |        |           \-EntityChain
+|  |        |  |                 |                          |  |        |              \-EntityLink
+|  |        |  |                 |                          |  |        |                 \-EntityCall
+|  |        |  |                 |                          |  |        |                    \-Entity
+|  |        |  |                 |                          |  |        |                       |-PrimEntity
+|  |        |  |                 |                          |  |        |                       |  \-IdentRef
+|  |        |  |                 |                          |  |        |                       |     \- sig1
+|  |        |  |                 |                          |  |        |                       \-MemberAccess
+|  |        |  |                 |                          |  |        |                          |- [
+|  |        |  |                 |                          |  |        |                          |-EntityExpr
+|  |        |  |                 |                          |  |        |                          |  \-RelaExpr
+|  |        |  |                 |                          |  |        |                          |     \-AddExpr
+|  |        |  |                 |                          |  |        |                          |        \-MultiExpr
+|  |        |  |                 |                          |  |        |                          |           \-UnaryExpr
+|  |        |  |                 |                          |  |        |                          |              \-PrimExpr
+|  |        |  |                 |                          |  |        |                          |                 \-EntityChain
+|  |        |  |                 |                          |  |        |                          |                    \-EntityLink
+|  |        |  |                 |                          |  |        |                          |                       \-EntityCall
+|  |        |  |                 |                          |  |        |                          |                          \-Entity
+|  |        |  |                 |                          |  |        |                          |                             \-PrimEntity
+|  |        |  |                 |                          |  |        |                          |                                \-Literal
+|  |        |  |                 |                          |  |        |                          |                                   \- 0
+|  |        |  |                 |                          |  |        |                          \- ]
+|  |        |  |                 |                          |  |        |- +
+|  |        |  |                 |                          |  |        \-MultiExpr
+|  |        |  |                 |                          |  |           \-UnaryExpr
+|  |        |  |                 |                          |  |              \-PrimExpr
+|  |        |  |                 |                          |  |                 \-EntityChain
+|  |        |  |                 |                          |  |                    \-EntityLink
+|  |        |  |                 |                          |  |                       \-EntityCall
+|  |        |  |                 |                          |  |                          \-Entity
+|  |        |  |                 |                          |  |                             |-PrimEntity
+|  |        |  |                 |                          |  |                             |  \-IdentRef
+|  |        |  |                 |                          |  |                             |     \- sig2
+|  |        |  |                 |                          |  |                             \-MemberAccess
+|  |        |  |                 |                          |  |                                |- [
+|  |        |  |                 |                          |  |                                |-EntityExpr
+|  |        |  |                 |                          |  |                                |  \-RelaExpr
+|  |        |  |                 |                          |  |                                |     \-AddExpr
+|  |        |  |                 |                          |  |                                |        \-MultiExpr
+|  |        |  |                 |                          |  |                                |           \-UnaryExpr
+|  |        |  |                 |                          |  |                                |              \-PrimExpr
+|  |        |  |                 |                          |  |                                |                 \-EntityChain
+|  |        |  |                 |                          |  |                                |                    \-EntityLink
+|  |        |  |                 |                          |  |                                |                       \-EntityCall
+|  |        |  |                 |                          |  |                                |                          \-Entity
+|  |        |  |                 |                          |  |                                |                             \-PrimEntity
+|  |        |  |                 |                          |  |                                |                                \-Literal
+|  |        |  |                 |                          |  |                                |                                   \- 0
+|  |        |  |                 |                          |  |                                \- ]
+|  |        |  |                 |                          |  |- ,
+|  |        |  |                 |                          |  \-EntityExpr
+|  |        |  |                 |                          |     \-RelaExpr
+|  |        |  |                 |                          |        \-AddExpr
+|  |        |  |                 |                          |           |-AddExpr
+|  |        |  |                 |                          |           |  \-MultiExpr
+|  |        |  |                 |                          |           |     \-UnaryExpr
+|  |        |  |                 |                          |           |        \-PrimExpr
+|  |        |  |                 |                          |           |           \-EntityChain
+|  |        |  |                 |                          |           |              \-EntityLink
+|  |        |  |                 |                          |           |                 \-EntityCall
+|  |        |  |                 |                          |           |                    \-Entity
+|  |        |  |                 |                          |           |                       |-PrimEntity
+|  |        |  |                 |                          |           |                       |  \-IdentRef
+|  |        |  |                 |                          |           |                       |     \- sig1
+|  |        |  |                 |                          |           |                       \-MemberAccess
+|  |        |  |                 |                          |           |                          |- [
+|  |        |  |                 |                          |           |                          |-EntityExpr
+|  |        |  |                 |                          |           |                          |  \-RelaExpr
+|  |        |  |                 |                          |           |                          |     \-AddExpr
+|  |        |  |                 |                          |           |                          |        \-MultiExpr
+|  |        |  |                 |                          |           |                          |           \-UnaryExpr
+|  |        |  |                 |                          |           |                          |              \-PrimExpr
+|  |        |  |                 |                          |           |                          |                 \-EntityChain
+|  |        |  |                 |                          |           |                          |                    \-EntityLink
+|  |        |  |                 |                          |           |                          |                       \-EntityCall
+|  |        |  |                 |                          |           |                          |                          \-Entity
+|  |        |  |                 |                          |           |                          |                             \-PrimEntity
+|  |        |  |                 |                          |           |                          |                                \-Literal
+|  |        |  |                 |                          |           |                          |                                   \- 1
+|  |        |  |                 |                          |           |                          \- ]
+|  |        |  |                 |                          |           |- +
+|  |        |  |                 |                          |           \-MultiExpr
+|  |        |  |                 |                          |              \-UnaryExpr
+|  |        |  |                 |                          |                 \-PrimExpr
+|  |        |  |                 |                          |                    \-EntityChain
+|  |        |  |                 |                          |                       \-EntityLink
+|  |        |  |                 |                          |                          \-EntityCall
+|  |        |  |                 |                          |                             \-Entity
+|  |        |  |                 |                          |                                |-PrimEntity
+|  |        |  |                 |                          |                                |  \-IdentRef
+|  |        |  |                 |                          |                                |     \- sig2
+|  |        |  |                 |                          |                                \-MemberAccess
+|  |        |  |                 |                          |                                   |- [
+|  |        |  |                 |                          |                                   |-EntityExpr
+|  |        |  |                 |                          |                                   |  \-RelaExpr
+|  |        |  |                 |                          |                                   |     \-AddExpr
+|  |        |  |                 |                          |                                   |        \-MultiExpr
+|  |        |  |                 |                          |                                   |           \-UnaryExpr
+|  |        |  |                 |                          |                                   |              \-PrimExpr
+|  |        |  |                 |                          |                                   |                 \-EntityChain
+|  |        |  |                 |                          |                                   |                    \-EntityLink
+|  |        |  |                 |                          |                                   |                       \-EntityCall
+|  |        |  |                 |                          |                                   |                          \-Entity
+|  |        |  |                 |                          |                                   |                             \-PrimEntity
+|  |        |  |                 |                          |                                   |                                \-Literal
+|  |        |  |                 |                          |                                   |                                   \- 1
+|  |        |  |                 |                          |                                   \- ]
+|  |        |  |                 |                          \- ]
+|  |        |  |                 |- as
+|  |        |  |                 \-TypeExpr
+|  |        |  |                    \-Type
+|  |        |  |                       \-IdentRef
+|  |        |  |                          \- Signal
+|  |        |  \- ;
+|  |        \- }
+|  |- ;
+|  |-Stmt
+|  |  \-FuncDef
+|  |     |-Modifiers
+|  |     |  \- atomic
+|  |     |- func
+|  |     |-IdentRef
+|  |     |  \- comp1
+|  |     |-ParentParams
+|  |     |  |- (
+|  |     |  |-PairedParams
+|  |     |  |  \-KeyParamPair
+|  |     |  |     |-IdentRef
+|  |     |  |     |  \- signal
+|  |     |  |     |- :
+|  |     |  |     \-TypeExpr
+|  |     |  |        \-Type
+|  |     |  |           \-IdentRef
+|  |     |  |              \- Signal
+|  |     |  \- )
+|  |     |- :
+|  |     |-TypeExpr
+|  |     |  \-Type
+|  |     |     \-IdentRef
+|  |     |        \- Signal
+|  |     \-BracedStmts
+|  |        |- {
+|  |        |-StmtList
+|  |        |  |-Stmt
+|  |        |  |  \-RetStmt
+|  |        |  |     |- return
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             \-EntityCall
+|  |        |  |                                |-EntityCall
+|  |        |  |                                |  \-Entity
+|  |        |  |                                |     \-PrimEntity
+|  |        |  |                                |        \-IdentRef
+|  |        |  |                                |           \- signal
+|  |        |  |                                |- .
+|  |        |  |                                \-Entity
+|  |        |  |                                   |-PrimEntity
+|  |        |  |                                   |  \-IdentRef
+|  |        |  |                                   |     \- map
+|  |        |  |                                   \-ParentValues
+|  |        |  |                                      |- (
+|  |        |  |                                      |-ArgumentList
+|  |        |  |                                      |  \-ValueList
+|  |        |  |                                      |     \-EntityExpr
+|  |        |  |                                      |        \-RelaExpr
+|  |        |  |                                      |           \-AddExpr
+|  |        |  |                                      |              \-MultiExpr
+|  |        |  |                                      |                 \-UnaryExpr
+|  |        |  |                                      |                    \-PrimExpr
+|  |        |  |                                      |                       \-EntityChain
+|  |        |  |                                      |                          \-EntityLink
+|  |        |  |                                      |                             \-EntityCall
+|  |        |  |                                      |                                \-Entity
+|  |        |  |                                      |                                   \-PrimEntity
+|  |        |  |                                      |                                      \-LambdaExpr
+|  |        |  |                                      |                                         |-ParentParams
+|  |        |  |                                      |                                         |  |- (
+|  |        |  |                                      |                                         |  |-PairedParams
+|  |        |  |                                      |                                         |  |  \-KeyParamPair
+|  |        |  |                                      |                                         |  |     |-IdentRef
+|  |        |  |                                      |                                         |  |     |  \- x
+|  |        |  |                                      |                                         |  |     |- :
+|  |        |  |                                      |                                         |  |     \-TypeExpr
+|  |        |  |                                      |                                         |  |        \-Type
+|  |        |  |                                      |                                         |  |           \-PrimType
+|  |        |  |                                      |                                         |  |              \- Int
+|  |        |  |                                      |                                         |  \- )
+|  |        |  |                                      |                                         |- =>
+|  |        |  |                                      |                                         \-EntityExpr
+|  |        |  |                                      |                                            \-RelaExpr
+|  |        |  |                                      |                                               \-AddExpr
+|  |        |  |                                      |                                                  |-AddExpr
+|  |        |  |                                      |                                                  |  \-MultiExpr
+|  |        |  |                                      |                                                  |     \-UnaryExpr
+|  |        |  |                                      |                                                  |        \-PrimExpr
+|  |        |  |                                      |                                                  |           \-EntityChain
+|  |        |  |                                      |                                                  |              \-EntityLink
+|  |        |  |                                      |                                                  |                 \-EntityCall
+|  |        |  |                                      |                                                  |                    \-Entity
+|  |        |  |                                      |                                                  |                       \-PrimEntity
+|  |        |  |                                      |                                                  |                          \-IdentRef
+|  |        |  |                                      |                                                  |                             \- x
+|  |        |  |                                      |                                                  |- +
+|  |        |  |                                      |                                                  \-MultiExpr
+|  |        |  |                                      |                                                     \-UnaryExpr
+|  |        |  |                                      |                                                        \-PrimExpr
+|  |        |  |                                      |                                                           \-EntityChain
+|  |        |  |                                      |                                                              \-EntityLink
+|  |        |  |                                      |                                                                 \-EntityCall
+|  |        |  |                                      |                                                                    \-Entity
+|  |        |  |                                      |                                                                       \-PrimEntity
+|  |        |  |                                      |                                                                          \-Literal
+|  |        |  |                                      |                                                                             \- 1
+|  |        |  |                                      \- )
+|  |        |  \- ;
+|  |        \- }
+|  |- ;
+|  |-Stmt
+|  |  \-FuncDef
+|  |     |-Modifiers
+|  |     |  \- atomic
+|  |     |- func
+|  |     |-IdentRef
+|  |     |  \- comp2
+|  |     |-ParentParams
+|  |     |  |- (
+|  |     |  |-PairedParams
+|  |     |  |  \-KeyParamPair
+|  |     |  |     |-IdentRef
+|  |     |  |     |  \- signal
+|  |     |  |     |- :
+|  |     |  |     \-TypeExpr
+|  |     |  |        \-Type
+|  |     |  |           \-IdentRef
+|  |     |  |              \- Signal
+|  |     |  \- )
+|  |     |- :
+|  |     |-TypeExpr
+|  |     |  \-Type
+|  |     |     \-IdentRef
+|  |     |        \- Signal
+|  |     \-BracedStmts
+|  |        |- {
+|  |        |-StmtList
+|  |        |  |-Stmt
+|  |        |  |  \-RetStmt
+|  |        |  |     |- return
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             \-EntityCall
+|  |        |  |                                |-EntityCall
+|  |        |  |                                |  \-Entity
+|  |        |  |                                |     \-PrimEntity
+|  |        |  |                                |        \-IdentRef
+|  |        |  |                                |           \- signal
+|  |        |  |                                |- .
+|  |        |  |                                \-Entity
+|  |        |  |                                   |-PrimEntity
+|  |        |  |                                   |  \-IdentRef
+|  |        |  |                                   |     \- map
+|  |        |  |                                   \-ParentValues
+|  |        |  |                                      |- (
+|  |        |  |                                      |-ArgumentList
+|  |        |  |                                      |  \-ValueList
+|  |        |  |                                      |     \-EntityExpr
+|  |        |  |                                      |        \-RelaExpr
+|  |        |  |                                      |           \-AddExpr
+|  |        |  |                                      |              \-MultiExpr
+|  |        |  |                                      |                 \-UnaryExpr
+|  |        |  |                                      |                    \-PrimExpr
+|  |        |  |                                      |                       \-EntityChain
+|  |        |  |                                      |                          \-EntityLink
+|  |        |  |                                      |                             \-EntityCall
+|  |        |  |                                      |                                \-Entity
+|  |        |  |                                      |                                   \-PrimEntity
+|  |        |  |                                      |                                      \-LambdaExpr
+|  |        |  |                                      |                                         |-ParentParams
+|  |        |  |                                      |                                         |  |- (
+|  |        |  |                                      |                                         |  |-PairedParams
+|  |        |  |                                      |                                         |  |  \-KeyParamPair
+|  |        |  |                                      |                                         |  |     |-IdentRef
+|  |        |  |                                      |                                         |  |     |  \- x
+|  |        |  |                                      |                                         |  |     |- :
+|  |        |  |                                      |                                         |  |     \-TypeExpr
+|  |        |  |                                      |                                         |  |        \-Type
+|  |        |  |                                      |                                         |  |           \-PrimType
+|  |        |  |                                      |                                         |  |              \- Int
+|  |        |  |                                      |                                         |  \- )
+|  |        |  |                                      |                                         |- =>
+|  |        |  |                                      |                                         \-EntityExpr
+|  |        |  |                                      |                                            \-RelaExpr
+|  |        |  |                                      |                                               \-AddExpr
+|  |        |  |                                      |                                                  \-MultiExpr
+|  |        |  |                                      |                                                     |-MultiExpr
+|  |        |  |                                      |                                                     |  \-UnaryExpr
+|  |        |  |                                      |                                                     |     \-PrimExpr
+|  |        |  |                                      |                                                     |        \-EntityChain
+|  |        |  |                                      |                                                     |           \-EntityLink
+|  |        |  |                                      |                                                     |              \-EntityCall
+|  |        |  |                                      |                                                     |                 \-Entity
+|  |        |  |                                      |                                                     |                    \-PrimEntity
+|  |        |  |                                      |                                                     |                       \-IdentRef
+|  |        |  |                                      |                                                     |                          \- x
+|  |        |  |                                      |                                                     |- /
+|  |        |  |                                      |                                                     \-UnaryExpr
+|  |        |  |                                      |                                                        \-PrimExpr
+|  |        |  |                                      |                                                           \-EntityChain
+|  |        |  |                                      |                                                              \-EntityLink
+|  |        |  |                                      |                                                                 \-EntityCall
+|  |        |  |                                      |                                                                    \-Entity
+|  |        |  |                                      |                                                                       \-PrimEntity
+|  |        |  |                                      |                                                                          \-Literal
+|  |        |  |                                      |                                                                             \- 2
+|  |        |  |                                      \- )
+|  |        |  \- ;
+|  |        \- }
+|  |- ;
+|  |-Stmt
+|  |  \-FuncDef
+|  |     |-Modifiers
+|  |     |  \- atomic
+|  |     |- func
+|  |     |-IdentRef
+|  |     |  \- comp3
+|  |     |-ParentParams
+|  |     |  |- (
+|  |     |  |-PairedParams
+|  |     |  |  \-KeyParamPair
+|  |     |  |     |-IdentRef
+|  |     |  |     |  \- signal
+|  |     |  |     |- :
+|  |     |  |     \-TypeExpr
+|  |     |  |        \-Type
+|  |     |  |           \-IdentRef
+|  |     |  |              \- Signal
+|  |     |  \- )
+|  |     |- :
+|  |     |-TypeExpr
+|  |     |  \-Type
+|  |     |     \-IdentRef
+|  |     |        \- Signal
+|  |     \-BracedStmts
+|  |        |- {
+|  |        |-StmtList
+|  |        |  |-Stmt
+|  |        |  |  \-RetStmt
+|  |        |  |     |- return
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             \-EntityCall
+|  |        |  |                                |-EntityCall
+|  |        |  |                                |  \-Entity
+|  |        |  |                                |     \-PrimEntity
+|  |        |  |                                |        \-IdentRef
+|  |        |  |                                |           \- signal
+|  |        |  |                                |- .
+|  |        |  |                                \-Entity
+|  |        |  |                                   |-PrimEntity
+|  |        |  |                                   |  \-IdentRef
+|  |        |  |                                   |     \- map
+|  |        |  |                                   \-ParentValues
+|  |        |  |                                      |- (
+|  |        |  |                                      |-ArgumentList
+|  |        |  |                                      |  \-ValueList
+|  |        |  |                                      |     \-EntityExpr
+|  |        |  |                                      |        \-RelaExpr
+|  |        |  |                                      |           \-AddExpr
+|  |        |  |                                      |              \-MultiExpr
+|  |        |  |                                      |                 \-UnaryExpr
+|  |        |  |                                      |                    \-PrimExpr
+|  |        |  |                                      |                       \-EntityChain
+|  |        |  |                                      |                          \-EntityLink
+|  |        |  |                                      |                             \-EntityCall
+|  |        |  |                                      |                                \-Entity
+|  |        |  |                                      |                                   \-PrimEntity
+|  |        |  |                                      |                                      \-LambdaExpr
+|  |        |  |                                      |                                         |-ParentParams
+|  |        |  |                                      |                                         |  |- (
+|  |        |  |                                      |                                         |  |-PairedParams
+|  |        |  |                                      |                                         |  |  \-KeyParamPair
+|  |        |  |                                      |                                         |  |     |-IdentRef
+|  |        |  |                                      |                                         |  |     |  \- x
+|  |        |  |                                      |                                         |  |     |- :
+|  |        |  |                                      |                                         |  |     \-TypeExpr
+|  |        |  |                                      |                                         |  |        \-Type
+|  |        |  |                                      |                                         |  |           \-PrimType
+|  |        |  |                                      |                                         |  |              \- Int
+|  |        |  |                                      |                                         |  \- )
+|  |        |  |                                      |                                         |- =>
+|  |        |  |                                      |                                         \-EntityExpr
+|  |        |  |                                      |                                            \-RelaExpr
+|  |        |  |                                      |                                               \-AddExpr
+|  |        |  |                                      |                                                  \-MultiExpr
+|  |        |  |                                      |                                                     |-MultiExpr
+|  |        |  |                                      |                                                     |  \-UnaryExpr
+|  |        |  |                                      |                                                     |     \-PrimExpr
+|  |        |  |                                      |                                                     |        \-EntityChain
+|  |        |  |                                      |                                                     |           \-EntityLink
+|  |        |  |                                      |                                                     |              \-EntityCall
+|  |        |  |                                      |                                                     |                 \-Entity
+|  |        |  |                                      |                                                     |                    \-PrimEntity
+|  |        |  |                                      |                                                     |                       \-IdentRef
+|  |        |  |                                      |                                                     |                          \- x
+|  |        |  |                                      |                                                     |- *
+|  |        |  |                                      |                                                     \-UnaryExpr
+|  |        |  |                                      |                                                        \-PrimExpr
+|  |        |  |                                      |                                                           \-EntityChain
+|  |        |  |                                      |                                                              \-EntityLink
+|  |        |  |                                      |                                                                 \-EntityCall
+|  |        |  |                                      |                                                                    \-Entity
+|  |        |  |                                      |                                                                       \-PrimEntity
+|  |        |  |                                      |                                                                          \-Literal
+|  |        |  |                                      |                                                                             \- 3
+|  |        |  |                                      \- )
+|  |        |  \- ;
+|  |        \- }
+|  |- ;
+|  |-Stmt
+|  |  \-FuncDef
+|  |     |-Modifiers
+|  |     |  \- atomic
+|  |     |- func
+|  |     |-IdentRef
+|  |     |  \- analyzer1
+|  |     |-ParentParams
+|  |     |  |- (
+|  |     |  |-PairedParams
+|  |     |  |  \-KeyParamPair
+|  |     |  |     |-IdentRef
+|  |     |  |     |  \- signal
+|  |     |  |     |- :
+|  |     |  |     \-TypeExpr
+|  |     |  |        \-Type
+|  |     |  |           \-IdentRef
+|  |     |  |              \- Signal
+|  |     |  \- )
+|  |     \-BracedStmts
+|  |        |- {
+|  |        |-StmtList
+|  |        |  |-Stmt
+|  |        |  |  \-ExprStmt
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             \-EntityCall
+|  |        |  |                                \-Entity
+|  |        |  |                                   |-PrimEntity
+|  |        |  |                                   |  \-IdentRef
+|  |        |  |                                   |     \- print
+|  |        |  |                                   \-ParentValues
+|  |        |  |                                      |- (
+|  |        |  |                                      |-ArgumentList
+|  |        |  |                                      |  \-ValueList
+|  |        |  |                                      |     |-EntityExpr
+|  |        |  |                                      |     |  \-RelaExpr
+|  |        |  |                                      |     |     \-AddExpr
+|  |        |  |                                      |     |        \-MultiExpr
+|  |        |  |                                      |     |           \-UnaryExpr
+|  |        |  |                                      |     |              \-PrimExpr
+|  |        |  |                                      |     |                 \-EntityChain
+|  |        |  |                                      |     |                    \-EntityLink
+|  |        |  |                                      |     |                       \-EntityCall
+|  |        |  |                                      |     |                          \-Entity
+|  |        |  |                                      |     |                             \-PrimEntity
+|  |        |  |                                      |     |                                \-Literal
+|  |        |  |                                      |     |                                   \- 'Analyzer 1: '
+|  |        |  |                                      |     |- ,
+|  |        |  |                                      |     \-EntityExpr
+|  |        |  |                                      |        \-RelaExpr
+|  |        |  |                                      |           \-AddExpr
+|  |        |  |                                      |              \-MultiExpr
+|  |        |  |                                      |                 \-UnaryExpr
+|  |        |  |                                      |                    \-PrimExpr
+|  |        |  |                                      |                       \-EntityChain
+|  |        |  |                                      |                          \-EntityLink
+|  |        |  |                                      |                             \-EntityCall
+|  |        |  |                                      |                                \-Entity
+|  |        |  |                                      |                                   \-PrimEntity
+|  |        |  |                                      |                                      \-IdentRef
+|  |        |  |                                      |                                         \- signal
+|  |        |  |                                      \- )
+|  |        |  \- ;
+|  |        \- }
+|  |- ;
+|  |-Stmt
+|  |  \-FuncDef
+|  |     |-Modifiers
+|  |     |  \- atomic
+|  |     |- func
+|  |     |-IdentRef
+|  |     |  \- analyzer2
+|  |     |-ParentParams
+|  |     |  |- (
+|  |     |  |-PairedParams
+|  |     |  |  \-KeyParamPair
+|  |     |  |     |-IdentRef
+|  |     |  |     |  \- signal
+|  |     |  |     |- :
+|  |     |  |     \-TypeExpr
+|  |     |  |        \-Type
+|  |     |  |           \-IdentRef
+|  |     |  |              \- Signal
+|  |     |  \- )
+|  |     \-BracedStmts
+|  |        |- {
+|  |        |-StmtList
+|  |        |  |-Stmt
+|  |        |  |  \-ExprStmt
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             \-EntityCall
+|  |        |  |                                \-Entity
+|  |        |  |                                   |-PrimEntity
+|  |        |  |                                   |  \-IdentRef
+|  |        |  |                                   |     \- print
+|  |        |  |                                   \-ParentValues
+|  |        |  |                                      |- (
+|  |        |  |                                      |-ArgumentList
+|  |        |  |                                      |  \-ValueList
+|  |        |  |                                      |     |-EntityExpr
+|  |        |  |                                      |     |  \-RelaExpr
+|  |        |  |                                      |     |     \-AddExpr
+|  |        |  |                                      |     |        \-MultiExpr
+|  |        |  |                                      |     |           \-UnaryExpr
+|  |        |  |                                      |     |              \-PrimExpr
+|  |        |  |                                      |     |                 \-EntityChain
+|  |        |  |                                      |     |                    \-EntityLink
+|  |        |  |                                      |     |                       \-EntityCall
+|  |        |  |                                      |     |                          \-Entity
+|  |        |  |                                      |     |                             \-PrimEntity
+|  |        |  |                                      |     |                                \-Literal
+|  |        |  |                                      |     |                                   \- 'Analyzer 2: '
+|  |        |  |                                      |     |- ,
+|  |        |  |                                      |     \-EntityExpr
+|  |        |  |                                      |        \-RelaExpr
+|  |        |  |                                      |           \-AddExpr
+|  |        |  |                                      |              \-MultiExpr
+|  |        |  |                                      |                 \-UnaryExpr
+|  |        |  |                                      |                    \-PrimExpr
+|  |        |  |                                      |                       \-EntityChain
+|  |        |  |                                      |                          \-EntityLink
+|  |        |  |                                      |                             \-EntityCall
+|  |        |  |                                      |                                \-Entity
+|  |        |  |                                      |                                   \-PrimEntity
+|  |        |  |                                      |                                      \-IdentRef
+|  |        |  |                                      |                                         \- signal
+|  |        |  |                                      \- )
+|  |        |  \- ;
+|  |        \- }
+|  |- ;
+|  |-Stmt
+|  |  \-FuncDef
+|  |     |- func
+|  |     |-IdentRef
+|  |     |  \- process
+|  |     |-ParentParams
+|  |     |  |- (
+|  |     |  |-PairedParams
+|  |     |  |  \-KeyParamPair
+|  |     |  |     |-IdentRef
+|  |     |  |     |  \- signals
+|  |     |  |     |- :
+|  |     |  |     \-TypeExpr
+|  |     |  |        |-Type
+|  |     |  |        |  \-IdentRef
+|  |     |  |        |     \- Signal
+|  |     |  |        |- [
+|  |     |  |        \- ]
+|  |     |  \- )
+|  |     \-BracedStmts
+|  |        |- {
+|  |        |-StmtList
+|  |        |  |-Stmt
+|  |        |  |  \-LetStmt
+|  |        |  |     |- let
+|  |        |  |     |-Carrier
+|  |        |  |     |  \-IdentRef
+|  |        |  |     |     \- res1
+|  |        |  |     |- =
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             |-EntityLink
+|  |        |  |                             |  |-EntityLink
+|  |        |  |                             |  |  \-EntityCall
+|  |        |  |                             |  |     \-Entity
+|  |        |  |                             |  |        |-PrimEntity
+|  |        |  |                             |  |        |  \-IdentRef
+|  |        |  |                             |  |        |     \- signals
+|  |        |  |                             |  |        \-MemberAccess
+|  |        |  |                             |  |           |- [
+|  |        |  |                             |  |           |-EntityExpr
+|  |        |  |                             |  |           |  \-RelaExpr
+|  |        |  |                             |  |           |     \-AddExpr
+|  |        |  |                             |  |           |        \-MultiExpr
+|  |        |  |                             |  |           |           \-UnaryExpr
+|  |        |  |                             |  |           |              \-PrimExpr
+|  |        |  |                             |  |           |                 \-EntityChain
+|  |        |  |                             |  |           |                    \-EntityLink
+|  |        |  |                             |  |           |                       \-EntityCall
+|  |        |  |                             |  |           |                          \-Entity
+|  |        |  |                             |  |           |                             \-PrimEntity
+|  |        |  |                             |  |           |                                \-Literal
+|  |        |  |                             |  |           |                                   \- 0
+|  |        |  |                             |  |           \- ]
+|  |        |  |                             |  |- ->
+|  |        |  |                             |  \-EntityCall
+|  |        |  |                             |     \-Entity
+|  |        |  |                             |        \-PrimEntity
+|  |        |  |                             |           \-IdentRef
+|  |        |  |                             |              \- comp1
+|  |        |  |                             |- ->
+|  |        |  |                             \-EntityCall
+|  |        |  |                                \-Entity
+|  |        |  |                                   \-PrimEntity
+|  |        |  |                                      \-IdentRef
+|  |        |  |                                         \- comp2
+|  |        |  |- ;
+|  |        |  |-Stmt
+|  |        |  |  \-ExprStmt
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             |-EntityLink
+|  |        |  |                             |  \-EntityCall
+|  |        |  |                             |     \-Entity
+|  |        |  |                             |        |-PrimEntity
+|  |        |  |                             |        |  \-IdentRef
+|  |        |  |                             |        |     \- res1
+|  |        |  |                             |        \-MemberAccess
+|  |        |  |                             |           |- [
+|  |        |  |                             |           |-EntityExpr
+|  |        |  |                             |           |  \-RelaExpr
+|  |        |  |                             |           |     \-AddExpr
+|  |        |  |                             |           |        \-MultiExpr
+|  |        |  |                             |           |           \-UnaryExpr
+|  |        |  |                             |           |              \-PrimExpr
+|  |        |  |                             |           |                 \-EntityChain
+|  |        |  |                             |           |                    \-EntityLink
+|  |        |  |                             |           |                       \-EntityCall
+|  |        |  |                             |           |                          \-Entity
+|  |        |  |                             |           |                             \-PrimEntity
+|  |        |  |                             |           |                                \-Literal
+|  |        |  |                             |           |                                   \- 0
+|  |        |  |                             |           \- ]
+|  |        |  |                             |- ->
+|  |        |  |                             \-EntityCall
+|  |        |  |                                \-Entity
+|  |        |  |                                   \-PrimEntity
+|  |        |  |                                      \-IdentRef
+|  |        |  |                                         \- analyzer1
+|  |        |  |- ;
+|  |        |  |-Stmt
+|  |        |  |  \-LetStmt
+|  |        |  |     |- let
+|  |        |  |     |-Carrier
+|  |        |  |     |  \-IdentRef
+|  |        |  |     |     \- res2
+|  |        |  |     |- =
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             |-EntityLink
+|  |        |  |                             |  \-EntityCall
+|  |        |  |                             |     \-Entity
+|  |        |  |                             |        |-PrimEntity
+|  |        |  |                             |        |  \-IdentRef
+|  |        |  |                             |        |     \- signals
+|  |        |  |                             |        \-MemberAccess
+|  |        |  |                             |           |- [
+|  |        |  |                             |           |-EntityExpr
+|  |        |  |                             |           |  \-RelaExpr
+|  |        |  |                             |           |     \-AddExpr
+|  |        |  |                             |           |        \-MultiExpr
+|  |        |  |                             |           |           \-UnaryExpr
+|  |        |  |                             |           |              \-PrimExpr
+|  |        |  |                             |           |                 \-EntityChain
+|  |        |  |                             |           |                    \-EntityLink
+|  |        |  |                             |           |                       \-EntityCall
+|  |        |  |                             |           |                          \-Entity
+|  |        |  |                             |           |                             \-PrimEntity
+|  |        |  |                             |           |                                \-Literal
+|  |        |  |                             |           |                                   \- 1
+|  |        |  |                             |           \- ]
+|  |        |  |                             |- ->
+|  |        |  |                             \-EntityCall
+|  |        |  |                                \-Entity
+|  |        |  |                                   \-PrimEntity
+|  |        |  |                                      \-IdentRef
+|  |        |  |                                         \- comp3
+|  |        |  |- ;
+|  |        |  |-Stmt
+|  |        |  |  \-ExprStmt
+|  |        |  |     \-EntityExpr
+|  |        |  |        \-RelaExpr
+|  |        |  |           \-AddExpr
+|  |        |  |              \-MultiExpr
+|  |        |  |                 \-UnaryExpr
+|  |        |  |                    \-PrimExpr
+|  |        |  |                       \-EntityChain
+|  |        |  |                          \-EntityLink
+|  |        |  |                             |-EntityLink
+|  |        |  |                             |  |-EntityLink
+|  |        |  |                             |  |  \-EntityCall
+|  |        |  |                             |  |     \-Entity
+|  |        |  |                             |  |        \-PrimEntity
+|  |        |  |                             |  |           \-BracketValues
+|  |        |  |                             |  |              |- [
+|  |        |  |                             |  |              |-ValueList
+|  |        |  |                             |  |              |  |-EntityExpr
+|  |        |  |                             |  |              |  |  \-RelaExpr
+|  |        |  |                             |  |              |  |     \-AddExpr
+|  |        |  |                             |  |              |  |        \-MultiExpr
+|  |        |  |                             |  |              |  |           \-UnaryExpr
+|  |        |  |                             |  |              |  |              \-PrimExpr
+|  |        |  |                             |  |              |  |                 \-EntityChain
+|  |        |  |                             |  |              |  |                    \-EntityLink
+|  |        |  |                             |  |              |  |                       \-EntityCall
+|  |        |  |                             |  |              |  |                          \-Entity
+|  |        |  |                             |  |              |  |                             |-PrimEntity
+|  |        |  |                             |  |              |  |                             |  \-IdentRef
+|  |        |  |                             |  |              |  |                             |     \- res1
+|  |        |  |                             |  |              |  |                             \-MemberAccess
+|  |        |  |                             |  |              |  |                                |- [
+|  |        |  |                             |  |              |  |                                |-EntityExpr
+|  |        |  |                             |  |              |  |                                |  \-RelaExpr
+|  |        |  |                             |  |              |  |                                |     \-AddExpr
+|  |        |  |                             |  |              |  |                                |        \-MultiExpr
+|  |        |  |                             |  |              |  |                                |           \-UnaryExpr
+|  |        |  |                             |  |              |  |                                |              \-PrimExpr
+|  |        |  |                             |  |              |  |                                |                 \-EntityChain
+|  |        |  |                             |  |              |  |                                |                    \-EntityLink
+|  |        |  |                             |  |              |  |                                |                       \-EntityCall
+|  |        |  |                             |  |              |  |                                |                          \-Entity
+|  |        |  |                             |  |              |  |                                |                             \-PrimEntity
+|  |        |  |                             |  |              |  |                                |                                \-Literal
+|  |        |  |                             |  |              |  |                                |                                   \- 1
+|  |        |  |                             |  |              |  |                                \- ]
+|  |        |  |                             |  |              |  |- ,
+|  |        |  |                             |  |              |  \-EntityExpr
+|  |        |  |                             |  |              |     \-RelaExpr
+|  |        |  |                             |  |              |        \-AddExpr
+|  |        |  |                             |  |              |           \-MultiExpr
+|  |        |  |                             |  |              |              \-UnaryExpr
+|  |        |  |                             |  |              |                 \-PrimExpr
+|  |        |  |                             |  |              |                    \-EntityChain
+|  |        |  |                             |  |              |                       \-EntityLink
+|  |        |  |                             |  |              |                          \-EntityCall
+|  |        |  |                             |  |              |                             \-Entity
+|  |        |  |                             |  |              |                                \-PrimEntity
+|  |        |  |                             |  |              |                                   \-IdentRef
+|  |        |  |                             |  |              |                                      \- res2
+|  |        |  |                             |  |              \- ]
+|  |        |  |                             |  |- ->
+|  |        |  |                             |  \-EntityCall
+|  |        |  |                             |     \-Entity
+|  |        |  |                             |        \-PrimEntity
+|  |        |  |                             |           \-IdentRef
+|  |        |  |                             |              \- add
+|  |        |  |                             |- ->
+|  |        |  |                             \-EntityCall
+|  |        |  |                                \-Entity
+|  |        |  |                                   \-PrimEntity
+|  |        |  |                                      \-IdentRef
+|  |        |  |                                         \- analyzer2
+|  |        |  \- ;
+|  |        \- }
+|  |- ;
+|  |-Stmt
+|  |  \-LetStmt
+|  |     |- let
+|  |     |-Carrier
+|  |     |  \-IdentRef
+|  |     |     \- signal1
+|  |     |- :
+|  |     |-TypeExpr
+|  |     |  \-Type
+|  |     |     \-IdentRef
+|  |     |        \- Signal
+|  |     |- =
+|  |     \-EntityExpr
+|  |        \-RelaExpr
+|  |           \-AddExpr
+|  |              \-MultiExpr
+|  |                 \-UnaryExpr
+|  |                    \-PrimExpr
+|  |                       \-EntityChain
+|  |                          \-EntityLink
+|  |                             \-EntityCall
+|  |                                \-Entity
+|  |                                   \-PrimEntity
+|  |                                      \-BracketValues
+|  |                                         |- [
+|  |                                         |-ValueList
+|  |                                         |  |-EntityExpr
+|  |                                         |  |  \-RelaExpr
+|  |                                         |  |     \-AddExpr
+|  |                                         |  |        \-MultiExpr
+|  |                                         |  |           \-UnaryExpr
+|  |                                         |  |              \-PrimExpr
+|  |                                         |  |                 \-EntityChain
+|  |                                         |  |                    \-EntityLink
+|  |                                         |  |                       \-EntityCall
+|  |                                         |  |                          \-Entity
+|  |                                         |  |                             \-PrimEntity
+|  |                                         |  |                                \-Literal
+|  |                                         |  |                                   \- 1
+|  |                                         |  |- ,
+|  |                                         |  \-EntityExpr
+|  |                                         |     \-RelaExpr
+|  |                                         |        \-AddExpr
+|  |                                         |           \-MultiExpr
+|  |                                         |              \-UnaryExpr
+|  |                                         |                 \-PrimExpr
+|  |                                         |                    \-EntityChain
+|  |                                         |                       \-EntityLink
+|  |                                         |                          \-EntityCall
+|  |                                         |                             \-Entity
+|  |                                         |                                \-PrimEntity
+|  |                                         |                                   \-Literal
+|  |                                         |                                      \- 2
+|  |                                         \- ]
+|  |- ;
+|  |-Stmt
+|  |  \-LetStmt
+|  |     |- let
+|  |     |-Carrier
+|  |     |  \-IdentRef
+|  |     |     \- signal2
+|  |     |- :
+|  |     |-TypeExpr
+|  |     |  \-Type
+|  |     |     \-IdentRef
+|  |     |        \- Signal
+|  |     |- =
+|  |     \-EntityExpr
+|  |        \-RelaExpr
+|  |           \-AddExpr
+|  |              \-MultiExpr
+|  |                 \-UnaryExpr
+|  |                    \-PrimExpr
+|  |                       \-EntityChain
+|  |                          \-EntityLink
+|  |                             \-EntityCall
+|  |                                \-Entity
+|  |                                   \-PrimEntity
+|  |                                      \-BracketValues
+|  |                                         |- [
+|  |                                         |-ValueList
+|  |                                         |  |-EntityExpr
+|  |                                         |  |  \-RelaExpr
+|  |                                         |  |     \-AddExpr
+|  |                                         |  |        \-MultiExpr
+|  |                                         |  |           \-UnaryExpr
+|  |                                         |  |              \-PrimExpr
+|  |                                         |  |                 \-EntityChain
+|  |                                         |  |                    \-EntityLink
+|  |                                         |  |                       \-EntityCall
+|  |                                         |  |                          \-Entity
+|  |                                         |  |                             \-PrimEntity
+|  |                                         |  |                                \-Literal
+|  |                                         |  |                                   \- 3
+|  |                                         |  |- ,
+|  |                                         |  \-EntityExpr
+|  |                                         |     \-RelaExpr
+|  |                                         |        \-AddExpr
+|  |                                         |           \-MultiExpr
+|  |                                         |              \-UnaryExpr
+|  |                                         |                 \-PrimExpr
+|  |                                         |                    \-EntityChain
+|  |                                         |                       \-EntityLink
+|  |                                         |                          \-EntityCall
+|  |                                         |                             \-Entity
+|  |                                         |                                \-PrimEntity
+|  |                                         |                                   \-Literal
+|  |                                         |                                      \- 4
+|  |                                         \- ]
+|  |- ;
+|  |-Stmt
+|  |  \-ExprStmt
+|  |     \-EntityExpr
+|  |        \-RelaExpr
+|  |           \-AddExpr
+|  |              \-MultiExpr
+|  |                 \-UnaryExpr
+|  |                    \-PrimExpr
+|  |                       \-EntityChain
+|  |                          \-EntityLink
+|  |                             |-EntityLink
+|  |                             |  |-EntityLink
+|  |                             |  |  \-EntityCall
+|  |                             |  |     \-Entity
+|  |                             |  |        \-PrimEntity
+|  |                             |  |           \-BracketValues
+|  |                             |  |              |- [
+|  |                             |  |              |-ValueList
+|  |                             |  |              |  |-EntityExpr
+|  |                             |  |              |  |  \-RelaExpr
+|  |                             |  |              |  |     \-AddExpr
+|  |                             |  |              |  |        \-MultiExpr
+|  |                             |  |              |  |           \-UnaryExpr
+|  |                             |  |              |  |              \-PrimExpr
+|  |                             |  |              |  |                 \-EntityChain
+|  |                             |  |              |  |                    \-EntityLink
+|  |                             |  |              |  |                       \-EntityCall
+|  |                             |  |              |  |                          \-Entity
+|  |                             |  |              |  |                             \-PrimEntity
+|  |                             |  |              |  |                                \-IdentRef
+|  |                             |  |              |  |                                   \- signal1
+|  |                             |  |              |  |- ,
+|  |                             |  |              |  \-EntityExpr
+|  |                             |  |              |     \-RelaExpr
+|  |                             |  |              |        \-AddExpr
+|  |                             |  |              |           \-MultiExpr
+|  |                             |  |              |              \-UnaryExpr
+|  |                             |  |              |                 \-PrimExpr
+|  |                             |  |              |                    \-EntityChain
+|  |                             |  |              |                       \-EntityLink
+|  |                             |  |              |                          \-EntityCall
+|  |                             |  |              |                             \-Entity
+|  |                             |  |              |                                \-PrimEntity
+|  |                             |  |              |                                   \-IdentRef
+|  |                             |  |              |                                      \- signal2
+|  |                             |  |              \- ]
+|  |                             |  |- ->
+|  |                             |  \-EntityCall
+|  |                             |     \-Entity
+|  |                             |        \-PrimEntity
+|  |                             |           \-IdentRef
+|  |                             |              \- process
+|  |                             |- ->
+|  |                             \-EntityCall
+|  |                                \-Entity
+|  |                                   \-PrimEntity
+|  |                                      \-IdentRef
+|  |                                         \- print
+|  \- ;
+\- <EOF>
