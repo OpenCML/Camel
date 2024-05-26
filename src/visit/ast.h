@@ -22,6 +22,20 @@
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime.h"
+#include "struct/tree.h"
+#include "struct/sem.h"
+
+
+class ASTNode : public AbstractTreeNode<sem_ptr_t> {
+  public:
+    ASTNode(sem_ptr_t sem) : AbstractTreeNode(sem) {}
+
+    std::string toString() const {
+        return data->toString();
+    }
+};
+
+using ast_ptr_t = std::shared_ptr<ASTNode>;
 
 class ASTConstructor : public OpenCMLVisitor {
 

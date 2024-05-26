@@ -18,202 +18,386 @@
 
 #include "ast.h"
 
-std::any ASTConstructor::visitProgram(OpenCMLParser::ProgramContext *context) { return dumpCST(context, "Program"); };
+/*
+program : stmtList? EOF;
+*/
+std::any ASTConstructor::visitProgram(OpenCMLParser::ProgramContext *context){};
 
-std::any ASTConstructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    return dumpCST(context, "StmtList");
-};
+/*
+stmtList : stmt+ ;
+*/
+std::any ASTConstructor::visitStmtList(OpenCMLParser::StmtListContext *context){};
 
-std::any ASTConstructor::visitStmt(OpenCMLParser::StmtContext *context) { return dumpCST(context, "Stmt"); };
+/*
+stmt
+    : letStmt SEP
+    | useStmt SEP
+    | typeStmt SEP
+    | exprStmt SEP
+    | assignStmt SEP
+    | funcDef SEP
+    | retStmt SEP
+    ;
+*/
+std::any ASTConstructor::visitStmt(OpenCMLParser::StmtContext *context){};
 
-std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) { return dumpCST(context, "LetStmt"); };
+/*
+letStmt : LET carrier (':' typeExpr)? ('='? entityExpr)?
+        | carrier (':' typeExpr)? ':=' entityExpr ;
+*/
+std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context){};
 
-std::any ASTConstructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) { return dumpCST(context, "UseStmt"); };
+/*
+useStmt : USE carrier '='? entityExpr
+        | carrier '::' entityExpr ;
+*/
+std::any ASTConstructor::visitUseStmt(OpenCMLParser::UseStmtContext *context){};
 
-std::any ASTConstructor::visitTypeStmt(OpenCMLParser::TypeStmtContext *context) {
-    return dumpCST(context, "TypeStmt");
-};
+/*
+typeStmt : TYPE identRef '='? typeExpr ;
+*/
+std::any ASTConstructor::visitTypeStmt(OpenCMLParser::TypeStmtContext *context){};
 
-std::any ASTConstructor::visitExprStmt(OpenCMLParser::ExprStmtContext *context) {
-    return dumpCST(context, "ExprStmt");
-};
+/*
+exprStmt : annotations? entityExpr ;
+*/
+std::any ASTConstructor::visitExprStmt(OpenCMLParser::ExprStmtContext *context){};
 
-std::any ASTConstructor::visitAssignStmt(OpenCMLParser::AssignStmtContext *context) {
-    return dumpCST(context, "AssignStmt");
-};
+/*
+assignStmt : identRef memberAccess? '=' entityExpr ;
+*/
+std::any ASTConstructor::visitAssignStmt(OpenCMLParser::AssignStmtContext *context){};
 
-std::any ASTConstructor::visitWithDef(OpenCMLParser::WithDefContext *context) { return dumpCST(context, "WithDef"); };
+/*
+withDef : WITH angledParams ;
+*/
+std::any ASTConstructor::visitWithDef(OpenCMLParser::WithDefContext *context){};
 
-std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) { return dumpCST(context, "FuncDef"); };
+/*
+funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
+*/
+std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context){};
 
-std::any ASTConstructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) { return dumpCST(context, "RetStmt"); };
+/*
+retStmt : RETURN entityExpr? ;
+*/
+std::any ASTConstructor::visitRetStmt(OpenCMLParser::RetStmtContext *context){};
 
-std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
-    return dumpCST(context, "LambdaExpr");
-};
+/*
+lambdaExpr : modifiers? ((parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr)) | '{' stmtList '}' ) ;
+*/
+std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context){};
 
-std::any ASTConstructor::visitCarrier(OpenCMLParser::CarrierContext *context) { return dumpCST(context, "Carrier"); };
+/*
+carrier : identRef | bracedIdents | bracketIdents ;
+*/
+std::any ASTConstructor::visitCarrier(OpenCMLParser::CarrierContext *context){};
 
-std::any ASTConstructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) {
-    return dumpCST(context, "Annotation");
-};
+/*
+annotation  : '@' primEntity ;
+*/
+std::any ASTConstructor::visitAnnotation(OpenCMLParser::AnnotationContext *context){};
 
-std::any ASTConstructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
-    return dumpCST(context, "Annotations");
-};
+/*
+annotations : (annotation SEP?)+ ;
+*/
+std::any ASTConstructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context){};
 
-std::any ASTConstructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
-    return dumpCST(context, "Modifiers");
-};
+/*
+modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
+*/
+std::any ASTConstructor::visitModifiers(OpenCMLParser::ModifiersContext *context){};
 
-std::any ASTConstructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
-    return dumpCST(context, "KeyTypePair");
-};
+/*
+keyTypePair  : identRef ':' typeExpr ;
+*/
+std::any ASTConstructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context){};
 
-std::any ASTConstructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
-    return dumpCST(context, "KeyValuePair");
-};
+/*
+keyValuePair : entityExpr ':' entityExpr ;
+*/
+std::any ASTConstructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context){};
 
-std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
-    return dumpCST(context, "KeyParamPair");
-};
+/*
+keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+*/
+std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context){};
 
-std::any ASTConstructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
-    return dumpCST(context, "TypeList");
-};
+/*
+typeList     : typeExpr (',' typeExpr)* ;
+*/
+std::any ASTConstructor::visitTypeList(OpenCMLParser::TypeListContext *context){};
 
-std::any ASTConstructor::visitIdentList(OpenCMLParser::IdentListContext *context) {
-    return dumpCST(context, "IdentList");
-};
+/*
+identList    : identRef (',' identRef)* ;
+*/
+std::any ASTConstructor::visitIdentList(OpenCMLParser::IdentListContext *context){};
 
-std::any ASTConstructor::visitValueList(OpenCMLParser::ValueListContext *context) {
-    return dumpCST(context, "ValueList");
-};
+/*
+valueList    : entityExpr (',' entityExpr)* ;
+*/
+std::any ASTConstructor::visitValueList(OpenCMLParser::ValueListContext *context){};
 
-std::any ASTConstructor::visitPairedTypes(OpenCMLParser::PairedTypesContext *context) {
-    return dumpCST(context, "PairedTypes");
-};
+/*
+pairedTypes  : keyTypePair (',' keyTypePair)* ;
+*/
+std::any ASTConstructor::visitPairedTypes(OpenCMLParser::PairedTypesContext *context){};
 
-std::any ASTConstructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
-    return dumpCST(context, "PairedValues");
-};
+/*
+pairedValues : keyValuePair (',' keyValuePair)* ;
+*/
+std::any ASTConstructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context){};
 
-std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
-    return dumpCST(context, "PairedParams");
-};
+/*
+pairedParams : keyParamPair (',' keyParamPair)* ;
+*/
+std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context){};
 
-std::any ASTConstructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
-    return dumpCST(context, "ArgumentList");
-};
+/*
+argumentList : valueList (',' pairedValues)? | pairedValues ;
+*/
+std::any ASTConstructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context){};
 
-std::any ASTConstructor::visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) {
-    return dumpCST(context, "BracedPairedValues");
-};
+/*
+bracedPairedValues : '{' pairedValues? ','? '}' ;
+*/
+std::any ASTConstructor::visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context){};
 
-std::any ASTConstructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
-    return dumpCST(context, "BracedIdents");
-};
+/*
+bracedIdents       : '{' identList? ','? '}' ;
+*/
+std::any ASTConstructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context){};
 
-std::any ASTConstructor::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context) {
-    return dumpCST(context, "BracedStmts");
-};
+/*
+bracedStmts        : '{' stmtList? '}' ;
+*/
+std::any ASTConstructor::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context){};
 
-std::any ASTConstructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
-    return dumpCST(context, "BracketIdents");
-};
+/*
+bracketIdents : '[' identList? ','? ']' ;
+*/
+std::any ASTConstructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context){};
 
-std::any ASTConstructor::visitBracketValues(OpenCMLParser::BracketValuesContext *context) {
-    return dumpCST(context, "BracketValues");
-};
+/*
+bracketValues : '[' valueList? ','? ']' ;
+*/
+std::any ASTConstructor::visitBracketValues(OpenCMLParser::BracketValuesContext *context){};
 
-std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
-    return dumpCST(context, "ParentParams");
-};
+/*
+parentParams : '(' pairedParams? ','? ')' ;
+*/
+std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *context){};
 
-std::any ASTConstructor::visitParentValues(OpenCMLParser::ParentValuesContext *context) {
-    return dumpCST(context, "ParentValues");
-};
+/*
+parentValues : '(' argumentList? ','? ')' ;
+*/
+std::any ASTConstructor::visitParentValues(OpenCMLParser::ParentValuesContext *context){};
 
-std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
-    return dumpCST(context, "AngledParams");
-};
+/*
+angledParams : '<' pairedParams? ','? '>' ;
+*/
+std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context){};
 
-std::any ASTConstructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
-    return dumpCST(context, "AngledValues");
-};
+/*
+angledValues : '<' argumentList? ','? '>' ;
+*/
+std::any ASTConstructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context){};
 
-std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *context) {
-    return dumpCST(context, "PrimEntity");
-};
+/*
+primEntity
+    : identRef
+    | literal
+    | bracketValues
+    | bracedPairedValues
+    | lambdaExpr
+    | '(' entityExpr ')' ;
+*/
+std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *context){};
 
-std::any ASTConstructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
-    return dumpCST(context, "MemberAccess");
-};
+/*
+memberAccess : '[' entityExpr ']' ;
+*/
+std::any ASTConstructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context){};
 
-std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) { return dumpCST(context, "Entity"); };
+/*
+entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
+*/
+std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context){};
 
-std::any ASTConstructor::visitEntityChain(OpenCMLParser::EntityChainContext *context) {
-    return dumpCST(context, "EntityChain");
-};
+/*
+entityChain  : entityLink+ ;
+*/
+std::any ASTConstructor::visitEntityChain(OpenCMLParser::EntityChainContext *context){};
 
-std::any ASTConstructor::visitEntityLink(OpenCMLParser::EntityLinkContext *context) {
-    return dumpCST(context, "EntityLink");
-};
+/*
+entityLink   : entityCall | entityLink '->' entityCall ;
+*/
+std::any ASTConstructor::visitEntityLink(OpenCMLParser::EntityLinkContext *context){};
 
-std::any ASTConstructor::visitEntityCall(OpenCMLParser::EntityCallContext *context) {
-    return dumpCST(context, "EntityCall");
-};
+/*
+entityCall   : entity | entityCall '.' entity ;
+*/
+std::any ASTConstructor::visitEntityCall(OpenCMLParser::EntityCallContext *context){};
 
-std::any ASTConstructor::visitEntitySpread(OpenCMLParser::EntitySpreadContext *context) {
-    return dumpCST(context, "EntitySpread");
-};
+/*
+entitySpread : '...' entity ;
+*/
+std::any ASTConstructor::visitEntitySpread(OpenCMLParser::EntitySpreadContext *context){};
 
-std::any ASTConstructor::visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
-    return dumpCST(context, "EntityExpr");
-};
+/*
+entityExpr
+    : relaExpr
+    | entityExpr '+=' relaExpr
+    | entityExpr '-=' relaExpr
+    | entityExpr '*=' relaExpr
+    | entityExpr '/=' relaExpr
+    | entityExpr '%=' relaExpr
+    | entityExpr '^=' relaExpr
+    | entityExpr '&=' relaExpr
+    | entityExpr '|=' relaExpr
+    ;
+*/
+std::any ASTConstructor::visitEntityExpr(OpenCMLParser::EntityExprContext *context){};
 
-std::any ASTConstructor::visitRelaExpr(OpenCMLParser::RelaExprContext *context) {
-    return dumpCST(context, "RelaExpr");
-};
+/*
+relaExpr
+    : addExpr
+    | relaExpr '<' addExpr
+    | relaExpr '>' addExpr
+    | relaExpr '<=' addExpr
+    | relaExpr '>=' addExpr
+    | relaExpr '==' addExpr
+    | relaExpr '!=' addExpr
+    | relaExpr '&&' addExpr
+    | relaExpr '||' addExpr
+    ;
+*/
+std::any ASTConstructor::visitRelaExpr(OpenCMLParser::RelaExprContext *context){};
 
-std::any ASTConstructor::visitAddExpr(OpenCMLParser::AddExprContext *context) { return dumpCST(context, "AddExpr"); };
+/*
+addExpr
+    : multiExpr
+    | addExpr '+' multiExpr
+    | addExpr '-' multiExpr
+    | addExpr '&' multiExpr
+    | addExpr '|' multiExpr
+    ;
+*/
+std::any ASTConstructor::visitAddExpr(OpenCMLParser::AddExprContext *context){};
 
-std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context) {
-    return dumpCST(context, "MultiExpr");
-};
+/*
+multiExpr
+    : unaryExpr
+    | multiExpr '^' unaryExpr
+    | multiExpr '*' unaryExpr
+    | multiExpr '/' unaryExpr
+    | multiExpr '%' unaryExpr
+    | multiExpr AS typeExpr
+    | multiExpr IS typeExpr
+    ;
+*/
+std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context){};
 
-std::any ASTConstructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
-    return dumpCST(context, "UnaryExpr");
-};
+/*
+unaryExpr
+    : primExpr
+    | '!' primExpr
+    | '~' primExpr
+    ;
+*/
+std::any ASTConstructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context){};
 
-std::any ASTConstructor::visitPrimExpr(OpenCMLParser::PrimExprContext *context) {
-    return dumpCST(context, "PrimExpr");
-};
+/*
+primExpr
+    : entityChain
+    | '(' entityExpr ')'
+    ;
+*/
+std::any ASTConstructor::visitPrimExpr(OpenCMLParser::PrimExprContext *context){};
 
-std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) { return dumpCST(context, "Literal"); };
+/*
+literal
+    : INTEGER UNIT?
+    | REAL UNIT?
+    | STRING
+    | MULTI_STR
+    | FSTRING
+    | TRUE
+    | FALSE
+    | NULL
+    ;
+*/
+std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context){};
 
-std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
-    return dumpCST(context, "TypeExpr");
-};
+/*
+typeExpr
+    : type ('[' ']')?
+    | typeExpr '|' typeExpr
+    | typeExpr '&' typeExpr
+    ;
+*/
+std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context){};
 
-std::any ASTConstructor::visitType(OpenCMLParser::TypeContext *context) { return dumpCST(context, "Type"); };
+/*
+type
+    : primType
+    | structType
+    | specialType
+    | identRef
+    | '(' typeExpr ')'
+    ;
+*/
+std::any ASTConstructor::visitType(OpenCMLParser::TypeContext *context){};
 
-std::any ASTConstructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
-    return dumpCST(context, "LambdaType");
-};
+/*
+lambdaType
+    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
+    ;
+*/
+std::any ASTConstructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context){};
 
-std::any ASTConstructor::visitPrimType(OpenCMLParser::PrimTypeContext *context) {
-    return dumpCST(context, "PrimType");
-};
+/*
+primType
+    : INTEGER_TYPE
+    | INTEGER32_TYPE
+    | INTEGER64_TYPE
+    | REAL_TYPE
+    | FLOAT_TYPE
+    | DOUBLE_TYPE
+    | NUMBER_TYPE
+    | STRING_TYPE
+    | BOOL_TYPE
+    | CHAR_TYPE
+    ;
+*/
+std::any ASTConstructor::visitPrimType(OpenCMLParser::PrimTypeContext *context){};
 
-std::any ASTConstructor::visitStructType(OpenCMLParser::StructTypeContext *context) {
-    return dumpCST(context, "StructType");
-};
+/*
+structType
+    : SET_TYPE ('<' typeExpr '>')?
+    | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
+    | LIST_TYPE
+    | DICT_TYPE // universal dict type
+    | '{' pairedTypes? ','? '}' // concrete dict type
+    | ARRAY_TYPE ('<' typeExpr '>')?
+    | TUPLE_TYPE ('<' typeList? ','? '>')?
+    | UNION_TYPE ('<' typeList? ','? '>')?
+    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? '>')?
+    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?
+    ;
+*/
+std::any ASTConstructor::visitStructType(OpenCMLParser::StructTypeContext *context){};
 
-std::any ASTConstructor::visitSpecialType(OpenCMLParser::SpecialTypeContext *context) {
-    return dumpCST(context, "SpecialType");
-};
+/*
+specialType
+    : ANY_TYPE
+    | VOID_TYPE
+    | FUNCTOR_TYPE
+    ;
+*/
+std::any ASTConstructor::visitSpecialType(OpenCMLParser::SpecialTypeContext *context){};
 
-std::any ASTConstructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {
-    return dumpCST(context, "IdentRef");
-};
+/*
+identRef : IDENTIFIER ;
+*/
+std::any ASTConstructor::visitIdentRef(OpenCMLParser::IdentRefContext *context){};
