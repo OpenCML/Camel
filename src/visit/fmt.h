@@ -35,7 +35,7 @@ class Formatter : public OpenCMLVisitor {
     std::string newline = "\r\n";
     unsigned int threshold = 80;
     QuotePreference quotePrefer = QuotePreference::Single;
-    CommentPreference cmtPrefer = CommentPreference::Hash;
+    CommentPreference cmtPrefer = CommentPreference::Slash;
 
     const std::vector<antlr4::Token *> tokens;
 

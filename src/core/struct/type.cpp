@@ -30,6 +30,8 @@ type_ptr_t intTypePtr;
 type_ptr_t realTypePtr;
 type_ptr_t numberTypePtr;
 
+type_ptr_t listTypePtr;
+
 type_ptr_t anyTypePtr;
 type_ptr_t voidTypePtr;
 type_ptr_t functorTypePtr;
@@ -535,6 +537,9 @@ void initTypes() {
     intTypePtr = int32TypePtr;
     realTypePtr = floatTypePtr;
     numberTypePtr = doubleTypePtr;
+
+    // initialize structured types
+    listTypePtr = std::make_shared<ListType>();
 
     // initialize special types
     anyTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);

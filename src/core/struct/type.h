@@ -510,6 +510,8 @@ extern type_ptr_t intTypePtr;
 extern type_ptr_t realTypePtr;
 extern type_ptr_t numberTypePtr;
 
+extern type_ptr_t listTypePtr;
+
 extern type_ptr_t anyTypePtr;
 extern type_ptr_t voidTypePtr;
 extern type_ptr_t functorTypePtr;

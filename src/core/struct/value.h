@@ -44,16 +44,16 @@ class Value : public std::enable_shared_from_this<Value> {
     type_ptr_t type_ = nullptr;
 
   public:
-    Value() = delete;
-    Value(type_ptr_t type = nullptr) : type_(type) {}
+    Value() : type_(nullptr){};
+    Value(type_ptr_t type) : type_(type) {}
     virtual ~Value() = default;
 
     bool isNull() const { return type_ == nullptr; }
     type_ptr_t type() const { return type_; }
 
     virtual bool resolved() = 0;
-    virtual void resolve() = 0;
-    virtual void pending() = 0;
+    virtual void resolve(){};
+    virtual void pending(){};
 
     virtual const value_ptr_t clone() const = 0;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) = 0;
@@ -61,16 +61,13 @@ class Value : public std::enable_shared_from_this<Value> {
     virtual const std::string toString() const = 0;
 };
 
-template <typename Dest, typename Src> std::shared_ptr<Dest> convertAndMakeShared(const Src &value) {
-    if constexpr (std::is_same_v<Dest, Src>) {
-        static_assert(always_false<Dest>, "This path should not be reached");
-    }
-    return std::make_shared<Dest>(static_cast<Dest>(value));
-}
-
 template <typename T> class PrimValue : public Value {
   private:
     T data_;
+
+    template <typename Dest, typename Src> std::shared_ptr<PrimValue<Dest>> convertAndMakeShared(const Src &value) {
+        return std::make_shared<PrimValue<Dest>>(static_cast<Dest>(value));
+    }
 
   public:
     PrimValue() = delete;
@@ -90,7 +87,7 @@ template <typename T> class PrimValue : public Value {
         } else if constexpr (std::is_same_v<T, std::string>) {
             type_ = stringTypePtr;
         } else {
-            static_assert(std::always_false<T>, "Unsupported type");
+            static_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
     }
 
@@ -128,7 +125,7 @@ template <typename T> class PrimValue : public Value {
                     switch (target->code()) {
                     case TypeCode::BOOL: {
                         const std::string &str = data_;
-                        return std::make_shared<bool>(str.length() > 0);
+                        return std::make_shared<PrimValue<bool>>(str.length() > 0);
                     }
 
                     default:
@@ -138,17 +135,17 @@ template <typename T> class PrimValue : public Value {
                     const bool &b = data_;
                     switch (target->code()) {
                     case TypeCode::INT32:
-                        return std::make_shared<int32_t>(static_cast<int32_t>(b));
+                        return std::make_shared<PrimValue<int32_t>>(static_cast<int32_t>(b));
                     case TypeCode::INT64:
-                        return std::make_shared<int64_t>(static_cast<int64_t>(b));
+                        return std::make_shared<PrimValue<int64_t>>(static_cast<int64_t>(b));
                     case TypeCode::FLOAT:
-                        return std::make_shared<float>(static_cast<float>(b));
+                        return std::make_shared<PrimValue<float>>(static_cast<float>(b));
                     case TypeCode::DOUBLE:
-                        return std::make_shared<double>(static_cast<double>(b));
+                        return std::make_shared<PrimValue<double>>(static_cast<double>(b));
                     case TypeCode::STRING:
-                        return std::make_shared<std::string>(b ? "true" : "false");
+                        return std::make_shared<PrimValue<std::string>>(b ? "true" : "false");
                     case TypeCode::CHAR:
-                        return std::make_shared<char>(static_cast<char>(b));
+                        return std::make_shared<PrimValue<char>>(static_cast<char>(b));
 
                     default:
                         throw UnsupportedConvError();
@@ -157,23 +154,23 @@ template <typename T> class PrimValue : public Value {
                     const char &c = data_;
                     switch (target->code()) {
                     case TypeCode::INT32:
-                        return std::make_shared<int32_t>(static_cast<int32_t>(c));
+                        return std::make_shared<PrimValue<int32_t>>(static_cast<int32_t>(c));
                     case TypeCode::INT64:
-                        return std::make_shared<int64_t>(static_cast<int64_t>(c));
+                        return std::make_shared<PrimValue<int64_t>>(static_cast<int64_t>(c));
                     case TypeCode::FLOAT:
-                        return std::make_shared<float>(static_cast<float>(c));
+                        return std::make_shared<PrimValue<float>>(static_cast<float>(c));
                     case TypeCode::DOUBLE:
-                        return std::make_shared<double>(static_cast<double>(c));
+                        return std::make_shared<PrimValue<double>>(static_cast<double>(c));
                     case TypeCode::STRING:
-                        return std::make_shared<std::string>(1, c);
+                        return std::make_shared<PrimValue<std::string>>(1, c);
                     case TypeCode::BOOL:
-                        return std::make_shared<bool>(c != 0);
+                        return std::make_shared<PrimValue<bool>>(c != 0);
 
                     default:
                         throw UnsupportedConvError();
                     }
                 } else {
-                    static_assert(std::always_false<T>, "Unsupported type");
+                    static_assert(!std::is_same_v<T, T>, "Unsupported type");
                 }
             }
         } catch (const UnsupportedConvError &e) {
@@ -213,13 +210,34 @@ class SetValue : public StructValue {
 
   public:
     SetValue() = delete;
-    SetValue(type_ptr_t type) : StructValue(type) {}
+    SetValue(type_ptr_t elType) : StructValue(std::make_shared<SetType>(elType)) {}
 
     bool resolved() override;
 
     // bool add(const entity_ptr_t &e) {
     //     if (e->type() == type_->elementType()) {
     //         data_.insert(e);
+    //         return true;
+    //     }
+    //     return false;
+    // }
+
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+};
+
+class ListValue : public StructValue {
+  private:
+    bool resolved_ = false;
+    std::vector<entity_ptr_t> data_;
+
+  public:
+    ListValue() : StructValue(listTypePtr) {}
+
+    bool resolved() override;
+
+    // bool add(const entity_ptr_t &e) {
+    //     if (e->type() == type_->elementType()) {
+    //         data_.push_back(e);
     //         return true;
     //     }
     //     return false;

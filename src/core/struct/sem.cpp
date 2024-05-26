@@ -57,7 +57,7 @@ const std::string SemanticNode::typeStr() const {
 
 const std::string DataNode::toString() const {
     std::stringstream ss;
-    ss << "DATA: " << pointerToHex(this) << ", " << entity_->type()->toString() << ", " << entity_->data()->toString();
+    ss << "DATA: " << pointerToHex(this) << ", " << entity_->typeStr() << ", " << entity_->dataStr();
     return ss.str();
 }
 

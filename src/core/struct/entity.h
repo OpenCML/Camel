@@ -22,8 +22,9 @@
 #include "value.h"
 
 class Entity : public std::enable_shared_from_this<Entity> {
-  private:
+  protected:
     size_t refs_ = 0;
+    bool dangling_ = false;
 
     // nullptr type means null entity
     type_ptr_t type_ = nullptr;
@@ -31,18 +32,23 @@ class Entity : public std::enable_shared_from_this<Entity> {
     value_ptr_t data_ = nullptr;
 
   public:
-    Entity() = delete;
-    Entity(type_ptr_t type = nullptr, value_ptr_t data = nullptr, value_ptr_t meta = nullptr)
-        : type_(type), meta_(meta), data_(data) {}
+    Entity() : type_(nullptr), meta_(nullptr), data_(nullptr) {}
+    Entity(type_ptr_t type, value_ptr_t data, value_ptr_t meta = nullptr) : type_(type), meta_(meta), data_(data) {}
     virtual ~Entity() = default;
 
-    bool resolved() const { return data_->resolved(); }
-    void resolve() { data_->resolve(); }
-    void pending() { data_->pending(); }
+    bool dangling() const { return dangling_; }
 
     type_ptr_t type() const { return type_; }
     value_ptr_t meta() const { return meta_; }
     value_ptr_t data() const { return data_; }
+
+    virtual bool resolved() const { return data_->resolved(); }
+    virtual void resolve() { data_->resolve(); }
+    virtual void pending() { data_->pending(); }
+
+    virtual std::string typeStr() const { return type_->toString(); }
+    virtual std::string metaStr() const { return meta_->toString(); }
+    virtual std::string dataStr() const { return data_->toString(); }
 
     void ref() { refs_++; }
     void unref() {
@@ -78,3 +84,17 @@ class Entity : public std::enable_shared_from_this<Entity> {
 
 // definition below is forwarded to value.h
 // using entity_ptr_t = std::shared_ptr<const Entity>;
+
+class DanglingEntity : public Entity {
+  private:
+    std::string ref_;
+
+  public:
+    DanglingEntity() = delete;
+    DanglingEntity(const std::string &ref) : Entity() { dangling_ = true; }
+    virtual ~DanglingEntity() = default;
+
+    virtual std::string typeStr() const override { return "DREF<" + ref_ + ">"; }
+    virtual std::string metaStr() const override { return "DREF<" + ref_ + ">"; }
+    virtual std::string dataStr() const override { return "DREF<" + ref_ + ">"; }
+};

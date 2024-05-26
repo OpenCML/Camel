@@ -24,7 +24,7 @@
 class SemanticNode;
 using sem_ptr_t = std::shared_ptr<const SemanticNode>;
 
-enum class SemNodeType { DATA, TYPE, FUNC, COPY, NREF, DREF, ANNO, LINK, CALL, RETN };
+enum class SemNodeType { DATA, TYPE, FUNC, COPY, NREF, DREF, ANNO, LINK, CALL, RETN, EXEC };
 
 class SemanticNode {
   protected:
@@ -37,7 +37,7 @@ class SemanticNode {
     const std::string typeStr() const;
 
     virtual const std::string toString() const { return typeStr(); }
-    virtual void visit() = 0;
+    virtual void visit() { throw std::runtime_error("SemanticNode::visit() not implemented"); };
 };
 
 class DataNode : public SemanticNode {
@@ -125,6 +125,13 @@ class CallNode : public SemanticNode {
 class ReturnNode : public SemanticNode {
   public:
     ReturnNode() : SemanticNode(SemNodeType::RETN) {}
+
+    // const std::string toString() const override;
+};
+
+class ExecuteNode : public SemanticNode {
+  public:
+    ExecuteNode() : SemanticNode(SemNodeType::EXEC) {}
 
     // const std::string toString() const override;
 };

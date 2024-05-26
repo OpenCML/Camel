@@ -17,6 +17,7 @@
  */
 
 #include "ast.h"
+#include "core/struct/token.h"
 
 /*
 program : stmtList? EOF;
@@ -296,7 +297,40 @@ multiExpr
     | multiExpr IS typeExpr
     ;
 */
-std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context){};
+std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context) {
+    const auto &unaryExpr = visitUnaryExpr(context->unaryExpr());
+    if (context->children.size() == 1) {
+        return unaryExpr;
+    } else {
+        ast_ptr_t linkNode = std::make_shared<ASTNode>(std::make_shared<LinkNode>());
+
+        ast_ptr_t execNode = std::make_shared<ASTNode>(std::make_shared<ExecuteNode>());
+        auto [multiRefNode, multiEntity] =
+            makeDanglingPair(std::any_cast<ast_ptr_t>(visitMultiExpr(context->multiExpr())));
+        auto [unaryRefNode, unaryEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(unaryExpr));
+
+        ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(unaryExpr);
+        ast_ptr_t funcNode = nullptr;
+        const auto &op = context->children[1]->getText();
+        if (op == "^") {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__pow__"));
+        } else if (op == "*") {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__mul__"));
+        } else if (op == "/") {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__div__"));
+        } else if (op == "%") {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__mod__"));
+        } else if (op == "as") {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__as__"));
+        } else if (op == "is") {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__is__"));
+        } else {
+            throw std::runtime_error("Unknown operator: " + op);
+        }
+        *linkNode << dataNode << funcNode;
+        return linkNode;
+    }
+};
 
 /*
 unaryExpr
@@ -305,7 +339,24 @@ unaryExpr
     | '~' primExpr
     ;
 */
-std::any ASTConstructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context){};
+std::any ASTConstructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
+    const auto &primExpr = visitPrimExpr(context->primExpr());
+    if (context->children.size() == 1) {
+        return primExpr;
+    } else {
+        ast_ptr_t linkNode = std::make_shared<ASTNode>(std::make_shared<LinkNode>());
+        ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(primExpr);
+        ast_ptr_t funcNode = nullptr;
+        const auto &op = context->children[0]->getText();
+        if (op == "!") {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__not__"));
+        } else {
+            funcNode = std::make_shared<ASTNode>(std::make_shared<DeRefNode>("__neg__"));
+        }
+        *linkNode << dataNode << funcNode;
+        return linkNode;
+    }
+};
 
 /*
 primExpr
@@ -313,7 +364,13 @@ primExpr
     | '(' entityExpr ')'
     ;
 */
-std::any ASTConstructor::visitPrimExpr(OpenCMLParser::PrimExprContext *context){};
+std::any ASTConstructor::visitPrimExpr(OpenCMLParser::PrimExprContext *context) {
+    if (context->entityChain()) {
+        return visitEntityChain(context->entityChain());
+    } else {
+        return visitEntityExpr(context->entityExpr());
+    }
+};
 
 /*
 literal
@@ -327,7 +384,51 @@ literal
     | NULL
     ;
 */
-std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context){};
+std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
+    type_ptr_t type = nullptr;
+    value_ptr_t value = nullptr;
+
+    switch (context->getAltNumber()) {
+    case 1: // INTEGER UNIT?
+        type = int64TypePtr;
+        value = std::make_shared<PrimValue<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText()));
+        break;
+    case 2: // REAL UNIT?
+        type = doubleTypePtr;
+        value = std::make_shared<PrimValue<double>>(parseNumber<double>(context->REAL()->getText()));
+        break;
+    case 3: // STRING
+        type = stringTypePtr;
+        value = std::make_shared<PrimValue<std::string>>(parseToken<std::string>(context->STRING()->getText()));
+        break;
+    case 4: // MULTI_STR
+    {
+        type = stringTypePtr;
+        const auto &text = context->MULTI_STR()->getText();
+        value = std::make_shared<PrimValue<std::string>>(text.substr(3, text.size() - 6));
+    } break;
+    case 5: // FSTRING
+    {
+        type = stringTypePtr;
+        // TODO: Implement FSTRING
+        const auto &text = context->FSTRING()->getText();
+        value = std::make_shared<PrimValue<std::string>>(text.substr(2, text.size() - 3));
+    } break;
+    case 6: // TRUE
+        type = boolTypePtr;
+        value = std::make_shared<PrimValue<bool>>(true);
+        break;
+    case 7: // FALSE
+        type = boolTypePtr;
+        value = std::make_shared<PrimValue<bool>>(false);
+        break;
+
+    default:
+        break;
+    }
+
+    return std::make_shared<Entity>(type, value);
+};
 
 /*
 typeExpr
