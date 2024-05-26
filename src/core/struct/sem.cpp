@@ -60,6 +60,7 @@ const std::string DataNode::toString() const {
     ss << "DATA: " << pointerToHex(this) << ", " << entity_->type()->toString() << ", " << entity_->data()->toString();
     return ss.str();
 }
+
 const std::string TypeNode::toString() const {
     std::stringstream ss;
     ss << "TYPE: " << pointerToHex(this) << ", " << type_->toString();

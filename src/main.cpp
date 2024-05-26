@@ -26,8 +26,8 @@
 
 #include "config.h"
 #include "core/error/json.h"
-#include "dump/cst.h"
-#include "dump/fmt.h"
+#include "visit/cst.h"
+#include "visit/fmt.h"
 #include "utils/log.h"
 
 using namespace antlr4;
