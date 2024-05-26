@@ -163,8 +163,12 @@ class Formatter : public OpenCMLVisitor {
         }
 
         if (multiLine) {
-            pushIndent();
+            // if wrapped with braces
+            // we don't need to add line breaks before and after the list
+            // and we don't need to add padding spaces
+            // it's better to use the indent level of the outer context
             if (!wrappedWithBraces) {
+                pushIndent();
                 result += lineEnd();
             }
         } else if (padding) {
@@ -249,8 +253,7 @@ class Formatter : public OpenCMLVisitor {
                 const size_t currLineEnd = list[i]->getStop()->getLine();
                 const auto &lastComment = tokens[predCmtEnd - 1];
                 const auto &lastText = lastComment->getText();
-                const size_t lastCommentLineEnd =
-                    lastComment->getLine() + countLines(lastText);
+                const size_t lastCommentLineEnd = lastComment->getLine() + countLines(lastText);
                 lastCommentLines = lastCommentLineEnd - currLineEnd;
             } else {
                 lastCommentLines = 0;
@@ -260,8 +263,8 @@ class Formatter : public OpenCMLVisitor {
         }
 
         if (multiLine) {
-            popIndent();
             if (!wrappedWithBraces) {
+                popIndent();
                 result += lineEnd();
             }
         } else if (padding && !trailingComma) {
@@ -285,8 +288,6 @@ class Formatter : public OpenCMLVisitor {
     std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context, bool trailingComma, bool padding,
                                bool forceMultiLine);
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool padding,
-                               bool forceMultiLine);
-    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool padding,
                                bool forceMultiLine);
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context, bool trailingComma, bool padding,
                                bool forceMultiLine);
@@ -315,8 +316,6 @@ class Formatter : public OpenCMLVisitor {
     std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context);
     std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context);
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context);
-    std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context);
-    std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context);
     std::any visitTypeList(OpenCMLParser::TypeListContext *context) {
         return visitTypeList(context, false, true, false);
     }
@@ -335,14 +334,9 @@ class Formatter : public OpenCMLVisitor {
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
         return visitPairedParams(context, false, true, false);
     }
-    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) {
-        return visitIndexKVPairs(context, false, true, false);
-    }
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
         return visitArgumentList(context, false, true, false);
     }
-    std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context);
-    std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context);
     std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context);
     std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
     std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context);
@@ -368,6 +362,7 @@ class Formatter : public OpenCMLVisitor {
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
     std::any visitType(OpenCMLParser::TypeContext *context);
+    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
     std::any visitPrimType(OpenCMLParser::PrimTypeContext *context);
     std::any visitStructType(OpenCMLParser::StructTypeContext *context);
     std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *context);

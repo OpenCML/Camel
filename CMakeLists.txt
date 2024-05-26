@@ -14,6 +14,7 @@ if(MSVC)
     add_compile_options(/wd4003 /wd4005 /wd4819 /O2)
 else()
 	message(STATUS "Using GCC or Clang")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 endif()
 
 file(GLOB_RECURSE SRC_FILES

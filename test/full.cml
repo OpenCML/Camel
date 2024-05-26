@@ -1,80 +1,77 @@
-@{x=3, y=1, style="bold", color="red"}
+@{ x: 3, y: 1, style: 'bold', color: 'red' }
 '''
 Impact of System Noise and Nonlinearities on a 16-QAM Signal in a Radio-over-Fiber Transmission
 ''';
 
 '''
 The relative constellation ...
-'''
-@{x=2, y=3, style="alert-info"};
+'''@{ x: 2, y: 3, style: 'alert-info' };
 
 a b c(f) d;
 a->b->c->d;
 a b<v> c a->b->c;
 a->b a b a<e>->b;
-a(b,d(f)->e(g));
-let a = d+(a+b)*c/2;
+a(b, d(f)->e(g));
+let a = d + (a + b) * c / 2;
 
 /*
 * This PSL module will be imported by interpreter automatically,
-* and can be accessed anywhere in any PSL script.
-*/
+* and can be accessed Anywhere in Any PSL script.
+*/ 
 
-with <loader: functor = psl>
-inner sync static func load(path: string) : any {
+with <loader: Functor = psl>
+inner static sync func load(path: String): Any {
     # inner func
 };
 
-with <path: string, ftype: string = 'psl'>
-inner sync static func save(entity: any) {
+with <path: String, ftype: String = 'psl'>
+inner static sync func save(entity: Any) {
     # inner func
 };
 
 use from = load;
 
-with <stream: string = 'stdout'>
-inner static func print(data: any) {
+with <stream: String = 'stdout'>
+inner static func print(data: Any) {
     # inner func
 };
 
-with <diagram: functor = eye>
-inner static func analyze(data: any) {
+with <diagram: Functor = eye>
+inner static func analyze(data: Any) {
     # inner func
 };
 
-ident.1->fn;
-nf->ident.1;
-nf->ident.1->fn;
-ident.1.id->fn;
+ident[1]->fn;
+nf->ident[1];
+nf->ident[1]->fn;
+ident[1][id]->fn;
 a->b->c;
 
-use { Const, Ground, Sub } from "phot/units" as module;
-use { Rx_El_mQAM_BER, Tx_El_mQAM } from "phot/tr";
+use { Const, Ground, Sub } from 'phot/units' as module;
+use { Rx_El_mQAM_BER, Tx_El_mQAM } from 'phot/tr';
 
-let photodiodeSetting : PhotodiodeSettingTemplate = {
-    temperature = 300`K`
+let photodiodeSetting: PhotodiodeSettingTemplate = {
+    temperature: 300`K`
 };
 
 let Power = {
-    dcOutput : ElSignal,
-    powerOutput : ElSignal
+    dcOutput: ElSignal,
+    powerOutput: ElSignal
 };
 
 @[14, 7]
-@{boxed=true, color="blue"}
-scoped func PowerControlEl(input : ElSignal)
-: ElSignal
-{
-    "Power control"@[6, 0];
+@{ boxed: true, color: 'blue' }
+sync func PowerControlEl(input: ElSignal): ElSignal {
+    'Power control'@[6, 0];
     let [dcOutput, powerOutput] = input->PowerMeterEl;
-    dcOutput->Ground<{a,b}, ...[c,d], e, 5`v`>;
+    dcOutput->Ground<{ a, b }, e, 5`v`>;
     return input->ParameterController<
         [powerInput, powerOutput]->Sub
     >@[2, 2]->AmpSysEl;
 };
 
-with <capture: any, condition: functor, update: functor>
-sync func test(target: functor) {
+with <capture: Any, condition: Functor, update: Functor>
+sync func test(target: Functor) {
     return ifexpr(condition<capture>(), {
         exec<{
             update<capture>;
@@ -84,32 +81,34 @@ sync func test(target: functor) {
 };
 
 sync func placeComponents(
-    startIndex: number, count: number,
-    dist: Point, pos: Point
-) : void {
+    startIndex: Number,
+    count: Number,
+    dist: Point,
+    pos: Point
+): Void {
     i := startIndex;
     # loop to create instances
-    for (i, {i << startIndex + count;}, {i = i + 1;}) {
-        let laser = LaserCW @[pos.x, pos.y];
+    for(i, { i < startIndex + count; }, { i = i + 1; }) {
+        let laser = LaserCW@[pos.x, pos.y];
         let laserRect = laser.meta.rect;
-        let analyzer = Analyzer @[pos.x + dist.x + laserRect.width, pos.y];
-        laser()->analyzer.(i + 1);
+        let analyzer = Analyzer@[pos.x + dist.x + laserRect.width, pos.y];
+        laser()->analyzer[i + 1];
         pos.y += pos.y + dist.y + laserRect.height;
     };
 };
 
-bus.on('ask-for-authorization', sync (event: string): list<string> => {
-    otp.value = '';
+bus.on('ask-for-authorization', sync (event: String): Array<String> => {
+    otp['value'] = '';
     cancelled = true;
-    isActive.value = true;
-    wrongOtp.value = false;
+    isActive['value'] = true;
+    wrongOtp['value'] = false;
     targetEvent = event;
-
-    return await new Promise((resolve, reject) => {
-        let stopWatch = watch(isActive, (newVal) => {
-            if (!newVal) {
+    
+    return await new Promise((resolve: Int, reject: Int) => {
+        let stopWatch = watch(isActive, (newVal: Int) => {
+            if(!newVal) {
                 stopWatch();
-                if (cancelled) {
+                if(cancelled) {
                     reject();
                 } else {
                     resolve(otp.value);

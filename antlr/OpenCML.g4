@@ -1,6 +1,37 @@
 grammar OpenCML;
 import OpenCMLLex;
 
+@header {
+/**
+ * Copyright (c) 2022 Beijing Jiaotong University
+ * PhotLab is licensed under [Open Source License].
+ * You can use this software according to the terms and conditions of the [Open
+ * Source License]. You may obtain a copy of [Open Source License] at:
+ * [https://open.source.license/]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the [Open Source License] for more details.
+ *
+ * Author: Zhenjie Wei
+ * Supported by: National Key Research and Development Program of China
+ */
+}
+
+@parser::members {
+bool isAdjacent() {
+    const antlr4::Token *first = _input->LT(-1);
+    const antlr4::Token *curr = _input->LT(1);
+    if (first == nullptr || curr == nullptr)
+        return false;
+    if (first->getStopIndex() + 1 != curr->getStartIndex())
+        return false;
+    return true;
+}
+}
+
 program : stmtList? EOF;
 
 stmtList : stmt (SEP stmt)* SEP? ;
@@ -26,7 +57,7 @@ assignStmt : identRef memberAccess? '=' entityExpr ;
 withDef : WITH angledParams ;
 funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
 retStmt : RETURN entityExpr? ;
-lambdaExpr : modifiers? (parentParams (':' typeExpr)? '=>')? bracedStmts ;
+lambdaExpr : modifiers? ((parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr)) | '{' stmtList '}' ) ;
 
 carrier : identRef | bracedIdents | bracketIdents ;
 
@@ -37,8 +68,6 @@ modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : entityExpr ':' entityExpr ;
 keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
-indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
-indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 
 typeList     : typeExpr (',' typeExpr)* ;
 identList    : identRef (',' identRef)* ;
@@ -46,11 +75,8 @@ valueList    : entityExpr (',' entityExpr)* ;
 pairedTypes  : keyTypePair (',' keyTypePair)* ;
 pairedValues : keyValuePair (',' keyValuePair)* ;
 pairedParams : keyParamPair (',' keyParamPair)* ;
-indexKVPairs : indexKVPair (',' indexKVPair)* ;
 argumentList : valueList (',' pairedValues)? | pairedValues ;
 
-bracedValues       : '{' valueList? ','? '}' ;    // for literal construction of set
-bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ; // for literal construction of map
 bracedPairedValues : '{' pairedValues? ','? '}' ; // for literal construction of dict
 bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
 bracedStmts        : '{' stmtList? '}' ;     // for block statement
@@ -68,13 +94,11 @@ primEntity
     : identRef
     | literal
     | bracketValues
-    | bracedValues
     | bracedPairedValues
-    | bracedIndexKVPairs
     | lambdaExpr
     | '(' entityExpr ')' ;
 memberAccess : '[' entityExpr ']' ;
-entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
+entity       : primEntity (({isAdjacent()}? (memberAccess | angledValues | parentValues)) | annotation)* ;
 
 entityChain  : entityLink+ ;
 entityLink   : entityCall | entityLink '->' entityCall ;
@@ -126,10 +150,7 @@ multiExpr
 unaryExpr
     : primExpr
     | '!' primExpr
-    | '++' primExpr
-    | '--' primExpr
-    | primExpr '++'
-    | primExpr '--'
+    | '~' primExpr
     ;
 
 primExpr
@@ -160,6 +181,11 @@ type
     | specialType
     | identRef
     | '(' typeExpr ')'
+    | lambdaType
+    ;
+
+lambdaType
+    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
     ;
 
 primType
@@ -178,7 +204,6 @@ primType
 structType
     : SET_TYPE ('<' typeExpr '>')?
     | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
-    | '{' indexKTPair '}' // concrete map type
     | LIST_TYPE
     | DICT_TYPE // universal dict type
     | '{' pairedTypes? ','? '}' // concrete dict type
