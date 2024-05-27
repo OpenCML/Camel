@@ -843,19 +843,19 @@ std::any Formatter::visitType(OpenCMLParser::TypeContext *context) {
 
 /*
 lambdaType
-    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
+    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
     ;
 */
 std::any Formatter::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     std::string result;
-    const auto &typeList0 = context->typeList(0);
-    const auto &typeList1 = context->typeList(1);
+    const auto &params0 = context->pairedParams(0);
+    const auto &params1 = context->pairedParams(1);
     const auto &typeExpr = context->typeExpr();
-    if (typeList1) {
-        result += "<" + std::any_cast<std::string>(visitTypeList(typeList0, false, false, false)) + ">";
+    if (params1) {
+        result += "<" + std::any_cast<std::string>(visitPairedParams(params0, false, false, false)) + ">";
     }
     result += "(";
-    result += std::any_cast<std::string>(visitTypeList(typeList1 ? typeList1 : typeList0, false, false, false));
+    result += std::any_cast<std::string>(visitPairedParams(params1 ? params1 : params0, false, false, false));
     result += ") => " + std::any_cast<std::string>(visitTypeExpr(typeExpr));
     return result;
 };

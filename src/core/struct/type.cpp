@@ -444,13 +444,13 @@ TypeConv NamedTupleType::convertibility(const Type &other) const {
         switch (other.code()) {
         case TypeCode::NAMED_TUPLE: {
             const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
-            if (pairs_.size() != otherParam.pairs_.size()) {
+            if (elements_.size() != otherParam.elements_.size()) {
                 return TypeConv::FORBIDDEN;
             }
             TypeConv result = TypeConv::SAFE;
-            for (size_t i = 0; i < pairs_.size(); i++) {
-                const auto &pair = pairs_[i];
-                const auto &other = otherParam.pairs_[i];
+            for (size_t i = 0; i < elements_.size(); i++) {
+                const auto &pair = elements_[i];
+                const auto &other = otherParam.elements_[i];
                 if (pair.first != other.first) {
                     return TypeConv::FORBIDDEN;
                 }
@@ -613,6 +613,47 @@ TypeConv ListType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
+TypeConv FunctorType::convertibility(const Type &other) const {
+    // TODO: not fully implemented
+    if (other.code() == TypeCode::FUNCTOR) {
+        TypeConv result = TypeConv::SAFE;
+        const FunctorType &otherFunctor = dynamic_cast<const FunctorType &>(other);
+        if (withType_ && !otherFunctor.withType_ ) {
+            const TypeConv withTypeConv = withType_->convertibility(*otherFunctor.withType_);
+            if (withTypeConv == TypeConv::FORBIDDEN) {
+                return TypeConv::FORBIDDEN;
+            }
+            if (withTypeConv == TypeConv::UNSAFE) {
+                result = TypeConv::UNSAFE;
+            }
+        }
+        if (paramsType_ && !otherFunctor.paramsType_) {
+            const TypeConv paramsTypeConv = paramsType_->convertibility(*otherFunctor.paramsType_);
+            if (paramsTypeConv == TypeConv::FORBIDDEN) {
+                return TypeConv::FORBIDDEN;
+            }
+            if (paramsTypeConv == TypeConv::UNSAFE) {
+                result = TypeConv::UNSAFE;
+            }
+        }
+        if (returnType_ && !otherFunctor.returnType_) {
+            const TypeConv returnTypeConv = returnType_->convertibility(*otherFunctor.returnType_);
+            if (returnTypeConv == TypeConv::FORBIDDEN) {
+                return TypeConv::FORBIDDEN;
+            }
+            if (returnTypeConv == TypeConv::UNSAFE) {
+                result = TypeConv::UNSAFE;
+            }
+        }
+        return result;
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
 void initTypes() {
     // initialize primitive types
     int32TypePtr = std::make_shared<PrimType>(TypeCode::INT32);
@@ -634,5 +675,5 @@ void initTypes() {
     // initialize special types
     anyTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);
     voidTypePtr = std::make_shared<SpecialType>(TypeCode::VOID);
-    functorTypePtr = std::make_shared<SpecialType>(TypeCode::FUNCTOR);
+    functorTypePtr = std::make_shared<FunctorType>();
 }

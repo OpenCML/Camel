@@ -34,10 +34,7 @@ class ValueConvError : public std::exception {
 };
 
 class Value;
-class Entity;
-
 using value_ptr_t = std::shared_ptr<Value>;
-using entity_ptr_t = std::shared_ptr<Entity>;
 
 class Value : public std::enable_shared_from_this<Value> {
   protected:
@@ -357,7 +354,7 @@ class NamedTupleValue : public Value {
         if (typeResolved_ || type->code() != TypeCode::NAMED_TUPLE) {
             return false;
         }
-        const auto &typeList = static_cast<NamedTupleType *>(type.get())->list();
+        const auto &typeList = static_cast<NamedTupleType *>(type.get())->elements();
         if (indexData_.size() + namedData_.size() != typeList.size()) {
             return false;
         }
@@ -365,7 +362,8 @@ class NamedTupleValue : public Value {
         std::vector<entity_ptr_t> indexResult;
         std::unordered_map<std::string, entity_ptr_t> namedResult;
         for (size_t i = 0; i < typeList.size(); i++) {
-            const auto &[key, typ] = typeList[i];
+            const auto &[key, typ, value] = typeList[i];
+            // TODO: unused value
             if (namedData_.find(key) != namedData_.end()) {
                 if (namedData_[key]->type()->convertibility(*typ) != TypeConv::SAFE) {
                     return false;

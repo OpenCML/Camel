@@ -185,7 +185,7 @@ type
     ;
 
 lambdaType
-    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
+    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
     ;
 
 primType

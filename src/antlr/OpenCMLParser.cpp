@@ -334,9 +334,9 @@ void opencmlParserInitialize() {
   	3,110,55,0,624,625,5,12,0,0,625,626,3,98,49,0,626,627,5,13,0,0,627,630,
   	1,0,0,0,628,630,3,102,51,0,629,620,1,0,0,0,629,621,1,0,0,0,629,622,1,
   	0,0,0,629,623,1,0,0,0,629,624,1,0,0,0,629,628,1,0,0,0,630,101,1,0,0,0,
-  	631,633,5,14,0,0,632,634,3,38,19,0,633,632,1,0,0,0,633,634,1,0,0,0,634,
+  	631,633,5,14,0,0,632,634,3,48,24,0,633,632,1,0,0,0,633,634,1,0,0,0,634,
   	635,1,0,0,0,635,637,5,15,0,0,636,631,1,0,0,0,636,637,1,0,0,0,637,638,
-  	1,0,0,0,638,640,5,12,0,0,639,641,3,38,19,0,640,639,1,0,0,0,640,641,1,
+  	1,0,0,0,638,640,5,12,0,0,639,641,3,48,24,0,640,639,1,0,0,0,640,641,1,
   	0,0,0,641,642,1,0,0,0,642,643,5,13,0,0,643,644,5,5,0,0,644,645,3,98,49,
   	0,645,103,1,0,0,0,646,647,7,1,0,0,647,105,1,0,0,0,648,653,5,70,0,0,649,
   	650,5,14,0,0,650,651,3,98,49,0,651,652,5,15,0,0,652,654,1,0,0,0,653,649,
@@ -4958,12 +4958,12 @@ OpenCMLParser::TypeExprContext* OpenCMLParser::LambdaTypeContext::typeExpr() {
   return getRuleContext<OpenCMLParser::TypeExprContext>(0);
 }
 
-std::vector<OpenCMLParser::TypeListContext *> OpenCMLParser::LambdaTypeContext::typeList() {
-  return getRuleContexts<OpenCMLParser::TypeListContext>();
+std::vector<OpenCMLParser::PairedParamsContext *> OpenCMLParser::LambdaTypeContext::pairedParams() {
+  return getRuleContexts<OpenCMLParser::PairedParamsContext>();
 }
 
-OpenCMLParser::TypeListContext* OpenCMLParser::LambdaTypeContext::typeList(size_t i) {
-  return getRuleContext<OpenCMLParser::TypeListContext>(i);
+OpenCMLParser::PairedParamsContext* OpenCMLParser::LambdaTypeContext::pairedParams(size_t i) {
+  return getRuleContext<OpenCMLParser::PairedParamsContext>(i);
 }
 
 
@@ -5004,11 +5004,9 @@ OpenCMLParser::LambdaTypeContext* OpenCMLParser::lambdaType() {
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if ((((_la & ~ 0x3fULL) == 0) &&
-        ((1ULL << _la) & -1152921504606826432) != 0) || ((((_la - 64) & ~ 0x3fULL) == 0) &&
-        ((1ULL << (_la - 64)) & 8650751) != 0)) {
+      if (_la == OpenCMLParser::IDENTIFIER) {
         setState(632);
-        typeList();
+        pairedParams();
       }
       setState(635);
       match(OpenCMLParser::T__14);
@@ -5019,11 +5017,9 @@ OpenCMLParser::LambdaTypeContext* OpenCMLParser::lambdaType() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & -1152921504606826432) != 0) || ((((_la - 64) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 64)) & 8650751) != 0)) {
+    if (_la == OpenCMLParser::IDENTIFIER) {
       setState(639);
-      typeList();
+      pairedParams();
     }
     setState(642);
     match(OpenCMLParser::T__12);

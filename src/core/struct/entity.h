@@ -50,6 +50,13 @@ class Entity : public std::enable_shared_from_this<Entity> {
     virtual std::string metaStr() const { return meta_->toString(); }
     virtual std::string dataStr() const { return data_->toString(); }
 
+    virtual std::string toString() const { return typeStr() + " " + metaStr() + " " + dataStr(); }
+
+    virtual bool equals(const entity_ptr_t &other) const {
+        // TODO: implement equals
+        return type_ == other->type_ && meta_ == other->meta_ && data_ == other->data_;
+    }
+
     void ref() { refs_++; }
     void unref() {
         if (refs_ > 0) {
@@ -82,7 +89,7 @@ class Entity : public std::enable_shared_from_this<Entity> {
     }
 };
 
-// definition below is forwarded to value.h
+// definition below is forwarded to type.h
 // using entity_ptr_t = std::shared_ptr<const Entity>;
 
 class DanglingEntity : public Entity {

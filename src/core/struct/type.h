@@ -78,6 +78,9 @@ class TensorType;
 
 using type_ptr_t = std::shared_ptr<Type>;
 
+class Entity;
+using entity_ptr_t = std::shared_ptr<Entity>;
+
 class Type {
   protected:
     TypeCode code_;
@@ -98,7 +101,7 @@ class Type {
     virtual bool operator==(const Type &other) const { return code_ == other.code_; }
     virtual bool operator!=(const Type &other) const { return code_ != other.code_; }
 
-    bool equals(const type_ptr_t &type) const { return *type == *this; }
+    bool equals(const type_ptr_t &type) const { return type && *type == *this; }
 
     virtual TypeConv convertibility(const Type &other) const {
         if (code_ == other.code_) {
@@ -134,7 +137,12 @@ class SpecialType : public Type {
     SpecialType() = delete;
     SpecialType(TypeCode code) : Type(code) {}
 
-    TypeConv convertibility(const Type &other) const override;
+    virtual std::string toString() const override { return typeCodeToString(code_); }
+
+    virtual bool operator==(const Type &other) const override { return code_ == other.code(); }
+    virtual bool operator!=(const Type &other) const override { return code_ != other.code(); }
+
+    virtual TypeConv convertibility(const Type &other) const override;
 };
 
 class SetType : public StructType {
@@ -310,9 +318,7 @@ class ArrayType : public StructType {
 
     type_ptr_t elementType() const { return elementType_; }
 
-    std::string toString() const override {
-        return "Array<" + elementType_->toString() + ">";
-    }
+    std::string toString() const override { return "Array<" + elementType_->toString() + ">"; }
 
     bool operator==(const Type &other) const override {
         if (other.code() != TypeCode::ARRAY) {
@@ -332,7 +338,7 @@ class ArrayType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-class TupleType: public StructType {
+class TupleType : public StructType {
   private:
     std::vector<type_ptr_t> types_;
 
@@ -545,15 +551,20 @@ class ListType : public StructType {
 
 class NamedTupleType : public StructType {
   private:
-    std::vector<std::pair<std::string, type_ptr_t>> pairs_;
+    std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>> elements_;
 
   public:
     NamedTupleType() : StructType(TypeCode::NAMED_TUPLE) {}
 
     std::string toString() const override {
         std::string result = "(";
-        for (const auto &pair : pairs_) {
-            result += pair.first + ": " + pair.second->toString() + ", ";
+        for (const auto &tuple : elements_) {
+            auto &[name, type, value] = tuple;
+            result += name + ": " + type->toString();
+            if (value) {
+                result += " = " + value->dataStr();
+            }
+            result += ", ";
         }
         result.pop_back();
         result.pop_back();
@@ -567,14 +578,19 @@ class NamedTupleType : public StructType {
         }
         const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
 
-        if (pairs_.size() != otherParam.pairs_.size()) {
+        if (elements_.size() != otherParam.elements_.size()) {
             return false;
         }
-        for (size_t i = 0; i < pairs_.size(); i++) {
-            if (pairs_[i].first != otherParam.pairs_[i].first) {
+        for (size_t i = 0; i < elements_.size(); i++) {
+            auto &[name, type, value] = elements_[i];
+            auto &[otherName, otherType, otherValue] = otherParam.elements_[i];
+            if (name != otherName) {
                 return false;
             }
-            if (!pairs_[i].second->equals(otherParam.pairs_[i].second)) {
+            if (!type->equals(otherType)) {
+                return false;
+            }
+            if (value && !value->equals(otherValue)) {
                 return false;
             }
         }
@@ -582,27 +598,109 @@ class NamedTupleType : public StructType {
     }
     bool operator!=(const Type &other) const override { return !(*this == other); }
 
-    bool add(const std::string &key, const type_ptr_t &type) {
-        for (const auto &pair : pairs_) {
-            if (pair.first == key) {
+    bool add(const std::string &key, const type_ptr_t &type, const entity_ptr_t &value = nullptr) {
+        for (const auto &tuple : elements_) {
+            if (std::get<0>(tuple) == key) {
                 return false;
             }
         }
-        pairs_.push_back({key, type});
+        elements_.push_back({key, type, value});
         return true;
     }
 
-    const std::vector<std::pair<std::string, type_ptr_t>> &list() const { return pairs_; }
+    const std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>> &elements() const { return elements_; }
 
     std::unordered_map<std::string, type_ptr_t> map() const {
         auto result = std::unordered_map<std::string, type_ptr_t>();
-        for (const auto &param : pairs_) {
-            result[param.first] = param.second;
+        for (const auto &tuple : elements_) {
+            const auto &[name, type, value] = tuple;
+            result[name] = type;
         }
         return result;
     }
 
-    void clear() { pairs_.clear(); }
+    void clear() { elements_.clear(); }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
+class FunctorType : public SpecialType {
+  private:
+    type_ptr_t withType_;
+    type_ptr_t paramsType_;
+    type_ptr_t returnType_;
+
+  public:
+    FunctorType() = delete;
+    FunctorType(const type_ptr_t &withType = nullptr, const type_ptr_t &paramsType = nullptr,
+                const type_ptr_t &returnType = nullptr)
+        : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
+
+    type_ptr_t withType() const { return withType_; }
+    type_ptr_t paramsType() const { return paramsType_; }
+    type_ptr_t returnType() const { return returnType_; }
+
+    std::string toString() const override {
+        std::string result = "";
+        if (withType_ != nullptr && withType_->code() == TypeCode::NAMED_TUPLE) {
+            const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
+            result += "<";
+            for (const auto &tuple : with.elements()) {
+                const auto &[name, type, value] = tuple;
+                result += name + ": " + type->toString();
+                if (value) {
+                    result += " = " + value->dataStr();
+                }
+                result += ", ";
+            }
+            result.pop_back();
+            result.pop_back();
+            result += "> ";
+        }
+        result += "(";
+        if (paramsType_ != nullptr && paramsType_->code() == TypeCode::NAMED_TUPLE) {
+            const auto &params = dynamic_cast<const NamedTupleType &>(*paramsType_);
+            for (const auto &tuple : params.elements()) {
+                const auto &[name, type, value] = tuple;
+                result += name + ": " + type->toString();
+                if (value) {
+                    result += " = " + value->dataStr();
+                }
+                result += ", ";
+            }
+            result.pop_back();
+            result.pop_back();
+        }
+        result += ") => ";
+        if (returnType_ != nullptr) {
+            result += returnType_->toString();
+        } else {
+            result += "Void";
+        }
+        return result;
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::FUNCTOR) {
+            return false;
+        }
+        const FunctorType &otherFunctor = dynamic_cast<const FunctorType &>(other);
+
+        if (withType_ != nullptr && !withType_->equals(otherFunctor.withType_)) {
+            return false;
+        }
+
+        if (paramsType_ != nullptr && !paramsType_->equals(otherFunctor.paramsType_)) {
+            return false;
+        }
+
+        if (returnType_ != nullptr && !returnType_->equals(otherFunctor.returnType_)) {
+            return false;
+        }
+
+        return true;
+    }
+    bool operator!=(const Type &other) const override { return !(*this == other); }
 
     TypeConv convertibility(const Type &other) const override;
 };

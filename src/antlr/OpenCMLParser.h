@@ -917,8 +917,8 @@ public:
     LambdaTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     TypeExprContext *typeExpr();
-    std::vector<TypeListContext *> typeList();
-    TypeListContext* typeList(size_t i);
+    std::vector<PairedParamsContext *> pairedParams();
+    PairedParamsContext* pairedParams(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

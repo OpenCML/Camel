@@ -219,13 +219,13 @@ std::any ASTConstructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *c
 keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 */
 std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
-    ast_ptr_t typeNode = std::any_cast<ast_ptr_t>(visitTypeExpr(context->typeExpr()));
+    type_ptr_t type = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
     ast_ptr_t defaultNode = nullptr;
     if (context->entityExpr()) {
         defaultNode = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
     }
     // TODO: implement the support for annotation
-    return std::make_tuple(context->identRef()->getText(), typeNode, defaultNode);
+    return std::make_tuple(context->identRef()->getText(), type, defaultNode);
 };
 
 /*
@@ -287,9 +287,9 @@ std::any ASTConstructor::visitPairedValues(OpenCMLParser::PairedValuesContext *c
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
-    std::vector<std::tuple<std::string, ast_ptr_t, ast_ptr_t>> pairedParams;
+    std::vector<std::tuple<std::string, type_ptr_t, ast_ptr_t>> pairedParams;
     for (const auto &pair : context->keyParamPair()) {
-        pairedParams.push_back(std::any_cast<std::tuple<std::string, ast_ptr_t, ast_ptr_t>>(visitKeyParamPair(pair)));
+        pairedParams.push_back(std::any_cast<std::tuple<std::string, type_ptr_t, ast_ptr_t>>(visitKeyParamPair(pair)));
     }
     return pairedParams;
 };
@@ -378,7 +378,7 @@ std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *c
     if (pairedParams) {
         return visitPairedParams(pairedParams);
     } else {
-        return std::vector<std::tuple<std::string, ast_ptr_t, ast_ptr_t>>();
+        return std::vector<std::tuple<std::string, type_ptr_t, ast_ptr_t>>();
     }
 };
 
@@ -402,7 +402,7 @@ std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *c
     if (pairedParams) {
         return visitPairedParams(pairedParams);
     } else {
-        return std::vector<std::tuple<std::string, ast_ptr_t, ast_ptr_t>>();
+        return std::vector<std::tuple<std::string, type_ptr_t, ast_ptr_t>>();
     }
 };
 
@@ -1064,10 +1064,49 @@ std::any ASTConstructor::visitType(OpenCMLParser::TypeContext *context){};
 
 /*
 lambdaType
-    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
+    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
     ;
 */
-std::any ASTConstructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context){};
+std::any ASTConstructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
+    const auto &pairedParamsList = context->pairedParams();
+    const auto &typeExpr = context->typeExpr();
+    std::shared_ptr<NamedTupleType> withType = nullptr;
+    auto paramsType = std::make_shared<NamedTupleType>();
+    type_ptr_t returnType = nullptr;
+    if (pairedParamsList.size() > 1) {
+        withType = std::make_shared<NamedTupleType>();
+        const auto &superParams = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, ast_ptr_t>>>(
+            visitPairedParams(pairedParamsList[0]));
+        for (const auto &[name, type, valueNode] : superParams) {
+            entity_ptr_t value = nullptr;
+            if (valueNode) { // valueNode may be nullptr
+                if (valueNode->type() == SemNodeType::DATA) {
+                    const DataNode &dataNode = dynamic_cast<const DataNode &>(*valueNode);
+                    value = dataNode.entity();
+                } else {
+                    throw std::runtime_error("Default values for a functor must be primitive");
+                }
+            }
+            withType->add(name, type, value);
+        }
+    }
+    const auto &params = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, ast_ptr_t>>>(
+        visitPairedParams(pairedParamsList.back()));
+    for (const auto &[name, type, valueNode] : params) {
+        entity_ptr_t value = nullptr;
+        if (valueNode) { // valueNode may be nullptr
+            if (valueNode->type() == SemNodeType::DATA) {
+                const DataNode &dataNode = dynamic_cast<const DataNode &>(*valueNode);
+                value = dataNode.entity();
+            } else {
+                throw std::runtime_error("Default values for a functor must be primitive");
+            }
+        }
+        paramsType->add(name, type, value);
+    }
+    returnType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
+    return std::make_shared<FunctorType>(withType, paramsType, returnType);
+};
 
 /*
 primType
