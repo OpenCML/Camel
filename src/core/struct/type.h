@@ -556,47 +556,10 @@ class NamedTupleType : public StructType {
   public:
     NamedTupleType() : StructType(TypeCode::NAMED_TUPLE) {}
 
-    std::string toString() const override {
-        std::string result = "(";
-        for (const auto &tuple : elements_) {
-            auto &[name, type, value] = tuple;
-            result += name + ": " + type->toString();
-            if (value) {
-                result += " = " + value->dataStr();
-            }
-            result += ", ";
-        }
-        result.pop_back();
-        result.pop_back();
-        result += ")";
-        return result;
-    }
+    std::string toString() const override;
 
-    bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::NAMED_TUPLE) {
-            return false;
-        }
-        const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
-
-        if (elements_.size() != otherParam.elements_.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < elements_.size(); i++) {
-            auto &[name, type, value] = elements_[i];
-            auto &[otherName, otherType, otherValue] = otherParam.elements_[i];
-            if (name != otherName) {
-                return false;
-            }
-            if (!type->equals(otherType)) {
-                return false;
-            }
-            if (value && !value->equals(otherValue)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    bool operator!=(const Type &other) const override { return !(*this == other); }
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
 
     bool add(const std::string &key, const type_ptr_t &type, const entity_ptr_t &value = nullptr) {
         for (const auto &tuple : elements_) {
@@ -640,45 +603,7 @@ class FunctorType : public SpecialType {
     type_ptr_t paramsType() const { return paramsType_; }
     type_ptr_t returnType() const { return returnType_; }
 
-    std::string toString() const override {
-        std::string result = "";
-        if (withType_ != nullptr && withType_->code() == TypeCode::NAMED_TUPLE) {
-            const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
-            result += "<";
-            for (const auto &tuple : with.elements()) {
-                const auto &[name, type, value] = tuple;
-                result += name + ": " + type->toString();
-                if (value) {
-                    result += " = " + value->dataStr();
-                }
-                result += ", ";
-            }
-            result.pop_back();
-            result.pop_back();
-            result += "> ";
-        }
-        result += "(";
-        if (paramsType_ != nullptr && paramsType_->code() == TypeCode::NAMED_TUPLE) {
-            const auto &params = dynamic_cast<const NamedTupleType &>(*paramsType_);
-            for (const auto &tuple : params.elements()) {
-                const auto &[name, type, value] = tuple;
-                result += name + ": " + type->toString();
-                if (value) {
-                    result += " = " + value->dataStr();
-                }
-                result += ", ";
-            }
-            result.pop_back();
-            result.pop_back();
-        }
-        result += ") => ";
-        if (returnType_ != nullptr) {
-            result += returnType_->toString();
-        } else {
-            result += "Void";
-        }
-        return result;
-    }
+    std::string toString() const override;
 
     bool operator==(const Type &other) const override {
         if (other.code() != TypeCode::FUNCTOR) {

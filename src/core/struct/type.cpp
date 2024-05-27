@@ -17,6 +17,7 @@
  */
 
 #include "type.h"
+#include "entity.h"
 
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
@@ -437,60 +438,6 @@ TypeConv UnionType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-TypeConv NamedTupleType::convertibility(const Type &other) const {
-    // TODO: not fully implemented
-    // TODO: others' convertibility should be checked
-    if (other.structured()) {
-        switch (other.code()) {
-        case TypeCode::NAMED_TUPLE: {
-            const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
-            if (elements_.size() != otherParam.elements_.size()) {
-                return TypeConv::FORBIDDEN;
-            }
-            TypeConv result = TypeConv::SAFE;
-            for (size_t i = 0; i < elements_.size(); i++) {
-                const auto &pair = elements_[i];
-                const auto &other = otherParam.elements_[i];
-                if (pair.first != other.first) {
-                    return TypeConv::FORBIDDEN;
-                }
-                TypeConv paramConv = pair.second->convertibility(*other.second);
-                if (paramConv == TypeConv::FORBIDDEN) {
-                    return TypeConv::FORBIDDEN;
-                } else if (paramConv == TypeConv::UNSAFE) {
-                    result = TypeConv::UNSAFE;
-                }
-            }
-            return result;
-        }
-        case TypeCode::UNION:
-            return TypeConv::SAFE;
-        case TypeCode::LIST:
-            return TypeConv::SAFE;
-        case TypeCode::SET:
-            return TypeConv::SAFE;
-        case TypeCode::ARRAY:
-            return TypeConv::SAFE;
-        case TypeCode::VECTOR:
-            return TypeConv::SAFE;
-        case TypeCode::TENSOR:
-            return TypeConv::SAFE;
-        case TypeCode::MAP:
-            return TypeConv::SAFE;
-        case TypeCode::DICT:
-            return TypeConv::SAFE;
-
-        default:
-            return TypeConv::FORBIDDEN;
-        }
-    }
-    if (other.code() == TypeCode::ANY) {
-        return TypeConv::SAFE;
-    }
-    // primitive types and special types are forbidden
-    return TypeConv::FORBIDDEN;
-}
-
 TypeConv VectorType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
@@ -613,12 +560,148 @@ TypeConv ListType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
+std::string NamedTupleType::toString() const {
+    std::string result = "(";
+    for (const auto &tuple : elements_) {
+        auto &[name, type, value] = tuple;
+        result += name + ": " + type->toString();
+        if (value) {
+            result += " = " + value->dataStr();
+        }
+        result += ", ";
+    }
+    result.pop_back();
+    result.pop_back();
+    result += ")";
+    return result;
+}
+
+bool NamedTupleType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::NAMED_TUPLE) {
+        return false;
+    }
+    const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
+
+    if (elements_.size() != otherParam.elements_.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < elements_.size(); i++) {
+        auto &[name, type, value] = elements_[i];
+        auto &[otherName, otherType, otherValue] = otherParam.elements_[i];
+        if (name != otherName) {
+            return false;
+        }
+        if (!type->equals(otherType)) {
+            return false;
+        }
+        if (value && !value->equals(otherValue)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool NamedTupleType::operator!=(const Type &other) const { return !(*this == other); }
+
+TypeConv NamedTupleType::convertibility(const Type &other) const {
+    // TODO: not fully implemented
+    // TODO: others' convertibility should be checked
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::NAMED_TUPLE: {
+            const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
+            if (elements_.size() != otherParam.elements_.size()) {
+                return TypeConv::FORBIDDEN;
+            }
+            TypeConv result = TypeConv::SAFE;
+            for (size_t i = 0; i < elements_.size(); i++) {
+                const auto &[name, type, value] = elements_[i];
+                if (name != name) {
+                    return TypeConv::FORBIDDEN;
+                }
+                TypeConv paramConv = type->convertibility(*type);
+                if (paramConv == TypeConv::FORBIDDEN) {
+                    return TypeConv::FORBIDDEN;
+                } else if (paramConv == TypeConv::UNSAFE) {
+                    result = TypeConv::UNSAFE;
+                }
+            }
+            return result;
+        }
+        case TypeCode::UNION:
+            return TypeConv::SAFE;
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET:
+            return TypeConv::SAFE;
+        case TypeCode::ARRAY:
+            return TypeConv::SAFE;
+        case TypeCode::VECTOR:
+            return TypeConv::SAFE;
+        case TypeCode::TENSOR:
+            return TypeConv::SAFE;
+        case TypeCode::MAP:
+            return TypeConv::SAFE;
+        case TypeCode::DICT:
+            return TypeConv::SAFE;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+std::string FunctorType::toString() const {
+    std::string result = "";
+    if (withType_ != nullptr && withType_->code() == TypeCode::NAMED_TUPLE) {
+        const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
+        result += "<";
+        for (const auto &tuple : with.elements()) {
+            const auto &[name, type, value] = tuple;
+            result += name + ": " + type->toString();
+            if (value) {
+                result += " = " + value->dataStr();
+            }
+            result += ", ";
+        }
+        result.pop_back();
+        result.pop_back();
+        result += "> ";
+    }
+    result += "(";
+    if (paramsType_ != nullptr && paramsType_->code() == TypeCode::NAMED_TUPLE) {
+        const auto &params = dynamic_cast<const NamedTupleType &>(*paramsType_);
+        for (const auto &tuple : params.elements()) {
+            const auto &[name, type, value] = tuple;
+            result += name + ": " + type->toString();
+            if (value) {
+                result += " = " + value->dataStr();
+            }
+            result += ", ";
+        }
+        result.pop_back();
+        result.pop_back();
+    }
+    result += ") => ";
+    if (returnType_ != nullptr) {
+        result += returnType_->toString();
+    } else {
+        result += "Void";
+    }
+    return result;
+}
+
 TypeConv FunctorType::convertibility(const Type &other) const {
     // TODO: not fully implemented
     if (other.code() == TypeCode::FUNCTOR) {
         TypeConv result = TypeConv::SAFE;
         const FunctorType &otherFunctor = dynamic_cast<const FunctorType &>(other);
-        if (withType_ && !otherFunctor.withType_ ) {
+        if (withType_ && !otherFunctor.withType_) {
             const TypeConv withTypeConv = withType_->convertibility(*otherFunctor.withType_);
             if (withTypeConv == TypeConv::FORBIDDEN) {
                 return TypeConv::FORBIDDEN;
@@ -675,5 +758,5 @@ void initTypes() {
     // initialize special types
     anyTypePtr = std::make_shared<SpecialType>(TypeCode::ANY);
     voidTypePtr = std::make_shared<SpecialType>(TypeCode::VOID);
-    functorTypePtr = std::make_shared<FunctorType>();
+    functorTypePtr = std::make_shared<FunctorType>(nullptr, nullptr, nullptr);
 }

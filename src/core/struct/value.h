@@ -273,56 +273,19 @@ class DictValue : public StructValue {
 
   public:
     DictValue() : StructValue(std::make_shared<DictType>()) {}
-    DictValue(std::initializer_list<std::pair<std::string, entity_ptr_t>> data)
-        : StructValue(std::make_shared<DictType>()) {
-        DictType &dictType = *static_cast<DictType *>(type_.get());
-        for (const auto &e : data) {
-            data_[e.first] = e.second;
-            dictType.add(e.first, e.second->type());
-        }
-    }
-    DictValue(const std::unordered_map<std::string, entity_ptr_t> &data)
-        : StructValue(std::make_shared<DictType>()), data_(data) {
-        DictType &dictType = *static_cast<DictType *>(type_.get());
-        for (const auto &e : data) {
-            dictType.add(e.first, e.second->type());
-        }
-    }
+    DictValue(std::initializer_list<std::pair<std::string, entity_ptr_t>> data);
+    DictValue(const std::unordered_map<std::string, entity_ptr_t> &data);
     virtual ~DictValue() = default;
 
-    bool add(const std::string &key, const entity_ptr_t &e) {
-        DictType &dictType = *static_cast<DictType *>(type_.get());
-        if (dictType.add(key, e->type())) {
-            data_[key] = e;
-            return true;
-        }
-        return false;
-    }
+    bool add(const std::string &key, const entity_ptr_t &e);
 
-    bool del(const std::string &key) {
-        DictType &dictType = *static_cast<DictType *>(type_.get());
-        if (dictType.del(key)) {
-            data_.erase(key);
-            return true;
-        }
-        return false;
-    }
+    bool del(const std::string &key);
 
-    bool has(const std::string &key) const { return data_.find(key) != data_.end(); }
+    bool has(const std::string &key) const;
 
-    void set(const std::string &key, const entity_ptr_t &e) {
-        DictType &dictType = *static_cast<DictType *>(type_.get());
-        dictType.set(key, e->type());
-        data_[key] = e;
-    }
+    void set(const std::string &key, const entity_ptr_t &e);
 
-    entity_ptr_t get(const std::string &key) const {
-        auto it = data_.find(key);
-        if (it != data_.end()) {
-            return it->second;
-        }
-        return nullptr;
-    }
+    entity_ptr_t get(const std::string &key) const;
 
     void clear() {
         DictType &dictType = *static_cast<DictType *>(type_.get());
@@ -350,55 +313,9 @@ class NamedTupleValue : public Value {
         : Value(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {}
     virtual ~NamedTupleValue() = default;
 
-    bool setType(type_ptr_t type) {
-        if (typeResolved_ || type->code() != TypeCode::NAMED_TUPLE) {
-            return false;
-        }
-        const auto &typeList = static_cast<NamedTupleType *>(type.get())->elements();
-        if (indexData_.size() + namedData_.size() != typeList.size()) {
-            return false;
-        }
-        size_t idx = 0;
-        std::vector<entity_ptr_t> indexResult;
-        std::unordered_map<std::string, entity_ptr_t> namedResult;
-        for (size_t i = 0; i < typeList.size(); i++) {
-            const auto &[key, typ, value] = typeList[i];
-            // TODO: unused value
-            if (namedData_.find(key) != namedData_.end()) {
-                if (namedData_[key]->type()->convertibility(*typ) != TypeConv::SAFE) {
-                    return false;
-                }
-                indexResult.push_back(namedData_[key]);
-                namedResult[key] = namedData_[key];
-            } else {
-                if (indexData_[idx]->type()->convertibility(*typ) != TypeConv::SAFE) {
-                    return false;
-                }
-                indexResult.push_back(indexData_[idx]);
-                namedResult[key] = indexData_[idx];
-                idx++;
-            }
-        }
-        indexData_ = indexResult;
-        namedData_ = namedResult;
-        type_ = type;
-        typeResolved_ = true;
-    }
+    bool setType(type_ptr_t type);
 
-    bool add(const entity_ptr_t &e, const std::string &key = "") {
-        if (typeResolved_) {
-            return false;
-        }
-        if (key.length() > 0) {
-            if (namedData_.find(key) != namedData_.end()) {
-                return false;
-            }
-            namedData_[key] = e;
-        } else {
-            indexData_.push_back(e);
-        }
-        return true;
-    }
+    bool add(const entity_ptr_t &e, const std::string &key = "");
 
     bool resolved() override;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
