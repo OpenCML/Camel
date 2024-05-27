@@ -504,16 +504,15 @@ class ListType : public StructType {
 
 class NamedTupleType : public StructType {
   private:
-    std::vector<std::string> keys_;
-    std::unordered_map<std::string, type_ptr_t> types_;
+    std::vector<std::pair<std::string, type_ptr_t>> pairs_;
 
   public:
     NamedTupleType() : StructType(TypeCode::NAMED_TUPLE) {}
 
     std::string toString() const override {
         std::string result = "(";
-        for (const auto &param : keys_) {
-            result += param + ": " + types_.at(param)->toString() + ", ";
+        for (const auto &pair : pairs_) {
+            result += pair.first + ": " + pair.second->toString() + ", ";
         }
         result.pop_back();
         result.pop_back();
@@ -527,14 +526,14 @@ class NamedTupleType : public StructType {
         }
         const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
 
-        if (keys_.size() != otherParam.keys_.size()) {
+        if (pairs_.size() != otherParam.pairs_.size()) {
             return false;
         }
-        for (size_t i = 0; i < keys_.size(); i++) {
-            if (keys_[i] != otherParam.keys_[i]) {
+        for (size_t i = 0; i < pairs_.size(); i++) {
+            if (pairs_[i].first != otherParam.pairs_[i].first) {
                 return false;
             }
-            if (!types_.at(keys_[i])->equals(otherParam.types_.at(keys_[i]))) {
+            if (!pairs_[i].second->equals(otherParam.pairs_[i].second)) {
                 return false;
             }
         }
@@ -542,39 +541,28 @@ class NamedTupleType : public StructType {
     }
     bool operator!=(const Type &other) const override { return !(*this == other); }
 
-    bool add(const std::string &param, const type_ptr_t &type) {
-        if (types_.find(param) != types_.end()) {
-            return false;
+    bool add(const std::string &key, const type_ptr_t &type) {
+        for (const auto &pair : pairs_) {
+            if (pair.first == key) {
+                return false;
+            }
         }
-        keys_.push_back(param);
-        types_[param] = type;
+        pairs_.push_back({key, type});
         return true;
     }
 
-    bool del(const std::string &param) {
-        if (types_.find(param) != types_.end()) {
-            keys_.erase(std::find(keys_.begin(), keys_.end(), param));
-            types_.erase(param);
-            return true;
+    const std::vector<std::pair<std::string, type_ptr_t>> &list() const { return pairs_; }
+    
+    std::unordered_map<std::string, type_ptr_t> map() const {
+        auto result = std::unordered_map<std::string, type_ptr_t>();
+        for (const auto &param : pairs_) {
+            result[param.first] = param.second;
         }
-        return false;
+        return result;
     }
-
-    bool has(const std::string &param) const { return types_.find(param) != types_.end(); }
-
-    bool set(const std::string &param, const type_ptr_t &type) {
-        if (types_.find(param) != types_.end()) {
-            types_[param] = type;
-            return true;
-        }
-        return false;
-    }
-
-    type_ptr_t get(const std::string &param) const { return types_.at(param); }
 
     void clear() {
-        keys_.clear();
-        types_.clear();
+        pairs_.clear();
     }
 
     TypeConv convertibility(const Type &other) const override;

@@ -183,6 +183,9 @@ TypeConv SetType::convertibility(const Type &other) const {
             return TypeConv::FORBIDDEN;
         }
     }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }
@@ -220,6 +223,9 @@ TypeConv MapType::convertibility(const Type &other) const {
         default:
             return TypeConv::FORBIDDEN;
         }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
     }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
@@ -267,6 +273,9 @@ TypeConv DictType::convertibility(const Type &other) const {
             return TypeConv::FORBIDDEN;
         }
     }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }
@@ -312,6 +321,9 @@ TypeConv ArrayType::convertibility(const Type &other) const {
         default:
             return TypeConv::FORBIDDEN;
         }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
     }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
@@ -400,6 +412,9 @@ TypeConv UnionType::convertibility(const Type &other) const {
             return TypeConv::FORBIDDEN;
         }
     }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }
@@ -411,17 +426,17 @@ TypeConv NamedTupleType::convertibility(const Type &other) const {
         switch (other.code()) {
         case TypeCode::NAMED_TUPLE: {
             const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
-            if (keys_.size() != otherParam.keys_.size()) {
+            if (pairs_.size() != otherParam.pairs_.size()) {
                 return TypeConv::FORBIDDEN;
             }
             TypeConv result = TypeConv::SAFE;
-            for (size_t i = 0; i < keys_.size(); i++) {
-                const auto &param = keys_[i];
-                const auto &other = otherParam.keys_[i];
-                if (param != other) {
+            for (size_t i = 0; i < pairs_.size(); i++) {
+                const auto &pair = pairs_[i];
+                const auto &other = otherParam.pairs_[i];
+                if (pair.first != other.first) {
                     return TypeConv::FORBIDDEN;
                 }
-                TypeConv paramConv = types_.at(param)->convertibility(*otherParam.types_.at(other));
+                TypeConv paramConv = pair.second->convertibility(*other.second);
                 if (paramConv == TypeConv::FORBIDDEN) {
                     return TypeConv::FORBIDDEN;
                 } else if (paramConv == TypeConv::UNSAFE) {
@@ -450,6 +465,9 @@ TypeConv NamedTupleType::convertibility(const Type &other) const {
         default:
             return TypeConv::FORBIDDEN;
         }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
     }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
@@ -497,6 +515,9 @@ TypeConv VectorType::convertibility(const Type &other) const {
             return TypeConv::FORBIDDEN;
         }
     }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }
@@ -542,6 +563,9 @@ TypeConv MatrixType::convertibility(const Type &other) const {
             return TypeConv::FORBIDDEN;
         }
     }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }
@@ -569,6 +593,9 @@ TypeConv ListType::convertibility(const Type &other) const {
         default:
             return TypeConv::FORBIDDEN;
         }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
     }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;

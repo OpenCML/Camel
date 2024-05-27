@@ -342,55 +342,49 @@ class DictValue : public StructValue {
 class NamedTupleValue : public Value {
   private:
     bool resolved_ = false;
-    std::vector<std::string> keys_;
-    std::unordered_map<std::string, entity_ptr_t> data_;
+    bool typeResolved_ = false;
+    std::vector<entity_ptr_t> seqData_;
+    std::unordered_map<std::string, entity_ptr_t> namedData_;
 
   public:
     NamedTupleValue() : Value(std::make_shared<NamedTupleType>()) {}
-    NamedTupleValue(std::initializer_list<std::pair<std::string, entity_ptr_t>> data)
-        : Value(std::make_shared<NamedTupleType>()) {
-        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
-        for (const auto &e : data) {
-            keys_.push_back(e.first);
-            data_[e.first] = e.second;
-            tupleType.add(e.first, e.second->type());
-        }
-    }
-    NamedTupleValue(const std::unordered_map<std::string, entity_ptr_t> &data) {
-        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
-        for (const auto &e : data) {
-            keys_.push_back(e.first);
-            tupleType.add(e.first, e.second->type());
-        }
-    }
+    NamedTupleValue(const std::vector<entity_ptr_t> &seqData,
+                    const std::unordered_map<std::string, entity_ptr_t> &namedData)
+        : Value(std::make_shared<NamedTupleType>()), seqData_(seqData), namedData_(namedData) {}
     virtual ~NamedTupleValue() = default;
 
-    bool add(const std::string &key, const entity_ptr_t &e) {
-        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
-        if (tupleType.add(key, e->type())) {
-            keys_.push_back(key);
-            data_[key] = e;
-            return true;
+    bool setType(type_ptr_t type) {
+        if (typeResolved_ || type->code() != TypeCode::NAMED_TUPLE) {
+            return false;
         }
-        return false;
-    }
-
-    bool del(const std::string &key) {
-        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
-        if (tupleType.del(key)) {
-            keys_.erase(std::remove(keys_.begin(), keys_.end(), key), keys_.end());
-            data_.erase(key);
-            return true;
+        const auto &typeList = static_cast<NamedTupleType *>(type.get())->list();
+        if (seqData_.size() + namedData_.size() != typeList.size()) {
+            return false;
         }
-        return false;
-    }
-
-    bool has(const std::string &key) const { return data_.find(key) != data_.end(); }
-
-    void set(const std::string &key, const entity_ptr_t &e) {
-        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
-        tupleType.set(key, e->type());
-        data_[key] = e;
+        size_t idx = 0;
+        std::vector<entity_ptr_t> seqResult;
+        std::unordered_map<std::string, entity_ptr_t> namedResult;
+        for (size_t i = 0; i < typeList.size(); i++) {
+            const auto &[key, typ] = typeList[i];
+            if (namedData_.find(key) != namedData_.end()) {
+                if (namedData_[key]->type()->convertibility(*typ) != TypeConv::SAFE) {
+                    return false;
+                }
+                seqResult.push_back(namedData_[key]);
+                namedResult[key] = namedData_[key];
+            } else {
+                if (seqData_[idx]->type()->convertibility(*typ) != TypeConv::SAFE) {
+                    return false;
+                }
+                seqResult.push_back(seqData_[idx]);
+                namedResult[key] = seqData_[idx];
+                idx++;
+            }
+        }
+        seqData_ = seqResult;
+        namedData_ = namedResult;
+        type_ = type;
+        typeResolved_ = true;
     }
 
     bool resolved() override;
