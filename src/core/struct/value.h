@@ -94,7 +94,6 @@ template <typename T> class PrimValue : public Value {
     const T &data() const { return data_; }
 
     bool resolved() override { return true; }
-
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
@@ -170,9 +169,7 @@ template <typename T> class PrimValue : public Value {
             throw ValueConvError(e.what());
         }
     }
-
     virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimValue<T>>(data_); }
-
     virtual const std::string toString() const override { return std::to_string(data_); }
 };
 
@@ -187,7 +184,6 @@ class StringValue : public Value {
     const std::string &data() const { return data_; }
 
     bool resolved() override { return true; }
-
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
@@ -211,9 +207,7 @@ class StringValue : public Value {
             throw ValueConvError(e.what());
         }
     }
-
     virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
-
     virtual const std::string toString() const override { return data_; }
 };
 
@@ -223,8 +217,8 @@ class StructValue : public Value {
     StructValue(type_ptr_t type) : Value(type) {}
     virtual ~StructValue() = default;
 
+    virtual bool resolved() = 0;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
-
     virtual const value_ptr_t clone(bool deep = false) const override = 0;
     virtual const std::string toString() const override = 0;
 };
@@ -242,8 +236,6 @@ class SetValue : public StructValue {
         : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
     virtual ~SetValue() = default;
 
-    bool resolved() override;
-
     // bool add(const entity_ptr_t &e) {
     //     if (e->type() == type_->elementType()) {
     //         data_.insert(e);
@@ -252,10 +244,9 @@ class SetValue : public StructValue {
     //     return false;
     // }
 
+    bool resolved() override;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-
     virtual const value_ptr_t clone(bool deep = false) const override;
-
     virtual const std::string toString() const override;
 };
 
@@ -270,14 +261,11 @@ class ListValue : public StructValue {
     ListValue(const std::vector<entity_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
     virtual ~ListValue() = default;
 
-    bool resolved() override;
-
     bool add(const entity_ptr_t &e) { data_.push_back(e); }
 
+    bool resolved() override;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-
     virtual const value_ptr_t clone(bool deep = false) const override;
-
     virtual const std::string toString() const override;
 };
 
@@ -304,8 +292,6 @@ class DictValue : public StructValue {
         }
     }
     virtual ~DictValue() = default;
-
-    bool resolved() override;
 
     bool add(const std::string &key, const entity_ptr_t &e) {
         DictType &dictType = *static_cast<DictType *>(type_.get());
@@ -347,9 +333,68 @@ class DictValue : public StructValue {
         data_.clear();
     }
 
+    bool resolved() override;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-
     virtual const value_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
 
+class NamedTupleValue : public Value {
+  private:
+    bool resolved_ = false;
+    std::vector<std::string> keys_;
+    std::unordered_map<std::string, entity_ptr_t> data_;
+
+  public:
+    NamedTupleValue() : Value(std::make_shared<NamedTupleType>()) {}
+    NamedTupleValue(std::initializer_list<std::pair<std::string, entity_ptr_t>> data)
+        : Value(std::make_shared<NamedTupleType>()) {
+        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
+        for (const auto &e : data) {
+            keys_.push_back(e.first);
+            data_[e.first] = e.second;
+            tupleType.add(e.first, e.second->type());
+        }
+    }
+    NamedTupleValue(const std::unordered_map<std::string, entity_ptr_t> &data) {
+        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
+        for (const auto &e : data) {
+            keys_.push_back(e.first);
+            tupleType.add(e.first, e.second->type());
+        }
+    }
+    virtual ~NamedTupleValue() = default;
+
+    bool add(const std::string &key, const entity_ptr_t &e) {
+        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
+        if (tupleType.add(key, e->type())) {
+            keys_.push_back(key);
+            data_[key] = e;
+            return true;
+        }
+        return false;
+    }
+
+    bool del(const std::string &key) {
+        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
+        if (tupleType.del(key)) {
+            keys_.erase(std::remove(keys_.begin(), keys_.end(), key), keys_.end());
+            data_.erase(key);
+            return true;
+        }
+        return false;
+    }
+
+    bool has(const std::string &key) const { return data_.find(key) != data_.end(); }
+
+    void set(const std::string &key, const entity_ptr_t &e) {
+        NamedTupleType &tupleType = *static_cast<NamedTupleType *>(type_.get());
+        tupleType.set(key, e->type());
+        data_[key] = e;
+    }
+
+    bool resolved() override;
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual const value_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };

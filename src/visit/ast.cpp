@@ -508,7 +508,106 @@ std::any ASTConstructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *c
 /*
 entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
 */
-std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context){};
+std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
+    ast_ptr_t &primEntity = std::any_cast<ast_ptr_t>(visitPrimEntity(context->primEntity()));
+    ast_ptr_t entity = primEntity;
+    for (size_t i = 1; i < context->children.size(); i++) {
+        bool dangling = false;
+        auto &execNode = createAstNode<ExecuteNode>();
+        const auto &child = context->children[i];
+        // TODO: find a better way to determine the type of the child
+        switch (child->getText()[0]) {
+        case '[': // memberAccess
+        {
+            const auto &memberAccess = dynamic_cast<OpenCMLParser::MemberAccessContext *>(child);
+            ast_ptr_t &indexNode = std::any_cast<ast_ptr_t>(visitMemberAccess(memberAccess));
+            ast_ptr_t &linkNode = createAstNode<LinkNode>();
+            // TODO: inner function names can share the same deref node
+            ast_ptr_t &funcNode = createAstNode<DeRefNode>("__index__");
+            auto &listValue = std::make_shared<ListValue>();
+            if (entity->type() == SemNodeType::DATA) {
+                const DataNode &dataNode = dynamic_cast<const DataNode &>(*entity);
+                listValue->add(dataNode.entity());
+            } else {
+                auto [refNode, refEntity] = makeDanglingPair(entity);
+                dangling = true;
+                *execNode << refNode;
+                listValue->add(refEntity);
+            }
+            if (indexNode->type() == SemNodeType::DATA) {
+                const DataNode &dataNode = dynamic_cast<const DataNode &>(*indexNode);
+                listValue->add(dataNode.entity());
+            } else {
+                auto [refNode, refEntity] = makeDanglingPair(indexNode);
+                dangling = true;
+                *execNode << refNode;
+                listValue->add(refEntity);
+            }
+            ast_ptr_t &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
+            *linkNode << dataNode << funcNode;
+            if (dangling) {
+                *execNode << linkNode;
+                entity = execNode;
+            } else {
+                entity = linkNode;
+            }
+        } break;
+
+        case '<': // angledValues
+        {
+            const auto &angledValues = dynamic_cast<OpenCMLParser::AngledValuesContext *>(child);
+            const auto &[indexArgs, namedArgs] =
+                std::any_cast<std::pair<std::vector<ast_ptr_t>, std::vector<std::pair<std::string, ast_ptr_t>>>>(
+                    visitAngledValues(angledValues));
+            ast_ptr_t &linkNode = createAstNode<LinkNode>();
+            ast_ptr_t &funcNode = createAstNode<DeRefNode>("__call__");
+            auto &listValue = std::make_shared<ListValue>();
+            if (entity->type() == SemNodeType::DATA) {
+                const DataNode &dataNode = dynamic_cast<const DataNode &>(*entity);
+                listValue->add(dataNode.entity());
+            } else {
+                auto [refNode, refEntity] = makeDanglingPair(entity);
+                dangling = true;
+                *execNode << refNode;
+                listValue->add(refEntity);
+            }
+            for (const auto &arg : indexArgs) {
+                if (arg->type() == SemNodeType::DATA) {
+                    const DataNode &dataNode = dynamic_cast<const DataNode &>(*arg);
+                    listValue->add(dataNode.entity());
+                } else {
+                    auto [refNode, refEntity] = makeDanglingPair(arg);
+                    dangling = true;
+                    *execNode << refNode;
+                    listValue->add(refEntity);
+                }
+            }
+            for (const auto &[key, arg] : namedArgs) {
+                if (arg->type() == SemNodeType::DATA) {
+                    const DataNode &dataNode = dynamic_cast<const DataNode &>(*arg);
+                    listValue->add(dataNode.entity());
+                } else {
+                    auto [refNode, refEntity] = makeDanglingPair(arg);
+                    dangling = true;
+                    *execNode << refNode;
+                    listValue->add(refEntity);
+                }
+            }
+            ast_ptr_t &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
+            *linkNode << dataNode << funcNode;
+            if (dangling) {
+                *execNode << linkNode;
+                entity = execNode;
+            } else {
+                entity = linkNode;
+            }
+        } break;
+
+        default:
+            break;
+        }
+    }
+};
 
 /*
 entityChain  : entityLink+ ;

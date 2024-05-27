@@ -19,6 +19,10 @@
 #include "value.h"
 #include "entity.h"
 
+/*
+SetValue
+*/
+
 bool SetValue::resolved() {
     if (resolved_) {
         return true;
@@ -66,6 +70,10 @@ const std::string SetValue::toString() const {
     str += "}";
     return str;
 }
+
+/*
+ListValue
+*/
 
 bool ListValue::resolved() {
     if (resolved_) {
@@ -116,6 +124,23 @@ const std::string ListValue::toString() const {
     return str;
 }
 
+/*
+DictValue
+*/
+
+bool DictValue::resolved() {
+    if (resolved_) {
+        return true;
+    }
+    for (const auto &e : data_) {
+        if (!e.second->resolved()) {
+            return false;
+        }
+    }
+    resolved_ = true;
+    return true;
+}
+
 const value_ptr_t DictValue::convert(type_ptr_t target, bool inplace) {
     // TODO
     if (target == type_ || type_->equals(target)) {
@@ -149,5 +174,56 @@ const std::string DictValue::toString() const {
         str += e.first + ": " + e.second->dataStr() + ", ";
     }
     str += "}";
+    return str;
+}
+
+/*
+NamedTupleValue
+*/
+
+bool NamedTupleValue::resolved() {
+    if (resolved_) {
+        return true;
+    }
+    for (const auto &e : data_) {
+        if (!e.second->resolved()) {
+            return false;
+        }
+    }
+    resolved_ = true;
+    return true;
+}
+
+const value_ptr_t NamedTupleValue::convert(type_ptr_t target, bool inplace) {
+    // TODO
+    if (target == type_ || type_->equals(target)) {
+        // same type, no need to convert
+        return shared_from_this();
+    }
+    if (target->structured()) {
+        switch (target->code()) {
+        case TypeCode::SET:
+            /* code */
+            break;
+
+        default:
+            break;
+        }
+    }
+    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+}
+
+const value_ptr_t NamedTupleValue::clone(bool) const {
+    return std::make_shared<NamedTupleValue>(data_);
+}
+
+const std::string NamedTupleValue::toString() const {
+    std::string str = "(";
+    for (const auto &e : data_) {
+        str += e.first + ": " + e.second->dataStr() + ", ";
+    }
+    str.pop_back();
+    str.pop_back();
+    str += ")";
     return str;
 }
