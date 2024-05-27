@@ -225,7 +225,7 @@ void opencmlParserInitialize() {
   	0,0,246,244,1,0,0,0,246,247,1,0,0,0,247,29,1,0,0,0,248,250,7,0,0,0,249,
   	248,1,0,0,0,250,251,1,0,0,0,251,249,1,0,0,0,251,252,1,0,0,0,252,31,1,
   	0,0,0,253,254,3,110,55,0,254,255,5,1,0,0,255,256,3,98,49,0,256,33,1,0,
-  	0,0,257,258,3,84,42,0,258,259,5,1,0,0,259,260,3,84,42,0,260,35,1,0,0,
+  	0,0,257,258,3,110,55,0,258,259,5,1,0,0,259,260,3,84,42,0,260,35,1,0,0,
   	0,261,263,3,110,55,0,262,264,3,26,13,0,263,262,1,0,0,0,263,264,1,0,0,
   	0,264,265,1,0,0,0,265,266,5,1,0,0,266,269,3,98,49,0,267,268,5,2,0,0,268,
   	270,3,84,42,0,269,267,1,0,0,0,269,270,1,0,0,0,270,37,1,0,0,0,271,276,
@@ -1841,12 +1841,12 @@ OpenCMLParser::KeyValuePairContext::KeyValuePairContext(ParserRuleContext *paren
   : antlr4::RuleContextWithAltNum(parent, invokingState) {
 }
 
-std::vector<OpenCMLParser::EntityExprContext *> OpenCMLParser::KeyValuePairContext::entityExpr() {
-  return getRuleContexts<OpenCMLParser::EntityExprContext>();
+OpenCMLParser::IdentRefContext* OpenCMLParser::KeyValuePairContext::identRef() {
+  return getRuleContext<OpenCMLParser::IdentRefContext>(0);
 }
 
-OpenCMLParser::EntityExprContext* OpenCMLParser::KeyValuePairContext::entityExpr(size_t i) {
-  return getRuleContext<OpenCMLParser::EntityExprContext>(i);
+OpenCMLParser::EntityExprContext* OpenCMLParser::KeyValuePairContext::entityExpr() {
+  return getRuleContext<OpenCMLParser::EntityExprContext>(0);
 }
 
 
@@ -1876,7 +1876,7 @@ OpenCMLParser::KeyValuePairContext* OpenCMLParser::keyValuePair() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(257);
-    entityExpr(0);
+    identRef();
     setState(258);
     match(OpenCMLParser::T__0);
     setState(259);
@@ -2512,9 +2512,7 @@ OpenCMLParser::BracedPairedValuesContext* OpenCMLParser::bracedPairedValues() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~ 0x3fULL) == 0) &&
-      ((1ULL << _la) & 1148424502049248320) != 0) || ((((_la - 86) & ~ 0x3fULL) == 0) &&
-      ((1ULL << (_la - 86)) & 123) != 0)) {
+    if (_la == OpenCMLParser::IDENTIFIER) {
       setState(328);
       pairedValues();
     }

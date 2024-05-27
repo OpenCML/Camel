@@ -424,8 +424,8 @@ public:
   public:
     KeyValuePairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<EntityExprContext *> entityExpr();
-    EntityExprContext* entityExpr(size_t i);
+    IdentRefContext *identRef();
+    EntityExprContext *entityExpr();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

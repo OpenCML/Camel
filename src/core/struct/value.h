@@ -55,7 +55,7 @@ class Value : public std::enable_shared_from_this<Value> {
     virtual void resolve(){};
     virtual void pending(){};
 
-    virtual const value_ptr_t clone() const = 0;
+    virtual const value_ptr_t clone(bool deep = false) const = 0;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) = 0;
 
     virtual const std::string toString() const = 0;
@@ -171,11 +171,9 @@ template <typename T> class PrimValue : public Value {
         }
     }
 
-    virtual const value_ptr_t clone() const override { return std::make_shared<PrimValue<T>>(data_); }
+    virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimValue<T>>(data_); }
 
-    virtual const std::string toString() const override {
-        return std::to_string(data_);
-    }
+    virtual const std::string toString() const override { return std::to_string(data_); }
 };
 
 class StringValue : public Value {
@@ -214,7 +212,7 @@ class StringValue : public Value {
         }
     }
 
-    virtual const value_ptr_t clone() const override { return std::make_shared<StringValue>(data_); }
+    virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
 
     virtual const std::string toString() const override { return data_; }
 };
@@ -226,7 +224,7 @@ class StructValue : public Value {
 
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
 
-    virtual const value_ptr_t clone() const override = 0;
+    virtual const value_ptr_t clone(bool deep = false) const override = 0;
     virtual const std::string toString() const override = 0;
 };
 
@@ -237,7 +235,10 @@ class SetValue : public StructValue {
 
   public:
     SetValue() = delete;
-    SetValue(type_ptr_t elType) : StructValue(std::make_shared<SetType>(elType)) {}
+    SetValue(type_ptr_t elType, std::initializer_list<entity_ptr_t> data)
+        : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
+    SetValue(type_ptr_t elType, const std::set<entity_ptr_t> &data)
+        : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
 
     bool resolved() override;
 
@@ -250,6 +251,10 @@ class SetValue : public StructValue {
     // }
 
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+
+    virtual const value_ptr_t clone(bool deep = false) const override;
+
+    virtual const std::string toString() const override;
 };
 
 class ListValue : public StructValue {
@@ -258,17 +263,16 @@ class ListValue : public StructValue {
     std::vector<entity_ptr_t> data_;
 
   public:
-    ListValue() : StructValue(listTypePtr) {}
+    ListValue(std::initializer_list<entity_ptr_t> data) : StructValue(listTypePtr), data_(data) {}
+    ListValue(const std::vector<entity_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
 
     bool resolved() override;
 
-    // bool add(const entity_ptr_t &e) {
-    //     if (e->type() == type_->elementType()) {
-    //         data_.push_back(e);
-    //         return true;
-    //     }
-    //     return false;
-    // }
+    bool add(const entity_ptr_t &e) { data_.push_back(e); }
 
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+
+    virtual const value_ptr_t clone(bool deep = false) const override;
+
+    virtual const std::string toString() const override;
 };

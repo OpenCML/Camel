@@ -43,6 +43,10 @@ class ASTNode : public AbstractTreeNode<sem_ptr_t>, std::enable_shared_from_this
     }
 };
 
+template <typename NodeType, typename... Args> ast_ptr_t createAstNode(Args &&...args) {
+    return std::make_shared<ASTNode>(std::make_shared<NodeType>(std::forward<Args>(args)...));
+}
+
 class ASTConstructor : public OpenCMLVisitor {
   public:
     ASTConstructor() = default;
@@ -61,7 +65,7 @@ class ASTConstructor : public OpenCMLVisitor {
 
     std::pair<ast_ptr_t, entity_ptr_t> makeDanglingPair(const ast_ptr_t &expr) {
         const std::string indent = std::to_string(indentIndex_++);
-        ast_ptr_t refNode = std::make_shared<ASTNode>(std::make_shared<NewRefNode>(indent));
+        ast_ptr_t refNode = createAstNode<NewRefNode>(indent);
         *refNode << expr;
         entity_ptr_t entity = std::make_shared<DanglingEntity>(indent);
         return std::make_pair(refNode, entity);

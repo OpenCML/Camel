@@ -49,3 +49,69 @@ const value_ptr_t SetValue::convert(type_ptr_t target, bool inplace) {
     }
     throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
+
+const value_ptr_t SetValue::clone(bool deep) const {
+    std::set<entity_ptr_t> cloned;
+    for (const auto &e : data_) {
+        cloned.insert(e);
+    }
+    return std::make_shared<SetValue>(type_, cloned);
+}
+
+const std::string SetValue::toString() const {
+    std::string str = "{";
+    for (const auto &e : data_) {
+        str += e->dataStr() + ", ";
+    }
+    str += "}";
+    return str;
+}
+
+bool ListValue::resolved() {
+    if (resolved_) {
+        return true;
+    }
+    for (const auto &e : data_) {
+        if (!e->resolved()) {
+            return false;
+        }
+    }
+    resolved_ = true;
+    return true;
+}
+
+const value_ptr_t ListValue::convert(type_ptr_t target, bool inplace) {
+    // TODO
+    if (target == type_ || type_->equals(target)) {
+        // same type, no need to convert
+        return shared_from_this();
+    }
+    if (target->structured()) {
+        switch (target->code()) {
+        case TypeCode::SET:
+            /* code */
+            break;
+
+        default:
+            break;
+        }
+    }
+    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+}
+
+const value_ptr_t ListValue::clone(bool) const {
+    std::vector<entity_ptr_t> cloned;
+    for (const auto &e : data_) {
+        cloned.push_back(e);
+    }
+    return std::make_shared<ListValue>(cloned);
+}
+
+const std::string ListValue::toString() const {
+    std::string str = "[";
+    for (const auto &e : data_) {
+        str += e->dataStr() + ", ";
+    }
+    str += "]";
+    return str;
+}

@@ -319,11 +319,11 @@ std::any Formatter::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context)
 };
 
 /*
-keyValuePair : entityExpr ':' entityExpr ;
+keyValuePair : identRef ':' entityExpr ;
 */
 std::any Formatter::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
-    return std::any_cast<std::string>(visitEntityExpr(context->entityExpr(0))) + ": " +
-           std::any_cast<std::string>(visitEntityExpr(context->entityExpr(1)));
+    return context->identRef()->getText() + ": " +
+           std::any_cast<std::string>(visitEntityExpr(context->entityExpr()));
 };
 
 /*

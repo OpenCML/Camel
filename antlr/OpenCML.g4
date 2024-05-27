@@ -66,7 +66,7 @@ annotations : annotation+ ;
 modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
-keyValuePair : entityExpr ':' entityExpr ;
+keyValuePair : identRef ':' entityExpr ;
 keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 
 typeList     : typeExpr (',' typeExpr)* ;
