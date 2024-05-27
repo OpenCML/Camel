@@ -79,8 +79,8 @@ std::string typeCodeToString(TypeCode code) {
         return "Union";
     case TypeCode::VECTOR:
         return "Vector";
-    case TypeCode::MATRIX:
-        return "Matrix";
+    case TypeCode::TENSOR:
+        return "Tensor";
     case TypeCode::NAMED_TUPLE:
         return "NamedTuple";
         // special types
@@ -113,7 +113,7 @@ TypeConv PrimType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::VECTOR:
             [[fallthrough]];
-        case TypeCode::MATRIX:
+        case TypeCode::TENSOR:
             [[fallthrough]];
         case TypeCode::SET:
             return TypeConv::SAFE;
@@ -161,12 +161,7 @@ TypeConv SetType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            if (otherArray.size() == 0) {
-                // if the array size is 0
-                // it indicates that the array is dynamic
-                return valueType_->convertibility(*otherArray.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return valueType_->convertibility(*otherArray.elementType());
         }
         case TypeCode::MAP:
             [[fallthrough]];
@@ -174,9 +169,14 @@ TypeConv SetType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::UNION:
             [[fallthrough]];
-        case TypeCode::VECTOR:
-            [[fallthrough]];
-        case TypeCode::MATRIX:
+        case TypeCode::VECTOR: {
+            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+            if (otherVector.size() == 1) {
+                return valueType_->convertibility(*otherVector.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::TENSOR:
             return TypeConv::FORBIDDEN;
 
         default:
@@ -217,7 +217,7 @@ TypeConv MapType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::VECTOR:
             [[fallthrough]];
-        case TypeCode::MATRIX:
+        case TypeCode::TENSOR:
             return TypeConv::FORBIDDEN;
 
         default:
@@ -266,7 +266,7 @@ TypeConv DictType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::VECTOR:
             [[fallthrough]];
-        case TypeCode::MATRIX:
+        case TypeCode::TENSOR:
             return TypeConv::FORBIDDEN;
 
         default:
@@ -285,10 +285,7 @@ TypeConv ArrayType::convertibility(const Type &other) const {
         switch (other.code()) {
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            if (size_ == otherArray.size()) {
-                return elementType_->convertibility(*otherArray.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherArray.elementType());
         }
         case TypeCode::LIST:
             return TypeConv::SAFE;
@@ -297,18 +294,11 @@ TypeConv ArrayType::convertibility(const Type &other) const {
             return elementType_->convertibility(*otherSet.valueType());
         }
         case TypeCode::VECTOR: {
-            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (size_ == otherVector.size()) {
-                return elementType_->convertibility(*otherVector.elementType());
-            }
+            // we cannot know the size of the array
             return TypeConv::FORBIDDEN;
         }
-        case TypeCode::MATRIX: {
-            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
-            const auto &shape = otherMatrix.shape();
-            if (shape.size() == 1 && size_ == shape.front()) {
-                return elementType_->convertibility(*otherMatrix.elementType());
-            }
+        case TypeCode::TENSOR: {
+            // we cannot know the size of the array
             return TypeConv::FORBIDDEN;
         }
         case TypeCode::MAP:
@@ -317,6 +307,38 @@ TypeConv ArrayType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::UNION:
             return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+TypeConv TupleType::convertibility(const Type &other) const {
+    // TODO: not fully implemented
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::TENSOR:
+            return TypeConv::SAFE;
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET:
+            return TypeConv::SAFE;
+        case TypeCode::ARRAY:
+            return TypeConv::SAFE;
+        case TypeCode::VECTOR:
+            return TypeConv::SAFE;
+        case TypeCode::MAP:
+            return TypeConv::SAFE;
+        case TypeCode::DICT:
+            return TypeConv::SAFE;
+        case TypeCode::UNION:
+            return TypeConv::SAFE;
 
         default:
             return TypeConv::FORBIDDEN;
@@ -366,10 +388,6 @@ TypeConv UnionType::convertibility(const Type &other) const {
         }
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            if (otherArray.size() > 1) {
-                // 0 or 1 size array is allowed
-                return TypeConv::FORBIDDEN;
-            }
             const type_ptr_t &otherType = otherArray.elementType();
             if (otherType->code() == TypeCode::UNION) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
@@ -390,8 +408,8 @@ TypeConv UnionType::convertibility(const Type &other) const {
             }
             return TypeConv::FORBIDDEN;
         }
-        case TypeCode::MATRIX: {
-            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        case TypeCode::TENSOR: {
+            const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             const auto &shape = otherMatrix.shape();
             if (shape.size() != 1 || shape.front() > 1) {
                 return TypeConv::FORBIDDEN;
@@ -455,7 +473,7 @@ TypeConv NamedTupleType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::VECTOR:
             return TypeConv::SAFE;
-        case TypeCode::MATRIX:
+        case TypeCode::TENSOR:
             return TypeConv::SAFE;
         case TypeCode::MAP:
             return TypeConv::SAFE;
@@ -487,13 +505,10 @@ TypeConv VectorType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            if (otherArray.size() == 0 || otherArray.size() == size_) {
-                return elementType_->convertibility(*otherArray.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherArray.elementType());
         }
-        case TypeCode::MATRIX: {
-            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        case TypeCode::TENSOR: {
+            const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             const auto &shape = otherMatrix.shape();
             if (shape.size() == 1 && shape.front() == size_) {
                 return elementType_->convertibility(*otherMatrix.elementType());
@@ -522,11 +537,11 @@ TypeConv VectorType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-TypeConv MatrixType::convertibility(const Type &other) const {
+TypeConv TensorType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::MATRIX: {
-            const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        case TypeCode::TENSOR: {
+            const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             if (shape_ == otherMatrix.shape()) {
                 return elementType_->convertibility(*otherMatrix.elementType());
             }
@@ -543,10 +558,7 @@ TypeConv MatrixType::convertibility(const Type &other) const {
         }
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            if (shape_.size() == 1 && (otherArray.size() == 0 || otherArray.size() == shape_.front())) {
-                return elementType_->convertibility(*otherArray.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherArray.elementType());
         }
         case TypeCode::SET: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
@@ -587,7 +599,7 @@ TypeConv ListType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::VECTOR:
             [[fallthrough]];
-        case TypeCode::MATRIX:
+        case TypeCode::TENSOR:
             return TypeConv::FORBIDDEN;
 
         default:

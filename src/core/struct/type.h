@@ -41,10 +41,11 @@ enum class TypeCode {
     LIST = 0b01'000010,
     DICT = 0b01'000011,
     ARRAY = 0b01'000100,
-    UNION = 0b01'000101,
-    VECTOR = 0b01'000110,
-    MATRIX = 0b01'000111,
-    NAMED_TUPLE = 0b01'001000,
+    TUPLE = 0b01'000101,
+    UNION = 0b01'000110,
+    VECTOR = 0b01'000111,
+    TENSOR = 0b01'001000,
+    NAMED_TUPLE = 0b01'001001,
     // special types
     ANY = 0b10'000000,
     VOID = 0b10'000001,
@@ -73,7 +74,7 @@ class ArrayType;
 class UnionType;
 class NamedTupleType;
 class VectorType;
-class MatrixType;
+class TensorType;
 
 using type_ptr_t = std::shared_ptr<Type>;
 
@@ -146,7 +147,7 @@ class SetType : public StructType {
 
     type_ptr_t valueType() const { return valueType_; }
 
-    std::string toString() const override { return "set<" + valueType_->toString() + ">"; }
+    std::string toString() const override { return "Set<" + valueType_->toString() + ">"; }
 
     bool operator==(const Type &other) const override {
         if (other.code() != TypeCode::SET) {
@@ -182,7 +183,7 @@ class MapType : public StructType {
     type_ptr_t valueType() const { return valueType_; }
 
     std::string toString() const override {
-        return "map<" + keyType_->toString() + ", " + valueType_->toString() + ">";
+        return "Map<" + keyType_->toString() + ", " + valueType_->toString() + ">";
     }
 
     bool operator==(const Type &other) const override {
@@ -302,18 +303,15 @@ class DictType : public StructType {
 class ArrayType : public StructType {
   private:
     type_ptr_t elementType_;
-    size_t size_;
 
   public:
     ArrayType() = delete;
-    ArrayType(const type_ptr_t &elementType, size_t size)
-        : StructType(TypeCode::ARRAY), elementType_(elementType), size_(size) {}
+    ArrayType(const type_ptr_t &elementType) : StructType(TypeCode::ARRAY), elementType_(elementType) {}
 
-    size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
 
     std::string toString() const override {
-        return "array<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
+        return "Array<" + elementType_->toString() + ">";
     }
 
     bool operator==(const Type &other) const override {
@@ -321,15 +319,58 @@ class ArrayType : public StructType {
             return false;
         }
         const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return size_ == otherArray.size_ && elementType_->equals(otherArray.elementType_);
+        return elementType_->equals(otherArray.elementType_);
     }
     bool operator!=(const Type &other) const override {
         if (other.code() != TypeCode::ARRAY) {
             return true;
         }
         const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return size_ != otherArray.size_ || !elementType_->equals(otherArray.elementType_);
+        return !elementType_->equals(otherArray.elementType_);
     }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
+class TupleType: public StructType {
+  private:
+    std::vector<type_ptr_t> types_;
+
+  public:
+    TupleType() : StructType(TypeCode::TUPLE) {}
+    TupleType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+    TupleType(const std::vector<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+
+    std::string toString() const override {
+        std::string result = "Tuple<";
+        for (const auto &type : types_) {
+            result += type->toString() + ", ";
+        }
+        result.pop_back();
+        result.pop_back();
+        result += ">";
+        return result;
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::TUPLE) {
+            return false;
+        }
+        const TupleType &otherTuple = dynamic_cast<const TupleType &>(other);
+
+        if (types_.size() != otherTuple.types_.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < types_.size(); i++) {
+            if (!types_[i]->equals(otherTuple.types_[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    bool operator!=(const Type &other) const override { return !(*this == other); }
+
+    const std::vector<type_ptr_t> &types() const { return types_; }
 
     TypeConv convertibility(const Type &other) const override;
 };
@@ -368,13 +409,13 @@ class UnionType : public StructType {
     }
 
     std::string toString() const override {
-        std::string result = "";
+        std::string result = "Union<";
         for (const auto &type : types_) {
-            result += type->toString() + " | ";
+            result += type->toString() + ", ";
         }
         result.pop_back();
         result.pop_back();
-        result.pop_back();
+        result += ">";
         return result;
     }
 
@@ -420,7 +461,7 @@ class VectorType : public StructType {
     type_ptr_t elementType() const { return elementType_; }
 
     std::string toString() const override {
-        return "vector<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
+        return "Vector<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
     }
 
     bool operator==(const Type &other) const override {
@@ -441,20 +482,20 @@ class VectorType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-class MatrixType : public StructType {
+class TensorType : public StructType {
   private:
     type_ptr_t elementType_;
     std::vector<size_t> shape_;
 
   public:
-    MatrixType(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-        : StructType(TypeCode::MATRIX), elementType_(elementType), shape_(shape) {
+    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape)
+        : StructType(TypeCode::TENSOR), elementType_(elementType), shape_(shape) {
         if (shape_.size() == 0) {
-            throw std::invalid_argument("Matrix shape must at least have 1 dim");
+            throw std::invalid_argument("Tensor shape must at least have 1 dim");
         }
         // element type must be a primitive type
         if (!elementType->primitive()) {
-            throw std::invalid_argument("Matrix element type must be primitive");
+            throw std::invalid_argument("Tensor element type must be primitive");
         }
     }
 
@@ -462,7 +503,7 @@ class MatrixType : public StructType {
     type_ptr_t elementType() const { return elementType_; }
 
     std::string toString() const override {
-        std::string result = "matrix<" + elementType_->toString() + ", [";
+        std::string result = "Tensor<" + elementType_->toString() + ", [";
         for (const auto &dim : shape_) {
             result += std::to_string(dim) + ", ";
         }
@@ -473,17 +514,17 @@ class MatrixType : public StructType {
     }
 
     bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::MATRIX) {
+        if (other.code() != TypeCode::TENSOR) {
             return false;
         }
-        const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
         return shape_ == otherMatrix.shape_ && elementType_->equals(otherMatrix.elementType_);
     }
     bool operator!=(const Type &other) const override {
-        if (other.code() != TypeCode::MATRIX) {
+        if (other.code() != TypeCode::TENSOR) {
             return true;
         }
-        const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
         return shape_ != otherMatrix.shape_ || !elementType_->equals(otherMatrix.elementType_);
     }
 
@@ -552,7 +593,7 @@ class NamedTupleType : public StructType {
     }
 
     const std::vector<std::pair<std::string, type_ptr_t>> &list() const { return pairs_; }
-    
+
     std::unordered_map<std::string, type_ptr_t> map() const {
         auto result = std::unordered_map<std::string, type_ptr_t>();
         for (const auto &param : pairs_) {
@@ -561,9 +602,7 @@ class NamedTupleType : public StructType {
         return result;
     }
 
-    void clear() {
-        pairs_.clear();
-    }
+    void clear() { pairs_.clear(); }
 
     TypeConv convertibility(const Type &other) const override;
 };

@@ -73,6 +73,15 @@ template <typename K, typename V> class Scope {
         }
     }
 
+    void clear() {
+        std::unique_lock<std::shared_mutex> lock(rwMutex);
+        map.clear();
+        if (outer) {
+            lock.unlock(); // Release the exclusive lock before calling outer->clear
+            outer->clear();
+        }
+    }
+
     bool has(const K &k, bool recursive = true) const {
         std::shared_lock<std::shared_mutex> lock(rwMutex);
         if (map.count(k) != 0) {

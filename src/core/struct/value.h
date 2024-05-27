@@ -343,14 +343,14 @@ class NamedTupleValue : public Value {
   private:
     bool resolved_ = false;
     bool typeResolved_ = false;
-    std::vector<entity_ptr_t> seqData_;
+    std::vector<entity_ptr_t> indexData_;
     std::unordered_map<std::string, entity_ptr_t> namedData_;
 
   public:
     NamedTupleValue() : Value(std::make_shared<NamedTupleType>()) {}
-    NamedTupleValue(const std::vector<entity_ptr_t> &seqData,
+    NamedTupleValue(const std::vector<entity_ptr_t> &indexData,
                     const std::unordered_map<std::string, entity_ptr_t> &namedData)
-        : Value(std::make_shared<NamedTupleType>()), seqData_(seqData), namedData_(namedData) {}
+        : Value(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {}
     virtual ~NamedTupleValue() = default;
 
     bool setType(type_ptr_t type) {
@@ -358,11 +358,11 @@ class NamedTupleValue : public Value {
             return false;
         }
         const auto &typeList = static_cast<NamedTupleType *>(type.get())->list();
-        if (seqData_.size() + namedData_.size() != typeList.size()) {
+        if (indexData_.size() + namedData_.size() != typeList.size()) {
             return false;
         }
         size_t idx = 0;
-        std::vector<entity_ptr_t> seqResult;
+        std::vector<entity_ptr_t> indexResult;
         std::unordered_map<std::string, entity_ptr_t> namedResult;
         for (size_t i = 0; i < typeList.size(); i++) {
             const auto &[key, typ] = typeList[i];
@@ -370,21 +370,36 @@ class NamedTupleValue : public Value {
                 if (namedData_[key]->type()->convertibility(*typ) != TypeConv::SAFE) {
                     return false;
                 }
-                seqResult.push_back(namedData_[key]);
+                indexResult.push_back(namedData_[key]);
                 namedResult[key] = namedData_[key];
             } else {
-                if (seqData_[idx]->type()->convertibility(*typ) != TypeConv::SAFE) {
+                if (indexData_[idx]->type()->convertibility(*typ) != TypeConv::SAFE) {
                     return false;
                 }
-                seqResult.push_back(seqData_[idx]);
-                namedResult[key] = seqData_[idx];
+                indexResult.push_back(indexData_[idx]);
+                namedResult[key] = indexData_[idx];
                 idx++;
             }
         }
-        seqData_ = seqResult;
+        indexData_ = indexResult;
         namedData_ = namedResult;
         type_ = type;
         typeResolved_ = true;
+    }
+
+    bool add(const entity_ptr_t &e, const std::string &key = "") {
+        if (typeResolved_) {
+            return false;
+        }
+        if (key.length() > 0) {
+            if (namedData_.find(key) != namedData_.end()) {
+                return false;
+            }
+            namedData_[key] = e;
+        } else {
+            indexData_.push_back(e);
+        }
+        return true;
     }
 
     bool resolved() override;

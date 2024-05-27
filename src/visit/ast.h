@@ -22,8 +22,11 @@
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime.h"
+#include "core/error/build.h"
+#include "core/struct/scope.h"
 #include "core/struct/sem.h"
 #include "core/struct/tree.h"
+
 
 class ASTNode;
 
@@ -54,6 +57,7 @@ class ASTConstructor : public OpenCMLVisitor {
     virtual ~ASTConstructor() = default;
 
     ast_ptr_t construct(antlr4::tree::ParseTree *tree) {
+        typeScope_->clear();
         root_ = std::make_shared<ASTNode>(nullptr);
         root_->parent = nullptr;
         visit(tree);
@@ -63,6 +67,7 @@ class ASTConstructor : public OpenCMLVisitor {
   private:
     ast_ptr_t root_ = nullptr;
     size_t indentIndex_ = 0;
+    scope_ptr_t<std::string, type_ptr_t> typeScope_;
 
     std::pair<ast_ptr_t, entity_ptr_t> makeDanglingPair(const ast_ptr_t &expr) {
         const std::string indent = std::to_string(indentIndex_++);

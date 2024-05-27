@@ -185,7 +185,7 @@ bool NamedTupleValue::resolved() {
     if (resolved_) {
         return true;
     }
-    for (const auto &e : seqData_) {
+    for (const auto &e : indexData_) {
         if (!e->resolved()) {
             return false;
         }
@@ -218,11 +218,11 @@ const value_ptr_t NamedTupleValue::convert(type_ptr_t target, bool inplace) {
     throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-const value_ptr_t NamedTupleValue::clone(bool) const { return std::make_shared<NamedTupleValue>(seqData_, namedData_); }
+const value_ptr_t NamedTupleValue::clone(bool) const { return std::make_shared<NamedTupleValue>(indexData_, namedData_); }
 
 const std::string NamedTupleValue::toString() const {
     std::string str = "(";
-    for (const auto &e : seqData_) {
+    for (const auto &e : indexData_) {
         str += e->dataStr() + ", ";
     }
     for (const auto &e : namedData_) {

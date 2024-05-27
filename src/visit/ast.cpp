@@ -155,7 +155,7 @@ std::any ASTConstructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
     const size_t alt = context->getAltNumber();
     switch (alt) {
     case 1:
-        return std::make_pair(alt, context->identRef()->getText());
+        return std::make_pair(alt, std::any_cast<std::string>(visitIdentRef(context->identRef())));
         break;
     case 2:
         return std::make_pair(alt, visitBracedIdents(context->bracedIdents()));
@@ -265,9 +265,9 @@ std::any ASTConstructor::visitValueList(OpenCMLParser::ValueListContext *context
 pairedTypes  : keyTypePair (',' keyTypePair)* ;
 */
 std::any ASTConstructor::visitPairedTypes(OpenCMLParser::PairedTypesContext *context) {
-    std::vector<std::pair<std::string, ast_ptr_t>> pairedTypes;
+    std::vector<std::pair<std::string, type_ptr_t>> pairedTypes;
     for (const auto &pair : context->keyTypePair()) {
-        pairedTypes.push_back(std::any_cast<std::pair<std::string, ast_ptr_t>>(visitKeyTypePair(pair)));
+        pairedTypes.push_back(std::any_cast<std::pair<std::string, type_ptr_t>>(visitKeyTypePair(pair)));
     }
     return pairedTypes;
 };
@@ -559,52 +559,103 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             const auto &[indexArgs, namedArgs] =
                 std::any_cast<std::pair<std::vector<ast_ptr_t>, std::vector<std::pair<std::string, ast_ptr_t>>>>(
                     visitAngledValues(angledValues));
-            ast_ptr_t &linkNode = createAstNode<LinkNode>();
-            ast_ptr_t &funcNode = createAstNode<DeRefNode>("__call__");
+            ast_ptr_t &callNode = createAstNode<CallNode>();
+            ast_ptr_t &funcNode = entity;
             auto &listValue = std::make_shared<ListValue>();
-            if (entity->type() == SemNodeType::DATA) {
-                const DataNode &dataNode = dynamic_cast<const DataNode &>(*entity);
-                listValue->add(dataNode.entity());
-            } else {
-                auto [refNode, refEntity] = makeDanglingPair(entity);
-                dangling = true;
-                *execNode << refNode;
-                listValue->add(refEntity);
-            }
+            auto &namedTuple = std::make_shared<NamedTupleValue>();
+            bool dangling = false;
+            auto &execNode = createAstNode<ExecuteNode>();
             for (const auto &arg : indexArgs) {
                 if (arg->type() == SemNodeType::DATA) {
                     const DataNode &dataNode = dynamic_cast<const DataNode &>(*arg);
-                    listValue->add(dataNode.entity());
+                    namedTuple->add(dataNode.entity());
                 } else {
-                    auto [refNode, refEntity] = makeDanglingPair(arg);
                     dangling = true;
+                    auto [refNode, entity] = makeDanglingPair(arg);
                     *execNode << refNode;
-                    listValue->add(refEntity);
+                    namedTuple->add(entity);
                 }
             }
             for (const auto &[key, arg] : namedArgs) {
                 if (arg->type() == SemNodeType::DATA) {
                     const DataNode &dataNode = dynamic_cast<const DataNode &>(*arg);
-                    listValue->add(dataNode.entity());
+                    namedTuple->add(dataNode.entity(), key);
                 } else {
-                    auto [refNode, refEntity] = makeDanglingPair(arg);
                     dangling = true;
+                    auto [refNode, entity] = makeDanglingPair(arg);
                     *execNode << refNode;
-                    listValue->add(refEntity);
+                    namedTuple->add(entity, key);
                 }
             }
-            ast_ptr_t &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
-            *linkNode << dataNode << funcNode;
+            ast_ptr_t &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(namedTuple->type(), namedTuple));
             if (dangling) {
-                *execNode << linkNode;
-                entity = execNode;
+                *execNode << dataNode;
+                *callNode << execNode << funcNode;
+                entity = callNode;
             } else {
+                *callNode << dataNode << funcNode;
+                entity = callNode;
+            }
+        } break;
+
+        case '(': // parentValues
+        {
+            const auto &parentValues = dynamic_cast<OpenCMLParser::ParentValuesContext *>(child);
+            const auto &[indexArgs, namedArgs] =
+                std::any_cast<std::pair<std::vector<ast_ptr_t>, std::vector<std::pair<std::string, ast_ptr_t>>>>(
+                    visitParentValues(parentValues));
+            ast_ptr_t &linkNode = createAstNode<LinkNode>();
+            ast_ptr_t &funcNode = entity;
+            auto &listValue = std::make_shared<ListValue>();
+            auto &namedTuple = std::make_shared<NamedTupleValue>();
+            bool dangling = false;
+            auto &execNode = createAstNode<ExecuteNode>();
+            for (const auto &arg : indexArgs) {
+                if (arg->type() == SemNodeType::DATA) {
+                    const DataNode &dataNode = dynamic_cast<const DataNode &>(*arg);
+                    listValue->add(dataNode.entity());
+                } else {
+                    dangling = true;
+                    auto [refNode, entity] = makeDanglingPair(arg);
+                    *execNode << refNode;
+                    listValue->add(entity);
+                }
+            }
+            for (const auto &[key, arg] : namedArgs) {
+                if (arg->type() == SemNodeType::DATA) {
+                    const DataNode &dataNode = dynamic_cast<const DataNode &>(*arg);
+                    namedTuple->add(dataNode.entity(), key);
+                } else {
+                    dangling = true;
+                    auto [refNode, entity] = makeDanglingPair(arg);
+                    *execNode << refNode;
+                    namedTuple->add(entity, key);
+                }
+            }
+            ast_ptr_t &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(namedTuple->type(), namedTuple));
+            if (dangling) {
+                *execNode << dataNode;
+                *linkNode << execNode << funcNode;
+                entity = linkNode;
+            } else {
+                *linkNode << dataNode << funcNode;
                 entity = linkNode;
             }
         } break;
 
+        case '@': // annotation
+        {
+            // TODO: Implement the support for annotation
+            const auto &annotation = dynamic_cast<OpenCMLParser::AnnotationContext *>(child);
+            ast_ptr_t &annoNode = std::any_cast<ast_ptr_t>(visitAnnotation(annotation));
+            ast_ptr_t &linkNode = createAstNode<LinkNode>();
+            ast_ptr_t &funcNode = entity;
+            *linkNode << annoNode << funcNode;
+            entity = linkNode;
+        } break;
+
         default:
-            break;
+            throw std::runtime_error("Unknown entity type");
         }
     }
 };
@@ -1032,7 +1083,43 @@ primType
     | CHAR_TYPE
     ;
 */
-std::any ASTConstructor::visitPrimType(OpenCMLParser::PrimTypeContext *context){};
+std::any ASTConstructor::visitPrimType(OpenCMLParser::PrimTypeContext *context) {
+    switch (context->getAltNumber()) {
+    case 1: // INTEGER_TYPE
+        return intTypePtr;
+        break;
+    case 2: // INTEGER32_TYPE
+        return int32TypePtr;
+        break;
+    case 3: // INTEGER64_TYPE
+        return int64TypePtr;
+        break;
+    case 4: // REAL_TYPE
+        return realTypePtr;
+        break;
+    case 5: // FLOAT_TYPE
+        return floatTypePtr;
+        break;
+    case 6: // DOUBLE_TYPE
+        return doubleTypePtr;
+        break;
+    case 7: // NUMBER_TYPE
+        return numberTypePtr;
+        break;
+    case 8: // STRING_TYPE
+        return stringTypePtr;
+        break;
+    case 9: // BOOL_TYPE
+        return boolTypePtr;
+        break;
+    case 10: // CHAR_TYPE
+        return charTypePtr;
+        break;
+
+    default:
+        throw std::runtime_error("Unknown primitive type");
+    }
+};
 
 /*
 structType
@@ -1048,7 +1135,140 @@ structType
     | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?
     ;
 */
-std::any ASTConstructor::visitStructType(OpenCMLParser::StructTypeContext *context){};
+std::any ASTConstructor::visitStructType(OpenCMLParser::StructTypeContext *context) {
+    switch (context->getAltNumber()) {
+    case 1: // SET_TYPE ('<' typeExpr '>')?
+    {
+        const auto &typeExpr = context->typeExpr();
+        if (typeExpr.size() == 1) {
+            const auto &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr[0]));
+            const auto &setType = std::make_shared<SetType>(type);
+            return setType;
+        } else {
+            // if no type is specified, use any type
+            return std::make_shared<SetType>(anyTypePtr);
+        }
+    } break;
+
+    case 2: // MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
+    {
+        const auto &typeExpr = context->typeExpr();
+        if (typeExpr.size() == 2) {
+            const auto &keyType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr[0]));
+            const auto &valueType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr[1]));
+            const auto &mapType = std::make_shared<MapType>(keyType, valueType);
+            return mapType;
+        } else {
+            // if no type is specified, use any type
+            return std::make_shared<MapType>(anyTypePtr, anyTypePtr);
+        }
+    } break;
+
+    case 3: // LIST_TYPE
+        return listTypePtr;
+        break;
+
+    case 4: // DICT_TYPE
+        // TODO: Implement the support for universal dict type
+        return std::make_shared<DictType>();
+        break;
+
+    case 5: // '{' pairedTypes? ','? '}'
+    {
+        const auto &pairedTypes = context->pairedTypes();
+        if (pairedTypes) {
+            const auto &types =
+                std::any_cast<std::vector<std::pair<std::string, type_ptr_t>>>(visitPairedTypes(pairedTypes));
+            auto &dictType = std::make_shared<DictType>();
+            for (const auto &[key, type] : types) {
+                dictType->add(key, type);
+            }
+            return dictType;
+        } else {
+            return std::make_shared<DictType>();
+        }
+    } break;
+
+    case 6: // ARRAY_TYPE ('<' typeExpr '>')?
+    {
+        const auto &typeExpr = context->typeExpr();
+        if (typeExpr.size() == 1) {
+            const auto &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr[0]));
+            const auto &arrayType = std::make_shared<ArrayType>(type);
+            return arrayType;
+        } else {
+            // if no type is specified, use any type
+            return std::make_shared<ArrayType>(anyTypePtr);
+        }
+    } break;
+
+    case 7: // TUPLE_TYPE ('<' typeList? ','? '>')?
+    {
+        const auto &typeList = context->typeList();
+        if (typeList) {
+            const auto &types = std::any_cast<std::vector<type_ptr_t>>(visitTypeList(typeList));
+            const auto &tupleType = std::make_shared<TupleType>(types);
+            return tupleType;
+        } else {
+            return std::make_shared<TupleType>();
+        }
+    } break;
+
+    case 8: // UNION_TYPE ('<' typeList? ','? '>')?
+    {
+        const auto &typeList = context->typeList();
+        if (typeList) {
+            const auto &types = std::any_cast<std::vector<type_ptr_t>>(visitTypeList(typeList));
+            const auto &unionType = std::make_shared<UnionType>(types);
+            return unionType;
+        } else {
+            return std::make_shared<UnionType>();
+        }
+    } break;
+
+    case 9: // VECTOR_TYPE ('<' typeExpr (',' INTEGER)? '>')?
+    {
+        const auto &typeExpr = context->typeExpr();
+        if (typeExpr.size() == 1) {
+            const auto &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr[0]));
+            const auto &sizes = context->INTEGER();
+            const auto &vectorType =
+                std::make_shared<VectorType>(type, sizes.size() ? std::stoi(sizes[0]->getText()) : 1);
+            return vectorType;
+        } else {
+            // if no type is specified, use any type
+            return std::make_shared<VectorType>(anyTypePtr, 1);
+        }
+    } break;
+
+    case 10: // TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?
+    {
+        const auto &typeExpr = context->typeExpr();
+        if (typeExpr.size() == 1) {
+            const auto &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr[0]));
+            const auto &sizes = context->INTEGER();
+            if (sizes.size()) {
+                std::vector<int> dimensions;
+                for (const auto &size : sizes) {
+                    dimensions.push_back(std::stoi(size->getText()));
+                }
+                const auto &tensorType = std::make_shared<TensorType>(type, dimensions);
+                return tensorType;
+            } else {
+                // if no size is specified, use a scalar tensor
+                const auto &tensorType = std::make_shared<TensorType>(type, std::vector<int>());
+                return tensorType;
+            }
+        } else {
+            // if no type is specified, use any type
+            return std::make_shared<TensorType>(anyTypePtr, std::vector<int>());
+        }
+    } break;
+
+    default:
+        break;
+    }
+};
 
 /*
 specialType
@@ -1057,9 +1277,26 @@ specialType
     | FUNCTOR_TYPE
     ;
 */
-std::any ASTConstructor::visitSpecialType(OpenCMLParser::SpecialTypeContext *context){};
+std::any ASTConstructor::visitSpecialType(OpenCMLParser::SpecialTypeContext *context) {
+    switch (context->getAltNumber()) {
+    case 1: // ANY_TYPE
+        return anyTypePtr;
+        break;
+    case 2: // VOID_TYPE
+        return voidTypePtr;
+        break;
+    case 3: // FUNCTOR_TYPE
+        return functorTypePtr;
+        break;
+
+    default:
+        throw std::runtime_error("Unknown special type");
+    }
+};
 
 /*
 identRef : IDENTIFIER ;
 */
-std::any ASTConstructor::visitIdentRef(OpenCMLParser::IdentRefContext *context){};
+std::any ASTConstructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {
+    return context->IDENTIFIER()->getText();
+};
