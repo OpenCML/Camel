@@ -297,6 +297,8 @@ class DictType : public StructType {
 
     type_ptr_t get(const std::string &name) const { return fields_.at(name); }
 
+    void clear() { fields_.clear(); }
+
     type_ptr_t operator|(const DictType &other) const {
         auto result = std::make_shared<DictType>();
         for (const auto &field : fields_) {

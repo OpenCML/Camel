@@ -115,3 +115,39 @@ const std::string ListValue::toString() const {
     str += "]";
     return str;
 }
+
+const value_ptr_t DictValue::convert(type_ptr_t target, bool inplace) {
+    // TODO
+    if (target == type_ || type_->equals(target)) {
+        // same type, no need to convert
+        return shared_from_this();
+    }
+    if (target->structured()) {
+        switch (target->code()) {
+        case TypeCode::SET:
+            /* code */
+            break;
+
+        default:
+            break;
+        }
+    }
+    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+}
+
+const value_ptr_t DictValue::clone(bool deep) const {
+    std::unordered_map<std::string, entity_ptr_t> cloned;
+    for (const auto &e : data_) {
+        cloned.insert(e);
+    }
+    return std::make_shared<DictValue>(type_, cloned);
+}
+
+const std::string DictValue::toString() const {
+    std::string str = "{";
+    for (const auto &e : data_) {
+        str += e.first + ": " + e.second->dataStr() + ", ";
+    }
+    str += "}";
+    return str;
+}

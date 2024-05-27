@@ -221,6 +221,7 @@ class StructValue : public Value {
   public:
     StructValue() = delete;
     StructValue(type_ptr_t type) : Value(type) {}
+    virtual ~StructValue() = default;
 
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
 
@@ -239,6 +240,7 @@ class SetValue : public StructValue {
         : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
     SetValue(type_ptr_t elType, const std::set<entity_ptr_t> &data)
         : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
+    virtual ~SetValue() = default;
 
     bool resolved() override;
 
@@ -266,10 +268,84 @@ class ListValue : public StructValue {
     ListValue() : StructValue(listTypePtr) {}
     ListValue(std::initializer_list<entity_ptr_t> data) : StructValue(listTypePtr), data_(data) {}
     ListValue(const std::vector<entity_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
+    virtual ~ListValue() = default;
 
     bool resolved() override;
 
     bool add(const entity_ptr_t &e) { data_.push_back(e); }
+
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+
+    virtual const value_ptr_t clone(bool deep = false) const override;
+
+    virtual const std::string toString() const override;
+};
+
+class DictValue : public StructValue {
+  private:
+    bool resolved_ = false;
+    std::unordered_map<std::string, entity_ptr_t> data_;
+
+  public:
+    DictValue() : StructValue(std::make_shared<DictType>()) {}
+    DictValue(std::initializer_list<std::pair<std::string, entity_ptr_t>> data)
+        : StructValue(std::make_shared<DictType>()) {
+        DictType &dictType = *static_cast<DictType *>(type_.get());
+        for (const auto &e : data) {
+            data_[e.first] = e.second;
+            dictType.add(e.first, e.second->type());
+        }
+    }
+    DictValue(const std::unordered_map<std::string, entity_ptr_t> &data)
+        : StructValue(std::make_shared<DictType>()), data_(data) {
+        DictType &dictType = *static_cast<DictType *>(type_.get());
+        for (const auto &e : data) {
+            dictType.add(e.first, e.second->type());
+        }
+    }
+    virtual ~DictValue() = default;
+
+    bool resolved() override;
+
+    bool add(const std::string &key, const entity_ptr_t &e) {
+        DictType &dictType = *static_cast<DictType *>(type_.get());
+        if (dictType.add(key, e->type())) {
+            data_[key] = e;
+            return true;
+        }
+        return false;
+    }
+
+    bool del(const std::string &key) {
+        DictType &dictType = *static_cast<DictType *>(type_.get());
+        if (dictType.del(key)) {
+            data_.erase(key);
+            return true;
+        }
+        return false;
+    }
+
+    bool has(const std::string &key) const { return data_.find(key) != data_.end(); }
+
+    void set(const std::string &key, const entity_ptr_t &e) {
+        DictType &dictType = *static_cast<DictType *>(type_.get());
+        dictType.set(key, e->type());
+        data_[key] = e;
+    }
+
+    entity_ptr_t get(const std::string &key) const {
+        auto it = data_.find(key);
+        if (it != data_.end()) {
+            return it->second;
+        }
+        return nullptr;
+    }
+
+    void clear() {
+        DictType &dictType = *static_cast<DictType *>(type_.get());
+        dictType.clear();
+        data_.clear();
+    }
 
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
 

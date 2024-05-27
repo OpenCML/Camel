@@ -34,6 +34,7 @@ class SemanticNode {
     SemanticNode(SemNodeType type) : type_(type) {}
     virtual ~SemanticNode() = default;
 
+    SemNodeType type() const { return type_; }
     const std::string typeStr() const;
 
     virtual const std::string toString() const { return typeStr(); }
@@ -46,6 +47,7 @@ class DataNode : public SemanticNode {
 
   public:
     DataNode(entity_ptr_t entity) : SemanticNode(SemNodeType::DATA), entity_(entity) {}
+    entity_ptr_t entity() const { return entity_; }
 
     const std::string toString() const override;
 };
@@ -56,6 +58,7 @@ class TypeNode : public SemanticNode {
 
   public:
     TypeNode(type_ptr_t type) : SemanticNode(SemNodeType::TYPE), type_(type) {}
+    type_ptr_t type() const { return type_; }
 
     const std::string toString() const override;
 };

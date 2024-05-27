@@ -286,57 +286,137 @@ std::any ASTConstructor::visitPairedValues(OpenCMLParser::PairedValuesContext *c
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
-std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context){};
+std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
+    std::vector<std::tuple<std::string, ast_ptr_t, ast_ptr_t>> pairedParams;
+    for (const auto &pair : context->keyParamPair()) {
+        pairedParams.push_back(std::any_cast<std::tuple<std::string, ast_ptr_t, ast_ptr_t>>(visitKeyParamPair(pair)));
+    }
+    return pairedParams;
+};
 
 /*
 argumentList : valueList (',' pairedValues)? | pairedValues ;
 */
-std::any ASTConstructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context){};
+std::any ASTConstructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
+    const auto &valueList = context->valueList();
+    const auto &pairedValues = context->pairedValues();
+    std::vector<ast_ptr_t> indexArgs;
+    if (valueList) {
+        indexArgs = std::any_cast<std::vector<ast_ptr_t>>(visitValueList(valueList));
+    }
+    std::vector<std::pair<std::string, ast_ptr_t>> namedArgs;
+    if (pairedValues) {
+        namedArgs = std::any_cast<std::vector<std::pair<std::string, ast_ptr_t>>>(visitPairedValues(pairedValues));
+    }
+    return std::make_pair(indexArgs, namedArgs);
+};
 
 /*
 bracedPairedValues : '{' pairedValues? ','? '}' ;
 */
-std::any ASTConstructor::visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context){};
+std::any ASTConstructor::visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) {
+    const auto &pairedValues = context->pairedValues();
+    if (pairedValues) {
+        return visitPairedValues(pairedValues);
+    } else {
+        return std::vector<std::pair<std::string, ast_ptr_t>>();
+    }
+};
 
 /*
 bracedIdents       : '{' identList? ','? '}' ;
 */
-std::any ASTConstructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context){};
+std::any ASTConstructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
+    const auto &identList = context->identList();
+    if (identList) {
+        return visitIdentList(identList);
+    } else {
+        return std::vector<std::string>();
+    }
+};
 
 /*
 bracedStmts        : '{' stmtList? '}' ;
 */
-std::any ASTConstructor::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context){};
+std::any ASTConstructor::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context) {
+    if (context->stmtList()) {
+        return visitStmtList(context->stmtList());
+    } else {
+        return createAstNode<ExecuteNode>();
+    }
+};
 
 /*
 bracketIdents : '[' identList? ','? ']' ;
 */
-std::any ASTConstructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context){};
+std::any ASTConstructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
+    const auto &identList = context->identList();
+    if (identList) {
+        return visitIdentList(identList);
+    } else {
+        return std::vector<std::string>();
+    }
+};
 
 /*
 bracketValues : '[' valueList? ','? ']' ;
 */
-std::any ASTConstructor::visitBracketValues(OpenCMLParser::BracketValuesContext *context){};
+std::any ASTConstructor::visitBracketValues(OpenCMLParser::BracketValuesContext *context) {
+    const auto &valueList = context->valueList();
+    if (valueList) {
+        return visitValueList(valueList);
+    } else {
+        return std::vector<ast_ptr_t>();
+    }
+};
 
 /*
 parentParams : '(' pairedParams? ','? ')' ;
 */
-std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *context){};
+std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
+    const auto &pairedParams = context->pairedParams();
+    if (pairedParams) {
+        return visitPairedParams(pairedParams);
+    } else {
+        return std::vector<std::tuple<std::string, ast_ptr_t, ast_ptr_t>>();
+    }
+};
 
 /*
 parentValues : '(' argumentList? ','? ')' ;
 */
-std::any ASTConstructor::visitParentValues(OpenCMLParser::ParentValuesContext *context){};
+std::any ASTConstructor::visitParentValues(OpenCMLParser::ParentValuesContext *context) {
+    const auto &argumentList = context->argumentList();
+    if (argumentList) {
+        return visitArgumentList(argumentList);
+    } else {
+        return std::make_pair(std::vector<ast_ptr_t>(), std::vector<std::pair<std::string, ast_ptr_t>>());
+    }
+};
 
 /*
 angledParams : '<' pairedParams? ','? '>' ;
 */
-std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context){};
+std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
+    const auto &pairedParams = context->pairedParams();
+    if (pairedParams) {
+        return visitPairedParams(pairedParams);
+    } else {
+        return std::vector<std::tuple<std::string, ast_ptr_t, ast_ptr_t>>();
+    }
+};
 
 /*
 angledValues : '<' argumentList? ','? '>' ;
 */
-std::any ASTConstructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context){};
+std::any ASTConstructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
+    const auto &argumentList = context->argumentList();
+    if (argumentList) {
+        return visitArgumentList(argumentList);
+    } else {
+        return std::make_pair(std::vector<ast_ptr_t>(), std::vector<std::pair<std::string, ast_ptr_t>>());
+    }
+};
 
 /*
 primEntity
@@ -347,7 +427,76 @@ primEntity
     | lambdaExpr
     | '(' entityExpr ')' ;
 */
-std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *context){};
+std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *context) {
+    switch (context->getAltNumber()) {
+    case 1:
+        return createAstNode<DeRefNode>(context->identRef()->getText());
+        break;
+    case 2:
+        return visitLiteral(context->literal());
+        break;
+    case 3: {
+        const std::vector<ast_ptr_t> &values =
+            std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
+        const auto &listValue = std::make_shared<ListValue>();
+        bool dangling = false;
+        const auto &execNode = createAstNode<ExecuteNode>();
+        for (const auto &node : values) {
+            if (node->type() == SemNodeType::DATA) {
+                const DataNode &dataNode = dynamic_cast<const DataNode &>(*node);
+                listValue->add(dataNode.entity());
+            } else {
+                dangling = true;
+                auto [refNode, entity] = makeDanglingPair(node);
+                *execNode << refNode;
+                listValue->add(entity);
+            }
+        }
+        const auto &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
+        if (dangling) {
+            *execNode << dataNode;
+            return execNode;
+        } else {
+            return dataNode;
+        }
+    } break;
+    case 4: {
+        const std::vector<std::pair<std::string, ast_ptr_t>> &values =
+            std::any_cast<std::vector<std::pair<std::string, ast_ptr_t>>>(
+                visitBracedPairedValues(context->bracedPairedValues()));
+        const auto &dictValue = std::make_shared<DictValue>();
+        bool dangling = false;
+        const auto &execNode = createAstNode<ExecuteNode>();
+        for (const auto &[key, node] : values) {
+            if (node->type() == SemNodeType::DATA) {
+                const DataNode &dataNode = dynamic_cast<const DataNode &>(*node);
+                dictValue->add(key, dataNode.entity());
+            } else {
+                dangling = true;
+                auto [refNode, entity] = makeDanglingPair(node);
+                *execNode << refNode;
+                dictValue->add(key, entity);
+            }
+        }
+        const auto &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(dictValue->type(), dictValue));
+        if (dangling) {
+            *execNode << dataNode;
+            return execNode;
+        } else {
+            return dataNode;
+        }
+    } break;
+    case 5:
+        return visitLambdaExpr(context->lambdaExpr());
+        break;
+    case 6:
+        return visitEntityExpr(context->entityExpr());
+        break;
+
+    default:
+        throw std::runtime_error("Unknown primary entity type");
+    }
+};
 
 /*
 memberAccess : '[' entityExpr ']' ;
@@ -446,7 +595,8 @@ std::any ASTConstructor::visitEntityExpr(OpenCMLParser::EntityExprContext *conte
             makeDanglingPair(std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr())));
         auto [relaRefNode, relaEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(relaExpr));
 
-        const auto listValue = std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{entityEntity, relaEntity});
+        const auto listValue =
+            std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{entityEntity, relaEntity});
         const auto listEntity = std::make_shared<Entity>(listTypePtr, listValue);
 
         ast_ptr_t dataNode = createAstNode<DataNode>(listEntity);
@@ -610,7 +760,8 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
             makeDanglingPair(std::any_cast<ast_ptr_t>(visitMultiExpr(context->multiExpr())));
         auto [unaryRefNode, unaryEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(unaryExpr));
 
-        const auto listValue = std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{multiEntity, unaryEntity});
+        const auto listValue =
+            std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{multiEntity, unaryEntity});
         const auto listEntity = std::make_shared<Entity>(listTypePtr, listValue);
 
         ast_ptr_t dataNode = createAstNode<DataNode>(listEntity);
@@ -738,7 +889,7 @@ std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
         break;
     }
 
-    return std::make_shared<Entity>(type, value);
+    return createAstNode<DataNode>(std::make_shared<Entity>(type, value));
 };
 
 /*
