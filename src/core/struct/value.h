@@ -234,7 +234,7 @@ class SetValue : public StructValue {
     std::set<entity_ptr_t> data_;
 
   public:
-    SetValue() = delete;
+    SetValue(type_ptr_t elType) : StructValue(std::make_shared<SetType>(elType)) {}
     SetValue(type_ptr_t elType, std::initializer_list<entity_ptr_t> data)
         : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
     SetValue(type_ptr_t elType, const std::set<entity_ptr_t> &data)
@@ -263,6 +263,7 @@ class ListValue : public StructValue {
     std::vector<entity_ptr_t> data_;
 
   public:
+    ListValue() : StructValue(listTypePtr) {}
     ListValue(std::initializer_list<entity_ptr_t> data) : StructValue(listTypePtr), data_(data) {}
     ListValue(const std::vector<entity_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
 

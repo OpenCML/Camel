@@ -610,7 +610,7 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
             makeDanglingPair(std::any_cast<ast_ptr_t>(visitMultiExpr(context->multiExpr())));
         auto [unaryRefNode, unaryEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(unaryExpr));
 
-        const auto listValue = std::make_shared<ListValue>(std::initializer_list{multiEntity, unaryEntity});
+        const auto listValue = std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{multiEntity, unaryEntity});
         const auto listEntity = std::make_shared<Entity>(listTypePtr, listValue);
 
         ast_ptr_t dataNode = createAstNode<DataNode>(listEntity);
