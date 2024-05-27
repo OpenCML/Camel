@@ -32,6 +32,30 @@ inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
     return firstTokenLine != secondTokenLine;
 }
 
+void Formatter::insertComment(antlr4::Token *comment, std::string &result) {
+    const auto &commentText = comment->getText();
+    switch (comment->getChannel()) {
+    case 2: {
+        if (cmtPrefer == CommentPreference::Slash)
+            result += hash2slash(commentText);
+        else
+            result += commentText;
+    } break;
+    case 3: {
+        if (cmtPrefer == CommentPreference::Hash)
+            result += slash2hash(commentText);
+        else
+            result += commentText;
+    } break;
+    case 4:
+        result += commentText + " ";
+        break;
+
+    default:
+        break;
+    }
+};
+
 /*
 program : stmtList? EOF;
 */
@@ -427,7 +451,8 @@ std::any Formatter::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context)
         pushIndent();
         for (int i = firstTokIdx + 1; i < lastTokIdx; i++) {
             if (tokens[i]->getChannel() > 1) {
-                result += lineEnd() + tokens[i]->getText();
+                result += lineEnd();
+                insertComment(tokens[i], result);
                 foundComment = true;
             }
         }

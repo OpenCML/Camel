@@ -54,6 +54,8 @@ class Formatter : public OpenCMLVisitor {
 
     std::string processStringLiteral(const std::string &input);
 
+    void insertComment(antlr4::Token *comment, std::string &result);
+
     inline std::string lineEnd() { return newline + currentIndent; }
 
     inline size_t countLines(const std::string &input) { return std::count(input.begin(), input.end(), '\n'); }
@@ -102,30 +104,6 @@ class Formatter : public OpenCMLVisitor {
             }
 
             return std::make_pair(predCmtStart, predCmtEnd);
-        };
-
-        const auto insertComment = [&](const antlr4::Token *comment) {
-            const auto &commentText = comment->getText();
-            switch (comment->getChannel()) {
-            case 2: {
-                if (cmtPrefer == CommentPreference::Slash)
-                    result += hash2slash(commentText);
-                else
-                    result += commentText;
-            } break;
-            case 3: {
-                if (cmtPrefer == CommentPreference::Hash)
-                    result += slash2hash(commentText);
-                else
-                    result += commentText;
-            } break;
-            case 4:
-                result += commentText + " ";
-                break;
-
-            default:
-                break;
-            }
         };
 
         bool multiLine = false || forceMultiLine;
@@ -210,7 +188,7 @@ class Formatter : public OpenCMLVisitor {
                         result += lineEnd();
                     }
 
-                    insertComment(comment);
+                    insertComment(comment, result);
 
                     lastStopLine = comment->getLine() + countLines(commentText);
                 }
@@ -244,7 +222,7 @@ class Formatter : public OpenCMLVisitor {
                     result += lineEnd();
                 }
 
-                insertComment(comment);
+                insertComment(comment, result);
 
                 lastStopLine = comment->getLine() + countLines(commentText);
             }

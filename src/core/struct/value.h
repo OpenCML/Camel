@@ -61,6 +61,8 @@ class Value : public std::enable_shared_from_this<Value> {
     virtual const std::string toString() const = 0;
 };
 
+class StringValue;
+
 template <typename T> class PrimValue : public Value {
   private:
     T data_;
@@ -84,8 +86,6 @@ template <typename T> class PrimValue : public Value {
             type_ = boolTypePtr;
         } else if constexpr (std::is_same_v<T, char>) {
             type_ = boolTypePtr;
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            type_ = stringTypePtr;
         } else {
             static_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
@@ -121,16 +121,6 @@ template <typename T> class PrimValue : public Value {
                     default:
                         throw UnsupportedConvError();
                     }
-                } else if constexpr (std::is_same_v<T, std::string>) {
-                    switch (target->code()) {
-                    case TypeCode::BOOL: {
-                        const std::string &str = data_;
-                        return std::make_shared<PrimValue<bool>>(str.length() > 0);
-                    }
-
-                    default:
-                        throw UnsupportedConvError();
-                    }
                 } else if constexpr (std::is_same_v<T, bool>) {
                     const bool &b = data_;
                     switch (target->code()) {
@@ -143,7 +133,7 @@ template <typename T> class PrimValue : public Value {
                     case TypeCode::DOUBLE:
                         return std::make_shared<PrimValue<double>>(static_cast<double>(b));
                     case TypeCode::STRING:
-                        return std::make_shared<PrimValue<std::string>>(b ? "true" : "false");
+                        return std::make_shared<StringValue>(b ? "true" : "false");
                     case TypeCode::CHAR:
                         return std::make_shared<PrimValue<char>>(static_cast<char>(b));
 
@@ -162,7 +152,7 @@ template <typename T> class PrimValue : public Value {
                     case TypeCode::DOUBLE:
                         return std::make_shared<PrimValue<double>>(static_cast<double>(c));
                     case TypeCode::STRING:
-                        return std::make_shared<PrimValue<std::string>>(1, c);
+                        return std::make_shared<StringValue>(std::string(1, c));
                     case TypeCode::BOOL:
                         return std::make_shared<PrimValue<bool>>(c != 0);
 
@@ -184,12 +174,49 @@ template <typename T> class PrimValue : public Value {
     virtual const value_ptr_t clone() const override { return std::make_shared<PrimValue<T>>(data_); }
 
     virtual const std::string toString() const override {
-        if constexpr (std::is_same_v<T, std::string>) {
-            return data_;
-        } else {
-            return std::to_string(data_);
+        return std::to_string(data_);
+    }
+};
+
+class StringValue : public Value {
+  private:
+    std::string data_;
+
+  public:
+    StringValue() = delete;
+    StringValue(const std::string &data) : Value(stringTypePtr), data_(data) {}
+
+    const std::string &data() const { return data_; }
+
+    bool resolved() override { return true; }
+
+    virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
+        if (target == type_ || type_->code() == target->code()) {
+            // same type, no need to convert
+            return shared_from_this();
+        }
+        try {
+            if (target->primitive()) {
+                switch (target->code()) {
+                case TypeCode::BOOL: {
+                    return std::make_shared<PrimValue<bool>>(data_.length() > 0);
+                }
+
+                default:
+                    throw UnsupportedConvError();
+                }
+            }
+        } catch (const UnsupportedConvError &e) {
+            throw ValueConvError("Cannot convert " + typeCodeToString(type_->code()) + " to " +
+                                 typeCodeToString(target->code()));
+        } catch (const std::exception &e) {
+            throw ValueConvError(e.what());
         }
     }
+
+    virtual const value_ptr_t clone() const override { return std::make_shared<StringValue>(data_); }
+
+    virtual const std::string toString() const override { return data_; }
 };
 
 class StructValue : public Value {

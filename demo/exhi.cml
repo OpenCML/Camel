@@ -2,7 +2,7 @@ type Signal = Vector<Int, 2>;
 
 with <this: Signal>
 inner atomic func map(f: (Int) => Int): Signal {
-    # implemented by the camel interpreter
+    // implemented by the camel interpreter
 };
 
 atomic func add(sig1: Signal, sig2: Signal): Signal {

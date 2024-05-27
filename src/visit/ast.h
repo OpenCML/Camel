@@ -32,6 +32,7 @@ using ast_ptr_t = std::shared_ptr<ASTNode>;
 class ASTNode : public AbstractTreeNode<sem_ptr_t>, std::enable_shared_from_this<ASTNode> {
   public:
     ASTNode(sem_ptr_t sem) : AbstractTreeNode(sem) {}
+    virtual ~ASTNode() = default;
 
     std::string toString() const { return data->toString(); }
 

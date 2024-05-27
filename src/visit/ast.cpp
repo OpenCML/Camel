@@ -398,21 +398,24 @@ std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
         value = std::make_shared<PrimValue<double>>(parseNumber<double>(context->REAL()->getText()));
         break;
     case 3: // STRING
+    {
         type = stringTypePtr;
-        value = std::make_shared<PrimValue<std::string>>(parseToken<std::string>(context->STRING()->getText()));
+        const auto &text = context->STRING()->getText();
+        value = std::make_shared<StringValue>(text.substr(1, text.size() - 2));
+    }
         break;
     case 4: // MULTI_STR
     {
         type = stringTypePtr;
         const auto &text = context->MULTI_STR()->getText();
-        value = std::make_shared<PrimValue<std::string>>(text.substr(3, text.size() - 6));
+        value = std::make_shared<StringValue>(text.substr(3, text.size() - 6));
     } break;
     case 5: // FSTRING
     {
         type = stringTypePtr;
         // TODO: Implement FSTRING
         const auto &text = context->FSTRING()->getText();
-        value = std::make_shared<PrimValue<std::string>>(text.substr(2, text.size() - 3));
+        value = std::make_shared<StringValue>(text.substr(2, text.size() - 3));
     } break;
     case 6: // TRUE
         type = boolTypePtr;

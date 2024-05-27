@@ -51,7 +51,7 @@ template <typename T> T parseNumber(const std::string &input) {
     while (i < input.length()) {
         if (base == 10 && input[i] == '.') {
             // For integer types, discard the fractional part
-            if constexpr (std::is_integral<T>) {
+            if constexpr (std::is_integral_v<T>) {
                 // Skip the fractional part
                 while (i < input.length() && isdigit(input[i])) {
                     i++;
@@ -121,15 +121,4 @@ template <typename T> T parseNumber(const std::string &input) {
     }
 
     return result;
-}
-
-template <typename T> T parseToken(const std::string &token) {
-    if constexpr (std::is_same<T, int32_t> || std::is_same<T, int64_t> || std::is_same<T, float> ||
-                  std::is_same<T, double>) {
-        return parseNumber<T>(token);
-    } else if constexpr (std::is_same<T, std::string>) {
-        return str.substr(1, str.size() - 2);
-    } else {
-        static_assert(std::always_false<T>, "Unsupported token type");
-    }
 }
