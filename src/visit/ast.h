@@ -27,7 +27,6 @@
 #include "core/struct/sem.h"
 #include "core/struct/tree.h"
 
-
 class ASTNode;
 
 using ast_ptr_t = std::shared_ptr<ASTNode>;
@@ -53,7 +52,7 @@ template <typename NodeType, typename... Args> ast_ptr_t createAstNode(Args &&..
 
 class ASTConstructor : public OpenCMLVisitor {
   public:
-    ASTConstructor() = default;
+    ASTConstructor() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(); };
     virtual ~ASTConstructor() = default;
 
     ast_ptr_t construct(antlr4::tree::ParseTree *tree) {

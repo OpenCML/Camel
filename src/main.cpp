@@ -26,9 +26,11 @@
 
 #include "config.h"
 #include "core/error/json.h"
+#include "core/struct/type.h"
+#include "utils/log.h"
+#include "visit/ast.h"
 #include "visit/cst.h"
 #include "visit/fmt.h"
-#include "utils/log.h"
 
 using namespace antlr4;
 
@@ -95,7 +97,7 @@ int main(int argc, char *argv[]) {
             tokens.reset();
             interpreter->setPredictionMode(atn::PredictionMode::LL);
             parser.setErrorHandler(std::make_shared<DefaultErrorStrategy>());
-            
+
             try {
                 tree = parser.program();
             } catch (std::exception &e) {
@@ -110,6 +112,19 @@ int main(int argc, char *argv[]) {
         if (dumpCST) {
             auto visitor = CSTDumpVisitor();
             visitor.visit(tree);
+        }
+
+        if (dumpAST) {
+            initTypes();
+            ast_ptr_t ast = nullptr;
+            try {
+                auto visitor = ASTConstructor();
+                ast = visitor.construct(tree);
+            } catch (std::exception &e) {
+                error << "AST construction failed: " << e.what() << std::endl;
+                return 1;
+            }
+            ast->dumpTree();
         }
 
         if (format) {

@@ -25,19 +25,15 @@
 #include <shared_mutex>
 #include <unordered_map>
 
-
 template <typename T, typename = std::void_t<>> struct hashable : std::false_type {};
 
 template <typename T>
 struct hashable<T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declval<T>()))>> : std::true_type {};
 
 template <typename K, typename V> class Scope {
-  public:
-    using Map = typename std::conditional<hashable<K>::value, std::unordered_map<K, V>, std::map<K, V>>::type;
-
   protected:
     mutable std::shared_mutex rwMutex_;
-    Map map_;
+    std::unordered_map<K, V> map_;
     std::shared_ptr<Scope<K, V>> outer_;
 
   public:
@@ -48,7 +44,7 @@ template <typename K, typename V> class Scope {
     std::shared_ptr<Scope<K, V>> outer() const { return outer_; }
 
     std::optional<V> at(const K &k, bool recursive = true) const {
-        std::shared_lock<std::shared_mutex> lock(rwMutex_);
+        // std::shared_lock<std::shared_mutex> lock(rwMutex_);
         auto it = map_.find(k);
         if (it != map_.end()) {
             return it->second;
@@ -60,15 +56,15 @@ template <typename K, typename V> class Scope {
     }
 
     void insert(const K &k, const V &v) {
-        std::unique_lock<std::shared_mutex> lock(rwMutex_);
+        // std::unique_lock<std::shared_mutex> lock(rwMutex_);
         map_.insert({k, v});
     }
 
     bool erase(const K &k, bool recursive = true) {
-        std::unique_lock<std::shared_mutex> lock(rwMutex_);
+        // std::unique_lock<std::shared_mutex> lock(rwMutex_);
         auto c = map_.erase(k);
         if (recursive && outer_) {
-            lock.unlock(); // Release the exclusive lock before calling outer->erase
+            // lock.unlock(); // Release the exclusive lock before calling outer->erase
             return outer_->erase(k, recursive) || c;
         } else {
             return c;
@@ -76,20 +72,20 @@ template <typename K, typename V> class Scope {
     }
 
     void clear() {
-        std::unique_lock<std::shared_mutex> lock(rwMutex_);
+        // std::unique_lock<std::shared_mutex> lock(rwMutex_);
         map_.clear();
         if (outer_) {
-            lock.unlock(); // Release the exclusive lock before calling outer->clear
+            // lock.unlock(); // Release the exclusive lock before calling outer->clear
             outer_->clear();
         }
     }
 
     bool has(const K &k, bool recursive = true) const {
-        std::shared_lock<std::shared_mutex> lock(rwMutex_);
+        // std::shared_lock<std::shared_mutex> lock(rwMutex_);
         if (map_.count(k) != 0) {
             return true;
         } else if (recursive && outer_) {
-            lock.unlock(); // Release the shared lock before calling outer->has
+            // lock.unlock(); // Release the shared lock before calling outer->has
             return outer_->has(k, recursive);
         }
         return false;
@@ -97,7 +93,7 @@ template <typename K, typename V> class Scope {
 
     bool isRoot() const { return !outer_; }
 
-    Map self() const { return map_; }
+    std::unordered_map<K, V> self() const { return map_; }
 };
 
 template <typename K, typename V> using scope_ptr_t = std::shared_ptr<Scope<K, V>>;
