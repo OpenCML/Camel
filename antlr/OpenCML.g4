@@ -170,7 +170,7 @@ literal
     ;
 
 typeExpr
-    : type ('[' ']')?
+    : type ('[' INTEGER? ']')*
     | typeExpr '|' typeExpr
     | typeExpr '&' typeExpr
     ;

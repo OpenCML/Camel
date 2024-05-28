@@ -884,6 +884,8 @@ public:
     TypeExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     TypeContext *type();
+    std::vector<antlr4::tree::TerminalNode *> INTEGER();
+    antlr4::tree::TerminalNode* INTEGER(size_t i);
     std::vector<TypeExprContext *> typeExpr();
     TypeExprContext* typeExpr(size_t i);
 
