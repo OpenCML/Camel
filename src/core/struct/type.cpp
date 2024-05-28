@@ -18,6 +18,7 @@
 
 #include "type.h"
 #include "entity.h"
+#include "functor.h"
 
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
@@ -658,6 +659,9 @@ TypeConv NamedTupleType::convertibility(const Type &other) const {
 
 std::string FunctorType::toString() const {
     std::string result = "";
+    for (const auto &modifier : modifiers_) {
+        result += modifier2str(modifier) + " ";
+    }
     if (withType_ != nullptr && withType_->code() == TypeCode::NAMED_TUPLE) {
         const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
         result += "<";

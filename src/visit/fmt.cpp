@@ -172,15 +172,15 @@ std::any Formatter::visitExprStmt(OpenCMLParser::ExprStmtContext *context) {
 };
 
 /*
-assignStmt : identRef memberAccess? '=' entityExpr ;
+assignStmt : identRef memberAccess* '=' entityExpr ;
 */
 std::any Formatter::visitAssignStmt(OpenCMLParser::AssignStmtContext *context) {
     std::string result;
     const auto &identRef = context->identRef();
-    const auto &memberAccess = context->memberAccess();
+    const auto &memberAccesses = context->memberAccess();
     const auto &entityExpr = context->entityExpr();
     result += std::any_cast<std::string>(visitIdentRef(identRef));
-    if (memberAccess) {
+    for (const auto &memberAccess : memberAccesses) {
         result += std::any_cast<std::string>(visitMemberAccess(memberAccess));
     }
     result += " = " + std::any_cast<std::string>(visitEntityExpr(entityExpr));
@@ -322,8 +322,7 @@ std::any Formatter::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context)
 keyValuePair : identRef ':' entityExpr ;
 */
 std::any Formatter::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
-    return context->identRef()->getText() + ": " +
-           std::any_cast<std::string>(visitEntityExpr(context->entityExpr()));
+    return context->identRef()->getText() + ": " + std::any_cast<std::string>(visitEntityExpr(context->entityExpr()));
 };
 
 /*
@@ -813,10 +812,16 @@ std::any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
         if (context->children.size() == 1) {
             return std::any_cast<std::string>(visitType(context->type()));
         } else {
-            const auto &integers = context->INTEGER();
             std::string result = std::any_cast<std::string>(visitType(context->type()));
-            for (const auto &integer : integers) {
-                result += "[" + integer->getText() + "]";
+            for (size_t i = 1; i < context->children.size(); i++) {
+                const std::string &text = context->children[i]->getText();
+                if (text == "[") {
+                    result += "[";
+                    if (context->children[i + 1]->getText() != "]") {
+                        result += context->children[i + 1]->getText();
+                    }
+                    result += "]";
+                }
             }
             return result;
         }

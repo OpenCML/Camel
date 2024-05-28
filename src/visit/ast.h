@@ -69,6 +69,9 @@ class ASTConstructor : public OpenCMLVisitor {
     size_t indentIndex_ = 0;
     scope_ptr_t<std::string, type_ptr_t> typeScope_;
 
+    void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
+    void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
+
     std::pair<ast_ptr_t, entity_ptr_t> makeDanglingPair(const ast_ptr_t &expr) {
         const std::string indent = std::to_string(indentIndex_++);
         ast_ptr_t refNode = createAstNode<NewRefNode>(indent);

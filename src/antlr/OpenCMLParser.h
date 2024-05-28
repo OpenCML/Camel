@@ -267,7 +267,8 @@ public:
     virtual size_t getRuleIndex() const override;
     IdentRefContext *identRef();
     EntityExprContext *entityExpr();
-    MemberAccessContext *memberAccess();
+    std::vector<MemberAccessContext *> memberAccess();
+    MemberAccessContext* memberAccess(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

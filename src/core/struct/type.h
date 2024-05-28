@@ -81,6 +81,11 @@ using type_ptr_t = std::shared_ptr<Type>;
 class Entity;
 using entity_ptr_t = std::shared_ptr<Entity>;
 
+class Functor;
+using functor_ptr_t = std::shared_ptr<const Functor>;
+
+enum class FunctorModifier;
+
 class Type {
   protected:
     TypeCode code_;
@@ -397,6 +402,17 @@ class UnionType : public StructType {
 
   public:
     UnionType() : StructType(TypeCode::UNION) {}
+    UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs) : StructType(TypeCode::UNION) {
+        if (lhs->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*lhs));
+        else
+            types_.insert(lhs);
+
+        if (rhs->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*rhs));
+        else
+            types_.insert(rhs);
+    }
     UnionType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::UNION) {
         for (const auto &type : types) {
             if (type->code() == TypeCode::UNION)
@@ -589,6 +605,7 @@ class NamedTupleType : public StructType {
 
 class FunctorType : public SpecialType {
   private:
+    std::set<FunctorModifier> modifiers_;
     type_ptr_t withType_;
     type_ptr_t paramsType_;
     type_ptr_t returnType_;
@@ -598,6 +615,9 @@ class FunctorType : public SpecialType {
     FunctorType(const type_ptr_t &withType = nullptr, const type_ptr_t &paramsType = nullptr,
                 const type_ptr_t &returnType = nullptr)
         : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
+
+    void addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
+    void setModifiers(const std::set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
 
     type_ptr_t withType() const { return withType_; }
     type_ptr_t paramsType() const { return paramsType_; }

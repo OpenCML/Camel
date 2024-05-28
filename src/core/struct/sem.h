@@ -24,7 +24,7 @@
 class SemanticNode;
 using sem_ptr_t = std::shared_ptr<const SemanticNode>;
 
-enum class SemNodeType { DATA, TYPE, FUNC, COPY, NREF, DREF, ANNO, LINK, CALL, RETN, EXEC };
+enum class SemNodeType { DATA, TYPE, FUNC, COPY, NREF, DREF, ASSN, ANNO, LINK, CALL, RETN, EXEC };
 
 class SemanticNode {
   protected:
@@ -65,11 +65,8 @@ class TypeNode : public SemanticNode {
 
 class FunctorNode : public SemanticNode {
   private:
-    std::set<FunctorModifier> modifiers_;
-
   public:
-    FunctorNode(const std::initializer_list<FunctorModifier> &modifiers)
-        : SemanticNode(SemNodeType::FUNC), modifiers_(modifiers) {}
+    FunctorNode() : SemanticNode(SemNodeType::FUNC) {}
 
     // const std::string toString() const override;
 };
@@ -99,6 +96,13 @@ class DeRefNode : public SemanticNode {
     DeRefNode(const std::string &ident) : SemanticNode(SemNodeType::DREF), ident_(ident) {}
 
     const std::string toString() const override { return "DREF: " + ident_; }
+};
+
+class AssignNode : public SemanticNode {
+  public:
+    AssignNode() : SemanticNode(SemNodeType::ASSN) {}
+
+    // const std::string toString() const override;
 };
 
 class AnnotationNode : public SemanticNode {

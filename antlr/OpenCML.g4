@@ -52,7 +52,7 @@ useStmt : USE carrier '='? entityExpr
         | carrier '::' entityExpr ;
 typeStmt : TYPE identRef '='? typeExpr ;
 exprStmt : annotations? entityExpr ;
-assignStmt : identRef memberAccess? '=' entityExpr ;
+assignStmt : identRef memberAccess* '=' entityExpr ;
 
 withDef : WITH angledParams ;
 funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
