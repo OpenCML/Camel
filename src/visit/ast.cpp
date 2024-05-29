@@ -691,7 +691,7 @@ std::any ASTConstructor::visitBracketValues(OpenCMLParser::BracketValuesContext 
 parentParams : '(' pairedParams? ','? ')' ;
 */
 std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
-    std ::cout << "visitParentParams" << std::endl;
+    debug(0) << "visitParentParams" << std::endl;
     const auto &pairedParams = context->pairedParams();
     if (pairedParams) {
         return visitPairedParams(pairedParams);

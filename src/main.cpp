@@ -124,7 +124,6 @@ int main(int argc, char *argv[]) {
                 error << "AST construction failed: " << e.what() << std::endl;
                 return 1;
             }
-            std::cout << "AST constructed" << std::endl;
             ast->print();
         }
 
