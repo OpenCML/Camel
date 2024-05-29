@@ -1,38 +1,37 @@
 type Signal = Vector<Int, 2>;
 
-// atomic func add(sig1: Signal, sig2: Signal): Signal {
-//     return [sig1[0] + sig2[0], sig1[1] + sig2[1]] as Signal;
-// };
-
-// inner func comp1(signal: Signal): Signal {
-//     // return signal.map((x: Int) => x + 1);
-// };
-
-// atomic func comp2(signal: Signal): Signal {
-//     return signal.map((x: Int) => x / 2);
-// };
-
-// atomic func comp3(signal: Signal): Signal {
-//     return signal.map((x: Int) => x * 3);
-// };
-
-// atomic func analyzer1(signal: Signal) {
-//     print('Analyzer 1: ', signal);
-// };
-
-// atomic func analyzer2(signal: Signal) {
-//     print('Analyzer 2: ', signal);
-// };
-
-func process(signals: Signal) {
-    let signal1: Signal = [1, 2];
-    // let res1 = signals[0]->comp1->comp2;
-    // res1[0]->analyzer1;
-    // let res2 = signals[1]->comp3;
-    // [res1[1], res2]->add->analyzer2;
+atomic func add(sig1: Signal, sig2: Signal): Signal {
+    return [sig1[0] + sig2[0], sig1[1] + sig2[1]] as Signal;
 };
 
-// let signal1: Signal = [1, 2];
-// let signal2: Signal = [3, 4];
+inner func comp1(signal: Signal): Signal {
+    // return signal.map((x: Int) => x + 1);
+};
 
-// [signal1, signal2]->process->print;
+inner func comp2(signal: Signal): Signal {
+    // return signal.map((x: Int) => x / 2);
+};
+
+inner func comp3(signal: Signal): Signal {
+    // return signal.map((x: Int) => x * 3);
+};
+
+inner func analyzer1(signal: Signal) {
+    // print('Analyzer 1: ', signal);
+};
+
+inner func analyzer2(signal: Signal) {
+    // print('Analyzer 2: ', signal);
+};
+
+func process(signals: Signal) {
+    let res1 = signals[0]->comp1->comp2;
+    res1[0]->analyzer1;
+    let res2 = signals[1]->comp3;
+    [res1[1], res2]->add->analyzer2;
+};
+
+let signal1: Signal = [1, 2];
+let signal2: Signal = [3, 4];
+
+[signal1, signal2]->process->print;
