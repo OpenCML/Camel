@@ -38,12 +38,14 @@ enum class TypeCode {
     // structured types
     SET = 0b01'000000,
     MAP = 0b01'000001,
-    ARRAY = 0b01'000010,
-    LIST = 0b01'000011,
-    DICT = 0b01'000100,
-    UNION = 0b01'000101,
-    VECTOR = 0b01'000110,
-    MATRIX = 0b01'000111,
+    LIST = 0b01'000010,
+    DICT = 0b01'000011,
+    ARRAY = 0b01'000100,
+    TUPLE = 0b01'000101,
+    UNION = 0b01'000110,
+    VECTOR = 0b01'000111,
+    TENSOR = 0b01'001000,
+    NAMED_TUPLE = 0b01'001001,
     // special types
     ANY = 0b10'000000,
     VOID = 0b10'000001,
@@ -66,14 +68,23 @@ class StructType;
 class SpecialType;
 class SetType;
 class MapType;
-class ArrayType;
 class ListType;
 class DictType;
+class ArrayType;
 class UnionType;
+class NamedTupleType;
 class VectorType;
-class MatrixType;
+class TensorType;
 
 using type_ptr_t = std::shared_ptr<Type>;
+
+class Entity;
+using entity_ptr_t = std::shared_ptr<Entity>;
+
+class Functor;
+using functor_ptr_t = std::shared_ptr<const Functor>;
+
+enum class FunctorModifier;
 
 class Type {
   protected:
@@ -95,7 +106,7 @@ class Type {
     virtual bool operator==(const Type &other) const { return code_ == other.code_; }
     virtual bool operator!=(const Type &other) const { return code_ != other.code_; }
 
-    bool equals(const type_ptr_t &type) const { return *type == *this; }
+    bool equals(const type_ptr_t &type) const { return type && *type == *this; }
 
     virtual TypeConv convertibility(const Type &other) const {
         if (code_ == other.code_) {
@@ -131,7 +142,12 @@ class SpecialType : public Type {
     SpecialType() = delete;
     SpecialType(TypeCode code) : Type(code) {}
 
-    TypeConv convertibility(const Type &other) const override;
+    virtual std::string toString() const override { return typeCodeToString(code_); }
+
+    virtual bool operator==(const Type &other) const override { return code_ == other.code(); }
+    virtual bool operator!=(const Type &other) const override { return code_ != other.code(); }
+
+    virtual TypeConv convertibility(const Type &other) const override;
 };
 
 class SetType : public StructType {
@@ -144,7 +160,7 @@ class SetType : public StructType {
 
     type_ptr_t valueType() const { return valueType_; }
 
-    std::string toString() const override { return "set<" + valueType_->toString() + ">"; }
+    std::string toString() const override { return "Set<" + valueType_->toString() + ">"; }
 
     bool operator==(const Type &other) const override {
         if (other.code() != TypeCode::SET) {
@@ -180,7 +196,7 @@ class MapType : public StructType {
     type_ptr_t valueType() const { return valueType_; }
 
     std::string toString() const override {
-        return "map<" + keyType_->toString() + ", " + valueType_->toString() + ">";
+        return "Map<" + keyType_->toString() + ", " + valueType_->toString() + ">";
     }
 
     bool operator==(const Type &other) const override {
@@ -198,41 +214,6 @@ class MapType : public StructType {
         const MapType &otherMap = dynamic_cast<const MapType &>(other);
 
         return !keyType_->equals(otherMap.keyType_) || !valueType_->equals(otherMap.valueType_);
-    }
-
-    TypeConv convertibility(const Type &other) const override;
-};
-
-class ArrayType : public StructType {
-  private:
-    type_ptr_t elementType_;
-    size_t size_;
-
-  public:
-    ArrayType() = delete;
-    ArrayType(const type_ptr_t &elementType, size_t size)
-        : StructType(TypeCode::ARRAY), elementType_(elementType), size_(size) {}
-
-    size_t size() const { return size_; }
-    type_ptr_t elementType() const { return elementType_; }
-
-    std::string toString() const override {
-        return "array<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
-    }
-
-    bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::ARRAY) {
-            return false;
-        }
-        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return size_ == otherArray.size_ && elementType_->equals(otherArray.elementType_);
-    }
-    bool operator!=(const Type &other) const override {
-        if (other.code() != TypeCode::ARRAY) {
-            return true;
-        }
-        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return size_ != otherArray.size_ || !elementType_->equals(otherArray.elementType_);
     }
 
     TypeConv convertibility(const Type &other) const override;
@@ -297,6 +278,8 @@ class DictType : public StructType {
 
     type_ptr_t get(const std::string &name) const { return fields_.at(name); }
 
+    void clear() { fields_.clear(); }
+
     type_ptr_t operator|(const DictType &other) const {
         auto result = std::make_shared<DictType>();
         for (const auto &field : fields_) {
@@ -330,6 +313,79 @@ class DictType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
+class ArrayType : public StructType {
+  private:
+    type_ptr_t elementType_;
+
+  public:
+    ArrayType() = delete;
+    ArrayType(const type_ptr_t &elementType) : StructType(TypeCode::ARRAY), elementType_(elementType) {}
+
+    type_ptr_t elementType() const { return elementType_; }
+
+    std::string toString() const override { return "Array<" + elementType_->toString() + ">"; }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::ARRAY) {
+            return false;
+        }
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return elementType_->equals(otherArray.elementType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.code() != TypeCode::ARRAY) {
+            return true;
+        }
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return !elementType_->equals(otherArray.elementType_);
+    }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
+class TupleType : public StructType {
+  private:
+    std::vector<type_ptr_t> types_;
+
+  public:
+    TupleType() : StructType(TypeCode::TUPLE) {}
+    TupleType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+    TupleType(const std::vector<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+
+    std::string toString() const override {
+        std::string result = "Tuple<";
+        for (const auto &type : types_) {
+            result += type->toString() + ", ";
+        }
+        result.pop_back();
+        result.pop_back();
+        result += ">";
+        return result;
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::TUPLE) {
+            return false;
+        }
+        const TupleType &otherTuple = dynamic_cast<const TupleType &>(other);
+
+        if (types_.size() != otherTuple.types_.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < types_.size(); i++) {
+            if (!types_[i]->equals(otherTuple.types_[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    bool operator!=(const Type &other) const override { return !(*this == other); }
+
+    const std::vector<type_ptr_t> &types() const { return types_; }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
 class UnionType : public StructType {
   private:
     std::set<type_ptr_t> types_;
@@ -346,6 +402,17 @@ class UnionType : public StructType {
 
   public:
     UnionType() : StructType(TypeCode::UNION) {}
+    UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs) : StructType(TypeCode::UNION) {
+        if (lhs->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*lhs));
+        else
+            types_.insert(lhs);
+
+        if (rhs->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*rhs));
+        else
+            types_.insert(rhs);
+    }
     UnionType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::UNION) {
         for (const auto &type : types) {
             if (type->code() == TypeCode::UNION)
@@ -364,13 +431,13 @@ class UnionType : public StructType {
     }
 
     std::string toString() const override {
-        std::string result = "";
+        std::string result = "Union<";
         for (const auto &type : types_) {
-            result += type->toString() + " | ";
+            result += type->toString() + ", ";
         }
         result.pop_back();
         result.pop_back();
-        result.pop_back();
+        result += ">";
         return result;
     }
 
@@ -416,7 +483,7 @@ class VectorType : public StructType {
     type_ptr_t elementType() const { return elementType_; }
 
     std::string toString() const override {
-        return "vector<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
+        return "Vector<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
     }
 
     bool operator==(const Type &other) const override {
@@ -437,20 +504,20 @@ class VectorType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-class MatrixType : public StructType {
+class TensorType : public StructType {
   private:
     type_ptr_t elementType_;
     std::vector<size_t> shape_;
 
   public:
-    MatrixType(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-        : StructType(TypeCode::MATRIX), elementType_(elementType), shape_(shape) {
+    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape)
+        : StructType(TypeCode::TENSOR), elementType_(elementType), shape_(shape) {
         if (shape_.size() == 0) {
-            throw std::invalid_argument("Matrix shape must at least have 1 dim");
+            throw std::invalid_argument("Tensor shape must at least have 1 dim");
         }
         // element type must be a primitive type
         if (!elementType->primitive()) {
-            throw std::invalid_argument("Matrix element type must be primitive");
+            throw std::invalid_argument("Tensor element type must be primitive");
         }
     }
 
@@ -458,7 +525,7 @@ class MatrixType : public StructType {
     type_ptr_t elementType() const { return elementType_; }
 
     std::string toString() const override {
-        std::string result = "matrix<" + elementType_->toString() + ", [";
+        std::string result = "Tensor<" + elementType_->toString() + ", [";
         for (const auto &dim : shape_) {
             result += std::to_string(dim) + ", ";
         }
@@ -469,17 +536,17 @@ class MatrixType : public StructType {
     }
 
     bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::MATRIX) {
+        if (other.code() != TypeCode::TENSOR) {
             return false;
         }
-        const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
         return shape_ == otherMatrix.shape_ && elementType_->equals(otherMatrix.elementType_);
     }
     bool operator!=(const Type &other) const override {
-        if (other.code() != TypeCode::MATRIX) {
+        if (other.code() != TypeCode::TENSOR) {
             return true;
         }
-        const MatrixType &otherMatrix = dynamic_cast<const MatrixType &>(other);
+        const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
         return shape_ != otherMatrix.shape_ || !elementType_->equals(otherMatrix.elementType_);
     }
 
@@ -498,6 +565,92 @@ class ListType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
+class NamedTupleType : public StructType {
+  private:
+    std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>> elements_;
+
+  public:
+    NamedTupleType() : StructType(TypeCode::NAMED_TUPLE) {}
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
+
+    bool add(const std::string &key, const type_ptr_t &type, const entity_ptr_t &value = nullptr) {
+        for (const auto &tuple : elements_) {
+            if (std::get<0>(tuple) == key) {
+                return false;
+            }
+        }
+        elements_.push_back({key, type, value});
+        return true;
+    }
+
+    size_t size() const { return elements_.size(); }
+    const std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>> &elements() const { return elements_; }
+
+    std::unordered_map<std::string, type_ptr_t> map() const {
+        auto result = std::unordered_map<std::string, type_ptr_t>();
+        for (const auto &tuple : elements_) {
+            const auto &[name, type, value] = tuple;
+            result[name] = type;
+        }
+        return result;
+    }
+
+    void clear() { elements_.clear(); }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
+class FunctorType : public SpecialType {
+  private:
+    std::set<FunctorModifier> modifiers_;
+    std::shared_ptr<NamedTupleType> withType_;
+    std::shared_ptr<NamedTupleType> paramsType_;
+    type_ptr_t returnType_;
+
+  public:
+    FunctorType() = delete;
+    FunctorType(const std::shared_ptr<NamedTupleType> &withType = nullptr,
+                const std::shared_ptr<NamedTupleType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
+        : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
+
+    void addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
+    void setModifiers(const std::set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
+
+    type_ptr_t withType() const { return std::dynamic_pointer_cast<Type>(withType_); }
+    type_ptr_t paramsType() const { return std::dynamic_pointer_cast<Type>(paramsType_); }
+    type_ptr_t returnType() const { return std::dynamic_pointer_cast<Type>(returnType_); }
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::FUNCTOR) {
+            return false;
+        }
+        const FunctorType &otherFunctor = dynamic_cast<const FunctorType &>(other);
+
+        if (withType_ != nullptr && !withType_->equals(otherFunctor.withType_)) {
+            return false;
+        }
+
+        if (paramsType_ != nullptr && !paramsType_->equals(otherFunctor.paramsType_)) {
+            return false;
+        }
+
+        if (returnType_ != nullptr && !returnType_->equals(otherFunctor.returnType_)) {
+            return false;
+        }
+
+        return true;
+    }
+    bool operator!=(const Type &other) const override { return !(*this == other); }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
 extern type_ptr_t int32TypePtr;
 extern type_ptr_t int64TypePtr;
 extern type_ptr_t floatTypePtr;
@@ -509,6 +662,8 @@ extern type_ptr_t charTypePtr;
 extern type_ptr_t intTypePtr;
 extern type_ptr_t realTypePtr;
 extern type_ptr_t numberTypePtr;
+
+extern type_ptr_t listTypePtr;
 
 extern type_ptr_t anyTypePtr;
 extern type_ptr_t voidTypePtr;

@@ -24,7 +24,7 @@
 class SemanticNode;
 using sem_ptr_t = std::shared_ptr<const SemanticNode>;
 
-enum class SemNodeType { DATA, TYPE, FUNC, COPY, NREF, DREF, ANNO, LINK, CALL, RETN };
+enum class SemNodeType { DATA, TYPE, FUNC, NREF, DREF, ASSN, ANNO, LINK, CALL, RETN, EXEC };
 
 class SemanticNode {
   protected:
@@ -34,10 +34,11 @@ class SemanticNode {
     SemanticNode(SemNodeType type) : type_(type) {}
     virtual ~SemanticNode() = default;
 
+    SemNodeType type() const { return type_; }
     const std::string typeStr() const;
 
     virtual const std::string toString() const { return typeStr(); }
-    virtual void visit() = 0;
+    virtual void visit() { throw std::runtime_error("SemanticNode::visit() not implemented"); };
 };
 
 class DataNode : public SemanticNode {
@@ -46,6 +47,7 @@ class DataNode : public SemanticNode {
 
   public:
     DataNode(entity_ptr_t entity) : SemanticNode(SemNodeType::DATA), entity_(entity) {}
+    entity_ptr_t entity() const { return entity_; }
 
     const std::string toString() const override;
 };
@@ -56,24 +58,15 @@ class TypeNode : public SemanticNode {
 
   public:
     TypeNode(type_ptr_t type) : SemanticNode(SemNodeType::TYPE), type_(type) {}
+    type_ptr_t type() const { return type_; }
 
     const std::string toString() const override;
 };
 
 class FunctorNode : public SemanticNode {
   private:
-    std::set<FunctorModifier> modifiers_;
-
   public:
-    FunctorNode(const std::initializer_list<FunctorModifier> &modifiers)
-        : SemanticNode(SemNodeType::FUNC), modifiers_(modifiers) {}
-
-    // const std::string toString() const override;
-};
-
-class CopyNode : public SemanticNode {
-  public:
-    CopyNode() : SemanticNode(SemNodeType::COPY) {}
+    FunctorNode() : SemanticNode(SemNodeType::FUNC) {}
 
     // const std::string toString() const override;
 };
@@ -85,7 +78,7 @@ class NewRefNode : public SemanticNode {
   public:
     NewRefNode(const std::string &ident) : SemanticNode(SemNodeType::NREF), ident_(ident) {}
 
-    const std::string toString() const override { return "NREF: " + ident_; }
+    const std::string toString() const override;
 };
 
 class DeRefNode : public SemanticNode {
@@ -95,7 +88,16 @@ class DeRefNode : public SemanticNode {
   public:
     DeRefNode(const std::string &ident) : SemanticNode(SemNodeType::DREF), ident_(ident) {}
 
-    const std::string toString() const override { return "DREF: " + ident_; }
+    const std::string ident() const { return ident_; }
+
+    const std::string toString() const override;
+};
+
+class AssignNode : public SemanticNode {
+  public:
+    AssignNode() : SemanticNode(SemNodeType::ASSN) {}
+
+    // const std::string toString() const override;
 };
 
 class AnnotationNode : public SemanticNode {
@@ -125,6 +127,13 @@ class CallNode : public SemanticNode {
 class ReturnNode : public SemanticNode {
   public:
     ReturnNode() : SemanticNode(SemNodeType::RETN) {}
+
+    // const std::string toString() const override;
+};
+
+class ExecuteNode : public SemanticNode {
+  public:
+    ExecuteNode() : SemanticNode(SemNodeType::EXEC) {}
 
     // const std::string toString() const override;
 };
