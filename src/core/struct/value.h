@@ -206,7 +206,7 @@ class StringValue : public Value {
         }
     }
     virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
-    virtual const std::string toString() const override { return data_; }
+    virtual const std::string toString() const override { return "\"" + data_ + "\""; }
 };
 
 class StructValue : public Value {
@@ -259,9 +259,7 @@ class ListValue : public StructValue {
     ListValue(const std::vector<entity_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
     virtual ~ListValue() = default;
 
-    void add(const entity_ptr_t &e) {
-        data_.push_back(e);
-    }
+    void add(const entity_ptr_t &e) { data_.push_back(e); }
 
     bool resolved() override;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;

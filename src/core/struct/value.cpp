@@ -320,16 +320,17 @@ const value_ptr_t NamedTupleValue::clone(bool) const {
 }
 
 const std::string NamedTupleValue::toString() const {
-    return "NamedTupleValue"; // TODO
     std::string str = "(";
     for (const auto &e : indexData_) {
-        str += e->dataStr() + ", ";
+        str += std::string("e->dataStr()") + ", ";
     }
     for (const auto &e : namedData_) {
-        str += e.first + ": " + e.second->dataStr() + ", ";
+        str += e.first + ": " + "e.second->dataStr()" + ", ";
     }
-    str.pop_back();
-    str.pop_back();
+    if (str.length() > 1) {
+        str.pop_back();
+        str.pop_back();
+    }
     str += ")";
     return str;
 }
