@@ -587,6 +587,7 @@ class NamedTupleType : public StructType {
         return true;
     }
 
+    size_t size() const { return elements_.size(); }
     const std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>> &elements() const { return elements_; }
 
     std::unordered_map<std::string, type_ptr_t> map() const {

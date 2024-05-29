@@ -67,7 +67,7 @@ const std::string DataNode::toString() const {
 
 const std::string TypeNode::toString() const {
     std::stringstream ss;
-    ss << "TYPE: " << pointerToHex(this) << ", " << type_->toString();
+    ss << "TYPE: " << type_->toString();
     return ss.str();
 }
 

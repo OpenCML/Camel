@@ -79,6 +79,8 @@ class ASTConstructor : public OpenCMLVisitor {
         return std::make_pair(refNode, entity);
     }
 
+    entity_ptr_t extractEntity(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
+
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
     std::any visitStmtList(OpenCMLParser::StmtListContext *context);
     std::any visitStmt(OpenCMLParser::StmtContext *context);

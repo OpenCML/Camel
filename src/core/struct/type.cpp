@@ -572,8 +572,10 @@ std::string NamedTupleType::toString() const {
         }
         result += ", ";
     }
-    result.pop_back();
-    result.pop_back();
+    if (elements_.size() > 0) {
+        result.pop_back();
+        result.pop_back();
+    }
     result += ")";
     return result;
 }
@@ -663,9 +665,9 @@ std::string FunctorType::toString() const {
     for (const auto &modifier : modifiers_) {
         result += modifier2str(modifier) + " ";
     }
-    if (withType_ != nullptr && withType_->code() == TypeCode::NAMED_TUPLE) {
-        const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
+    if (withType_ && withType_->size() > 0) {
         result += "<";
+        const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
         for (const auto &tuple : with.elements()) {
             const auto &[name, type, value] = tuple;
             result += name + ": " + type->toString();
@@ -679,7 +681,7 @@ std::string FunctorType::toString() const {
         result += "> ";
     }
     result += "(";
-    if (paramsType_ != nullptr && paramsType_->code() == TypeCode::NAMED_TUPLE) {
+    if (paramsType_ && paramsType_->size() > 0) {
         const auto &params = dynamic_cast<const NamedTupleType &>(*paramsType_);
         for (const auto &tuple : params.elements()) {
             const auto &[name, type, value] = tuple;
@@ -693,10 +695,10 @@ std::string FunctorType::toString() const {
         result.pop_back();
     }
     result += ") => ";
-    if (returnType_ != nullptr) {
+    if (returnType_) {
         result += returnType_->toString();
     } else {
-        result += "Void";
+        result += "NULL";
     }
     return result;
 }

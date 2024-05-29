@@ -19,6 +19,22 @@
 #include "ast.h"
 #include "core/struct/token.h"
 
+entity_ptr_t ASTConstructor::extractEntity(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
+    // TODO: better name for dangling
+    if (node->type() == SemNodeType::DATA) {
+        const auto dataNode = std::dynamic_pointer_cast<const DataNode>(node->data);
+        return dataNode->entity();
+    } else if (node->type() == SemNodeType::DREF) {
+        const auto refNode = std::dynamic_pointer_cast<const DeRefNode>(node->data);
+        return std::make_shared<DanglingEntity>(refNode->ident());
+    } else {
+        dangling = true;
+        auto [refNode, refEntity] = makeDanglingPair(node);
+        *execNode << refNode;
+        return refEntity;
+    }
+}
+
 /*
 program : stmtList? EOF;
 */
@@ -100,20 +116,33 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
     }
     const auto &entityExpr = context->entityExpr();
-    ast_ptr_t dataNode = nullptr;
+    ast_ptr_t exprNode = nullptr;
     if (entityExpr) {
-        dataNode = std::any_cast<ast_ptr_t>(visitEntityExpr(entityExpr));
+        exprNode = std::any_cast<ast_ptr_t>(visitEntityExpr(entityExpr));
     } else {
-        dataNode = createAstNode<DataNode>(std::make_shared<Entity>(type, nullptr));
+        exprNode = createAstNode<DataNode>(std::make_shared<Entity>(type, nullptr));
     }
     switch (carrierType) {
     case 1: // identRef
     {
         const std::string &ident = std::any_cast<std::string>(carrier);
         if (type) {
+            bool dangling = false;
+            ast_ptr_t execNode = createAstNode<ExecuteNode>();
             ast_ptr_t linkNode = createAstNode<LinkNode>();
+            entity_ptr_t exprEntity = extractEntity(exprNode, execNode, dangling);
+            ast_ptr_t dataNode = createAstNode<DataNode>(
+                std::make_shared<Entity>(listTypePtr, std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{
+                                                          exprEntity, std::make_shared<Entity>(type, nullptr)})));
             ast_ptr_t funcNode = createAstNode<DeRefNode>("__cast__");
-            *linkNode << dataNode << funcNode;
+
+            if (dangling) {
+                *execNode << dataNode;
+                *linkNode << execNode << funcNode;
+            } else {
+                *linkNode << dataNode << funcNode;
+            }
+
             ast_ptr_t copyNode = createAstNode<CopyNode>();
             *copyNode << linkNode;
             ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
@@ -136,7 +165,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             const auto indexValue = std::make_shared<PrimValue<int32_t>>(i);
             const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
             ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
-            *linkNode << dataNode << funcNode;
+            *linkNode << exprNode << funcNode;
             ast_ptr_t copyNode = createAstNode<CopyNode>();
             *copyNode << linkNode;
             *newRefNode << copyNode;
@@ -159,7 +188,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             const auto indexValue = std::make_shared<StringValue>(ident);
             const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
             ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
-            *linkNode << dataNode << funcNode;
+            *linkNode << exprNode << funcNode;
             ast_ptr_t copyNode = createAstNode<CopyNode>();
             *copyNode << linkNode;
             *newRefNode << copyNode;
@@ -265,30 +294,11 @@ std::any ASTConstructor::visitAssignStmt(OpenCMLParser::AssignStmtContext *conte
         ast_ptr_t linkNode = createAstNode<LinkNode>();
         entity_ptr_t targetEntity = nullptr;
         if (targetNode) {
-            if (targetNode->type() == SemNodeType::DATA) {
-                std::cout << "DATA" << std::endl;
-                const auto dataNode = std::dynamic_pointer_cast<const DataNode>(targetNode->data);
-                targetEntity = dataNode->entity();
-            } else {
-                dangling = true;
-                auto [refNode, refEntity] = makeDanglingPair(targetNode);
-                *execNode << refNode;
-                targetEntity = refEntity;
-            }
+            targetEntity = extractEntity(targetNode, execNode, dangling);
         } else {
             targetEntity = std::make_shared<DanglingEntity>(ident);
         }
-        entity_ptr_t indexEntity = nullptr;
-        if (memberNode->type() == SemNodeType::DATA) {
-            std::cout << "DATA" << std::endl;
-            const auto dataNode = std::dynamic_pointer_cast<const DataNode>(memberNode->data);
-            indexEntity = dataNode->entity();
-        } else {
-            dangling = true;
-            auto [refNode, refEntity] = makeDanglingPair(memberNode);
-            *execNode << refNode;
-            indexEntity = refEntity;
-        }
+        entity_ptr_t indexEntity = extractEntity(memberNode, execNode, dangling);
         const auto listValue =
             std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{targetEntity, indexEntity});
         const auto dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
@@ -351,7 +361,7 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
         const auto &modSet = std::any_cast<std::set<FunctorModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
-    const auto funcTypeNode = createAstNode<TypeNode>(funcType);
+    const auto funcTypeNode = createAstNode<TypeNode>(std::dynamic_pointer_cast<Type>(funcType));
     const auto funcNode = createAstNode<FunctorNode>();
     *funcNode << funcTypeNode << std::any_cast<ast_ptr_t>(visitBracedStmts(context->bracedStmts()));
     return funcNode;
@@ -748,18 +758,9 @@ std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *conte
             std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
         const auto &listValue = std::make_shared<ListValue>();
         bool dangling = false;
-        const auto &execNode = createAstNode<ExecuteNode>();
+        ast_ptr_t execNode = createAstNode<ExecuteNode>();
         for (const auto &node : values) {
-            if (node->type() == SemNodeType::DATA) {
-                std::cout << "DATA" << std::endl;
-                const auto dataNode = std::dynamic_pointer_cast<const DataNode>(node->data);
-                listValue->add(dataNode->entity());
-            } else {
-                dangling = true;
-                auto [refNode, entity] = makeDanglingPair(node);
-                *execNode << refNode;
-                listValue->add(entity);
-            }
+            listValue->add(extractEntity(node, execNode, dangling));
         }
         const auto &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
         if (dangling) {
@@ -775,18 +776,9 @@ std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *conte
                 visitBracedPairedValues(context->bracedPairedValues()));
         const auto &dictValue = std::make_shared<DictValue>();
         bool dangling = false;
-        const auto &execNode = createAstNode<ExecuteNode>();
+        ast_ptr_t execNode = createAstNode<ExecuteNode>();
         for (const auto &[key, node] : values) {
-            if (node->type() == SemNodeType::DATA) {
-                std::cout << "DATA" << std::endl;
-                const auto dataNode = std::dynamic_pointer_cast<const DataNode>(node->data);
-                dictValue->add(key, dataNode->entity());
-            } else {
-                dangling = true;
-                auto [refNode, entity] = makeDanglingPair(node);
-                *execNode << refNode;
-                dictValue->add(key, entity);
-            }
+            dictValue->add(key, extractEntity(node, execNode, dangling));
         }
         const auto &dataNode = createAstNode<DataNode>(std::make_shared<Entity>(dictValue->type(), dictValue));
         if (dangling) {
@@ -837,26 +829,8 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             // TODO: inner function names can share the same deref node
             ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
             auto listValue = std::make_shared<ListValue>();
-            if (entity->type() == SemNodeType::DATA) {
-                std::cout << "DATA" << std::endl;
-                const auto dataNode = std::dynamic_pointer_cast<const DataNode>(entity->data);
-                listValue->add(dataNode->entity());
-            } else {
-                auto [refNode, refEntity] = makeDanglingPair(entity);
-                dangling = true;
-                *execNode << refNode;
-                listValue->add(refEntity);
-            }
-            if (indexNode->type() == SemNodeType::DATA) {
-                std::cout << "DATA" << std::endl;
-                const auto dataNode = std::dynamic_pointer_cast<const DataNode>(indexNode->data);
-                listValue->add(dataNode->entity());
-            } else {
-                auto [refNode, refEntity] = makeDanglingPair(indexNode);
-                dangling = true;
-                *execNode << refNode;
-                listValue->add(refEntity);
-            }
+            listValue->add(extractEntity(entity, execNode, dangling));
+            listValue->add(extractEntity(indexNode, execNode, dangling));
             ast_ptr_t dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
             *linkNode << dataNode << funcNode;
             if (dangling) {
@@ -880,28 +854,10 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             bool dangling = false;
             auto execNode = createAstNode<ExecuteNode>();
             for (const auto &arg : indexArgs) {
-                if (arg->type() == SemNodeType::DATA) {
-                    std::cout << "DATA" << std::endl;
-                    const auto dataNode = std::dynamic_pointer_cast<const DataNode>(arg->data);
-                    namedTuple->add(dataNode->entity());
-                } else {
-                    dangling = true;
-                    auto [refNode, entity] = makeDanglingPair(arg);
-                    *execNode << refNode;
-                    namedTuple->add(entity);
-                }
+                namedTuple->add(extractEntity(arg, execNode, dangling));
             }
             for (const auto &[key, arg] : namedArgs) {
-                if (arg->type() == SemNodeType::DATA) {
-                    std::cout << "DATA" << std::endl;
-                    const auto dataNode = std::dynamic_pointer_cast<const DataNode>(arg->data);
-                    namedTuple->add(dataNode->entity(), key);
-                } else {
-                    dangling = true;
-                    auto [refNode, entity] = makeDanglingPair(arg);
-                    *execNode << refNode;
-                    namedTuple->add(entity, key);
-                }
+                namedTuple->add(extractEntity(arg, execNode, dangling), key);
             }
             ast_ptr_t dataNode = createAstNode<DataNode>(std::make_shared<Entity>(namedTuple->type(), namedTuple));
             if (dangling) {
@@ -927,28 +883,10 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             bool dangling = false;
             ast_ptr_t execNode = createAstNode<ExecuteNode>();
             for (const auto &arg : indexArgs) {
-                if (arg->type() == SemNodeType::DATA) {
-                    std::cout << "DATA" << std::endl;
-                    const auto dataNode = std::dynamic_pointer_cast<const DataNode>(arg->data);
-                    listValue->add(dataNode->entity());
-                } else {
-                    dangling = true;
-                    auto [refNode, entity] = makeDanglingPair(arg);
-                    *execNode << refNode;
-                    listValue->add(entity);
-                }
+                listValue->add(extractEntity(arg, execNode, dangling));
             }
             for (const auto &[key, arg] : namedArgs) {
-                if (arg->type() == SemNodeType::DATA) {
-                    std::cout << "DATA" << std::endl;
-                    const auto dataNode = std::dynamic_pointer_cast<const DataNode>(arg->data);
-                    namedTuple->add(dataNode->entity(), key);
-                } else {
-                    dangling = true;
-                    auto [refNode, entity] = makeDanglingPair(arg);
-                    *execNode << refNode;
-                    namedTuple->add(entity, key);
-                }
+                namedTuple->add(extractEntity(arg, execNode, dangling), key);
             }
             ast_ptr_t dataNode = createAstNode<DataNode>(
                 std::make_shared<Entity>(namedTuple->type(), std::dynamic_pointer_cast<Value>(namedTuple)));
@@ -996,17 +934,7 @@ std::any ASTConstructor::visitEntityChain(OpenCMLParser::EntityChainContext *con
     const auto listValue = std::make_shared<ListValue>();
     for (const auto &link : entityLinks) {
         ast_ptr_t linkNode = std::any_cast<ast_ptr_t>(visitEntityLink(link));
-
-        if (linkNode->type() == SemNodeType::DATA) {
-            std::cout << "DATA" << std::endl;
-            const auto dataNode = std::dynamic_pointer_cast<const DataNode>(linkNode->data);
-            listValue->add(dataNode->entity());
-        } else {
-            dangling = true;
-            auto [refNode, entity] = makeDanglingPair(linkNode);
-            *execNode << refNode;
-            listValue->add(entity);
-        }
+        listValue->add(extractEntity(linkNode, execNode, dangling));
     }
     ast_ptr_t dataNode =
         createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, std::dynamic_pointer_cast<Value>(listValue)));
@@ -1267,17 +1195,7 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
 
         bool dangling = false;
         const auto &multiNode = std::any_cast<ast_ptr_t>(visitMultiExpr(context->multiExpr()));
-
-        if (multiNode->type() == SemNodeType::DATA) {
-            std::cout << "DATA" << std::endl;
-            const auto dataNode = std::dynamic_pointer_cast<const DataNode>(multiNode->data);
-            listValue->add(dataNode->entity());
-        } else {
-            dangling = true;
-            auto [refNode, refEntity] = makeDanglingPair(multiNode);
-            *execNode << refNode;
-            listValue->add(refEntity);
-        }
+        listValue->add(extractEntity(multiNode, execNode, dangling));
 
         const auto &op = context->children[1]->getText();
 
@@ -1296,16 +1214,7 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
                 throw std::runtime_error("Unknown operator: " + op);
             }
         } else {
-            if (unaryExprNode->type() == SemNodeType::DATA) {
-                std::cout << "DATA" << std::endl;
-                const auto dataNode = std::dynamic_pointer_cast<const DataNode>(unaryExprNode->data);
-                listValue->add(dataNode->entity());
-            } else {
-                dangling = true;
-                auto [refNode, refEntity] = makeDanglingPair(unaryExprNode);
-                *execNode << refNode;
-                listValue->add(refEntity);
-            }
+            listValue->add(extractEntity(unaryExprNode, execNode, dangling));
 
             dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
 

@@ -95,6 +95,8 @@ class DeRefNode : public SemanticNode {
   public:
     DeRefNode(const std::string &ident) : SemanticNode(SemNodeType::DREF), ident_(ident) {}
 
+    const std::string ident() const { return ident_; }
+
     const std::string toString() const override;
 };
 
