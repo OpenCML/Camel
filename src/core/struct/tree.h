@@ -128,41 +128,47 @@ template <typename data_t> class AbstractTreeNode : public tree_children_t<data_
 
     void dumpTree(std::ostream &os) {
         std::vector<bool> visible;
-        int level = 0;
+        int depth = 0;
         int index = 0;
         traverse(
             [&](tree_node_t<data_t> &node) {
-                if (visible.size() <= level)
+                bool isLast = false;
+                if (visible.size() <= depth)
                     visible.push_back(true);
-                if (level > 0) {
+                if (depth > 0) {
                     if (node.parent == nullptr) {
                         warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
                     } else if (index == node.parent->size() - 1) {
-                        visible[level - 1] = false;
+                        isLast = true;
+                        visible[depth - 1] = false;
                     }
                 }
-                auto getHead = [=](int level) -> std::string {
+                auto getHead = [&]() -> std::string {
                     int i = 0;
                     std::string ret;
-                    while (i < level - 1) {
+                    while (i < depth - 1) {
                         if (visible[i])
                             ret += "|  ";
                         else
                             ret += "   ";
                         i++;
                     }
-                    if (level > 0)
-                        ret += "|--";
+                    if (depth > 0) {
+                        if (isLast)
+                            ret += "\\-";
+                        else
+                            ret += "|-";
+                    }
                     return ret;
                 };
-                os << getHead(level);
+                os << getHead();
                 os << node.toString();
                 os << std::endl;
-                if (level > 0)
-                    for (int i = level; i < visible.size(); i++)
+                if (depth > 0)
+                    for (int i = depth; i < visible.size(); i++)
                         visible[i] = true;
             },
-            level, index);
+            depth, index);
         return;
     }
 
