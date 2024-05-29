@@ -16,15 +16,15 @@ inner func comp3(signal: Signal): Signal {
     // return signal.map((x: Int) => x * 3);
 };
 
-inner func analyzer1(signal: Signal) {
+inner func analyzer1(signal: Signal): Void {
     // print('Analyzer 1: ', signal);
 };
 
-inner func analyzer2(signal: Signal) {
+inner func analyzer2(signal: Signal): Void {
     // print('Analyzer 2: ', signal);
 };
 
-func process(signals: Signal) {
+func process(signals: Signal[]): Void {
     let res1 = signals[0]->comp1->comp2;
     res1[0]->analyzer1;
     let res2 = signals[1]->comp3;

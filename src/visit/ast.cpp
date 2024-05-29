@@ -129,7 +129,8 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
     case 1: // identRef
     {
         const std::string &ident = std::any_cast<std::string>(carrier);
-        ast_ptr_t copyNode = createAstNode<CopyNode>();
+        ast_ptr_t copyNode = createAstNode<LinkNode>();
+        ast_ptr_t copyFunc = createAstNode<DeRefNode>("__copy__");
         if (type) {
             bool dangling = false;
             ast_ptr_t execNode = createAstNode<ExecuteNode>();
@@ -147,9 +148,9 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
                 *linkNode << dataNode << funcNode;
             }
 
-            *copyNode << linkNode;
+            *copyNode << linkNode << copyFunc;
         } else {
-            *copyNode << exprNode;
+            *copyNode << exprNode << copyFunc;
         }
         ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
         *newRefNode << copyNode;
@@ -171,8 +172,9 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
             ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
             *linkNode << exprNode << funcNode;
-            ast_ptr_t copyNode = createAstNode<CopyNode>();
-            *copyNode << linkNode;
+            ast_ptr_t copyNode = createAstNode<LinkNode>();
+            ast_ptr_t copyFunc = createAstNode<DeRefNode>("__copy__");
+            *copyNode << linkNode << copyFunc;
             *newRefNode << copyNode;
             *execNode << newRefNode;
         }
@@ -194,8 +196,9 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
             ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
             *linkNode << exprNode << funcNode;
-            ast_ptr_t copyNode = createAstNode<CopyNode>();
-            *copyNode << linkNode;
+            ast_ptr_t copyNode = createAstNode<LinkNode>();
+            ast_ptr_t copyFunc = createAstNode<DeRefNode>("__copy__");
+            *copyNode << linkNode << copyFunc;
             *newRefNode << copyNode;
             *execNode << newRefNode;
         }
@@ -338,6 +341,7 @@ funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeE
 std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     debug(0) << "visitFuncDef" << std::endl;
     // TODO: Implement annotations
+    const std::string ident = std::any_cast<std::string>(visitIdentRef(context->identRef()));
     std::shared_ptr<FunctorType> funcType = nullptr;
     const auto withType = std::make_shared<NamedTupleType>();
     const auto paramsType = std::make_shared<NamedTupleType>();
@@ -369,7 +373,11 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     const auto funcTypeNode = createAstNode<TypeNode>(std::dynamic_pointer_cast<Type>(funcType));
     const auto funcNode = createAstNode<FunctorNode>();
     *funcNode << funcTypeNode << std::any_cast<ast_ptr_t>(visitBracedStmts(context->bracedStmts()));
-    return funcNode;
+
+    ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
+    *newRefNode << funcNode;
+
+    return newRefNode;
 };
 
 /*

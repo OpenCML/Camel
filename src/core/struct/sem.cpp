@@ -36,8 +36,6 @@ const std::string SemanticNode::typeStr() const {
         return "TYPE";
     case SemNodeType::FUNC:
         return "FUNC";
-    case SemNodeType::COPY:
-        return "COPY";
     case SemNodeType::NREF:
         return "NREF";
     case SemNodeType::DREF:

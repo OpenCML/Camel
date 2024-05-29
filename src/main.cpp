@@ -31,6 +31,7 @@
 #include "visit/ast.h"
 #include "visit/cst.h"
 #include "visit/fmt.h"
+#include "visit/gir.h"
 
 using namespace antlr4;
 
@@ -125,6 +126,10 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             ast->print();
+        }
+
+        if (dumpGIR) {
+            _dumpGIR();
         }
 
         if (format) {
