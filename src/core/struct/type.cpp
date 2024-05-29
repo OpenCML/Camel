@@ -562,6 +562,7 @@ TypeConv ListType::convertibility(const Type &other) const {
 }
 
 std::string NamedTupleType::toString() const {
+    return "NamedTuple";
     std::string result = "(";
     for (const auto &tuple : elements_) {
         auto &[name, type, value] = tuple;

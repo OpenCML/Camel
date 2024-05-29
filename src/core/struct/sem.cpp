@@ -70,3 +70,7 @@ const std::string TypeNode::toString() const {
     ss << "TYPE: " << pointerToHex(this) << ", " << type_->toString();
     return ss.str();
 }
+
+const std::string NewRefNode::toString() const { return "NREF: " + ident_; }
+
+const std::string DeRefNode::toString() const { return "DREF: " + ident_; }

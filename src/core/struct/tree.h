@@ -126,8 +126,7 @@ template <typename data_t> class AbstractTreeNode : public tree_children_t<data_
         f(self);
     }
 
-    std::string dumpTree() {
-        std::stringstream ss;
+    void dumpTree(std::ostream &os) {
         std::vector<bool> visible;
         int level = 0;
         int index = 0;
@@ -156,16 +155,16 @@ template <typename data_t> class AbstractTreeNode : public tree_children_t<data_
                         ret += "|--";
                     return ret;
                 };
-                ss << getHead(level);
-                ss << node.toString();
-                ss << std::endl;
+                os << getHead(level);
+                os << node.toString();
+                os << std::endl;
                 if (level > 0)
                     for (int i = level; i < visible.size(); i++)
                         visible[i] = true;
             },
             level, index);
-        return ss.str();
+        return;
     }
 
-    void print() { std::cout << this->dumpTree(); }
+    void print() { this->dumpTree(std::cout); }
 };

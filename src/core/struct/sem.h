@@ -85,7 +85,7 @@ class NewRefNode : public SemanticNode {
   public:
     NewRefNode(const std::string &ident) : SemanticNode(SemNodeType::NREF), ident_(ident) {}
 
-    const std::string toString() const override { return "NREF: " + ident_; }
+    const std::string toString() const override;
 };
 
 class DeRefNode : public SemanticNode {
@@ -95,7 +95,7 @@ class DeRefNode : public SemanticNode {
   public:
     DeRefNode(const std::string &ident) : SemanticNode(SemNodeType::DREF), ident_(ident) {}
 
-    const std::string toString() const override { return "DREF: " + ident_; }
+    const std::string toString() const override;
 };
 
 class AssignNode : public SemanticNode {

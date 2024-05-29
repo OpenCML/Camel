@@ -46,11 +46,29 @@ class Entity : public std::enable_shared_from_this<Entity> {
     virtual void resolve() { data_->resolve(); }
     virtual void pending() { data_->pending(); }
 
-    virtual std::string typeStr() const { return type_->toString(); }
-    virtual std::string metaStr() const { return meta_->toString(); }
-    virtual std::string dataStr() const { return data_->toString(); }
+    virtual std::string typeStr() const {
+        if (type_ == nullptr) {
+            return "NULL";
+        } else {
+            return type_->toString();
+        }
+    }
+    virtual std::string metaStr() const {
+        if (meta_ == nullptr) {
+            return "NULL";
+        } else {
+            return meta_->toString();
+        }
+    }
+    virtual std::string dataStr() const {
+        if (data_ == nullptr) {
+            return "NULL";
+        } else {
+            return data_->toString();
+        }
+    }
 
-    virtual std::string toString() const { return typeStr() + " " + metaStr() + " " + dataStr(); }
+    virtual std::string toString() const { return typeStr() + ", " + metaStr() + ", " + dataStr(); }
 
     virtual bool equals(const entity_ptr_t &other) const {
         // TODO: implement equals
@@ -98,7 +116,7 @@ class DanglingEntity : public Entity {
 
   public:
     DanglingEntity() = delete;
-    DanglingEntity(const std::string &ref) : Entity() { dangling_ = true; }
+    DanglingEntity(const std::string &ref) : Entity(), ref_(ref) { dangling_ = true; }
     virtual ~DanglingEntity() = default;
 
     virtual std::string typeStr() const override { return "DREF<" + ref_ + ">"; }

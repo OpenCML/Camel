@@ -414,7 +414,13 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     const auto funcTypeNode = createAstNode<TypeNode>(funcType);
     const auto funcNode = createAstNode<FunctorNode>();
     *funcNode << funcTypeNode << bodyNode;
-    return funcNode;
+    ast_ptr_t newRefNode = createAstNode<NewRefNode>(std::to_string(indentIndex_++));
+    *newRefNode << funcNode;
+    ast_ptr_t linkNode = createAstNode<LinkNode>();
+    entity_ptr_t entity = std::make_shared<Entity>(voidTypePtr, nullptr);
+    ast_ptr_t dataNode = createAstNode<DataNode>(entity);
+    *linkNode << newRefNode << dataNode;
+    return linkNode;
 };
 
 /*
@@ -730,9 +736,10 @@ primEntity
 std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *context) {
     std::cout << "visitPrimEntity: " << context->getAltNumber() << std::endl;
     switch (context->getAltNumber()) {
-    case 1:
-        return createAstNode<DeRefNode>(context->identRef()->getText());
-        break;
+    case 1: {
+        const std::string &ident = std::any_cast<std::string>(visitIdentRef(context->identRef()));
+        return createAstNode<DeRefNode>(ident);
+    } break;
     case 2:
         return visitLiteral(context->literal());
         break;
@@ -918,7 +925,7 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             auto listValue = std::make_shared<ListValue>();
             auto namedTuple = std::make_shared<NamedTupleValue>();
             bool dangling = false;
-            auto execNode = createAstNode<ExecuteNode>();
+            ast_ptr_t execNode = createAstNode<ExecuteNode>();
             for (const auto &arg : indexArgs) {
                 if (arg->type() == SemNodeType::DATA) {
                     std::cout << "DATA" << std::endl;
@@ -943,7 +950,8 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
                     namedTuple->add(entity, key);
                 }
             }
-            ast_ptr_t dataNode = createAstNode<DataNode>(std::make_shared<Entity>(namedTuple->type(), namedTuple));
+            ast_ptr_t dataNode = createAstNode<DataNode>(
+                std::make_shared<Entity>(namedTuple->type(), std::dynamic_pointer_cast<Value>(namedTuple)));
             if (dangling) {
                 *execNode << dataNode;
                 *linkNode << execNode << funcNode;
@@ -977,10 +985,16 @@ entityChain  : entityLink+ ;
 */
 std::any ASTConstructor::visitEntityChain(OpenCMLParser::EntityChainContext *context) {
     std::cout << "visitEntityChain" << std::endl;
+    const auto &entityLinks = context->entityLink();
+
+    if (entityLinks.size() == 1) {
+        return visitEntityLink(entityLinks[0]);
+    }
+
     bool dangling = false;
     ast_ptr_t execNode = createAstNode<ExecuteNode>();
     const auto listValue = std::make_shared<ListValue>();
-    for (const auto &link : context->entityLink()) {
+    for (const auto &link : entityLinks) {
         ast_ptr_t linkNode = std::any_cast<ast_ptr_t>(visitEntityLink(link));
 
         if (linkNode->type() == SemNodeType::DATA) {

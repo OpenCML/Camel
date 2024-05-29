@@ -120,6 +120,8 @@ const std::string ListValue::toString() const {
     for (const auto &e : data_) {
         str += e->dataStr() + ", ";
     }
+    str.pop_back();
+    str.pop_back();
     str += "]";
     return str;
 }
@@ -318,6 +320,7 @@ const value_ptr_t NamedTupleValue::clone(bool) const {
 }
 
 const std::string NamedTupleValue::toString() const {
+    return "NamedTupleValue"; // TODO
     std::string str = "(";
     for (const auto &e : indexData_) {
         str += e->dataStr() + ", ";
