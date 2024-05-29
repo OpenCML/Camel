@@ -21,6 +21,7 @@
 #include <string>
 
 template <typename T> T parseNumber(const std::string &input) {
+    std::cout << "Parsing number: " << input << std::endl;
     bool isNegative = false;
     T result = 0;
     int base = 10;
@@ -120,5 +121,6 @@ template <typename T> T parseNumber(const std::string &input) {
         throw std::overflow_error("Number out of range");
     }
 
+    std::cout << "Parsed number: " << result << std::endl;
     return result;
 }

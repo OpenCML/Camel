@@ -841,6 +841,7 @@ type
     | specialType
     | identRef
     | '(' typeExpr ')'
+    | lambdaType
     ;
 */
 std::any Formatter::visitType(OpenCMLParser::TypeContext *context) {

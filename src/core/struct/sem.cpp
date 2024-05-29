@@ -42,6 +42,8 @@ const std::string SemanticNode::typeStr() const {
         return "NREF";
     case SemNodeType::DREF:
         return "DREF";
+    case SemNodeType::ASSN:
+        return "ASSN";
     case SemNodeType::ANNO:
         return "ANNO";
     case SemNodeType::LINK:
@@ -50,6 +52,8 @@ const std::string SemanticNode::typeStr() const {
         return "CALL";
     case SemNodeType::RETN:
         return "RETN";
+    case SemNodeType::EXEC:
+        return "EXEC";
     default:
         return "UNKNOWN";
     }

@@ -606,22 +606,22 @@ class NamedTupleType : public StructType {
 class FunctorType : public SpecialType {
   private:
     std::set<FunctorModifier> modifiers_;
-    type_ptr_t withType_;
-    type_ptr_t paramsType_;
+    std::shared_ptr<NamedTupleType> withType_;
+    std::shared_ptr<NamedTupleType> paramsType_;
     type_ptr_t returnType_;
 
   public:
     FunctorType() = delete;
-    FunctorType(const type_ptr_t &withType = nullptr, const type_ptr_t &paramsType = nullptr,
-                const type_ptr_t &returnType = nullptr)
+    FunctorType(const std::shared_ptr<NamedTupleType> &withType = nullptr,
+                const std::shared_ptr<NamedTupleType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
         : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
 
     void addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
     void setModifiers(const std::set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
 
-    type_ptr_t withType() const { return withType_; }
-    type_ptr_t paramsType() const { return paramsType_; }
-    type_ptr_t returnType() const { return returnType_; }
+    type_ptr_t withType() const { return std::dynamic_pointer_cast<Type>(withType_); }
+    type_ptr_t paramsType() const { return std::dynamic_pointer_cast<Type>(paramsType_); }
+    type_ptr_t returnType() const { return std::dynamic_pointer_cast<Type>(returnType_); }
 
     std::string toString() const override;
 

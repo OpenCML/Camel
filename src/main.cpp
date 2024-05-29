@@ -117,14 +117,15 @@ int main(int argc, char *argv[]) {
         if (dumpAST) {
             initTypes();
             ast_ptr_t ast = nullptr;
+            auto visitor = ASTConstructor();
             try {
-                auto visitor = ASTConstructor();
                 ast = visitor.construct(tree);
             } catch (std::exception &e) {
                 error << "AST construction failed: " << e.what() << std::endl;
                 return 1;
             }
-            ast->dumpTree();
+            std::cout << "AST constructed" << std::endl;
+            ast->print();
         }
 
         if (format) {

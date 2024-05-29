@@ -19,6 +19,7 @@
 #pragma once
 
 #include "type.h"
+#include <iostream>
 
 class UnsupportedConvError : public std::exception {};
 
@@ -253,12 +254,14 @@ class ListValue : public StructValue {
     std::vector<entity_ptr_t> data_;
 
   public:
-    ListValue() : StructValue(listTypePtr) {}
+    ListValue() : StructValue(listTypePtr), data_() {}
     ListValue(std::initializer_list<entity_ptr_t> data) : StructValue(listTypePtr), data_(data) {}
     ListValue(const std::vector<entity_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
     virtual ~ListValue() = default;
 
-    bool add(const entity_ptr_t &e) { data_.push_back(e); }
+    void add(const entity_ptr_t &e) {
+        data_.push_back(e);
+    }
 
     bool resolved() override;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override;

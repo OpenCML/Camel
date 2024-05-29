@@ -42,7 +42,7 @@ template <typename data_t> class AbstractTreeNode : public tree_children_t<data_
     tree_node_t<data_t> *parent;
     data_t data;
 
-    AbstractTreeNode(data_t data) : data(data), parent(nullptr) {}
+    AbstractTreeNode(data_t data) : parent(nullptr), data(data) {}
 
     static tree_node_ptr_t<data_t> createNode(data_t data) { return std::make_shared<tree_node_t<data_t>>(data); }
 
