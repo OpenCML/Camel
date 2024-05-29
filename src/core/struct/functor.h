@@ -20,9 +20,6 @@
 
 #include "entity.h"
 
-class Functor;
-using functor_ptr_t = std::shared_ptr<const Functor>;
-
 enum class FunctorModifier {
     INNER,
     OUTER,
@@ -30,6 +27,9 @@ enum class FunctorModifier {
     STATIC,
     SYNC,
 };
+
+FunctorModifier str2modifier(const std::string &str);
+std::string modifier2str(FunctorModifier modifier);
 
 class Functor : Entity {
   protected:

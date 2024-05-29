@@ -267,7 +267,8 @@ public:
     virtual size_t getRuleIndex() const override;
     IdentRefContext *identRef();
     EntityExprContext *entityExpr();
-    MemberAccessContext *memberAccess();
+    std::vector<MemberAccessContext *> memberAccess();
+    MemberAccessContext* memberAccess(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -424,8 +425,8 @@ public:
   public:
     KeyValuePairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<EntityExprContext *> entityExpr();
-    EntityExprContext* entityExpr(size_t i);
+    IdentRefContext *identRef();
+    EntityExprContext *entityExpr();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -884,6 +885,8 @@ public:
     TypeExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     TypeContext *type();
+    std::vector<antlr4::tree::TerminalNode *> INTEGER();
+    antlr4::tree::TerminalNode* INTEGER(size_t i);
     std::vector<TypeExprContext *> typeExpr();
     TypeExprContext* typeExpr(size_t i);
 
@@ -917,8 +920,8 @@ public:
     LambdaTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     TypeExprContext *typeExpr();
-    std::vector<TypeListContext *> typeList();
-    TypeListContext* typeList(size_t i);
+    std::vector<PairedParamsContext *> pairedParams();
+    PairedParamsContext* pairedParams(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

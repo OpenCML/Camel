@@ -32,6 +32,30 @@ inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
     return firstTokenLine != secondTokenLine;
 }
 
+void Formatter::insertComment(antlr4::Token *comment, std::string &result) {
+    const auto &commentText = comment->getText();
+    switch (comment->getChannel()) {
+    case 2: {
+        if (cmtPrefer == CommentPreference::Slash)
+            result += hash2slash(commentText);
+        else
+            result += commentText;
+    } break;
+    case 3: {
+        if (cmtPrefer == CommentPreference::Hash)
+            result += slash2hash(commentText);
+        else
+            result += commentText;
+    } break;
+    case 4:
+        result += commentText + " ";
+        break;
+
+    default:
+        break;
+    }
+};
+
 /*
 program : stmtList? EOF;
 */
@@ -148,15 +172,15 @@ std::any Formatter::visitExprStmt(OpenCMLParser::ExprStmtContext *context) {
 };
 
 /*
-assignStmt : identRef memberAccess? '=' entityExpr ;
+assignStmt : identRef memberAccess* '=' entityExpr ;
 */
 std::any Formatter::visitAssignStmt(OpenCMLParser::AssignStmtContext *context) {
     std::string result;
     const auto &identRef = context->identRef();
-    const auto &memberAccess = context->memberAccess();
+    const auto &memberAccesses = context->memberAccess();
     const auto &entityExpr = context->entityExpr();
     result += std::any_cast<std::string>(visitIdentRef(identRef));
-    if (memberAccess) {
+    for (const auto &memberAccess : memberAccesses) {
         result += std::any_cast<std::string>(visitMemberAccess(memberAccess));
     }
     result += " = " + std::any_cast<std::string>(visitEntityExpr(entityExpr));
@@ -295,11 +319,10 @@ std::any Formatter::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context)
 };
 
 /*
-keyValuePair : entityExpr ':' entityExpr ;
+keyValuePair : identRef ':' entityExpr ;
 */
 std::any Formatter::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
-    return std::any_cast<std::string>(visitEntityExpr(context->entityExpr(0))) + ": " +
-           std::any_cast<std::string>(visitEntityExpr(context->entityExpr(1)));
+    return context->identRef()->getText() + ": " + std::any_cast<std::string>(visitEntityExpr(context->entityExpr()));
 };
 
 /*
@@ -427,7 +450,8 @@ std::any Formatter::visitBracedStmts(OpenCMLParser::BracedStmtsContext *context)
         pushIndent();
         for (int i = firstTokIdx + 1; i < lastTokIdx; i++) {
             if (tokens[i]->getChannel() > 1) {
-                result += lineEnd() + tokens[i]->getText();
+                result += lineEnd();
+                insertComment(tokens[i], result);
                 foundComment = true;
             }
         }
@@ -778,7 +802,7 @@ std::any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) {
 
 /*
 typeExpr
-    : type ('[' ']')?
+    : type ('[' INTEGER? ']')*
     | typeExpr '|' typeExpr
     | typeExpr '&' typeExpr
     ;
@@ -788,7 +812,18 @@ std::any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
         if (context->children.size() == 1) {
             return std::any_cast<std::string>(visitType(context->type()));
         } else {
-            return std::any_cast<std::string>(visitType(context->type())) + "[]";
+            std::string result = std::any_cast<std::string>(visitType(context->type()));
+            for (size_t i = 1; i < context->children.size(); i++) {
+                const std::string &text = context->children[i]->getText();
+                if (text == "[") {
+                    result += "[";
+                    if (context->children[i + 1]->getText() != "]") {
+                        result += context->children[i + 1]->getText();
+                    }
+                    result += "]";
+                }
+            }
+            return result;
         }
     } else {
         std::string result;
@@ -806,6 +841,7 @@ type
     | specialType
     | identRef
     | '(' typeExpr ')'
+    | lambdaType
     ;
 */
 std::any Formatter::visitType(OpenCMLParser::TypeContext *context) {
@@ -818,19 +854,19 @@ std::any Formatter::visitType(OpenCMLParser::TypeContext *context) {
 
 /*
 lambdaType
-    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
+    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
     ;
 */
 std::any Formatter::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     std::string result;
-    const auto &typeList0 = context->typeList(0);
-    const auto &typeList1 = context->typeList(1);
+    const auto &params0 = context->pairedParams(0);
+    const auto &params1 = context->pairedParams(1);
     const auto &typeExpr = context->typeExpr();
-    if (typeList1) {
-        result += "<" + std::any_cast<std::string>(visitTypeList(typeList0, false, false, false)) + ">";
+    if (params1) {
+        result += "<" + std::any_cast<std::string>(visitPairedParams(params0, false, false, false)) + ">";
     }
     result += "(";
-    result += std::any_cast<std::string>(visitTypeList(typeList1 ? typeList1 : typeList0, false, false, false));
+    result += std::any_cast<std::string>(visitPairedParams(params1 ? params1 : params0, false, false, false));
     result += ") => " + std::any_cast<std::string>(visitTypeExpr(typeExpr));
     return result;
 };

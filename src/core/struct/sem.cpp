@@ -36,12 +36,12 @@ const std::string SemanticNode::typeStr() const {
         return "TYPE";
     case SemNodeType::FUNC:
         return "FUNC";
-    case SemNodeType::COPY:
-        return "COPY";
     case SemNodeType::NREF:
         return "NREF";
     case SemNodeType::DREF:
         return "DREF";
+    case SemNodeType::ASSN:
+        return "ASSN";
     case SemNodeType::ANNO:
         return "ANNO";
     case SemNodeType::LINK:
@@ -50,6 +50,8 @@ const std::string SemanticNode::typeStr() const {
         return "CALL";
     case SemNodeType::RETN:
         return "RETN";
+    case SemNodeType::EXEC:
+        return "EXEC";
     default:
         return "UNKNOWN";
     }
@@ -57,11 +59,16 @@ const std::string SemanticNode::typeStr() const {
 
 const std::string DataNode::toString() const {
     std::stringstream ss;
-    ss << "DATA: " << pointerToHex(this) << ", " << entity_->type()->toString() << ", " << entity_->data()->toString();
+    ss << "DATA: " << pointerToHex(this) << ", " << entity_->typeStr() << ", " << entity_->dataStr();
     return ss.str();
 }
+
 const std::string TypeNode::toString() const {
     std::stringstream ss;
-    ss << "TYPE: " << pointerToHex(this) << ", " << type_->toString();
+    ss << "TYPE: " << type_->toString();
     return ss.str();
 }
+
+const std::string NewRefNode::toString() const { return "NREF: " + ident_; }
+
+const std::string DeRefNode::toString() const { return "DREF: " + ident_; }

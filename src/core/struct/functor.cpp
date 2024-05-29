@@ -15,3 +15,38 @@
  * Created: May. 5, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "functor.h"
+
+FunctorModifier str2modifier(const std::string &str) {
+    if (str == "inner") {
+        return FunctorModifier::INNER;
+    } else if (str == "outer") {
+        return FunctorModifier::OUTER;
+    } else if (str == "atomic") {
+        return FunctorModifier::ATOMIC;
+    } else if (str == "static") {
+        return FunctorModifier::STATIC;
+    } else if (str == "sync") {
+        return FunctorModifier::SYNC;
+    } else {
+        throw std::runtime_error("Unknown modifier: " + str);
+    }
+}
+
+std::string modifier2str(FunctorModifier modifier) {
+    switch (modifier) {
+    case FunctorModifier::INNER:
+        return "inner";
+    case FunctorModifier::OUTER:
+        return "outer";
+    case FunctorModifier::ATOMIC:
+        return "atomic";
+    case FunctorModifier::STATIC:
+        return "static";
+    case FunctorModifier::SYNC:
+        return "sync";
+    default:
+        throw std::runtime_error("Unknown modifier: " + std::to_string(static_cast<int>(modifier)));
+    }
+}

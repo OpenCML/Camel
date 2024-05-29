@@ -52,7 +52,7 @@ useStmt : USE carrier '='? entityExpr
         | carrier '::' entityExpr ;
 typeStmt : TYPE identRef '='? typeExpr ;
 exprStmt : annotations? entityExpr ;
-assignStmt : identRef memberAccess? '=' entityExpr ;
+assignStmt : identRef memberAccess* '=' entityExpr ;
 
 withDef : WITH angledParams ;
 funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
@@ -66,7 +66,7 @@ annotations : annotation+ ;
 modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
-keyValuePair : entityExpr ':' entityExpr ;
+keyValuePair : identRef ':' entityExpr ;
 keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 
 typeList     : typeExpr (',' typeExpr)* ;
@@ -170,7 +170,7 @@ literal
     ;
 
 typeExpr
-    : type ('[' ']')?
+    : type ('[' INTEGER? ']')*
     | typeExpr '|' typeExpr
     | typeExpr '&' typeExpr
     ;
@@ -185,7 +185,7 @@ type
     ;
 
 lambdaType
-    : ('<' typeList? '>')? '(' typeList? ')' '=>' typeExpr
+    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
     ;
 
 primType
