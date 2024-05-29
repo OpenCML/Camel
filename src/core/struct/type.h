@@ -228,13 +228,13 @@ class DictType : public StructType {
     DictType() : StructType(TypeCode::DICT) {}
 
     std::string toString() const override {
-        std::string result = "{";
+        std::string result = "{ ";
         for (const auto &field : fields_) {
             result += field.first + ": " + field.second->toString() + ", ";
         }
         result.pop_back();
         result.pop_back();
-        result += "}";
+        result += " }";
         return result;
     }
 

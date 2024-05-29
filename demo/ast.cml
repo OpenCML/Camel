@@ -1,0 +1,12 @@
+type ElSignal = {
+    boxed: Bool,
+    color: String
+};
+
+@{ boxed: true, color: 'blue' }
+func SignalGenEl(): ElSignal {
+    'Electrical domain'@[10, 0];
+    let linearSignal: ElSignal = Rx_El_mQAM_BER()->PowerControlEl->Linearizer;
+    let dcSource = DC_Source<{ a: 0.5`V` }>;
+    return [linearSignal, dcSource]->AddSignalsEl;
+};

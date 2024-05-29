@@ -16,6 +16,8 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include "antlr/OpenCMLLexer.h"
+
 #include "ast.h"
 #include "core/struct/token.h"
 #include "utils/log.h"
@@ -508,7 +510,8 @@ keyTypePair  : identRef ':' typeExpr ;
 */
 std::any ASTConstructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
     debug(0) << "visitKeyTypePair" << std::endl;
-    return std::make_pair(context->identRef()->getText(), visitTypeExpr(context->typeExpr()));
+    std::string key = std::any_cast<std::string>(visitIdentRef(context->identRef()));
+    return std::make_pair(key, std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr())));
 };
 
 /*
@@ -516,7 +519,8 @@ keyValuePair : identRef ':' entityExpr ;
 */
 std::any ASTConstructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
     debug(0) << "visitKeyValuePair" << std::endl;
-    return std::make_pair(context->identRef()->getText(), visitEntityExpr(context->entityExpr()));
+    return std::make_pair(context->identRef()->getText(),
+                          std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr())));
 };
 
 /*
@@ -912,7 +916,7 @@ std::any ASTConstructor::visitEntityUnit(OpenCMLParser::EntityUnitContext *conte
             const auto &[indexArgs, namedArgs] =
                 std::any_cast<std::pair<std::vector<ast_ptr_t>, std::vector<std::pair<std::string, ast_ptr_t>>>>(
                     visitAngledValues(angledValues));
-            ast_ptr_t callNode = createAstNode<WithNode>();
+            ast_ptr_t withNode = createAstNode<WithNode>();
             ast_ptr_t &funcNode = entityNode;
             auto listValue = std::make_shared<ListValue>();
             auto namedTuple = std::make_shared<NamedTupleValue>();
@@ -927,11 +931,11 @@ std::any ASTConstructor::visitEntityUnit(OpenCMLParser::EntityUnitContext *conte
             ast_ptr_t dataNode = createAstNode<DataNode>(std::make_shared<Entity>(namedTuple->type(), namedTuple));
             if (dangling) {
                 *execNode << dataNode;
-                *callNode << execNode << funcNode;
-                entityNode = callNode;
+                *withNode << execNode << funcNode;
+                entityNode = withNode;
             } else {
-                *callNode << dataNode << funcNode;
-                entityNode = callNode;
+                *withNode << dataNode << funcNode;
+                entityNode = withNode;
             }
         } break;
 
@@ -991,13 +995,13 @@ std::any ASTConstructor::visitEntityWith(OpenCMLParser::EntityWithContext *conte
     if (context->children.size() == 1) {
         return visitPrimEntity(context->primEntity());
     } else {
-        ast_ptr_t callNode = createAstNode<WithNode>();
+        ast_ptr_t withNode = createAstNode<WithNode>();
         ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityWith(context->entityWith()));
         ast_ptr_t funcNode = std::any_cast<ast_ptr_t>(visitPrimEntity(context->primEntity()));
 
-        *callNode << dataNode << funcNode;
+        *withNode << dataNode << funcNode;
 
-        return callNode;
+        return withNode;
     }
 };
 
@@ -1515,35 +1519,36 @@ primType
 */
 std::any ASTConstructor::visitPrimType(OpenCMLParser::PrimTypeContext *context) {
     debug(0) << "visitPrimType" << context->getAltNumber() << std::endl;
-    switch (context->getAltNumber()) {
-    case 1: // INTEGER_TYPE
+    const auto tokenType = context->getStart()->getType();
+    switch (tokenType) {
+    case OpenCMLLexer::INTEGER_TYPE: // INTEGER_TYPE
         return intTypePtr;
         break;
-    case 2: // INTEGER32_TYPE
+    case OpenCMLLexer::INTEGER32_TYPE: // INTEGER32_TYPE
         return int32TypePtr;
         break;
-    case 3: // INTEGER64_TYPE
+    case OpenCMLLexer::INTEGER64_TYPE: // INTEGER64_TYPE
         return int64TypePtr;
         break;
-    case 4: // REAL_TYPE
+    case OpenCMLLexer::REAL_TYPE: // REAL_TYPE
         return realTypePtr;
         break;
-    case 5: // FLOAT_TYPE
+    case OpenCMLLexer::FLOAT_TYPE: // FLOAT_TYPE
         return floatTypePtr;
         break;
-    case 6: // DOUBLE_TYPE
+    case OpenCMLLexer::DOUBLE_TYPE: // DOUBLE_TYPE
         return doubleTypePtr;
         break;
-    case 7: // NUMBER_TYPE
+    case OpenCMLLexer::NUMBER_TYPE: // NUMBER_TYPE
         return numberTypePtr;
         break;
-    case 8: // STRING_TYPE
+    case OpenCMLLexer::STRING_TYPE: // STRING_TYPE
         return stringTypePtr;
         break;
-    case 9: // BOOL_TYPE
+    case OpenCMLLexer::BOOL_TYPE: // BOOL_TYPE
         return boolTypePtr;
         break;
-    case 10: // CHAR_TYPE
+    case OpenCMLLexer::CHAR_TYPE: // CHAR_TYPE
         return charTypePtr;
         break;
 
