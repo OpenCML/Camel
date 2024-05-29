@@ -173,15 +173,11 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitEntity(OpenCMLParser::EntityContext *ctx) override {
+  virtual std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -193,11 +189,11 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitEntityCall(OpenCMLParser::EntityCallContext *ctx) override {
+  virtual std::any visitEntityUnit(OpenCMLParser::EntityUnitContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitEntitySpread(OpenCMLParser::EntitySpreadContext *ctx) override {
+  virtual std::any visitEntityWith(OpenCMLParser::EntityWithContext *ctx) override {
     return visitChildren(ctx);
   }
 

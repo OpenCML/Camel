@@ -118,11 +118,10 @@ class ASTConstructor : public OpenCMLVisitor {
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
     std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context);
     std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
-    std::any visitEntity(OpenCMLParser::EntityContext *context);
     std::any visitEntityChain(OpenCMLParser::EntityChainContext *context);
     std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context);
-    std::any visitEntityCall(OpenCMLParser::EntityCallContext *context);
-    std::any visitEntitySpread(OpenCMLParser::EntitySpreadContext *context);
+    std::any visitEntityUnit(OpenCMLParser::EntityUnitContext *context);
+    std::any visitEntityWith(OpenCMLParser::EntityWithContext *context);
     std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context);
     std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context);
     std::any visitAddExpr(OpenCMLParser::AddExprContext *context);

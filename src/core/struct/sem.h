@@ -24,7 +24,7 @@
 class SemanticNode;
 using sem_ptr_t = std::shared_ptr<const SemanticNode>;
 
-enum class SemNodeType { DATA, TYPE, FUNC, NREF, DREF, ASSN, ANNO, LINK, CALL, RETN, EXEC };
+enum class SemNodeType { DATA, TYPE, FUNC, NREF, DREF, ASSN, ANNO, LINK, WITH, RETN, EXEC };
 
 class SemanticNode {
   protected:
@@ -117,9 +117,9 @@ class LinkNode : public SemanticNode {
     // const std::string toString() const override;
 };
 
-class CallNode : public SemanticNode {
+class WithNode : public SemanticNode {
   public:
-    CallNode() : SemanticNode(SemNodeType::CALL) {}
+    WithNode() : SemanticNode(SemNodeType::WITH) {}
 
     // const std::string toString() const override;
 };

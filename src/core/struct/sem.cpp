@@ -46,8 +46,8 @@ const std::string SemanticNode::typeStr() const {
         return "ANNO";
     case SemNodeType::LINK:
         return "LINK";
-    case SemNodeType::CALL:
-        return "CALL";
+    case SemNodeType::WITH:
+        return "WITH";
     case SemNodeType::RETN:
         return "RETN";
     case SemNodeType::EXEC:
