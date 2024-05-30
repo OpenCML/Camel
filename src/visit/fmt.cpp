@@ -306,7 +306,9 @@ std::any Formatter::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     (context->ATOMIC()).size() ? result += "atomic " : result;
     (context->STATIC()).size() ? result += "static " : result;
     (context->SYNC()).size() ? result += "sync " : result;
-    result.pop_back();
+    if (!result.empty()) {
+        result.pop_back();
+    }
     return result;
 };
 
@@ -964,8 +966,10 @@ std::any Formatter::visitStructType(OpenCMLParser::StructTypeContext *context) {
                 for (const auto &integer : integers) {
                     result += integer->getText() + ", ";
                 }
-                result.pop_back();
-                result.pop_back();
+                if (integers.size() > 1) {
+                    result.pop_back();
+                    result.pop_back();
+                }
                 result += "]>";
                 return result;
             }

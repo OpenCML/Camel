@@ -120,8 +120,10 @@ const std::string ListValue::toString() const {
     for (const auto &e : data_) {
         str += e->dataStr() + ", ";
     }
-    str.pop_back();
-    str.pop_back();
+    if (data_.size() > 0) {
+        str.pop_back();
+        str.pop_back();
+    }
     str += "]";
     return str;
 }

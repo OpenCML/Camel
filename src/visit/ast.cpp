@@ -549,9 +549,9 @@ typeList     : typeExpr (',' typeExpr)* ;
 */
 std::any ASTConstructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
     debug(0) << "visitTypeList" << std::endl;
-    std::vector<ast_ptr_t> typeList;
+    std::vector<type_ptr_t> typeList;
     for (const auto &type : context->typeExpr()) {
-        typeList.push_back(std::any_cast<ast_ptr_t>(visitTypeExpr(type)));
+        typeList.push_back(std::any_cast<type_ptr_t>(visitTypeExpr(type)));
     }
     return typeList;
 };
@@ -1368,10 +1368,8 @@ typeExpr
     ;
 */
 std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
-    debug(0) << "visitTypeExpr: " << context->getAltNumber() << std::endl;
-    switch (context->getAltNumber()) {
-    case 1: // type ('[' INTEGER? ']')*
-    {
+    debug(0) << "visitTypeExpr" << std::endl;
+    if (context->type()) { // type ('[' INTEGER? ']')*
         type_ptr_t type = std::any_cast<type_ptr_t>(visitType(context->type()));
         for (size_t i = 0; i < context->children.size(); i++) {
             if (context->children[i]->getText() == "[") {
@@ -1384,36 +1382,29 @@ std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) 
             }
         }
         return type;
-    } break;
-
-    case 2: // typeExpr '|' typeExpr
-    {
-        type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(0)));
-        type_ptr_t rhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(1)));
-        if (lhs->code() == TypeCode::DICT && rhs->code() == TypeCode::DICT) {
-            return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) |
+    } else {
+        if (context->children[1]->getText() == "|") { // typeExpr '|' typeExpr
+            type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(0)));
+            type_ptr_t rhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(1)));
+            if (lhs->code() == TypeCode::DICT && rhs->code() == TypeCode::DICT) {
+                return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) |
+                                                       dynamic_cast<DictType &>(*rhs.get()));
+            }
+            return std::dynamic_pointer_cast<Type>(std::make_shared<UnionType>(lhs, rhs));
+        } else { // typeExpr '&' typeExpr
+            type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(0)));
+            type_ptr_t rhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(1)));
+            if (lhs->code() != TypeCode::DICT) {
+                throw BuildException("The left-hand side of '&' must be a dict type");
+            }
+            if (rhs->code() != TypeCode::DICT) {
+                throw BuildException("The right-hand side of '&' must be a dict type");
+            }
+            return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) &
                                                    dynamic_cast<DictType &>(*rhs.get()));
         }
-        return std::dynamic_pointer_cast<Type>(std::make_shared<UnionType>(lhs, rhs));
-    } break;
-
-    case 3: // typeExpr '&' typeExpr
-    {
-        type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(0)));
-        type_ptr_t rhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(1)));
-        if (lhs->code() != TypeCode::DICT) {
-            throw BuildException("The left-hand side of '&' must be a dict type");
-        }
-        if (rhs->code() != TypeCode::DICT) {
-            throw BuildException("The right-hand side of '&' must be a dict type");
-        }
-        return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) &
-                                               dynamic_cast<DictType &>(*rhs.get()));
-    } break;
-
-    default:
-        throw std::runtime_error("Unknown type expression");
     }
+    throw std::runtime_error("Unknown type expression");
 };
 
 /*

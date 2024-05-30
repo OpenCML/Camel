@@ -1,12 +1,18 @@
-type ElSignal = {
-    boxed: Bool,
-    color: String
-};
+// type ElSignal = {
+//     boxed: Bool,
+//     color: String
+// };
 
-@{ boxed: true, color: 'blue' }
-func SignalGenEl(): ElSignal {
-    'Electrical domain'@[10, 0];
-    let linearSignal: ElSignal = Rx_El_mQAM_BER()->PowerControlEl->Linearizer;
-    let dcSource = DC_Source<{ a: 0.5`V` }>;
-    return [linearSignal, dcSource]->AddSignalsEl;
-};
+// @{ boxed: true, color: 'blue' }
+// func SignalGenEl(): ElSignal {
+//     'Electrical domain'@[10, 0];
+//     let linearSignal: ElSignal = Rx_El_mQAM_BER()->PowerControlEl->Linearizer;
+//     let dcSource = DC_Source<{ a: 0.5`V` }>;
+//     return [linearSignal, dcSource]->AddSignalsEl;
+// };
+
+type p = { c: Any } & { b: Any } | { a: Number, b: Tuple<Number, List> };
+// type p = { b: Any } | { a: Number, b: Tuple<Number, List> };
+
+// type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List> } & { c: Any }>> | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
+// type test2 = (Array<String> | Union<Int, String>[])[] | { a: Number, b: String }[] | (Int | String)[];

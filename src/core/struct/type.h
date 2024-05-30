@@ -228,6 +228,9 @@ class DictType : public StructType {
     DictType() : StructType(TypeCode::DICT) {}
 
     std::string toString() const override {
+        if (fields_.empty()) {
+            return "{}";
+        }
         std::string result = "{ ";
         for (const auto &field : fields_) {
             result += field.first + ": " + field.second->toString() + ", ";
@@ -357,8 +360,10 @@ class TupleType : public StructType {
         for (const auto &type : types_) {
             result += type->toString() + ", ";
         }
-        result.pop_back();
-        result.pop_back();
+        if (!types_.empty()) {
+            result.pop_back();
+            result.pop_back();
+        }
         result += ">";
         return result;
     }
@@ -435,8 +440,10 @@ class UnionType : public StructType {
         for (const auto &type : types_) {
             result += type->toString() + ", ";
         }
-        result.pop_back();
-        result.pop_back();
+        if (!types_.empty()) {
+            result.pop_back();
+            result.pop_back();
+        }
         result += ">";
         return result;
     }
@@ -529,8 +536,10 @@ class TensorType : public StructType {
         for (const auto &dim : shape_) {
             result += std::to_string(dim) + ", ";
         }
-        result.pop_back();
-        result.pop_back();
+        if (!shape_.empty()) {
+            result.pop_back();
+            result.pop_back();
+        }
         result += "]>";
         return result;
     }
@@ -557,7 +566,7 @@ class ListType : public StructType {
   public:
     ListType() : StructType(TypeCode::LIST) {}
 
-    std::string toString() const override { return "list"; }
+    std::string toString() const override { return "List"; }
 
     bool operator==(const Type &other) const override { return true; }
     bool operator!=(const Type &other) const override { return false; }

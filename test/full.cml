@@ -64,7 +64,7 @@ let Power = {
 sync func PowerControlEl(input: ElSignal): ElSignal {
     'Power control'@[6, 0];
     let [dcOutput, powerOutput] = input->PowerMeterEl;
-    dcOutput->Ground<{ a, b }, e, 5`v`>;
+    dcOutput->Ground<e, 5`v`>;
     return input->ParameterController<
         [powerInput, powerOutput]->Sub
     >@[2, 2]->AmpSysEl;
