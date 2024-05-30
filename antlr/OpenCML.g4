@@ -171,8 +171,8 @@ literal
 
 typeExpr
     : type ('[' INTEGER? ']')*
-    | typeExpr '|' typeExpr
-    | typeExpr '&' typeExpr
+    | typeExpr '&' type
+    | typeExpr '|' type
     ;
 
 type

@@ -328,8 +328,8 @@ void opencmlParserInitialize() {
   	0,0,604,606,5,90,0,0,605,604,1,0,0,0,605,606,1,0,0,0,606,607,1,0,0,0,
   	607,609,5,11,0,0,608,603,1,0,0,0,609,612,1,0,0,0,610,608,1,0,0,0,610,
   	611,1,0,0,0,611,621,1,0,0,0,612,610,1,0,0,0,613,614,10,2,0,0,614,615,
-  	5,35,0,0,615,620,3,96,48,3,616,617,10,1,0,0,617,618,5,34,0,0,618,620,
-  	3,96,48,2,619,613,1,0,0,0,619,616,1,0,0,0,620,623,1,0,0,0,621,619,1,0,
+  	5,34,0,0,615,620,3,98,49,0,616,617,10,1,0,0,617,618,5,35,0,0,618,620,
+  	3,98,49,0,619,613,1,0,0,0,619,616,1,0,0,0,620,623,1,0,0,0,621,619,1,0,
   	0,0,621,622,1,0,0,0,622,97,1,0,0,0,623,621,1,0,0,0,624,634,3,102,51,0,
   	625,634,3,104,52,0,626,634,3,106,53,0,627,634,3,108,54,0,628,629,5,12,
   	0,0,629,630,3,96,48,0,630,631,5,13,0,0,631,634,1,0,0,0,632,634,3,100,
@@ -4675,12 +4675,8 @@ tree::TerminalNode* OpenCMLParser::TypeExprContext::INTEGER(size_t i) {
   return getToken(OpenCMLParser::INTEGER, i);
 }
 
-std::vector<OpenCMLParser::TypeExprContext *> OpenCMLParser::TypeExprContext::typeExpr() {
-  return getRuleContexts<OpenCMLParser::TypeExprContext>();
-}
-
-OpenCMLParser::TypeExprContext* OpenCMLParser::TypeExprContext::typeExpr(size_t i) {
-  return getRuleContext<OpenCMLParser::TypeExprContext>(i);
+OpenCMLParser::TypeExprContext* OpenCMLParser::TypeExprContext::typeExpr() {
+  return getRuleContext<OpenCMLParser::TypeExprContext>(0);
 }
 
 
@@ -4765,9 +4761,9 @@ OpenCMLParser::TypeExprContext* OpenCMLParser::typeExpr(int precedence) {
 
           if (!(precpred(_ctx, 2))) throw FailedPredicateException(this, "precpred(_ctx, 2)");
           setState(614);
-          match(OpenCMLParser::T__34);
+          match(OpenCMLParser::T__33);
           setState(615);
-          typeExpr(3);
+          type();
           break;
         }
 
@@ -4778,9 +4774,9 @@ OpenCMLParser::TypeExprContext* OpenCMLParser::typeExpr(int precedence) {
 
           if (!(precpred(_ctx, 1))) throw FailedPredicateException(this, "precpred(_ctx, 1)");
           setState(617);
-          match(OpenCMLParser::T__33);
+          match(OpenCMLParser::T__34);
           setState(618);
-          typeExpr(2);
+          type();
           break;
         }
 

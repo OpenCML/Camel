@@ -798,8 +798,8 @@ std::any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) {
 /*
 typeExpr
     : type ('[' INTEGER? ']')*
-    | typeExpr '|' typeExpr
-    | typeExpr '&' typeExpr
+    | typeExpr '&' type
+    | typeExpr '|' type
     ;
 */
 std::any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
@@ -822,9 +822,9 @@ std::any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
         }
     } else {
         std::string result;
-        result += std::any_cast<std::string>(visitTypeExpr(context->typeExpr(0))) + " " +
+        result += std::any_cast<std::string>(visitTypeExpr(context->typeExpr())) + " " +
                   context->children[1]->getText() + " " +
-                  std::any_cast<std::string>(visitTypeExpr(context->typeExpr(1)));
+                  std::any_cast<std::string>(visitType(context->type()));
         return result;
     }
 };

@@ -873,8 +873,7 @@ public:
     TypeContext *type();
     std::vector<antlr4::tree::TerminalNode *> INTEGER();
     antlr4::tree::TerminalNode* INTEGER(size_t i);
-    std::vector<TypeExprContext *> typeExpr();
-    TypeExprContext* typeExpr(size_t i);
+    TypeExprContext *typeExpr();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
