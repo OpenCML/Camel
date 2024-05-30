@@ -31,6 +31,41 @@ class ASTNode;
 
 using ast_ptr_t = std::shared_ptr<ASTNode>;
 
+extern ast_ptr_t copyFuncDeRefNode;
+extern ast_ptr_t castFuncDeRefNode;
+extern ast_ptr_t typeFuncDeRefNode;
+extern ast_ptr_t indexFuncDeRefNode;
+extern ast_ptr_t chainFuncDeRefNode;
+
+extern ast_ptr_t addFuncDeRefNode;
+extern ast_ptr_t subFuncDeRefNode;
+extern ast_ptr_t mulFuncDeRefNode;
+extern ast_ptr_t divFuncDeRefNode;
+extern ast_ptr_t modFuncDeRefNode;
+extern ast_ptr_t powFuncDeRefNode;
+extern ast_ptr_t interFuncDeRefNode;
+extern ast_ptr_t unionFuncDeRefNode;
+
+extern ast_ptr_t iAddFuncDeRefNode;
+extern ast_ptr_t iSubFuncDeRefNode;
+extern ast_ptr_t iMulFuncDeRefNode;
+extern ast_ptr_t iDivFuncDeRefNode;
+extern ast_ptr_t iModFuncDeRefNode;
+extern ast_ptr_t iPowFuncDeRefNode;
+extern ast_ptr_t iInterFuncDeRefNode;
+extern ast_ptr_t iUnionFuncDeRefNode;
+
+extern ast_ptr_t ltFuncDeRefNode;
+extern ast_ptr_t gtFuncDeRefNode;
+extern ast_ptr_t leFuncDeRefNode;
+extern ast_ptr_t geFuncDeRefNode;
+extern ast_ptr_t eqFuncDeRefNode;
+extern ast_ptr_t neFuncDeRefNode;
+extern ast_ptr_t andFuncDeRefNode;
+extern ast_ptr_t orFuncDeRefNode;
+
+void initFuncDeRefNodes();
+
 class ASTNode : public AbstractTreeNode<sem_ptr_t>, std::enable_shared_from_this<ASTNode> {
   public:
     ASTNode(sem_ptr_t sem) : AbstractTreeNode(sem) {}
@@ -52,7 +87,10 @@ template <typename NodeType, typename... Args> ast_ptr_t createAstNode(Args &&..
 
 class ASTConstructor : public OpenCMLVisitor {
   public:
-    ASTConstructor() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(); };
+    ASTConstructor() {
+        typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>();
+        initFuncDeRefNodes();
+    };
     virtual ~ASTConstructor() = default;
 
     ast_ptr_t construct(antlr4::tree::ParseTree *tree) {

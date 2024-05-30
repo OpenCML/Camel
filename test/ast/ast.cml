@@ -13,10 +13,15 @@
 //     temperature: 300`K`
 // };
 
-type a = Functor;
+// type a = Functor;
 
-// let Power = ElSignal;
-with <loader: Functor = psl>
-inner static sync func load(path: String): Any {
-    # inner func
-};
+// // let Power = ElSignal;
+// with <loader: Functor = psl>
+// inner static sync func load(path: String): Any {
+//     # inner func
+// };
+
+// let a = b;
+// let b = c + d;
+
+use [Const, Ground, Sub] = b;

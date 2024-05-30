@@ -18,8 +18,10 @@
 
 #pragma once
 
-#include "type.h"
 #include <iostream>
+#include <regex>
+
+#include "type.h"
 
 class UnsupportedConvError : public std::exception {};
 
@@ -206,7 +208,10 @@ class StringValue : public Value {
         }
     }
     virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
-    virtual const std::string toString() const override { return "\"" + data_ + "\""; }
+    virtual const std::string toString() const override {
+        std::regex re("\\n");
+        return "\"" + std::regex_replace(data_, re, "\\n") + "\"";
+    }
 };
 
 class StructValue : public Value {
