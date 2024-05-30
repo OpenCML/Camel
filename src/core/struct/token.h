@@ -42,7 +42,7 @@ template <typename T> T parseNumber(const std::string &input) {
     } else if (input.substr(i, 2) == "0b") {
         base = 2;
         i += 2;
-    } else if (input[i] == '0') {
+    } else if (input[i] == '0' && input.find_first_of(".") == std::string::npos) {
         base = 8;
         i++;
     }

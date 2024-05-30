@@ -107,19 +107,17 @@ public:
 
     virtual std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) = 0;
 
-    virtual std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context) = 0;
-
     virtual std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) = 0;
 
-    virtual std::any visitEntity(OpenCMLParser::EntityContext *context) = 0;
+    virtual std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context) = 0;
 
     virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) = 0;
 
     virtual std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context) = 0;
 
-    virtual std::any visitEntityCall(OpenCMLParser::EntityCallContext *context) = 0;
+    virtual std::any visitEntityUnit(OpenCMLParser::EntityUnitContext *context) = 0;
 
-    virtual std::any visitEntitySpread(OpenCMLParser::EntitySpreadContext *context) = 0;
+    virtual std::any visitEntityWith(OpenCMLParser::EntityWithContext *context) = 0;
 
     virtual std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) = 0;
 

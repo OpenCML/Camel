@@ -116,7 +116,7 @@ class DanglingEntity : public Entity {
 
   public:
     DanglingEntity() = delete;
-    DanglingEntity(const std::string &ref) : Entity(), ref_(ref) { dangling_ = true; }
+    DanglingEntity(const std::string &ref) : Entity(anyTypePtr, nullptr, nullptr), ref_(ref) { dangling_ = true; }
     virtual ~DanglingEntity() = default;
 
     virtual std::string typeStr() const override { return "DREF<" + ref_ + ">"; }

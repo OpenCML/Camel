@@ -120,8 +120,10 @@ const std::string ListValue::toString() const {
     for (const auto &e : data_) {
         str += e->dataStr() + ", ";
     }
-    str.pop_back();
-    str.pop_back();
+    if (data_.size() > 0) {
+        str.pop_back();
+        str.pop_back();
+    }
     str += "]";
     return str;
 }
@@ -216,11 +218,16 @@ const value_ptr_t DictValue::convert(type_ptr_t target, bool inplace) {
 const value_ptr_t DictValue::clone(bool deep) const { return std::make_shared<DictValue>(data_); }
 
 const std::string DictValue::toString() const {
-    std::string str = "{";
+    if (data_.size() == 0) {
+        return "{}";
+    }
+    std::string str = "{ ";
     for (const auto &e : data_) {
         str += e.first + ": " + e.second->dataStr() + ", ";
     }
-    str += "}";
+    str.pop_back();
+    str.pop_back();
+    str += " }";
     return str;
 }
 
@@ -320,7 +327,6 @@ const value_ptr_t NamedTupleValue::clone(bool) const {
 }
 
 const std::string NamedTupleValue::toString() const {
-    return "NamedTupleValue"; // TODO
     std::string str = "(";
     for (const auto &e : indexData_) {
         str += e->dataStr() + ", ";
@@ -328,8 +334,10 @@ const std::string NamedTupleValue::toString() const {
     for (const auto &e : namedData_) {
         str += e.first + ": " + e.second->dataStr() + ", ";
     }
-    str.pop_back();
-    str.pop_back();
+    if (str.length() > 1) {
+        str.pop_back();
+        str.pop_back();
+    }
     str += ")";
     return str;
 }

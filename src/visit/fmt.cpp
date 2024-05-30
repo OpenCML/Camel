@@ -306,7 +306,9 @@ std::any Formatter::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     (context->ATOMIC()).size() ? result += "atomic " : result;
     (context->STATIC()).size() ? result += "static " : result;
     (context->SYNC()).size() ? result += "sync " : result;
-    result.pop_back();
+    if (!result.empty()) {
+        result.pop_back();
+    }
     return result;
 };
 
@@ -564,21 +566,6 @@ std::any Formatter::visitMemberAccess(OpenCMLParser::MemberAccessContext *contex
 };
 
 /*
-entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
-*/
-std::any Formatter::visitEntity(OpenCMLParser::EntityContext *context) {
-    std::string result;
-    const auto &primEntity = context->primEntity();
-    result += std::any_cast<std::string>(visitPrimEntity(primEntity));
-    const auto &children = context->children;
-    for (int i = 1; i < children.size(); i++) {
-        const auto &child = children[i];
-        result += std::any_cast<std::string>(child->accept(this));
-    }
-    return result;
-};
-
-/*
 entityChain  : entityLink+ ;
 */
 std::any Formatter::visitEntityChain(OpenCMLParser::EntityChainContext *context) {
@@ -594,34 +581,42 @@ std::any Formatter::visitEntityChain(OpenCMLParser::EntityChainContext *context)
 };
 
 /*
-entityLink   : entityCall | entityLink '->' entityCall ;
+entityLink   : entityUnit | entityLink '->' entityUnit ;
 */
 std::any Formatter::visitEntityLink(OpenCMLParser::EntityLinkContext *context) {
     if (context->getAltNumber() == 1) {
-        return visitEntityCall(context->entityCall());
+        return visitEntityUnit(context->entityUnit());
     } else {
         return std::any_cast<std::string>(visitEntityLink(context->entityLink())) + "->" +
-               std::any_cast<std::string>(visitEntityCall(context->entityCall()));
+               std::any_cast<std::string>(visitEntityUnit(context->entityUnit()));
     }
 };
 
 /*
-entityCall   : entity | entityCall '.' entity ;
+entityUnit   : entityWith (({isAdjacent()}? (memberAccess | angledValues | parentValues)) | annotation)* ;
 */
-std::any Formatter::visitEntityCall(OpenCMLParser::EntityCallContext *context) {
+std::any Formatter::visitEntityUnit(OpenCMLParser::EntityUnitContext *context) {
+    std::string result;
+    const auto &entityWith = context->entityWith();
+    result += std::any_cast<std::string>(visitEntityWith(entityWith));
+    const auto &children = context->children;
+    for (int i = 1; i < children.size(); i++) {
+        const auto &child = children[i];
+        result += std::any_cast<std::string>(child->accept(this));
+    }
+    return result;
+};
+
+/*
+entityWith   : primEntity | entityWith '.' primEntity ;
+*/
+std::any Formatter::visitEntityWith(OpenCMLParser::EntityWithContext *context) {
     if (context->getAltNumber() == 1) {
-        return visitEntity(context->entity());
+        return visitPrimEntity(context->primEntity());
     } else {
-        return std::any_cast<std::string>(visitEntityCall(context->entityCall())) + "." +
-               std::any_cast<std::string>(visitEntity(context->entity()));
+        return std::any_cast<std::string>(visitEntityWith(context->entityWith())) + "." +
+               std::any_cast<std::string>(visitPrimEntity(context->primEntity()));
     }
-};
-
-/*
-entitySpread : '...' entity ;
-*/
-std::any Formatter::visitEntitySpread(OpenCMLParser::EntitySpreadContext *context) {
-    return "..." + std::any_cast<std::string>(visitEntity(context->entity()));
 };
 
 /*
@@ -803,8 +798,8 @@ std::any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) {
 /*
 typeExpr
     : type ('[' INTEGER? ']')*
-    | typeExpr '|' typeExpr
-    | typeExpr '&' typeExpr
+    | typeExpr '&' type
+    | typeExpr '|' type
     ;
 */
 std::any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
@@ -827,9 +822,9 @@ std::any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
         }
     } else {
         std::string result;
-        result += std::any_cast<std::string>(visitTypeExpr(context->typeExpr(0))) + " " +
+        result += std::any_cast<std::string>(visitTypeExpr(context->typeExpr())) + " " +
                   context->children[1]->getText() + " " +
-                  std::any_cast<std::string>(visitTypeExpr(context->typeExpr(1)));
+                  std::any_cast<std::string>(visitType(context->type()));
         return result;
     }
 };
@@ -971,8 +966,10 @@ std::any Formatter::visitStructType(OpenCMLParser::StructTypeContext *context) {
                 for (const auto &integer : integers) {
                     result += integer->getText() + ", ";
                 }
-                result.pop_back();
-                result.pop_back();
+                if (integers.size() > 1) {
+                    result.pop_back();
+                    result.pop_back();
+                }
                 result += "]>";
                 return result;
             }
