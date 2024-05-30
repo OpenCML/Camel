@@ -90,6 +90,8 @@ parentValues : '(' argumentList? ','? ')' ; // for functor arguments
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 
+memberAccess : '[' entityExpr ']' ;
+
 primEntity
     : identRef
     | literal
@@ -97,13 +99,11 @@ primEntity
     | bracedPairedValues
     | lambdaExpr
     | '(' entityExpr ')' ;
-memberAccess : '[' entityExpr ']' ;
-entity       : primEntity (({isAdjacent()}? (memberAccess | angledValues | parentValues)) | annotation)* ;
 
 entityChain  : entityLink+ ;
-entityLink   : entityCall | entityLink '->' entityCall ;
-entityCall   : entity | entityCall '.' entity ;
-entitySpread : '...' entity ;
+entityLink   : entityUnit | entityLink '->' entityUnit ;
+entityUnit   : entityWith (({isAdjacent()}? (memberAccess | angledValues | parentValues)) | annotation)* ;
+entityWith   : primEntity | entityWith '.' primEntity ;
 
 entityExpr
     : relaExpr
@@ -171,8 +171,8 @@ literal
 
 typeExpr
     : type ('[' INTEGER? ']')*
-    | typeExpr '|' typeExpr
-    | typeExpr '&' typeExpr
+    | typeExpr '&' type
+    | typeExpr '|' type
     ;
 
 type

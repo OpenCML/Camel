@@ -562,7 +562,7 @@ TypeConv ListType::convertibility(const Type &other) const {
 }
 
 std::string NamedTupleType::toString() const {
-    return "NamedTuple";
+    // return "NamedTuple";
     std::string result = "(";
     for (const auto &tuple : elements_) {
         auto &[name, type, value] = tuple;
@@ -668,7 +668,8 @@ std::string FunctorType::toString() const {
     if (withType_ && withType_->size() > 0) {
         result += "<";
         const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
-        for (const auto &tuple : with.elements()) {
+        const auto &elements = with.elements();
+        for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
             result += name + ": " + type->toString();
             if (value) {
@@ -676,14 +677,17 @@ std::string FunctorType::toString() const {
             }
             result += ", ";
         }
-        result.pop_back();
-        result.pop_back();
+        if (elements.size() > 0) {
+            result.pop_back();
+            result.pop_back();
+        }
         result += "> ";
     }
     result += "(";
     if (paramsType_ && paramsType_->size() > 0) {
         const auto &params = dynamic_cast<const NamedTupleType &>(*paramsType_);
-        for (const auto &tuple : params.elements()) {
+        const auto &elements = params.elements();
+        for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
             result += name + ": " + type->toString();
             if (value) {
@@ -691,8 +695,10 @@ std::string FunctorType::toString() const {
             }
             result += ", ";
         }
-        result.pop_back();
-        result.pop_back();
+        if (elements.size() > 0) {
+            result.pop_back();
+            result.pop_back();
+        }
     }
     result += ") => ";
     if (returnType_) {
@@ -765,5 +771,5 @@ void initTypes() {
     // initialize special types
     anyTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::ANY));
     voidTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::VOID));
-    functorTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<FunctorType>(nullptr, nullptr, nullptr));
+    functorTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<FunctorType>(nullptr, nullptr, anyTypePtr));
 }

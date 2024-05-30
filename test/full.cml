@@ -47,10 +47,21 @@ nf->ident[1]->fn;
 ident[1][id]->fn;
 a->b->c;
 
-use { Const, Ground, Sub } from 'phot/units' as module;
+use { Const, Ground, Sub } from 'phot/units' as Any;
 use { Rx_El_mQAM_BER, Tx_El_mQAM } from 'phot/tr';
 
-let photodiodeSetting: PhotodiodeSettingTemplate = {
+type ElSignal = {
+    power: Number,
+    freq: Number,
+    phase: Number
+};
+
+type Point = {
+    x: Number,
+    y: Number
+};
+
+let photodiodeSetting = {
     temperature: 300`K`
 };
 
@@ -64,7 +75,7 @@ let Power = {
 sync func PowerControlEl(input: ElSignal): ElSignal {
     'Power control'@[6, 0];
     let [dcOutput, powerOutput] = input->PowerMeterEl;
-    dcOutput->Ground<{ a, b }, e, 5`v`>;
+    dcOutput->Ground<e, 5`v`>;
     return input->ParameterController<
         [powerInput, powerOutput]->Sub
     >@[2, 2]->AmpSysEl;

@@ -16,20 +16,103 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include "antlr/OpenCMLLexer.h"
+
 #include "ast.h"
 #include "core/struct/token.h"
 #include "utils/log.h"
 
 #define DEBUG_LEVEL -1
 
-entity_ptr_t ASTConstructor::extractEntity(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
-    // TODO: better name for dangling
+ast_ptr_t copyFuncDeRefNode = nullptr;
+ast_ptr_t castFuncDeRefNode = nullptr;
+ast_ptr_t typeFuncDeRefNode = nullptr;
+ast_ptr_t indexFuncDeRefNode = nullptr;
+ast_ptr_t chainFuncDeRefNode = nullptr;
+
+ast_ptr_t addFuncDeRefNode = nullptr;
+ast_ptr_t subFuncDeRefNode = nullptr;
+ast_ptr_t mulFuncDeRefNode = nullptr;
+ast_ptr_t divFuncDeRefNode = nullptr;
+ast_ptr_t modFuncDeRefNode = nullptr;
+ast_ptr_t powFuncDeRefNode = nullptr;
+ast_ptr_t interFuncDeRefNode = nullptr;
+ast_ptr_t unionFuncDeRefNode = nullptr;
+
+ast_ptr_t iAddFuncDeRefNode = nullptr;
+ast_ptr_t iSubFuncDeRefNode = nullptr;
+ast_ptr_t iMulFuncDeRefNode = nullptr;
+ast_ptr_t iDivFuncDeRefNode = nullptr;
+ast_ptr_t iModFuncDeRefNode = nullptr;
+ast_ptr_t iPowFuncDeRefNode = nullptr;
+ast_ptr_t iInterFuncDeRefNode = nullptr;
+ast_ptr_t iUnionFuncDeRefNode = nullptr;
+
+ast_ptr_t ltFuncDeRefNode = nullptr;
+ast_ptr_t gtFuncDeRefNode = nullptr;
+ast_ptr_t leFuncDeRefNode = nullptr;
+ast_ptr_t geFuncDeRefNode = nullptr;
+ast_ptr_t eqFuncDeRefNode = nullptr;
+ast_ptr_t neFuncDeRefNode = nullptr;
+ast_ptr_t andFuncDeRefNode = nullptr;
+ast_ptr_t orFuncDeRefNode = nullptr;
+
+void initFuncDeRefNodes() {
+    if (copyFuncDeRefNode) {
+        return;
+    }
+
+    copyFuncDeRefNode = createAstNode<DeRefNode>("__copy__");
+    castFuncDeRefNode = createAstNode<DeRefNode>("__cast__");
+    typeFuncDeRefNode = createAstNode<DeRefNode>("__type__");
+    indexFuncDeRefNode = createAstNode<DeRefNode>("__index__");
+    chainFuncDeRefNode = createAstNode<DeRefNode>("__chain__");
+
+    addFuncDeRefNode = createAstNode<DeRefNode>("__add__");
+    subFuncDeRefNode = createAstNode<DeRefNode>("__sub__");
+    mulFuncDeRefNode = createAstNode<DeRefNode>("__mul__");
+    divFuncDeRefNode = createAstNode<DeRefNode>("__div__");
+    modFuncDeRefNode = createAstNode<DeRefNode>("__mod__");
+    powFuncDeRefNode = createAstNode<DeRefNode>("__pow__");
+    interFuncDeRefNode = createAstNode<DeRefNode>("__inter__");
+    unionFuncDeRefNode = createAstNode<DeRefNode>("__union__");
+
+    iAddFuncDeRefNode = createAstNode<DeRefNode>("__i_add__");
+    iSubFuncDeRefNode = createAstNode<DeRefNode>("__i_sub__");
+    iMulFuncDeRefNode = createAstNode<DeRefNode>("__i_mul__");
+    iDivFuncDeRefNode = createAstNode<DeRefNode>("__i_div__");
+    iModFuncDeRefNode = createAstNode<DeRefNode>("__i_mod__");
+    iPowFuncDeRefNode = createAstNode<DeRefNode>("__i_pow__");
+    iInterFuncDeRefNode = createAstNode<DeRefNode>("__i_inter__");
+    iUnionFuncDeRefNode = createAstNode<DeRefNode>("__i_union__");
+
+    ltFuncDeRefNode = createAstNode<DeRefNode>("__lt__");
+    gtFuncDeRefNode = createAstNode<DeRefNode>("__gt__");
+    leFuncDeRefNode = createAstNode<DeRefNode>("__le__");
+    geFuncDeRefNode = createAstNode<DeRefNode>("__ge__");
+    eqFuncDeRefNode = createAstNode<DeRefNode>("__eq__");
+    neFuncDeRefNode = createAstNode<DeRefNode>("__ne__");
+    andFuncDeRefNode = createAstNode<DeRefNode>("__and__");
+    orFuncDeRefNode = createAstNode<DeRefNode>("__or__");
+}
+
+entity_ptr_t ASTConstructor::extractStaticEntity(const ast_ptr_t &node) {
     if (node->type() == SemNodeType::DATA) {
         const auto dataNode = std::dynamic_pointer_cast<const DataNode>(node->data);
         return dataNode->entity();
     } else if (node->type() == SemNodeType::DREF) {
         const auto refNode = std::dynamic_pointer_cast<const DeRefNode>(node->data);
-        return std::make_shared<DanglingEntity>(refNode->ident());
+        return std::dynamic_pointer_cast<Entity>(std::make_shared<DanglingEntity>(refNode->ident()));
+    } else {
+        return nullptr;
+    }
+}
+
+entity_ptr_t ASTConstructor::extractEntity(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
+    // TODO: better name for dangling
+    const entity_ptr_t entity = extractStaticEntity(node);
+    if (entity) {
+        return entity;
     } else {
         dangling = true;
         auto [refNode, refEntity] = makeDanglingPair(node);
@@ -129,8 +212,8 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
     case 1: // identRef
     {
         const std::string &ident = std::any_cast<std::string>(carrier);
-        ast_ptr_t copyNode = createAstNode<LinkNode>();
-        ast_ptr_t copyFunc = createAstNode<DeRefNode>("__copy__");
+        ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
+        ast_ptr_t baseNode = nullptr;
         if (type) {
             bool dangling = false;
             ast_ptr_t execNode = createAstNode<ExecuteNode>();
@@ -139,7 +222,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             ast_ptr_t dataNode = createAstNode<DataNode>(
                 std::make_shared<Entity>(listTypePtr, std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{
                                                           exprEntity, std::make_shared<Entity>(type, nullptr)})));
-            ast_ptr_t funcNode = createAstNode<DeRefNode>("__cast__");
+            ast_ptr_t funcNode = castFuncDeRefNode;
 
             if (dangling) {
                 *execNode << dataNode;
@@ -148,19 +231,25 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
                 *linkNode << dataNode << funcNode;
             }
 
-            *copyNode << linkNode << copyFunc;
+            baseNode = linkNode;
         } else {
-            *copyNode << exprNode << copyFunc;
+            baseNode = exprNode;
         }
-        ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
-        *newRefNode << copyNode;
+        if (exprNode->type() == SemNodeType::DREF) {
+            ast_ptr_t copyNode = createAstNode<LinkNode>();
+            ast_ptr_t copyFunc = copyFuncDeRefNode;
+            *copyNode << baseNode << copyFunc;
+            baseNode = copyNode;
+        }
+        *newRefNode << baseNode;
         return newRefNode;
     } break;
 
     case 2: // bracedIdents
     {
         if (type) {
-            throw BuildException("Type cannot be specified for multiple identifiers");
+            const auto &token = context->getStart();
+            throw BuildException("Type cannot be specified for multiple identifiers", token);
         }
         const std::vector<std::string> &idents = std::any_cast<std::vector<std::string>>(carrier);
         ast_ptr_t execNode = createAstNode<ExecuteNode>();
@@ -170,10 +259,10 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             ast_ptr_t linkNode = createAstNode<LinkNode>();
             const auto indexValue = std::make_shared<PrimValue<int32_t>>(i);
             const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
-            ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
+            ast_ptr_t funcNode = indexFuncDeRefNode;
             *linkNode << exprNode << funcNode;
             ast_ptr_t copyNode = createAstNode<LinkNode>();
-            ast_ptr_t copyFunc = createAstNode<DeRefNode>("__copy__");
+            ast_ptr_t copyFunc = copyFuncDeRefNode;
             *copyNode << linkNode << copyFunc;
             *newRefNode << copyNode;
             *execNode << newRefNode;
@@ -184,7 +273,8 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
     case 3: // bracketIdents
     {
         if (type) {
-            throw BuildException("Type cannot be specified for multiple identifiers");
+            const auto &token = context->getStart();
+            throw BuildException("Type cannot be specified for multiple identifiers", token);
         }
         const std::vector<std::string> &idents = std::any_cast<std::vector<std::string>>(carrier);
         ast_ptr_t execNode = createAstNode<ExecuteNode>();
@@ -194,10 +284,10 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             ast_ptr_t linkNode = createAstNode<LinkNode>();
             const auto indexValue = std::make_shared<StringValue>(ident);
             const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
-            ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
+            ast_ptr_t funcNode = indexFuncDeRefNode;
             *linkNode << exprNode << funcNode;
             ast_ptr_t copyNode = createAstNode<LinkNode>();
-            ast_ptr_t copyFunc = createAstNode<DeRefNode>("__copy__");
+            ast_ptr_t copyFunc = copyFuncDeRefNode;
             *copyNode << linkNode << copyFunc;
             *newRefNode << copyNode;
             *execNode << newRefNode;
@@ -231,37 +321,57 @@ std::any ASTConstructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
     case 2: // bracedIdents
     {
         const std::vector<std::string> &idents = std::any_cast<std::vector<std::string>>(carrier);
-        ast_ptr_t execNode = createAstNode<ExecuteNode>();
+        ast_ptr_t useNode = createAstNode<ExecuteNode>();
+        bool dangling = false;
+        entity_ptr_t exprEntity = extractEntity(dataNode, useNode, dangling);
         for (size_t i = 0; i < idents.size(); i++) {
             const std::string &ident = idents[i];
             ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
             ast_ptr_t linkNode = createAstNode<LinkNode>();
-            const auto indexValue = std::make_shared<PrimValue<int32_t>>(i);
-            const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
-            ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
-            *linkNode << dataNode << funcNode;
+
+            const auto indexValue = std::make_shared<StringValue>(ident);
+            const auto indexEntity = std::make_shared<Entity>(stringTypePtr, indexValue);
+            const auto listValue =
+                std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{exprEntity, indexEntity});
+
+            entity_ptr_t listEntity = std::make_shared<Entity>(listTypePtr, listValue);
+            ast_ptr_t argsNode = createAstNode<DataNode>(listEntity);
+            ast_ptr_t funcNode = indexFuncDeRefNode;
+
+            *linkNode << argsNode << funcNode;
             *newRefNode << linkNode;
-            *execNode << newRefNode;
+
+            *useNode << newRefNode;
         }
-        return execNode;
+        return useNode;
     } break;
 
     case 3: // bracketIdents
     {
         const std::vector<std::string> &idents = std::any_cast<std::vector<std::string>>(carrier);
-        ast_ptr_t execNode = createAstNode<ExecuteNode>();
+        ast_ptr_t useNode = createAstNode<ExecuteNode>();
+        bool dangling = false;
+        entity_ptr_t exprEntity = extractEntity(dataNode, useNode, dangling);
         for (size_t i = 0; i < idents.size(); i++) {
             const std::string &ident = idents[i];
             ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
             ast_ptr_t linkNode = createAstNode<LinkNode>();
-            const auto indexValue = std::make_shared<StringValue>(ident);
+
+            const auto indexValue = std::make_shared<PrimValue<int32_t>>(i);
             const auto indexEntity = std::make_shared<Entity>(int32TypePtr, indexValue);
-            ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
-            *linkNode << dataNode << funcNode;
+            const auto listValue =
+                std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{exprEntity, indexEntity});
+
+            entity_ptr_t listEntity = std::make_shared<Entity>(listTypePtr, listValue);
+            ast_ptr_t argsNode = createAstNode<DataNode>(listEntity);
+            ast_ptr_t funcNode = indexFuncDeRefNode;
+
+            *linkNode << argsNode << funcNode;
             *newRefNode << linkNode;
-            *execNode << newRefNode;
+
+            *useNode << newRefNode;
         }
-        return execNode;
+        return useNode;
     } break;
 
     default:
@@ -310,7 +420,7 @@ std::any ASTConstructor::visitAssignStmt(OpenCMLParser::AssignStmtContext *conte
         const auto listValue =
             std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{targetEntity, indexEntity});
         const auto dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
-        ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
+        ast_ptr_t funcNode = indexFuncDeRefNode;
         *linkNode << dataNode << funcNode;
         targetNode = linkNode;
     }
@@ -363,7 +473,7 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
         const auto returnType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
         funcType = std::make_shared<FunctorType>(withType, paramsType, returnType);
     } else {
-        funcType = std::make_shared<FunctorType>(withType, paramsType, nullptr);
+        funcType = std::make_shared<FunctorType>(withType, paramsType, anyTypePtr);
     }
     const auto &modifiers = context->modifiers();
     if (modifiers) {
@@ -402,7 +512,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     const auto &stmtList = context->stmtList();
     if (stmtList) {
         bodyNode = std::any_cast<ast_ptr_t>(visitStmtList(stmtList));
-        funcType = std::make_shared<FunctorType>(nullptr, nullptr, nullptr);
+        funcType = std::make_shared<FunctorType>(nullptr, nullptr, anyTypePtr);
     } else {
         const auto &params = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>>>(
             visitParentParams(context->parentParams()));
@@ -415,7 +525,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
             const auto returnType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
             funcType = std::make_shared<FunctorType>(nullptr, paramsType, returnType);
         } else {
-            funcType = std::make_shared<FunctorType>(nullptr, paramsType, nullptr);
+            funcType = std::make_shared<FunctorType>(nullptr, paramsType, anyTypePtr);
         }
         const auto &stmts = context->bracedStmts();
         if (stmts) {
@@ -437,13 +547,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     const auto funcTypeNode = createAstNode<TypeNode>(funcType);
     const auto funcNode = createAstNode<FunctorNode>();
     *funcNode << funcTypeNode << bodyNode;
-    ast_ptr_t newRefNode = createAstNode<NewRefNode>(std::to_string(indentIndex_++));
-    *newRefNode << funcNode;
-    ast_ptr_t linkNode = createAstNode<LinkNode>();
-    entity_ptr_t entity = std::make_shared<Entity>(voidTypePtr, nullptr);
-    ast_ptr_t dataNode = createAstNode<DataNode>(entity);
-    *linkNode << newRefNode << dataNode;
-    return linkNode;
+    return funcNode;
 };
 
 /*
@@ -508,7 +612,8 @@ keyTypePair  : identRef ':' typeExpr ;
 */
 std::any ASTConstructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
     debug(0) << "visitKeyTypePair" << std::endl;
-    return std::make_pair(context->identRef()->getText(), visitTypeExpr(context->typeExpr()));
+    std::string key = std::any_cast<std::string>(visitIdentRef(context->identRef()));
+    return std::make_pair(key, std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr())));
 };
 
 /*
@@ -516,7 +621,8 @@ keyValuePair : identRef ':' entityExpr ;
 */
 std::any ASTConstructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
     debug(0) << "visitKeyValuePair" << std::endl;
-    return std::make_pair(context->identRef()->getText(), visitEntityExpr(context->entityExpr()));
+    return std::make_pair(context->identRef()->getText(),
+                          std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr())));
 };
 
 /*
@@ -528,12 +634,11 @@ std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *c
     entity_ptr_t defaultValue = nullptr;
     if (context->entityExpr()) {
         const auto defaultNode = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
-        if (defaultNode->type() == SemNodeType::DATA) {
-            debug(0) << "DATA" << std::endl;
-            const auto dataNode = std::dynamic_pointer_cast<const DataNode>(defaultNode->data);
-            defaultValue = dataNode->entity();
-        } else {
-            throw BuildException("Default value must be primitive");
+        defaultValue = extractStaticEntity(defaultNode);
+        if (!defaultValue) {
+            const auto &exprToken = context->entityExpr()->getStart();
+            // TODO shouldn't throw exception here
+            throw BuildException("Default value must not be expressions", exprToken);
         }
     }
     // TODO: implement the support for annotation
@@ -545,9 +650,9 @@ typeList     : typeExpr (',' typeExpr)* ;
 */
 std::any ASTConstructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
     debug(0) << "visitTypeList" << std::endl;
-    std::vector<ast_ptr_t> typeList;
+    std::vector<type_ptr_t> typeList;
     for (const auto &type : context->typeExpr()) {
-        typeList.push_back(std::any_cast<ast_ptr_t>(visitTypeExpr(type)));
+        typeList.push_back(std::any_cast<type_ptr_t>(visitTypeExpr(type)));
     }
     return typeList;
 };
@@ -822,11 +927,62 @@ std::any ASTConstructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *c
 };
 
 /*
-entity       : primEntity (memberAccess | angledValues | annotation | parentValues)* ;
+entityChain  : entityLink+ ;
 */
-std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
-    debug(0) << "visitEntity" << std::endl;
-    ast_ptr_t primEntity = std::any_cast<ast_ptr_t>(visitPrimEntity(context->primEntity()));
+std::any ASTConstructor::visitEntityChain(OpenCMLParser::EntityChainContext *context) {
+    debug(0) << "visitEntityChain" << std::endl;
+    const auto &entityLinks = context->entityLink();
+
+    if (entityLinks.size() == 1) {
+        return visitEntityLink(entityLinks[0]);
+    }
+
+    bool dangling = false;
+    ast_ptr_t execNode = createAstNode<ExecuteNode>();
+    const auto listValue = std::make_shared<ListValue>();
+    for (const auto &link : entityLinks) {
+        ast_ptr_t linkNode = std::any_cast<ast_ptr_t>(visitEntityLink(link));
+        listValue->add(extractEntity(linkNode, execNode, dangling));
+    }
+    ast_ptr_t dataNode =
+        createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, std::dynamic_pointer_cast<Value>(listValue)));
+    ast_ptr_t linkNode = createAstNode<LinkNode>();
+    ast_ptr_t funcNode = chainFuncDeRefNode;
+
+    if (dangling) {
+        *execNode << dataNode;
+        *linkNode << execNode << funcNode;
+        return linkNode;
+    } else {
+        *linkNode << dataNode << funcNode;
+        return linkNode;
+    }
+};
+
+/*
+entityLink   : entityUnit | entityLink '->' entityUnit ;
+*/
+std::any ASTConstructor::visitEntityLink(OpenCMLParser::EntityLinkContext *context) {
+    debug(0) << "visitEntityLink" << std::endl;
+    if (context->children.size() == 1) {
+        return visitEntityUnit(context->entityUnit());
+    } else {
+        ast_ptr_t linkNode = createAstNode<LinkNode>();
+        ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityLink(context->entityLink()));
+        ast_ptr_t funcNode = std::any_cast<ast_ptr_t>(visitEntityUnit(context->entityUnit()));
+
+        *linkNode << dataNode << funcNode;
+
+        return linkNode;
+    }
+};
+
+/*
+entityUnit   : entityWith (({isAdjacent()}? (memberAccess | angledValues | parentValues)) | annotation)* ;
+*/
+std::any ASTConstructor::visitEntityUnit(OpenCMLParser::EntityUnitContext *context) {
+    debug(0) << "visitEntityUnit" << std::endl;
+    ast_ptr_t primEntity = std::any_cast<ast_ptr_t>(visitEntityWith(context->entityWith()));
     ast_ptr_t entityNode = primEntity;
     for (size_t i = 1; i < context->children.size(); i++) {
         bool dangling = false;
@@ -840,7 +996,7 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             ast_ptr_t indexNode = std::any_cast<ast_ptr_t>(visitMemberAccess(memberAccess));
             ast_ptr_t linkNode = createAstNode<LinkNode>();
             // TODO: inner function names can share the same deref node
-            ast_ptr_t funcNode = createAstNode<DeRefNode>("__index__");
+            ast_ptr_t funcNode = indexFuncDeRefNode;
             auto listValue = std::make_shared<ListValue>();
             listValue->add(extractEntity(entityNode, execNode, dangling));
             listValue->add(extractEntity(indexNode, execNode, dangling));
@@ -861,9 +1017,8 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             const auto &[indexArgs, namedArgs] =
                 std::any_cast<std::pair<std::vector<ast_ptr_t>, std::vector<std::pair<std::string, ast_ptr_t>>>>(
                     visitAngledValues(angledValues));
-            ast_ptr_t callNode = createAstNode<CallNode>();
+            ast_ptr_t withNode = createAstNode<WithNode>();
             ast_ptr_t &funcNode = entityNode;
-            auto listValue = std::make_shared<ListValue>();
             auto namedTuple = std::make_shared<NamedTupleValue>();
             bool dangling = false;
             auto execNode = createAstNode<ExecuteNode>();
@@ -876,11 +1031,11 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
             ast_ptr_t dataNode = createAstNode<DataNode>(std::make_shared<Entity>(namedTuple->type(), namedTuple));
             if (dangling) {
                 *execNode << dataNode;
-                *callNode << execNode << funcNode;
-                entityNode = callNode;
+                *withNode << execNode << funcNode;
+                entityNode = withNode;
             } else {
-                *callNode << dataNode << funcNode;
-                entityNode = callNode;
+                *withNode << dataNode << funcNode;
+                entityNode = withNode;
             }
         } break;
 
@@ -892,12 +1047,11 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
                     visitParentValues(parentValues));
             ast_ptr_t linkNode = createAstNode<LinkNode>();
             ast_ptr_t &funcNode = entityNode;
-            auto listValue = std::make_shared<ListValue>();
             auto namedTuple = std::make_shared<NamedTupleValue>();
             bool dangling = false;
             ast_ptr_t execNode = createAstNode<ExecuteNode>();
             for (const auto &arg : indexArgs) {
-                listValue->add(extractEntity(arg, execNode, dangling));
+                namedTuple->add(extractEntity(arg, execNode, dangling));
             }
             for (const auto &[key, arg] : namedArgs) {
                 namedTuple->add(extractEntity(arg, execNode, dangling), key);
@@ -933,80 +1087,21 @@ std::any ASTConstructor::visitEntity(OpenCMLParser::EntityContext *context) {
 };
 
 /*
-entityChain  : entityLink+ ;
+entityWith   : primEntity | entityWith '.' primEntity ;
 */
-std::any ASTConstructor::visitEntityChain(OpenCMLParser::EntityChainContext *context) {
-    debug(0) << "visitEntityChain" << std::endl;
-    const auto &entityLinks = context->entityLink();
-
-    if (entityLinks.size() == 1) {
-        return visitEntityLink(entityLinks[0]);
-    }
-
-    bool dangling = false;
-    ast_ptr_t execNode = createAstNode<ExecuteNode>();
-    const auto listValue = std::make_shared<ListValue>();
-    for (const auto &link : entityLinks) {
-        ast_ptr_t linkNode = std::any_cast<ast_ptr_t>(visitEntityLink(link));
-        listValue->add(extractEntity(linkNode, execNode, dangling));
-    }
-    ast_ptr_t dataNode =
-        createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, std::dynamic_pointer_cast<Value>(listValue)));
-    ast_ptr_t linkNode = createAstNode<LinkNode>();
-    ast_ptr_t funcNode = createAstNode<DeRefNode>("__chain__");
-
-    if (dangling) {
-        *execNode << dataNode;
-        *linkNode << execNode << funcNode;
-        return linkNode;
-    } else {
-        *linkNode << dataNode << funcNode;
-        return linkNode;
-    }
-};
-
-/*
-entityLink   : entityCall | entityLink '->' entityCall ;
-*/
-std::any ASTConstructor::visitEntityLink(OpenCMLParser::EntityLinkContext *context) {
-    debug(0) << "visitEntityLink" << std::endl;
+std::any ASTConstructor::visitEntityWith(OpenCMLParser::EntityWithContext *context) {
+    debug(0) << "visitEntityWith" << std::endl;
     if (context->children.size() == 1) {
-        return visitEntityCall(context->entityCall());
+        return visitPrimEntity(context->primEntity());
     } else {
-        ast_ptr_t linkNode = createAstNode<LinkNode>();
-        ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityLink(context->entityLink()));
-        ast_ptr_t funcNode = std::any_cast<ast_ptr_t>(visitEntityCall(context->entityCall()));
+        ast_ptr_t withNode = createAstNode<WithNode>();
+        ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityWith(context->entityWith()));
+        ast_ptr_t funcNode = std::any_cast<ast_ptr_t>(visitPrimEntity(context->primEntity()));
 
-        *linkNode << dataNode << funcNode;
+        *withNode << dataNode << funcNode;
 
-        return linkNode;
+        return withNode;
     }
-};
-
-/*
-entityCall   : entity | entityCall '.' entity ;
-*/
-std::any ASTConstructor::visitEntityCall(OpenCMLParser::EntityCallContext *context) {
-    debug(0) << "visitEntityCall" << std::endl;
-    if (context->children.size() == 1) {
-        return visitEntity(context->entity());
-    } else {
-        ast_ptr_t callNode = createAstNode<CallNode>();
-        ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityCall(context->entityCall()));
-        ast_ptr_t funcNode = std::any_cast<ast_ptr_t>(visitEntity(context->entity()));
-
-        *callNode << dataNode << funcNode;
-
-        return callNode;
-    }
-};
-
-/*
-entitySpread : '...' entity ;
-*/
-std::any ASTConstructor::visitEntitySpread(OpenCMLParser::EntitySpreadContext *context) {
-    debug(0) << "visitEntitySpread" << std::endl;
-    return visitEntity(context->entity());
 };
 
 /*
@@ -1029,11 +1124,13 @@ std::any ASTConstructor::visitEntityExpr(OpenCMLParser::EntityExprContext *conte
         return relaExpr;
     } else {
         ast_ptr_t linkNode = createAstNode<LinkNode>();
+
+        bool dangling = false;
         ast_ptr_t execNode = createAstNode<ExecuteNode>();
 
-        auto [entityRefNode, entityEntity] =
-            makeDanglingPair(std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr())));
-        auto [relaRefNode, relaEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(relaExpr));
+        entity_ptr_t entityEntity =
+            extractEntity(std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr())), execNode, dangling);
+        entity_ptr_t relaEntity = extractEntity(std::any_cast<ast_ptr_t>(relaExpr), execNode, dangling);
 
         const auto listValue =
             std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{entityEntity, relaEntity});
@@ -1041,33 +1138,36 @@ std::any ASTConstructor::visitEntityExpr(OpenCMLParser::EntityExprContext *conte
 
         ast_ptr_t dataNode = createAstNode<DataNode>(listEntity);
 
-        *execNode << entityRefNode << relaRefNode << dataNode;
-
         ast_ptr_t funcNode = nullptr;
         const auto &op = context->children[1]->getText();
         if (op == "+=") {
-            funcNode = createAstNode<DeRefNode>("__i_add__");
+            funcNode = iAddFuncDeRefNode;
         } else if (op == "-=") {
-            funcNode = createAstNode<DeRefNode>("__i_sub__");
+            funcNode = iSubFuncDeRefNode;
         } else if (op == "*=") {
-            funcNode = createAstNode<DeRefNode>("__i_mul__");
+            funcNode = iMulFuncDeRefNode;
         } else if (op == "/=") {
-            funcNode = createAstNode<DeRefNode>("__i_div__");
+            funcNode = iDivFuncDeRefNode;
         } else if (op == "%=") {
-            funcNode = createAstNode<DeRefNode>("__i_mod__");
+            funcNode = iModFuncDeRefNode;
         } else if (op == "^=") {
-            funcNode = createAstNode<DeRefNode>("__i_pow__");
+            funcNode = iPowFuncDeRefNode;
         } else if (op == "&=") {
-            funcNode = createAstNode<DeRefNode>("__i_inter__");
+            funcNode = iInterFuncDeRefNode;
         } else if (op == "|=") {
-            funcNode = createAstNode<DeRefNode>("__i_union__");
+            funcNode = iUnionFuncDeRefNode;
         } else {
             throw std::runtime_error("Unknown operator: " + op);
         }
 
-        *linkNode << execNode << funcNode;
-
-        return linkNode;
+        if (dangling) {
+            *execNode << dataNode;
+            *linkNode << execNode << funcNode;
+            return linkNode;
+        } else {
+            *linkNode << dataNode << funcNode;
+            return linkNode;
+        }
     }
 };
 
@@ -1091,43 +1191,49 @@ std::any ASTConstructor::visitRelaExpr(OpenCMLParser::RelaExprContext *context) 
         return addExpr;
     } else {
         ast_ptr_t linkNode = createAstNode<LinkNode>();
+
+        bool dangling = false;
         ast_ptr_t execNode = createAstNode<ExecuteNode>();
 
-        auto [relaRefNode, relaEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(visitRelaExpr(context->relaExpr())));
-        auto [addRefNode, addEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(addExpr));
+        entity_ptr_t relaEntity =
+            extractEntity(std::any_cast<ast_ptr_t>(visitRelaExpr(context->relaExpr())), execNode, dangling);
+        entity_ptr_t addEntity = extractEntity(std::any_cast<ast_ptr_t>(addExpr), execNode, dangling);
 
         const auto listValue = std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{relaEntity, addEntity});
         const auto listEntity = std::make_shared<Entity>(listTypePtr, listValue);
 
         ast_ptr_t dataNode = createAstNode<DataNode>(listEntity);
 
-        *execNode << relaRefNode << addRefNode << dataNode;
-
         ast_ptr_t funcNode = nullptr;
         const auto &op = context->children[1]->getText();
         if (op == "<") {
-            funcNode = createAstNode<DeRefNode>("__lt__");
+            funcNode = ltFuncDeRefNode;
         } else if (op == ">") {
-            funcNode = createAstNode<DeRefNode>("__gt__");
+            funcNode = gtFuncDeRefNode;
         } else if (op == "<=") {
-            funcNode = createAstNode<DeRefNode>("__le__");
+            funcNode = leFuncDeRefNode;
         } else if (op == ">=") {
-            funcNode = createAstNode<DeRefNode>("__ge__");
+            funcNode = geFuncDeRefNode;
         } else if (op == "==") {
-            funcNode = createAstNode<DeRefNode>("__eq__");
+            funcNode = eqFuncDeRefNode;
         } else if (op == "!=") {
-            funcNode = createAstNode<DeRefNode>("__ne__");
+            funcNode = neFuncDeRefNode;
         } else if (op == "&&") {
-            funcNode = createAstNode<DeRefNode>("__and__");
+            funcNode = andFuncDeRefNode;
         } else if (op == "||") {
-            funcNode = createAstNode<DeRefNode>("__or__");
+            funcNode = orFuncDeRefNode;
         } else {
             throw std::runtime_error("Unknown operator: " + op);
         }
 
-        *linkNode << execNode << funcNode;
-
-        return linkNode;
+        if (dangling) {
+            *execNode << dataNode;
+            *linkNode << execNode << funcNode;
+            return linkNode;
+        } else {
+            *linkNode << dataNode << funcNode;
+            return linkNode;
+        }
     }
 };
 
@@ -1147,35 +1253,41 @@ std::any ASTConstructor::visitAddExpr(OpenCMLParser::AddExprContext *context) {
         return multiExpr;
     } else {
         ast_ptr_t linkNode = createAstNode<LinkNode>();
+
+        bool dangling = false;
         ast_ptr_t execNode = createAstNode<ExecuteNode>();
 
-        auto [addRefNode, addEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(visitAddExpr(context->addExpr())));
-        auto [multiRefNode, multiEntity] = makeDanglingPair(std::any_cast<ast_ptr_t>(multiExpr));
+        entity_ptr_t addEntity =
+            extractEntity(std::any_cast<ast_ptr_t>(visitAddExpr(context->addExpr())), execNode, dangling);
+        entity_ptr_t multiEntity = extractEntity(std::any_cast<ast_ptr_t>(multiExpr), execNode, dangling);
 
         const auto listValue = std::make_shared<ListValue>(std::initializer_list<entity_ptr_t>{addEntity, multiEntity});
         const auto listEntity = std::make_shared<Entity>(listTypePtr, listValue);
 
         ast_ptr_t dataNode = createAstNode<DataNode>(listEntity);
 
-        *execNode << addRefNode << multiRefNode << dataNode;
-
         ast_ptr_t funcNode = nullptr;
         const auto &op = context->children[1]->getText();
         if (op == "+") {
-            funcNode = createAstNode<DeRefNode>("__add__");
+            funcNode = addFuncDeRefNode;
         } else if (op == "-") {
-            funcNode = createAstNode<DeRefNode>("__sub__");
+            funcNode = subFuncDeRefNode;
         } else if (op == "&") {
-            funcNode = createAstNode<DeRefNode>("__inter__");
+            funcNode = interFuncDeRefNode;
         } else if (op == "|") {
-            funcNode = createAstNode<DeRefNode>("__union__");
+            funcNode = unionFuncDeRefNode;
         } else {
             throw std::runtime_error("Unknown operator: " + op);
         }
 
-        *linkNode << execNode << funcNode;
-
-        return linkNode;
+        if (dangling) {
+            *execNode << dataNode;
+            *linkNode << execNode << funcNode;
+            return linkNode;
+        } else {
+            *linkNode << dataNode << funcNode;
+            return linkNode;
+        }
     }
 };
 
@@ -1201,13 +1313,13 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
         return unaryExprNode;
     } else {
         ast_ptr_t linkNode = createAstNode<LinkNode>();
-        ast_ptr_t execNode = createAstNode<ExecuteNode>();
         ast_ptr_t funcNode = nullptr;
         ast_ptr_t dataNode = nullptr;
 
         const auto listValue = std::make_shared<ListValue>();
 
         bool dangling = false;
+        ast_ptr_t execNode = createAstNode<ExecuteNode>();
         const auto &multiNode = std::any_cast<ast_ptr_t>(visitMultiExpr(context->multiExpr()));
         listValue->add(extractEntity(multiNode, execNode, dangling));
 
@@ -1220,9 +1332,9 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
             listValue->add(std::make_shared<Entity>(type, nullptr));
             dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
             if (op == "as") {
-                funcNode = createAstNode<DeRefNode>("__cast__");
+                funcNode = castFuncDeRefNode;
             } else if (op == "is") {
-                funcNode = createAstNode<DeRefNode>("__type__");
+                funcNode = typeFuncDeRefNode;
             } else {
                 throw std::runtime_error("Unknown operator: " + op);
             }
@@ -1232,17 +1344,17 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
             dataNode = createAstNode<DataNode>(std::make_shared<Entity>(listTypePtr, listValue));
 
             if (op == "^") {
-                funcNode = createAstNode<DeRefNode>("__pow__");
+                funcNode = powFuncDeRefNode;
             } else if (op == "*") {
-                funcNode = createAstNode<DeRefNode>("__mul__");
+                funcNode = mulFuncDeRefNode;
             } else if (op == "/") {
-                funcNode = createAstNode<DeRefNode>("__div__");
+                funcNode = divFuncDeRefNode;
             } else if (op == "%") {
-                funcNode = createAstNode<DeRefNode>("__mod__");
+                funcNode = modFuncDeRefNode;
             } else if (op == "as") {
-                funcNode = createAstNode<DeRefNode>("__cast__");
+                funcNode = castFuncDeRefNode;
             } else if (op == "is") {
-                funcNode = createAstNode<DeRefNode>("__type__");
+                funcNode = typeFuncDeRefNode;
             } else {
                 throw std::runtime_error("Unknown operator: " + op);
             }
@@ -1367,16 +1479,14 @@ std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
 /*
 typeExpr
     : type ('[' INTEGER? ']')*
-    | typeExpr '|' typeExpr
-    | typeExpr '&' typeExpr
+    | typeExpr '&' type
+    | typeExpr '|' type
     ;
 */
 std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
-    debug(0) << "visitTypeExpr: " << context->getAltNumber() << std::endl;
-    switch (context->getAltNumber()) {
-    case 1: // type ('[' INTEGER? ']')*
-    {
-        type_ptr_t type = std::any_cast<type_ptr_t>(visitType(context->type()));
+    debug(0) << "visitTypeExpr" << std::endl;
+    type_ptr_t type = std::any_cast<type_ptr_t>(visitType(context->type()));
+    if (context->type()) { // type ('[' INTEGER? ']')*
         for (size_t i = 0; i < context->children.size(); i++) {
             if (context->children[i]->getText() == "[") {
                 const auto &size = context->children[i + 1]->getText();
@@ -1388,36 +1498,31 @@ std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) 
             }
         }
         return type;
-    } break;
-
-    case 2: // typeExpr '|' typeExpr
-    {
-        type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(0)));
-        type_ptr_t rhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(1)));
-        if (lhs->code() == TypeCode::DICT && rhs->code() == TypeCode::DICT) {
-            return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) |
+    } else {
+        if (context->children[1]->getText() == "&") { // typeExpr '&' typeExpr
+            type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
+            type_ptr_t rhs = type;
+            if (lhs->code() != TypeCode::DICT) {
+                const auto &token = context->getStart();
+                throw BuildException("The left-hand side of '&' must be a dict type", token);
+            }
+            if (rhs->code() != TypeCode::DICT) {
+                const auto &token = context->getStart();
+                throw BuildException("The right-hand side of '&' must be a dict type", token);
+            }
+            return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) &
                                                    dynamic_cast<DictType &>(*rhs.get()));
+        } else { // typeExpr '|' typeExpr
+            type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
+            type_ptr_t rhs = type;
+            if (lhs->code() == TypeCode::DICT && rhs->code() == TypeCode::DICT) {
+                return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) |
+                                                       dynamic_cast<DictType &>(*rhs.get()));
+            }
+            return std::dynamic_pointer_cast<Type>(std::make_shared<UnionType>(lhs, rhs));
         }
-        return std::dynamic_pointer_cast<Type>(std::make_shared<UnionType>(lhs, rhs));
-    } break;
-
-    case 3: // typeExpr '&' typeExpr
-    {
-        type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(0)));
-        type_ptr_t rhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(1)));
-        if (lhs->code() != TypeCode::DICT) {
-            throw BuildException("The left-hand side of '&' must be a dict type");
-        }
-        if (rhs->code() != TypeCode::DICT) {
-            throw BuildException("The right-hand side of '&' must be a dict type");
-        }
-        return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) &
-                                               dynamic_cast<DictType &>(*rhs.get()));
-    } break;
-
-    default:
-        throw std::runtime_error("Unknown type expression");
     }
+    throw std::runtime_error("Unknown type expression");
 };
 
 /*
@@ -1450,7 +1555,8 @@ std::any ASTConstructor::visitType(OpenCMLParser::TypeContext *context) {
         const auto &ident = std::any_cast<std::string>(visitIdentRef(context->identRef()));
         const auto &type = typeScope_->at(ident);
         if (!type.has_value()) {
-            throw BuildException("Type '" + ident + "' is not defined");
+            const auto &token = context->getStart();
+            throw BuildException("Type '" + ident + "' is not defined", token);
         }
         return type.value();
     } break;
@@ -1485,15 +1591,10 @@ std::any ASTConstructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *conte
         const auto &superParams = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, ast_ptr_t>>>(
             visitPairedParams(pairedParamsList[0]));
         for (const auto &[name, type, valueNode] : superParams) {
-            entity_ptr_t value = nullptr;
-            if (valueNode) { // valueNode may be nullptr
-                if (valueNode->type() == SemNodeType::DATA) {
-                    debug(0) << "DATA" << std::endl;
-                    const auto dataNode = std::dynamic_pointer_cast<const DataNode>(valueNode->data);
-                    value = dataNode->entity();
-                } else {
-                    throw std::runtime_error("Default values for a functor must be primitive");
-                }
+            entity_ptr_t value = extractStaticEntity(valueNode);
+            if (!valueNode) {
+                const auto &token = context->getStart();
+                throw BuildException("Default values for a functor must not be expressions", token);
             }
             withType->add(name, type, value);
         }
@@ -1523,35 +1624,36 @@ primType
 */
 std::any ASTConstructor::visitPrimType(OpenCMLParser::PrimTypeContext *context) {
     debug(0) << "visitPrimType" << context->getAltNumber() << std::endl;
-    switch (context->getAltNumber()) {
-    case 1: // INTEGER_TYPE
+    const auto tokenType = context->getStart()->getType();
+    switch (tokenType) {
+    case OpenCMLLexer::INTEGER_TYPE: // INTEGER_TYPE
         return intTypePtr;
         break;
-    case 2: // INTEGER32_TYPE
+    case OpenCMLLexer::INTEGER32_TYPE: // INTEGER32_TYPE
         return int32TypePtr;
         break;
-    case 3: // INTEGER64_TYPE
+    case OpenCMLLexer::INTEGER64_TYPE: // INTEGER64_TYPE
         return int64TypePtr;
         break;
-    case 4: // REAL_TYPE
+    case OpenCMLLexer::REAL_TYPE: // REAL_TYPE
         return realTypePtr;
         break;
-    case 5: // FLOAT_TYPE
+    case OpenCMLLexer::FLOAT_TYPE: // FLOAT_TYPE
         return floatTypePtr;
         break;
-    case 6: // DOUBLE_TYPE
+    case OpenCMLLexer::DOUBLE_TYPE: // DOUBLE_TYPE
         return doubleTypePtr;
         break;
-    case 7: // NUMBER_TYPE
+    case OpenCMLLexer::NUMBER_TYPE: // NUMBER_TYPE
         return numberTypePtr;
         break;
-    case 8: // STRING_TYPE
+    case OpenCMLLexer::STRING_TYPE: // STRING_TYPE
         return stringTypePtr;
         break;
-    case 9: // BOOL_TYPE
+    case OpenCMLLexer::BOOL_TYPE: // BOOL_TYPE
         return boolTypePtr;
         break;
-    case 10: // CHAR_TYPE
+    case OpenCMLLexer::CHAR_TYPE: // CHAR_TYPE
         return charTypePtr;
         break;
 
@@ -1720,14 +1822,15 @@ specialType
 */
 std::any ASTConstructor::visitSpecialType(OpenCMLParser::SpecialTypeContext *context) {
     debug(0) << "visitSpecialType" << std::endl;
-    switch (context->getAltNumber()) {
-    case 1: // ANY_TYPE
+    const auto &tokenType = context->getStart()->getType();
+    switch (tokenType) {
+    case OpenCMLLexer::ANY_TYPE: // ANY_TYPE
         return anyTypePtr;
         break;
-    case 2: // VOID_TYPE
+    case OpenCMLLexer::VOID_TYPE: // VOID_TYPE
         return voidTypePtr;
         break;
-    case 3: // FUNCTOR_TYPE
+    case OpenCMLLexer::FUNCTOR_TYPE: // FUNCTOR_TYPE
         return functorTypePtr;
         break;
 

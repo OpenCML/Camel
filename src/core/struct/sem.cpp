@@ -46,8 +46,8 @@ const std::string SemanticNode::typeStr() const {
         return "ANNO";
     case SemNodeType::LINK:
         return "LINK";
-    case SemNodeType::CALL:
-        return "CALL";
+    case SemNodeType::WITH:
+        return "WITH";
     case SemNodeType::RETN:
         return "RETN";
     case SemNodeType::EXEC:
@@ -59,7 +59,7 @@ const std::string SemanticNode::typeStr() const {
 
 const std::string DataNode::toString() const {
     std::stringstream ss;
-    ss << "DATA: " << pointerToHex(this) << ", " << entity_->typeStr() << ", " << entity_->dataStr();
+    ss << "DATA: " << pointerToHex(entity_.get()) << ", " << entity_->typeStr() << ", " << entity_->dataStr();
     return ss.str();
 }
 
