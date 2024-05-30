@@ -14,6 +14,8 @@ a->b a b a<e>->b;
 a(b, d(f)->e(g));
 let a = d + (a + b) * c / 2;
 
+(() => a + b)();
+
 /*
 * This PSL module will be imported by interpreter automatically,
 * and can be accessed Anywhere in Any PSL script.
@@ -21,24 +23,24 @@ let a = d + (a + b) * c / 2;
 
 with <loader: Functor = psl>
 inner static sync func load(path: String): Any {
-    # inner func
+    // inner func
 };
 
 with <path: String, ftype: String = 'psl'>
 inner static sync func save(entity: Any) {
-    # inner func
+    // inner func
 };
 
 use from = load;
 
 with <stream: String = 'stdout'>
 inner static func print(data: Any) {
-    # inner func
+    // inner func
 };
 
 with <diagram: Functor = eye>
 inner static func analyze(data: Any) {
-    # inner func
+    // inner func
 };
 
 ident[1]->fn;
@@ -98,7 +100,7 @@ sync func placeComponents(
     pos: Point
 ): Void {
     i := startIndex;
-    # loop to create instances
+    // loop to create instances
     for(i, { i < startIndex + count; }, { i = i + 1; }) {
         let laser = LaserCW@[pos.x, pos.y];
         let laserRect = laser.meta.rect;

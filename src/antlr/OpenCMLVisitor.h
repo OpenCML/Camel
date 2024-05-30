@@ -135,7 +135,9 @@ public:
 
     virtual std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) = 0;
 
-    virtual std::any visitType(OpenCMLParser::TypeContext *context) = 0;
+    virtual std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context) = 0;
+
+    virtual std::any visitAtomType(OpenCMLParser::AtomTypeContext *context) = 0;
 
     virtual std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) = 0;
 

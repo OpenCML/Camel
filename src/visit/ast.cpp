@@ -1478,30 +1478,20 @@ std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
 
 /*
 typeExpr
-    : type ('[' INTEGER? ']')*
-    | typeExpr '&' type
-    | typeExpr '|' type
+    : unaryType
+    | typeExpr '&' unaryType
+    | typeExpr '|' unaryType
     ;
 */
 std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
     debug(0) << "visitTypeExpr" << std::endl;
-    type_ptr_t type = std::any_cast<type_ptr_t>(visitType(context->type()));
-    if (context->type()) { // type ('[' INTEGER? ']')*
-        for (size_t i = 0; i < context->children.size(); i++) {
-            if (context->children[i]->getText() == "[") {
-                const auto &size = context->children[i + 1]->getText();
-                if (size == "]") {
-                    type = std::dynamic_pointer_cast<Type>(std::make_shared<ArrayType>(type));
-                } else {
-                    type = std::dynamic_pointer_cast<Type>(std::make_shared<VectorType>(type, std::stoi(size)));
-                }
-            }
-        }
-        return type;
+    type_ptr_t unaryType = std::any_cast<type_ptr_t>(visitUnaryType(context->unaryType()));
+    if (context->children.size() == 1) { // unaryType
+        return unaryType;
     } else {
-        if (context->children[1]->getText() == "&") { // typeExpr '&' typeExpr
+        if (context->children[1]->getText() == "&") { // typeExpr '&' unaryType
             type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
-            type_ptr_t rhs = type;
+            type_ptr_t rhs = unaryType;
             if (lhs->code() != TypeCode::DICT) {
                 const auto &token = context->getStart();
                 throw BuildException("The left-hand side of '&' must be a dict type", token);
@@ -1512,9 +1502,9 @@ std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) 
             }
             return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) &
                                                    dynamic_cast<DictType &>(*rhs.get()));
-        } else { // typeExpr '|' typeExpr
+        } else { // typeExpr '|' unaryType
             type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
-            type_ptr_t rhs = type;
+            type_ptr_t rhs = unaryType;
             if (lhs->code() == TypeCode::DICT && rhs->code() == TypeCode::DICT) {
                 return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) |
                                                        dynamic_cast<DictType &>(*rhs.get()));
@@ -1526,7 +1516,28 @@ std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) 
 };
 
 /*
-type
+unaryType
+    : atomType ('[' INTEGER? ']')*
+    ;
+*/
+std::any ASTConstructor::visitUnaryType(OpenCMLParser::UnaryTypeContext *context) {
+    debug(0) << "visitUnaryType" << std::endl;
+    type_ptr_t atomType = std::any_cast<type_ptr_t>(visitAtomType(context->atomType()));
+    for (size_t i = 1; i < context->children.size(); i++) {
+        if (context->children[i]->getText() == "[") {
+            const auto &size = context->children[i + 1]->getText();
+            if (size == "]") {
+                atomType = std::dynamic_pointer_cast<Type>(std::make_shared<ArrayType>(atomType));
+            } else {
+                atomType = std::dynamic_pointer_cast<Type>(std::make_shared<VectorType>(atomType, std::stoi(size)));
+            }
+        }
+    }
+    return atomType;
+};
+
+/*
+atomType
     : primType
     | structType
     | specialType
@@ -1535,8 +1546,8 @@ type
     | lambdaType
     ;
 */
-std::any ASTConstructor::visitType(OpenCMLParser::TypeContext *context) {
-    debug(0) << "visitType: " << context->getAltNumber() << std::endl;
+std::any ASTConstructor::visitAtomType(OpenCMLParser::AtomTypeContext *context) {
+    debug(0) << "visitAtomType: " << context->getAltNumber() << std::endl;
     switch (context->getAltNumber()) {
     case 1: // primType
         return visitPrimType(context->primType());
