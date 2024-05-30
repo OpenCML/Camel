@@ -24,4 +24,6 @@
 // let a = b;
 // let b = c + d;
 
-use [Const, Ground, Sub] = b;
+// use [Const, Ground, Sub] = b;
+
+(()=>a+b)();

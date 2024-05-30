@@ -547,13 +547,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     const auto funcTypeNode = createAstNode<TypeNode>(funcType);
     const auto funcNode = createAstNode<FunctorNode>();
     *funcNode << funcTypeNode << bodyNode;
-    ast_ptr_t newRefNode = createAstNode<NewRefNode>(std::to_string(indentIndex_++));
-    *newRefNode << funcNode;
-    ast_ptr_t linkNode = createAstNode<LinkNode>();
-    entity_ptr_t entity = std::make_shared<Entity>(voidTypePtr, nullptr);
-    ast_ptr_t dataNode = createAstNode<DataNode>(entity);
-    *linkNode << newRefNode << dataNode;
-    return linkNode;
+    return funcNode;
 };
 
 /*
