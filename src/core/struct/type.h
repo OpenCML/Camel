@@ -233,7 +233,12 @@ class DictType : public StructType {
         }
         std::string result = "{ ";
         for (const auto &field : fields_) {
-            result += field.first + ": " + field.second->toString() + ", ";
+            result += field.first + ": ";
+            if (field.second) {
+                result += field.second->toString() + ", ";
+            } else {
+                result += "NULL, ";
+            }
         }
         result.pop_back();
         result.pop_back();

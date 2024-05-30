@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <antlr4-runtime.h>
 #include <exception>
 #include <string>
 
@@ -26,6 +27,9 @@ class BuildException : public std::exception {
     std::string message;
 
   public:
-    BuildException(const std::string &msg) : message(msg) {}
+    BuildException(const std::string &msg, antlr4::Token *token) {
+        message = "line " + std::to_string(token->getLine()) + ", column " +
+                  std::to_string(token->getCharPositionInLine()) + ": " + msg;
+    }
     const char *what() const noexcept override { return message.c_str(); }
 };

@@ -222,6 +222,10 @@ const std::string DictValue::toString() const {
     for (const auto &e : data_) {
         str += e.first + ": " + e.second->dataStr() + ", ";
     }
+    if (data_.size() > 0) {
+        str.pop_back();
+        str.pop_back();
+    }
     str += "}";
     return str;
 }

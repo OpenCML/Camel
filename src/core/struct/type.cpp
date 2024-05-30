@@ -771,5 +771,5 @@ void initTypes() {
     // initialize special types
     anyTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::ANY));
     voidTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::VOID));
-    functorTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<FunctorType>(nullptr, nullptr, nullptr));
+    functorTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<FunctorType>(nullptr, nullptr, anyTypePtr));
 }

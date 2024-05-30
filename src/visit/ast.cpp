@@ -24,14 +24,23 @@
 
 #define DEBUG_LEVEL -1
 
-entity_ptr_t ASTConstructor::extractEntity(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
-    // TODO: better name for dangling
+entity_ptr_t ASTConstructor::extractStaticEntity(const ast_ptr_t &node) {
     if (node->type() == SemNodeType::DATA) {
         const auto dataNode = std::dynamic_pointer_cast<const DataNode>(node->data);
         return dataNode->entity();
     } else if (node->type() == SemNodeType::DREF) {
         const auto refNode = std::dynamic_pointer_cast<const DeRefNode>(node->data);
-        return std::make_shared<DanglingEntity>(refNode->ident());
+        return std::dynamic_pointer_cast<Entity>(std::make_shared<DanglingEntity>(refNode->ident()));
+    } else {
+        return nullptr;
+    }
+}
+
+entity_ptr_t ASTConstructor::extractEntity(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
+    // TODO: better name for dangling
+    const entity_ptr_t entity = extractStaticEntity(node);
+    if (entity) {
+        return entity;
     } else {
         dangling = true;
         auto [refNode, refEntity] = makeDanglingPair(node);
@@ -162,7 +171,8 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
     case 2: // bracedIdents
     {
         if (type) {
-            throw BuildException("Type cannot be specified for multiple identifiers");
+            const auto &token = context->getStart();
+            throw BuildException("Type cannot be specified for multiple identifiers", token);
         }
         const std::vector<std::string> &idents = std::any_cast<std::vector<std::string>>(carrier);
         ast_ptr_t execNode = createAstNode<ExecuteNode>();
@@ -186,7 +196,8 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
     case 3: // bracketIdents
     {
         if (type) {
-            throw BuildException("Type cannot be specified for multiple identifiers");
+            const auto &token = context->getStart();
+            throw BuildException("Type cannot be specified for multiple identifiers", token);
         }
         const std::vector<std::string> &idents = std::any_cast<std::vector<std::string>>(carrier);
         ast_ptr_t execNode = createAstNode<ExecuteNode>();
@@ -365,7 +376,7 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
         const auto returnType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
         funcType = std::make_shared<FunctorType>(withType, paramsType, returnType);
     } else {
-        funcType = std::make_shared<FunctorType>(withType, paramsType, nullptr);
+        funcType = std::make_shared<FunctorType>(withType, paramsType, anyTypePtr);
     }
     const auto &modifiers = context->modifiers();
     if (modifiers) {
@@ -404,7 +415,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     const auto &stmtList = context->stmtList();
     if (stmtList) {
         bodyNode = std::any_cast<ast_ptr_t>(visitStmtList(stmtList));
-        funcType = std::make_shared<FunctorType>(nullptr, nullptr, nullptr);
+        funcType = std::make_shared<FunctorType>(nullptr, nullptr, anyTypePtr);
     } else {
         const auto &params = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>>>(
             visitParentParams(context->parentParams()));
@@ -417,7 +428,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
             const auto returnType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
             funcType = std::make_shared<FunctorType>(nullptr, paramsType, returnType);
         } else {
-            funcType = std::make_shared<FunctorType>(nullptr, paramsType, nullptr);
+            funcType = std::make_shared<FunctorType>(nullptr, paramsType, anyTypePtr);
         }
         const auto &stmts = context->bracedStmts();
         if (stmts) {
@@ -532,12 +543,11 @@ std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *c
     entity_ptr_t defaultValue = nullptr;
     if (context->entityExpr()) {
         const auto defaultNode = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
-        if (defaultNode->type() == SemNodeType::DATA) {
-            debug(0) << "DATA" << std::endl;
-            const auto dataNode = std::dynamic_pointer_cast<const DataNode>(defaultNode->data);
-            defaultValue = dataNode->entity();
-        } else {
-            throw BuildException("Default value must be primitive");
+        defaultValue = extractStaticEntity(defaultNode);
+        if (!defaultValue) {
+            const auto &exprToken = context->entityExpr()->getStart();
+            // TODO shouldn't throw exception here
+            throw BuildException("Default value must not be expressions", exprToken);
         }
     }
     // TODO: implement the support for annotation
@@ -1387,10 +1397,12 @@ std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) 
             type_ptr_t lhs = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
             type_ptr_t rhs = type;
             if (lhs->code() != TypeCode::DICT) {
-                throw BuildException("The left-hand side of '&' must be a dict type");
+                const auto &token = context->getStart();
+                throw BuildException("The left-hand side of '&' must be a dict type", token);
             }
             if (rhs->code() != TypeCode::DICT) {
-                throw BuildException("The right-hand side of '&' must be a dict type");
+                const auto &token = context->getStart();
+                throw BuildException("The right-hand side of '&' must be a dict type", token);
             }
             return std::dynamic_pointer_cast<Type>(dynamic_cast<DictType &>(*lhs.get()) &
                                                    dynamic_cast<DictType &>(*rhs.get()));
@@ -1437,7 +1449,8 @@ std::any ASTConstructor::visitType(OpenCMLParser::TypeContext *context) {
         const auto &ident = std::any_cast<std::string>(visitIdentRef(context->identRef()));
         const auto &type = typeScope_->at(ident);
         if (!type.has_value()) {
-            throw BuildException("Type '" + ident + "' is not defined");
+            const auto &token = context->getStart();
+            throw BuildException("Type '" + ident + "' is not defined", token);
         }
         return type.value();
     } break;
@@ -1472,15 +1485,10 @@ std::any ASTConstructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *conte
         const auto &superParams = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, ast_ptr_t>>>(
             visitPairedParams(pairedParamsList[0]));
         for (const auto &[name, type, valueNode] : superParams) {
-            entity_ptr_t value = nullptr;
-            if (valueNode) { // valueNode may be nullptr
-                if (valueNode->type() == SemNodeType::DATA) {
-                    debug(0) << "DATA" << std::endl;
-                    const auto dataNode = std::dynamic_pointer_cast<const DataNode>(valueNode->data);
-                    value = dataNode->entity();
-                } else {
-                    throw std::runtime_error("Default values for a functor must be primitive");
-                }
+            entity_ptr_t value = extractStaticEntity(valueNode);
+            if (!valueNode) {
+                const auto &token = context->getStart();
+                throw BuildException("Default values for a functor must not be expressions", token);
             }
             withType->add(name, type, value);
         }
@@ -1708,14 +1716,15 @@ specialType
 */
 std::any ASTConstructor::visitSpecialType(OpenCMLParser::SpecialTypeContext *context) {
     debug(0) << "visitSpecialType" << std::endl;
-    switch (context->getAltNumber()) {
-    case 1: // ANY_TYPE
+    const auto &tokenType = context->getStart()->getType();
+    switch (tokenType) {
+    case OpenCMLLexer::ANY_TYPE: // ANY_TYPE
         return anyTypePtr;
         break;
-    case 2: // VOID_TYPE
+    case OpenCMLLexer::VOID_TYPE: // VOID_TYPE
         return voidTypePtr;
         break;
-    case 3: // FUNCTOR_TYPE
+    case OpenCMLLexer::FUNCTOR_TYPE: // FUNCTOR_TYPE
         return functorTypePtr;
         break;
 
