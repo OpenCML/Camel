@@ -68,14 +68,6 @@ int main(int argc, char *argv[]) {
         auto interpreter = parser.getInterpreter<atn::ParserATNSimulator>();
         tree::ParseTree *tree = nullptr;
 
-        if (dumpTokens) {
-            for (auto &token : tokens.getTokens()) {
-                os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3) << std::right
-                   << token->getLine() << ":" << std::setw(3) << std::left << token->getCharPositionInLine() << "] ("
-                   << token->getChannel() << ") : " << token->getText() << std::endl;
-            }
-        }
-
         try {
             interpreter->setPredictionMode(atn::PredictionMode::SLL);
             parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
@@ -110,26 +102,13 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        if (dumpCST) {
-            auto visitor = CSTDumpVisitor();
-            visitor.visit(tree);
-        }
-
-        if (dumpAST) {
-            initTypes();
-            ast_ptr_t ast = nullptr;
-            auto visitor = ASTConstructor();
-            try {
-                ast = visitor.construct(tree);
-            } catch (std::exception &e) {
-                error << "AST construction failed: " << e.what() << std::endl;
-                return 1;
+        if (dumpTokens) {
+            for (auto &token : tokens.getTokens()) {
+                os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3) << std::right
+                   << token->getLine() << ":" << std::setw(3) << std::left << token->getCharPositionInLine() << "] ("
+                   << token->getChannel() << ") : " << token->getText() << std::endl;
             }
-            ast->print();
-        }
-
-        if (dumpGIR) {
-            _dumpGIR();
+            return 0;
         }
 
         if (format) {
@@ -138,6 +117,33 @@ int main(int argc, char *argv[]) {
             const std::string formattedCode = std::any_cast<std::string>(formatter.visit(tree));
 
             os << formattedCode;
+            return 0;
+        }
+
+        if (dumpCST) {
+            auto visitor = CSTDumpVisitor();
+            visitor.visit(tree);
+            return 0;
+        }
+
+        initTypes();
+        ast_ptr_t ast = nullptr;
+        auto visitor = ASTConstructor();
+        try {
+            ast = visitor.construct(tree);
+        } catch (std::exception &e) {
+            error << "AST construction failed: " << e.what() << std::endl;
+            return 1;
+        }
+
+        if (dumpAST) {
+            ast->print();
+            return 0;
+        }
+
+        if (dumpGIR) {
+            _dumpGIR();
+            return 0;
         }
 
         if (profile) {

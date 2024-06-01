@@ -1581,7 +1581,7 @@ std::any ASTConstructor::visitAtomType(OpenCMLParser::AtomTypeContext *context) 
         break;
 
     default:
-        break;
+        throw std::runtime_error("Unknown atom type");
     }
 };
 

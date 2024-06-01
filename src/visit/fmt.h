@@ -29,11 +29,11 @@ class Formatter : public OpenCMLVisitor {
     enum class QuotePreference { Single, Double };
     enum class CommentPreference { Hash, Slash };
 
-    bool compact = false;
+    // bool compact = false;
+    // unsigned int threshold = 80;
     std::string indent = "    ";
     std::string currentIndent = "";
     std::string newline = "\r\n";
-    unsigned int threshold = 80;
     QuotePreference quotePrefer = QuotePreference::Single;
     CommentPreference cmtPrefer = CommentPreference::Slash;
 

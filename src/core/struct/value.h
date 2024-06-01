@@ -168,6 +168,7 @@ template <typename T> class PrimValue : public Value {
         } catch (const std::exception &e) {
             throw ValueConvError(e.what());
         }
+        throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     }
     virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimValue<T>>(data_); }
     virtual const std::string toString() const override { return std::to_string(data_); }
@@ -206,6 +207,7 @@ class StringValue : public Value {
         } catch (const std::exception &e) {
             throw ValueConvError(e.what());
         }
+        throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     }
     virtual const value_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
     virtual const std::string toString() const override {
@@ -220,7 +222,7 @@ class StructValue : public Value {
     StructValue(type_ptr_t type) : Value(type) {}
     virtual ~StructValue() = default;
 
-    virtual bool resolved() = 0;
+    virtual bool resolved() override = 0;
     virtual const value_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
     virtual const value_ptr_t clone(bool deep = false) const override = 0;
     virtual const std::string toString() const override = 0;
