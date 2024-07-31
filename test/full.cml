@@ -49,7 +49,7 @@ nf->ident[1]->fn;
 ident[1][id]->fn;
 a->b->c;
 
-use { Const, Ground, Sub } from 'phot/units' as Any;
+use { Const, Ground, Sub } from<xml> 'phot/units' as Any;
 use { Rx_El_mQAM_BER, Tx_El_mQAM } from 'phot/tr';
 
 type ElSignal = {
@@ -71,6 +71,8 @@ let Power = {
     dcOutput: ElSignal,
     powerOutput: ElSignal
 };
+
+let a = a;
 
 @[14, 7]
 @{ boxed: true, color: 'blue' }

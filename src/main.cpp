@@ -131,9 +131,27 @@ int main(int argc, char *argv[]) {
         auto visitor = ASTConstructor();
         try {
             ast = visitor.construct(tree);
+        } catch (BuildException &e) {
+            if (errorFormat != "json") {
+                error << e.what() << std::endl;
+                return 1;
+            } else {
+                os << e.json() << std::endl;
+                return 0;
+            }
         } catch (std::exception &e) {
-            error << "AST construction failed: " << e.what() << std::endl;
-            return 1;
+            if (errorFormat != "json") {
+                error << "AST construction failed: " << e.what() << std::endl;
+                return 1;
+            } else {
+                os << "{"
+                   << "\"filename\": \"" << targetFile << "\", "
+                   << "\"line\": 0, "
+                   << "\"column\": 0, "
+                   << "\"message\": \"AST construction failed: " << e.what() << "\""
+                   << "}" << std::endl;
+                return 0;
+            }
         }
 
         if (dumpAST) {
