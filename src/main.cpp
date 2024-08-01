@@ -25,6 +25,7 @@
 #include "antlr4-runtime.h"
 
 #include "config.h"
+#include "core/error/error.h"
 #include "core/error/json.h"
 #include "core/struct/type.h"
 #include "utils/log.h"
@@ -35,6 +36,8 @@
 
 using namespace antlr4;
 
+// #define DEBUG_LEVEL 1
+
 int main(int argc, char *argv[]) {
     if (!parseArgs(argc, argv))
         return 0;
@@ -44,6 +47,8 @@ int main(int argc, char *argv[]) {
     std::chrono::high_resolution_clock::time_point startTime, endTime;
 
     while (repeat--) {
+        bool hasParseError = false;
+
         if (profile) {
             startTime = std::chrono::high_resolution_clock::now();
         }
@@ -67,6 +72,7 @@ int main(int argc, char *argv[]) {
         OpenCMLParser parser(&tokens);
         auto interpreter = parser.getInterpreter<atn::ParserATNSimulator>();
         tree::ParseTree *tree = nullptr;
+        parser.removeErrorListeners();
 
         try {
             interpreter->setPredictionMode(atn::PredictionMode::SLL);
@@ -75,16 +81,18 @@ int main(int argc, char *argv[]) {
         } catch (ParseCancellationException &e) {
             debug(1) << "Parse failed, retrying with LL mode" << std::endl;
 
-            parser.removeErrorListeners();
+            CamelErrorListener *listener = nullptr;
 
             if (errorFormat == "text") {
-                parser.addErrorListener(new ConsoleErrorListener());
+                listener = new CamelErrorListener(targetFile, os);
             } else if (errorFormat == "json") {
-                parser.addErrorListener(new JSONErrorListener(targetFile, os));
+                listener = new JSONErrorListener(targetFile, os);
             } else {
                 error << "Unknown error format: " << errorFormat << std::endl;
                 return 1;
             }
+
+            parser.addErrorListener(listener);
 
             parser.reset();
             tokens.reset();
@@ -97,6 +105,9 @@ int main(int argc, char *argv[]) {
                 error << "Parse failed" << std::endl;
                 return 1;
             }
+
+            hasParseError = listener->hasErrors();
+
         } catch (std::exception &e) {
             error << "Parse failed" << std::endl;
             return 1;
@@ -111,7 +122,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        if (format) {
+        if (format && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
 
             const std::string formattedCode = std::any_cast<std::string>(formatter.visit(tree));
@@ -126,42 +137,44 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        initTypes();
-        ast_ptr_t ast = nullptr;
-        auto visitor = ASTConstructor();
-        try {
-            ast = visitor.construct(tree);
-        } catch (BuildException &e) {
-            if (errorFormat != "json") {
-                error << e.what() << std::endl;
-                return 1;
-            } else {
-                os << e.json() << std::endl;
+        if (!hasParseError) {
+            initTypes();
+            ast_ptr_t ast = nullptr;
+            auto visitor = ASTConstructor();
+            try {
+                ast = visitor.construct(tree);
+            } catch (BuildException &e) {
+                if (errorFormat != "json") {
+                    error << e.what() << std::endl;
+                    return 1;
+                } else {
+                    os << e.json() << std::endl;
+                    return 0;
+                }
+            } catch (std::exception &e) {
+                if (errorFormat != "json") {
+                    error << "AST construction failed: " << e.what() << std::endl;
+                    return 1;
+                } else {
+                    os << "{"
+                       << "\"filename\": \"" << targetFile << "\", "
+                       << "\"line\": 0, "
+                       << "\"column\": 0, "
+                       << "\"message\": \"AST construction failed: " << e.what() << "\""
+                       << "}" << std::endl;
+                    return 0;
+                }
+            }
+
+            if (dumpAST) {
+                ast->print();
                 return 0;
             }
-        } catch (std::exception &e) {
-            if (errorFormat != "json") {
-                error << "AST construction failed: " << e.what() << std::endl;
-                return 1;
-            } else {
-                os << "{"
-                   << "\"filename\": \"" << targetFile << "\", "
-                   << "\"line\": 0, "
-                   << "\"column\": 0, "
-                   << "\"message\": \"AST construction failed: " << e.what() << "\""
-                   << "}" << std::endl;
+
+            if (dumpGIR) {
+                _dumpGIR();
                 return 0;
             }
-        }
-
-        if (dumpAST) {
-            ast->print();
-            return 0;
-        }
-
-        if (dumpGIR) {
-            _dumpGIR();
-            return 0;
         }
 
         if (profile) {

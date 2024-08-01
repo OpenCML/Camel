@@ -1,1 +1,32 @@
-let a = 1;
+type Signal = Vector<Int, 2>;
+
+// 实体表达式
+let signal1: Signal = [1, 2];
+let signal2: Signal = [3, 4];
+
+// 函子表达式
+func process(signals: Signal[]): Void {
+    // 函子调用
+    let res1 = signals[0]->comp1->comp2;
+    res1[0]->analyzer1;
+    let res2 = signals[1]->comp3;
+    [res1[1], res2]->add->analyzer2;
+};
+
+// 可视化注解
+@{ x: 3, y: 1, style: 'bold', color: 'red' }
+'''
+Impact of System Noise and Nonlinearities on a 16-QAM Signal in a Radio-over-Fiber Transmission
+''';
+
+'''
+The relative constellation ...
+'''@{ x: 2, y: 3, style: 'alert-info' };
+
+@{ boxed: true, color: 'blue' }
+func SignalGenEl(): Signal {
+    'Electrical domain'@[10, 0];
+    let linearSignal: Signal = Rx_El_mQAM_BER->PowerControlEl->Linearizer;
+    let dcSource = DC_Source<{ a: 0.5`V` }>;
+    return [linearSignal, dcSource]->AddSignalsEl;
+};
