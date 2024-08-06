@@ -192,7 +192,9 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) { return dumpCST(context, "TypeExpr"); };
 
-    std::any visitType(OpenCMLParser::TypeContext *context) { return dumpCST(context, "Type"); };
+    std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context) { return dumpCST(context, "UnaryType"); };
+
+    std::any visitAtomType(OpenCMLParser::AtomTypeContext *context) { return dumpCST(context, "AtomType"); };
 
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) { return dumpCST(context, "LambdaType"); };
 

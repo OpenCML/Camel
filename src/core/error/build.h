@@ -22,14 +22,37 @@
 #include <exception>
 #include <string>
 
+extern std::string tmpMessage;
+
 class BuildException : public std::exception {
   private:
     std::string message;
+    size_t line;
+    size_t column;
 
   public:
     BuildException(const std::string &msg, antlr4::Token *token) {
-        message = "line " + std::to_string(token->getLine()) + ", column " +
-                  std::to_string(token->getCharPositionInLine()) + ": " + msg;
+        line = token->getLine();
+        column = token->getCharPositionInLine();
+        message = msg;
     }
-    const char *what() const noexcept override { return message.c_str(); }
+    const char *what() const noexcept override {
+        tmpMessage = "line " + std::to_string(line) + ", column " + std::to_string(column) + ": " + message;
+        return tmpMessage.c_str();
+    }
+
+    const char *json() const noexcept {
+        tmpMessage = "{"
+                     "\"line\": " +
+                     std::to_string(line) +
+                     ", "
+                     "\"column\": " +
+                     std::to_string(column) +
+                     ", "
+                     "\"message\": \"" +
+                     message +
+                     "\""
+                     "}";
+        return tmpMessage.c_str();
+    }
 };

@@ -797,40 +797,45 @@ std::any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) {
 
 /*
 typeExpr
-    : type ('[' INTEGER? ']')*
-    | typeExpr '&' type
-    | typeExpr '|' type
+    : unaryType
+    | typeExpr '&' unaryType
+    | typeExpr '|' unaryType
     ;
 */
 std::any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
     if (context->getAltNumber() == 1) {
-        if (context->children.size() == 1) {
-            return std::any_cast<std::string>(visitType(context->type()));
-        } else {
-            std::string result = std::any_cast<std::string>(visitType(context->type()));
-            for (size_t i = 1; i < context->children.size(); i++) {
-                const std::string &text = context->children[i]->getText();
-                if (text == "[") {
-                    result += "[";
-                    if (context->children[i + 1]->getText() != "]") {
-                        result += context->children[i + 1]->getText();
-                    }
-                    result += "]";
-                }
-            }
-            return result;
-        }
+        return std::any_cast<std::string>(visitUnaryType(context->unaryType()));
     } else {
         std::string result;
         result += std::any_cast<std::string>(visitTypeExpr(context->typeExpr())) + " " +
                   context->children[1]->getText() + " " +
-                  std::any_cast<std::string>(visitType(context->type()));
+                  std::any_cast<std::string>(visitUnaryType(context->unaryType()));
         return result;
     }
 };
 
 /*
-type
+unaryType
+    : atomType ('[' INTEGER? ']')*
+    ;
+*/
+std::any Formatter::visitUnaryType(OpenCMLParser::UnaryTypeContext *context) {
+    std::string result = std::any_cast<std::string>(visitAtomType(context->atomType()));
+    for (size_t i = 1; i < context->children.size(); i++) {
+        const std::string &text = context->children[i]->getText();
+        if (text == "[") {
+            result += "[";
+            if (context->children[i + 1]->getText() != "]") {
+                result += context->children[i + 1]->getText();
+            }
+            result += "]";
+        }
+    }
+    return result;
+};
+
+/*
+atomType
     : primType
     | structType
     | specialType
@@ -839,7 +844,7 @@ type
     | lambdaType
     ;
 */
-std::any Formatter::visitType(OpenCMLParser::TypeContext *context) {
+std::any Formatter::visitAtomType(OpenCMLParser::AtomTypeContext *context) {
     if (context->getAltNumber() == 5) {
         return "(" + std::any_cast<std::string>(visitTypeExpr(context->typeExpr())) + ")";
     } else {

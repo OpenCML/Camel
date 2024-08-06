@@ -62,9 +62,9 @@ public:
     RuleAngledValues = 34, RuleMemberAccess = 35, RulePrimEntity = 36, RuleEntityChain = 37, 
     RuleEntityLink = 38, RuleEntityUnit = 39, RuleEntityWith = 40, RuleEntityExpr = 41, 
     RuleRelaExpr = 42, RuleAddExpr = 43, RuleMultiExpr = 44, RuleUnaryExpr = 45, 
-    RulePrimExpr = 46, RuleLiteral = 47, RuleTypeExpr = 48, RuleType = 49, 
-    RuleLambdaType = 50, RulePrimType = 51, RuleStructType = 52, RuleSpecialType = 53, 
-    RuleIdentRef = 54
+    RulePrimExpr = 46, RuleLiteral = 47, RuleTypeExpr = 48, RuleUnaryType = 49, 
+    RuleAtomType = 50, RuleLambdaType = 51, RulePrimType = 52, RuleStructType = 53, 
+    RuleSpecialType = 54, RuleIdentRef = 55
   };
 
   explicit OpenCMLParser(antlr4::TokenStream *input);
@@ -144,7 +144,8 @@ public:
   class PrimExprContext;
   class LiteralContext;
   class TypeExprContext;
-  class TypeContext;
+  class UnaryTypeContext;
+  class AtomTypeContext;
   class LambdaTypeContext;
   class PrimTypeContext;
   class StructTypeContext;
@@ -870,9 +871,7 @@ public:
   public:
     TypeExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    TypeContext *type();
-    std::vector<antlr4::tree::TerminalNode *> INTEGER();
-    antlr4::tree::TerminalNode* INTEGER(size_t i);
+    UnaryTypeContext *unaryType();
     TypeExprContext *typeExpr();
 
 
@@ -882,9 +881,24 @@ public:
 
   TypeExprContext* typeExpr();
   TypeExprContext* typeExpr(int precedence);
-  class  TypeContext : public antlr4::RuleContextWithAltNum {
+  class  UnaryTypeContext : public antlr4::RuleContextWithAltNum {
   public:
-    TypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    UnaryTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    AtomTypeContext *atomType();
+    std::vector<antlr4::tree::TerminalNode *> INTEGER();
+    antlr4::tree::TerminalNode* INTEGER(size_t i);
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  UnaryTypeContext* unaryType();
+
+  class  AtomTypeContext : public antlr4::RuleContextWithAltNum {
+  public:
+    AtomTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrimTypeContext *primType();
     StructTypeContext *structType();
@@ -898,7 +912,7 @@ public:
    
   };
 
-  TypeContext* type();
+  AtomTypeContext* atomType();
 
   class  LambdaTypeContext : public antlr4::RuleContextWithAltNum {
   public:

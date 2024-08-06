@@ -29,11 +29,11 @@ class Formatter : public OpenCMLVisitor {
     enum class QuotePreference { Single, Double };
     enum class CommentPreference { Hash, Slash };
 
-    bool compact = false;
+    // bool compact = false;
+    // unsigned int threshold = 80;
     std::string indent = "    ";
     std::string currentIndent = "";
     std::string newline = "\r\n";
-    unsigned int threshold = 80;
     QuotePreference quotePrefer = QuotePreference::Single;
     CommentPreference cmtPrefer = CommentPreference::Slash;
 
@@ -338,7 +338,8 @@ class Formatter : public OpenCMLVisitor {
     std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context);
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
-    std::any visitType(OpenCMLParser::TypeContext *context);
+    std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context);
+    std::any visitAtomType(OpenCMLParser::AtomTypeContext *context);
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
     std::any visitPrimType(OpenCMLParser::PrimTypeContext *context);
     std::any visitStructType(OpenCMLParser::StructTypeContext *context);

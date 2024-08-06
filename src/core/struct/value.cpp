@@ -268,6 +268,7 @@ bool NamedTupleValue::setType(type_ptr_t type) {
     namedData_ = namedResult;
     type_ = type;
     typeResolved_ = true;
+    return true;
 }
 
 bool NamedTupleValue::add(const entity_ptr_t &e, const std::string &key) {

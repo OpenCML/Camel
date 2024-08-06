@@ -169,7 +169,8 @@ class ASTConstructor : public OpenCMLVisitor {
     std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context);
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
-    std::any visitType(OpenCMLParser::TypeContext *context);
+    std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context);
+    std::any visitAtomType(OpenCMLParser::AtomTypeContext *context);
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
     std::any visitPrimType(OpenCMLParser::PrimTypeContext *context);
     std::any visitStructType(OpenCMLParser::StructTypeContext *context);

@@ -21,7 +21,7 @@ use {a,b} from<psl> "haha";
 
 # text comment
 
-type test1 = Set<Map<String, { 
+type test1 = Set<Map <String, { 
     a: Number, 
     b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
 type test2 = (Array<String> | Union<Int, String>[])[1][2];

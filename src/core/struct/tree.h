@@ -80,7 +80,7 @@ template <typename data_t> class AbstractTreeNode : public tree_children_t<data_
     virtual std::string toString() const { return ""; }
 
     template <typename func_t> void foreach (func_t f) const {
-        auto nodeF = [=](tree_children_t<data_t>::const_reference ref) { f(*ref); };
+        auto nodeF = [=](typename tree_children_t<data_t>::const_reference ref) { f(*ref); };
         for_each(tree_children_t<data_t>::begin(), tree_children_t<data_t>::end(), nodeF);
     }
 
