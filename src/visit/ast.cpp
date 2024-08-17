@@ -1480,46 +1480,41 @@ literal
 */
 std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     debug(0) << "visitLiteral: " << context->getAltNumber() << std::endl;
-    type_ptr_t type = nullptr;
     value_ptr_t value = nullptr;
 
     switch (context->getAltNumber()) {
     case 1: // INTEGER UNIT?
-        type = int64TypePtr;
         value = std::dynamic_pointer_cast<Value>(
             std::make_shared<PrimValue<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
         break;
     case 2: // REAL UNIT?
-        type = doubleTypePtr;
         value = std::dynamic_pointer_cast<Value>(
             std::make_shared<PrimValue<double>>(parseNumber<double>(context->REAL()->getText())));
         break;
     case 3: // STRING
     {
-        type = stringTypePtr;
         const auto &text = context->STRING()->getText();
         value = std::dynamic_pointer_cast<Value>(std::make_shared<StringValue>(text.substr(1, text.size() - 2)));
     } break;
     case 4: // MULTI_STR
     {
-        type = stringTypePtr;
         const auto &text = context->MULTI_STR()->getText();
         value = std::dynamic_pointer_cast<Value>(std::make_shared<StringValue>(text.substr(3, text.size() - 6)));
     } break;
     case 5: // FSTRING
     {
-        type = stringTypePtr;
         // TODO: Implement FSTRING
         const auto &text = context->FSTRING()->getText();
         value = std::dynamic_pointer_cast<Value>(std::make_shared<StringValue>(text.substr(2, text.size() - 3)));
     } break;
     case 6: // TRUE
-        type = boolTypePtr;
         value = std::dynamic_pointer_cast<Value>(std::make_shared<PrimValue<bool>>(true));
         break;
     case 7: // FALSE
-        type = boolTypePtr;
         value = std::dynamic_pointer_cast<Value>(std::make_shared<PrimValue<bool>>(false));
+        break;
+    case 8: // NULL
+        value = std::dynamic_pointer_cast<Value>(std::make_shared<NullValue>());
         break;
 
     default:
