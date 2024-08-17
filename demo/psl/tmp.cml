@@ -1,0 +1,18 @@
+type Signal = Vector<Int, 2>;
+
+func process(signals: Signal[]): Void {
+    // 函子调用
+    let res1 = signals[0]->comp1->comp2;
+    res1[0]->analyzer1;
+    let res2 = signals[1]->comp3;
+    [res1[1], res2]->add->analyzer2;
+};
+
+func branch(cond: Bool): Bool {
+    if (cond) {
+        return true;
+    } else {
+        return false;
+    };
+    return false;
+};

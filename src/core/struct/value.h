@@ -38,7 +38,7 @@ class ValueConvError : public std::exception {
 
 class Value;
 using value_ptr_t = std::shared_ptr<Value>;
-
+ 
 class Value : public std::enable_shared_from_this<Value> {
   protected:
     type_ptr_t type_ = nullptr;
