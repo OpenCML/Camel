@@ -32,3 +32,5 @@ inline void _dumpGIR() {
         error << "Error dumping GIR" << std::endl;
     }
 }
+
+class GraphIRConstructor {};
