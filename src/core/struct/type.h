@@ -500,12 +500,7 @@ class VectorType : public StructType {
 
   public:
     VectorType(const type_ptr_t &elementType, size_t size)
-        : StructType(TypeCode::VECTOR), elementType_(elementType), size_(size) {
-        // element type must be a primitive type
-        if (!elementType->primitive()) {
-            throw std::invalid_argument("Vector element type must be primitive");
-        }
-    }
+        : StructType(TypeCode::VECTOR), elementType_(elementType), size_(size) {}
 
     size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
