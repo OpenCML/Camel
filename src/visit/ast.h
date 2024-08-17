@@ -109,16 +109,9 @@ class ASTConstructor : public OpenCMLVisitor {
     void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
 
-    std::pair<ast_ptr_t, entity_ptr_t> makeDanglingPair(const ast_ptr_t &expr) {
-        const std::string indent = std::to_string(indentIndex_++);
-        ast_ptr_t refNode = createAstNode<NewRefNode>(indent);
-        *refNode << expr;
-        entity_ptr_t entity = std::make_shared<DanglingEntity>(indent);
-        return std::make_pair(refNode, entity);
-    }
-
-    entity_ptr_t extractStaticEntity(const ast_ptr_t &node);
-    entity_ptr_t extractEntity(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
+    value_ptr_t extractStaticValue(const ast_ptr_t &node);
+    std::pair<ast_ptr_t, value_ptr_t> makeDanglingValue(const ast_ptr_t &expr);
+    std::pair<value_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
 
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
     std::any visitStmtList(OpenCMLParser::StmtListContext *context);

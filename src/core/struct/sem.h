@@ -20,6 +20,7 @@
 
 #include "entity.h"
 #include "functor.h"
+#include "value.h"
 
 class SemanticNode;
 using sem_ptr_t = std::shared_ptr<const SemanticNode>;
@@ -43,11 +44,17 @@ class SemanticNode {
 
 class DataNode : public SemanticNode {
   private:
-    entity_ptr_t entity_;
+    value_ptr_t value_;
+    value_vec_t unrefVals_;
 
   public:
-    DataNode(entity_ptr_t entity) : SemanticNode(SemNodeType::DATA), entity_(entity) {}
-    entity_ptr_t entity() const { return entity_; }
+    DataNode(value_ptr_t value, value_vec_t &&unrefVals)
+        : SemanticNode(SemNodeType::DATA), value_(value), unrefVals_(std::move(unrefVals)) {}
+    DataNode(value_ptr_t value, value_list_t unrefList = {})
+        : SemanticNode(SemNodeType::DATA), value_(value), unrefVals_(unrefList) {}
+    value_ptr_t value() const { return value_; }
+
+    value_vec_t &getUnrefVals() { return unrefVals_; }
 
     const std::string toString() const override;
 };

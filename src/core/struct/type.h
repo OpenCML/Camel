@@ -77,12 +77,28 @@ class VectorType;
 class TensorType;
 
 using type_ptr_t = std::shared_ptr<Type>;
+using type_wptr_t = std::weak_ptr<Type>;
+
+class Value;
+using value_ptr_t = std::shared_ptr<Value>;
+using value_wptr_t = std::weak_ptr<Value>;
+using value_lst_t = std::list<value_ptr_t>;
+using value_vec_t = std::vector<value_ptr_t>;
+using value_list_t = std::initializer_list<value_ptr_t>;
 
 class Entity;
 using entity_ptr_t = std::shared_ptr<Entity>;
+using entity_wptr_t = std::weak_ptr<Entity>;
+using entity_lst_t = std::list<entity_ptr_t>;
+using entity_vec_t = std::vector<entity_ptr_t>;
+using entity_list_t = std::initializer_list<entity_ptr_t>;
 
 class Functor;
-using functor_ptr_t = std::shared_ptr<const Functor>;
+using functor_ptr_t = std::shared_ptr<Functor>;
+using functor_wptr_t = std::weak_ptr<Functor>;
+using functor_lst_t = std::list<functor_ptr_t>;
+using functor_vec_t = std::vector<functor_ptr_t>;
+using functor_list_t = std::initializer_list<functor_ptr_t>;
 
 enum class FunctorModifier;
 
@@ -581,7 +597,7 @@ class ListType : public StructType {
 
 class NamedTupleType : public StructType {
   private:
-    std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>> elements_;
+    std::vector<std::tuple<std::string, type_ptr_t, value_ptr_t>> elements_;
 
   public:
     NamedTupleType() : StructType(TypeCode::NAMED_TUPLE) {}
@@ -591,7 +607,7 @@ class NamedTupleType : public StructType {
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
-    bool add(const std::string &key, const type_ptr_t &type, const entity_ptr_t &value = nullptr) {
+    bool add(const std::string &key, const type_ptr_t &type, const value_ptr_t &value = nullptr) {
         for (const auto &tuple : elements_) {
             if (std::get<0>(tuple) == key) {
                 return false;
@@ -602,7 +618,7 @@ class NamedTupleType : public StructType {
     }
 
     size_t size() const { return elements_.size(); }
-    const std::vector<std::tuple<std::string, type_ptr_t, entity_ptr_t>> &elements() const { return elements_; }
+    const std::vector<std::tuple<std::string, type_ptr_t, value_ptr_t>> &elements() const { return elements_; }
 
     std::unordered_map<std::string, type_ptr_t> map() const {
         auto result = std::unordered_map<std::string, type_ptr_t>();
