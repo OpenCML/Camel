@@ -12,28 +12,8 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 5, 2024
+ * Created: Aug. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
-
-#include "entity.h"
-#include "value.h"
-
-class Functor : Entity {
-    value_ptr_t input;
-    value_ptr_t output;
-
-  public:
-    Functor() = delete;
-    Functor(const value_ptr_t &input, const value_ptr_t &output, const value_ptr_t &with = nullptr)
-        : Entity(with), input(input), output(output) {}
-    virtual ~Functor() = default;
-
-    virtual void apply() = 0;
-};
-
-// definition below is forwarded to type.h
-// using functor_ptr_t = std::shared_ptr<Functor>;
-// using functor_wptr_t = std::weak_ptr<Functor>;
+#include "graph.h"

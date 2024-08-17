@@ -20,6 +20,7 @@
 
 #include "ast.h"
 #include "core/struct/token.h"
+#include "core/struct/function.h"
 #include "utils/log.h"
 
 #define DEBUG_LEVEL -1
@@ -480,7 +481,7 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     }
     const auto &modifiers = context->modifiers();
     if (modifiers) {
-        const auto &modSet = std::any_cast<std::set<FunctorModifier>>(visitModifiers(modifiers));
+        const auto &modSet = std::any_cast<std::set<FunctionModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
     const auto funcTypeNode = createAstNode<TypeNode>(std::dynamic_pointer_cast<Type>(funcType));
@@ -544,7 +545,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     }
     const auto &modifiers = context->modifiers();
     if (modifiers) {
-        const auto &modSet = std::any_cast<std::set<FunctorModifier>>(visitModifiers(modifiers));
+        const auto &modSet = std::any_cast<std::set<FunctionModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
     const auto funcTypeNode = createAstNode<TypeNode>(funcType);
@@ -602,7 +603,7 @@ modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 */
 std::any ASTConstructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     debug(0) << "visitModifiers" << std::endl;
-    std::set<FunctorModifier> modifiers;
+    std::set<FunctionModifier> modifiers;
     for (const auto &mod : context->children) {
         modifiers.insert(str2modifier(mod->getText()));
     }

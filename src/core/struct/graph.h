@@ -18,23 +18,67 @@
 
 #pragma once
 
-#include <list>
+#include "value.h"
+#include "operation.h"
+
 #include <any>
+#include <list>
+
+enum class NodeType { OPERATION, DATA, GRAPH };
 
 class Operation;
 class GraphNode;
 
+using node_ptr_t = std::shared_ptr<GraphNode>;
+using node_wptr_t = std::weak_ptr<GraphNode>;
+using node_lst_t = std::list<node_ptr_t>;
+
 class GraphNode {
-protected:
-    std::any data;
-    Operation* operation;
-    std::list<GraphNode*> inputs;
-    std::list<GraphNode*> outputs;
+  protected:
+    NodeType type;
+    node_lst_t inputs;
+    node_lst_t outputs;
     bool computed = false;
 
-public:
+  public:
     GraphNode() = default;
     virtual ~GraphNode() = default;
 
+    bool isComputed() const { return computed; }
+    void setComputed(bool value) { computed = value; }
+
     virtual void run() = 0;
+};
+
+class Graph : public GraphNode {
+    node_lst_t nodes;
+
+  public:
+    Graph() { type = NodeType::GRAPH; }
+    ~Graph() = default;
+
+    void run() override;
+};
+
+class DataNode : public GraphNode {
+    value_ptr_t data;
+
+  public:
+    DataNode(const value_ptr_t &data) : data(data) {
+        type = NodeType::DATA;
+        computed = true;
+    }
+    ~DataNode() = default;
+
+    void run() override;
+};
+
+class OperationNode : public GraphNode {
+    Operation *operation;
+
+  public:
+    OperationNode(Operation *operation) : operation(operation) { type = NodeType::OPERATION; }
+    ~OperationNode() = default;
+
+    void run() override;
 };
