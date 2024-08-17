@@ -17,6 +17,7 @@
  */
 
 #include "type.h"
+#include "value.h"
 #include "entity.h"
 #include "functor.h"
 
@@ -571,7 +572,7 @@ std::string NamedTupleType::toString() const {
         auto &[name, type, value] = tuple;
         result += name + ": " + type->toString();
         if (value) {
-            result += " = " + value->dataStr();
+            result += " = " + value->toString();
         }
         result += ", ";
     }
@@ -676,7 +677,7 @@ std::string FunctorType::toString() const {
             const auto &[name, type, value] = tuple;
             result += name + ": " + type->toString();
             if (value) {
-                result += " = " + value->dataStr();
+                result += " = " + value->toString();
             }
             result += ", ";
         }
@@ -694,7 +695,7 @@ std::string FunctorType::toString() const {
             const auto &[name, type, value] = tuple;
             result += name + ": " + type->toString();
             if (value) {
-                result += " = " + value->dataStr();
+                result += " = " + value->toString();
             }
             result += ", ";
         }

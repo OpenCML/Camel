@@ -44,8 +44,8 @@ class Functor : Entity {
 
   public:
     Functor() = delete;
-    Functor(const entity_ptr_t &input, const entity_ptr_t &output, const value_ptr_t &data = nullptr)
-        : Entity(nullptr, data), input(input), output(output) {}
+    Functor(const entity_ptr_t &input, const entity_ptr_t &output, const value_ptr_t &with = nullptr)
+        : Entity(with), input(input), output(output) {}
     virtual ~Functor() = default;
 
     template <typename T> void setFlag(bool value) {
@@ -66,6 +66,10 @@ class Functor : Entity {
 
     virtual void execute() = 0;
 };
+
+// definition below is forwarded to type.h
+// using functor_ptr_t = std::shared_ptr<Functor>;
+// using functor_wptr_t = std::weak_ptr<Functor>;
 
 class InnerFunctor : Functor {
   public:
