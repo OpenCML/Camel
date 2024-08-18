@@ -12,20 +12,8 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 10, 2024
+ * Created: Aug. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
-
-#include "value.h"
-
-class Graph;
-
-class Operation {
-  public:
-    Operation() = default;
-    virtual ~Operation() = default;
-
-    virtual bool operate(Graph& graph) = 0;
-};

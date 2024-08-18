@@ -18,15 +18,16 @@
 
 #pragma once
 
-#include "value.h"
 #include "operation.h"
+#include "value.h"
+
 
 #include <any>
 #include <list>
 
 enum class NodeType { OPERATION, DATA, GRAPH };
 
-class Operation;
+class Operator;
 class GraphNode;
 
 using node_ptr_t = std::shared_ptr<GraphNode>;
@@ -35,50 +36,51 @@ using node_lst_t = std::list<node_ptr_t>;
 
 class GraphNode {
   protected:
-    NodeType type;
-    node_lst_t inputs;
-    node_lst_t outputs;
-    bool computed = false;
+    NodeType type_;
+    node_lst_t inputs_;
+    node_lst_t outputs_;
 
   public:
     GraphNode() = default;
     virtual ~GraphNode() = default;
 
-    bool isComputed() const { return computed; }
-    void setComputed(bool value) { computed = value; }
+    NodeType type() const { return type_; }
 
-    virtual void run() = 0;
+    node_lst_t &inputs() { return inputs_; }
+    node_lst_t &outputs() { return outputs_; }
+
+    size_t inDegree() const { return inputs_.size(); }
+    size_t outDegree() const { return outputs_.size(); }
+
+    static void link(node_ptr_t &from, node_ptr_t &to) {
+        from->outputs().push_back(to);
+        to->inputs().push_back(from);
+    }
 };
 
 class Graph : public GraphNode {
     node_lst_t nodes;
 
   public:
-    Graph() { type = NodeType::GRAPH; }
+    Graph() { type_ = NodeType::GRAPH; }
     ~Graph() = default;
 
-    void run() override;
+    void addNode(const node_ptr_t &node) { nodes.push_back(node); }
+    void delNode(const node_ptr_t &node) { nodes.remove(node); }
 };
 
 class DataNode : public GraphNode {
     value_ptr_t data;
 
   public:
-    DataNode(const value_ptr_t &data) : data(data) {
-        type = NodeType::DATA;
-        computed = true;
-    }
+    DataNode(const value_ptr_t &data) : data(data) { type_ = NodeType::DATA; }
     ~DataNode() = default;
-
-    void run() override;
 };
 
 class OperationNode : public GraphNode {
-    Operation *operation;
+    Operator *operation;
 
   public:
-    OperationNode(Operation *operation) : operation(operation) { type = NodeType::OPERATION; }
+    OperationNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATION; }
     ~OperationNode() = default;
-
-    void run() override;
 };
