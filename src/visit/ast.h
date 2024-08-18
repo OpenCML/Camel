@@ -95,7 +95,7 @@ class ASTConstructor : public OpenCMLVisitor {
 
     ast_ptr_t construct(antlr4::tree::ParseTree *tree) {
         typeScope_->clear();
-        root_ = std::make_shared<ASTNode>(nullptr);
+        root_ = nullptr;
         root_->parent = nullptr;
         visit(tree);
         return root_;

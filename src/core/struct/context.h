@@ -18,8 +18,20 @@
 
 #pragma once
 
+#include <string>
+
+#include "scope.h"
+#include "value.h"
+
+using value_scope_t = scope_ptr_t<std::string, value_ptr_t>;
+
 class Context {
+    value_scope_t global_; 
+    value_scope_t scope_;
+
   public:
     Context() = default;
     virtual ~Context() = default;
 };
+
+using context_ptr_t = std::shared_ptr<Context>;

@@ -28,6 +28,6 @@ class Graph;
 
 using Operator = std::function<value_ptr_t(Context&, value_lst_t&&)>;
 
-extern std::unordered_map<std::string, Operator> operations;
+extern std::unordered_map<std::string, Operator> operators;
 
-void registerOperation(const std::string &name, Operator &&op);
+void registerOperator(const std::string &name, Operator &&op);

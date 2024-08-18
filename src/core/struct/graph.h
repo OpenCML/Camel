@@ -18,9 +18,8 @@
 
 #pragma once
 
-#include "operation.h"
+#include "operator.h"
 #include "value.h"
-
 
 #include <any>
 #include <list>
@@ -69,6 +68,8 @@ class Graph : public GraphNode {
     void delNode(const node_ptr_t &node) { nodes.remove(node); }
 };
 
+using graph_ptr_t = std::shared_ptr<Graph>;
+
 class DataNode : public GraphNode {
     value_ptr_t data;
 
@@ -77,10 +78,10 @@ class DataNode : public GraphNode {
     ~DataNode() = default;
 };
 
-class OperationNode : public GraphNode {
+class OperatorNode : public GraphNode {
     Operator *operation;
 
   public:
-    OperationNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATION; }
-    ~OperationNode() = default;
+    OperatorNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATION; }
+    ~OperatorNode() = default;
 };

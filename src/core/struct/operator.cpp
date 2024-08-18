@@ -17,3 +17,5 @@
  */
 
 #include "operator.h"
+
+std::unordered_map<std::string, Operator> operators;
