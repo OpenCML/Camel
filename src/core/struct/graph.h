@@ -18,23 +18,70 @@
 
 #pragma once
 
-#include <list>
-#include <any>
+#include "operator.h"
+#include "value.h"
 
-class Operation;
+#include <any>
+#include <list>
+
+enum class NodeType { OPERATION, DATA, GRAPH };
+
+class Operator;
 class GraphNode;
 
-class GraphNode {
-protected:
-    std::any data;
-    Operation* operation;
-    std::list<GraphNode*> inputs;
-    std::list<GraphNode*> outputs;
-    bool computed = false;
+using node_ptr_t = std::shared_ptr<GraphNode>;
+using node_wptr_t = std::weak_ptr<GraphNode>;
+using node_lst_t = std::list<node_ptr_t>;
 
-public:
+class GraphNode {
+  protected:
+    NodeType type_;
+    node_lst_t inputs_;
+    node_lst_t outputs_;
+
+  public:
     GraphNode() = default;
     virtual ~GraphNode() = default;
 
-    virtual void run() = 0;
+    NodeType type() const { return type_; }
+
+    node_lst_t &inputs() { return inputs_; }
+    node_lst_t &outputs() { return outputs_; }
+
+    size_t inDegree() const { return inputs_.size(); }
+    size_t outDegree() const { return outputs_.size(); }
+
+    static void link(node_ptr_t &from, node_ptr_t &to) {
+        from->outputs().push_back(to);
+        to->inputs().push_back(from);
+    }
+};
+
+class Graph : public GraphNode {
+    node_lst_t nodes;
+
+  public:
+    Graph() { type_ = NodeType::GRAPH; }
+    ~Graph() = default;
+
+    void addNode(const node_ptr_t &node) { nodes.push_back(node); }
+    void delNode(const node_ptr_t &node) { nodes.remove(node); }
+};
+
+using graph_ptr_t = std::shared_ptr<Graph>;
+
+class DataNode : public GraphNode {
+    value_ptr_t data;
+
+  public:
+    DataNode(const value_ptr_t &data) : data(data) { type_ = NodeType::DATA; }
+    ~DataNode() = default;
+};
+
+class OperatorNode : public GraphNode {
+    Operator *operation;
+
+  public:
+    OperatorNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATION; }
+    ~OperatorNode() = default;
 };

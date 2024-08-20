@@ -100,7 +100,7 @@ using functor_lst_t = std::list<functor_ptr_t>;
 using functor_vec_t = std::vector<functor_ptr_t>;
 using functor_list_t = std::initializer_list<functor_ptr_t>;
 
-enum class FunctorModifier;
+enum class FunctionModifier;
 
 class Type {
   protected:
@@ -631,7 +631,7 @@ class NamedTupleType : public StructType {
 
 class FunctorType : public SpecialType {
   private:
-    std::set<FunctorModifier> modifiers_;
+    std::set<FunctionModifier> modifiers_;
     std::shared_ptr<NamedTupleType> withType_;
     std::shared_ptr<NamedTupleType> paramsType_;
     type_ptr_t returnType_;
@@ -642,8 +642,8 @@ class FunctorType : public SpecialType {
                 const std::shared_ptr<NamedTupleType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
         : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
 
-    void addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
-    void setModifiers(const std::set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
+    void addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }
+    void setModifiers(const std::set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
 
     type_ptr_t withType() const { return std::dynamic_pointer_cast<Type>(withType_); }
     type_ptr_t paramsType() const { return std::dynamic_pointer_cast<Type>(paramsType_); }

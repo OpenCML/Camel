@@ -12,8 +12,22 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 5, 2024
+ * Created: Aug. 10, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "functor.h"
+#pragma once
+
+#include "value.h"
+#include "context.h"
+
+#include <unordered_map>
+#include <functional>
+
+class Graph;
+
+using Operator = std::function<value_ptr_t(Context&, value_lst_t&&)>;
+
+extern std::unordered_map<std::string, Operator> operators;
+
+void registerOperator(const std::string &name, Operator &&op);

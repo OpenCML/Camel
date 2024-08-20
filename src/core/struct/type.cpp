@@ -20,6 +20,7 @@
 #include "value.h"
 #include "entity.h"
 #include "functor.h"
+#include "function.h"
 
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;

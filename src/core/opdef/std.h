@@ -12,8 +12,10 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 5, 2024
+ * Created: Aug. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "functor.h"
+#pragma once
+
+#include "core/struct/operation.h"

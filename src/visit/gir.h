@@ -19,7 +19,12 @@
 #include <fstream>
 #include <iostream>
 
+#include "ast.h"
+#include "core/struct/context.h"
+#include "core/struct/graph.h"
+#include "core/struct/sem.h"
 #include "utils/log.h"
+
 
 inline void _dumpGIR() {
     std::ifstream file("D:\\Projects\\Camel\\demo\\feat\\gir.txt");
@@ -32,3 +37,17 @@ inline void _dumpGIR() {
         error << "Error dumping GIR" << std::endl;
     }
 }
+
+class GraphIRConstructor {
+  public:
+    GraphIRConstructor(context_ptr_t &context) : context_(context) {}
+
+    graph_ptr_t construct(ast_ptr_t &ast) { return nullptr; }
+
+  private:
+    context_ptr_t context_;
+
+    value_ptr_t visitDataNode(DataNode *node) {
+        return nullptr;
+    }
+};
