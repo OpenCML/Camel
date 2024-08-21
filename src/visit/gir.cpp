@@ -17,3 +17,23 @@
  */
 
 #include "gir.h"
+
+node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &node) {}
+
+func_ptr_t GraphIRConstructor::visitFuncNode(const ast_ptr_t &node) {}
+
+void GraphIRConstructor::visitTypeNode(const ast_ptr_t &node) {}
+
+void GraphIRConstructor::visitNewRefNode(const ast_ptr_t &node) {}
+
+entity_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &node) {}
+
+void GraphIRConstructor::visitAssignNode(const ast_ptr_t &node) {}
+
+void GraphIRConstructor::visitAnnoNode(const ast_ptr_t &node) {}
+
+node_ptr_t GraphIRConstructor::visitLinkNode(const ast_ptr_t &node) {}
+
+func_ptr_t GraphIRConstructor::visitWithNode(const ast_ptr_t &node) {}
+
+func_ptr_t GraphIRConstructor::visitReturnNode(const ast_ptr_t &node) {}

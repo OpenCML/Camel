@@ -70,10 +70,10 @@ class TypeNode : public SemanticNode {
     const std::string toString() const override;
 };
 
-class FunctorNode : public SemanticNode {
+class FunctionNode : public SemanticNode {
   private:
   public:
-    FunctorNode() : SemanticNode(SemNodeType::FUNC) {}
+    FunctionNode() : SemanticNode(SemNodeType::FUNC) {}
 
     // const std::string toString() const override;
 };

@@ -485,7 +485,7 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
         funcType->setModifiers(modSet);
     }
     const auto funcTypeNode = createAstNode<TypeNode>(std::dynamic_pointer_cast<Type>(funcType));
-    const auto funcNode = createAstNode<FunctorNode>();
+    const auto funcNode = createAstNode<FunctionNode>();
     *funcNode << funcTypeNode << std::any_cast<ast_ptr_t>(visitBracedStmts(context->bracedStmts()));
 
     ast_ptr_t newRefNode = createAstNode<NewRefNode>(ident);
@@ -549,7 +549,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
         funcType->setModifiers(modSet);
     }
     const auto funcTypeNode = createAstNode<TypeNode>(funcType);
-    const auto funcNode = createAstNode<FunctorNode>();
+    const auto funcNode = createAstNode<FunctionNode>();
     *funcNode << funcTypeNode << bodyNode;
     return funcNode;
 };

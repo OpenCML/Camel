@@ -20,9 +20,11 @@
 #include <iostream>
 
 #include "ast.h"
+#include "core/struct/function.h"
 #include "core/struct/context.h"
 #include "core/struct/graph.h"
 #include "core/struct/sem.h"
+#include "core/struct/entity.h"
 #include "utils/log.h"
 
 
@@ -47,7 +49,14 @@ class GraphIRConstructor {
   private:
     context_ptr_t context_;
 
-    value_ptr_t visitDataNode(DataNode *node) {
-        return nullptr;
-    }
+    node_ptr_t visitDataNode(const ast_ptr_t &node);
+    func_ptr_t visitFuncNode(const ast_ptr_t &node);
+    void visitTypeNode(const ast_ptr_t &node);
+    void visitNewRefNode(const ast_ptr_t &node);
+    entity_ptr_t visitDeRefNode(const ast_ptr_t &node);
+    void visitAssignNode(const ast_ptr_t &node);
+    void visitAnnoNode(const ast_ptr_t &node);
+    node_ptr_t visitLinkNode(const ast_ptr_t &node);
+    func_ptr_t visitWithNode(const ast_ptr_t &node);
+    func_ptr_t visitReturnNode(const ast_ptr_t &node);
 };

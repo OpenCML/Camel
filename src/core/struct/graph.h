@@ -19,12 +19,13 @@
 #pragma once
 
 #include "operator.h"
+#include "function.h"
 #include "value.h"
 
 #include <any>
 #include <list>
 
-enum class NodeType { OPERATION, DATA, GRAPH };
+enum class NodeType { OPERATOR, DATA, FUNCTOR, GRAPH };
 
 class Operator;
 class GraphNode;
@@ -78,10 +79,23 @@ class DataNode : public GraphNode {
     ~DataNode() = default;
 };
 
+class FunctionNode:public GraphNode{
+    func_ptr_t func;
+    node_ptr_t params;
+    node_ptr_t super;
+
+  public:
+    FunctionNode(const func_ptr_t &func, const node_ptr_t &params, const node_ptr_t &super)
+        : func(func), params(params), super(super) {
+        type_ = NodeType::FUNCTOR;
+    }
+    ~FunctionNode() = default;
+};
+
 class OperatorNode : public GraphNode {
     Operator *operation;
 
   public:
-    OperatorNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATION; }
+    OperatorNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATOR; }
     ~OperatorNode() = default;
 };
