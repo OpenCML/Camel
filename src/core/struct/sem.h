@@ -52,8 +52,10 @@ class DataNode : public SemanticNode {
         : SemanticNode(SemNodeType::DATA), value_(value), unrefVals_(std::move(unrefVals)) {}
     DataNode(value_ptr_t value, value_list_t unrefList = {})
         : SemanticNode(SemNodeType::DATA), value_(value), unrefVals_(unrefList) {}
-    value_ptr_t value() const { return value_; }
 
+    bool resolved() const { return unrefVals_.empty(); }
+
+    value_ptr_t value() const { return value_; }
     value_vec_t &getUnrefVals() { return unrefVals_; }
 
     const std::string toString() const override;

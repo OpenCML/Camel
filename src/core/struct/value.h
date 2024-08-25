@@ -43,7 +43,7 @@ class Value : public std::enable_shared_from_this<Value> {
     entity_wptr_t entity_;
 
   public:
-    Value(){};
+    Value() {};
     Value(type_ptr_t type) : type_(type) {}
     virtual ~Value() = default;
 
@@ -82,6 +82,8 @@ class DanglingValue : public Value {
   public:
     DanglingValue(const std::string &ref) : Value(nullptr), ref_(ref) {}
     virtual ~DanglingValue() = default;
+
+    const std::string &ref() const { return ref_; }
 
     virtual bool equals(const value_ptr_t &other) const override { return false; }
     virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override {

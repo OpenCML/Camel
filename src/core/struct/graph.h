@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "operator.h"
 #include "function.h"
+#include "operator.h"
 #include "value.h"
 
 #include <any>
@@ -71,15 +71,15 @@ class Graph : public GraphNode {
 
 using graph_ptr_t = std::shared_ptr<Graph>;
 
-class DataNode : public GraphNode {
-    value_ptr_t data;
+class ValueNode : public GraphNode {
+    value_ptr_t value;
 
   public:
-    DataNode(const value_ptr_t &data) : data(data) { type_ = NodeType::DATA; }
-    ~DataNode() = default;
+    ValueNode(const value_ptr_t &value) : value(value) { type_ = NodeType::DATA; }
+    ~ValueNode() = default;
 };
 
-class FunctionNode:public GraphNode{
+class FunctionNode : public GraphNode {
     func_ptr_t func;
     node_ptr_t params;
     node_ptr_t super;
