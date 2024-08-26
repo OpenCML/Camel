@@ -59,7 +59,7 @@ const std::string ASTNodeLoad::typeStr() const {
 
 const std::string DataASTNode::toString() const {
     std::stringstream ss;
-    ss << "DATA: " << pointerToHex(value_.get()) << ", " << value_->type()->toString() << ", " << value_->toString();
+    ss << "DATA: " << pointerToHex(data_.get()) << ", " << data_->type()->toString() << ", " << data_->toString();
     return ss.str();
 }
 

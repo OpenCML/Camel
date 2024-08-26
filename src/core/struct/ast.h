@@ -46,19 +46,19 @@ class ASTNodeLoad {
 
 class DataASTNode : public ASTNodeLoad {
   private:
-    data_ptr_t value_;
-    data_vec_t unrefVals_;
+    data_ptr_t data_;
+    data_vec_t unrefDataVec_;
 
   public:
-    DataASTNode(data_ptr_t value, data_vec_t &&unrefVals)
-        : ASTNodeLoad(ASTNodeType::DATA), value_(value), unrefVals_(std::move(unrefVals)) {}
-    DataASTNode(data_ptr_t value, data_list_t unrefList = {})
-        : ASTNodeLoad(ASTNodeType::DATA), value_(value), unrefVals_(unrefList) {}
+    DataASTNode(data_ptr_t data, data_vec_t &&unrefVec)
+        : ASTNodeLoad(ASTNodeType::DATA), data_(data), unrefDataVec_(std::move(unrefVec)) {}
+    DataASTNode(data_ptr_t data, data_list_t unrefList = {})
+        : ASTNodeLoad(ASTNodeType::DATA), data_(data), unrefDataVec_(unrefList) {}
 
-    bool resolved() const { return unrefVals_.empty(); }
+    bool resolved() const { return unrefDataVec_.empty(); }
 
-    data_ptr_t data() { return value_; }
-    data_vec_t &getUnrefData() { return unrefVals_; }
+    data_ptr_t data() { return data_; }
+    data_vec_t &getUnrefData() { return unrefDataVec_; }
 
     const std::string toString() const override;
 };
@@ -106,9 +106,9 @@ class DRefASTNode : public ASTNodeLoad {
     const std::string toString() const override;
 };
 
-class AssignASTNode : public ASTNodeLoad {
+class AssnASTNode : public ASTNodeLoad {
   public:
-    AssignASTNode() : ASTNodeLoad(ASTNodeType::ASSN) {}
+    AssnASTNode() : ASTNodeLoad(ASTNodeType::ASSN) {}
 
     // const std::string toString() const override;
 };
@@ -137,9 +137,9 @@ class WithASTNode : public ASTNodeLoad {
     // const std::string toString() const override;
 };
 
-class RetASTNode : public ASTNodeLoad {
+class RetnASTNode : public ASTNodeLoad {
   public:
-    RetASTNode() : ASTNodeLoad(ASTNodeType::RETN) {}
+    RetnASTNode() : ASTNodeLoad(ASTNodeType::RETN) {}
 
     // const std::string toString() const override;
 };

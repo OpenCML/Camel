@@ -436,7 +436,7 @@ std::any ASTConstructor::visitAssignStmt(OpenCMLParser::AssignStmtContext *conte
         targetNode = execNode;
     }
     ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
-    ast_ptr_t assignNode = createAstNode<AssignASTNode>();
+    ast_ptr_t assignNode = createAstNode<AssnASTNode>();
     *assignNode << targetNode << dataNode;
     return assignNode;
 };
@@ -499,7 +499,7 @@ retStmt : RETURN entityExpr? ;
 */
 std::any ASTConstructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
     debug(0) << "visitRetStmt" << std::endl;
-    ast_ptr_t retNode = createAstNode<RetASTNode>();
+    ast_ptr_t retNode = createAstNode<RetnASTNode>();
     if (context->entityExpr()) {
         *retNode << std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
     }
@@ -536,7 +536,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
             bodyNode = std::any_cast<ast_ptr_t>(visitBracedStmts(stmts));
         } else {
             ast_ptr_t exprNode = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
-            ast_ptr_t returnNode = createAstNode<RetASTNode>();
+            ast_ptr_t returnNode = createAstNode<RetnASTNode>();
             ast_ptr_t execNode = createAstNode<ExecASTNode>();
             *returnNode << exprNode;
             *execNode << returnNode;

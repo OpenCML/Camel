@@ -37,7 +37,8 @@ template <typename load_t> using tree_node_ptr_t = std::shared_ptr<tree_node_t<l
 
 template <typename load_t> using tree_children_t = std::vector<tree_node_ptr_t<load_t>>;
 
-template <typename load_t> class AbstractTreeNode : public tree_children_t<load_t> {
+template <typename load_t>
+class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from_this<AbstractTreeNode<load_t>> {
   protected:
     tree_node_t<load_t> *parent_;
     load_t load_;
@@ -65,12 +66,12 @@ template <typename load_t> class AbstractTreeNode : public tree_children_t<load_
 
     void reverseChildren() { reverse(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end()); }
 
-    tree_node_t<load_t> &operator[](size_t index) const {
-        const auto &child = this->at(index);
-        return static_cast<tree_node_t<load_t> &>(*child);
+    tree_node_ptr_t<load_t> operator[](size_t index) const {
+        tree_node_ptr_t<load_t> child = this->at(index);
+        return child;
     }
 
-    tree_node_ptr_t<load_t> childPtrAt(size_t index) const {
+    tree_node_ptr_t<load_t> childAt(size_t index) const {
         tree_node_ptr_t<load_t> child = this->at(index);
         return child;
     }

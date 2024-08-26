@@ -64,7 +64,7 @@ extern ast_ptr_t orFuncDeRefNode;
 
 void initFuncDeRefNodes();
 
-class ASTNode : public AbstractTreeNode<ast_load_ptr_t>, std::enable_shared_from_this<ASTNode> {
+class ASTNode : public AbstractTreeNode<ast_load_ptr_t> {
   public:
     ASTNode(ast_load_ptr_t load) : AbstractTreeNode(load) {}
     virtual ~ASTNode() = default;

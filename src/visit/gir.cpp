@@ -19,6 +19,10 @@
 #include "gir.h"
 #include "core/struct/functor.h"
 
+inline ast_ptr_t ast_ptr_cast(const tree_node_ptr_t<ast_load_ptr_t> &ptr) {
+    return std::dynamic_pointer_cast<ASTNode>(ptr);
+}
+
 node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
     const auto &dataNode = std::dynamic_pointer_cast<DataASTNode>(ast);
     const data_ptr_t &data = dataNode->data();
@@ -46,7 +50,8 @@ type_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) { return null
 node_ptr_t GraphIRConstructor::visitNewRefNode(const ast_ptr_t &ast) {
     const auto &newRefNode = std::dynamic_pointer_cast<NRefASTNode>(ast);
     const std::string &ident = newRefNode->ident();
-    const ast_load_ptr_t &target = (*ast)[0].load();
+    const ast_ptr_t &child = ast_ptr_cast(ast->childAt(0));
+    const ast_load_ptr_t &target = child->load();
     if (target->type() == ASTNodeType::FUNC) {
     }
 }
