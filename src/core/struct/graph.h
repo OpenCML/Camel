@@ -27,7 +27,6 @@
 
 enum class NodeType { OPERATOR, DATA, FUNCTOR, GRAPH };
 
-class Operator;
 class GraphNode;
 
 using node_ptr_t = std::shared_ptr<GraphNode>;
@@ -71,31 +70,31 @@ class Graph : public GraphNode {
 
 using graph_ptr_t = std::shared_ptr<Graph>;
 
-class ValueNode : public GraphNode {
+class DataGraphNode : public GraphNode {
     value_ptr_t value;
 
   public:
-    ValueNode(const value_ptr_t &value) : value(value) { type_ = NodeType::DATA; }
-    ~ValueNode() = default;
+    DataGraphNode(const value_ptr_t &value) : value(value) { type_ = NodeType::DATA; }
+    ~DataGraphNode() = default;
 };
 
-class FunctionNode : public GraphNode {
+class FuncGraphNode : public GraphNode {
     func_ptr_t func;
     node_ptr_t params;
     node_ptr_t super;
 
   public:
-    FunctionNode(const func_ptr_t &func, const node_ptr_t &params, const node_ptr_t &super)
+    FuncGraphNode(const func_ptr_t &func, const node_ptr_t &params, const node_ptr_t &super)
         : func(func), params(params), super(super) {
         type_ = NodeType::FUNCTOR;
     }
-    ~FunctionNode() = default;
+    ~FuncGraphNode() = default;
 };
 
-class OperatorNode : public GraphNode {
+class OpGraphNode : public GraphNode {
     Operator *operation;
 
   public:
-    OperatorNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATOR; }
-    ~OperatorNode() = default;
+    OpGraphNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATOR; }
+    ~OpGraphNode() = default;
 };

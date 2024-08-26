@@ -60,23 +60,3 @@ class Function {
 };
 
 using func_ptr_t = std::shared_ptr<Function>;
-
-class InnerFunction : Function {
-  public:
-    InnerFunction() { inner_ = true; }
-    virtual ~InnerFunction() = default;
-
-    virtual void apply() = 0;
-};
-
-class OuterFunction : Function {
-  protected:
-    std::string name_;
-    std::string path_;
-
-  public:
-    OuterFunction() { outer_ = true; }
-    virtual ~OuterFunction() = default;
-
-    virtual void apply() = 0;
-};

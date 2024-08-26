@@ -16,6 +16,8 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#pragma once
+
 #include <iostream>
 #include <regex>
 #include <string>
@@ -24,7 +26,7 @@
 #include "antlr4-runtime.h"
 #include "core/error/build.h"
 #include "core/struct/scope.h"
-#include "core/struct/sem.h"
+#include "core/struct/ast.h"
 #include "core/struct/tree.h"
 
 class ASTNode;
@@ -66,12 +68,12 @@ extern ast_ptr_t orFuncDeRefNode;
 
 void initFuncDeRefNodes();
 
-class ASTNode : public AbstractTreeNode<sem_ptr_t>, std::enable_shared_from_this<ASTNode> {
+class ASTNode : public AbstractTreeNode<ast_load_ptr_t>, std::enable_shared_from_this<ASTNode> {
   public:
-    ASTNode(sem_ptr_t sem) : AbstractTreeNode(sem) {}
+    ASTNode(ast_load_ptr_t load) : AbstractTreeNode(load) {}
     virtual ~ASTNode() = default;
 
-    SemNodeType type() const { return data->type(); }
+    ASTNodeType type() const { return data->type(); }
     std::string toString() const { return data->toString(); }
 
     ASTNode &operator<<(const ast_ptr_t &node) {
@@ -96,13 +98,12 @@ class ASTConstructor : public OpenCMLVisitor {
     ast_ptr_t construct(antlr4::tree::ParseTree *tree) {
         typeScope_->clear();
         root_ = nullptr;
-        root_->parent = nullptr;
         visit(tree);
         return root_;
     }
 
   private:
-    ast_ptr_t root_ = nullptr;
+    ast_ptr_t root_;
     size_t indentIndex_ = 0;
     scope_ptr_t<std::string, type_ptr_t> typeScope_;
 

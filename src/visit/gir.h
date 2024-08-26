@@ -24,7 +24,7 @@
 #include "core/struct/function.h"
 #include "core/struct/context.h"
 #include "core/struct/graph.h"
-#include "core/struct/sem.h"
+#include "core/struct/ast.h"
 #include "core/struct/entity.h"
 #include "utils/log.h"
 
@@ -42,6 +42,7 @@ inline void _dumpGIR() {
 }
 
 using node_scope_t = scope_ptr_t<std::string, node_ptr_t>;
+using func_scope_t = scope_ptr_t<std::string, func_ptr_t>;
 
 class GraphIRConstructor {
   public:
@@ -53,6 +54,8 @@ class GraphIRConstructor {
     context_ptr_t context_;
     
     node_scope_t nodeScope_; // TODO: init required
+    value_scope_t valueScope_;
+    func_scope_t funcScope_;
 
     node_ptr_t visitDataNode(const ast_ptr_t &ast);
     node_ptr_t visitFuncNode(const ast_ptr_t &ast);

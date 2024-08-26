@@ -19,17 +19,17 @@
 #include "gir.h"
 
 node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
-    const auto &data = std::dynamic_pointer_cast<DataNode>(ast);
-    value_ptr_t &value = data->value();
-    node_ptr_t node = std::make_shared<ValueNode>(value);
+    const auto &data = std::dynamic_pointer_cast<DataASTNode>(ast);
+    const value_ptr_t &value = data->value();
+    node_ptr_t node = std::make_shared<DataGraphNode>(value);
     if (data->resolved()) {
         return node;
     } else {
         for (const auto &e : data->getUnrefVals()) {
-            std::string &ref = std::dynamic_pointer_cast<DanglingValue>(e)->ref();
-            auto &sourceNode = nodeScope_->at(ref);
-            if (sourceNode.has_value()) {
-                GraphNode::link(sourceNode.value(), node);
+            const std::string &ref = std::dynamic_pointer_cast<DanglingValue>(e)->ref();
+            auto optSrcNode = nodeScope_->at(ref);
+            if (optSrcNode.has_value()) {
+                GraphNode::link(optSrcNode.value(), node);
             } else {
                 throw std::runtime_error("Unresolved reference: " + ref);
             }
@@ -45,7 +45,21 @@ node_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) {}
 node_ptr_t GraphIRConstructor::visitNewRefNode(const ast_ptr_t &ast) {}
 
 node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {
-    const auto &deref = std::dynamic_pointer_cast<DeRefNode>(ast);
+    const std::string &ident = std::dynamic_pointer_cast<DRefASTNode>(ast)->ident();
+    auto optNode = nodeScope_->at(ident);
+    if (optNode.has_value()) {
+        return optNode.value();
+    }
+    auto optValue = valueScope_->at(ident);
+    if (optValue.has_value()) {
+        value_ptr_t &value = optValue.value();
+        return std::make_shared<DataGraphNode>(optValue.value());
+    }
+    auto optFunc = funcScope_->at(ident);
+    if (optFunc.has_value()) {
+        // return std::make_shared<FuncGraphNode>(optFunc.value());
+    }
+    throw std::runtime_error("Unresolved reference: " + ident);
 }
 
 node_ptr_t GraphIRConstructor::visitAssignNode(const ast_ptr_t &ast) {}

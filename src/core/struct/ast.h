@@ -22,127 +22,127 @@
 #include "functor.h"
 #include "value.h"
 
-class SemanticNode;
-using sem_ptr_t = std::shared_ptr<const SemanticNode>;
+class ASTNodeLoad;
+using ast_load_ptr_t = std::shared_ptr<ASTNodeLoad>;
 
-enum class SemNodeType { DATA, TYPE, FUNC, NREF, DREF, ASSN, ANNO, LINK, WITH, RETN, EXEC };
+enum class ASTNodeType { DATA, TYPE, FUNC, NREF, DREF, ASSN, ANNO, LINK, WITH, RETN, EXEC };
 
-class SemanticNode {
+class ASTNodeLoad {
   protected:
-    SemNodeType type_;
+    ASTNodeType type_;
 
   public:
-    SemanticNode(SemNodeType type) : type_(type) {}
-    virtual ~SemanticNode() = default;
+    ASTNodeLoad(ASTNodeType type) : type_(type) {}
+    virtual ~ASTNodeLoad() = default;
 
-    SemNodeType type() const { return type_; }
+    ASTNodeType type() const { return type_; }
     const std::string typeStr() const;
 
     virtual const std::string toString() const { return typeStr(); }
-    virtual void visit() { throw std::runtime_error("SemanticNode::visit() not implemented"); };
+    virtual void visit() { throw std::runtime_error("ASTNodeLoad::visit() not implemented"); };
 };
 
-class DataNode : public SemanticNode {
+class DataASTNode : public ASTNodeLoad {
   private:
     value_ptr_t value_;
     value_vec_t unrefVals_;
 
   public:
-    DataNode(value_ptr_t value, value_vec_t &&unrefVals)
-        : SemanticNode(SemNodeType::DATA), value_(value), unrefVals_(std::move(unrefVals)) {}
-    DataNode(value_ptr_t value, value_list_t unrefList = {})
-        : SemanticNode(SemNodeType::DATA), value_(value), unrefVals_(unrefList) {}
+    DataASTNode(value_ptr_t value, value_vec_t &&unrefVals)
+        : ASTNodeLoad(ASTNodeType::DATA), value_(value), unrefVals_(std::move(unrefVals)) {}
+    DataASTNode(value_ptr_t value, value_list_t unrefList = {})
+        : ASTNodeLoad(ASTNodeType::DATA), value_(value), unrefVals_(unrefList) {}
 
     bool resolved() const { return unrefVals_.empty(); }
 
-    value_ptr_t value() const { return value_; }
+    value_ptr_t value() { return value_; }
     value_vec_t &getUnrefVals() { return unrefVals_; }
 
     const std::string toString() const override;
 };
 
-class TypeNode : public SemanticNode {
+class TypeASTNode : public ASTNodeLoad {
   private:
     type_ptr_t type_;
 
   public:
-    TypeNode(type_ptr_t type) : SemanticNode(SemNodeType::TYPE), type_(type) {}
+    TypeASTNode(type_ptr_t type) : ASTNodeLoad(ASTNodeType::TYPE), type_(type) {}
     type_ptr_t type() const { return type_; }
 
     const std::string toString() const override;
 };
 
-class FunctionNode : public SemanticNode {
+class FuncASTNode : public ASTNodeLoad {
   private:
   public:
-    FunctionNode() : SemanticNode(SemNodeType::FUNC) {}
+    FuncASTNode() : ASTNodeLoad(ASTNodeType::FUNC) {}
 
     // const std::string toString() const override;
 };
 
-class NewRefNode : public SemanticNode {
+class NRefASTNode : public ASTNodeLoad {
   private:
     std::string ident_;
 
   public:
-    NewRefNode(const std::string &ident) : SemanticNode(SemNodeType::NREF), ident_(ident) {}
+    NRefASTNode(const std::string &ident) : ASTNodeLoad(ASTNodeType::NREF), ident_(ident) {}
 
     const std::string toString() const override;
 };
 
-class DeRefNode : public SemanticNode {
+class DRefASTNode : public ASTNodeLoad {
   private:
     std::string ident_;
 
   public:
-    DeRefNode(const std::string &ident) : SemanticNode(SemNodeType::DREF), ident_(ident) {}
+    DRefASTNode(const std::string &ident) : ASTNodeLoad(ASTNodeType::DREF), ident_(ident) {}
 
     const std::string ident() const { return ident_; }
 
     const std::string toString() const override;
 };
 
-class AssignNode : public SemanticNode {
+class AssignASTNode : public ASTNodeLoad {
   public:
-    AssignNode() : SemanticNode(SemNodeType::ASSN) {}
+    AssignASTNode() : ASTNodeLoad(ASTNodeType::ASSN) {}
 
     // const std::string toString() const override;
 };
 
-class AnnotationNode : public SemanticNode {
+class AnnoASTNode : public ASTNodeLoad {
   private:
     std::string annotation_;
 
   public:
-    AnnotationNode(const std::string &annotation) : SemanticNode(SemNodeType::ANNO), annotation_(annotation) {}
+    AnnoASTNode(const std::string &annotation) : ASTNodeLoad(ASTNodeType::ANNO), annotation_(annotation) {}
 
     // const std::string toString() const override;
 };
 
-class LinkNode : public SemanticNode {
+class LinkASTNode : public ASTNodeLoad {
   public:
-    LinkNode() : SemanticNode(SemNodeType::LINK) {}
+    LinkASTNode() : ASTNodeLoad(ASTNodeType::LINK) {}
 
     // const std::string toString() const override;
 };
 
-class WithNode : public SemanticNode {
+class WithASTNode : public ASTNodeLoad {
   public:
-    WithNode() : SemanticNode(SemNodeType::WITH) {}
+    WithASTNode() : ASTNodeLoad(ASTNodeType::WITH) {}
 
     // const std::string toString() const override;
 };
 
-class ReturnNode : public SemanticNode {
+class RetASTNode : public ASTNodeLoad {
   public:
-    ReturnNode() : SemanticNode(SemNodeType::RETN) {}
+    RetASTNode() : ASTNodeLoad(ASTNodeType::RETN) {}
 
     // const std::string toString() const override;
 };
 
-class ExecuteNode : public SemanticNode {
+class ExecASTNode : public ASTNodeLoad {
   public:
-    ExecuteNode() : SemanticNode(SemNodeType::EXEC) {}
+    ExecASTNode() : ASTNodeLoad(ASTNodeType::EXEC) {}
 
     // const std::string toString() const override;
 };

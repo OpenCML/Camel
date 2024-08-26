@@ -41,9 +41,9 @@ template <typename K, typename V> class Scope {
 
     explicit Scope(std::shared_ptr<Scope<K, V>> outer) : map_(), outer_(std::move(outer)) {}
 
-    std::shared_ptr<Scope<K, V>> outer() const { return outer_; }
+    std::shared_ptr<Scope<K, V>> outer() { return outer_; }
 
-    std::optional<V> at(const K &k, bool recursive = true) const {
+    std::optional<V> at(const K &k, bool recursive = true) {
         // std::shared_lock<std::shared_mutex> lock(rwMutex_);
         auto it = map_.find(k);
         if (it != map_.end()) {
