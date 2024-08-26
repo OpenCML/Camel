@@ -57,18 +57,18 @@ const std::string ASTNodeLoad::typeStr() const {
     }
 }
 
-const std::string DataASTNode::toString() const {
+const std::string DataASTLoad::toString() const {
     std::stringstream ss;
     ss << "DATA: " << pointerToHex(data_.get()) << ", " << data_->type()->toString() << ", " << data_->toString();
     return ss.str();
 }
 
-const std::string TypeASTNode::toString() const {
+const std::string TypeASTLoad::toString() const {
     std::stringstream ss;
     ss << "TYPE: " << type_->toString();
     return ss.str();
 }
 
-const std::string NRefASTNode::toString() const { return "NREF: " + ident_; }
+const std::string NRefASTLoad::toString() const { return "NREF: " + ident_; }
 
-const std::string DRefASTNode::toString() const { return "DREF: " + ident_; }
+const std::string DRefASTLoad::toString() const { return "DREF: " + ident_; }

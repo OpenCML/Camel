@@ -44,15 +44,15 @@ class ASTNodeLoad {
     virtual void visit() { throw std::runtime_error("ASTNodeLoad::visit() not implemented"); };
 };
 
-class DataASTNode : public ASTNodeLoad {
+class DataASTLoad : public ASTNodeLoad {
   private:
     data_ptr_t data_;
     data_vec_t unrefDataVec_;
 
   public:
-    DataASTNode(data_ptr_t data, data_vec_t &&unrefVec)
+    DataASTLoad(data_ptr_t data, data_vec_t &&unrefVec)
         : ASTNodeLoad(ASTNodeType::DATA), data_(data), unrefDataVec_(std::move(unrefVec)) {}
-    DataASTNode(data_ptr_t data, data_list_t unrefList = {})
+    DataASTLoad(data_ptr_t data, data_list_t unrefList = {})
         : ASTNodeLoad(ASTNodeType::DATA), data_(data), unrefDataVec_(unrefList) {}
 
     bool resolved() const { return unrefDataVec_.empty(); }
@@ -63,90 +63,134 @@ class DataASTNode : public ASTNodeLoad {
     const std::string toString() const override;
 };
 
-class TypeASTNode : public ASTNodeLoad {
+inline std::shared_ptr<DataASTLoad> data_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<DataASTLoad>(ptr);
+}
+
+class TypeASTLoad : public ASTNodeLoad {
   private:
     type_ptr_t type_;
 
   public:
-    TypeASTNode(type_ptr_t type) : ASTNodeLoad(ASTNodeType::TYPE), type_(type) {}
+    TypeASTLoad(type_ptr_t type) : ASTNodeLoad(ASTNodeType::TYPE), type_(type) {}
     type_ptr_t type() const { return type_; }
 
     const std::string toString() const override;
 };
 
-class FuncASTNode : public ASTNodeLoad {
+inline std::shared_ptr<TypeASTLoad> type_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<TypeASTLoad>(ptr);
+}
+
+class FuncASTLoad : public ASTNodeLoad {
   private:
   public:
-    FuncASTNode() : ASTNodeLoad(ASTNodeType::FUNC) {}
+    FuncASTLoad() : ASTNodeLoad(ASTNodeType::FUNC) {}
 
     // const std::string toString() const override;
 };
 
-class NRefASTNode : public ASTNodeLoad {
+inline std::shared_ptr<FuncASTLoad> func_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<FuncASTLoad>(ptr);
+}
+
+class NRefASTLoad : public ASTNodeLoad {
   private:
     std::string ident_;
 
   public:
-    NRefASTNode(const std::string &ident) : ASTNodeLoad(ASTNodeType::NREF), ident_(ident) {}
+    NRefASTLoad(const std::string &ident) : ASTNodeLoad(ASTNodeType::NREF), ident_(ident) {}
 
     const std::string ident() const { return ident_; }
 
     const std::string toString() const override;
 };
 
-class DRefASTNode : public ASTNodeLoad {
+inline std::shared_ptr<NRefASTLoad> nref_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<NRefASTLoad>(ptr);
+}
+
+class DRefASTLoad : public ASTNodeLoad {
   private:
     std::string ident_;
 
   public:
-    DRefASTNode(const std::string &ident) : ASTNodeLoad(ASTNodeType::DREF), ident_(ident) {}
+    DRefASTLoad(const std::string &ident) : ASTNodeLoad(ASTNodeType::DREF), ident_(ident) {}
 
     const std::string ident() const { return ident_; }
 
     const std::string toString() const override;
 };
 
-class AssnASTNode : public ASTNodeLoad {
+inline std::shared_ptr<DRefASTLoad> dref_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<DRefASTLoad>(ptr);
+}
+
+class AssnASTLoad : public ASTNodeLoad {
   public:
-    AssnASTNode() : ASTNodeLoad(ASTNodeType::ASSN) {}
+    AssnASTLoad() : ASTNodeLoad(ASTNodeType::ASSN) {}
 
     // const std::string toString() const override;
 };
 
-class AnnoASTNode : public ASTNodeLoad {
+inline std::shared_ptr<AssnASTLoad> assn_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<AssnASTLoad>(ptr);
+}
+
+class AnnoASTLoad : public ASTNodeLoad {
   private:
     std::string annotation_;
 
   public:
-    AnnoASTNode(const std::string &annotation) : ASTNodeLoad(ASTNodeType::ANNO), annotation_(annotation) {}
+    AnnoASTLoad(const std::string &annotation) : ASTNodeLoad(ASTNodeType::ANNO), annotation_(annotation) {}
 
     // const std::string toString() const override;
 };
 
-class LinkASTNode : public ASTNodeLoad {
+inline std::shared_ptr<AnnoASTLoad> anno_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<AnnoASTLoad>(ptr);
+}
+
+class LinkASTLoad : public ASTNodeLoad {
   public:
-    LinkASTNode() : ASTNodeLoad(ASTNodeType::LINK) {}
+    LinkASTLoad() : ASTNodeLoad(ASTNodeType::LINK) {}
 
     // const std::string toString() const override;
 };
 
-class WithASTNode : public ASTNodeLoad {
+inline std::shared_ptr<LinkASTLoad> link_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<LinkASTLoad>(ptr);
+}
+
+class WithASTLoad : public ASTNodeLoad {
   public:
-    WithASTNode() : ASTNodeLoad(ASTNodeType::WITH) {}
+    WithASTLoad() : ASTNodeLoad(ASTNodeType::WITH) {}
 
     // const std::string toString() const override;
 };
 
-class RetnASTNode : public ASTNodeLoad {
+inline std::shared_ptr<WithASTLoad> with_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<WithASTLoad>(ptr);
+}
+
+class RetnASTLoad : public ASTNodeLoad {
   public:
-    RetnASTNode() : ASTNodeLoad(ASTNodeType::RETN) {}
+    RetnASTLoad() : ASTNodeLoad(ASTNodeType::RETN) {}
 
     // const std::string toString() const override;
 };
 
-class ExecASTNode : public ASTNodeLoad {
+inline std::shared_ptr<RetnASTLoad> retn_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<RetnASTLoad>(ptr);
+}
+
+class ExecASTLoad : public ASTNodeLoad {
   public:
-    ExecASTNode() : ASTNodeLoad(ASTNodeType::EXEC) {}
+    ExecASTLoad() : ASTNodeLoad(ASTNodeType::EXEC) {}
 
     // const std::string toString() const override;
 };
+
+inline std::shared_ptr<ExecASTLoad> exec_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<ExecASTLoad>(ptr);
+}

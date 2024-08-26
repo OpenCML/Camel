@@ -24,7 +24,7 @@ inline ast_ptr_t ast_ptr_cast(const tree_node_ptr_t<ast_load_ptr_t> &ptr) {
 }
 
 node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
-    const auto &dataNode = std::dynamic_pointer_cast<DataASTNode>(ast);
+    const auto &dataNode = std::dynamic_pointer_cast<DataASTLoad>(ast);
     const data_ptr_t &data = dataNode->data();
     node_ptr_t node = std::make_shared<DataGraphNode>(data);
     if (dataNode->resolved()) {
@@ -47,17 +47,19 @@ func_ptr_t GraphIRConstructor::visitFuncNode(const ast_ptr_t &ast) {}
 
 type_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) { return nullptr; }
 
-node_ptr_t GraphIRConstructor::visitNewRefNode(const ast_ptr_t &ast) {
-    const auto &newRefNode = std::dynamic_pointer_cast<NRefASTNode>(ast);
+node_ptr_t GraphIRConstructor::visitNRefNode(const ast_ptr_t &ast) {
+    const auto &newRefNode = std::dynamic_pointer_cast<NRefASTLoad>(ast);
     const std::string &ident = newRefNode->ident();
     const ast_ptr_t &child = ast_ptr_cast(ast->childAt(0));
     const ast_load_ptr_t &target = child->load();
     if (target->type() == ASTNodeType::FUNC) {
+        func_ptr_t func = visitFuncNode(child);
+        funcScope_->insert(ident, func);
     }
 }
 
-node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {
-    const std::string &ident = std::dynamic_pointer_cast<DRefASTNode>(ast)->ident();
+node_ptr_t GraphIRConstructor::visitDRefNode(const ast_ptr_t &ast) {
+    const std::string &ident = std::dynamic_pointer_cast<DRefASTLoad>(ast)->ident();
     auto optNode = nodeScope_->at(ident);
     if (optNode.has_value()) {
         return optNode.value();
@@ -80,7 +82,7 @@ node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {
     throw std::runtime_error("Unresolved reference: " + ident);
 }
 
-node_ptr_t GraphIRConstructor::visitAssignNode(const ast_ptr_t &ast) {}
+node_ptr_t GraphIRConstructor::visitAssnNode(const ast_ptr_t &ast) {}
 
 node_ptr_t GraphIRConstructor::visitAnnoNode(const ast_ptr_t &ast) {}
 
@@ -88,4 +90,4 @@ node_ptr_t GraphIRConstructor::visitLinkNode(const ast_ptr_t &ast) {}
 
 node_ptr_t GraphIRConstructor::visitWithNode(const ast_ptr_t &ast) {}
 
-node_ptr_t GraphIRConstructor::visitReturnNode(const ast_ptr_t &ast) {}
+node_ptr_t GraphIRConstructor::visitRetnNode(const ast_ptr_t &ast) {}

@@ -20,14 +20,13 @@
 #include <iostream>
 
 #include "ast.h"
-#include "core/struct/scope.h"
-#include "core/struct/function.h"
-#include "core/struct/context.h"
-#include "core/struct/graph.h"
 #include "core/struct/ast.h"
+#include "core/struct/context.h"
 #include "core/struct/entity.h"
+#include "core/struct/function.h"
+#include "core/struct/graph.h"
+#include "core/struct/scope.h"
 #include "utils/log.h"
-
 
 inline void _dumpGIR() {
     std::ifstream file("D:\\Projects\\Camel\\demo\\feat\\gir.txt");
@@ -41,8 +40,10 @@ inline void _dumpGIR() {
     }
 }
 
-using node_scope_t = scope_ptr_t<std::string, node_ptr_t>;
-using func_scope_t = scope_ptr_t<std::string, func_ptr_t>;
+using node_scope_t = Scope<std::string, node_ptr_t>;
+using node_scope_ptr_t = scope_ptr_t<std::string, node_ptr_t>;
+using func_scope_t = Scope<std::string, func_ptr_t>;
+using func_scope_ptr_t = scope_ptr_t<std::string, func_ptr_t>;
 
 class GraphIRConstructor {
   public:
@@ -52,19 +53,31 @@ class GraphIRConstructor {
 
   private:
     context_ptr_t context_;
-    
-    node_scope_t nodeScope_; // TODO: init required
-    entity_scope_t entityScope_;
-    func_scope_t funcScope_;
+
+    node_scope_ptr_t nodeScope_; // TODO: init required
+    entity_scope_ptr_t entityScope_;
+    func_scope_ptr_t funcScope_;
+
+    void pushScope(const std::string &name) {
+        nodeScope_ = node_scope_t::push(nodeScope_);
+        entityScope_ = entity_scope_t::push(entityScope_);
+        funcScope_ = func_scope_t::push(funcScope_);
+    }
+
+    void popScope() {
+        nodeScope_ = node_scope_t::pop(nodeScope_);
+        entityScope_ = entity_scope_t::pop(entityScope_);
+        funcScope_ = func_scope_t::pop(funcScope_);
+    }
 
     node_ptr_t visitDataNode(const ast_ptr_t &ast);
     func_ptr_t visitFuncNode(const ast_ptr_t &ast);
     type_ptr_t visitTypeNode(const ast_ptr_t &ast);
-    node_ptr_t visitNewRefNode(const ast_ptr_t &ast);
-    node_ptr_t visitDeRefNode(const ast_ptr_t &ast);
-    node_ptr_t visitAssignNode(const ast_ptr_t &ast);
+    node_ptr_t visitNRefNode(const ast_ptr_t &ast);
+    node_ptr_t visitDRefNode(const ast_ptr_t &ast);
+    node_ptr_t visitAssnNode(const ast_ptr_t &ast);
     node_ptr_t visitAnnoNode(const ast_ptr_t &ast);
     node_ptr_t visitLinkNode(const ast_ptr_t &ast);
     node_ptr_t visitWithNode(const ast_ptr_t &ast);
-    node_ptr_t visitReturnNode(const ast_ptr_t &ast);
+    node_ptr_t visitRetnNode(const ast_ptr_t &ast);
 };
