@@ -16,6 +16,8 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#pragma once
+
 #include <iostream>
 #include <regex>
 #include <string>
@@ -24,12 +26,8 @@
 #include "antlr4-runtime.h"
 #include "core/error/build.h"
 #include "core/struct/scope.h"
-#include "core/struct/sem.h"
+#include "core/struct/ast.h"
 #include "core/struct/tree.h"
-
-class ASTNode;
-
-using ast_ptr_t = std::shared_ptr<ASTNode>;
 
 extern ast_ptr_t copyFuncDeRefNode;
 extern ast_ptr_t castFuncDeRefNode;
@@ -66,16 +64,16 @@ extern ast_ptr_t orFuncDeRefNode;
 
 void initFuncDeRefNodes();
 
-class ASTNode : public AbstractTreeNode<sem_ptr_t>, std::enable_shared_from_this<ASTNode> {
+class ASTNode : public AbstractTreeNode<ast_load_ptr_t> {
   public:
-    ASTNode(sem_ptr_t sem) : AbstractTreeNode(sem) {}
+    ASTNode(ast_load_ptr_t load) : AbstractTreeNode(load) {}
     virtual ~ASTNode() = default;
 
-    SemNodeType type() const { return data->type(); }
-    std::string toString() const { return data->toString(); }
+    ASTNodeType type() const { return load_->type(); }
+    std::string toString() const { return load_->toString(); }
 
     ASTNode &operator<<(const ast_ptr_t &node) {
-        node->parent = this;
+        node->setParent(this);
         this->push_back(node);
         return *this;
     }
@@ -96,22 +94,21 @@ class ASTConstructor : public OpenCMLVisitor {
     ast_ptr_t construct(antlr4::tree::ParseTree *tree) {
         typeScope_->clear();
         root_ = nullptr;
-        root_->parent = nullptr;
         visit(tree);
         return root_;
     }
 
   private:
-    ast_ptr_t root_ = nullptr;
+    ast_ptr_t root_;
     size_t indentIndex_ = 0;
     scope_ptr_t<std::string, type_ptr_t> typeScope_;
 
     void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
 
-    value_ptr_t extractStaticValue(const ast_ptr_t &node);
-    std::pair<ast_ptr_t, value_ptr_t> makeDanglingValue(const ast_ptr_t &expr);
-    std::pair<value_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
+    data_ptr_t extractStaticValue(const ast_ptr_t &node);
+    std::pair<ast_ptr_t, data_ptr_t> makeDanglingValue(const ast_ptr_t &expr);
+    std::pair<data_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
 
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
     std::any visitStmtList(OpenCMLParser::StmtListContext *context);

@@ -79,12 +79,15 @@ class TensorType;
 using type_ptr_t = std::shared_ptr<Type>;
 using type_wptr_t = std::weak_ptr<Type>;
 
-class Value;
-using value_ptr_t = std::shared_ptr<Value>;
-using value_wptr_t = std::weak_ptr<Value>;
-using value_lst_t = std::list<value_ptr_t>;
-using value_vec_t = std::vector<value_ptr_t>;
-using value_list_t = std::initializer_list<value_ptr_t>;
+class Data;
+using data_ptr_t = std::shared_ptr<Data>;
+using data_wptr_t = std::weak_ptr<Data>;
+using data_lst_t = std::list<data_ptr_t>;
+using data_vec_t = std::vector<data_ptr_t>;
+using data_list_t = std::initializer_list<data_ptr_t>;
+
+class Function;
+using func_ptr_t = std::shared_ptr<Function>;
 
 class Entity;
 using entity_ptr_t = std::shared_ptr<Entity>;
@@ -592,7 +595,7 @@ class ListType : public StructType {
 
 class NamedTupleType : public StructType {
   private:
-    std::vector<std::tuple<std::string, type_ptr_t, value_ptr_t>> elements_;
+    std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> elements_;
 
   public:
     NamedTupleType() : StructType(TypeCode::NAMED_TUPLE) {}
@@ -602,7 +605,7 @@ class NamedTupleType : public StructType {
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
-    bool add(const std::string &key, const type_ptr_t &type, const value_ptr_t &value = nullptr) {
+    bool add(const std::string &key, const type_ptr_t &type, const data_ptr_t &value = nullptr) {
         for (const auto &tuple : elements_) {
             if (std::get<0>(tuple) == key) {
                 return false;
@@ -613,7 +616,7 @@ class NamedTupleType : public StructType {
     }
 
     size_t size() const { return elements_.size(); }
-    const std::vector<std::tuple<std::string, type_ptr_t, value_ptr_t>> &elements() const { return elements_; }
+    const std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> &elements() const { return elements_; }
 
     std::unordered_map<std::string, type_ptr_t> map() const {
         auto result = std::unordered_map<std::string, type_ptr_t>();

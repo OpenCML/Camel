@@ -17,6 +17,7 @@
  */
 
 #include "function.h"
+#include "graph.h"
 
 #include <stdexcept>
 
@@ -51,4 +52,8 @@ std::string modifier2str(FunctionModifier modifier) {
     default:
         throw std::runtime_error("Unknown modifier: " + std::to_string(static_cast<int>(modifier)));
     }
+}
+
+graph_ptr_t Function::constructGraph() {
+    return nullptr;
 }

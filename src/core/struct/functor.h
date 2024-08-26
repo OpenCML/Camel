@@ -18,20 +18,25 @@
 
 #pragma once
 
+#include "data.h"
 #include "entity.h"
-#include "value.h"
+#include "function.h"
 
-class Functor : Entity {
-    value_ptr_t input;
-    value_ptr_t output;
+class Functor : public Entity {
+    func_ptr_t func_;
 
   public:
     Functor() = delete;
-    Functor(const value_ptr_t &input, const value_ptr_t &output, const value_ptr_t &with = nullptr)
-        : Entity(with), input(input), output(output) {}
-    virtual ~Functor() = default;
+    Functor(const func_ptr_t &func, const data_ptr_t &with = nullptr) : Entity(with), func_(func) { isFunc_ = true; }
 
-    virtual void apply() = 0;
+    virtual entity_ptr_t clone(bool deep = false) const override {
+        entity_ptr_t entity = std::make_shared<Functor>(func_, data_->clone(deep));
+        return entity;
+    }
+
+    func_ptr_t func() const { return func_; }
+
+    virtual ~Functor() = default;
 };
 
 // definition below is forwarded to type.h

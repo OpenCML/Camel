@@ -17,23 +17,30 @@
  */
 
 #include "entity.h"
-#include "value.h"
+#include "data.h"
 
-Entity::Entity(value_ptr_t data) : data_(data) {
+Entity::Entity(data_ptr_t data) : data_(data) {
     if (data_ != nullptr) {
         type_ = data_->type();
     }
 }
 
-value_ptr_t Entity::meta() {
+data_ptr_t Entity::meta() {
     if (meta_ == nullptr) {
         // Create a new value
         // TODO
         throw std::runtime_error("Entity::meta() not implemented");
-        meta_ = std::make_shared<Value>();
+        meta_ = std::make_shared<Data>();
         return meta_;
     }
     return meta_;
+}
+
+entity_ptr_t Entity::clone(bool deep) const {
+    entity_ptr_t entity = std::make_shared<Entity>(data_->clone(deep));
+    entity->type_ = type_;
+    entity->meta_ = meta_->clone(deep);
+    return entity;
 }
 
 std::string Entity::typeStr() const {
@@ -62,7 +69,7 @@ std::string Entity::dataStr() const {
 }
 
 const entity_ptr_t Entity::convert(type_ptr_t target, bool inplace = false) {
-    const value_ptr_t newData = data_->convert(target, inplace);
+    const data_ptr_t newData = data_->convert(target, inplace);
     if (inplace) {
         data_ = newData;
         return shared_from_this();
@@ -78,8 +85,8 @@ bool Entity::equals(const entity_ptr_t &other) const {
     return data_ == other->data_ || (data_ != nullptr && other->data_ != nullptr && data_->equals(other->data_));
 }
 
-void Entity::setMeta(value_ptr_t meta) { meta_ = meta; }
-void Entity::setData(value_ptr_t data) {
+void Entity::setMeta(data_ptr_t meta) { meta_ = meta; }
+void Entity::setData(data_ptr_t data) {
     data_ = data;
     if (data_ != nullptr) {
         type_ = data_->type();

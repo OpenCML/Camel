@@ -30,7 +30,7 @@ template <typename T, typename = std::void_t<>> struct hashable : std::false_typ
 template <typename T>
 struct hashable<T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declval<T>()))>> : std::true_type {};
 
-template <typename K, typename V> class Scope {
+template <typename K, typename V> class Scope : public std::enable_shared_from_this<Scope<K, V>> {
   protected:
     mutable std::shared_mutex rwMutex_;
     std::unordered_map<K, V> map_;
@@ -41,9 +41,9 @@ template <typename K, typename V> class Scope {
 
     explicit Scope(std::shared_ptr<Scope<K, V>> outer) : map_(), outer_(std::move(outer)) {}
 
-    std::shared_ptr<Scope<K, V>> outer() const { return outer_; }
+    std::shared_ptr<Scope<K, V>> outer() { return outer_; }
 
-    std::optional<V> at(const K &k, bool recursive = true) const {
+    std::optional<V> at(const K &k, bool recursive = true) {
         // std::shared_lock<std::shared_mutex> lock(rwMutex_);
         auto it = map_.find(k);
         if (it != map_.end()) {
@@ -94,6 +94,19 @@ template <typename K, typename V> class Scope {
     bool isRoot() const { return !outer_; }
 
     std::unordered_map<K, V> self() const { return map_; }
+
+    static std::shared_ptr<Scope<K, V>> create(std::shared_ptr<Scope<K, V>> outer = nullptr) {
+        return std::make_shared<Scope<K, V>>(outer);
+    }
+
+    static std::shared_ptr<Scope<K, V>> push(std::shared_ptr<Scope<K, V>> target) {
+        return std::make_shared<Scope<K, V>>(target);
+    }
+
+    static std::shared_ptr<Scope<K, V>> pop(std::shared_ptr<Scope<K, V>> target) {
+        // TODO: Shall we free the scope?
+        return target->outer();
+    }
 };
 
 template <typename K, typename V> using scope_ptr_t = std::shared_ptr<Scope<K, V>>;

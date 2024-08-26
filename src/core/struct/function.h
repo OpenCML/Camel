@@ -19,67 +19,45 @@
 #pragma once
 
 #include "entity.h"
-#include "value.h"
+#include "data.h"
+#include "ast.h"
+
 #include <string>
 
 enum class FunctionModifier {
-    INNER,
-    OUTER,
-    ATOMIC,
-    STATIC,
-    SYNC,
+    INNER = 0b00000001,
+    OUTER = 0b00000010,
+    ATOMIC = 0b00000100,
+    STATIC = 0b00001000,
+    SYNC = 0b00010000,
 };
 
 FunctionModifier str2modifier(const std::string &str);
 std::string modifier2str(FunctionModifier modifier);
 
+class Graph;
+using graph_ptr_t = std::shared_ptr<Graph>;
+
 class Function {
   protected:
-    bool inner_ = false;
-    bool outer_ = false;
-    bool atomic_ = false;
-    bool static_ = false;
-    bool sync_ = false;
+    unsigned char flags_ = 0;
+    ast_ptr_t funcNode_;
 
   public:
-    Function() = default;
+    Function(const ast_ptr_t &funcNode) : funcNode_(funcNode) {};
     virtual ~Function() = default;
 
-    template <typename T> void setFlag(bool value) {
-        if constexpr (std::is_same_v<T, FunctionModifier::INNER>) {
-            inner_ = value;
-        } else if constexpr (std::is_same_v<T, FunctionModifier::OUTER>) {
-            outer_ = value;
-        } else if constexpr (std::is_same_v<T, FunctionModifier::ATOMIC>) {
-            atomic_ = value;
-        } else if constexpr (std::is_same_v<T, FunctionModifier::STATIC>) {
-            static_ = value;
-        } else if constexpr (std::is_same_v<T, FunctionModifier::SYNC>) {
-            sync_ = value;
-        } else {
-            static_assert(std::always_false<T>, "Unsupported flag type");
-        }
-    }
+    unsigned char flags() const { return flags_; }
 
-    virtual void apply() = 0;
-};
+    ast_ptr_t node() { return funcNode_; }
 
-class InnerFunction : Function {
-  public:
-    InnerFunction() { inner_ = true; }
-    virtual ~InnerFunction() = default;
+    bool inner() const { return flags_ & static_cast<unsigned char>(FunctionModifier::INNER); }
+    bool outer() const { return flags_ & static_cast<unsigned char>(FunctionModifier::OUTER); }
+    bool atomic() const { return flags_ & static_cast<unsigned char>(FunctionModifier::ATOMIC); }
+    bool static_() const { return flags_ & static_cast<unsigned char>(FunctionModifier::STATIC); }
+    bool sync() const { return flags_ & static_cast<unsigned char>(FunctionModifier::SYNC); }
 
-    virtual void apply() = 0;
-};
+    void setFlags(unsigned char value) { flags_ = value; }
 
-class OuterFunction : Function {
-  protected:
-    std::string name_;
-    std::string path_;
-
-  public:
-    OuterFunction() { outer_ = true; }
-    virtual ~OuterFunction() = default;
-
-    virtual void apply() = 0;
+    graph_ptr_t constructGraph();
 };

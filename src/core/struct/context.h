@@ -21,13 +21,14 @@
 #include <string>
 
 #include "scope.h"
-#include "value.h"
+#include "entity.h"
 
-using value_scope_t = scope_ptr_t<std::string, value_ptr_t>;
+using entity_scope_t = Scope<std::string, entity_ptr_t>;
+using entity_scope_ptr_t = scope_ptr_t<std::string, entity_ptr_t>;
 
 class Context {
-    value_scope_t global_; 
-    value_scope_t scope_;
+    entity_scope_ptr_t global_; 
+    entity_scope_ptr_t scope_;
 
   public:
     Context() = default;
