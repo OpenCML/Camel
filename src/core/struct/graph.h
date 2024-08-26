@@ -18,9 +18,9 @@
 
 #pragma once
 
+#include "data.h"
 #include "function.h"
 #include "operator.h"
-#include "data.h"
 
 #include <any>
 #include <list>
@@ -59,32 +59,38 @@ class GraphNode {
 };
 
 class Graph : public GraphNode {
-    node_vec_t nodes;
+    node_vec_t nodes_;
+    node_vec_t inputs_;
+    node_ptr_t output_;
 
   public:
     Graph() { type_ = NodeType::GRAPH; }
     ~Graph() = default;
 
-    void addNode(const node_ptr_t &node) { nodes.push_back(node); }
-    void delNode(const node_ptr_t &node) { nodes.pop_back(); }
+    void addNode(const node_ptr_t &node) { nodes_.push_back(node); }
+    void delNode(const node_ptr_t &node) { nodes_.pop_back(); }
 };
 
 using graph_ptr_t = std::shared_ptr<Graph>;
 
 class DataGraphNode : public GraphNode {
-    data_ptr_t value;
+    data_ptr_t data_;
 
   public:
-    DataGraphNode(const data_ptr_t &value) : value(value) { type_ = NodeType::DATA; }
+    DataGraphNode(const data_ptr_t &data) : data_(data) { type_ = NodeType::DATA; }
     ~DataGraphNode() = default;
 };
 
+inline std::shared_ptr<DataGraphNode> data_graph_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<DataGraphNode>(ptr);
+}
+
 class FuncGraphNode : public GraphNode {
-    func_ptr_t func;
+    func_ptr_t func_;
+    graph_ptr_t graph_;
 
   public:
-    FuncGraphNode(const func_ptr_t &func)
-        : func(func) {
+    FuncGraphNode(const func_ptr_t &func) : func_(func) {
         type_ = NodeType::FUNCTOR;
         inputs_.resize(2, nullptr);
     }
@@ -98,10 +104,18 @@ class FuncGraphNode : public GraphNode {
     ~FuncGraphNode() = default;
 };
 
+inline std::shared_ptr<FuncGraphNode> func_graph_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<FuncGraphNode>(ptr);
+}
+
 class OpGraphNode : public GraphNode {
-    Operator *operation;
+    Operator *operation_;
 
   public:
-    OpGraphNode(Operator *operation) : operation(operation) { type_ = NodeType::OPERATOR; }
+    OpGraphNode(Operator *operation) : operation_(operation) { type_ = NodeType::OPERATOR; }
     ~OpGraphNode() = default;
 };
+
+inline std::shared_ptr<OpGraphNode> op_graph_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<OpGraphNode>(ptr);
+}

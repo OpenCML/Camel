@@ -45,11 +45,26 @@ using node_scope_ptr_t = scope_ptr_t<std::string, node_ptr_t>;
 using func_scope_t = Scope<std::string, func_ptr_t>;
 using func_scope_ptr_t = scope_ptr_t<std::string, func_ptr_t>;
 
+using void_ptr_t = void *;
+
 class GraphIRConstructor {
   public:
     GraphIRConstructor(context_ptr_t &context) : context_(context) {}
 
     graph_ptr_t construct(ast_ptr_t &ast) { return nullptr; }
+
+    std::any visitASTNode(const ast_ptr_t &ast);
+
+    func_ptr_t visitFuncNode(const ast_ptr_t &ast);
+    type_ptr_t visitTypeNode(const ast_ptr_t &ast);
+    node_ptr_t visitDataNode(const ast_ptr_t &ast);
+    void_ptr_t visitNRefNode(const ast_ptr_t &ast);
+    node_ptr_t visitDRefNode(const ast_ptr_t &ast);
+    void_ptr_t visitAssnNode(const ast_ptr_t &ast);
+    node_ptr_t visitAnnoNode(const ast_ptr_t &ast);
+    node_ptr_t visitLinkNode(const ast_ptr_t &ast);
+    node_ptr_t visitWithNode(const ast_ptr_t &ast);
+    node_ptr_t visitRetnNode(const ast_ptr_t &ast);
 
   private:
     context_ptr_t context_;
@@ -69,15 +84,4 @@ class GraphIRConstructor {
         entityScope_ = entity_scope_t::pop(entityScope_);
         funcScope_ = func_scope_t::pop(funcScope_);
     }
-
-    node_ptr_t visitDataNode(const ast_ptr_t &ast);
-    func_ptr_t visitFuncNode(const ast_ptr_t &ast);
-    type_ptr_t visitTypeNode(const ast_ptr_t &ast);
-    node_ptr_t visitNRefNode(const ast_ptr_t &ast);
-    node_ptr_t visitDRefNode(const ast_ptr_t &ast);
-    node_ptr_t visitAssnNode(const ast_ptr_t &ast);
-    node_ptr_t visitAnnoNode(const ast_ptr_t &ast);
-    node_ptr_t visitLinkNode(const ast_ptr_t &ast);
-    node_ptr_t visitWithNode(const ast_ptr_t &ast);
-    node_ptr_t visitRetnNode(const ast_ptr_t &ast);
 };

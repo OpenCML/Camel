@@ -35,6 +35,9 @@ enum class FunctionModifier {
 FunctionModifier str2modifier(const std::string &str);
 std::string modifier2str(FunctionModifier modifier);
 
+class Graph;
+using graph_ptr_t = std::shared_ptr<Graph>;
+
 class Function {
   protected:
     unsigned char flags_ = 0;
@@ -56,5 +59,5 @@ class Function {
 
     void setFlags(unsigned char value) { flags_ = value; }
 
-    virtual void apply() = 0;
+    graph_ptr_t constructGraph();
 };
