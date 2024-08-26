@@ -23,20 +23,23 @@
 class Entity : public std::enable_shared_from_this<Entity> {
   protected:
     size_t refs_ = 0;
+    bool isFunc_ = false;
 
     // nullptr type means null entity
     type_wptr_t type_;
-    value_ptr_t meta_ = nullptr;
-    value_ptr_t data_ = nullptr;
+    data_ptr_t meta_ = nullptr;
+    data_ptr_t data_ = nullptr;
 
   public:
     Entity() = delete;
-    Entity(value_ptr_t data);
+    Entity(data_ptr_t data);
     virtual ~Entity() = default;
 
     type_ptr_t type() const { return type_.lock(); }
-    value_ptr_t data() const { return data_; }
-    value_ptr_t meta();
+    data_ptr_t data() const { return data_; }
+    data_ptr_t meta();
+
+    bool isFunc() const { return isFunc_; }
 
     virtual std::string typeStr() const;
     virtual std::string metaStr() const;
@@ -62,12 +65,12 @@ class Entity : public std::enable_shared_from_this<Entity> {
     bool isNull() const { return data_ != nullptr; }
     bool hasMeta() const { return meta_ != nullptr; }
 
-    void setMeta(value_ptr_t meta);
-    void setData(value_ptr_t data);
+    void setMeta(data_ptr_t meta);
+    void setData(data_ptr_t data);
 
     const entity_ptr_t convert(type_ptr_t target, bool inplace);
 };
 
 // definition below is forwarded to type.h
-// using value_ptr_t = std::shared_ptr<Value>;
-// using value_wptr_t = std::weak_ptr<Value>;
+// using data_ptr_t = std::shared_ptr<Data>;
+// using data_wptr_t = std::weak_ptr<Data>;

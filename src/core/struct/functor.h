@@ -19,19 +19,21 @@
 #pragma once
 
 #include "entity.h"
-#include "value.h"
+#include "data.h"
+#include "function.h"
 
 class Functor : Entity {
-    value_ptr_t input;
-    value_ptr_t output;
+    func_ptr_t func_;
+    data_ptr_t input_;
+    data_ptr_t output_;
 
   public:
     Functor() = delete;
-    Functor(const value_ptr_t &input, const value_ptr_t &output, const value_ptr_t &with = nullptr)
-        : Entity(with), input(input), output(output) {}
+    Functor(const func_ptr_t &func, const data_ptr_t &input, const data_ptr_t &output, const data_ptr_t &with = nullptr)
+        : Entity(with), func_(func), input_(input), output_(output) {
+        isFunc_ = true;
+    }
     virtual ~Functor() = default;
-
-    virtual void apply() = 0;
 };
 
 // definition below is forwarded to type.h

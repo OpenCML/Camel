@@ -19,8 +19,10 @@
 #pragma once
 
 #include "entity.h"
-#include "functor.h"
-#include "value.h"
+#include "data.h"
+
+class ASTNode;
+using ast_ptr_t = std::shared_ptr<ASTNode>;
 
 class ASTNodeLoad;
 using ast_load_ptr_t = std::shared_ptr<ASTNodeLoad>;
@@ -44,19 +46,19 @@ class ASTNodeLoad {
 
 class DataASTNode : public ASTNodeLoad {
   private:
-    value_ptr_t value_;
-    value_vec_t unrefVals_;
+    data_ptr_t value_;
+    data_vec_t unrefVals_;
 
   public:
-    DataASTNode(value_ptr_t value, value_vec_t &&unrefVals)
+    DataASTNode(data_ptr_t value, data_vec_t &&unrefVals)
         : ASTNodeLoad(ASTNodeType::DATA), value_(value), unrefVals_(std::move(unrefVals)) {}
-    DataASTNode(value_ptr_t value, value_list_t unrefList = {})
+    DataASTNode(data_ptr_t value, data_list_t unrefList = {})
         : ASTNodeLoad(ASTNodeType::DATA), value_(value), unrefVals_(unrefList) {}
 
     bool resolved() const { return unrefVals_.empty(); }
 
-    value_ptr_t value() { return value_; }
-    value_vec_t &getUnrefVals() { return unrefVals_; }
+    data_ptr_t data() { return value_; }
+    data_vec_t &getUnrefData() { return unrefVals_; }
 
     const std::string toString() const override;
 };

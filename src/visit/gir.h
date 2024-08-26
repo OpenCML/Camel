@@ -54,7 +54,7 @@ class GraphIRConstructor {
     context_ptr_t context_;
     
     node_scope_t nodeScope_; // TODO: init required
-    value_scope_t valueScope_;
+    entity_scope_t entityScope_;
     func_scope_t funcScope_;
 
     node_ptr_t visitDataNode(const ast_ptr_t &ast);

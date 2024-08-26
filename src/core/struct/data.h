@@ -32,20 +32,20 @@ class ValueConvError : public std::exception {
 
   public:
     ValueConvError() = delete;
-    ValueConvError(const std::string &message) { message_ = "Value conversion failed: " + message; }
+    ValueConvError(const std::string &message) { message_ = "Data conversion failed: " + message; }
 
     virtual const char *what() const noexcept override { return message_.c_str(); }
 };
 
-class Value : public std::enable_shared_from_this<Value> {
+class Data : public std::enable_shared_from_this<Data> {
   protected:
     type_ptr_t type_;
     entity_wptr_t entity_;
 
   public:
-    Value() {};
-    Value(type_ptr_t type) : type_(type) {}
-    virtual ~Value() = default;
+    Data() {};
+    Data(type_ptr_t type) : type_(type) {}
+    virtual ~Data() = default;
 
     type_ptr_t type() const { return type_; }
     entity_ptr_t entity() {
@@ -58,63 +58,63 @@ class Value : public std::enable_shared_from_this<Value> {
     }
     void setEntity(const entity_ptr_t &entity) { entity_ = entity; }
 
-    virtual bool equals(const value_ptr_t &other) const {
-        throw std::runtime_error("Base Value::equals() not implemented");
+    virtual bool equals(const data_ptr_t &other) const {
+        throw std::runtime_error("Base Data::equals() not implemented");
     }
-    virtual value_ptr_t clone(bool deep = false) const {
-        throw std::runtime_error("Base Value::clone() not implemented");
+    virtual data_ptr_t clone(bool deep = false) const {
+        throw std::runtime_error("Base Data::clone() not implemented");
     }
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) {
-        throw std::runtime_error("Base Value::convert() not implemented");
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) {
+        throw std::runtime_error("Base Data::convert() not implemented");
     }
 
-    virtual const std::string toString() const { throw std::runtime_error("Base Value::toString() not implemented"); }
+    virtual const std::string toString() const { throw std::runtime_error("Base Data::toString() not implemented"); }
 };
 
 // definition below is forwarded to type.h
-// using value_ptr_t = std::shared_ptr<Value>;
-// using value_wptr_t = std::weak_ptr<Value>;
+// using data_ptr_t = std::shared_ptr<Data>;
+// using data_wptr_t = std::weak_ptr<Data>;
 
-class DanglingValue : public Value {
+class DanglingValue : public Data {
   private:
     std::string ref_;
 
   public:
-    DanglingValue(const std::string &ref) : Value(nullptr), ref_(ref) {}
+    DanglingValue(const std::string &ref) : Data(nullptr), ref_(ref) {}
     virtual ~DanglingValue() = default;
 
     const std::string &ref() const { return ref_; }
 
-    virtual bool equals(const value_ptr_t &other) const override { return false; }
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
+    virtual bool equals(const data_ptr_t &other) const override { return false; }
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         throw ValueConvError("Cannot convert DanglingValue to " + typeCodeToString(target->code()));
     }
-    virtual value_ptr_t clone(bool deep = false) const override { return std::make_shared<DanglingValue>(ref_); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<DanglingValue>(ref_); }
     virtual const std::string toString() const override { return "DREF<" + ref_ + ">"; }
 };
 
 using dang_value_ptr_t = std::shared_ptr<DanglingValue>;
 
-class NullValue : public Value {
+class NullValue : public Data {
   public:
-    NullValue(type_ptr_t type = voidTypePtr) : Value(type) {}
+    NullValue(type_ptr_t type = voidTypePtr) : Data(type) {}
     virtual ~NullValue() = default;
 
-    virtual bool equals(const value_ptr_t &other) const override { return true; }
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
+    virtual bool equals(const data_ptr_t &other) const override { return true; }
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
             return shared_from_this();
         }
         throw ValueConvError("Cannot convert null to " + typeCodeToString(target->code()));
     }
-    virtual value_ptr_t clone(bool deep = false) const override { return std::make_shared<NullValue>(); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<NullValue>(); }
     virtual const std::string toString() const override { return "null"; }
 };
 
 class StringValue;
 
-template <typename T> class PrimValue : public Value {
+template <typename T> class PrimValue : public Data {
   private:
     T data_;
 
@@ -124,7 +124,7 @@ template <typename T> class PrimValue : public Value {
 
   public:
     PrimValue() = delete;
-    PrimValue(const T &data) : Value(), data_(data) {
+    PrimValue(const T &data) : Data(), data_(data) {
         if constexpr (std::is_same_v<T, int32_t>) {
             type_ = int32TypePtr;
         } else if constexpr (std::is_same_v<T, int64_t>) {
@@ -144,14 +144,14 @@ template <typename T> class PrimValue : public Value {
 
     const T &data() const { return data_; }
 
-    virtual bool equals(const value_ptr_t &other) const override {
+    virtual bool equals(const data_ptr_t &other) const override {
         if (auto o = std::dynamic_pointer_cast<PrimValue<T>>(other)) {
             return data_ == o->data_;
         }
         return false;
     }
 
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
             return shared_from_this();
@@ -227,28 +227,28 @@ template <typename T> class PrimValue : public Value {
         }
         throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     }
-    virtual value_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimValue<T>>(data_); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimValue<T>>(data_); }
     virtual const std::string toString() const override { return std::to_string(data_); }
 };
 
-class StringValue : public Value {
+class StringValue : public Data {
   private:
     std::string data_;
 
   public:
     StringValue() = delete;
-    StringValue(const std::string &data) : Value(stringTypePtr), data_(data) {}
+    StringValue(const std::string &data) : Data(stringTypePtr), data_(data) {}
 
     const std::string &data() const { return data_; }
 
-    virtual bool equals(const value_ptr_t &other) const override {
+    virtual bool equals(const data_ptr_t &other) const override {
         if (auto o = std::dynamic_pointer_cast<StringValue>(other)) {
             return data_ == o->data_;
         }
         return false;
     }
 
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override {
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
             return shared_from_this();
@@ -272,79 +272,79 @@ class StringValue : public Value {
         }
         throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     }
-    virtual value_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
     virtual const std::string toString() const override {
         std::regex re("\\n");
         return "\"" + std::regex_replace(data_, re, "\\n") + "\"";
     }
 };
 
-class StructValue : public Value {
+class StructValue : public Data {
   public:
     StructValue() = delete;
-    StructValue(type_ptr_t type) : Value(type) {}
+    StructValue(type_ptr_t type) : Data(type) {}
     virtual ~StructValue() = default;
 
-    virtual bool equals(const value_ptr_t &other) const override = 0;
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
-    virtual value_ptr_t clone(bool deep = false) const override = 0;
+    virtual bool equals(const data_ptr_t &other) const override = 0;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
+    virtual data_ptr_t clone(bool deep = false) const override = 0;
     virtual const std::string toString() const override = 0;
 };
 
 class SetValue : public StructValue {
   private:
-    std::set<value_ptr_t> data_;
+    std::set<data_ptr_t> data_;
 
   public:
     SetValue(type_ptr_t elType) : StructValue(std::make_shared<SetType>(elType)) {}
-    SetValue(type_ptr_t elType, value_list_t data) : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
-    SetValue(type_ptr_t elType, const std::set<value_ptr_t> &data)
+    SetValue(type_ptr_t elType, data_list_t data) : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
+    SetValue(type_ptr_t elType, const std::set<data_ptr_t> &data)
         : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
     virtual ~SetValue() = default;
 
-    virtual bool equals(const value_ptr_t &other) const override;
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual value_ptr_t clone(bool deep = false) const override;
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };
 
 class ListValue : public StructValue {
   private:
-    std::vector<value_ptr_t> data_;
+    std::vector<data_ptr_t> data_;
 
   public:
     ListValue() : StructValue(listTypePtr), data_() {}
-    ListValue(value_list_t data) : StructValue(listTypePtr), data_(data) {}
-    ListValue(const std::vector<value_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
+    ListValue(data_list_t data) : StructValue(listTypePtr), data_(data) {}
+    ListValue(const std::vector<data_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
     virtual ~ListValue() = default;
 
-    void add(const value_ptr_t &e) { data_.push_back(e); }
+    void add(const data_ptr_t &e) { data_.push_back(e); }
 
-    virtual bool equals(const value_ptr_t &other) const override;
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual value_ptr_t clone(bool deep = false) const override;
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };
 
 class DictValue : public StructValue {
   private:
-    std::unordered_map<std::string, value_ptr_t> data_;
+    std::unordered_map<std::string, data_ptr_t> data_;
 
   public:
     DictValue() : StructValue(std::make_shared<DictType>()) {}
-    DictValue(std::initializer_list<std::pair<std::string, value_ptr_t>> data);
-    DictValue(const std::unordered_map<std::string, value_ptr_t> &data);
+    DictValue(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
+    DictValue(const std::unordered_map<std::string, data_ptr_t> &data);
     virtual ~DictValue() = default;
 
-    bool add(const std::string &key, const value_ptr_t &e);
+    bool add(const std::string &key, const data_ptr_t &e);
 
     bool del(const std::string &key);
 
     bool has(const std::string &key) const;
 
-    void set(const std::string &key, const value_ptr_t &e);
+    void set(const std::string &key, const data_ptr_t &e);
 
-    value_ptr_t get(const std::string &key) const;
+    data_ptr_t get(const std::string &key) const;
 
     void clear() {
         DictType &dictType = *static_cast<DictType *>(type_.get());
@@ -352,31 +352,31 @@ class DictValue : public StructValue {
         data_.clear();
     }
 
-    virtual bool equals(const value_ptr_t &other) const override;
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual value_ptr_t clone(bool deep = false) const override;
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };
 
-class NamedTupleValue : public Value {
+class NamedTupleValue : public Data {
   private:
     bool typeResolved_ = false;
-    std::vector<value_ptr_t> indexData_;
-    std::unordered_map<std::string, value_ptr_t> namedData_;
+    std::vector<data_ptr_t> indexData_;
+    std::unordered_map<std::string, data_ptr_t> namedData_;
 
   public:
-    NamedTupleValue() : Value(std::make_shared<NamedTupleType>()) {}
-    NamedTupleValue(const std::vector<value_ptr_t> &indexData,
-                    const std::unordered_map<std::string, value_ptr_t> &namedData)
-        : Value(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {}
+    NamedTupleValue() : Data(std::make_shared<NamedTupleType>()) {}
+    NamedTupleValue(const std::vector<data_ptr_t> &indexData,
+                    const std::unordered_map<std::string, data_ptr_t> &namedData)
+        : Data(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {}
     virtual ~NamedTupleValue() = default;
 
     bool setType(type_ptr_t type);
 
-    bool add(const value_ptr_t &e, const std::string &key = "");
+    bool add(const data_ptr_t &e, const std::string &key = "");
 
-    virtual bool equals(const value_ptr_t &other) const override;
-    virtual value_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual value_ptr_t clone(bool deep = false) const override;
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };

@@ -19,8 +19,8 @@
 #pragma once
 
 #include "entity.h"
-#include "value.h"
-#include "visit/ast.h"
+#include "data.h"
+#include "ast.h"
 
 #include <string>
 
@@ -58,5 +58,3 @@ class Function {
 
     virtual void apply() = 0;
 };
-
-using func_ptr_t = std::shared_ptr<Function>;

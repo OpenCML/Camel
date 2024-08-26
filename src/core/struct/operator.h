@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "value.h"
+#include "data.h"
 #include "context.h"
 
 #include <unordered_map>
@@ -26,7 +26,7 @@
 
 class Graph;
 
-using Operator = std::function<value_ptr_t(Context&, value_lst_t&&)>;
+using Operator = std::function<data_ptr_t(Context&, data_lst_t&&)>;
 
 extern std::unordered_map<std::string, Operator> operators;
 

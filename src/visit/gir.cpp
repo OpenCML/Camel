@@ -19,13 +19,13 @@
 #include "gir.h"
 
 node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
-    const auto &data = std::dynamic_pointer_cast<DataASTNode>(ast);
-    const value_ptr_t &value = data->value();
-    node_ptr_t node = std::make_shared<DataGraphNode>(value);
-    if (data->resolved()) {
+    const auto &dataNode = std::dynamic_pointer_cast<DataASTNode>(ast);
+    const data_ptr_t &data = dataNode->data();
+    node_ptr_t node = std::make_shared<DataGraphNode>(data);
+    if (dataNode->resolved()) {
         return node;
     } else {
-        for (const auto &e : data->getUnrefVals()) {
+        for (const auto &e : dataNode->getUnrefData()) {
             const std::string &ref = std::dynamic_pointer_cast<DanglingValue>(e)->ref();
             auto optSrcNode = nodeScope_->at(ref);
             if (optSrcNode.has_value()) {
@@ -50,10 +50,14 @@ node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {
     if (optNode.has_value()) {
         return optNode.value();
     }
-    auto optValue = valueScope_->at(ident);
-    if (optValue.has_value()) {
-        value_ptr_t &value = optValue.value();
-        return std::make_shared<DataGraphNode>(optValue.value());
+    auto optEntity = entityScope_->at(ident);
+    if (optEntity.has_value()) {
+        entity_ptr_t &entity = optEntity.value();
+        if (entity->isFunc()) {
+            // return std::make_shared<FuncGraphNode>(entity->func());
+        } else {
+            return std::make_shared<DataGraphNode>(entity->data());
+        }
     }
     auto optFunc = funcScope_->at(ident);
     if (optFunc.has_value()) {

@@ -20,9 +20,9 @@
 
 #include <string>
 
-#include "struct/value.h"
+#include "struct/data.h"
 #include "struct/scope.h"
 
-extern Scope<std::string, value_ptr_t> globalRootScope;
+extern Scope<std::string, data_ptr_t> globalRootScope;
 
 void initGlobalRootScope();

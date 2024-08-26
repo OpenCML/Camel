@@ -20,7 +20,7 @@
 
 #include "function.h"
 #include "operator.h"
-#include "value.h"
+#include "data.h"
 
 #include <any>
 #include <list>
@@ -71,10 +71,10 @@ class Graph : public GraphNode {
 using graph_ptr_t = std::shared_ptr<Graph>;
 
 class DataGraphNode : public GraphNode {
-    value_ptr_t value;
+    data_ptr_t value;
 
   public:
-    DataGraphNode(const value_ptr_t &value) : value(value) { type_ = NodeType::DATA; }
+    DataGraphNode(const data_ptr_t &value) : value(value) { type_ = NodeType::DATA; }
     ~DataGraphNode() = default;
 };
 
