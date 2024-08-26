@@ -20,13 +20,13 @@
 
 node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
     const auto &data = std::dynamic_pointer_cast<DataNode>(ast);
-    const auto &value = data->value();
-    node_ptr_t node = std::make_shared<GraphNode>();
+    value_ptr_t &value = data->value();
+    node_ptr_t node = std::make_shared<ValueNode>(value);
     if (data->resolved()) {
         return node;
     } else {
         for (const auto &e : data->getUnrefVals()) {
-            const auto &ref = std::dynamic_pointer_cast<DanglingValue>(e)->ref();
+            std::string &ref = std::dynamic_pointer_cast<DanglingValue>(e)->ref();
             auto &sourceNode = nodeScope_->at(ref);
             if (sourceNode.has_value()) {
                 GraphNode::link(sourceNode.value(), node);
@@ -44,7 +44,9 @@ node_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) {}
 
 node_ptr_t GraphIRConstructor::visitNewRefNode(const ast_ptr_t &ast) {}
 
-node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {}
+node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {
+    const auto &deref = std::dynamic_pointer_cast<DeRefNode>(ast);
+}
 
 node_ptr_t GraphIRConstructor::visitAssignNode(const ast_ptr_t &ast) {}
 
