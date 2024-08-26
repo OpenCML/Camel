@@ -89,6 +89,8 @@ class NRefASTNode : public ASTNodeLoad {
   public:
     NRefASTNode(const std::string &ident) : ASTNodeLoad(ASTNodeType::NREF), ident_(ident) {}
 
+    const std::string ident() const { return ident_; }
+
     const std::string toString() const override;
 };
 

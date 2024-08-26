@@ -43,7 +43,13 @@ func_ptr_t GraphIRConstructor::visitFuncNode(const ast_ptr_t &ast) {}
 
 type_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) { return nullptr; }
 
-node_ptr_t GraphIRConstructor::visitNewRefNode(const ast_ptr_t &ast) {}
+node_ptr_t GraphIRConstructor::visitNewRefNode(const ast_ptr_t &ast) {
+    const auto &newRefNode = std::dynamic_pointer_cast<NRefASTNode>(ast);
+    const std::string &ident = newRefNode->ident();
+    const ast_load_ptr_t &target = (*ast)[0].load();
+    if (target->type() == ASTNodeType::FUNC) {
+    }
+}
 
 node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {
     const std::string &ident = std::dynamic_pointer_cast<DRefASTNode>(ast)->ident();

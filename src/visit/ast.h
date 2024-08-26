@@ -69,11 +69,11 @@ class ASTNode : public AbstractTreeNode<ast_load_ptr_t>, std::enable_shared_from
     ASTNode(ast_load_ptr_t load) : AbstractTreeNode(load) {}
     virtual ~ASTNode() = default;
 
-    ASTNodeType type() const { return load->type(); }
-    std::string toString() const { return load->toString(); }
+    ASTNodeType type() const { return load_->type(); }
+    std::string toString() const { return load_->toString(); }
 
     ASTNode &operator<<(const ast_ptr_t &node) {
-        node->parent = this;
+        node->setParent(this);
         this->push_back(node);
         return *this;
     }

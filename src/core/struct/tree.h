@@ -33,16 +33,22 @@ template <typename load_t> class AbstractTreeNode;
 
 template <typename load_t> using tree_node_t = AbstractTreeNode<load_t>;
 
-template <typename load_t> using tree_node_ptr_t = std::shared_ptr<AbstractTreeNode<load_t>>;
+template <typename load_t> using tree_node_ptr_t = std::shared_ptr<tree_node_t<load_t>>;
 
 template <typename load_t> using tree_children_t = std::vector<tree_node_ptr_t<load_t>>;
 
 template <typename load_t> class AbstractTreeNode : public tree_children_t<load_t> {
-  public:
-    tree_node_t<load_t> *parent;
-    load_t load;
+  protected:
+    tree_node_t<load_t> *parent_;
+    load_t load_;
 
-    AbstractTreeNode(load_t load) : parent(nullptr), load(load) {}
+  public:
+    AbstractTreeNode(load_t load) : parent_(nullptr), load_(load) {}
+
+    tree_node_t<load_t> *parent() const { return parent_; }
+    load_t &load() { return load_; }
+
+    void setParent(tree_node_t<load_t> *parent) { parent_ = parent; }
 
     static tree_node_ptr_t<load_t> createNode(load_t load) { return std::make_shared<tree_node_t<load_t>>(load); }
 
@@ -64,7 +70,7 @@ template <typename load_t> class AbstractTreeNode : public tree_children_t<load_
         return static_cast<tree_node_t<load_t> &>(*child);
     }
 
-    tree_node_ptr_t<load_t> get_child_ptr(size_t index) const {
+    tree_node_ptr_t<load_t> childPtrAt(size_t index) const {
         tree_node_ptr_t<load_t> child = this->at(index);
         return child;
     }
@@ -136,9 +142,9 @@ template <typename load_t> class AbstractTreeNode : public tree_children_t<load_
                 if (visible.size() <= depth)
                     visible.push_back(true);
                 if (depth > 0) {
-                    if (node.parent == nullptr) {
+                    if (node.parent_ == nullptr) {
                         warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
-                    } else if (index == node.parent->size() - 1) {
+                    } else if (index == node.parent_->size() - 1) {
                         isLast = true;
                         visible[depth - 1] = false;
                     }

@@ -99,10 +99,10 @@ void initFuncDeRefNodes() {
 
 data_ptr_t ASTConstructor::extractStaticValue(const ast_ptr_t &node) {
     if (node->type() == ASTNodeType::DATA) {
-        const auto dataNode = std::dynamic_pointer_cast<DataASTNode>(node->load);
+        const auto dataNode = std::dynamic_pointer_cast<DataASTNode>(node->load());
         return dataNode->data();
     } else if (node->type() == ASTNodeType::DREF) {
-        const auto refNode = std::dynamic_pointer_cast<DRefASTNode>(node->load);
+        const auto refNode = std::dynamic_pointer_cast<DRefASTNode>(node->load());
         return std::make_shared<DanglingValue>(refNode->ident());
     } else {
         return nullptr;
