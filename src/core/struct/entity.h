@@ -39,6 +39,8 @@ class Entity : public std::enable_shared_from_this<Entity> {
     data_ptr_t data() const { return data_; }
     data_ptr_t meta();
 
+    virtual entity_ptr_t clone(bool deep = false) const;
+
     bool isFunc() const { return isFunc_; }
 
     virtual std::string typeStr() const;

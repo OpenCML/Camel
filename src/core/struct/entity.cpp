@@ -36,6 +36,13 @@ data_ptr_t Entity::meta() {
     return meta_;
 }
 
+entity_ptr_t Entity::clone(bool deep) const {
+    entity_ptr_t entity = std::make_shared<Entity>(data_->clone(deep));
+    entity->type_ = type_;
+    entity->meta_ = meta_->clone(deep);
+    return entity;
+}
+
 std::string Entity::typeStr() const {
     auto type = type_.lock();
     if (type == nullptr) {

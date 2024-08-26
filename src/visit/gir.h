@@ -58,8 +58,8 @@ class GraphIRConstructor {
     func_scope_t funcScope_;
 
     node_ptr_t visitDataNode(const ast_ptr_t &ast);
-    node_ptr_t visitFuncNode(const ast_ptr_t &ast);
-    node_ptr_t visitTypeNode(const ast_ptr_t &ast);
+    func_ptr_t visitFuncNode(const ast_ptr_t &ast);
+    type_ptr_t visitTypeNode(const ast_ptr_t &ast);
     node_ptr_t visitNewRefNode(const ast_ptr_t &ast);
     node_ptr_t visitDeRefNode(const ast_ptr_t &ast);
     node_ptr_t visitAssignNode(const ast_ptr_t &ast);

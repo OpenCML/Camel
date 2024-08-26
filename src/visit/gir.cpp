@@ -17,6 +17,7 @@
  */
 
 #include "gir.h"
+#include "core/struct/functor.h"
 
 node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
     const auto &dataNode = std::dynamic_pointer_cast<DataASTNode>(ast);
@@ -38,9 +39,9 @@ node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
     }
 }
 
-node_ptr_t GraphIRConstructor::visitFuncNode(const ast_ptr_t &ast) {}
+func_ptr_t GraphIRConstructor::visitFuncNode(const ast_ptr_t &ast) {}
 
-node_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) {}
+type_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) { return nullptr; }
 
 node_ptr_t GraphIRConstructor::visitNewRefNode(const ast_ptr_t &ast) {}
 
@@ -54,14 +55,16 @@ node_ptr_t GraphIRConstructor::visitDeRefNode(const ast_ptr_t &ast) {
     if (optEntity.has_value()) {
         entity_ptr_t &entity = optEntity.value();
         if (entity->isFunc()) {
-            // return std::make_shared<FuncGraphNode>(entity->func());
+            const functor_ptr_t functor = std::dynamic_pointer_cast<Functor>(entity);
+            auto funcNode = std::make_shared<FuncGraphNode>(functor->func());
+            return funcNode;
         } else {
             return std::make_shared<DataGraphNode>(entity->data());
         }
     }
     auto optFunc = funcScope_->at(ident);
     if (optFunc.has_value()) {
-        // return std::make_shared<FuncGraphNode>(optFunc.value());
+        return std::make_shared<FuncGraphNode>(optFunc.value());
     }
     throw std::runtime_error("Unresolved reference: " + ident);
 }

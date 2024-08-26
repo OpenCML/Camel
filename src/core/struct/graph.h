@@ -32,12 +32,13 @@ class GraphNode;
 using node_ptr_t = std::shared_ptr<GraphNode>;
 using node_wptr_t = std::weak_ptr<GraphNode>;
 using node_lst_t = std::list<node_ptr_t>;
+using node_vec_t = std::vector<node_ptr_t>;
 
 class GraphNode {
   protected:
     NodeType type_;
-    node_lst_t inputs_;
-    node_lst_t outputs_;
+    node_vec_t inputs_;
+    node_vec_t outputs_;
 
   public:
     GraphNode() = default;
@@ -45,8 +46,8 @@ class GraphNode {
 
     NodeType type() const { return type_; }
 
-    node_lst_t &inputs() { return inputs_; }
-    node_lst_t &outputs() { return outputs_; }
+    node_vec_t &inputs() { return inputs_; }
+    node_vec_t &outputs() { return outputs_; }
 
     size_t inDegree() const { return inputs_.size(); }
     size_t outDegree() const { return outputs_.size(); }
@@ -58,14 +59,14 @@ class GraphNode {
 };
 
 class Graph : public GraphNode {
-    node_lst_t nodes;
+    node_vec_t nodes;
 
   public:
     Graph() { type_ = NodeType::GRAPH; }
     ~Graph() = default;
 
     void addNode(const node_ptr_t &node) { nodes.push_back(node); }
-    void delNode(const node_ptr_t &node) { nodes.remove(node); }
+    void delNode(const node_ptr_t &node) { nodes.pop_back(); }
 };
 
 using graph_ptr_t = std::shared_ptr<Graph>;
@@ -80,14 +81,20 @@ class DataGraphNode : public GraphNode {
 
 class FuncGraphNode : public GraphNode {
     func_ptr_t func;
-    node_ptr_t params;
-    node_ptr_t super;
 
   public:
-    FuncGraphNode(const func_ptr_t &func, const node_ptr_t &params, const node_ptr_t &super)
-        : func(func), params(params), super(super) {
+    FuncGraphNode(const func_ptr_t &func)
+        : func(func) {
         type_ = NodeType::FUNCTOR;
+        inputs_.resize(2, nullptr);
     }
+
+    void setSuperParams(const node_ptr_t &superParams) { inputs_[0] = superParams; }
+    void setParams(const node_ptr_t &params) { inputs_[1] = params; }
+
+    node_ptr_t &superParams() { return inputs_[0]; }
+    node_ptr_t &params() { return inputs_[1]; }
+
     ~FuncGraphNode() = default;
 };
 
