@@ -17,6 +17,11 @@
 //     return false;
 // };
 
+let a = 1;
+let b = a;
+use c = b;
+c = a;
+
 with <capture: Any, condition: Functor, update: Functor>
 sync func test(target: Functor) {
     return ifexpr(condition<capture>(), {
