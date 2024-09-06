@@ -17,8 +17,10 @@
  */
 
 #include "type.h"
+#include "data.h"
 #include "entity.h"
 #include "functor.h"
+#include "function.h"
 
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
@@ -77,6 +79,8 @@ std::string typeCodeToString(TypeCode code) {
         return "Dict";
     case TypeCode::ARRAY:
         return "Array";
+    case TypeCode::TUPLE:
+        return "Tuple";
     case TypeCode::UNION:
         return "Union";
     case TypeCode::VECTOR:
@@ -93,6 +97,7 @@ std::string typeCodeToString(TypeCode code) {
     case TypeCode::FUNCTOR:
         return "Functor";
     }
+    return "Unknown";
 }
 
 TypeConv PrimType::convertibility(const Type &other) const {
@@ -568,7 +573,7 @@ std::string NamedTupleType::toString() const {
         auto &[name, type, value] = tuple;
         result += name + ": " + type->toString();
         if (value) {
-            result += " = " + value->dataStr();
+            result += " = " + value->toString();
         }
         result += ", ";
     }
@@ -673,7 +678,7 @@ std::string FunctorType::toString() const {
             const auto &[name, type, value] = tuple;
             result += name + ": " + type->toString();
             if (value) {
-                result += " = " + value->dataStr();
+                result += " = " + value->toString();
             }
             result += ", ";
         }
@@ -691,7 +696,7 @@ std::string FunctorType::toString() const {
             const auto &[name, type, value] = tuple;
             result += name + ": " + type->toString();
             if (value) {
-                result += " = " + value->dataStr();
+                result += " = " + value->toString();
             }
             result += ", ";
         }

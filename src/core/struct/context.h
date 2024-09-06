@@ -12,8 +12,27 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 5, 2024
+ * Created: Aug. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "functor.h"
+#pragma once
+
+#include <string>
+
+#include "scope.h"
+#include "entity.h"
+
+using entity_scope_t = Scope<std::string, entity_ptr_t>;
+using entity_scope_ptr_t = scope_ptr_t<std::string, entity_ptr_t>;
+
+class Context {
+    entity_scope_ptr_t global_; 
+    entity_scope_ptr_t scope_;
+
+  public:
+    Context() = default;
+    virtual ~Context() = default;
+};
+
+using context_ptr_t = std::shared_ptr<Context>;

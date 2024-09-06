@@ -12,40 +12,32 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 12, 2024
+ * Created: Aug. 1, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "error.h"
+#include <iostream>
+#include <regex>
+#include <string>
 
-class JSONErrorListener : public CamelErrorListener {
-    std::string escapeString(const std::string &input) {
-        std::string result;
-        for (char c : input) {
-            if (c == '"') {
-                result += "\\\"";
-            } else if (c == '\n') {
-                result += "\\n";
-            } else {
-                result += c;
-            }
-        }
-        return result;
-    }
+#include "antlr4-runtime.h"
+
+class CamelErrorListener : public antlr4::BaseErrorListener {
+  protected:
+    std::string filename;
+    std::ostream &os;
+    bool hasError = false;
 
   public:
-    JSONErrorListener(std::string filename, std::ostream &os) : CamelErrorListener(filename, os) {}
+    CamelErrorListener(std::string filename, std::ostream &os) : filename(filename), os(os) {}
+
+    bool hasErrors() { return hasError; }
 
     virtual void syntaxError(antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
                              size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
         hasError = true;
-        os << "{"
-           << "\"filename\": \"" << filename << "\", "
-           << "\"line\": " << line << ", "
-           << "\"column\": " << charPositionInLine << ", "
-           << "\"message\": \"" << escapeString(msg).c_str() << "\""
-           << "}" << std::endl;
+        os << "line " << line << ", column " << charPositionInLine << ": " << msg << std::endl;
     }
 };

@@ -29,74 +29,81 @@
 
 #include "utils/log.h"
 
-template <typename data_t> class AbstractTreeNode;
+template <typename load_t> class AbstractTreeNode;
 
-template <typename data_t> using tree_node_t = AbstractTreeNode<data_t>;
+template <typename load_t> using tree_node_t = AbstractTreeNode<load_t>;
 
-template <typename data_t> using tree_node_ptr_t = std::shared_ptr<AbstractTreeNode<data_t>>;
+template <typename load_t> using tree_node_ptr_t = std::shared_ptr<tree_node_t<load_t>>;
 
-template <typename data_t> using tree_children_t = std::vector<tree_node_ptr_t<data_t>>;
+template <typename load_t> using tree_children_t = std::vector<tree_node_ptr_t<load_t>>;
 
-template <typename data_t> class AbstractTreeNode : public tree_children_t<data_t> {
+template <typename load_t>
+class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from_this<AbstractTreeNode<load_t>> {
+  protected:
+    tree_node_t<load_t> *parent_;
+    load_t load_;
+
   public:
-    tree_node_t<data_t> *parent;
-    data_t data;
+    AbstractTreeNode(load_t load) : parent_(nullptr), load_(load) {}
 
-    AbstractTreeNode(data_t data) : parent(nullptr), data(data) {}
+    tree_node_t<load_t> *parent() const { return parent_; }
+    load_t &load() { return load_; }
 
-    static tree_node_ptr_t<data_t> createNode(data_t data) { return std::make_shared<tree_node_t<data_t>>(data); }
+    void setParent(tree_node_t<load_t> *parent) { parent_ = parent; }
 
-    size_t find(data_t data) const {
-        auto it = find_if(tree_children_t<data_t>::begin(), tree_children_t<data_t>::end(),
-                          [=](tree_node_ptr_t<data_t> node) { return node->data == data; });
-        return it == tree_children_t<data_t>::end() ? -1 : it - tree_children_t<data_t>::begin();
+    static tree_node_ptr_t<load_t> createNode(load_t load) { return std::make_shared<tree_node_t<load_t>>(load); }
+
+    size_t find(load_t load) const {
+        auto it = find_if(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end(),
+                          [=](tree_node_ptr_t<load_t> node) { return node->load == load; });
+        return it == tree_children_t<load_t>::end() ? -1 : it - tree_children_t<load_t>::begin();
     }
 
     template <typename func_t> size_t find(func_t cmp) const {
-        auto it = find_if(tree_children_t<data_t>::begin(), tree_children_t<data_t>::end(), cmp);
-        return it == tree_children_t<data_t>::end() ? -1 : it - tree_children_t<data_t>::begin();
+        auto it = find_if(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end(), cmp);
+        return it == tree_children_t<load_t>::end() ? -1 : it - tree_children_t<load_t>::begin();
     }
 
-    void reverseChildren() { reverse(tree_children_t<data_t>::begin(), tree_children_t<data_t>::end()); }
+    void reverseChildren() { reverse(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end()); }
 
-    tree_node_t<data_t> &operator[](size_t index) const {
-        const auto &child = this->at(index);
-        return static_cast<tree_node_t<data_t> &>(*child);
-    }
-
-    tree_node_ptr_t<data_t> get_child_ptr(size_t index) const {
-        tree_node_ptr_t<data_t> child = this->at(index);
+    tree_node_ptr_t<load_t> operator[](size_t index) const {
+        tree_node_ptr_t<load_t> child = this->at(index);
         return child;
     }
 
-    tree_node_t<data_t> &operator<<(const tree_node_ptr_t<data_t> node) {
-        node->parent = this;
-        this->push_back(node);
-        return static_cast<tree_node_t<data_t> &>(*this);
+    tree_node_ptr_t<load_t> childAt(size_t index) const {
+        tree_node_ptr_t<load_t> child = this->at(index);
+        return child;
     }
 
-    size_t size() const { return tree_children_t<data_t>::size(); }
+    tree_node_t<load_t> &operator<<(const tree_node_ptr_t<load_t> node) {
+        node->parent = this;
+        this->push_back(node);
+        return static_cast<tree_node_t<load_t> &>(*this);
+    }
+
+    size_t size() const { return tree_children_t<load_t>::size(); }
 
     virtual std::string toString() const { return ""; }
 
     template <typename func_t> void foreach (func_t f) const {
-        auto nodeF = [=](tree_children_t<data_t>::const_reference ref) { f(*ref); };
-        for_each(tree_children_t<data_t>::begin(), tree_children_t<data_t>::end(), nodeF);
+        auto nodeF = [=](typename tree_children_t<load_t>::const_reference ref) { f(*ref); };
+        for_each(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end(), nodeF);
     }
 
     template <typename func_t> void traverse(func_t f) const {
         f(*this);
-        foreach ([=](tree_node_t<data_t> &ref) { ref.traverse(f); })
+        foreach ([=](tree_node_t<load_t> &ref) { ref.traverse(f); })
             ;
     }
 
     template <typename func_t> void traverse(func_t f, int &level, int &index) {
-        tree_node_t<data_t> &self = *this;
+        tree_node_t<load_t> &self = *this;
         f(self);
         level++;
         int tmpIdx = index++;
         index = 0;
-        foreach ([&](tree_node_t<data_t> &ref) {
+        foreach ([&](tree_node_t<load_t> &ref) {
             ref.traverse(f, level, index);
             index++;
         })
@@ -106,17 +113,17 @@ template <typename data_t> class AbstractTreeNode : public tree_children_t<data_
     }
 
     template <typename func_t> void postorder(func_t f) const {
-        foreach ([=](tree_node_t<data_t> &ref) { ref.postorder(f); })
+        foreach ([=](tree_node_t<load_t> &ref) { ref.postorder(f); })
             ;
         f(*this);
     }
 
     template <typename func_t> void postorder(func_t f, int &level, int &index) {
-        tree_node_t<data_t> &self = *this;
+        tree_node_t<load_t> &self = *this;
         level++;
         int tmpIdx = index++;
         index = 0;
-        foreach ([&](tree_node_t<data_t> &ref) {
+        foreach ([&](tree_node_t<load_t> &ref) {
             ref.postorder(f, level, index);
             index++;
         })
@@ -131,14 +138,14 @@ template <typename data_t> class AbstractTreeNode : public tree_children_t<data_
         int depth = 0;
         int index = 0;
         traverse(
-            [&](tree_node_t<data_t> &node) {
+            [&](tree_node_t<load_t> &node) {
                 bool isLast = false;
                 if (visible.size() <= depth)
                     visible.push_back(true);
                 if (depth > 0) {
-                    if (node.parent == nullptr) {
+                    if (node.parent_ == nullptr) {
                         warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
-                    } else if (index == node.parent->size() - 1) {
+                    } else if (index == node.parent_->size() - 1) {
                         isLast = true;
                         visible[depth - 1] = false;
                     }

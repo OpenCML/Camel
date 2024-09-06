@@ -142,3 +142,20 @@ tools.cmake.cmaketoolchain:generator=Visual Studio 17
 ```
 conan install . --output-folder=build --build=missing
 ```
+
+运行脚本
+
+```
+./run.cmd
+```
+
+conan会自动完成依赖包的获取和编译，但在链接阶段会报错，说找不到`antlr4-runtime`
+这里主要原因是conan对antlr4包的命名有误（具体原因不详，但有walkaround：
+
+> 找到conan存储依赖包的路径
+> 打开文件 `./build/conan_toolchain.cmake`
+> 搜索 `CMAKE_LIBRARY_PATH`
+> 找到后面的路径
+> 类似于 `"C:/Users/xxxx/.conan2/p/b/antlrxxxxxxxxxxx/p/lib"`
+> 打开该路径，将其中的`antlr4-runtime-static.lib`重命名为`antlr4-runtime.lib`
+> 重新执行`run.cmd`即可

@@ -18,77 +18,27 @@
 
 #pragma once
 
+#include "data.h"
 #include "entity.h"
+#include "function.h"
 
-enum class FunctorModifier {
-    INNER,
-    OUTER,
-    ATOMIC,
-    STATIC,
-    SYNC,
-};
-
-FunctorModifier str2modifier(const std::string &str);
-std::string modifier2str(FunctorModifier modifier);
-
-class Functor : Entity {
-  protected:
-    bool inner_ = false;
-    bool outer_ = false;
-    bool atomic_ = false;
-    bool static_ = false;
-    bool sync_ = false;
-
-    entity_ptr_t input;
-    entity_ptr_t output;
+class Functor : public Entity {
+    func_ptr_t func_;
 
   public:
     Functor() = delete;
-    Functor(const entity_ptr_t &input, const entity_ptr_t &output, const value_ptr_t &data = nullptr)
-        : Entity(nullptr, data), input(input), output(output) {}
+    Functor(const func_ptr_t &func, const data_ptr_t &with = nullptr) : Entity(with), func_(func) { isFunc_ = true; }
+
+    virtual entity_ptr_t clone(bool deep = false) const override {
+        entity_ptr_t entity = std::make_shared<Functor>(func_, data_->clone(deep));
+        return entity;
+    }
+
+    func_ptr_t func() const { return func_; }
+
     virtual ~Functor() = default;
-
-    template <typename T> void setFlag(bool value) {
-        if constexpr (std::is_same_v<T, FunctorModifier::INNER>) {
-            inner_ = value;
-        } else if constexpr (std::is_same_v<T, FunctorModifier::OUTER>) {
-            outer_ = value;
-        } else if constexpr (std::is_same_v<T, FunctorModifier::ATOMIC>) {
-            atomic_ = value;
-        } else if constexpr (std::is_same_v<T, FunctorModifier::STATIC>) {
-            static_ = value;
-        } else if constexpr (std::is_same_v<T, FunctorModifier::SYNC>) {
-            sync_ = value;
-        } else {
-            static_assert(std::always_false<T>, "Unsupported flag type");
-        }
-    }
-
-    virtual void execute() = 0;
 };
 
-class InnerFunctor : Functor {
-  public:
-    InnerFunctor(const entity_ptr_t &input, const entity_ptr_t &output, const value_ptr_t &data = nullptr)
-        : Functor(input, output, data) {
-        inner_ = true;
-    }
-    virtual ~InnerFunctor() = default;
-
-    virtual void execute() = 0;
-};
-
-class OuterFunctor : Functor {
-  protected:
-    std::string name_;
-    std::string path_;
-
-  public:
-    OuterFunctor(const entity_ptr_t &input, const entity_ptr_t &output, const value_ptr_t &data = nullptr)
-        : Functor(input, output, data) {
-        outer_ = true;
-    }
-    virtual ~OuterFunctor() = default;
-
-    virtual void execute() = 0;
-};
+// definition below is forwarded to type.h
+// using functor_ptr_t = std::shared_ptr<Functor>;
+// using functor_wptr_t = std::weak_ptr<Functor>;

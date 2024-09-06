@@ -20,7 +20,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "sem.h"
+#include "ast.h"
 
 std::string pointerToHex(const void *ptr) {
     std::stringstream ss;
@@ -28,47 +28,47 @@ std::string pointerToHex(const void *ptr) {
     return ss.str();
 }
 
-const std::string SemanticNode::typeStr() const {
+const std::string ASTNodeLoad::typeStr() const {
     switch (type_) {
-    case SemNodeType::DATA:
+    case ASTNodeType::DATA:
         return "DATA";
-    case SemNodeType::TYPE:
+    case ASTNodeType::TYPE:
         return "TYPE";
-    case SemNodeType::FUNC:
+    case ASTNodeType::FUNC:
         return "FUNC";
-    case SemNodeType::NREF:
+    case ASTNodeType::NREF:
         return "NREF";
-    case SemNodeType::DREF:
+    case ASTNodeType::DREF:
         return "DREF";
-    case SemNodeType::ASSN:
+    case ASTNodeType::ASSN:
         return "ASSN";
-    case SemNodeType::ANNO:
+    case ASTNodeType::ANNO:
         return "ANNO";
-    case SemNodeType::LINK:
+    case ASTNodeType::LINK:
         return "LINK";
-    case SemNodeType::WITH:
+    case ASTNodeType::WITH:
         return "WITH";
-    case SemNodeType::RETN:
+    case ASTNodeType::RETN:
         return "RETN";
-    case SemNodeType::EXEC:
+    case ASTNodeType::EXEC:
         return "EXEC";
     default:
         return "UNKNOWN";
     }
 }
 
-const std::string DataNode::toString() const {
+const std::string DataASTLoad::toString() const {
     std::stringstream ss;
-    ss << "DATA: " << pointerToHex(entity_.get()) << ", " << entity_->typeStr() << ", " << entity_->dataStr();
+    ss << "DATA: " << pointerToHex(data_.get()) << ", " << data_->type()->toString() << ", " << data_->toString();
     return ss.str();
 }
 
-const std::string TypeNode::toString() const {
+const std::string TypeASTLoad::toString() const {
     std::stringstream ss;
     ss << "TYPE: " << type_->toString();
     return ss.str();
 }
 
-const std::string NewRefNode::toString() const { return "NREF: " + ident_; }
+const std::string NRefASTLoad::toString() const { return "NREF: " + ident_; }
 
-const std::string DeRefNode::toString() const { return "DREF: " + ident_; }
+const std::string DRefASTLoad::toString() const { return "DREF: " + ident_; }

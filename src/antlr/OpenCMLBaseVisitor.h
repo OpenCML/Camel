@@ -229,7 +229,11 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitType(OpenCMLParser::TypeContext *ctx) override {
+  virtual std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAtomType(OpenCMLParser::AtomTypeContext *ctx) override {
     return visitChildren(ctx);
   }
 

@@ -170,12 +170,16 @@ literal
     ;
 
 typeExpr
-    : type ('[' INTEGER? ']')*
-    | typeExpr '&' type
-    | typeExpr '|' type
+    : unaryType
+    | typeExpr '&' unaryType
+    | typeExpr '|' unaryType
     ;
 
-type
+unaryType
+    : atomType ('[' INTEGER? ']')*
+    ;
+
+atomType
     : primType
     | structType
     | specialType
