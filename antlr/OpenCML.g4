@@ -48,7 +48,7 @@ lambdaExpr : modifiers? parentParams (':' typeExpr)? '=>' (bracedStmts | entityE
 
 carrier    : identRef | bracedIdents | bracketIdents ;
 
-annotation  : '@' primEntity ;
+annotation  : '@' primaryExpr ;
 annotations : annotation+ ;
 modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
 
@@ -77,6 +77,7 @@ bracedIndexKVPairs : '{' indexKVPairs ','? '}' ;  // for literal construction of
 bracketIdents      : '[' identList? ','? ']' ;    // for list unpacking
 bracketHomoValues  : '[|' valueList? ','? '|]' ;  // for literal construction of vector (variable length, homogeneous)
 bracketHeteValues  : '[' valueList? ','? ']' ;    // for literal construction of list (variable length, heterogeneous)
+memberAccess       : '[' entityExpr ']' ;
 
 parentParams       : '(' pairedParams? ','? ')' ; // for functor parameters definition
 parentValues       : '(' argumentList? ','? ')' ; // for functor arguments
@@ -86,7 +87,56 @@ parentHeteValues   : '(' valueList? ','? ')' ;    // for literal construction of
 angledParams       : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues       : '<' argumentList? ','? '>' ; // for functor super arguments
 
-primEntity
+entityExpr
+    : ternaryExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') ternaryExpr)*
+    ;
+
+ternaryExpr
+    : relationalExpr ('?' ternaryExpr ':' ternaryExpr)?
+    ;
+
+logicalOrExpr
+    : logicalAndExpr ('||' logicalAndExpr)*
+    ;
+
+logicalAndExpr
+    : equalityExpr ('&&' equalityExpr)*
+    ;
+
+equalityExpr
+    : relationalExpr (('==' | '!=') relationalExpr)*
+    ;
+
+relationalExpr
+    : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
+    ;
+
+additiveExpr
+    : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
+    ;
+
+multiplicativeExpr
+    : unaryExpr (('^' | '*' | '/' | '%' | AS | IS) unaryExpr)*
+    ;
+
+unaryExpr
+    : linkExpr
+    | ('!' | '~') linkExpr
+    ;
+
+linkExpr
+    : withExpr ('->' withExpr)*
+    ;
+
+withExpr
+    : annotatedExpr ('.' annotatedExpr)*
+    ;
+
+annotatedExpr
+    : primaryExpr (memberAccess | parentValues | angledValues | annotation)*
+    ;
+
+primaryExpr
     : identRef
     | literal
     | bracedIndexKVPairs    // for map
@@ -98,71 +148,6 @@ primEntity
     | parentHeteValues      // for tuple
     | parentHomoValues      // for array
     | lambdaExpr ;
-
-memberAccess : '[' entityExpr ']' ;
-
-entityLink   : entityUnit | entityLink '->' entityUnit ;
-entityUnit   : entityWith ((memberAccess | angledValues | parentValues) | annotation)* ;
-entityWith   : primEntity | entityWith '.' primEntity ;
-
-entityExpr
-    : ternaryExpr
-    | entityExpr '=' ternaryExpr
-    | entityExpr '+=' ternaryExpr
-    | entityExpr '-=' ternaryExpr
-    | entityExpr '*=' ternaryExpr
-    | entityExpr '/=' ternaryExpr
-    | entityExpr '%=' ternaryExpr
-    | entityExpr '^=' ternaryExpr
-    | entityExpr '&=' ternaryExpr
-    | entityExpr '|=' ternaryExpr
-    ;
-
-ternaryExpr
-    : relaExpr
-    | relaExpr '?' ternaryExpr ':' ternaryExpr
-    ;
-
-relaExpr
-    : addExpr
-    | relaExpr '<' addExpr
-    | relaExpr '>' addExpr
-    | relaExpr '<=' addExpr
-    | relaExpr '>=' addExpr
-    | relaExpr '==' addExpr
-    | relaExpr '!=' addExpr
-    | relaExpr '&&' addExpr
-    | relaExpr '||' addExpr
-    ;
-
-addExpr
-    : multiExpr
-    | addExpr '+' multiExpr
-    | addExpr '-' multiExpr
-    | addExpr '&' multiExpr
-    | addExpr '|' multiExpr
-    ;
-
-multiExpr
-    : unaryExpr
-    | multiExpr '^' unaryExpr
-    | multiExpr '*' unaryExpr
-    | multiExpr '/' unaryExpr
-    | multiExpr '%' unaryExpr
-    | multiExpr AS typeExpr
-    | multiExpr IS typeExpr
-    ;
-
-unaryExpr
-    : primExpr
-    | '!' primExpr
-    | '~' primExpr
-    ;
-
-primExpr
-    : entityLink
-    | '(' entityExpr ')'
-    ;
 
 literal
     : INTEGER UNIT?
@@ -176,17 +161,15 @@ literal
     ;
 
 typeExpr
-    : unaryType
-    | typeExpr '&' unaryType
-    | typeExpr '|' unaryType
+    : arrayType (('&' | '|' | '^') arrayType)*
     ;
 
-unaryType
+arrayType
     : atomType ('[' INTEGER? ']')*
     ;
 
 atomType
-    : primType
+    : primaryType
     | structType
     | specialType
     | identRef
@@ -198,7 +181,7 @@ lambdaType
     : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
     ;
 
-primType
+primaryType
     : INTEGER_TYPE
     | INTEGER32_TYPE
     | INTEGER64_TYPE
