@@ -6,17 +6,19 @@ SEP         : ';';
 AS          : 'as';
 IS          : 'is';
 LET         : 'let';
+VAR         : 'var';
 USE         : 'use';
+FROM        : 'from';
 FUNC        : 'func';
 TYPE        : 'type';
 WITH        : 'with';
+WAIT        : 'wait';
 RETURN      : 'return';
 
 INNER       : 'inner';
 OUTER       : 'outer';
 ATOMIC      : 'atomic';
 STATIC      : 'static';
-SYNC        : 'sync';
 
 NULL        : 'null';
 TRUE        : 'true';

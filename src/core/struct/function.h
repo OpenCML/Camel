@@ -20,7 +20,6 @@
 
 #include "entity.h"
 #include "data.h"
-#include "ast.h"
 
 #include <string>
 
@@ -41,15 +40,15 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 class Function {
   protected:
     unsigned char flags_ = 0;
-    ast_ptr_t funcNode_;
+    graph_ptr_t graph_;
 
   public:
-    Function(const ast_ptr_t &funcNode) : funcNode_(funcNode) {};
+    Function(const graph_ptr_t &graph) : graph_(graph) {};
     virtual ~Function() = default;
 
     unsigned char flags() const { return flags_; }
 
-    ast_ptr_t node() { return funcNode_; }
+    graph_ptr_t graph() const { return graph_; }
 
     bool inner() const { return flags_ & static_cast<unsigned char>(FunctionModifier::INNER); }
     bool outer() const { return flags_ & static_cast<unsigned char>(FunctionModifier::OUTER); }

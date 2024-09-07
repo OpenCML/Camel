@@ -60,12 +60,22 @@ class GraphNode {
 
 class Graph : public GraphNode {
     node_vec_t nodes_;
-    node_vec_t inputs_;
+    node_vec_t params_;
+    node_vec_t superParams_;
     node_ptr_t output_;
 
   public:
     Graph() { type_ = NodeType::GRAPH; }
     ~Graph() = default;
+
+    node_vec_t &nodes() { return nodes_; }
+    node_vec_t &params() { return params_; }
+    node_vec_t &superParams() { return superParams_; }
+    node_ptr_t &output() { return output_; }
+
+    void setOutput(node_ptr_t &&output) { output_ = std::move(output); }
+    void setParams(node_vec_t &&params) { params_ = std::move(params); }
+    void setSuperParams(node_vec_t &&superParams) { superParams_ = std::move(superParams); }
 
     void addNode(const node_ptr_t &node) { nodes_.push_back(node); }
     void delNode(const node_ptr_t &node) { nodes_.pop_back(); }
