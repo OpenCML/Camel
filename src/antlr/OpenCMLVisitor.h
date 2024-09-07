@@ -51,7 +51,7 @@ public:
 
     virtual std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) = 0;
 
-    virtual std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *context) = 0;
+    virtual std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context) = 0;
 
     virtual std::any visitWithDef(OpenCMLParser::WithDefContext *context) = 0;
 
@@ -75,6 +75,10 @@ public:
 
     virtual std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) = 0;
 
+    virtual std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) = 0;
+
+    virtual std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) = 0;
+
     virtual std::any visitTypeList(OpenCMLParser::TypeListContext *context) = 0;
 
     virtual std::any visitIdentList(OpenCMLParser::IdentListContext *context) = 0;
@@ -87,6 +91,8 @@ public:
 
     virtual std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) = 0;
 
+    virtual std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) = 0;
+
     virtual std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) = 0;
 
     virtual std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) = 0;
@@ -95,23 +101,31 @@ public:
 
     virtual std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context) = 0;
 
+    virtual std::any visitBracedHomoValues(OpenCMLParser::BracedHomoValuesContext *context) = 0;
+
+    virtual std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) = 0;
+
     virtual std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) = 0;
 
-    virtual std::any visitBracketValues(OpenCMLParser::BracketValuesContext *context) = 0;
+    virtual std::any visitBracketHomoValues(OpenCMLParser::BracketHomoValuesContext *context) = 0;
+
+    virtual std::any visitBracketHeteValues(OpenCMLParser::BracketHeteValuesContext *context) = 0;
 
     virtual std::any visitParentParams(OpenCMLParser::ParentParamsContext *context) = 0;
 
     virtual std::any visitParentValues(OpenCMLParser::ParentValuesContext *context) = 0;
 
+    virtual std::any visitParentHomoValues(OpenCMLParser::ParentHomoValuesContext *context) = 0;
+
+    virtual std::any visitParentHeteValues(OpenCMLParser::ParentHeteValuesContext *context) = 0;
+
     virtual std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) = 0;
 
     virtual std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) = 0;
 
-    virtual std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) = 0;
-
     virtual std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context) = 0;
 
-    virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) = 0;
+    virtual std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) = 0;
 
     virtual std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context) = 0;
 
