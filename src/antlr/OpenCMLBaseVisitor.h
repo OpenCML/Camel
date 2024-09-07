@@ -229,6 +229,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitRelaExpr(OpenCMLParser::RelaExprContext *ctx) override {
     return visitChildren(ctx);
   }

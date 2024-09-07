@@ -135,6 +135,8 @@ public:
 
     virtual std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) = 0;
 
+    virtual std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) = 0;
+
     virtual std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context) = 0;
 
     virtual std::any visitAddExpr(OpenCMLParser::AddExprContext *context) = 0;

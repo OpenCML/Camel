@@ -29,7 +29,7 @@ stmt
     | useStmt
     | typeStmt
     | exprStmt
-    | waitStmt
+    | waitStmt  
     | funcDef
     | retStmt
     ;
@@ -94,7 +94,7 @@ primEntity
     | bracedPairedValues    // for dict
     | bracketHeteValues     // for list
     | bracketHomoValues     // for vector
-    | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression
+    | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a tuple
     | parentHeteValues      // for tuple
     | parentHomoValues      // for array
     | lambdaExpr ;
@@ -106,17 +106,21 @@ entityUnit   : entityWith ((memberAccess | angledValues | parentValues) | annota
 entityWith   : primEntity | entityWith '.' primEntity ;
 
 entityExpr
+    : ternaryExpr
+    | entityExpr '=' ternaryExpr
+    | entityExpr '+=' ternaryExpr
+    | entityExpr '-=' ternaryExpr
+    | entityExpr '*=' ternaryExpr
+    | entityExpr '/=' ternaryExpr
+    | entityExpr '%=' ternaryExpr
+    | entityExpr '^=' ternaryExpr
+    | entityExpr '&=' ternaryExpr
+    | entityExpr '|=' ternaryExpr
+    ;
+
+ternaryExpr
     : relaExpr
-    | entityExpr '?' entityExpr ':' entityExpr
-    | entityExpr '=' relaExpr
-    | entityExpr '+=' relaExpr
-    | entityExpr '-=' relaExpr
-    | entityExpr '*=' relaExpr
-    | entityExpr '/=' relaExpr
-    | entityExpr '%=' relaExpr
-    | entityExpr '^=' relaExpr
-    | entityExpr '&=' relaExpr
-    | entityExpr '|=' relaExpr
+    | relaExpr '?' ternaryExpr ':' ternaryExpr
     ;
 
 relaExpr

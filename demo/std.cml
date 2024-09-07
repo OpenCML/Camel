@@ -35,6 +35,8 @@ let f = {[a]:b};
 
 let powerInput = Const<5`V`>;
 let powerOutput = true ? powerInput : Const<3`V`>;
+let r = A ? B ? a : b : C ? c : d;
+let result = a == 1 ? b : c = 4;
 
 type Power = {
     dcOutput: ElSignal,
@@ -63,7 +65,7 @@ func SignalGenEl(): ElSignal {
 
 // Optical domain
 @{ boxed: true, color: 'blue' }
-func SignalProcOp(input@[0, 0]: ElSignal): ElSignal {
+func SignalProcOp(var input@[0, 0]: ElSignal): ElSignal {
     'Optical domain'@[10, 0];
     let modulatedOpSig = [input, LaserCW<azimuth: 0`deg`>]->ModulatorMZ<30`dB`>;
     modulatedOpSig->Resample<abc, centerFrequency: 192.1e12`Hz`>@[2, 2]->SignalAnalyzer<eye>@[4, 5];

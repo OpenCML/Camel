@@ -64,11 +64,11 @@ public:
     RuleBracketHeteValues = 36, RuleParentParams = 37, RuleParentValues = 38, 
     RuleParentHomoValues = 39, RuleParentHeteValues = 40, RuleAngledParams = 41, 
     RuleAngledValues = 42, RulePrimEntity = 43, RuleMemberAccess = 44, RuleEntityLink = 45, 
-    RuleEntityUnit = 46, RuleEntityWith = 47, RuleEntityExpr = 48, RuleRelaExpr = 49, 
-    RuleAddExpr = 50, RuleMultiExpr = 51, RuleUnaryExpr = 52, RulePrimExpr = 53, 
-    RuleLiteral = 54, RuleTypeExpr = 55, RuleUnaryType = 56, RuleAtomType = 57, 
-    RuleLambdaType = 58, RulePrimType = 59, RuleStructType = 60, RuleSpecialType = 61, 
-    RuleIdentRef = 62
+    RuleEntityUnit = 46, RuleEntityWith = 47, RuleEntityExpr = 48, RuleTernaryExpr = 49, 
+    RuleRelaExpr = 50, RuleAddExpr = 51, RuleMultiExpr = 52, RuleUnaryExpr = 53, 
+    RulePrimExpr = 54, RuleLiteral = 55, RuleTypeExpr = 56, RuleUnaryType = 57, 
+    RuleAtomType = 58, RuleLambdaType = 59, RulePrimType = 60, RuleStructType = 61, 
+    RuleSpecialType = 62, RuleIdentRef = 63
   };
 
   explicit OpenCMLParser(antlr4::TokenStream *input);
@@ -137,6 +137,7 @@ public:
   class EntityUnitContext;
   class EntityWithContext;
   class EntityExprContext;
+  class TernaryExprContext;
   class RelaExprContext;
   class AddExprContext;
   class MultiExprContext;
@@ -861,9 +862,8 @@ public:
   public:
     EntityExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    RelaExprContext *relaExpr();
-    std::vector<EntityExprContext *> entityExpr();
-    EntityExprContext* entityExpr(size_t i);
+    TernaryExprContext *ternaryExpr();
+    EntityExprContext *entityExpr();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -872,6 +872,21 @@ public:
 
   EntityExprContext* entityExpr();
   EntityExprContext* entityExpr(int precedence);
+  class  TernaryExprContext : public antlr4::RuleContextWithAltNum {
+  public:
+    TernaryExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    RelaExprContext *relaExpr();
+    std::vector<TernaryExprContext *> ternaryExpr();
+    TernaryExprContext* ternaryExpr(size_t i);
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  TernaryExprContext* ternaryExpr();
+
   class  RelaExprContext : public antlr4::RuleContextWithAltNum {
   public:
     RelaExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
