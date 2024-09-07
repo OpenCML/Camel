@@ -34,6 +34,7 @@ let e_ = (|3|);
 let f = {[a]:b};
 
 let powerInput = Const<5`V`>;
+let powerOutput = true ? powerInput : Const<3`V`>;
 
 type Power = {
     dcOutput: ElSignal,

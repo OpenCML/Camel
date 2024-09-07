@@ -37,17 +37,17 @@ public:
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
     T__38 = 39, T__39 = 40, T__40 = 41, T__41 = 42, T__42 = 43, T__43 = 44, 
-    T__44 = 45, T__45 = 46, SEP = 47, AS = 48, IS = 49, LET = 50, VAR = 51, 
-    USE = 52, FROM = 53, FUNC = 54, TYPE = 55, WITH = 56, WAIT = 57, RETURN = 58, 
-    INNER = 59, OUTER = 60, ATOMIC = 61, STATIC = 62, NULL_ = 63, TRUE = 64, 
-    FALSE = 65, INTEGER_TYPE = 66, INTEGER32_TYPE = 67, INTEGER64_TYPE = 68, 
-    REAL_TYPE = 69, FLOAT_TYPE = 70, DOUBLE_TYPE = 71, NUMBER_TYPE = 72, 
-    STRING_TYPE = 73, BOOL_TYPE = 74, CHAR_TYPE = 75, SET_TYPE = 76, MAP_TYPE = 77, 
-    LIST_TYPE = 78, DICT_TYPE = 79, ARRAY_TYPE = 80, TUPLE_TYPE = 81, UNION_TYPE = 82, 
-    VECTOR_TYPE = 83, TENSOR_TYPE = 84, ANY_TYPE = 85, VOID_TYPE = 86, FUNCTOR_TYPE = 87, 
-    BLANK = 88, LIN_CMT_HASH = 89, LIN_CMT_SLASH = 90, BLK_CMT = 91, MULTI_STR = 92, 
-    IDENTIFIER = 93, UNIT = 94, STRING = 95, FSTRING = 96, INTEGER = 97, 
-    REAL = 98
+    T__44 = 45, T__45 = 46, T__46 = 47, SEP = 48, AS = 49, IS = 50, LET = 51, 
+    VAR = 52, USE = 53, FROM = 54, FUNC = 55, TYPE = 56, WITH = 57, WAIT = 58, 
+    RETURN = 59, INNER = 60, OUTER = 61, ATOMIC = 62, STATIC = 63, NULL_ = 64, 
+    TRUE = 65, FALSE = 66, INTEGER_TYPE = 67, INTEGER32_TYPE = 68, INTEGER64_TYPE = 69, 
+    REAL_TYPE = 70, FLOAT_TYPE = 71, DOUBLE_TYPE = 72, NUMBER_TYPE = 73, 
+    STRING_TYPE = 74, BOOL_TYPE = 75, CHAR_TYPE = 76, SET_TYPE = 77, MAP_TYPE = 78, 
+    LIST_TYPE = 79, DICT_TYPE = 80, ARRAY_TYPE = 81, TUPLE_TYPE = 82, UNION_TYPE = 83, 
+    VECTOR_TYPE = 84, TENSOR_TYPE = 85, ANY_TYPE = 86, VOID_TYPE = 87, FUNCTOR_TYPE = 88, 
+    BLANK = 89, LIN_CMT_HASH = 90, LIN_CMT_SLASH = 91, BLK_CMT = 92, MULTI_STR = 93, 
+    IDENTIFIER = 94, UNIT = 95, STRING = 96, FSTRING = 97, INTEGER = 98, 
+    REAL = 99
   };
 
   enum {
@@ -862,7 +862,8 @@ public:
     EntityExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     RelaExprContext *relaExpr();
-    EntityExprContext *entityExpr();
+    std::vector<EntityExprContext *> entityExpr();
+    EntityExprContext* entityExpr(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

@@ -107,6 +107,7 @@ entityWith   : primEntity | entityWith '.' primEntity ;
 
 entityExpr
     : relaExpr
+    | entityExpr '?' entityExpr ':' entityExpr
     | entityExpr '=' relaExpr
     | entityExpr '+=' relaExpr
     | entityExpr '-=' relaExpr
