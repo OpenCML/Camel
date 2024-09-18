@@ -161,7 +161,7 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitBracedHomoValues(OpenCMLParser::BracedHomoValuesContext *ctx) override {
+  virtual std::any visitBracedValues(OpenCMLParser::BracedValuesContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -173,11 +173,7 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitBracketHomoValues(OpenCMLParser::BracketHomoValuesContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBracketHeteValues(OpenCMLParser::BracketHeteValuesContext *ctx) override {
+  virtual std::any visitBracketValues(OpenCMLParser::BracketValuesContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -189,15 +185,11 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitParentArgues(OpenCMLParser::ParentArguesContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitParentValues(OpenCMLParser::ParentValuesContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitParentHomoValues(OpenCMLParser::ParentHomoValuesContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitParentHeteValues(OpenCMLParser::ParentHeteValuesContext *ctx) override {
     return visitChildren(ctx);
   }
 

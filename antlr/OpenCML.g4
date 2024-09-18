@@ -36,7 +36,7 @@ stmt
 
 letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' entityExpr
            | carrier (':' typeExpr)? ':=' entityExpr ;
-useStmt    : USE carrier ('=' entityExpr | FROM STRING);
+useStmt    : USE (carrier | '*') ('=' entityExpr | FROM STRING);
 typeStmt   : TYPE identRef '=' typeExpr ;
 exprStmt   : annotations? entityExpr ;
 waitStmt   : WAIT entityExpr ;
@@ -71,18 +71,16 @@ argumentList : valueList (',' pairedValues)? | pairedValues ;
 bracedPairedValues : '{' pairedValues? ','? '}' ; // for literal construction of dict
 bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
 bracedStmts        : '{' stmtList? '}' ;          // for block statement
-bracedHomoValues   : '{|' valueList ','? '|}' ;   // for literal construction of set (at least one value, otherwise the element type is unknown)
+bracedValues       : '{' valueList ','? '}' ;     // for literal construction of set (at least one value, otherwise the element type is unknown)
 bracedIndexKVPairs : '{' indexKVPairs ','? '}' ;  // for literal construction of map (at least one pair, otherwise the key type is unknown)
 
 bracketIdents      : '[' identList? ','? ']' ;    // for list unpacking
-bracketHomoValues  : '[|' valueList? ','? '|]' ;  // for literal construction of vector (variable length, homogeneous)
-bracketHeteValues  : '[' valueList? ','? ']' ;    // for literal construction of list (variable length, heterogeneous)
+bracketValues      : '[' valueList? ','? ']' ;    // for literal construction of list (variable length)
 memberAccess       : '[' entityExpr ']' ;
 
 parentParams       : '(' pairedParams? ','? ')' ; // for functor parameters definition
-parentValues       : '(' argumentList? ','? ')' ; // for functor arguments
-parentHomoValues   : '(|' valueList? ','? '|)' ;  // for literal construction of array (fixed length, homogeneous)
-parentHeteValues   : '(' valueList? ','? ')' ;    // for literal construction of tuple (fixed length, heterogeneous)
+parentArgues       : '(' argumentList? ','? ')' ; // for functor arguments
+parentValues       : '(' valueList? ','? ')' ;    // for literal construction of tuple (fixed length)
 
 angledParams       : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues       : '<' argumentList? ','? '>' ; // for functor super arguments
@@ -133,20 +131,17 @@ withExpr
     ;
 
 annotatedExpr
-    : primaryExpr (memberAccess | parentValues | angledValues | annotation)*
+    : primaryExpr (memberAccess | parentArgues | angledValues | annotation)*
     ;
 
 primaryExpr
     : identRef
     | literal
     | bracedIndexKVPairs    // for map
-    | bracedHomoValues      // for set
     | bracedPairedValues    // for dict
-    | bracketHeteValues     // for list
-    | bracketHomoValues     // for vector
     | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a tuple
-    | parentHeteValues      // for tuple
-    | parentHomoValues      // for array
+    // for list (or vector) | tuple (or array) | tensor
+    | ('<' typeExpr (',' (INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues | bracedValues)
     | lambdaExpr ;
 
 literal
@@ -197,15 +192,15 @@ primaryType
 structType
     : SET_TYPE ('<' typeExpr '>')?
     | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
-    | LIST_TYPE
-    | DICT_TYPE                 // universal dict type
-    | ARRAY_TYPE ('<' typeExpr '>')?
-    | TUPLE_TYPE ('<' typeList? ','? '>')?
+    | LIST_TYPE // variable length, hetergeneous
+    | DICT_TYPE // universal dict type
+    | ARRAY_TYPE ('<' typeExpr (',' INTEGER)? '>')? // fixed length, homogenous
+    | TUPLE_TYPE ('<' typeList? ','? '>')? // fixed length, hetergeneous
     | UNION_TYPE ('<' typeList? ','? '>')?
-    | VECTOR_TYPE ('<' typeExpr (',' INTEGER)? '>')?
+    | VECTOR_TYPE ('<' typeExpr '>')? // variable length, homogenous
     | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?
     | '{' pairedTypes? ','? '}' // concrete dict type
-    | '{' indexKTPair '}'       // concrete map type
+    | '{' indexKTPair '}' // concrete map type
     ;
 
 specialType
