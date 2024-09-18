@@ -34,9 +34,8 @@ stmt
     | retStmt
     ;
 
-letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' entityExpr
-           | carrier (':' typeExpr)? ':=' entityExpr ;
-useStmt    : USE (carrier | '*') ('=' entityExpr | FROM STRING);
+letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' entityExpr ;
+useStmt    : USE (carrier | '*') ('=' entityExpr | FROM STRING) ;
 typeStmt   : TYPE identRef '=' typeExpr ;
 exprStmt   : annotations? entityExpr ;
 waitStmt   : WAIT entityExpr ;
@@ -71,8 +70,8 @@ argumentList : valueList (',' pairedValues)? | pairedValues ;
 bracedPairedValues : '{' pairedValues? ','? '}' ; // for literal construction of dict
 bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
 bracedStmts        : '{' stmtList? '}' ;          // for block statement
-bracedValues       : '{' valueList ','? '}' ;     // for literal construction of set (at least one value, otherwise the element type is unknown)
-bracedIndexKVPairs : '{' indexKVPairs ','? '}' ;  // for literal construction of map (at least one pair, otherwise the key type is unknown)
+bracedValues       : '{' valueList? ','? '}' ;     // for literal construction of set
+bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ;  // for literal construction of map
 
 bracketIdents      : '[' identList? ','? ']' ;    // for list unpacking
 bracketValues      : '[' valueList? ','? ']' ;    // for literal construction of list (variable length)
@@ -86,7 +85,7 @@ angledParams       : '<' pairedParams? ','? '>' ; // for functor super parameter
 angledValues       : '<' argumentList? ','? '>' ; // for functor super arguments
 
 entityExpr
-    : ternaryExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') ternaryExpr)*
+    : ternaryExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') ternaryExpr)?
     ;
 
 ternaryExpr
@@ -137,11 +136,10 @@ annotatedExpr
 primaryExpr
     : identRef
     | literal
-    | bracedIndexKVPairs    // for map
     | bracedPairedValues    // for dict
     | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a tuple
-    // for list (or vector) | tuple (or array) | tensor
-    | ('<' typeExpr (',' (INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues | bracedValues)
+    // for list (or vector) | tuple (or array) | tensor | set | map
+    | ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues | bracedValues | bracedIndexKVPairs)
     | lambdaExpr ;
 
 literal
@@ -192,10 +190,10 @@ primaryType
 structType
     : SET_TYPE ('<' typeExpr '>')?
     | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
-    | LIST_TYPE // variable length, hetergeneous
+    | LIST_TYPE // variable length, heterogeneous
     | DICT_TYPE // universal dict type
     | ARRAY_TYPE ('<' typeExpr (',' INTEGER)? '>')? // fixed length, homogenous
-    | TUPLE_TYPE ('<' typeList? ','? '>')? // fixed length, hetergeneous
+    | TUPLE_TYPE ('<' typeList? ','? '>')? // fixed length, heterogeneous
     | UNION_TYPE ('<' typeList? ','? '>')?
     | VECTOR_TYPE ('<' typeExpr '>')? // variable length, homogenous
     | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?

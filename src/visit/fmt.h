@@ -52,7 +52,7 @@ class Formatter : public OpenCMLVisitor {
         }
     }
 
-    std::string processStringLiteral(const std::string &input);
+    std::string formatStringLiteral(const std::string &input);
 
     void insertComment(antlr4::Token *comment, std::string &result);
 
@@ -267,6 +267,8 @@ class Formatter : public OpenCMLVisitor {
                                bool forceMultiLine);
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool padding,
                                bool forceMultiLine);
+    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool padding,
+                               bool forceMultiLine);
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context, bool trailingComma, bool padding,
                                bool forceMultiLine);
 
@@ -282,7 +284,7 @@ class Formatter : public OpenCMLVisitor {
     std::any visitUseStmt(OpenCMLParser::UseStmtContext *context);
     std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context);
     std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context);
-    std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *context);
+    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
     std::any visitWithDef(OpenCMLParser::WithDefContext *context);
     std::any visitFuncDef(OpenCMLParser::FuncDefContext *context);
     std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
@@ -294,6 +296,8 @@ class Formatter : public OpenCMLVisitor {
     std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context);
     std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context);
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context);
+    std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context);
+    std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context);
     std::any visitTypeList(OpenCMLParser::TypeListContext *context) {
         return visitTypeList(context, false, true, false);
     }
@@ -312,36 +316,44 @@ class Formatter : public OpenCMLVisitor {
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
         return visitPairedParams(context, false, true, false);
     }
+    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context){
+        return visitIndexKVPairs(context, false, true, false);
+    }
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
         return visitArgumentList(context, false, true, false);
     }
     std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context);
     std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
     std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context);
+    std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context);
+    std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context);
     std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context);
     std::any visitBracketValues(OpenCMLParser::BracketValuesContext *context);
+    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
     std::any visitParentParams(OpenCMLParser::ParentParamsContext *context);
+    std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context);
     std::any visitParentValues(OpenCMLParser::ParentValuesContext *context);
     std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context);
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
-    std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context);
-    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
-    std::any visitEntityChain(OpenCMLParser::EntityChainContext *context);
-    std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context);
-    std::any visitEntityUnit(OpenCMLParser::EntityUnitContext *context);
-    std::any visitEntityWith(OpenCMLParser::EntityWithContext *context);
     std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context);
-    std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context);
-    std::any visitAddExpr(OpenCMLParser::AddExprContext *context);
-    std::any visitMultiExpr(OpenCMLParser::MultiExprContext *context);
+    std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context);
+    std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context);
+    std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context);
+    std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context);
+    std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context);
+    std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context);
+    std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context);
     std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context);
-    std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context);
+    std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context);
+    std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
+    std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context);
+    std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context);
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
-    std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context);
+    std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context);
     std::any visitAtomType(OpenCMLParser::AtomTypeContext *context);
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
-    std::any visitPrimType(OpenCMLParser::PrimTypeContext *context);
+    std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context);
     std::any visitStructType(OpenCMLParser::StructTypeContext *context);
     std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *context);
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context);

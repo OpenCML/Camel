@@ -36,17 +36,17 @@ public:
     T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
-    T__38 = 39, T__39 = 40, T__40 = 41, SEP = 42, AS = 43, IS = 44, LET = 45, 
-    VAR = 46, USE = 47, FROM = 48, FUNC = 49, TYPE = 50, WITH = 51, WAIT = 52, 
-    RETURN = 53, INNER = 54, OUTER = 55, ATOMIC = 56, STATIC = 57, NULL_ = 58, 
-    TRUE = 59, FALSE = 60, INTEGER_TYPE = 61, INTEGER32_TYPE = 62, INTEGER64_TYPE = 63, 
-    REAL_TYPE = 64, FLOAT_TYPE = 65, DOUBLE_TYPE = 66, NUMBER_TYPE = 67, 
-    STRING_TYPE = 68, BOOL_TYPE = 69, CHAR_TYPE = 70, SET_TYPE = 71, MAP_TYPE = 72, 
-    LIST_TYPE = 73, DICT_TYPE = 74, ARRAY_TYPE = 75, TUPLE_TYPE = 76, UNION_TYPE = 77, 
-    VECTOR_TYPE = 78, TENSOR_TYPE = 79, ANY_TYPE = 80, VOID_TYPE = 81, FUNCTOR_TYPE = 82, 
-    BLANK = 83, LIN_CMT_HASH = 84, LIN_CMT_SLASH = 85, BLK_CMT = 86, MULTI_STR = 87, 
-    IDENTIFIER = 88, UNIT = 89, STRING = 90, FSTRING = 91, INTEGER = 92, 
-    REAL = 93
+    T__38 = 39, T__39 = 40, SEP = 41, AS = 42, IS = 43, LET = 44, VAR = 45, 
+    USE = 46, FROM = 47, FUNC = 48, TYPE = 49, WITH = 50, WAIT = 51, RETURN = 52, 
+    INNER = 53, OUTER = 54, ATOMIC = 55, STATIC = 56, NULL_ = 57, TRUE = 58, 
+    FALSE = 59, INTEGER_TYPE = 60, INTEGER32_TYPE = 61, INTEGER64_TYPE = 62, 
+    REAL_TYPE = 63, FLOAT_TYPE = 64, DOUBLE_TYPE = 65, NUMBER_TYPE = 66, 
+    STRING_TYPE = 67, BOOL_TYPE = 68, CHAR_TYPE = 69, SET_TYPE = 70, MAP_TYPE = 71, 
+    LIST_TYPE = 72, DICT_TYPE = 73, ARRAY_TYPE = 74, TUPLE_TYPE = 75, UNION_TYPE = 76, 
+    VECTOR_TYPE = 77, TENSOR_TYPE = 78, ANY_TYPE = 79, VOID_TYPE = 80, FUNCTOR_TYPE = 81, 
+    BLANK = 82, LIN_CMT_HASH = 83, LIN_CMT_SLASH = 84, BLK_CMT = 85, MULTI_STR = 86, 
+    IDENTIFIER = 87, UNIT = 88, STRING = 89, FSTRING = 90, INTEGER = 91, 
+    REAL = 92
   };
 
   enum {
@@ -944,13 +944,14 @@ public:
     virtual size_t getRuleIndex() const override;
     IdentRefContext *identRef();
     LiteralContext *literal();
-    BracedIndexKVPairsContext *bracedIndexKVPairs();
     BracedPairedValuesContext *bracedPairedValues();
     EntityExprContext *entityExpr();
     BracketValuesContext *bracketValues();
     ParentValuesContext *parentValues();
     BracedValuesContext *bracedValues();
-    TypeExprContext *typeExpr();
+    BracedIndexKVPairsContext *bracedIndexKVPairs();
+    std::vector<TypeExprContext *> typeExpr();
+    TypeExprContext* typeExpr(size_t i);
     std::vector<antlr4::tree::TerminalNode *> INTEGER();
     antlr4::tree::TerminalNode* INTEGER(size_t i);
     LambdaExprContext *lambdaExpr();
