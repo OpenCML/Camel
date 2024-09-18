@@ -25,8 +25,8 @@
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime.h"
 #include "core/error/build.h"
-#include "core/struct/scope.h"
 #include "core/struct/ast.h"
+#include "core/struct/scope.h"
 #include "core/struct/tree.h"
 
 extern ast_ptr_t copyFuncDeRefNode;
@@ -111,59 +111,130 @@ class ASTConstructor : public OpenCMLVisitor {
     std::pair<data_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
 
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
+
     std::any visitStmtList(OpenCMLParser::StmtListContext *context);
+
     std::any visitStmt(OpenCMLParser::StmtContext *context);
+
     std::any visitLetStmt(OpenCMLParser::LetStmtContext *context);
+
     std::any visitUseStmt(OpenCMLParser::UseStmtContext *context);
+
     std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context);
+
     std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context);
-    std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *context);
+
+    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
+
     std::any visitWithDef(OpenCMLParser::WithDefContext *context);
+
     std::any visitFuncDef(OpenCMLParser::FuncDefContext *context);
+
     std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
+
     std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
+
     std::any visitCarrier(OpenCMLParser::CarrierContext *context);
+
     std::any visitAnnotation(OpenCMLParser::AnnotationContext *context);
+
     std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context);
+
     std::any visitModifiers(OpenCMLParser::ModifiersContext *context);
+
     std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context);
+
     std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context);
+
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context);
+
+    std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context);
+
+    std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context);
+
     std::any visitTypeList(OpenCMLParser::TypeListContext *context);
+
     std::any visitIdentList(OpenCMLParser::IdentListContext *context);
+
     std::any visitValueList(OpenCMLParser::ValueListContext *context);
+
     std::any visitPairedTypes(OpenCMLParser::PairedTypesContext *context);
+
     std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context);
+
     std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context);
+
+    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context);
+
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context);
+
     std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context);
+
     std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
+
     std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context);
+
+    std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context);
+
+    std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context);
+
     std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context);
+
     std::any visitBracketValues(OpenCMLParser::BracketValuesContext *context);
-    std::any visitParentParams(OpenCMLParser::ParentParamsContext *context);
-    std::any visitParentValues(OpenCMLParser::ParentValuesContext *context);
-    std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context);
-    std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
-    std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context);
+
     std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
-    std::any visitEntityChain(OpenCMLParser::EntityChainContext *context);
-    std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context);
-    std::any visitEntityUnit(OpenCMLParser::EntityUnitContext *context);
-    std::any visitEntityWith(OpenCMLParser::EntityWithContext *context);
+
+    std::any visitParentParams(OpenCMLParser::ParentParamsContext *context);
+
+    std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context);
+
+    std::any visitParentValues(OpenCMLParser::ParentValuesContext *context);
+
+    std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context);
+
+    std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
+
     std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context);
-    std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context);
-    std::any visitAddExpr(OpenCMLParser::AddExprContext *context);
-    std::any visitMultiExpr(OpenCMLParser::MultiExprContext *context);
+
+    std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context);
+
+    std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context);
+
+    std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context);
+
+    std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context);
+
+    std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context);
+
+    std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context);
+
+    std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context);
+
     std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context);
-    std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context);
+
+    std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context);
+
+    std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
+
+    std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context);
+
+    std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context);
+
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
+
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
-    std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context);
+
+    std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context);
+
     std::any visitAtomType(OpenCMLParser::AtomTypeContext *context);
+
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
-    std::any visitPrimType(OpenCMLParser::PrimTypeContext *context);
+
+    std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context);
+
     std::any visitStructType(OpenCMLParser::StructTypeContext *context);
+
     std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *context);
+
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context);
 };

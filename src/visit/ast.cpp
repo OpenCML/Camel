@@ -19,8 +19,8 @@
 #include "antlr/OpenCMLLexer.h"
 
 #include "ast.h"
-#include "core/struct/token.h"
 #include "core/struct/function.h"
+#include "core/struct/token.h"
 #include "utils/log.h"
 
 #define DEBUG_LEVEL -1
@@ -143,7 +143,7 @@ std::any ASTConstructor::visitProgram(OpenCMLParser::ProgramContext *context) {
 };
 
 /*
-stmtList : stmt+ ;
+stmtList : stmt (SEP stmt)* SEP? ;
 */
 std::any ASTConstructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     debug(0) << "visitStmtList" << std::endl;
@@ -158,13 +158,13 @@ std::any ASTConstructor::visitStmtList(OpenCMLParser::StmtListContext *context) 
 
 /*
 stmt
-    : letStmt SEP
-    | useStmt SEP
-    | typeStmt SEP
-    | exprStmt SEP
-    | assignStmt SEP
-    | funcDef SEP
-    | retStmt SEP
+    : letStmt
+    | useStmt
+    | typeStmt
+    | exprStmt
+    | waitStmt
+    | funcDef
+    | retStmt
     ;
 */
 std::any ASTConstructor::visitStmt(OpenCMLParser::StmtContext *context) {
@@ -198,8 +198,7 @@ std::any ASTConstructor::visitStmt(OpenCMLParser::StmtContext *context) {
 };
 
 /*
-letStmt : LET carrier (':' typeExpr)? ('='? entityExpr)?
-        | carrier (':' typeExpr)? ':=' entityExpr ;
+letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' entityExpr ;
 */
 std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
     debug(0) << "visitLetStmt" << std::endl;
@@ -307,8 +306,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
 };
 
 /*
-useStmt : USE carrier '='? entityExpr
-        | carrier '::' entityExpr ;
+useStmt    : USE (carrier | '*') ('=' entityExpr | FROM STRING);
 */
 std::any ASTConstructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
     debug(0) << "visitUseStmt" << std::endl;
@@ -380,7 +378,7 @@ std::any ASTConstructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
 };
 
 /*
-typeStmt : TYPE identRef '='? typeExpr ;
+typeStmt : TYPE identRef '=' typeExpr ;
 */
 std::any ASTConstructor::visitTypeStmt(OpenCMLParser::TypeStmtContext *context) {
     debug(0) << "visitTypeStmt" << std::endl;
@@ -399,47 +397,55 @@ std::any ASTConstructor::visitExprStmt(OpenCMLParser::ExprStmtContext *context) 
 };
 
 /*
+waitStmt   : WAIT entityExpr ;
+*/
+std::any ASTConstructor::visitWaitStmt(OpenCMLParser::WaitStmtContext *context) {
+    debug(0) << "visitExprStmt" << std::endl;
+    return visitEntityExpr(context->entityExpr());
+};
+
+/*
 assignStmt : identRef memberAccess* '=' entityExpr ;
 */
-std::any ASTConstructor::visitAssignStmt(OpenCMLParser::AssignStmtContext *context) {
-    debug(0) << "visitAssignStmt" << std::endl;
-    const std::string &ident = context->identRef()->getText();
-    ast_ptr_t targetNode = nullptr;
-    bool dangling = false;
-    ast_ptr_t execNode = createAstNode<ExecASTLoad>();
-    for (const auto &member : context->memberAccess()) {
-        ast_ptr_t memberNode = std::any_cast<ast_ptr_t>(visitMemberAccess(member));
-        ast_ptr_t linkNode = createAstNode<LinkASTLoad>();
-        data_ptr_t targetValue = nullptr;
-        bool targetDang = true;
-        if (targetNode) {
-            std::tie(targetValue, targetDang) = extractValue(targetNode, execNode, dangling);
-        } else {
-            targetValue = std::make_shared<DanglingValue>(ident);
-        }
-        auto [indexValue, indexDang] = extractValue(memberNode, execNode, dangling);
-        const auto listValue = std::make_shared<ListValue>(data_list_t{targetValue, indexValue});
-        const auto dataNode = // TODO: Find a better way to handle this
-            createAstNode<DataASTLoad>(listValue, targetDang && indexDang ? data_list_t{targetValue, indexValue}
-                                               : targetDang            ? data_list_t{targetValue}
-                                               : indexDang             ? data_list_t{indexValue}
-                                                                       : data_list_t{});
-        ast_ptr_t funcNode = indexFuncDeRefNode;
-        *linkNode << dataNode << funcNode;
-        targetNode = linkNode;
-    }
-    if (!targetNode) {
-        targetNode = createAstNode<DRefASTLoad>(ident);
-    }
-    if (dangling) {
-        *execNode << targetNode;
-        targetNode = execNode;
-    }
-    ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
-    ast_ptr_t assignNode = createAstNode<AssnASTLoad>();
-    *assignNode << targetNode << dataNode;
-    return assignNode;
-};
+// std::any ASTConstructor::visitAssignStmt(OpenCMLParser::AssignStmtContext *context) {
+//     debug(0) << "visitAssignStmt" << std::endl;
+//     const std::string &ident = context->identRef()->getText();
+//     ast_ptr_t targetNode = nullptr;
+//     bool dangling = false;
+//     ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+//     for (const auto &member : context->memberAccess()) {
+//         ast_ptr_t memberNode = std::any_cast<ast_ptr_t>(visitMemberAccess(member));
+//         ast_ptr_t linkNode = createAstNode<LinkASTLoad>();
+//         data_ptr_t targetValue = nullptr;
+//         bool targetDang = true;
+//         if (targetNode) {
+//             std::tie(targetValue, targetDang) = extractValue(targetNode, execNode, dangling);
+//         } else {
+//             targetValue = std::make_shared<DanglingValue>(ident);
+//         }
+//         auto [indexValue, indexDang] = extractValue(memberNode, execNode, dangling);
+//         const auto listValue = std::make_shared<ListValue>(data_list_t{targetValue, indexValue});
+//         const auto dataNode = // TODO: Find a better way to handle this
+//             createAstNode<DataASTLoad>(listValue, targetDang && indexDang ? data_list_t{targetValue, indexValue}
+//                                                : targetDang            ? data_list_t{targetValue}
+//                                                : indexDang             ? data_list_t{indexValue}
+//                                                                        : data_list_t{});
+//         ast_ptr_t funcNode = indexFuncDeRefNode;
+//         *linkNode << dataNode << funcNode;
+//         targetNode = linkNode;
+//     }
+//     if (!targetNode) {
+//         targetNode = createAstNode<DRefASTLoad>(ident);
+//     }
+//     if (dangling) {
+//         *execNode << targetNode;
+//         targetNode = execNode;
+//     }
+//     ast_ptr_t dataNode = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr()));
+//     ast_ptr_t assignNode = createAstNode<AssnASTLoad>();
+//     *assignNode << targetNode << dataNode;
+//     return assignNode;
+// };
 
 /*
 withDef : WITH angledParams ;
@@ -450,7 +456,7 @@ std::any ASTConstructor::visitWithDef(OpenCMLParser::WithDefContext *context) {
 };
 
 /*
-funcDef : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
+funcDef    : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
 */
 std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     debug(0) << "visitFuncDef" << std::endl;
@@ -507,7 +513,7 @@ std::any ASTConstructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
 };
 
 /*
-lambdaExpr : modifiers? ((parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr)) | '{' stmtList '}' ) ;
+lambdaExpr : modifiers? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
 */
 std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     debug(0) << "visitLambdaExpr" << std::endl;
@@ -555,7 +561,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
 };
 
 /*
-carrier : identRef | bracedIdents | bracketIdents ;
+carrier    : identRef | bracedIdents | bracketIdents ;
 */
 std::any ASTConstructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
     debug(0) << "visitCarrier" << std::endl;
@@ -577,7 +583,7 @@ std::any ASTConstructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
 };
 
 /*
-annotation  : '@' primEntity ;
+annotation  : '@' primaryExpr ;
 */
 std::any ASTConstructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) {
     debug(0) << "visitAnnotation" << std::endl;
@@ -586,7 +592,7 @@ std::any ASTConstructor::visitAnnotation(OpenCMLParser::AnnotationContext *conte
 };
 
 /*
-annotations : (annotation SEP?)+ ;
+annotations : annotation+ ;
 */
 std::any ASTConstructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
     debug(0) << "visitAnnotations" << std::endl;
@@ -599,7 +605,7 @@ std::any ASTConstructor::visitAnnotations(OpenCMLParser::AnnotationsContext *con
 };
 
 /*
-modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
 */
 std::any ASTConstructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     debug(0) << "visitModifiers" << std::endl;
@@ -630,7 +636,7 @@ std::any ASTConstructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *c
 };
 
 /*
-keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+keyParamPair : VAR? identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 */
 std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
     debug(0) << "visitKeyParamPair" << std::endl;
@@ -648,6 +654,16 @@ std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *c
     // TODO: implement the support for annotation
     return std::make_tuple(context->identRef()->getText(), type, defaultValue);
 };
+
+/*
+indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
+*/
+std::any ASTConstructor::visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) {};
+
+/*
+indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
+*/
+std::any ASTConstructor::visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) {};
 
 /*
 typeList     : typeExpr (',' typeExpr)* ;
@@ -716,11 +732,15 @@ std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *c
     debug(0) << "visitPairedParams" << std::endl;
     std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> pairedParams;
     for (const auto &pair : context->keyParamPair()) {
-        pairedParams.push_back(
-            std::any_cast<std::tuple<std::string, type_ptr_t, data_ptr_t>>(visitKeyParamPair(pair)));
+        pairedParams.push_back(std::any_cast<std::tuple<std::string, type_ptr_t, data_ptr_t>>(visitKeyParamPair(pair)));
     }
     return pairedParams;
 };
+
+/*
+indexKVPairs : indexKVPair (',' indexKVPair)* ;
+*/
+std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) {};
 
 /*
 argumentList : valueList (',' pairedValues)? | pairedValues ;
@@ -779,6 +799,16 @@ std::any ASTConstructor::visitBracedStmts(OpenCMLParser::BracedStmtsContext *con
 };
 
 /*
+bracedValues       : '{' valueList? ','? '}' ;
+*/
+std::any ASTConstructor::visitBracedValues(OpenCMLParser::BracedValuesContext *context) {};
+
+/*
+bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ;
+*/
+std::any ASTConstructor::visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) {};
+
+/*
 bracketIdents : '[' identList? ','? ']' ;
 */
 std::any ASTConstructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
@@ -805,6 +835,14 @@ std::any ASTConstructor::visitBracketValues(OpenCMLParser::BracketValuesContext 
 };
 
 /*
+memberAccess : '[' entityExpr ']' ;
+*/
+std::any ASTConstructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
+    debug(0) << "visitMemberAccess" << std::endl;
+    return visitEntityExpr(context->entityExpr());
+};
+
+/*
 parentParams : '(' pairedParams? ','? ')' ;
 */
 std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
@@ -818,7 +856,20 @@ std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *c
 };
 
 /*
-parentValues : '(' argumentList? ','? ')' ;
+parentArgues       : '(' argumentList? ','? ')' ;
+*/
+std::any ASTConstructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
+    debug(0) << "visitParentParams" << std::endl;
+    const auto &pairedParams = context->pairedParams();
+    if (pairedParams) {
+        return visitPairedParams(pairedParams);
+    } else {
+        return std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>>();
+    }
+};
+
+/*
+parentValues       : '(' valueList? ','? ')' ;
 */
 std::any ASTConstructor::visitParentValues(OpenCMLParser::ParentValuesContext *context) {
     debug(0) << "visitParentValues" << std::endl;
@@ -831,7 +882,7 @@ std::any ASTConstructor::visitParentValues(OpenCMLParser::ParentValuesContext *c
 };
 
 /*
-angledParams : '<' pairedParams? ','? '>' ;
+angledParams       : '<' pairedParams? ','? '>' ;
 */
 std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
     debug(0) << "visitAngledParams" << std::endl;
@@ -844,7 +895,7 @@ std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *c
 };
 
 /*
-angledValues : '<' argumentList? ','? '>' ;
+angledValues       : '<' argumentList? ','? '>' ;
 */
 std::any ASTConstructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
     debug(0) << "visitAngledValues" << std::endl;
@@ -855,6 +906,198 @@ std::any ASTConstructor::visitAngledValues(OpenCMLParser::AngledValuesContext *c
         return std::make_pair(std::vector<ast_ptr_t>(), std::vector<std::pair<std::string, ast_ptr_t>>());
     }
 };
+
+/*
+entityExpr
+    : ternaryExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') ternaryExpr)?
+    ;
+*/
+std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) {};
+
+/*
+ternaryExpr
+    : relationalExpr ('?' ternaryExpr ':' ternaryExpr)?
+    ;
+*/
+std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) {};
+
+/*
+logicalOrExpr
+    : logicalAndExpr ('||' logicalAndExpr)*
+    ;
+*/
+std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {};
+
+/*
+logicalAndExpr
+    : equalityExpr ('&&' equalityExpr)*
+    ;
+*/
+std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {};
+
+/*
+equalityExpr
+    : relationalExpr (('==' | '!=') relationalExpr)*
+    ;
+*/
+std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {};
+
+/*
+relationalExpr
+    : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
+    ;
+*/
+std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {};
+
+/*
+additiveExpr
+    : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
+    ;
+*/
+std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {};
+
+/*
+multiplicativeExpr
+    : unaryExpr (('^' | '*' | '/' | '%' | AS | IS) unaryExpr)*
+    ;
+*/
+std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {};
+
+/*
+unaryExpr
+    : linkExpr
+    | ('!' | '~') linkExpr
+    ;
+*/
+std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {};
+
+/*
+linkExpr
+    : withExpr ('->' withExpr)*
+    ;
+*/
+std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context) {};
+
+/*
+withExpr
+    : annotatedExpr ('.' annotatedExpr)*
+    ;
+*/
+std::any visitWithExpr(OpenCMLParser::WithExprContext *context) {};
+
+/*
+annotatedExpr
+    : primaryExpr (memberAccess | parentArgues | angledValues | annotation)*
+    ;
+*/
+std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context) {};
+
+/*
+primaryExpr
+    : identRef
+    | literal
+    | bracedPairedValues    // for dict
+    | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a
+tuple
+    \\ for list (or vector) | tuple (or array) | tensor | set | map
+    | ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues |
+bracedValues | bracedIndexKVPairs) | lambdaExpr ;
+*/
+std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {};
+
+/*
+literal
+    : INTEGER UNIT?
+    | REAL UNIT?
+    | STRING
+    | MULTI_STR
+    | FSTRING
+    | TRUE
+    | FALSE
+    | NULL
+    ;
+*/
+std::any visitLiteral(OpenCMLParser::LiteralContext *context) {};
+
+/*
+typeExpr
+    : arrayType (('&' | '|' | '^') arrayType)*
+    ;
+*/
+std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) {};
+
+/*
+arrayType
+    : atomType ('[' INTEGER? ']')*
+    ;
+*/
+std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context) {};
+
+/*
+atomType
+    : primaryType
+    | structType
+    | specialType
+    | identRef
+    | '(' typeExpr ')'
+    | lambdaType
+    ;
+*/
+std::any visitAtomType(OpenCMLParser::AtomTypeContext *context) {};
+
+/*
+lambdaType
+    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
+    ;
+*/
+std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {};
+
+/*
+primaryType
+    : INTEGER_TYPE
+    | INTEGER32_TYPE
+    | INTEGER64_TYPE
+    | REAL_TYPE
+    | FLOAT_TYPE
+    | DOUBLE_TYPE
+    | NUMBER_TYPE
+    | STRING_TYPE
+    | BOOL_TYPE
+    | CHAR_TYPE
+    ;
+*/
+std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {};
+
+/*
+structType
+    : SET_TYPE ('<' typeExpr '>')?
+    | MAP_TYPE ('<' typeExpr ',' typeExpr '>')?
+    | LIST_TYPE // variable length, heterogeneous
+    | DICT_TYPE // universal dict type
+    | ARRAY_TYPE ('<' typeExpr (',' INTEGER)? '>')? // fixed length, homogenous
+    | TUPLE_TYPE ('<' typeList? ','? '>')? // fixed length, heterogeneous
+    | UNION_TYPE ('<' typeList? ','? '>')?
+    | VECTOR_TYPE ('<' typeExpr '>')? // variable length, homogenous
+    | TENSOR_TYPE ('<' typeExpr (',' '[' INTEGER (',' INTEGER)* ']')? '>')?
+    | '{' pairedTypes? ','? '}' // concrete dict type
+    | '{' indexKTPair '}' // concrete map type
+    ;
+*/
+std::any visitStructType(OpenCMLParser::StructTypeContext *context) {};
+
+/*
+specialType
+    : ANY_TYPE
+    | VOID_TYPE
+    | FUNCTOR_TYPE
+    ;
+*/
+std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *context) {};
+
+/*
+identRef : IDENTIFIER ;
+*/
+std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) {};
 
 /*
 primEntity
@@ -930,14 +1173,6 @@ std::any ASTConstructor::visitPrimEntity(OpenCMLParser::PrimEntityContext *conte
     default:
         throw std::runtime_error("Unknown primary entity type");
     }
-};
-
-/*
-memberAccess : '[' entityExpr ']' ;
-*/
-std::any ASTConstructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
-    debug(0) << "visitMemberAccess" << std::endl;
-    return visitEntityExpr(context->entityExpr());
 };
 
 /*
@@ -1021,11 +1256,12 @@ std::any ASTConstructor::visitEntityUnit(OpenCMLParser::EntityUnitContext *conte
             listValue->add(targetValue);
             listValue->add(indexValue);
             // TODO: Find a better way to handle this
-            ast_ptr_t dataNode = createAstNode<DataASTLoad>(std::dynamic_pointer_cast<Data>(listValue),
-                                                         targetDang && indexDang ? data_list_t{targetValue, indexValue}
-                                                         : targetDang            ? data_list_t{targetValue}
-                                                         : indexDang             ? data_list_t{indexValue}
-                                                                                 : data_list_t{});
+            ast_ptr_t dataNode =
+                createAstNode<DataASTLoad>(std::dynamic_pointer_cast<Data>(listValue),
+                                           targetDang && indexDang ? data_list_t{targetValue, indexValue}
+                                           : targetDang            ? data_list_t{targetValue}
+                                           : indexDang             ? data_list_t{indexValue}
+                                                                   : data_list_t{});
             *linkNode << dataNode << funcNode;
             if (dangling) {
                 *execNode << linkNode;
@@ -1180,8 +1416,8 @@ std::any ASTConstructor::visitEntityExpr(OpenCMLParser::EntityExprContext *conte
 
         ast_ptr_t dataNode =
             createAstNode<DataASTLoad>(listValue, entityDang && relaDang ? data_list_t{entityValue, relaValue}
-                                               : entityDang           ? data_list_t{entityValue}
-                                                                      : data_list_t{relaValue});
+                                                  : entityDang           ? data_list_t{entityValue}
+                                                                         : data_list_t{relaValue});
 
         ast_ptr_t funcNode = nullptr;
         const auto &op = context->children[1]->getText();
@@ -1247,9 +1483,10 @@ std::any ASTConstructor::visitRelaExpr(OpenCMLParser::RelaExprContext *context) 
 
         const auto listValue = std::make_shared<ListValue>(data_list_t{relaValue, addValue});
 
-        ast_ptr_t dataNode = createAstNode<DataASTLoad>(listValue, relaDang && addDang ? data_list_t{relaValue, addValue}
-                                                                : relaDang          ? data_list_t{relaValue}
-                                                                                    : data_list_t{addValue});
+        ast_ptr_t dataNode =
+            createAstNode<DataASTLoad>(listValue, relaDang && addDang ? data_list_t{relaValue, addValue}
+                                                  : relaDang          ? data_list_t{relaValue}
+                                                                      : data_list_t{addValue});
 
         ast_ptr_t funcNode = nullptr;
         const auto &op = context->children[1]->getText();
@@ -1379,7 +1616,7 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
 
             listValue->add(std::make_shared<NullValue>(type));
             dataNode = createAstNode<DataASTLoad>(std::dynamic_pointer_cast<Data>(listValue),
-                                               multiDang ? data_list_t{multiValue} : data_list_t{});
+                                                  multiDang ? data_list_t{multiValue} : data_list_t{});
             if (op == "as") {
                 funcNode = castFuncDeRefNode;
             } else if (op == "is") {
@@ -1392,10 +1629,10 @@ std::any ASTConstructor::visitMultiExpr(OpenCMLParser::MultiExprContext *context
             listValue->add(unaryValue);
 
             dataNode = createAstNode<DataASTLoad>(std::dynamic_pointer_cast<Data>(listValue),
-                                               multiDang && unaryDang ? data_list_t{multiValue, unaryValue}
-                                               : multiDang            ? data_list_t{multiValue}
-                                               : unaryDang            ? data_list_t{unaryValue}
-                                                                      : data_list_t{});
+                                                  multiDang && unaryDang ? data_list_t{multiValue, unaryValue}
+                                                  : multiDang            ? data_list_t{multiValue}
+                                                  : unaryDang            ? data_list_t{unaryValue}
+                                                                         : data_list_t{});
 
             if (op == "^") {
                 funcNode = powFuncDeRefNode;

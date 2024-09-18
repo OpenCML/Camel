@@ -40,8 +40,8 @@ const std::string ASTNodeLoad::typeStr() const {
         return "NREF";
     case ASTNodeType::DREF:
         return "DREF";
-    case ASTNodeType::ASSN:
-        return "ASSN";
+    case ASTNodeType::WAIT:
+        return "WAIT";
     case ASTNodeType::ANNO:
         return "ANNO";
     case ASTNodeType::LINK:
@@ -72,3 +72,15 @@ const std::string TypeASTLoad::toString() const {
 const std::string NRefASTLoad::toString() const { return "NREF: " + ident_; }
 
 const std::string DRefASTLoad::toString() const { return "DREF: " + ident_; }
+
+const std::string WaitASTLoad::toString() const {
+    std::stringstream ss;
+    ss << "WAIT: ";
+    for (const auto &ident : idents_) {
+        ss << ident << ", ";
+    }
+    std::string res = std::move(ss.str());
+    res.pop_back();
+    res.pop_back();
+    return res;
+}
