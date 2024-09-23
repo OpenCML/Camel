@@ -118,7 +118,7 @@ multiplicativeExpr
 
 unaryExpr
     : linkExpr
-    | ('!' | '~') linkExpr
+    | ('!' | '-' | '~') linkExpr
     ;
 
 linkExpr

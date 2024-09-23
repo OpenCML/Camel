@@ -24,11 +24,33 @@
 #include "utils/log.h"
 
 #define DEBUG_LEVEL -1
+
+#define CREATE_SINGLE_DANGLING_LIST(dangling, value) (dangling ? data_list_t{value} : data_list_t{})
+
+#define CREATE_DOUBLE_DANGLING_LIST(lhsDangling, lhsValue, rhsDangling, rhsValue)                                      \
+    (lhsDangling && rhsDangling ? data_list_t{lhsValue, rhsValue}                                                      \
+     : lhsDangling              ? data_list_t{lhsValue}                                                                \
+     : rhsDangling              ? data_list_t{rhsValue}                                                                \
+                                : data_list_t{})
+
+#define CREATE_TRIPLE_DANGLING_LIST(lhsDangling, lhsValue, midDangling, midValue, rhsDangling, rhsValue)               \
+    (lhsDangling && midDangling && rhsDangling ? data_list_t{lhsValue, midValue, rhsValue}                             \
+     : lhsDangling && midDangling              ? data_list_t{lhsValue, midValue}                                       \
+     : midDangling && rhsDangling              ? data_list_t{midValue, rhsValue}                                       \
+     : lhsDangling && rhsDangling              ? data_list_t{lhsValue, rhsValue}                                       \
+     : lhsDangling                             ? data_list_t{lhsValue}                                                 \
+     : midDangling                             ? data_list_t{midValue}                                                 \
+     : rhsDangling                             ? data_list_t{rhsValue}                                                 \
+                                               : data_list_t{})
+
 namespace InnerFuncDRefNodes {
 ast_ptr_t __copy__ = nullptr;
 ast_ptr_t __cast__ = nullptr;
 ast_ptr_t __type__ = nullptr;
 ast_ptr_t __index__ = nullptr;
+
+ast_ptr_t __as__ = nullptr;
+ast_ptr_t __is__ = nullptr;
 
 ast_ptr_t __add__ = nullptr;
 ast_ptr_t __sub__ = nullptr;
@@ -39,14 +61,15 @@ ast_ptr_t __pow__ = nullptr;
 ast_ptr_t __inter__ = nullptr;
 ast_ptr_t __union__ = nullptr;
 
-ast_ptr_t __i_add__ = nullptr;
-ast_ptr_t __i_sub__ = nullptr;
-ast_ptr_t __i_mul__ = nullptr;
-ast_ptr_t __i_div__ = nullptr;
-ast_ptr_t __i_mod__ = nullptr;
-ast_ptr_t __i_pow__ = nullptr;
-ast_ptr_t __i_inter__ = nullptr;
-ast_ptr_t __i_union__ = nullptr;
+ast_ptr_t __assn__ = nullptr;
+ast_ptr_t __assn_add__ = nullptr;
+ast_ptr_t __assn_sub__ = nullptr;
+ast_ptr_t __assn_mul__ = nullptr;
+ast_ptr_t __assn_div__ = nullptr;
+ast_ptr_t __assn_mod__ = nullptr;
+ast_ptr_t __assn_pow__ = nullptr;
+ast_ptr_t __assn_inter__ = nullptr;
+ast_ptr_t __assn_union__ = nullptr;
 
 ast_ptr_t __lt__ = nullptr;
 ast_ptr_t __gt__ = nullptr;
@@ -56,6 +79,15 @@ ast_ptr_t __eq__ = nullptr;
 ast_ptr_t __ne__ = nullptr;
 ast_ptr_t __and__ = nullptr;
 ast_ptr_t __or__ = nullptr;
+
+ast_ptr_t __not__ = nullptr;
+ast_ptr_t __neg__ = nullptr;
+ast_ptr_t __rev__ = nullptr;
+
+ast_ptr_t __ifexpr__ = nullptr;
+
+std::unordered_map<std::string, ast_ptr_t> nodesMap;
+std::unordered_map<std::string, ast_ptr_t> opNodesMap;
 } // namespace InnerFuncDRefNodes
 
 void initFuncDeRefNodes() {
@@ -64,36 +96,108 @@ void initFuncDeRefNodes() {
         return;
 
     __copy__ = createAstNode<DRefASTLoad>("__copy__");
+    nodesMap["__copy__"] = __copy__;
     __cast__ = createAstNode<DRefASTLoad>("__cast__");
+    nodesMap["__cast__"] = __cast__;
     __type__ = createAstNode<DRefASTLoad>("__type__");
+    nodesMap["__type__"] = __type__;
     __index__ = createAstNode<DRefASTLoad>("__index__");
+    nodesMap["__index__"] = __index__;
+
+    __as__ = createAstNode<DRefASTLoad>("__as__");
+    nodesMap["__as__"] = __as__;
+    opNodesMap["as"] = __as__;
+    __is__ = createAstNode<DRefASTLoad>("__is__");
+    nodesMap["__is__"] = __is__;
+    opNodesMap["is"] = __is__;
 
     __add__ = createAstNode<DRefASTLoad>("__add__");
+    nodesMap["__add__"] = __add__;
+    opNodesMap["+"] = __add__;
     __sub__ = createAstNode<DRefASTLoad>("__sub__");
+    nodesMap["__sub__"] = __sub__;
+    opNodesMap["-"] = __sub__;
     __mul__ = createAstNode<DRefASTLoad>("__mul__");
+    nodesMap["__mul__"] = __mul__;
+    opNodesMap["*"] = __mul__;
     __div__ = createAstNode<DRefASTLoad>("__div__");
+    nodesMap["__div__"] = __div__;
+    opNodesMap["/"] = __div__;
     __mod__ = createAstNode<DRefASTLoad>("__mod__");
+    nodesMap["__mod__"] = __mod__;
+    opNodesMap["%"] = __mod__;
     __pow__ = createAstNode<DRefASTLoad>("__pow__");
+    nodesMap["__pow__"] = __pow__;
+    opNodesMap["^"] = __pow__;
     __inter__ = createAstNode<DRefASTLoad>("__inter__");
+    nodesMap["__inter__"] = __inter__;
+    opNodesMap["&"] = __inter__;
     __union__ = createAstNode<DRefASTLoad>("__union__");
+    nodesMap["__union__"] = __union__;
+    opNodesMap["|"] = __union__;
 
-    __i_add__ = createAstNode<DRefASTLoad>("__i_add__");
-    __i_sub__ = createAstNode<DRefASTLoad>("__i_sub__");
-    __i_mul__ = createAstNode<DRefASTLoad>("__i_mul__");
-    __i_div__ = createAstNode<DRefASTLoad>("__i_div__");
-    __i_mod__ = createAstNode<DRefASTLoad>("__i_mod__");
-    __i_pow__ = createAstNode<DRefASTLoad>("__i_pow__");
-    __i_inter__ = createAstNode<DRefASTLoad>("__i_inter__");
-    __i_union__ = createAstNode<DRefASTLoad>("__i_union__");
+    __assn__ = createAstNode<DRefASTLoad>("__assn__");
+    nodesMap["__assn__"] = __assn__;
+    opNodesMap["="] = __assn__;
+    __assn_add__ = createAstNode<DRefASTLoad>("__assn_add__");
+    nodesMap["__assn_add__"] = __assn_add__;
+    opNodesMap["+="] = __assn_add__;
+    __assn_sub__ = createAstNode<DRefASTLoad>("__assn_sub__");
+    nodesMap["__assn_sub__"] = __assn_sub__;
+    opNodesMap["-="] = __assn_sub__;
+    __assn_mul__ = createAstNode<DRefASTLoad>("__assn_mul__");
+    nodesMap["__assn_mul__"] = __assn_mul__;
+    opNodesMap["*="] = __assn_mul__;
+    __assn_div__ = createAstNode<DRefASTLoad>("__assn_div__");
+    nodesMap["__assn_div__"] = __assn_div__;
+    opNodesMap["/="] = __assn_div__;
+    __assn_mod__ = createAstNode<DRefASTLoad>("__assn_mod__");
+    nodesMap["__assn_mod__"] = __assn_mod__;
+    opNodesMap["%="] = __assn_mod__;
+    __assn_pow__ = createAstNode<DRefASTLoad>("__assn_pow__");
+    nodesMap["__assn_pow__"] = __assn_pow__;
+    opNodesMap["^="] = __assn_pow__;
+    __assn_inter__ = createAstNode<DRefASTLoad>("__assn_inter__");
+    nodesMap["__assn_inter__"] = __assn_inter__;
+    opNodesMap["&="] = __assn_inter__;
+    __assn_union__ = createAstNode<DRefASTLoad>("__assn_union__");
+    nodesMap["__assn_union__"] = __assn_union__;
+    opNodesMap["|="] = __assn_union__;
 
     __lt__ = createAstNode<DRefASTLoad>("__lt__");
+    nodesMap["__lt__"] = __lt__;
+    opNodesMap["<"] = __lt__;
     __gt__ = createAstNode<DRefASTLoad>("__gt__");
+    nodesMap["__gt__"] = __gt__;
+    opNodesMap[">"] = __gt__;
     __le__ = createAstNode<DRefASTLoad>("__le__");
+    nodesMap["__le__"] = __le__;
+    opNodesMap["<="] = __le__;
     __ge__ = createAstNode<DRefASTLoad>("__ge__");
+    nodesMap["__ge__"] = __ge__;
+    opNodesMap[">="] = __ge__;
     __eq__ = createAstNode<DRefASTLoad>("__eq__");
+    nodesMap["__eq__"] = __eq__;
+    opNodesMap["=="] = __eq__;
     __ne__ = createAstNode<DRefASTLoad>("__ne__");
+    nodesMap["__ne__"] = __ne__;
+    opNodesMap["!="] = __ne__;
     __and__ = createAstNode<DRefASTLoad>("__and__");
+    nodesMap["__and__"] = __and__;
+    opNodesMap["&&"] = __and__;
     __or__ = createAstNode<DRefASTLoad>("__or__");
+    nodesMap["__or__"] = __or__;
+    opNodesMap["||"] = __or__;
+
+    __not__ = createAstNode<DRefASTLoad>("__not__");
+    nodesMap["__not__"] = __not__;
+    opNodesMap["!"] = __not__;
+    __neg__ = createAstNode<DRefASTLoad>("__neg__");
+    nodesMap["__neg__"] = __neg__;
+    opNodesMap["-"] = __neg__;
+    __rev__ = createAstNode<DRefASTLoad>("__rev__");
+    nodesMap["__rev__"] = __rev__;
+    opNodesMap["~"] = __rev__;
 }
 
 inline ast_ptr_t reparent(ast_ptr_t &node, ast_ptr_t &parent) {
@@ -127,16 +231,21 @@ std::pair<ast_ptr_t, data_ptr_t> ASTConstructor::makeDanglingValue(const ast_ptr
     return std::make_pair(refNode, value);
 }
 
-std::pair<data_ptr_t, bool> ASTConstructor::extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
+std::pair<data_ptr_t, bool> ASTConstructor::extractValue(const ast_ptr_t &node, ast_ptr_t &execNode) {
     const data_ptr_t value = extractStaticValue(node);
     if (value) {
         return std::make_pair(value, false);
     } else {
-        dangling = true;
         auto [refNode, refValue] = makeDanglingValue(node);
         *execNode << refNode;
         return std::make_pair(refValue, true);
     }
+}
+
+std::pair<data_ptr_t, bool> ASTConstructor::extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
+    auto [refValue, dang] = extractValue(node, execNode);
+    dangling = dang;
+    return std::make_pair(refValue, dang);
 }
 
 /*
@@ -236,7 +345,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         if (type) {
             ast_ptr_t dataNode = createAstNode<DataASTLoad>(
                 std::make_shared<TupleValue>(data_list_t{exprValue, std::make_shared<NullValue>(type)}),
-                dangling ? data_list_t{exprValue} : data_list_t{});
+                CREATE_SINGLE_DANGLING_LIST(dangling, exprValue));
 
             if (dangling) {
                 dataNode = reparent(dataNode, execNode);
@@ -269,7 +378,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             ast_ptr_t nRefNode = createAstNode<NRefASTLoad>(ident);
             ast_ptr_t dataNode = createAstNode<DataASTLoad>(
                 std::make_shared<TupleValue>(data_list_t{exprValue, std::make_shared<PrimValue<int32_t>>(i)}),
-                dangling ? data_list_t{exprValue} : data_list_t{});
+                CREATE_SINGLE_DANGLING_LIST(dangling, exprValue));
             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
             *execNode << nRefNode;
         }
@@ -295,7 +404,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
             ast_ptr_t nRefNode = createAstNode<NRefASTLoad>(ident);
             ast_ptr_t dataNode = createAstNode<DataASTLoad>(
                 std::make_shared<TupleValue>(data_list_t{exprValue, std::make_shared<StringValue>(ident)}),
-                dangling ? data_list_t{exprValue} : data_list_t{});
+                CREATE_SINGLE_DANGLING_LIST(dangling, exprValue));
             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
             *execNode << nRefNode;
         }
@@ -612,7 +721,12 @@ std::any ASTConstructor::visitIndexKTPair(OpenCMLParser::IndexKTPairContext *con
 /*
 indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 */
-std::any ASTConstructor::visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) {};
+std::any ASTConstructor::visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) {
+    debug(0) << "visitIndexKVPair" << std::endl;
+    const auto &key = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr(0)));
+    const auto &value = std::any_cast<ast_ptr_t>(visitEntityExpr(context->entityExpr(1)));
+    return std::make_pair(key, value);
+};
 
 /*
 typeList     : typeExpr (',' typeExpr)* ;
@@ -690,7 +804,14 @@ std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *c
 /*
 indexKVPairs : indexKVPair (',' indexKVPair)* ;
 */
-std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) {};
+std::any ASTConstructor::visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) {
+    debug(0) << "visitIndexKVPairs" << std::endl;
+    std::vector<std::pair<ast_ptr_t, ast_ptr_t>> indexKVPairs;
+    for (const auto &pair : context->indexKVPair()) {
+        indexKVPairs.push_back(std::any_cast<std::pair<ast_ptr_t, ast_ptr_t>>(visitIndexKVPair(pair)));
+    }
+    return indexKVPairs;
+};
 
 /*
 argumentList : valueList (',' pairedValues)? | pairedValues ;
@@ -751,12 +872,28 @@ std::any ASTConstructor::visitBracedStmts(OpenCMLParser::BracedStmtsContext *con
 /*
 bracedValues       : '{' valueList? ','? '}' ;
 */
-std::any ASTConstructor::visitBracedValues(OpenCMLParser::BracedValuesContext *context) {};
+std::any ASTConstructor::visitBracedValues(OpenCMLParser::BracedValuesContext *context) {
+    debug(0) << "visitBracedValues" << std::endl;
+    const auto &valueList = context->valueList();
+    if (valueList) {
+        return visitValueList(valueList);
+    } else {
+        return std::vector<ast_ptr_t>();
+    }
+};
 
 /*
 bracedIndexKVPairs : '{' indexKVPairs? ','? '}' ;
 */
-std::any ASTConstructor::visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) {};
+std::any ASTConstructor::visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) {
+    debug(0) << "visitBracedIndexKVPairs" << std::endl;
+    const auto &indexKVPairs = context->indexKVPairs();
+    if (indexKVPairs) {
+        return visitIndexKVPairs(indexKVPairs);
+    } else {
+        return std::vector<std::pair<ast_ptr_t, ast_ptr_t>>();
+    }
+};
 
 /*
 bracketIdents : '[' identList? ','? ']' ;
@@ -809,12 +946,12 @@ std::any ASTConstructor::visitParentParams(OpenCMLParser::ParentParamsContext *c
 parentArgues       : '(' argumentList? ','? ')' ;
 */
 std::any ASTConstructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
-    debug(0) << "visitParentParams" << std::endl;
-    const auto &pairedParams = context->pairedParams();
-    if (pairedParams) {
-        return visitPairedParams(pairedParams);
+    debug(0) << "visitParentArgues" << std::endl;
+    const auto &argumentList = context->argumentList();
+    if (argumentList) {
+        return visitArgumentList(argumentList);
     } else {
-        return std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>>();
+        return std::make_pair(std::vector<ast_ptr_t>(), std::vector<std::pair<std::string, ast_ptr_t>>());
     }
 };
 
@@ -823,11 +960,11 @@ parentValues       : '(' valueList? ','? ')' ;
 */
 std::any ASTConstructor::visitParentValues(OpenCMLParser::ParentValuesContext *context) {
     debug(0) << "visitParentValues" << std::endl;
-    const auto &argumentList = context->argumentList();
-    if (argumentList) {
-        return visitArgumentList(argumentList);
+    const auto &valueList = context->valueList();
+    if (valueList) {
+        return visitValueList(valueList);
     } else {
-        return std::make_pair(std::vector<ast_ptr_t>(), std::vector<std::pair<std::string, ast_ptr_t>>());
+        return std::vector<ast_ptr_t>();
     }
 };
 
@@ -862,85 +999,223 @@ entityExpr
     : ternaryExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') ternaryExpr)?
     ;
 */
-std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) {};
+std::any ASTConstructor::visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
+    debug(0) << "visitEntityExpr" << std::endl;
+    return visitBinaryOpList(context, context->ternaryExpr());
+};
 
 /*
 ternaryExpr
     : relationalExpr ('?' ternaryExpr ':' ternaryExpr)?
     ;
 */
-std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) {};
+std::any ASTConstructor::visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) {
+    debug(0) << "visitTernaryExpr" << std::endl;
+    const auto &relationalExpr = context->relationalExpr();
+    ast_ptr_t condNode = std::any_cast<ast_ptr_t>(visitRelationalExpr(relationalExpr));
+
+    if (context->children.size() > 1) {
+        ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+        ast_ptr_t trueNode = std::any_cast<ast_ptr_t>(visitTernaryExpr(context->ternaryExpr(0)));
+        ast_ptr_t falseNode = std::any_cast<ast_ptr_t>(visitTernaryExpr(context->ternaryExpr(1)));
+
+        ast_ptr_t funcNode = InnerFuncDRefNodes::__ifexpr__;
+        auto [condValue, condDangling] = extractValue(condNode, execNode);
+        auto [trueValue, trueDangling] = extractValue(trueNode, execNode);
+        auto [falseValue, falseDangling] = extractValue(falseNode, execNode);
+
+        ast_ptr_t dataNode = createAstNode<DataASTLoad>(
+            std::make_shared<TupleValue>(data_list_t{condValue, trueValue, falseValue}),
+            CREATE_TRIPLE_DANGLING_LIST(condDangling, condValue, trueDangling, trueValue, falseDangling, falseValue));
+
+        if (condDangling || trueDangling || falseDangling) {
+            dataNode = reparent(dataNode, execNode);
+        }
+
+        return linkFunc(dataNode, funcNode);
+    }
+
+    return condNode;
+};
 
 /*
 logicalOrExpr
     : logicalAndExpr ('||' logicalAndExpr)*
     ;
 */
-std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {};
+std::any ASTConstructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
+    debug(0) << "visitLogicalOrExpr" << std::endl;
+    return visitBinaryOpList(context, context->logicalAndExpr());
+};
 
 /*
 logicalAndExpr
     : equalityExpr ('&&' equalityExpr)*
     ;
 */
-std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {};
+std::any ASTConstructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {
+    debug(0) << "visitLogicalAndExpr" << std::endl;
+    return visitBinaryOpList(context, context->equalityExpr());
+};
 
 /*
 equalityExpr
     : relationalExpr (('==' | '!=') relationalExpr)*
     ;
 */
-std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {};
+std::any ASTConstructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
+    debug(0) << "visitEqualityExpr" << std::endl;
+    return visitBinaryOpList(context, context->relationalExpr());
+};
 
 /*
 relationalExpr
     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
     ;
 */
-std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {};
+std::any ASTConstructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {
+    debug(0) << "visitRelationalExpr" << std::endl;
+    return visitBinaryOpList(context, context->additiveExpr());
+};
 
 /*
 additiveExpr
     : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
     ;
 */
-std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {};
+std::any ASTConstructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
+    debug(0) << "visitAdditiveExpr" << std::endl;
+    return visitBinaryOpList(context, context->multiplicativeExpr());
+};
 
 /*
 multiplicativeExpr
     : unaryExpr (('^' | '*' | '/' | '%' | AS | IS) unaryExpr)*
     ;
 */
-std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {};
+std::any ASTConstructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {
+    debug(0) << "visitMultiplicativeExpr" << std::endl;
+    return visitBinaryOpList(context, context->unaryExpr());
+};
 
 /*
 unaryExpr
     : linkExpr
-    | ('!' | '~') linkExpr
+    | ('!' | '-' | '~') linkExpr
     ;
 */
-std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {};
+std::any ASTConstructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
+    debug(0) << "visitUnaryExpr" << std::endl;
+    if (context->linkExpr()) {
+        return visitLinkExpr(context->linkExpr());
+    }
+
+    ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+    ast_ptr_t linkNode = std::any_cast<ast_ptr_t>(visitLinkExpr(context->linkExpr()));
+
+    std::string op = context->children[0]->getText();
+    ast_ptr_t funcNode = InnerFuncDRefNodes::opNodesMap[op];
+
+    auto [linkValue, linkDangling] = extractValue(linkNode, execNode);
+    ast_ptr_t dataNode = createAstNode<DataASTLoad>(std::make_shared<TupleValue>(data_list_t{linkValue}),
+                                                    CREATE_SINGLE_DANGLING_LIST(linkDangling, linkValue));
+
+    if (linkDangling) {
+        dataNode = reparent(dataNode, execNode);
+    }
+
+    return linkFunc(dataNode, funcNode);
+};
 
 /*
 linkExpr
     : withExpr ('->' withExpr)*
     ;
 */
-std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context) {};
+std::any ASTConstructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
+    debug(0) << "visitLinkExpr" << std::endl;
+    const auto &withExprs = context->withExpr();
+    ast_ptr_t lhsNode = std::any_cast<ast_ptr_t>(visitWithExpr(withExprs[0]));
+
+    for (size_t i = 1; i < withExprs.size(); ++i) {
+        ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+        ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visitWithExpr(withExprs[i]));
+
+        ast_ptr_t linkNode = createAstNode<LinkASTLoad>();
+        *linkNode << lhsNode << rhsNode;
+
+        lhsNode = linkNode;
+    }
+
+    return lhsNode;
+};
 
 /*
 withExpr
     : annotatedExpr ('.' annotatedExpr)*
     ;
 */
-std::any visitWithExpr(OpenCMLParser::WithExprContext *context) {};
+std::any ASTConstructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
+    debug(0) << "visitWithExpr" << std::endl;
+    const auto &annotatedExprs = context->annotatedExpr();
+    ast_ptr_t lhsNode = std::any_cast<ast_ptr_t>(visitAnnotatedExpr(annotatedExprs[0]));
+
+    for (size_t i = 1; i < annotatedExprs.size(); ++i) {
+        ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+        ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visitAnnotatedExpr(annotatedExprs[i]));
+
+        ast_ptr_t linkNode = createAstNode<LinkASTLoad>();
+        *linkNode << lhsNode << rhsNode;
+
+        lhsNode = linkNode;
+    }
+
+    return lhsNode;
+};
 
 /*
 annotatedExpr
     : primaryExpr (memberAccess | parentArgues | angledValues | annotation)*
     ;
 */
-std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context) {};
+std::any ASTConstructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context) {
+    debug(0) << "visitAnnotatedExpr" << std::endl;
+    ast_ptr_t lhsNode = std::any_cast<ast_ptr_t>(visitPrimaryExpr(context->primaryExpr()));
+
+    for (const auto &child : context->children) {
+        const char &op = child->children[0]->getText()[0];
+        ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visit(child));
+        switch (op) {
+        case '[': {
+            ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+            auto [resultValue, resultDangling] = extractValue(lhsNode, execNode);
+            auto [memberValue, memberDangling] = extractValue(rhsNode, execNode);
+            ast_ptr_t dataNode = createAstNode<DataASTLoad>(
+                std::make_shared<TupleValue>(data_list_t{resultValue, memberValue}),
+                CREATE_DOUBLE_DANGLING_LIST(resultDangling, resultValue, memberDangling, memberValue));
+            if (resultDangling || memberDangling) {
+                dataNode = reparent(dataNode, execNode);
+            }
+            lhsNode = linkFunc(dataNode, InnerFuncDRefNodes::__index__);
+        } break;
+        case '(': {
+            ast_ptr_t linkNode = createAstNode<LinkASTLoad>();
+            *linkNode << rhsNode << lhsNode;
+            lhsNode = linkNode;
+        } break;
+        case '<': {
+            ast_ptr_t withNode = createAstNode<WithASTLoad>();
+            *withNode << rhsNode << lhsNode;
+            lhsNode = withNode;
+        } break;
+        case '@': {
+            // TODO: Implement annotation
+        } break;
+        }
+    }
+
+    return lhsNode;
+};
 
 /*
 primaryExpr
@@ -953,7 +1228,7 @@ tuple
     | ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues |
 bracedValues | bracedIndexKVPairs) | lambdaExpr ;
 */
-std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {};
+std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {};
 
 /*
 literal
@@ -967,21 +1242,21 @@ literal
     | NULL
     ;
 */
-std::any visitLiteral(OpenCMLParser::LiteralContext *context) {};
+std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {};
 
 /*
 typeExpr
     : arrayType (('&' | '|' | '^') arrayType)*
     ;
 */
-std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) {};
+std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {};
 
 /*
 arrayType
     : atomType ('[' INTEGER? ']')*
     ;
 */
-std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context) {};
+std::any ASTConstructor::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {};
 
 /*
 atomType
@@ -993,14 +1268,14 @@ atomType
     | lambdaType
     ;
 */
-std::any visitAtomType(OpenCMLParser::AtomTypeContext *context) {};
+std::any ASTConstructor::visitAtomType(OpenCMLParser::AtomTypeContext *context) {};
 
 /*
 lambdaType
     : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
     ;
 */
-std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {};
+std::any ASTConstructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {};
 
 /*
 primaryType
@@ -1016,7 +1291,7 @@ primaryType
     | CHAR_TYPE
     ;
 */
-std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {};
+std::any ASTConstructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {};
 
 /*
 structType
@@ -1033,7 +1308,7 @@ structType
     | '{' indexKTPair '}' // concrete map type
     ;
 */
-std::any visitStructType(OpenCMLParser::StructTypeContext *context) {};
+std::any ASTConstructor::visitStructType(OpenCMLParser::StructTypeContext *context) {};
 
 /*
 specialType
@@ -1042,12 +1317,12 @@ specialType
     | FUNCTOR_TYPE
     ;
 */
-std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *context) {};
+std::any ASTConstructor::visitSpecialType(OpenCMLParser::SpecialTypeContext *context) {};
 
 /*
 identRef : IDENTIFIER ;
 */
-std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) {};
+std::any ASTConstructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {};
 
 /*
 primEntity

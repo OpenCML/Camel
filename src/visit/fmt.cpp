@@ -718,7 +718,7 @@ std::any Formatter::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprCon
 /*
 unaryExpr
     : linkExpr
-    | ('!' | '~') linkExpr
+    | ('!' | '-' | '~') linkExpr
     ;
 */
 std::any Formatter::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {

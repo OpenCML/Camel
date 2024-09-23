@@ -35,6 +35,9 @@ extern ast_ptr_t __cast__;
 extern ast_ptr_t __type__;
 extern ast_ptr_t __index__;
 
+extern ast_ptr_t __as__;
+extern ast_ptr_t __is__;
+
 extern ast_ptr_t __add__;
 extern ast_ptr_t __sub__;
 extern ast_ptr_t __mul__;
@@ -44,14 +47,15 @@ extern ast_ptr_t __pow__;
 extern ast_ptr_t __inter__;
 extern ast_ptr_t __union__;
 
-extern ast_ptr_t __i_add__;
-extern ast_ptr_t __i_sub__;
-extern ast_ptr_t __i_mul__;
-extern ast_ptr_t __i_div__;
-extern ast_ptr_t __i_mod__;
-extern ast_ptr_t __i_pow__;
-extern ast_ptr_t __i_inter__;
-extern ast_ptr_t __i_union__;
+extern ast_ptr_t __assn__;
+extern ast_ptr_t __assn_add__;
+extern ast_ptr_t __assn_sub__;
+extern ast_ptr_t __assn_mul__;
+extern ast_ptr_t __assn_div__;
+extern ast_ptr_t __assn_mod__;
+extern ast_ptr_t __assn_pow__;
+extern ast_ptr_t __assn_inter__;
+extern ast_ptr_t __assn_union__;
 
 extern ast_ptr_t __lt__;
 extern ast_ptr_t __gt__;
@@ -61,7 +65,16 @@ extern ast_ptr_t __eq__;
 extern ast_ptr_t __ne__;
 extern ast_ptr_t __and__;
 extern ast_ptr_t __or__;
-} // namespace FuncDRefNodes
+
+extern ast_ptr_t __not__;
+extern ast_ptr_t __neg__;
+extern ast_ptr_t __rev__;
+
+extern ast_ptr_t __ifexpr__;
+
+extern std::unordered_map<std::string, ast_ptr_t> nodesMap;
+extern std::unordered_map<std::string, ast_ptr_t> opNodesMap;
+} // namespace InnerFuncDRefNodes
 
 void initFuncDeRefNodes();
 
@@ -109,7 +122,34 @@ class ASTConstructor : public OpenCMLVisitor {
 
     data_ptr_t extractStaticValue(const ast_ptr_t &node);
     std::pair<ast_ptr_t, data_ptr_t> makeDanglingValue(const ast_ptr_t &expr);
+    std::pair<data_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode);
     std::pair<data_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
+
+    template <typename Ctx, typename Val> ast_ptr_t visitBinaryOpList(Ctx *context, std::vector<Val *> values) {
+        ast_ptr_t lhsNode = std::any_cast<ast_ptr_t>(visit(values[0]));
+
+        for (size_t i = 1; i < values.size(); i++) {
+            ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+            ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visit(values[i]));
+
+            std::string op = context->children[i * 2 - 1]->getText();
+            ast_ptr_t funcNode = InnerFuncDRefNodes::opNodesMap[op];
+
+            auto [lhsValue, lhsDangling] = extractValue(lhsNode, execNode);
+            auto [rhsValue, rhsDangling] = extractValue(rhsNode, execNode);
+            ast_ptr_t dataNode =
+                createAstNode<DataASTLoad>(std::make_shared<TupleValue>(data_list_t{lhsValue, rhsValue}),
+                                           CREATE_DOUBLE_DANGLING_LIST(lhsDangling, lhsValue, rhsDangling, rhsValue));
+
+            if (lhsDangling || rhsDangling) {
+                dataNode = reparent(dataNode, execNode);
+            }
+
+            lhsNode = linkFunc(dataNode, funcNode);
+        }
+
+        return lhsNode;
+    }
 
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
 
