@@ -350,11 +350,12 @@ std::any Formatter::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *contex
 };
 
 /*
-indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
+indexKTPair  : '[' typeExpr ']' ':' typeExpr ;
 */
 std::any Formatter::visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) {
-    return "[" + std::any_cast<std::string>(visitEntityExpr(context->entityExpr())) +
-           "]: " + std::any_cast<std::string>(visitTypeExpr(context->typeExpr()));
+    const auto &typeExprs = context->typeExpr();
+    return "[" + std::any_cast<std::string>(visitTypeExpr(typeExprs[0])) +
+           "]: " + std::any_cast<std::string>(visitTypeExpr(typeExprs[1]));
 };
 
 /*

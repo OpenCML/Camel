@@ -455,8 +455,8 @@ public:
   public:
     IndexKTPairContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    EntityExprContext *entityExpr();
-    TypeExprContext *typeExpr();
+    std::vector<TypeExprContext *> typeExpr();
+    TypeExprContext* typeExpr(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

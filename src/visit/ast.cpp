@@ -377,21 +377,6 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     const auto withType = std::make_shared<NamedTupleType>();
     const auto paramsType = std::make_shared<NamedTupleType>();
 
-    const auto &withDef = context->withDef();
-    if (withDef) {
-        const auto &pairedParams =
-            std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>>>(visitWithDef(withDef));
-        for (const auto &[name, type, value] : pairedParams) {
-            withType->add(name, type, value);
-        }
-    }
-
-    const auto &params = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>>>(
-        visitParentParams(context->parentParams()));
-    for (const auto &[name, type, value] : params) {
-        paramsType->add(name, type, value);
-    }
-
     const auto &typeExpr = context->typeExpr();
     if (typeExpr) {
         const auto returnType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
@@ -399,6 +384,31 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     } else {
         // if no return type is specified, the default return type is void
         funcType = std::make_shared<FunctorType>(withType, paramsType, voidTypePtr);
+    }
+
+    const auto &withDef = context->withDef();
+    if (withDef) {
+        const auto &pairedParams =
+            std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>>(visitWithDef(withDef));
+        for (const auto &[name, type, value, isVar] : pairedParams) {
+            withType->add(name, type, value);
+            bool success = funcType->addIdent(name, isVar);
+            if (!success) {
+                const auto &token = context->getStart();
+                throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
+            }
+        }
+    }
+
+    const auto &params = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>>(
+        visitParentParams(context->parentParams()));
+    for (const auto &[name, type, value, isVar] : params) {
+        paramsType->add(name, type, value);
+        bool success = funcType->addIdent(name, isVar);
+        if (!success) {
+            const auto &token = context->getStart();
+            throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
+        }
     }
 
     const auto &modifiers = context->modifiers();
@@ -436,21 +446,40 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     debug(0) << "visitLambdaExpr" << std::endl;
     std::shared_ptr<FunctorType> funcType = nullptr;
     ast_ptr_t bodyNode = nullptr;
-
-    const auto &params = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>>(
-        visitParentParams(context->parentParams()));
+    const auto withType = std::make_shared<NamedTupleType>();
     const auto paramsType = std::make_shared<NamedTupleType>();
-    for (const auto &[name, type, value, isVar] : params) {
-        paramsType->add(name, type, value);
-    }
 
     const auto &typeExpr = context->typeExpr();
     if (typeExpr) {
         const auto returnType = std::any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
-        funcType = std::make_shared<FunctorType>(nullptr, paramsType, returnType);
+        funcType = std::make_shared<FunctorType>(withType, paramsType, returnType);
     } else {
         // if no return type is specified, the default return type is void
-        funcType = std::make_shared<FunctorType>(nullptr, paramsType, voidTypePtr);
+        funcType = std::make_shared<FunctorType>(withType, paramsType, voidTypePtr);
+    }
+
+    if (context->angledParams()) {
+        const auto &withParams = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>>(
+            visitAngledParams(context->angledParams()));
+        for (const auto &[name, type, value, isVar] : withParams) {
+            withType->add(name, type, value);
+            bool success = funcType->addIdent(name, isVar);
+            if (!success) {
+                const auto &token = context->getStart();
+                throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
+            }
+        }
+    }
+
+    const auto &params = std::any_cast<std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>>(
+        visitParentParams(context->parentParams()));
+    for (const auto &[name, type, value, isVar] : params) {
+        paramsType->add(name, type, value);
+        bool success = funcType->addIdent(name, isVar);
+        if (!success) {
+            const auto &token = context->getStart();
+            throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
+        }
     }
 
     const auto &stmts = context->bracedStmts();
@@ -472,6 +501,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
     }
     const auto funcTypeNode = createAstNode<TypeASTLoad>(funcType);
     const auto funcNode = createAstNode<FuncASTLoad>();
+
     *funcNode << funcTypeNode << bodyNode;
     return funcNode;
 };
@@ -503,8 +533,7 @@ annotation  : '@' primaryExpr ;
 */
 std::any ASTConstructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) {
     debug(0) << "visitAnnotation" << std::endl;
-    // TODO: Implement visitAnnotation
-    return visitPrimEntity(context->primEntity());
+    return visitPrimaryExpr(context->primaryExpr());
 };
 
 /*
@@ -529,7 +558,6 @@ std::any ASTConstructor::visitModifiers(OpenCMLParser::ModifiersContext *context
     for (const auto &mod : context->children) {
         modifiers.insert(str2modifier(mod->getText()));
     }
-    // TODO: use std::move to transfer the ownership of modifiers to the caller
     return modifiers;
 };
 
@@ -572,9 +600,14 @@ std::any ASTConstructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *c
 };
 
 /*
-indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
+indexKTPair  : '[' typeExpr ']' ':' typeExpr ;
 */
-std::any ASTConstructor::visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) {};
+std::any ASTConstructor::visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) {
+    debug(0) << "visitIndexKTPair" << std::endl;
+    const auto &keyType = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(0)));
+    const auto &valueType = std::any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr(1)));
+    return std::make_pair(keyType, valueType);
+};
 
 /*
 indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
@@ -807,7 +840,7 @@ std::any ASTConstructor::visitAngledParams(OpenCMLParser::AngledParamsContext *c
     if (pairedParams) {
         return visitPairedParams(pairedParams);
     } else {
-        return std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>>();
+        return std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>();
     }
 };
 

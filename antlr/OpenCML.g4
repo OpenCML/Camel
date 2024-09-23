@@ -54,7 +54,7 @@ modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
 keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : identRef ':' entityExpr ;
 keyParamPair : VAR? identRef annotation? ':' typeExpr ('=' entityExpr)? ;
-indexKTPair  : '[' entityExpr ']' ':' typeExpr ;
+indexKTPair  : '[' typeExpr ']' ':' typeExpr ;
 indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 
 typeList     : typeExpr (',' typeExpr)* ;
