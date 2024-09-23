@@ -39,6 +39,7 @@ class ValueConvError : public std::exception {
 
 class Data : public std::enable_shared_from_this<Data> {
   protected:
+    bool mutable_ = false;
     type_ptr_t type_;
     entity_wptr_t entity_;
 
@@ -57,6 +58,9 @@ class Data : public std::enable_shared_from_this<Data> {
         return entity_.lock();
     }
     void setEntity(const entity_ptr_t &entity) { entity_ = entity; }
+
+    bool variable() const { return mutable_; }
+    void setVariable() { mutable_ = true; }
 
     virtual bool equals(const data_ptr_t &other) const {
         throw std::runtime_error("Base Data::equals() not implemented");
@@ -281,7 +285,7 @@ class StringValue : public Data {
 
 class StructValue : public Data {
   public:
-    StructValue() = delete;
+    StructValue() = default;
     StructValue(type_ptr_t type) : Data(type) {}
     virtual ~StructValue() = default;
 
@@ -317,6 +321,35 @@ class ListValue : public StructValue {
     ListValue(data_list_t data) : StructValue(listTypePtr), data_(data) {}
     ListValue(const std::vector<data_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
     virtual ~ListValue() = default;
+
+    void add(const data_ptr_t &e) { data_.push_back(e); }
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
+
+class TupleValue : public StructValue {
+  private:
+    std::vector<data_ptr_t> data_;
+
+  public:
+    TupleValue(data_list_t data) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<TupleType>(types);
+    }
+    TupleValue(const std::vector<data_ptr_t> &data) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<TupleType>(types);
+    }
+    virtual ~TupleValue() = default;
 
     void add(const data_ptr_t &e) { data_.push_back(e); }
 

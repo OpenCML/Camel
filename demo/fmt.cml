@@ -23,15 +23,13 @@ type test2 = (Array<String> | Union<Int, String>[])[] | { a: Number, b: String }
 
 let var2 = b->(a.at(b))<>()[1]()@{}();
 let var3 = c->a.b->d;
-var a = 1;
-wait a = 1;
-let b = [a, b, c];
-let b_ = [||];
-let c = {};
-let d = { b: a };
-let e = (1, 2);
-let e_ = (|3|);
-let f = {[a]:b};
+// var a = 1;
+// wait a = 1;
+// let b = [a, b, c];
+// let c = {a, c, v}; // set
+// let d = { b: a };
+// let e = (1, 2);
+// let f = {[a]:b};
 
 let powerInput = Const<5`V`>;
 

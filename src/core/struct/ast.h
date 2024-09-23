@@ -27,7 +27,7 @@ using ast_ptr_t = std::shared_ptr<ASTNode>;
 class ASTNodeLoad;
 using ast_load_ptr_t = std::shared_ptr<ASTNodeLoad>;
 
-enum class ASTNodeType { DATA, TYPE, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC };
+enum class ASTNodeType { DATA, VARI, TYPE, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC };
 
 class ASTNodeLoad {
   protected:
@@ -64,6 +64,23 @@ class DataASTLoad : public ASTNodeLoad {
 
 inline std::shared_ptr<DataASTLoad> data_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<DataASTLoad>(ptr);
+}
+
+class VariASTLoad : public ASTNodeLoad {
+  public:
+    VariASTLoad() : ASTNodeLoad(ASTNodeType::VARI) {}
+
+    // const std::string toString() const override;
+};
+
+inline std::shared_ptr<VariASTLoad> vari_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<VariASTLoad>(ptr);
+}
+
+inline ast_ptr_t variIt(ast_ptr_t &node) {
+    auto variNode = createAstNode<VariASTLoad>();
+    *variNode << node;
+    return variNode;
 }
 
 class TypeASTLoad : public ASTNodeLoad {

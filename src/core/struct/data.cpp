@@ -113,6 +113,41 @@ const std::string ListValue::toString() const {
 }
 
 /*
+TupleValue
+*/
+
+bool TupleValue::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ListValue
+    return true;
+}
+
+data_ptr_t TupleValue::convert(type_ptr_t target, bool inplace) {
+    // TODO
+    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+}
+
+data_ptr_t TupleValue::clone(bool) const {
+    std::vector<data_ptr_t> cloned;
+    for (const auto &e : data_) {
+        cloned.push_back(e);
+    }
+    return std::make_shared<TupleValue>(cloned);
+}
+
+const std::string TupleValue::toString() const {
+    std::string str = "(";
+    for (const auto &e : data_) {
+        str += e->toString() + ", ";
+    }
+    if (data_.size() > 0) {
+        str.pop_back();
+        str.pop_back();
+    }
+    str += ")";
+    return str;
+}
+
+/*
 DictValue
 */
 

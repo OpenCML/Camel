@@ -26,3 +26,8 @@ with <diagram: Functor = eye>
 inner static func analyze(data: Any) {
     # inner func
 };
+
+with <src: List>
+func append(ele: Int) {
+    # func
+};

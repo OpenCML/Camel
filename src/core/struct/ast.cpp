@@ -32,6 +32,8 @@ const std::string ASTNodeLoad::typeStr() const {
     switch (type_) {
     case ASTNodeType::DATA:
         return "DATA";
+    case ASTNodeType::VARI:
+        return "VARI";
     case ASTNodeType::TYPE:
         return "TYPE";
     case ASTNodeType::FUNC:

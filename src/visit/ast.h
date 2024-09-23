@@ -29,38 +29,39 @@
 #include "core/struct/scope.h"
 #include "core/struct/tree.h"
 
-extern ast_ptr_t copyFuncDeRefNode;
-extern ast_ptr_t castFuncDeRefNode;
-extern ast_ptr_t typeFuncDeRefNode;
-extern ast_ptr_t indexFuncDeRefNode;
-extern ast_ptr_t chainFuncDeRefNode;
+namespace InnerFuncDRefNodes {
+extern ast_ptr_t __copy__;
+extern ast_ptr_t __cast__;
+extern ast_ptr_t __type__;
+extern ast_ptr_t __index__;
 
-extern ast_ptr_t addFuncDeRefNode;
-extern ast_ptr_t subFuncDeRefNode;
-extern ast_ptr_t mulFuncDeRefNode;
-extern ast_ptr_t divFuncDeRefNode;
-extern ast_ptr_t modFuncDeRefNode;
-extern ast_ptr_t powFuncDeRefNode;
-extern ast_ptr_t interFuncDeRefNode;
-extern ast_ptr_t unionFuncDeRefNode;
+extern ast_ptr_t __add__;
+extern ast_ptr_t __sub__;
+extern ast_ptr_t __mul__;
+extern ast_ptr_t __div__;
+extern ast_ptr_t __mod__;
+extern ast_ptr_t __pow__;
+extern ast_ptr_t __inter__;
+extern ast_ptr_t __union__;
 
-extern ast_ptr_t iAddFuncDeRefNode;
-extern ast_ptr_t iSubFuncDeRefNode;
-extern ast_ptr_t iMulFuncDeRefNode;
-extern ast_ptr_t iDivFuncDeRefNode;
-extern ast_ptr_t iModFuncDeRefNode;
-extern ast_ptr_t iPowFuncDeRefNode;
-extern ast_ptr_t iInterFuncDeRefNode;
-extern ast_ptr_t iUnionFuncDeRefNode;
+extern ast_ptr_t __i_add__;
+extern ast_ptr_t __i_sub__;
+extern ast_ptr_t __i_mul__;
+extern ast_ptr_t __i_div__;
+extern ast_ptr_t __i_mod__;
+extern ast_ptr_t __i_pow__;
+extern ast_ptr_t __i_inter__;
+extern ast_ptr_t __i_union__;
 
-extern ast_ptr_t ltFuncDeRefNode;
-extern ast_ptr_t gtFuncDeRefNode;
-extern ast_ptr_t leFuncDeRefNode;
-extern ast_ptr_t geFuncDeRefNode;
-extern ast_ptr_t eqFuncDeRefNode;
-extern ast_ptr_t neFuncDeRefNode;
-extern ast_ptr_t andFuncDeRefNode;
-extern ast_ptr_t orFuncDeRefNode;
+extern ast_ptr_t __lt__;
+extern ast_ptr_t __gt__;
+extern ast_ptr_t __le__;
+extern ast_ptr_t __ge__;
+extern ast_ptr_t __eq__;
+extern ast_ptr_t __ne__;
+extern ast_ptr_t __and__;
+extern ast_ptr_t __or__;
+} // namespace FuncDRefNodes
 
 void initFuncDeRefNodes();
 
