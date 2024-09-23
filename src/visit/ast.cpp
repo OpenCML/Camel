@@ -315,7 +315,7 @@ std::any ASTConstructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
 };
 
 /*
-useStmt    : USE (carrier | '*') ('=' entityExpr | FROM STRING);
+useStmt    : USE (carrier | '*') FROM STRING ;
 */
 std::any ASTConstructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
     debug(0) << "visitUseStmt" << std::endl;

@@ -133,7 +133,7 @@ std::any Formatter::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
 };
 
 /*
-useStmt    : USE (carrier | '*') ('=' entityExpr | FROM STRING);
+useStmt    : USE (carrier | '*') FROM STRING ;
 */
 std::any Formatter::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
     std::string result = "use ";
@@ -143,12 +143,7 @@ std::any Formatter::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
     } else {
         result += "*";
     }
-    const auto &entityExpr = context->entityExpr();
-    if (entityExpr) {
-        result += " = " + std::any_cast<std::string>(visitEntityExpr(entityExpr));
-    } else {
-        result += " from " + formatStringLiteral(context->STRING()->getText());
-    }
+    result += " from " + formatStringLiteral(context->STRING()->getText());
     return result;
 };
 

@@ -223,10 +223,9 @@ public:
     UseStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *USE();
-    CarrierContext *carrier();
-    EntityExprContext *entityExpr();
     antlr4::tree::TerminalNode *FROM();
     antlr4::tree::TerminalNode *STRING();
+    CarrierContext *carrier();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
