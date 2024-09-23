@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <iterator>
 
 #include "ast.h"
 
@@ -54,6 +55,8 @@ const std::string ASTNodeLoad::typeStr() const {
         return "RETN";
     case ASTNodeType::EXEC:
         return "EXEC";
+    case ASTNodeType::FROM:
+        return "FROM";
     default:
         return "UNKNOWN";
     }
@@ -76,13 +79,24 @@ const std::string NRefASTLoad::toString() const { return "NREF: " + ident_; }
 const std::string DRefASTLoad::toString() const { return "DREF: " + ident_; }
 
 const std::string WaitASTLoad::toString() const {
-    std::stringstream ss;
-    ss << "WAIT: ";
-    for (const auto &ident : idents_) {
-        ss << ident << ", ";
+    std::ostringstream oss;
+    oss << "WAIT: ";
+    if (!idents_.empty()) {
+        std::copy(idents_.begin(), idents_.end() - 1, std::ostream_iterator<std::string>(oss, ", "));
+        oss << idents_.back();
     }
-    std::string res = std::move(ss.str());
-    res.pop_back();
-    res.pop_back();
-    return res;
+    return oss.str();
+}
+
+const std::string FromASTLoad::toString() const {
+    std::ostringstream oss;
+    oss << "FROM: '" << path_ << "' USE { ";
+    if (idents_.empty()) {
+        oss << "*";
+    } else {
+        std::copy(idents_.begin(), idents_.end() - 1, std::ostream_iterator<std::string>(oss, ", "));
+        oss << idents_.back();
+    }
+    oss << " }";
+    return oss.str();
 }

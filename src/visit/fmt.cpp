@@ -133,15 +133,20 @@ std::any Formatter::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
 };
 
 /*
-useStmt    : USE (carrier | '*') FROM STRING ;
+useStmt    : USE (identRef | bracedIdents | '*') FROM STRING ;
 */
 std::any Formatter::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
     std::string result = "use ";
-    const auto &carrier = context->carrier();
-    if (carrier) {
-        result += std::any_cast<std::string>(visitCarrier(carrier));
+    const auto &identRef = context->identRef();
+    if (identRef) {
+        result += std::any_cast<std::string>(visitIdentRef(identRef));
     } else {
-        result += "*";
+        const auto &bracedIdents = context->bracedIdents();
+        if (bracedIdents) {
+            result += std::any_cast<std::string>(visitBracedIdents(bracedIdents));
+        } else {
+            result += "*";
+        }
     }
     result += " from " + formatStringLiteral(context->STRING()->getText());
     return result;

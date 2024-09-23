@@ -20,9 +20,9 @@
 
 #include <any>
 #include <memory>
-#include <set>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
@@ -417,7 +417,7 @@ class TupleType : public StructType {
 
 class UnionType : public StructType {
   private:
-    std::set<type_ptr_t> types_;
+    std::unordered_set<type_ptr_t> types_;
 
     void insertUnion(const UnionType &other) {
         // flatten the union type
@@ -634,9 +634,11 @@ class NamedTupleType : public StructType {
 
 class FunctorType : public SpecialType {
   private:
-    std::set<FunctionModifier> modifiers_;
+    std::unordered_set<FunctionModifier> modifiers_;
     std::shared_ptr<NamedTupleType> withType_;
     std::shared_ptr<NamedTupleType> paramsType_;
+    std::unordered_map<std::string, bool> innerIdents_;
+    bool hasSideEffect_ = false;
     type_ptr_t returnType_;
 
   public:
@@ -646,7 +648,28 @@ class FunctorType : public SpecialType {
         : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
 
     void addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }
-    void setModifiers(const std::set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
+    void setModifiers(const std::unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
+
+    bool addIdent(const std::string &ident, bool variable) {
+        if (innerIdents_.find(ident) != innerIdents_.end()) {
+            return false;
+        }
+        innerIdents_[ident] = variable;
+        if (variable) {
+            hasSideEffect_ = true;
+        }
+        return true;
+    }
+    bool hasSideEffect() const { return hasSideEffect_; }
+    std::unordered_set<std::string> variables() const {
+        std::unordered_set<std::string> result;
+        for (const auto &ident : innerIdents_) {
+            if (ident.second) {
+                result.insert(ident.first);
+            }
+        }
+        return result;
+    }
 
     type_ptr_t withType() const { return std::dynamic_pointer_cast<Type>(withType_); }
     type_ptr_t paramsType() const { return std::dynamic_pointer_cast<Type>(paramsType_); }

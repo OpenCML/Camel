@@ -225,7 +225,8 @@ public:
     antlr4::tree::TerminalNode *USE();
     antlr4::tree::TerminalNode *FROM();
     antlr4::tree::TerminalNode *STRING();
-    CarrierContext *carrier();
+    IdentRefContext *identRef();
+    BracedIdentsContext *bracedIdents();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

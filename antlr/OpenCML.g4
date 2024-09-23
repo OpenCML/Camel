@@ -35,7 +35,7 @@ stmt
     ;
 
 letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' entityExpr ;
-useStmt    : USE (carrier | '*') FROM STRING ;
+useStmt    : USE (identRef | bracedIdents | '*') FROM STRING ;
 typeStmt   : TYPE identRef '=' typeExpr ;
 exprStmt   : annotations? entityExpr ;
 waitStmt   : WAIT entityExpr ;
