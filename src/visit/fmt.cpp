@@ -237,21 +237,30 @@ std::any Formatter::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
 };
 
 /*
-lambdaExpr : modifiers? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
+lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
 */
 std::any Formatter::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     std::string result;
     const auto &modifiers = context->modifiers();
+    const auto &angledParams = context->angledParams();
     const auto &parentParams = context->parentParams();
+
     if (modifiers) {
         result += std::any_cast<std::string>(visitModifiers(modifiers)) + " ";
     }
+
+    if (angledParams) {
+        result += std::any_cast<std::string>(visitAngledParams(angledParams));
+    }
     result += std::any_cast<std::string>(visitParentParams(parentParams));
+
     const auto &typeExpr = context->typeExpr();
     if (typeExpr) {
         result += ": " + std::any_cast<std::string>(visitTypeExpr(typeExpr));
     }
+
     result += " => ";
+
     const auto &bracedStmts = context->bracedStmts();
     if (bracedStmts) {
         result += std::any_cast<std::string>(visitBracedStmts(bracedStmts));
@@ -259,6 +268,7 @@ std::any Formatter::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
         const auto &entityExpr = context->entityExpr();
         result += std::any_cast<std::string>(visitEntityExpr(entityExpr));
     }
+
     return result;
 };
 

@@ -403,7 +403,7 @@ std::any ASTConstructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
 
     const auto &modifiers = context->modifiers();
     if (modifiers) {
-        const auto &modSet = std::any_cast<std::set<FunctionModifier>>(visitModifiers(modifiers));
+        const auto &modSet = std::any_cast<std::unordered_set<FunctionModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
 
@@ -430,7 +430,7 @@ std::any ASTConstructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
 };
 
 /*
-lambdaExpr : modifiers? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
+lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
 */
 std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     debug(0) << "visitLambdaExpr" << std::endl;
@@ -467,7 +467,7 @@ std::any ASTConstructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *conte
 
     const auto &modifiers = context->modifiers();
     if (modifiers) {
-        const auto &modSet = std::any_cast<std::set<FunctionModifier>>(visitModifiers(modifiers));
+        const auto &modSet = std::any_cast<std::unordered_set<FunctionModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
     const auto funcTypeNode = createAstNode<TypeASTLoad>(funcType);
@@ -525,7 +525,7 @@ modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
 */
 std::any ASTConstructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     debug(0) << "visitModifiers" << std::endl;
-    std::set<FunctionModifier> modifiers;
+    std::unordered_set<FunctionModifier> modifiers;
     for (const auto &mod : context->children) {
         modifiers.insert(str2modifier(mod->getText()));
     }
@@ -648,7 +648,8 @@ std::any ASTConstructor::visitPairedParams(OpenCMLParser::PairedParamsContext *c
     debug(0) << "visitPairedParams" << std::endl;
     std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>> pairedParams;
     for (const auto &pair : context->keyParamPair()) {
-        pairedParams.push_back(std::any_cast<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>(visitKeyParamPair(pair)));
+        pairedParams.push_back(
+            std::any_cast<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>(visitKeyParamPair(pair)));
     }
     return pairedParams;
 };

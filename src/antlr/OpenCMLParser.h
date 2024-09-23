@@ -334,6 +334,7 @@ public:
     BracedStmtsContext *bracedStmts();
     EntityExprContext *entityExpr();
     ModifiersContext *modifiers();
+    AngledParamsContext *angledParams();
     TypeExprContext *typeExpr();
 
 

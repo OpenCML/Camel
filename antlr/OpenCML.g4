@@ -43,7 +43,7 @@ waitStmt   : WAIT entityExpr ;
 withDef    : WITH angledParams ;
 funcDef    : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
 retStmt    : RETURN entityExpr? ;
-lambdaExpr : modifiers? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
+lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
 
 carrier    : identRef | bracedIdents | bracketIdents ;
 
