@@ -19,11 +19,12 @@
 #pragma once
 
 #include <any>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 enum class TypeCode {
@@ -485,12 +486,15 @@ class ArrayType : public StructType {
 
   public:
     ArrayType() = delete;
-    ArrayType(const type_ptr_t &elementType, size_t size) : StructType(TypeCode::ARRAY), size_(size), elementType_(elementType) {}
+    ArrayType(const type_ptr_t &elementType, size_t size)
+        : StructType(TypeCode::ARRAY), size_(size), elementType_(elementType) {}
 
     size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
 
-    std::string toString() const override { return "Array<" + elementType_->toString() + ", " + std::to_string(size_) + ">"; }
+    std::string toString() const override {
+        return "Array<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
+    }
 
     bool operator==(const Type &other) const override {
         if (other.code() != TypeCode::ARRAY) {
@@ -515,14 +519,11 @@ class VectorType : public StructType {
     type_ptr_t elementType_;
 
   public:
-    VectorType(const type_ptr_t &elementType)
-        : StructType(TypeCode::VECTOR), elementType_(elementType) {}
-    
+    VectorType(const type_ptr_t &elementType) : StructType(TypeCode::VECTOR), elementType_(elementType) {}
+
     type_ptr_t elementType() const { return elementType_; }
 
-    std::string toString() const override {
-        return "Vector<" + elementType_->toString() + ">";
-    }
+    std::string toString() const override { return "Vector<" + elementType_->toString() + ">"; }
 
     bool operator==(const Type &other) const override {
         if (other.code() != TypeCode::VECTOR) {
@@ -618,8 +619,8 @@ class NamedTupleType : public StructType {
     size_t size() const { return elements_.size(); }
     const std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> &elements() const { return elements_; }
 
-    std::unordered_map<std::string, type_ptr_t> map() const {
-        auto result = std::unordered_map<std::string, type_ptr_t>();
+    std::map<std::string, type_ptr_t> map() const {
+        auto result = std::map<std::string, type_ptr_t>();
         for (const auto &tuple : elements_) {
             const auto &[name, type, value] = tuple;
             result[name] = type;

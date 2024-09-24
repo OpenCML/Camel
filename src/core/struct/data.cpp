@@ -55,11 +55,16 @@ data_ptr_t SetValue::clone(bool deep) const {
 }
 
 const std::string SetValue::toString() const {
-    std::string str = "{";
+    if (data_.empty()) {
+        return "{}";
+    }
+    std::string str = "{ ";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
     }
-    str += "}";
+    str.pop_back();
+    str.pop_back();
+    str += " }";
     return str;
 }
 
@@ -359,7 +364,7 @@ bool NamedTupleValue::setType(type_ptr_t type) {
     }
     size_t idx = 0;
     std::vector<data_ptr_t> indexResult;
-    std::unordered_map<std::string, data_ptr_t> namedResult;
+    std::map<std::string, data_ptr_t> namedResult;
     for (size_t i = 0; i < typeList.size(); i++) {
         const auto &[key, typ, value] = typeList[i];
         // TODO: unused value

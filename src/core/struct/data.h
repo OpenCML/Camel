@@ -560,12 +560,12 @@ class NamedTupleValue : public Data {
   private:
     bool typeResolved_ = false;
     std::vector<data_ptr_t> indexData_;
-    std::unordered_map<std::string, data_ptr_t> namedData_;
+    std::map<std::string, data_ptr_t> namedData_;
 
   public:
     NamedTupleValue() : Data(std::make_shared<NamedTupleType>()) {}
     NamedTupleValue(const std::vector<data_ptr_t> &indexData,
-                    const std::unordered_map<std::string, data_ptr_t> &namedData)
+                    const std::map<std::string, data_ptr_t> &namedData)
         : Data(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {}
     virtual ~NamedTupleValue() = default;
 

@@ -1,19 +1,19 @@
-#  @[14, 7]
-#  @{boxed: true, color: "blue"}
-#  func PowerControlEl(input : ElSignal) : ElSignal
-#  {
-#      "Power control"@[6, 0];
-#      let [dcOutput, powerOutput, ] = input->PowerMeterEl;
-#      dcOutput->Ground;
-#      return input->ParameterController<
-#          [powerInput, powerOutput]->Sub
-#      >->AmpSysEl;
-#  };
-
+//  @[14, 7]
+//  @{boxed: true, color: "blue"}
+//  func PowerControlEl(input : ElSignal) : ElSignal
+//  {
+//      "Power control"@[6, 0];
+//      let [dcOutput, powerOutput, ] = input->PowerMeterEl;
+//      dcOutput->Ground;
+//      return input->ParameterController<
+//          [powerInput, powerOutput]->Sub
+//      >->AmpSysEl;
+//  };
+// a();
 let a = a(b+c);
 
-#  let var2 = b->(a.at(b))<>()[1]()@{}() [c, ];
-#  let var3 = c->a.b->d e;
+//  let var2 = b->(a.at(b))<>()[1]()@{}() [c, ];
+//  let var3 = c->a.b->d e;
 
-#  type type1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
-#  type type2 = (Array<String> | Union<Int, String>[])[];
+//  type type1 = Set<Map<String, { a: Number, b: Tuple<Number, List, > } & { c: Any }> > | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
+//  type type2 = (Array<String> | Union<Int, String>[])[];

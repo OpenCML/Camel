@@ -23,7 +23,7 @@
 #include "core/struct/token.h"
 #include "utils/log.h"
 
-#define DEBUG_LEVEL -1
+#define DEBUG_LEVEL 0
 
 namespace InnerFuncDRefNodes {
 ast_ptr_t __copy__ = nullptr;
@@ -765,9 +765,9 @@ pairedValues : keyValuePair (',' keyValuePair)* ;
 */
 std::any ASTConstructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
     debug(0) << "visitPairedValues" << std::endl;
-    std::vector<std::pair<std::string, ast_ptr_t>> pairedValues;
+    std::map<std::string, ast_ptr_t> pairedValues;
     for (const auto &pair : context->keyValuePair()) {
-        pairedValues.push_back(std::any_cast<std::pair<std::string, ast_ptr_t>>(visitKeyValuePair(pair)));
+        pairedValues.insert(std::any_cast<std::pair<std::string, ast_ptr_t>>(visitKeyValuePair(pair)));
     }
     return pairedValues;
 };
@@ -808,9 +808,9 @@ std::any ASTConstructor::visitArgumentList(OpenCMLParser::ArgumentListContext *c
     if (valueList) {
         indexArgs = std::any_cast<std::vector<ast_ptr_t>>(visitValueList(valueList));
     }
-    std::vector<std::pair<std::string, ast_ptr_t>> namedArgs;
+    std::map<std::string, ast_ptr_t> namedArgs;
     if (pairedValues) {
-        namedArgs = std::any_cast<std::vector<std::pair<std::string, ast_ptr_t>>>(visitPairedValues(pairedValues));
+        namedArgs = std::any_cast<std::map<std::string, ast_ptr_t>>(visitPairedValues(pairedValues));
     }
     return std::make_pair(indexArgs, namedArgs);
 };
@@ -935,7 +935,7 @@ std::any ASTConstructor::visitParentArgues(OpenCMLParser::ParentArguesContext *c
     if (argumentList) {
         return visitArgumentList(argumentList);
     } else {
-        return std::make_pair(std::vector<ast_ptr_t>(), std::vector<std::pair<std::string, ast_ptr_t>>());
+        return std::make_pair(std::vector<ast_ptr_t>(), std::map<std::string, ast_ptr_t>());
     }
 };
 
@@ -974,7 +974,7 @@ std::any ASTConstructor::visitAngledValues(OpenCMLParser::AngledValuesContext *c
     if (argumentList) {
         return visitArgumentList(argumentList);
     } else {
-        return std::make_pair(std::vector<ast_ptr_t>(), std::vector<std::pair<std::string, ast_ptr_t>>());
+        return std::make_pair(std::vector<ast_ptr_t>(), std::map<std::string, ast_ptr_t>());
     }
 };
 
@@ -1168,9 +1168,9 @@ std::any ASTConstructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext 
 
     for (const auto &child : context->children) {
         const char &op = child->children[0]->getText()[0];
-        ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visit(child));
         switch (op) {
         case '[': {
+            ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visit(child));
             ast_ptr_t execNode = createAstNode<ExecASTLoad>();
             auto [resultValue, resultDangling] = extractValue(lhsNode, execNode);
             auto [memberValue, memberDangling] = extractValue(rhsNode, execNode);
@@ -1182,16 +1182,59 @@ std::any ASTConstructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext 
             }
             lhsNode = linkFunc(dataNode, InnerFuncDRefNodes::__index__);
         } break;
+
         case '(': {
+            auto [rawIndexArgs, rawNamedArgs] =
+                std::any_cast<std::pair<std::vector<ast_ptr_t>, std::map<std::string, ast_ptr_t>>>(visit(child));
+            ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+            bool dangling = false;
+            std::vector<data_ptr_t> indexArgs;
+            std::map<std::string, data_ptr_t> namedArgs;
+            for (const auto &arg : rawIndexArgs) {
+                auto [argValue, _] = extractValue(arg, execNode, dangling);
+                indexArgs.push_back(argValue);
+            }
+            for (const auto &[name, arg] : rawNamedArgs) {
+                auto [argValue, _] = extractValue(arg, execNode, dangling);
+                namedArgs[name] = argValue;
+            }
+            const auto &arguesValue = std::make_shared<NamedTupleValue>(indexArgs, namedArgs);
+            ast_ptr_t dataNode = createAstNode<DataASTLoad>(arguesValue);
             ast_ptr_t linkNode = createAstNode<LinkASTLoad>();
-            *linkNode << rhsNode << lhsNode;
-            lhsNode = linkNode;
+            *linkNode << dataNode << lhsNode;
+            if (dangling) {
+                lhsNode = reparent(linkNode, execNode);
+            } else {
+                lhsNode = linkNode;
+            }
         } break;
+
         case '<': {
+            auto [rawIndexArgs, rawNamedArgs] =
+                std::any_cast<std::pair<std::vector<ast_ptr_t>, std::map<std::string, ast_ptr_t>>>(visit(child));
+            ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+            bool dangling = false;
+            std::vector<data_ptr_t> indexArgs;
+            std::map<std::string, data_ptr_t> namedArgs;
+            for (const auto &arg : rawIndexArgs) {
+                auto [argValue, _] = extractValue(arg, execNode, dangling);
+                indexArgs.push_back(argValue);
+            }
+            for (const auto &[name, arg] : rawNamedArgs) {
+                auto [argValue, _] = extractValue(arg, execNode, dangling);
+                namedArgs[name] = argValue;
+            }
+            const auto &arguesValue = std::make_shared<NamedTupleValue>(indexArgs, namedArgs);
+            ast_ptr_t dataNode = createAstNode<DataASTLoad>(arguesValue);
             ast_ptr_t withNode = createAstNode<WithASTLoad>();
-            *withNode << rhsNode << lhsNode;
-            lhsNode = withNode;
+            *withNode << dataNode << lhsNode;
+            if (dangling) {
+                lhsNode = reparent(withNode, execNode);
+            } else {
+                lhsNode = withNode;
+            }
         } break;
+
         case '@': {
             // TODO: Implement annotation
         } break;

@@ -808,9 +808,9 @@ std::any Formatter::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context)
                     result += std::any_cast<std::string>(visitTypeExpr(context->typeExpr(1)));
                 }
             }
-            result += "> ";
+            result += ">";
         }
-        return result + std::any_cast<std::string>(visit(context->children[1]));
+        return result + std::any_cast<std::string>(visit(context->children.back()));
     } else {
         return visit(context->children[0]);
     }
