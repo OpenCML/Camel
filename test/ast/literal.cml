@@ -1,3 +1,7 @@
+let a = 1;
+let a = [1, 2, 3];
+let a = <Int>[1, 2, 3];
+let a = <Int>{ 1, 2, 3 };
 (1, 2);
 let var2 = b->(a.at(b))<>()[1]()@{}();
 let c = <Int>{a, c, v}; // set

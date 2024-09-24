@@ -16,11 +16,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "type.h"
+#include <iostream>
+
 #include "data.h"
 #include "entity.h"
-#include "functor.h"
 #include "function.h"
+#include "functor.h"
+#include "type.h"
 
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
@@ -39,6 +41,8 @@ type_ptr_t listTypePtr;
 type_ptr_t anyTypePtr;
 type_ptr_t voidTypePtr;
 type_ptr_t functorTypePtr;
+
+type_ptr_t refTypePtr;
 
 const signed char primeTypeConvMatrix[7][7] = {
     // INT32, INT64, FLOAT, DOUBLE, STRING, BOOL, CHAR
@@ -96,6 +100,8 @@ std::string typeCodeToString(TypeCode code) {
         return "Void";
     case TypeCode::FUNCTOR:
         return "Functor";
+    case TypeCode::REF:
+        return "REF";
     }
     return "Unknown";
 }
@@ -168,7 +174,10 @@ TypeConv SetType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            return valueType_->convertibility(*otherArray.elementType());
+            if (otherArray.size() == 1) {
+                return valueType_->convertibility(*otherArray.elementType());
+            }
+            return TypeConv::FORBIDDEN;
         }
         case TypeCode::MAP:
             [[fallthrough]];
@@ -178,10 +187,7 @@ TypeConv SetType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (otherVector.size() == 1) {
-                return valueType_->convertibility(*otherVector.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return valueType_->convertibility(*otherVector.elementType());
         }
         case TypeCode::TENSOR:
             return TypeConv::FORBIDDEN;
@@ -326,6 +332,23 @@ TypeConv ArrayType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
+std::string TupleType::toString() const {
+    std::string result = "Tuple<";
+    for (const auto &type : types_) {
+        if (type) {
+            result += type->toString() + ", ";
+        } else {
+            result += "NULL, ";
+        }
+    }
+    if (!types_.empty()) {
+        result.pop_back();
+        result.pop_back();
+    }
+    result += ">";
+    return result;
+}
+
 TypeConv TupleType::convertibility(const Type &other) const {
     // TODO: not fully implemented
     if (other.structured()) {
@@ -396,6 +419,10 @@ TypeConv UnionType::convertibility(const Type &other) const {
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
             const type_ptr_t &otherType = otherArray.elementType();
+            if (otherArray.size() > 1) {
+                // 0 or 1 size array is allowed
+                return TypeConv::FORBIDDEN;
+            }
             if (otherType->code() == TypeCode::UNION) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
                 return convertibility(otherUnion);
@@ -404,10 +431,6 @@ TypeConv UnionType::convertibility(const Type &other) const {
         }
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (otherVector.size() > 1) {
-                // 0 or 1 size vector is allowed
-                return TypeConv::FORBIDDEN;
-            }
             const type_ptr_t &otherType = otherVector.elementType();
             if (otherType->code() == TypeCode::UNION) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
@@ -449,10 +472,7 @@ TypeConv VectorType::convertibility(const Type &other) const {
         switch (other.code()) {
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (size_ == otherVector.size()) {
-                return elementType_->convertibility(*otherVector.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherVector.elementType());
         }
         case TypeCode::LIST:
             return TypeConv::SAFE;
@@ -463,10 +483,7 @@ TypeConv VectorType::convertibility(const Type &other) const {
         case TypeCode::TENSOR: {
             const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             const auto &shape = otherMatrix.shape();
-            if (shape.size() == 1 && shape.front() == size_) {
-                return elementType_->convertibility(*otherMatrix.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherMatrix.elementType());
         }
         case TypeCode::SET: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
@@ -504,10 +521,7 @@ TypeConv TensorType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (shape_.size() == 1 && shape_.front() == otherVector.size()) {
-                return elementType_->convertibility(*otherVector.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherVector.elementType());
         }
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
@@ -567,11 +581,10 @@ TypeConv ListType::convertibility(const Type &other) const {
 }
 
 std::string NamedTupleType::toString() const {
-    // return "NamedTuple";
-    std::string result = "(";
+    std::string result = "NamedTuple<";
     for (const auto &tuple : elements_) {
         auto &[name, type, value] = tuple;
-        result += name + ": " + type->toString();
+        result += (name.empty() ? "" : name + ": ") + (type ? type->toString() : "NULL");
         if (value) {
             result += " = " + value->toString();
         }
@@ -581,7 +594,7 @@ std::string NamedTupleType::toString() const {
         result.pop_back();
         result.pop_back();
     }
-    result += ")";
+    result += ">";
     return result;
 }
 
@@ -777,4 +790,7 @@ void initTypes() {
     anyTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::ANY));
     voidTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::VOID));
     functorTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<FunctorType>(nullptr, nullptr, anyTypePtr));
+
+    // initialize unknown type
+    refTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::REF));
 }

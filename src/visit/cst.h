@@ -27,70 +27,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     int depth = 0;
     std::vector<bool> visible;
 
-    std::any dumpCST(antlr4::tree::ParseTree *context, std::string nodeName) {
-        bool isLast = false;
-        auto children = context->children;
-
-        if (visible.size() <= depth)
-            visible.push_back(true);
-
-        if (depth > 0) {
-            auto siblings = context->parent->children;
-            if (siblings[siblings.size() - 1] == context) {
-                isLast = true;
-                visible[depth - 1] = false;
-            }
-        }
-
-        auto getHead = [=](bool last) -> std::string {
-            int i = 0;
-            std::string ret = "";
-            while (i < depth - 1) {
-                if (visible[i])
-                    ret += "|  ";
-                else
-                    ret += "   ";
-                i++;
-            }
-            if (depth > 0) {
-                if (last)
-                    ret += "\\-";
-                else
-                    ret += "|-";
-            }
-            return ret;
-        };
-
-        std::cout << getHead(isLast);
-        std::cout << nodeName;
-        if (children.size() == 0) {
-            std::string raw = context->getText();
-            std::string text = std::regex_replace(raw, std::regex(R"(\n)"), "\\n");
-            std::cout << " " << text;
-        }
-        std::cout << std::endl;
-
-        if (depth > 0)
-            for (int i = depth; i < visible.size(); i++)
-                visible[i] = true;
-
-        depth++;
-
-        std::any result = defaultResult();
-        size_t n = children.size();
-        for (size_t i = 0; i < n; i++) {
-            if (children[i]->getTreeType() == antlr4::tree::ParseTreeType::RULE) {
-                std::any childResult = context->children[i]->accept(this);
-                result = aggregateResult(std::move(result), std::move(childResult));
-            } else {
-                dumpCST(context->children[i], "");
-            }
-        }
-
-        depth--;
-
-        return result;
-    };
+    std::any dumpCST(antlr4::tree::ParseTree *context, std::string nodeName);
 
     std::any visitProgram(OpenCMLParser::ProgramContext *context) { return dumpCST(context, "Program"); };
 
@@ -106,7 +43,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) { return dumpCST(context, "ExprStmt"); };
 
-    std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *context) { return dumpCST(context, "AssignStmt"); };
+    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context) { return dumpCST(context, "WaitStmt"); };
 
     std::any visitWithDef(OpenCMLParser::WithDefContext *context) { return dumpCST(context, "WithDef"); };
 
@@ -126,9 +63,17 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) { return dumpCST(context, "KeyTypePair"); };
 
-    std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) { return dumpCST(context, "KeyValuePair"); };
+    std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
+        return dumpCST(context, "KeyValuePair");
+    };
 
-    std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return dumpCST(context, "KeyParamPair"); };
+    std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
+        return dumpCST(context, "KeyParamPair");
+    };
+
+    std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) { return dumpCST(context, "IndexKTPair"); };
+
+    std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) { return dumpCST(context, "IndexKVPair"); };
 
     std::any visitTypeList(OpenCMLParser::TypeListContext *context) { return dumpCST(context, "TypeList"); };
 
@@ -138,67 +83,123 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitPairedTypes(OpenCMLParser::PairedTypesContext *context) { return dumpCST(context, "PairedTypes"); };
 
-    std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context) { return dumpCST(context, "PairedValues"); };
+    std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
+        return dumpCST(context, "PairedValues");
+    };
 
-    std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) { return dumpCST(context, "PairedParams"); };
+    std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
+        return dumpCST(context, "PairedParams");
+    };
 
-    std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return dumpCST(context, "ArgumentList"); };
+    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) {
+        return dumpCST(context, "IndexKVPairs");
+    };
+
+    std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
+        return dumpCST(context, "ArgumentList");
+    };
 
     std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) {
         return dumpCST(context, "BracedPairedValues");
     };
 
-    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) { return dumpCST(context, "BracedIdents"); };
+    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
+        return dumpCST(context, "BracedIdents");
+    };
 
     std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context) { return dumpCST(context, "BracedStmts"); };
 
-    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) { return dumpCST(context, "BracketIdents"); };
+    std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context) {
+        return dumpCST(context, "BracedValues");
+    };
 
-    std::any visitBracketValues(OpenCMLParser::BracketValuesContext *context) { return dumpCST(context, "BracketValues"); };
+    std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) {
+        return dumpCST(context, "BracedIndexKVPairs");
+    };
 
-    std::any visitParentParams(OpenCMLParser::ParentParamsContext *context) { return dumpCST(context, "ParentParams"); };
+    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
+        return dumpCST(context, "BracketIdents");
+    };
 
-    std::any visitParentValues(OpenCMLParser::ParentValuesContext *context) { return dumpCST(context, "ParentValues"); };
+    std::any visitBracketValues(OpenCMLParser::BracketValuesContext *context) {
+        return dumpCST(context, "BracketValues");
+    };
 
-    std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) { return dumpCST(context, "AngledParams"); };
+    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
+        return dumpCST(context, "MemberAccess");
+    };
 
-    std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return dumpCST(context, "AngledValues"); };
+    std::any visitParentParams(OpenCMLParser::ParentParamsContext *context) {
+        return dumpCST(context, "ParentParams");
+    };
 
-    std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context) { return dumpCST(context, "PrimEntity"); };
+    std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
+        return dumpCST(context, "ParentArgues");
+    };
 
-    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) { return dumpCST(context, "MemberAccess"); };
+    std::any visitParentValues(OpenCMLParser::ParentValuesContext *context) {
+        return dumpCST(context, "ParentValues");
+    };
 
-    std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) { return dumpCST(context, "EntityChain"); };
+    std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
+        return dumpCST(context, "AngledParams");
+    };
 
-    std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context) { return dumpCST(context, "EntityLink"); };
-
-    std::any visitEntityUnit(OpenCMLParser::EntityUnitContext *context) { return dumpCST(context, "EntityUnit"); };
-
-    std::any visitEntityWith(OpenCMLParser::EntityWithContext *context) { return dumpCST(context, "EntityWith"); };
+    std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
+        return dumpCST(context, "AngledValues");
+    };
 
     std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) { return dumpCST(context, "EntityExpr"); };
 
-    std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context) { return dumpCST(context, "RelaExpr"); };
+    std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) { return dumpCST(context, "TernaryExpr"); };
 
-    std::any visitAddExpr(OpenCMLParser::AddExprContext *context) { return dumpCST(context, "AddExpr"); };
+    std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
+        return dumpCST(context, "LogicalOrExpr");
+    };
 
-    std::any visitMultiExpr(OpenCMLParser::MultiExprContext *context) { return dumpCST(context, "MultiExpr"); };
+    std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {
+        return dumpCST(context, "LogicalAndExpr");
+    };
+
+    std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
+        return dumpCST(context, "EqualityExpr");
+    };
+
+    std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {
+        return dumpCST(context, "RelationalExpr");
+    };
+
+    std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
+        return dumpCST(context, "AdditiveExpr");
+    };
+
+    std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {
+        return dumpCST(context, "MultiplicativeExpr");
+    };
 
     std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) { return dumpCST(context, "UnaryExpr"); };
 
-    std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context) { return dumpCST(context, "PrimExpr"); };
+    std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context) { return dumpCST(context, "LinkExpr"); };
+
+    std::any visitWithExpr(OpenCMLParser::WithExprContext *context) { return dumpCST(context, "WithExpr"); };
+
+    std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context) {
+        return dumpCST(context, "AnnotatedExpr");
+    };
+
+    std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) { return dumpCST(context, "PrimaryExpr"); };
 
     std::any visitLiteral(OpenCMLParser::LiteralContext *context) { return dumpCST(context, "Literal"); };
 
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) { return dumpCST(context, "TypeExpr"); };
 
-    std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context) { return dumpCST(context, "UnaryType"); };
+    std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context) { return dumpCST(context, "ArrayType"); };
 
     std::any visitAtomType(OpenCMLParser::AtomTypeContext *context) { return dumpCST(context, "AtomType"); };
 
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) { return dumpCST(context, "LambdaType"); };
 
-    std::any visitPrimType(OpenCMLParser::PrimTypeContext *context) { return dumpCST(context, "PrimType"); };
+    std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return dumpCST(context, "PrimaryType"); };
 
     std::any visitStructType(OpenCMLParser::StructTypeContext *context) { return dumpCST(context, "StructType"); };
 

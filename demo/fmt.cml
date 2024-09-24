@@ -18,22 +18,30 @@ let photodiodeSetting: String = {
     temperature: 300`K`
 };
 
-type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List> } & { c: Any }>> | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
-type test2 = (Array<String> | Union<Int, String>[])[] | { a: Number, b: String }[] | (Int | String)[];
+type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List> } & { c: Any }>> | (Array<Number, 5> | Tensor<Number, [5, 5]>);
+type test2 = (Array<String, 2> | Union<Int, String>[])[] | { a: Number, b: String }[] | (Int | String)[];
 
 let var2 = b->(a.at(b))<>()[1]()@{}();
 let var3 = c->a.b->d;
 var a = 1;
 wait a = 1;
 let b = [a, b, c];
-let b_ = [||];
-let c = {};
+let c = <Int>{ a, c, v }; // set
 let d = { b: a };
 let e = (1, 2);
-let e_ = (|3|);
-let f = {[a]:b};
+let f = <Int, Int>{ [a]: b };
 
 let powerInput = Const<5`V`>;
+
+type ElSignal = {
+    samples: Array<Number, 1000>,
+    time: Array<Number, 1000>
+};
+
+type OpSignal = {
+    samples: Array<Number, 1000>,
+    time: Array<Number, 1000>
+};
 
 type Power = {
     dcOutput: ElSignal,
@@ -72,7 +80,7 @@ func SignalProcOp(input@[0, 0]: ElSignal): ElSignal {
 
 // Electrical domain
 @{ boxed: true, color: 'blue' }
-func SignalRecvEl(input: ElSignal):Void {
+func SignalRecvEl(input: ElSignal): Void {
     'Electrical domain'@[0, 0];
     let samples = input->Resample<centerFrequency: 193.1e12`Hz`>;
     let ber = samples->Rx_El_mQAM_BER;
@@ -85,9 +93,9 @@ SignalGenEl->SignalProcOp->SignalRecvEl;
 
 with <
     loader: Functor = psl,
-    loader: Functor = psl
+    d: Functor = psl
 >
-inner static func load(path: string): Any {
+inner static func load(path: String): Any {
     // inner func
 };
 
@@ -99,68 +107,73 @@ inner static func load(path: string): Any {
 // psl, json, phtc, xml, toml
 
 with <loader: Functor = psl>
-inner static func load(path: string): Any {
+inner static func load(path: String): Any {
     // inner func
 };
 
-with <path: string, ftype: string = 'psl'>
-inner static func save(entity: Any) :Void{
+with <path: String, ftype: String = 'psl'>
+inner static func save(entity: Any): Void {
     // inner func
 };
 
-with <stream: string = 'stdout'>
-inner static func print(data: Any):Void {
+with <stream: String = 'stdout'>
+inner static func print(data: Any): Void {
     // inner func
 };
 
 with <diagram: Functor = eye>
-inner static func analyze(data: Any):Void {
+inner static func analyze(data: Any): Void {
     // inner func:Void
 };
 
-inner static  func ifexpr(
+inner static func ifexpr(
     condition: Bool,
     trueValue: Any,
     falseValue: Any
-):Void {
+): Void {
     // return trueValue if condition is true, otherwise return falseValue
 };
 
 with <after: Functor>
-inner  func exec(block: Functor): Void {
+inner func exec(block: Functor): Void {
     // execute the following block synchronously
     // if after is specified, run it after execution of block
 };
 
 with <after: Functor>
-inner static  func skip(entity: Any): Void {
+inner static func skip(entity: Any): Void {
     // skip an entity in an entity chain
 };
 
-use else = skip;
+let else = skip;
 
-static  func if(condition: Bool) :Void{
+static func if(condition: Bool): Void {
     return ifexpr(condition, exec, skip<skip>)
 };
 
 with <capture: Any, condition: Functor, update: Functor>
- func test(target: Functor):Void {
-    return ifexpr(condition<capture>(), {
-        exec<{
+func test(target: Functor): Void {
+    return ifexpr(condition<capture>(), () => {
+        exec<() => {
             update<capture>();
             test<capture, condition, update>(target)
         }>(target);
     }, null)
 };
 
- func placeComponents(
+type Point = {
+    x: Number,
+    y: Number
+};
+
+func placeComponents(
     startIndex: Number,
     count: Number,
     dist: Point,
     pos: Point
 ): Void {
     let i = startIndex;
-    for(i, { i < startIndex + count }, { i += 1 }); {
+    () => {
         // create instance of LaserCW and place it
         let laser = LaserCW@[pos['x'], pos['y']];
         let laserRect = laser['meta']['rect'];
