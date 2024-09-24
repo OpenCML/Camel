@@ -447,20 +447,28 @@ class ArrayValue : public StructValue {
     std::vector<data_ptr_t> data_;
 
   public:
-    ArrayValue(data_list_t data, size_t length) : data_(data) {
+    ArrayValue(const std::shared_ptr<ArrayType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
+        type_ = type_;
+    }
+    ArrayValue(const std::shared_ptr<ArrayType> &type, data_list_t data = {}) : data_(data) {
+        type_ = type_;
+    }
+    ArrayValue(type_ptr_t type, size_t length, const std::vector<data_ptr_t> &data) : data_(data) {
+        // TODO: check element TYPES
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
             types.push_back(d->type());
         }
-        type_ = std::make_shared<ArrayType>(types, length);
+        type_ = std::make_shared<ArrayType>(type, length);
         data_.resize(length);
     }
-    ArrayValue(const std::vector<data_ptr_t> &data, size_t length) : data_(data) {
+    ArrayValue(type_ptr_t type, size_t length, data_list_t data = {}) : data_(data) {
+        // TODO: check element TYPES
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
             types.push_back(d->type());
         }
-        type_ = std::make_shared<ArrayType>(types, length);
+        type_ = std::make_shared<ArrayType>(type, length);
         data_.resize(length);
     }
     virtual ~ArrayValue() = default;
@@ -492,19 +500,27 @@ class VectorValue : public StructValue {
     std::vector<data_ptr_t> data_;
 
   public:
-    VectorValue(data_list_t data) : data_(data) {
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<VectorType>(types);
+    VectorValue(const std::shared_ptr<VectorType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
+        type_ = type_;
     }
-    VectorValue(const std::vector<data_ptr_t> &data) : data_(data) {
+    VectorValue(const std::shared_ptr<VectorType> &type, data_list_t data = {}) : data_(data) {
+        type_ = type_;
+    }
+    VectorValue(type_ptr_t type, const std::vector<data_ptr_t> &data) : data_(data) {
+        // TODO: check element TYPES
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
             types.push_back(d->type());
         }
-        type_ = std::make_shared<VectorType>(types);
+        type_ = std::make_shared<VectorType>(type);
+    }
+    VectorValue(type_ptr_t type, data_list_t data = {}) : data_(data) {
+        // TODO: check element TYPES
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<VectorType>(type);
     }
     virtual ~VectorValue() = default;
 
@@ -568,7 +584,7 @@ class TensorValue : public StructValue {
     data_ptr_t data_; // TODO: support multi-dimensional tensor
 
   public:
-    TensorValue(const data_ptr_t &elementType, const std::vector<size_t> &shape)
+    TensorValue(const type_ptr_t &elementType, const std::vector<size_t> &shape)
         : StructValue(std::make_shared<TensorType>(elementType, shape)) {}
     virtual ~TensorValue() = default;
 

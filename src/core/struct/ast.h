@@ -44,6 +44,10 @@ class ASTNodeLoad {
     virtual void visit() { throw std::runtime_error("ASTNodeLoad::visit() not implemented"); };
 };
 
+template <typename NodeType, typename... Args> ast_ptr_t createAstNode(Args &&...args) {
+    return std::make_shared<ASTNode>(std::make_shared<NodeType>(std::forward<Args>(args)...));
+}
+
 class DataASTLoad : public ASTNodeLoad {
     data_ptr_t data_;
     data_vec_t unrefDataVec_;
@@ -75,12 +79,6 @@ class VariASTLoad : public ASTNodeLoad {
 
 inline std::shared_ptr<VariASTLoad> vari_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<VariASTLoad>(ptr);
-}
-
-inline ast_ptr_t variIt(ast_ptr_t &node) {
-    auto variNode = createAstNode<VariASTLoad>();
-    *variNode << node;
-    return variNode;
 }
 
 class TypeASTLoad : public ASTNodeLoad {

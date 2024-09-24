@@ -24,6 +24,7 @@ inline ast_ptr_t ast_ptr_cast(const tree_node_ptr_t<ast_load_ptr_t> &ptr) {
 }
 
 std::any GraphIRConstructor::visitASTNode(const ast_ptr_t &ast) {
+    // TODO: implement
     switch (ast->type()) {
     case ASTNodeType::DATA:
         return visitDataNode(ast);
@@ -35,8 +36,6 @@ std::any GraphIRConstructor::visitASTNode(const ast_ptr_t &ast) {
         return visitNRefNode(ast);
     case ASTNodeType::DREF:
         return visitDRefNode(ast);
-    case ASTNodeType::ASSN:
-        return visitAssnNode(ast);
     case ASTNodeType::ANNO:
         return visitAnnoNode(ast);
     case ASTNodeType::LINK:

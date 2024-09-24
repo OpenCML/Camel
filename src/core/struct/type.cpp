@@ -19,8 +19,8 @@
 #include "type.h"
 #include "data.h"
 #include "entity.h"
-#include "functor.h"
 #include "function.h"
+#include "functor.h"
 
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
@@ -168,7 +168,10 @@ TypeConv SetType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            return valueType_->convertibility(*otherArray.elementType());
+            if (otherArray.size() == 1) {
+                return valueType_->convertibility(*otherArray.elementType());
+            }
+            return TypeConv::FORBIDDEN;
         }
         case TypeCode::MAP:
             [[fallthrough]];
@@ -178,10 +181,7 @@ TypeConv SetType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (otherVector.size() == 1) {
-                return valueType_->convertibility(*otherVector.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return valueType_->convertibility(*otherVector.elementType());
         }
         case TypeCode::TENSOR:
             return TypeConv::FORBIDDEN;
@@ -396,6 +396,10 @@ TypeConv UnionType::convertibility(const Type &other) const {
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
             const type_ptr_t &otherType = otherArray.elementType();
+            if (otherArray.size() > 1) {
+                // 0 or 1 size array is allowed
+                return TypeConv::FORBIDDEN;
+            }
             if (otherType->code() == TypeCode::UNION) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
                 return convertibility(otherUnion);
@@ -404,10 +408,6 @@ TypeConv UnionType::convertibility(const Type &other) const {
         }
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (otherVector.size() > 1) {
-                // 0 or 1 size vector is allowed
-                return TypeConv::FORBIDDEN;
-            }
             const type_ptr_t &otherType = otherVector.elementType();
             if (otherType->code() == TypeCode::UNION) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
@@ -449,10 +449,7 @@ TypeConv VectorType::convertibility(const Type &other) const {
         switch (other.code()) {
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (size_ == otherVector.size()) {
-                return elementType_->convertibility(*otherVector.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherVector.elementType());
         }
         case TypeCode::LIST:
             return TypeConv::SAFE;
@@ -463,10 +460,7 @@ TypeConv VectorType::convertibility(const Type &other) const {
         case TypeCode::TENSOR: {
             const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             const auto &shape = otherMatrix.shape();
-            if (shape.size() == 1 && shape.front() == size_) {
-                return elementType_->convertibility(*otherMatrix.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherMatrix.elementType());
         }
         case TypeCode::SET: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
@@ -504,10 +498,7 @@ TypeConv TensorType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::VECTOR: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            if (shape_.size() == 1 && shape_.front() == otherVector.size()) {
-                return elementType_->convertibility(*otherVector.elementType());
-            }
-            return TypeConv::FORBIDDEN;
+            return elementType_->convertibility(*otherVector.elementType());
         }
         case TypeCode::ARRAY: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);

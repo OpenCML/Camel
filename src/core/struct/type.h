@@ -201,6 +201,87 @@ class SetType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
+class UnionType : public StructType {
+  private:
+    std::unordered_set<type_ptr_t> types_;
+
+    void insertUnion(const UnionType &other) {
+        // flatten the union type
+        for (const auto &type : other.types_) {
+            if (type->code() == TypeCode::UNION)
+                insertUnion(dynamic_cast<const UnionType &>(*type));
+            else
+                types_.insert(type);
+        }
+    }
+
+  public:
+    UnionType() : StructType(TypeCode::UNION) {}
+    UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs) : StructType(TypeCode::UNION) {
+        if (lhs->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*lhs));
+        else
+            types_.insert(lhs);
+
+        if (rhs->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*rhs));
+        else
+            types_.insert(rhs);
+    }
+    UnionType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::UNION) {
+        for (const auto &type : types) {
+            if (type->code() == TypeCode::UNION)
+                insertUnion(dynamic_cast<const UnionType &>(*type));
+            else
+                types_.insert(type);
+        }
+    }
+    UnionType(const std::vector<type_ptr_t> &types) : StructType(TypeCode::UNION) {
+        for (const auto &type : types) {
+            if (type->code() == TypeCode::UNION)
+                insertUnion(dynamic_cast<const UnionType &>(*type));
+            else
+                types_.insert(type);
+        }
+    }
+
+    std::string toString() const override {
+        std::string result = "Union<";
+        for (const auto &type : types_) {
+            result += type->toString() + ", ";
+        }
+        if (!types_.empty()) {
+            result.pop_back();
+            result.pop_back();
+        }
+        result += ">";
+        return result;
+    }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::UNION) {
+            return false;
+        }
+        const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
+
+        if (types_.size() != otherUnion.types_.size()) {
+            return false;
+        }
+        for (const auto &type : otherUnion.types_) {
+            if (types_.find(type) == types_.end()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    bool operator!=(const Type &other) const override { return !(*this == other); }
+
+    void add(const type_ptr_t &type) { types_.insert(type); }
+    bool has(const type_ptr_t &type) const { return types_.find(type) != types_.end(); }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
 class MapType : public StructType {
   private:
     type_ptr_t keyType_;
@@ -340,6 +421,18 @@ class DictType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
+class ListType : public StructType {
+  public:
+    ListType() : StructType(TypeCode::LIST) {}
+
+    std::string toString() const override { return "List"; }
+
+    bool operator==(const Type &other) const override { return true; }
+    bool operator!=(const Type &other) const override { return false; }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
 class TupleType : public StructType {
   private:
     std::vector<type_ptr_t> types_;
@@ -385,87 +478,6 @@ class TupleType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-class UnionType : public StructType {
-  private:
-    std::unordered_set<type_ptr_t> types_;
-
-    void insertUnion(const UnionType &other) {
-        // flatten the union type
-        for (const auto &type : other.types_) {
-            if (type->code() == TypeCode::UNION)
-                insertUnion(dynamic_cast<const UnionType &>(*type));
-            else
-                types_.insert(type);
-        }
-    }
-
-  public:
-    UnionType() : StructType(TypeCode::UNION) {}
-    UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs) : StructType(TypeCode::UNION) {
-        if (lhs->code() == TypeCode::UNION)
-            insertUnion(dynamic_cast<const UnionType &>(*lhs));
-        else
-            types_.insert(lhs);
-
-        if (rhs->code() == TypeCode::UNION)
-            insertUnion(dynamic_cast<const UnionType &>(*rhs));
-        else
-            types_.insert(rhs);
-    }
-    UnionType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::UNION) {
-        for (const auto &type : types) {
-            if (type->code() == TypeCode::UNION)
-                insertUnion(dynamic_cast<const UnionType &>(*type));
-            else
-                types_.insert(type);
-        }
-    }
-    UnionType(const std::vector<type_ptr_t> &types) : StructType(TypeCode::UNION) {
-        for (const auto &type : types) {
-            if (type->code() == TypeCode::UNION)
-                insertUnion(dynamic_cast<const UnionType &>(*type));
-            else
-                types_.insert(type);
-        }
-    }
-
-    std::string toString() const override {
-        std::string result = "Union<";
-        for (const auto &type : types_) {
-            result += type->toString() + ", ";
-        }
-        if (!types_.empty()) {
-            result.pop_back();
-            result.pop_back();
-        }
-        result += ">";
-        return result;
-    }
-
-    bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::UNION) {
-            return false;
-        }
-        const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
-
-        if (types_.size() != otherUnion.types_.size()) {
-            return false;
-        }
-        for (const auto &type : otherUnion.types_) {
-            if (types_.find(type) == types_.end()) {
-                return false;
-            }
-        }
-        return true;
-    }
-    bool operator!=(const Type &other) const override { return !(*this == other); }
-
-    void add(const type_ptr_t &type) { types_.insert(type); }
-    bool has(const type_ptr_t &type) const { return types_.find(type) != types_.end(); }
-
-    TypeConv convertibility(const Type &other) const override;
-};
-
 class ArrayType : public StructType {
   private:
     size_t size_;
@@ -473,7 +485,7 @@ class ArrayType : public StructType {
 
   public:
     ArrayType() = delete;
-    ArrayType(const type_ptr_t &elementType, size_t size) : StructType(TypeCode::ARRAY), elementType_(elementType), size_(size) {}
+    ArrayType(const type_ptr_t &elementType, size_t size) : StructType(TypeCode::ARRAY), size_(size), elementType_(elementType) {}
 
     size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
@@ -577,18 +589,6 @@ class TensorType : public StructType {
         const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
         return shape_ != otherMatrix.shape_ || !elementType_->equals(otherMatrix.elementType_);
     }
-
-    TypeConv convertibility(const Type &other) const override;
-};
-
-class ListType : public StructType {
-  public:
-    ListType() : StructType(TypeCode::LIST) {}
-
-    std::string toString() const override { return "List"; }
-
-    bool operator==(const Type &other) const override { return true; }
-    bool operator!=(const Type &other) const override { return false; }
 
     TypeConv convertibility(const Type &other) const override;
 };

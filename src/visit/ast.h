@@ -30,6 +30,24 @@
 #include "core/struct/scope.h"
 #include "core/struct/tree.h"
 
+#define CREATE_SINGLE_DANGLING_LIST(dangling, value) (dangling ? data_list_t{value} : data_list_t{})
+
+#define CREATE_DOUBLE_DANGLING_LIST(lhsDangling, lhsValue, rhsDangling, rhsValue)                                      \
+    (lhsDangling && rhsDangling ? data_list_t{lhsValue, rhsValue}                                                      \
+     : lhsDangling              ? data_list_t{lhsValue}                                                                \
+     : rhsDangling              ? data_list_t{rhsValue}                                                                \
+                                : data_list_t{})
+
+#define CREATE_TRIPLE_DANGLING_LIST(lhsDangling, lhsValue, midDangling, midValue, rhsDangling, rhsValue)               \
+    (lhsDangling && midDangling && rhsDangling ? data_list_t{lhsValue, midValue, rhsValue}                             \
+     : lhsDangling && midDangling              ? data_list_t{lhsValue, midValue}                                       \
+     : midDangling && rhsDangling              ? data_list_t{midValue, rhsValue}                                       \
+     : lhsDangling && rhsDangling              ? data_list_t{lhsValue, rhsValue}                                       \
+     : lhsDangling                             ? data_list_t{lhsValue}                                                 \
+     : midDangling                             ? data_list_t{midValue}                                                 \
+     : rhsDangling                             ? data_list_t{rhsValue}                                                 \
+                                               : data_list_t{})
+
 namespace InnerFuncDRefNodes {
 extern ast_ptr_t __copy__;
 extern ast_ptr_t __cast__;
@@ -93,10 +111,6 @@ class ASTNode : public AbstractTreeNode<ast_load_ptr_t> {
         return *this;
     }
 };
-
-template <typename NodeType, typename... Args> ast_ptr_t createAstNode(Args &&...args) {
-    return std::make_shared<ASTNode>(std::make_shared<NodeType>(std::forward<Args>(args)...));
-}
 
 class ASTConstructor : public OpenCMLVisitor {
   public:
