@@ -173,7 +173,7 @@ atomType
     ;
 
 lambdaType
-    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
+    : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 
 primaryType

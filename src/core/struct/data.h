@@ -297,12 +297,12 @@ class StructValue : public Data {
 
 class SetValue : public StructValue {
   private:
-    std::set<data_ptr_t> data_;
+    std::unordered_set<data_ptr_t> data_;
 
   public:
     SetValue(type_ptr_t elType) : StructValue(std::make_shared<SetType>(elType)) {}
     SetValue(type_ptr_t elType, data_list_t data) : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
-    SetValue(type_ptr_t elType, const std::set<data_ptr_t> &data)
+    SetValue(type_ptr_t elType, const std::unordered_set<data_ptr_t> &data)
         : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
     virtual ~SetValue() = default;
 

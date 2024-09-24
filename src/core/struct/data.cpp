@@ -47,7 +47,7 @@ data_ptr_t SetValue::convert(type_ptr_t target, bool inplace) {
 }
 
 data_ptr_t SetValue::clone(bool deep) const {
-    std::set<data_ptr_t> cloned;
+    std::unordered_set<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.insert(e);
     }

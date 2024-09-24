@@ -884,21 +884,22 @@ std::any Formatter::visitAtomType(OpenCMLParser::AtomTypeContext *context) {
 
 /*
 lambdaType
-    : ('<' pairedParams? '>')? '(' pairedParams? ')' '=>' typeExpr
+    : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
 std::any Formatter::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     std::string result;
-    const auto &params0 = context->pairedParams(0);
-    const auto &params1 = context->pairedParams(1);
-    const auto &typeExpr = context->typeExpr();
-    if (params1) {
-        result += "<" + std::any_cast<std::string>(visitPairedParams(params0, false, false, false)) + ">";
+    const auto &modifiers = context->modifiers();
+    const auto &angledParams = context->angledParams();
+    const auto &parentParams = context->parentParams();
+    if (modifiers) {
+        result += std::any_cast<std::string>(visitModifiers(modifiers)) + " ";
     }
-    result += "(";
-    result += std::any_cast<std::string>(visitPairedParams(params1 ? params1 : params0, false, false, false));
-    result += ") => " + std::any_cast<std::string>(visitTypeExpr(typeExpr));
-    return result;
+    if (angledParams) {
+        result += std::any_cast<std::string>(visitAngledParams(angledParams));
+    }
+    result += std::any_cast<std::string>(visitParentParams(parentParams));
+    return result + " => " + std::any_cast<std::string>(visitTypeExpr(context->typeExpr()));
 };
 
 /*
