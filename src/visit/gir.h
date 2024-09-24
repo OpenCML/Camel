@@ -74,14 +74,17 @@ class GraphIRConstructor {
 
     std::any visitASTNode(const ast_ptr_t &ast);
 
-    func_ptr_t visitFuncNode(const ast_ptr_t &ast);
-    type_ptr_t visitTypeNode(const ast_ptr_t &ast);
     node_ptr_t visitDataNode(const ast_ptr_t &ast);
+    node_ptr_t visitVariNode(const ast_ptr_t &ast);
+    type_ptr_t visitTypeNode(const ast_ptr_t &ast);
+    func_ptr_t visitFuncNode(const ast_ptr_t &ast);
     void_ptr_t visitNRefNode(const ast_ptr_t &ast);
     node_ptr_t visitDRefNode(const ast_ptr_t &ast);
-    void_ptr_t visitAssnNode(const ast_ptr_t &ast);
+    node_ptr_t visitWaitNode(const ast_ptr_t &ast);
     node_ptr_t visitAnnoNode(const ast_ptr_t &ast);
     node_ptr_t visitLinkNode(const ast_ptr_t &ast);
     node_ptr_t visitWithNode(const ast_ptr_t &ast);
     node_ptr_t visitRetnNode(const ast_ptr_t &ast);
+    node_ptr_t visitExecNode(const ast_ptr_t &ast);
+    node_ptr_t visitFromNode(const ast_ptr_t &ast);
 };

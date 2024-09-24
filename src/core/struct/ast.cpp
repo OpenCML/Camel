@@ -17,7 +17,6 @@
  */
 
 #include <iomanip>
-#include <iostream>
 #include <iterator>
 #include <sstream>
 

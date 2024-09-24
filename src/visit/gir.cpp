@@ -17,6 +17,7 @@
  */
 
 #include "gir.h"
+#include "core/error/build.h"
 #include "core/struct/functor.h"
 
 inline ast_ptr_t ast_ptr_cast(const tree_node_ptr_t<ast_load_ptr_t> &ptr) {
@@ -28,14 +29,18 @@ std::any GraphIRConstructor::visitASTNode(const ast_ptr_t &ast) {
     switch (ast->type()) {
     case ASTNodeType::DATA:
         return visitDataNode(ast);
-    case ASTNodeType::FUNC:
-        return visitFuncNode(ast);
+    case ASTNodeType::VARI:
+        return visitVariNode(ast);
     case ASTNodeType::TYPE:
         return visitTypeNode(ast);
+    case ASTNodeType::FUNC:
+        return visitFuncNode(ast);
     case ASTNodeType::NREF:
         return visitNRefNode(ast);
     case ASTNodeType::DREF:
         return visitDRefNode(ast);
+    case ASTNodeType::WAIT:
+        return visitWaitNode(ast);
     case ASTNodeType::ANNO:
         return visitAnnoNode(ast);
     case ASTNodeType::LINK:
@@ -44,6 +49,10 @@ std::any GraphIRConstructor::visitASTNode(const ast_ptr_t &ast) {
         return visitWithNode(ast);
     case ASTNodeType::RETN:
         return visitRetnNode(ast);
+    case ASTNodeType::EXEC:
+        return visitExecNode(ast);
+    case ASTNodeType::FROM:
+        return visitFromNode(ast);
     default:
         throw std::runtime_error("Unknown ASTNodeType");
     }
@@ -69,9 +78,11 @@ node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
     }
 }
 
-func_ptr_t GraphIRConstructor::visitFuncNode(const ast_ptr_t &ast) {}
+node_ptr_t GraphIRConstructor::visitVariNode(const ast_ptr_t &ast) { return nullptr; }
 
 type_ptr_t GraphIRConstructor::visitTypeNode(const ast_ptr_t &ast) { return nullptr; }
+
+func_ptr_t GraphIRConstructor::visitFuncNode(const ast_ptr_t &ast) {}
 
 void_ptr_t GraphIRConstructor::visitNRefNode(const ast_ptr_t &ast) {
     const std::string &ident = nref_ast_load_ptr_cast(ast->load())->ident();
@@ -116,7 +127,7 @@ node_ptr_t GraphIRConstructor::visitDRefNode(const ast_ptr_t &ast) {
     throw std::runtime_error("Unresolved reference: " + ident);
 }
 
-void_ptr_t GraphIRConstructor::visitAssnNode(const ast_ptr_t &ast) {}
+node_ptr_t GraphIRConstructor::visitWaitNode(const ast_ptr_t &ast) { throw std::runtime_error("Not implemented"); }
 
 node_ptr_t GraphIRConstructor::visitAnnoNode(const ast_ptr_t &ast) { throw std::runtime_error("Not implemented"); }
 
@@ -168,3 +179,7 @@ node_ptr_t GraphIRConstructor::visitRetnNode(const ast_ptr_t &ast) {
         throw std::runtime_error("Unexpected result type from visiting child of RETN node");
     }
 }
+
+node_ptr_t GraphIRConstructor::visitExecNode(const ast_ptr_t &ast) { throw std::runtime_error("Not implemented"); }
+
+node_ptr_t GraphIRConstructor::visitFromNode(const ast_ptr_t &ast) { throw std::runtime_error("Not implemented"); }
