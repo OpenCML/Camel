@@ -945,14 +945,14 @@ public:
     virtual size_t getRuleIndex() const override;
     IdentRefContext *identRef();
     LiteralContext *literal();
+    BracketValuesContext *bracketValues();
     BracedPairedValuesContext *bracedPairedValues();
     EntityExprContext *entityExpr();
-    BracketValuesContext *bracketValues();
     ParentValuesContext *parentValues();
-    BracedValuesContext *bracedValues();
-    BracedIndexKVPairsContext *bracedIndexKVPairs();
     std::vector<TypeExprContext *> typeExpr();
     TypeExprContext* typeExpr(size_t i);
+    BracedValuesContext *bracedValues();
+    BracedIndexKVPairsContext *bracedIndexKVPairs();
     std::vector<antlr4::tree::TerminalNode *> INTEGER();
     antlr4::tree::TerminalNode* INTEGER(size_t i);
     LambdaExprContext *lambdaExpr();

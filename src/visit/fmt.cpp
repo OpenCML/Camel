@@ -772,18 +772,19 @@ std::any Formatter::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *cont
 primaryExpr
     : identRef
     | literal
+    | bracketValues         // for list
     | bracedPairedValues    // for dict
-    | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a
-tuple
-    \\ for list (or vector) | tuple (or array) | tensor | set | map
-    | ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues |
-bracedValues | bracedIndexKVPairs) | lambdaExpr ;
+    | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a tuple
+    | parentValues          // for tuple
+    \\ for vector | array | tensor | set | map
+    | '<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>' (bracketValues | bracedValues | bracedIndexKVPairs)
+    | lambdaExpr ;
 */
 std::any Formatter::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
     const auto &alt = context->getAltNumber();
-    if (alt == 4) { // '(' entityExpr ')'
+    if (alt == 5) { // '(' entityExpr ')'
         return "(" + std::any_cast<std::string>(visitEntityExpr(context->entityExpr())) + ")";
-    } else if (alt == 5) {
+    } else if (alt == 7) {
         std::string result;
         const auto &typeExpr = context->typeExpr();
         if (typeExpr.size() > 0) {

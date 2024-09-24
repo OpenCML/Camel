@@ -136,10 +136,12 @@ annotatedExpr
 primaryExpr
     : identRef
     | literal
+    | bracketValues         // for list
     | bracedPairedValues    // for dict
     | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a tuple
-    // for list (or vector) | tuple (or array) | tensor | set | map
-    | ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues | bracedValues | bracedIndexKVPairs)
+    | parentValues          // for tuple
+    // for vector | array | tensor | set | map
+    | '<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>' (bracketValues | bracedValues | bracedIndexKVPairs)
     | lambdaExpr ;
 
 literal

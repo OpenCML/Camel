@@ -1221,12 +1221,13 @@ std::any ASTConstructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext 
 primaryExpr
     : identRef
     | literal
+    | bracketValues         // for list
     | bracedPairedValues    // for dict
     | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a
-tuple
-    \\ for list (or vector) | tuple (or array) | tensor | set | map
-    | ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues |
-bracedValues | bracedIndexKVPairs) | lambdaExpr ;
+tuple | parentValues          // for tuple
+    \\ for vector | array | tensor | set | map
+    | '<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>' (bracketValues | bracedValues |
+bracedIndexKVPairs) | lambdaExpr ;
 */
 std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
     debug(0) << "visitPrimaryExpr: " << context->getAltNumber() << std::endl;
@@ -1239,7 +1240,28 @@ std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *con
         return visitLiteral(context->literal());
         break;
     }
-    case 3: { // bracedPairedValues (for dict)
+    case 3: { // bracketValues (for list)
+        const std::vector<ast_ptr_t> &values =
+            std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
+        const auto &listValue = std::make_shared<ListValue>();
+        data_vec_t unrefVec;
+        bool dangling = false;
+        ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+        for (const auto &node : values) {
+            auto [value, dang] = extractValue(node, execNode, dangling);
+            listValue->pushBack(value);
+            if (dang) {
+                unrefVec.push_back(value);
+            }
+        }
+        ast_ptr_t dataNode = createAstNode<DataASTLoad>(listValue, std::move(unrefVec));
+        if (dangling) {
+            return reparent(dataNode, execNode);
+        } else {
+            return dataNode;
+        }
+    } break;
+    case 4: { // bracedPairedValues (for dict)
         const std::vector<std::pair<std::string, ast_ptr_t>> &values =
             std::any_cast<std::vector<std::pair<std::string, ast_ptr_t>>>(
                 visitBracedPairedValues(context->bracedPairedValues()));
@@ -1261,38 +1283,40 @@ std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *con
             return dataNode;
         }
     } break;
-    case 4: { // '(' entityExpr ')'
+    case 5: { // '(' entityExpr ')'
         return visitEntityExpr(context->entityExpr());
     } break;
-    case 5: { // ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues |
-              // parentValues | bracedValues | bracedIndexKVPairs)
+    case 6: { // parentValues (for tuple)
+        const std::vector<ast_ptr_t> &values =
+            std::any_cast<std::vector<ast_ptr_t>>(visitParentValues(context->parentValues()));
+        std::vector<data_ptr_t> tupleValues;
+        data_vec_t unrefVec;
+        bool dangling = false;
+        ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+        for (const auto &node : values) {
+            auto [value, dang] = extractValue(node, execNode, dangling);
+            tupleValues.push_back(value);
+            if (dang) {
+                unrefVec.push_back(value);
+            }
+        }
+        const auto &tupleValue = std::make_shared<TupleValue>(tupleValues);
+        ast_ptr_t dataNode = createAstNode<DataASTLoad>(tupleValue, std::move(unrefVec));
+        if (dangling) {
+            dataNode = reparent(dataNode, execNode);
+        }
+        return dataNode;
+    } break;
+    // TODO: Need type checking for the following cases
+    case 7: { // '<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>'
+              // (bracketValues | bracedValues | bracedIndexKVPairs)
+              // for vector | array | tensor | set | map
         const auto &typeExprs = context->typeExpr();
         const auto &integers = context->INTEGER();
-        if (context->bracketValues()) {  // List [] | Vector <T> [] | Array <T, N> [] | Tensor <T, [N1, N2]> []
-            if (typeExprs.size() != 1) { // typeExprs.size() == 0: List [] | typeExprs.size() > 1: warning
-                if (typeExprs.size() > 1) { // warning
-                    reportWarning("Multiple type expressions are not supported for list-like literal value", typeExprs[1]->getStart());
-                }
-                const std::vector<ast_ptr_t> &values =
-                    std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
-                const auto &listValue = std::make_shared<ListValue>();
-                data_vec_t unrefVec;
-                bool dangling = false;
-                ast_ptr_t execNode = createAstNode<ExecASTLoad>();
-                for (const auto &node : values) {
-                    auto [value, dang] = extractValue(node, execNode, dangling);
-                    listValue->pushBack(value);
-                    if (dang) {
-                        unrefVec.push_back(value);
-                    }
-                }
-                ast_ptr_t dataNode = createAstNode<DataASTLoad>(listValue, std::move(unrefVec));
-                if (dangling) {
-                    dataNode = reparent(dataNode, execNode);
-                }
-                return dataNode;
-            } else { // typeExprs.size() == 1: Vector <T> [] | Array <T, N> [] | Tensor <T, [N1, N2]> []
-                if (integers.size() == 0) {     // Vector <T> []
+        if (context->bracketValues()) { // Vector <T> [] | Array <T, N> [] | Tensor <T, [N1, N2]> []
+            if (typeExprs.size() == 1) {
+                // typeExprs.size() == 1: Vector <T> [] | Array <T, N> [] | Tensor <T, [N1, N2]> []
+                if (integers.size() == 0) { // Vector <T> []
                     const type_ptr_t &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
                     const std::vector<ast_ptr_t> &values =
                         std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
@@ -1353,37 +1377,77 @@ std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *con
                     }
                     return dataNode;
                 }
+            } else {
+                reportWarning("Multiple type specification is not supported for list-like literal value",
+                              context->getStart());
             }
-        } else if (context->parentValues()) { // Tuple (V1, V2, ..., Vn)
-            if (typeExprs.size() > 0 || integers.size() > 0) {
-                reportWarning("Type or size specification is not supported for tuple-like literal value", context->getStart());
+        } else if (context->bracedValues()) { // Set <T> {} | Map <T1, T2> {} (must be empty)
+            if (typeExprs.size() == 1) {      // Set <T> {}
+                const type_ptr_t &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
+                const std::vector<ast_ptr_t> &values =
+                    std::any_cast<std::vector<ast_ptr_t>>(visitBracedValues(context->bracedValues()));
+                const auto &setValue = std::make_shared<SetValue>(type);
+                data_vec_t unrefVec;
+                bool dangling = false;
+                ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+                for (const auto &node : values) {
+                    auto [value, dang] = extractValue(node, execNode, dangling);
+                    setValue->add(value);
+                    if (dang) {
+                        unrefVec.push_back(value);
+                    }
+                }
+                ast_ptr_t dataNode = createAstNode<DataASTLoad>(setValue, std::move(unrefVec));
+                if (dangling) {
+                    dataNode = reparent(dataNode, execNode);
+                }
+                return dataNode;
+            } else { // Map <T1, T2> {}
+                const type_ptr_t &type1 = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
+                const type_ptr_t &type2 = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[1]));
+                const std::vector<ast_ptr_t> &values =
+                    std::any_cast<std::vector<ast_ptr_t>>(visitBracedValues(context->bracedValues()));
+                if (values.size() > 0) {
+                    throw BuildException("Map literal values must be in the form of { [K]: V }", context->getStart());
+                }
+                const auto &mapValue = std::make_shared<MapValue>(type1, type2);
+                return createAstNode<DataASTLoad>(mapValue);
             }
-            const std::vector<ast_ptr_t> &values =
-                std::any_cast<std::vector<ast_ptr_t>>(visitParentValues(context->parentValues()));
-            std::vector<data_ptr_t> tupleValues;
+        } else if (context->bracedIndexKVPairs()) { // Map <T1, T2> { [K]: V }
+            if (typeExprs.size() == 1) {
+                reportWarning("Map literal must have two type specifications", context->getStart());
+            }
+            const type_ptr_t &type1 = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
+            const type_ptr_t &type2 = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[1]));
+            const std::vector<std::pair<ast_ptr_t, ast_ptr_t>> &values =
+                std::any_cast <
+                std::vector<std::pair<ast_ptr_t, ast_ptr_t>>(visitBracedIndexKVPairs(context->bracedIndexKVPairs()));
+            const auto &mapValue = std::make_shared<MapValue>(type1, type2);
             data_vec_t unrefVec;
             bool dangling = false;
             ast_ptr_t execNode = createAstNode<ExecASTLoad>();
-            for (const auto &node : values) {
-                auto [value, dang] = extractValue(node, execNode, dangling);
-                tupleValues.push_back(value);
-                if (dang) {
-                    unrefVec.push_back(value);
+            for (const auto &[key, value] : values) {
+                auto [keyValue, keyDangling] = extractValue(key, execNode, dangling);
+                auto [valueValue, valueDangling] = extractValue(value, execNode, dangling);
+                mapValue->set(keyValue, valueValue);
+                if (keyDangling) {
+                    unrefVec.push_back(keyValue);
+                }
+                if (valueDangling) {
+                    unrefVec.push_back(valueValue);
                 }
             }
-            const auto &tupleValue = std::make_shared<TupleValue>(tupleValues);
-            ast_ptr_t dataNode = createAstNode<DataASTLoad>(tupleValue, std::move(unrefVec));
+            ast_ptr_t dataNode = createAstNode<DataASTLoad>(mapValue, std::move(unrefVec));
             if (dangling) {
                 dataNode = reparent(dataNode, execNode);
             }
             return dataNode;
-        } else if (context->bracedValues()) { // Set <T> {}
-
-        } else if (context->bracedIndexKVPairs()) { // Map <T1, T2> { [K]: V }
+        } else {
+            reportWarning("No pattern matched", context->getStart());
         }
         throw BuildException("No pattern matched", context->getStart());
     }
-    case 6: { // lambdaExpr
+    case 8: { // lambdaExpr
         return visitLambdaExpr(context->lambdaExpr());
     } break;
     }
@@ -1401,14 +1465,61 @@ literal
     | NULL
     ;
 */
-std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {};
+std::any ASTConstructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
+    debug(0) << "visitLiteral: " << context->getAltNumber() << std::endl;
+    data_ptr_t value = nullptr;
+
+    switch (context->getAltNumber()) {
+    case 1: // INTEGER UNIT?
+        value = std::dynamic_pointer_cast<Data>(
+            std::make_shared<PrimValue<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
+        break;
+    case 2: // REAL UNIT?
+        value = std::dynamic_pointer_cast<Data>(
+            std::make_shared<PrimValue<double>>(parseNumber<double>(context->REAL()->getText())));
+        break;
+    case 3: // STRING
+    {
+        const auto &text = context->STRING()->getText();
+        value = std::dynamic_pointer_cast<Data>(std::make_shared<StringValue>(text.substr(1, text.size() - 2)));
+    } break;
+    case 4: // MULTI_STR
+    {
+        const auto &text = context->MULTI_STR()->getText();
+        value = std::dynamic_pointer_cast<Data>(std::make_shared<StringValue>(text.substr(3, text.size() - 6)));
+    } break;
+    case 5: // FSTRING
+    {
+        // TODO: Implement FSTRING
+        const auto &text = context->FSTRING()->getText();
+        value = std::dynamic_pointer_cast<Data>(std::make_shared<StringValue>(text.substr(2, text.size() - 3)));
+    } break;
+    case 6: // TRUE
+        value = std::dynamic_pointer_cast<Data>(std::make_shared<PrimValue<bool>>(true));
+        break;
+    case 7: // FALSE
+        value = std::dynamic_pointer_cast<Data>(std::make_shared<PrimValue<bool>>(false));
+        break;
+    case 8: // NULL
+        value = std::dynamic_pointer_cast<Data>(std::make_shared<NullValue>());
+        break;
+
+    default:
+        break;
+    }
+
+    return createAstNode<DataASTLoad>(value);
+};
 
 /*
 typeExpr
     : arrayType (('&' | '|' | '^') arrayType)*
     ;
 */
-std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {};
+std::any ASTConstructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
+    debug(0) << "visitTypeExpr" << std::endl;
+    return visitBinaryOpList(context, context->arrayType());
+};
 
 /*
 arrayType

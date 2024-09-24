@@ -306,6 +306,9 @@ class SetValue : public StructValue {
         : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
     virtual ~SetValue() = default;
 
+    bool add(const data_ptr_t &e) { return data_.insert(e).second; }
+    bool del(const data_ptr_t &e) { return data_.erase(e) > 0; }
+
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
@@ -321,6 +324,18 @@ class MapValue : public StructValue {
     MapValue(type_ptr_t keyType, type_ptr_t valueType, const std::unordered_map<data_ptr_t, data_ptr_t> &data)
         : StructValue(std::make_shared<MapType>(keyType, valueType)), data_(data) {}
     virtual ~MapValue() = default;
+
+    bool set(const data_ptr_t &key, const data_ptr_t &value) {
+        return data_.insert(std::make_pair(key, value)).second;
+    }
+    bool del(const data_ptr_t &key) { return data_.erase(key) > 0; }
+    data_ptr_t get(const data_ptr_t &key) const {
+        auto it = data_.find(key);
+        if (it == data_.end()) {
+            return nullptr;
+        }
+        return it->second;
+    }
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
