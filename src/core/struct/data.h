@@ -312,46 +312,15 @@ class SetValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class ListValue : public StructValue {
+class MapValue : public StructValue {
   private:
-    std::vector<data_ptr_t> data_;
+    std::unordered_map<data_ptr_t, data_ptr_t> data_;
 
   public:
-    ListValue() : StructValue(listTypePtr), data_() {}
-    ListValue(data_list_t data) : StructValue(listTypePtr), data_(data) {}
-    ListValue(const std::vector<data_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
-    virtual ~ListValue() = default;
-
-    void add(const data_ptr_t &e) { data_.push_back(e); }
-
-    virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual data_ptr_t clone(bool deep = false) const override;
-    virtual const std::string toString() const override;
-};
-
-class TupleValue : public StructValue {
-  private:
-    std::vector<data_ptr_t> data_;
-
-  public:
-    TupleValue(data_list_t data) : data_(data) {
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<TupleType>(types);
-    }
-    TupleValue(const std::vector<data_ptr_t> &data) : data_(data) {
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<TupleType>(types);
-    }
-    virtual ~TupleValue() = default;
-
-    void add(const data_ptr_t &e) { data_.push_back(e); }
+    MapValue(type_ptr_t keyType, type_ptr_t valueType) : StructValue(std::make_shared<MapType>(keyType, valueType)) {}
+    MapValue(type_ptr_t keyType, type_ptr_t valueType, const std::unordered_map<data_ptr_t, data_ptr_t> &data)
+        : StructValue(std::make_shared<MapType>(keyType, valueType)), data_(data) {}
+    virtual ~MapValue() = default;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -391,6 +360,171 @@ class DictValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
+class ListValue : public StructValue {
+  private:
+    std::vector<data_ptr_t> data_;
+
+  public:
+    ListValue() : StructValue(listTypePtr), data_() {}
+    ListValue(data_list_t data) : StructValue(listTypePtr), data_(data) {}
+    ListValue(const std::vector<data_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
+    virtual ~ListValue() = default;
+
+    void pushBack(const data_ptr_t &e) { data_.push_back(e); }
+    data_ptr_t popBack() {
+        if (data_.empty()) {
+            return nullptr;
+        }
+        data_ptr_t back = data_.back();
+        data_.pop_back();
+        return back;
+    }
+
+    data_ptr_t get(size_t index) const {
+        if (index >= data_.size()) {
+            return nullptr;
+        }
+        return data_[index];
+    }
+    bool set(size_t index, const data_ptr_t &e) {
+        if (index >= data_.size()) {
+            return false;
+        }
+        data_[index] = e;
+        return true;
+    }
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
+
+class TupleValue : public StructValue {
+  private:
+    std::vector<data_ptr_t> data_;
+
+  public:
+    TupleValue(data_list_t data) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<TupleType>(types);
+    }
+    TupleValue(const std::vector<data_ptr_t> &data) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<TupleType>(types);
+    }
+    virtual ~TupleValue() = default;
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
+
+class ArrayValue : public StructValue {
+  private:
+    std::vector<data_ptr_t> data_;
+
+  public:
+    ArrayValue(data_list_t data, size_t length) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<ArrayType>(types, length);
+        data_.resize(length);
+    }
+    ArrayValue(const std::vector<data_ptr_t> &data, size_t length) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<ArrayType>(types, length);
+        data_.resize(length);
+    }
+    virtual ~ArrayValue() = default;
+
+    data_ptr_t get(size_t index) const {
+        if (index >= data_.size()) {
+            return nullptr;
+        }
+        return data_[index];
+    }
+    bool set(size_t index, const data_ptr_t &e) {
+        if (index >= data_.size()) {
+            return false;
+        }
+        data_[index] = e;
+        return true;
+    }
+    size_t size() const { return data_.size(); }
+    size_t length() const { return data_.size(); }
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
+
+class VectorValue : public StructValue {
+  private:
+    std::vector<data_ptr_t> data_;
+
+  public:
+    VectorValue(data_list_t data) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<VectorType>(types);
+    }
+    VectorValue(const std::vector<data_ptr_t> &data) : data_(data) {
+        std::vector<type_ptr_t> types;
+        for (const auto &d : data) {
+            types.push_back(d->type());
+        }
+        type_ = std::make_shared<VectorType>(types);
+    }
+    virtual ~VectorValue() = default;
+
+    void pushBack(const data_ptr_t &e) { data_.push_back(e); }
+    data_ptr_t popBack() {
+        if (data_.empty()) {
+            return nullptr;
+        }
+        data_ptr_t back = data_.back();
+        data_.pop_back();
+        return back;
+    }
+
+    data_ptr_t get(size_t index) const {
+        if (index >= data_.size()) {
+            return nullptr;
+        }
+        return data_[index];
+    }
+    bool set(size_t index, const data_ptr_t &e) {
+        if (index >= data_.size()) {
+            return false;
+        }
+        data_[index] = e;
+        return true;
+    }
+    size_t size() const { return data_.size(); }
+    size_t length() const { return data_.size(); }
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
+
 class NamedTupleValue : public Data {
   private:
     bool typeResolved_ = false;
@@ -407,6 +541,23 @@ class NamedTupleValue : public Data {
     bool setType(type_ptr_t type);
 
     bool add(const data_ptr_t &e, const std::string &key = "");
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
+
+class TensorValue : public StructValue {
+  private:
+    data_ptr_t data_; // TODO: support multi-dimensional tensor
+
+  public:
+    TensorValue(const data_ptr_t &elementType, const std::vector<size_t> &shape)
+        : StructValue(std::make_shared<TensorType>(elementType, shape)) {}
+    virtual ~TensorValue() = default;
+
+    data_ptr_t at(const std::vector<size_t> &index) const;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;

@@ -1228,7 +1228,166 @@ tuple
     | ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues | parentValues |
 bracedValues | bracedIndexKVPairs) | lambdaExpr ;
 */
-std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {};
+std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
+    debug(0) << "visitPrimaryExpr: " << context->getAltNumber() << std::endl;
+    switch (context->getAltNumber()) {
+    case 1: { // identRef
+        const std::string &ident = std::any_cast<std::string>(visitIdentRef(context->identRef()));
+        return createAstNode<DRefASTLoad>(ident);
+    } break;
+    case 2: { // literal
+        return visitLiteral(context->literal());
+        break;
+    }
+    case 3: { // bracedPairedValues (for dict)
+        const std::vector<std::pair<std::string, ast_ptr_t>> &values =
+            std::any_cast<std::vector<std::pair<std::string, ast_ptr_t>>>(
+                visitBracedPairedValues(context->bracedPairedValues()));
+        const auto &dictValue = std::make_shared<DictValue>();
+        data_vec_t unrefVec;
+        bool dangling = false;
+        ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+        for (const auto &[key, node] : values) {
+            auto [value, dang] = extractValue(node, execNode, dangling);
+            dictValue->add(key, value);
+            if (dang) {
+                unrefVec.push_back(value);
+            }
+        }
+        ast_ptr_t dataNode = createAstNode<DataASTLoad>(dictValue, std::move(unrefVec));
+        if (dangling) {
+            return reparent(dataNode, execNode);
+        } else {
+            return dataNode;
+        }
+    } break;
+    case 4: { // '(' entityExpr ')'
+        return visitEntityExpr(context->entityExpr());
+    } break;
+    case 5: { // ('<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>')? (bracketValues |
+              // parentValues | bracedValues | bracedIndexKVPairs)
+        const auto &typeExprs = context->typeExpr();
+        const auto &integers = context->INTEGER();
+        if (context->bracketValues()) {  // List [] | Vector <T> [] | Array <T, N> [] | Tensor <T, [N1, N2]> []
+            if (typeExprs.size() != 1) { // typeExprs.size() == 0: List [] | typeExprs.size() > 1: warning
+                if (typeExprs.size() > 1) { // warning
+                    reportWarning("Multiple type expressions are not supported for list-like literal value", typeExprs[1]->getStart());
+                }
+                const std::vector<ast_ptr_t> &values =
+                    std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
+                const auto &listValue = std::make_shared<ListValue>();
+                data_vec_t unrefVec;
+                bool dangling = false;
+                ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+                for (const auto &node : values) {
+                    auto [value, dang] = extractValue(node, execNode, dangling);
+                    listValue->pushBack(value);
+                    if (dang) {
+                        unrefVec.push_back(value);
+                    }
+                }
+                ast_ptr_t dataNode = createAstNode<DataASTLoad>(listValue, std::move(unrefVec));
+                if (dangling) {
+                    dataNode = reparent(dataNode, execNode);
+                }
+                return dataNode;
+            } else { // typeExprs.size() == 1: Vector <T> [] | Array <T, N> [] | Tensor <T, [N1, N2]> []
+                if (integers.size() == 0) {     // Vector <T> []
+                    const type_ptr_t &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
+                    const std::vector<ast_ptr_t> &values =
+                        std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
+                    const auto &vectorValue = std::make_shared<VectorValue>(type);
+                    data_vec_t unrefVec;
+                    bool dangling = false;
+                    ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+                    for (const auto &node : values) {
+                        auto [value, dang] = extractValue(node, execNode, dangling);
+                        vectorValue->pushBack(value);
+                        if (dang) {
+                            unrefVec.push_back(value);
+                        }
+                    }
+                    ast_ptr_t dataNode = createAstNode<DataASTLoad>(vectorValue, std::move(unrefVec));
+                    if (dangling) {
+                        dataNode = reparent(dataNode, execNode);
+                    }
+                    return dataNode;
+                } else if (integers.size() == 1) { // Array <T, N> []
+                    const type_ptr_t &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
+                    const int size = std::stoi(integers[0]->getText());
+                    const std::vector<ast_ptr_t> &values =
+                        std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
+                    const auto &arrayValue = std::make_shared<ArrayValue>(type, size);
+                    data_vec_t unrefVec;
+                    bool dangling = false;
+                    ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+                    for (size_t i = 0; i < values.size(); ++i) {
+                        auto [value, dang] = extractValue(values[i], execNode, dangling);
+                        arrayValue->set(i, value);
+                        if (dang) {
+                            unrefVec.push_back(value);
+                        }
+                    }
+                    ast_ptr_t dataNode = createAstNode<DataASTLoad>(arrayValue, std::move(unrefVec));
+                    if (dangling) {
+                        dataNode = reparent(dataNode, execNode);
+                    }
+                    return dataNode;
+                } else { // Tensor <T, [N1, N2]> []
+                    const type_ptr_t &type = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
+                    std::vector<size_t> shape;
+                    for (size_t i = 0; i < integers.size(); ++i) {
+                        shape.push_back(std::stoi(integers[i]->getText()));
+                    }
+                    const std::vector<ast_ptr_t> &values =
+                        std::any_cast<std::vector<ast_ptr_t>>(visitBracketValues(context->bracketValues()));
+                    const auto &tensorValue = std::make_shared<TensorValue>(type, shape);
+                    data_vec_t unrefVec;
+                    bool dangling = false;
+                    ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+                    // TODO: Implement tensor value setting
+                    reportWarning("Tensor value setting is not implemented yet", context->getStart());
+                    ast_ptr_t dataNode = createAstNode<DataASTLoad>(tensorValue, std::move(unrefVec));
+                    if (dangling) {
+                        dataNode = reparent(dataNode, execNode);
+                    }
+                    return dataNode;
+                }
+            }
+        } else if (context->parentValues()) { // Tuple (V1, V2, ..., Vn)
+            if (typeExprs.size() > 0 || integers.size() > 0) {
+                reportWarning("Type or size specification is not supported for tuple-like literal value", context->getStart());
+            }
+            const std::vector<ast_ptr_t> &values =
+                std::any_cast<std::vector<ast_ptr_t>>(visitParentValues(context->parentValues()));
+            std::vector<data_ptr_t> tupleValues;
+            data_vec_t unrefVec;
+            bool dangling = false;
+            ast_ptr_t execNode = createAstNode<ExecASTLoad>();
+            for (const auto &node : values) {
+                auto [value, dang] = extractValue(node, execNode, dangling);
+                tupleValues.push_back(value);
+                if (dang) {
+                    unrefVec.push_back(value);
+                }
+            }
+            const auto &tupleValue = std::make_shared<TupleValue>(tupleValues);
+            ast_ptr_t dataNode = createAstNode<DataASTLoad>(tupleValue, std::move(unrefVec));
+            if (dangling) {
+                dataNode = reparent(dataNode, execNode);
+            }
+            return dataNode;
+        } else if (context->bracedValues()) { // Set <T> {}
+
+        } else if (context->bracedIndexKVPairs()) { // Map <T1, T2> { [K]: V }
+        }
+        throw BuildException("No pattern matched", context->getStart());
+    }
+    case 6: { // lambdaExpr
+        return visitLambdaExpr(context->lambdaExpr());
+    } break;
+    }
+};
 
 /*
 literal

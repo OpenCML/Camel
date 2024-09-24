@@ -340,36 +340,6 @@ class DictType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-class ArrayType : public StructType {
-  private:
-    type_ptr_t elementType_;
-
-  public:
-    ArrayType() = delete;
-    ArrayType(const type_ptr_t &elementType) : StructType(TypeCode::ARRAY), elementType_(elementType) {}
-
-    type_ptr_t elementType() const { return elementType_; }
-
-    std::string toString() const override { return "Array<" + elementType_->toString() + ">"; }
-
-    bool operator==(const Type &other) const override {
-        if (other.code() != TypeCode::ARRAY) {
-            return false;
-        }
-        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return elementType_->equals(otherArray.elementType_);
-    }
-    bool operator!=(const Type &other) const override {
-        if (other.code() != TypeCode::ARRAY) {
-            return true;
-        }
-        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-        return !elementType_->equals(otherArray.elementType_);
-    }
-
-    TypeConv convertibility(const Type &other) const override;
-};
-
 class TupleType : public StructType {
   private:
     std::vector<type_ptr_t> types_;
@@ -496,20 +466,50 @@ class UnionType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-class VectorType : public StructType {
+class ArrayType : public StructType {
   private:
-    type_ptr_t elementType_;
     size_t size_;
+    type_ptr_t elementType_;
 
   public:
-    VectorType(const type_ptr_t &elementType, size_t size)
-        : StructType(TypeCode::VECTOR), elementType_(elementType), size_(size) {}
+    ArrayType() = delete;
+    ArrayType(const type_ptr_t &elementType, size_t size) : StructType(TypeCode::ARRAY), elementType_(elementType), size_(size) {}
 
     size_t size() const { return size_; }
     type_ptr_t elementType() const { return elementType_; }
 
+    std::string toString() const override { return "Array<" + elementType_->toString() + ", " + std::to_string(size_) + ">"; }
+
+    bool operator==(const Type &other) const override {
+        if (other.code() != TypeCode::ARRAY) {
+            return false;
+        }
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return size_ == otherArray.size_ && elementType_->equals(otherArray.elementType_);
+    }
+    bool operator!=(const Type &other) const override {
+        if (other.code() != TypeCode::ARRAY) {
+            return true;
+        }
+        const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+        return size_ != otherArray.size_ || !elementType_->equals(otherArray.elementType_);
+    }
+
+    TypeConv convertibility(const Type &other) const override;
+};
+
+class VectorType : public StructType {
+  private:
+    type_ptr_t elementType_;
+
+  public:
+    VectorType(const type_ptr_t &elementType)
+        : StructType(TypeCode::VECTOR), elementType_(elementType) {}
+    
+    type_ptr_t elementType() const { return elementType_; }
+
     std::string toString() const override {
-        return "Vector<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
+        return "Vector<" + elementType_->toString() + ">";
     }
 
     bool operator==(const Type &other) const override {
@@ -517,14 +517,14 @@ class VectorType : public StructType {
             return false;
         }
         const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-        return size_ == otherVector.size_ && elementType_->equals(otherVector.elementType_);
+        return elementType_->equals(otherVector.elementType_);
     }
     bool operator!=(const Type &other) const override {
         if (other.code() != TypeCode::VECTOR) {
             return true;
         }
         const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-        return size_ != otherVector.size_ || !elementType_->equals(otherVector.elementType_);
+        return !elementType_->equals(otherVector.elementType_);
     }
 
     TypeConv convertibility(const Type &other) const override;

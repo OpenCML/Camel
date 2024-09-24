@@ -19,6 +19,7 @@
 #pragma once
 
 #include <iostream>
+#include <queue>
 #include <regex>
 #include <string>
 
@@ -112,10 +113,16 @@ class ASTConstructor : public OpenCMLVisitor {
         return root_;
     }
 
+    std::queue<BuildWarning> &warns() { return warnQueue_; }
+
   private:
     ast_ptr_t root_;
     size_t indentIndex_ = 0;
     scope_ptr_t<std::string, type_ptr_t> typeScope_;
+
+    std::queue<BuildWarning> warnQueue_;
+
+    void reportWarning(const std::string &msg, antlr4::Token *token) { warnQueue_.emplace(msg, token); }
 
     void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
