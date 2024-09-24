@@ -1,4 +1,9 @@
-(1, 2);
-let var2 = b->(a.at(b))<>()[1]()@{}();
-let c = <Int>{a, c, v}; // set
-let f = <Int, Int>{[a]:b};
+with <capture: Any, condition: Functor, update: Functor>
+func test(target: Functor): Void {
+    return ifexpr(condition<capture>(), () => {
+        exec<() => {
+            update<capture>();
+            test<capture, condition, update>(target)
+        }>(target);
+    }, null)
+};

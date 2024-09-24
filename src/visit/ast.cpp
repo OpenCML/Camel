@@ -226,7 +226,9 @@ std::pair<data_ptr_t, bool> ASTConstructor::extractValue(const ast_ptr_t &node, 
 
 std::pair<data_ptr_t, bool> ASTConstructor::extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling) {
     auto [refValue, dang] = extractValue(node, execNode);
-    dangling = dang;
+    if (dang) {
+        dangling = true;
+    }
     return std::make_pair(refValue, dang);
 }
 
