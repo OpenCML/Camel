@@ -20,15 +20,15 @@
 #include "entity.h"
 
 /*
-SetValue
+SetData
 */
 
-bool SetValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for SetValue
+bool SetData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for SetData
     return true;
 }
 
-data_ptr_t SetValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t SetData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -43,18 +43,18 @@ data_ptr_t SetValue::convert(type_ptr_t target, bool inplace) {
             break;
         }
     }
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t SetValue::clone(bool deep) const {
+data_ptr_t SetData::clone(bool deep) const {
     std::unordered_set<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.insert(e);
     }
-    return std::make_shared<SetValue>(type_, cloned);
+    return std::make_shared<SetData>(type_, cloned);
 }
 
-const std::string SetValue::toString() const {
+const std::string SetData::toString() const {
     if (data_.empty()) {
         return "{}";
     }
@@ -69,21 +69,21 @@ const std::string SetValue::toString() const {
 }
 
 /*
-MapValue
+MapData
 */
 
-bool MapValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for SetValue
+bool MapData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for SetData
     return true;
 }
 
-data_ptr_t MapValue::convert(type_ptr_t target, bool inplace) {
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+data_ptr_t MapData::convert(type_ptr_t target, bool inplace) {
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t MapValue::clone(bool deep) const { throw std::runtime_error("Not implemented"); }
+data_ptr_t MapData::clone(bool deep) const { throw std::runtime_error("Not implemented"); }
 
-const std::string MapValue::toString() const {
+const std::string MapData::toString() const {
     if (data_.empty()) {
         return "{}";
     }
@@ -97,16 +97,16 @@ const std::string MapValue::toString() const {
 }
 
 /*
-DictValue
+DictData
 */
 
-bool DictValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for DictValue
+bool DictData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for DictData
     return true;
 }
 
-DictValue::DictValue(std::initializer_list<std::pair<std::string, data_ptr_t>> data)
-    : StructValue(std::make_shared<DictType>()) {
+DictData::DictData(std::initializer_list<std::pair<std::string, data_ptr_t>> data)
+    : StructData(std::make_shared<DictType>()) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     for (const auto &e : data) {
         data_[e.first] = e.second;
@@ -114,15 +114,15 @@ DictValue::DictValue(std::initializer_list<std::pair<std::string, data_ptr_t>> d
     }
 }
 
-DictValue::DictValue(const std::unordered_map<std::string, data_ptr_t> &data)
-    : StructValue(std::make_shared<DictType>()), data_(data) {
+DictData::DictData(const std::unordered_map<std::string, data_ptr_t> &data)
+    : StructData(std::make_shared<DictType>()), data_(data) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     for (const auto &e : data) {
         dictType.add(e.first, e.second->type());
     }
 }
 
-bool DictValue::add(const std::string &key, const data_ptr_t &e) {
+bool DictData::add(const std::string &key, const data_ptr_t &e) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     if (dictType.add(key, e->type())) {
         data_[key] = e;
@@ -131,7 +131,7 @@ bool DictValue::add(const std::string &key, const data_ptr_t &e) {
     return false;
 }
 
-bool DictValue::del(const std::string &key) {
+bool DictData::del(const std::string &key) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     if (dictType.del(key)) {
         data_.erase(key);
@@ -140,15 +140,15 @@ bool DictValue::del(const std::string &key) {
     return false;
 }
 
-bool DictValue::has(const std::string &key) const { return data_.find(key) != data_.end(); }
+bool DictData::has(const std::string &key) const { return data_.find(key) != data_.end(); }
 
-void DictValue::set(const std::string &key, const data_ptr_t &e) {
+void DictData::set(const std::string &key, const data_ptr_t &e) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     dictType.set(key, e->type());
     data_[key] = e;
 }
 
-data_ptr_t DictValue::get(const std::string &key) const {
+data_ptr_t DictData::get(const std::string &key) const {
     auto it = data_.find(key);
     if (it != data_.end()) {
         return it->second;
@@ -156,7 +156,7 @@ data_ptr_t DictValue::get(const std::string &key) const {
     return nullptr;
 }
 
-data_ptr_t DictValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
     // TODO
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
@@ -172,12 +172,12 @@ data_ptr_t DictValue::convert(type_ptr_t target, bool inplace) {
             break;
         }
     }
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t DictValue::clone(bool deep) const { return std::make_shared<DictValue>(data_); }
+data_ptr_t DictData::clone(bool deep) const { return std::make_shared<DictData>(data_); }
 
-const std::string DictValue::toString() const {
+const std::string DictData::toString() const {
     if (data_.size() == 0) {
         return "{}";
     }
@@ -192,15 +192,15 @@ const std::string DictValue::toString() const {
 }
 
 /*
-ListValue
+ListData
 */
 
-bool ListValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ListValue
+bool ListData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ListData
     return true;
 }
 
-data_ptr_t ListValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
     // TODO
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
@@ -216,18 +216,18 @@ data_ptr_t ListValue::convert(type_ptr_t target, bool inplace) {
             break;
         }
     }
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t ListValue::clone(bool) const {
+data_ptr_t ListData::clone(bool) const {
     std::vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<ListValue>(cloned);
+    return std::make_shared<ListData>(cloned);
 }
 
-const std::string ListValue::toString() const {
+const std::string ListData::toString() const {
     std::string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
@@ -241,28 +241,28 @@ const std::string ListValue::toString() const {
 }
 
 /*
-TupleValue
+TupleData
 */
 
-bool TupleValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ListValue
+bool TupleData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ListData
     return true;
 }
 
-data_ptr_t TupleValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t TupleData::convert(type_ptr_t target, bool inplace) {
     // TODO
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t TupleValue::clone(bool) const {
+data_ptr_t TupleData::clone(bool) const {
     std::vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<TupleValue>(cloned);
+    return std::make_shared<TupleData>(cloned);
 }
 
-const std::string TupleValue::toString() const {
+const std::string TupleData::toString() const {
     std::string str = "(";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
@@ -276,28 +276,28 @@ const std::string TupleValue::toString() const {
 }
 
 /*
-ArrayValue
+ArrayData
 */
 
-bool ArrayValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ArrayValue
+bool ArrayData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ArrayData
     return true;
 }
 
-data_ptr_t ArrayValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
     // TODO
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t ArrayValue::clone(bool) const {
+data_ptr_t ArrayData::clone(bool) const {
     std::vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<ArrayValue>(std::dynamic_pointer_cast<ArrayType>(type_), cloned);
+    return std::make_shared<ArrayData>(std::dynamic_pointer_cast<ArrayType>(type_), cloned);
 }
 
-const std::string ArrayValue::toString() const {
+const std::string ArrayData::toString() const {
     std::string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
@@ -311,28 +311,28 @@ const std::string ArrayValue::toString() const {
 }
 
 /*
-VectorValue
+VectorData
 */
 
-bool VectorValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for VectorValue
+bool VectorData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for VectorData
     return true;
 }
 
-data_ptr_t VectorValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
     // TODO
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t VectorValue::clone(bool) const {
+data_ptr_t VectorData::clone(bool) const {
     std::vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<VectorValue>(std::dynamic_pointer_cast<VectorType>(type_), cloned);
+    return std::make_shared<VectorData>(std::dynamic_pointer_cast<VectorType>(type_), cloned);
 }
 
-const std::string VectorValue::toString() const {
+const std::string VectorData::toString() const {
     std::string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
@@ -346,19 +346,19 @@ const std::string VectorValue::toString() const {
 }
 
 /*
-NamedTupleValue
+ParamsData
 */
 
-bool NamedTupleValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for NamedTupleValue
+bool ParamsData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ParamsData
     return true;
 }
 
-bool NamedTupleValue::setType(type_ptr_t type) {
-    if (typeResolved_ || type->code() != TypeCode::NAMED_TUPLE) {
+bool ParamsData::setType(type_ptr_t type) {
+    if (typeResolved_ || type->code() != TypeCode::PARAMS) {
         return false;
     }
-    const auto &typeList = static_cast<NamedTupleType *>(type.get())->elements();
+    const auto &typeList = static_cast<ParamsType *>(type.get())->elements();
     if (indexData_.size() + namedData_.size() != typeList.size()) {
         return false;
     }
@@ -366,8 +366,8 @@ bool NamedTupleValue::setType(type_ptr_t type) {
     std::vector<data_ptr_t> indexResult;
     std::map<std::string, data_ptr_t> namedResult;
     for (size_t i = 0; i < typeList.size(); i++) {
-        const auto &[key, typ, value] = typeList[i];
-        // TODO: unused value
+        const auto &[key, typ, data] = typeList[i];
+        // TODO: unused data
         if (namedData_.find(key) != namedData_.end()) {
             if (namedData_[key]->type()->convertibility(*typ) != TypeConv::SAFE) {
                 return false;
@@ -390,7 +390,7 @@ bool NamedTupleValue::setType(type_ptr_t type) {
     return true;
 }
 
-bool NamedTupleValue::add(const data_ptr_t &e, const std::string &key) {
+bool ParamsData::add(const data_ptr_t &e, const std::string &key) {
     if (typeResolved_) {
         return false;
     }
@@ -405,7 +405,7 @@ bool NamedTupleValue::add(const data_ptr_t &e, const std::string &key) {
     return true;
 }
 
-data_ptr_t NamedTupleValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
     // TODO
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
@@ -421,12 +421,12 @@ data_ptr_t NamedTupleValue::convert(type_ptr_t target, bool inplace) {
             break;
         }
     }
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t NamedTupleValue::clone(bool) const { return std::make_shared<NamedTupleValue>(indexData_, namedData_); }
+data_ptr_t ParamsData::clone(bool) const { return std::make_shared<ParamsData>(indexData_, namedData_); }
 
-const std::string NamedTupleValue::toString() const {
+const std::string ParamsData::toString() const {
     std::string str = "(";
     for (const auto &e : indexData_) {
         str += e->toString() + ", ";
@@ -443,19 +443,19 @@ const std::string NamedTupleValue::toString() const {
 }
 
 /*
-TensorValue
+TensorData
 */
 
-bool TensorValue::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for VectorValue
+bool TensorData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for VectorData
     return true;
 }
 
-data_ptr_t TensorValue::convert(type_ptr_t target, bool inplace) {
+data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
     // TODO
-    throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t TensorValue::clone(bool) const { throw std::runtime_error("Not implemented"); }
+data_ptr_t TensorData::clone(bool) const { throw std::runtime_error("Not implemented"); }
 
-const std::string TensorValue::toString() const { return std::string("TensorValue"); }
+const std::string TensorData::toString() const { return std::string("TensorData"); }

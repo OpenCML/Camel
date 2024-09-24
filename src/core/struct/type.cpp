@@ -91,8 +91,8 @@ std::string typeCodeToString(TypeCode code) {
         return "Vector";
     case TypeCode::TENSOR:
         return "Tensor";
-    case TypeCode::NAMED_TUPLE:
-        return "NamedTuple";
+    case TypeCode::PARAMS:
+        return "Params";
         // special types
     case TypeCode::ANY:
         return "Any";
@@ -580,8 +580,8 @@ TypeConv ListType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-std::string NamedTupleType::toString() const {
-    std::string result = "NamedTuple<";
+std::string ParamsType::toString() const {
+    std::string result = "Params<";
     for (const auto &tuple : elements_) {
         auto &[name, type, value] = tuple;
         result += (name.empty() ? "" : name + ": ") + (type ? type->toString() : "NULL");
@@ -598,11 +598,11 @@ std::string NamedTupleType::toString() const {
     return result;
 }
 
-bool NamedTupleType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::NAMED_TUPLE) {
+bool ParamsType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::PARAMS) {
         return false;
     }
-    const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
+    const ParamsType &otherParam = dynamic_cast<const ParamsType &>(other);
 
     if (elements_.size() != otherParam.elements_.size()) {
         return false;
@@ -623,15 +623,15 @@ bool NamedTupleType::operator==(const Type &other) const {
     return true;
 }
 
-bool NamedTupleType::operator!=(const Type &other) const { return !(*this == other); }
+bool ParamsType::operator!=(const Type &other) const { return !(*this == other); }
 
-TypeConv NamedTupleType::convertibility(const Type &other) const {
+TypeConv ParamsType::convertibility(const Type &other) const {
     // TODO: not fully implemented
     // TODO: others' convertibility should be checked
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::NAMED_TUPLE: {
-            const NamedTupleType &otherParam = dynamic_cast<const NamedTupleType &>(other);
+        case TypeCode::PARAMS: {
+            const ParamsType &otherParam = dynamic_cast<const ParamsType &>(other);
             if (elements_.size() != otherParam.elements_.size()) {
                 return TypeConv::FORBIDDEN;
             }
@@ -685,7 +685,7 @@ std::string FunctorType::toString() const {
     }
     if (withType_ && withType_->size() > 0) {
         result += "<";
-        const auto &with = dynamic_cast<const NamedTupleType &>(*withType_);
+        const auto &with = dynamic_cast<const ParamsType &>(*withType_);
         const auto &elements = with.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
@@ -703,7 +703,7 @@ std::string FunctorType::toString() const {
     }
     result += "(";
     if (paramsType_ && paramsType_->size() > 0) {
-        const auto &params = dynamic_cast<const NamedTupleType &>(*paramsType_);
+        const auto &params = dynamic_cast<const ParamsType &>(*paramsType_);
         const auto &elements = params.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;

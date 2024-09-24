@@ -66,7 +66,7 @@ node_ptr_t GraphIRConstructor::visitDataNode(const ast_ptr_t &ast) {
         return node;
     } else {
         for (const auto &e : dataNode->getUnrefData()) {
-            const std::string &ref = std::dynamic_pointer_cast<DanglingValue>(e)->ref();
+            const std::string &ref = std::dynamic_pointer_cast<RefData>(e)->ref();
             auto optSrcNode = nodeScope_->at(ref);
             if (optSrcNode.has_value()) {
                 GraphNode::link(optSrcNode.value(), node);

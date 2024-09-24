@@ -30,22 +30,22 @@
 #include "core/struct/scope.h"
 #include "core/struct/tree.h"
 
-#define CREATE_SINGLE_DANGLING_LIST(dangling, value) (dangling ? data_list_t{value} : data_list_t{})
+#define CREATE_SINGLE_UNREF_LIST(dangling, data) (dangling ? data_list_t{data} : data_list_t{})
 
-#define CREATE_DOUBLE_DANGLING_LIST(lhsDangling, lhsValue, rhsDangling, rhsValue)                                      \
-    (lhsDangling && rhsDangling ? data_list_t{lhsValue, rhsValue}                                                      \
-     : lhsDangling              ? data_list_t{lhsValue}                                                                \
-     : rhsDangling              ? data_list_t{rhsValue}                                                                \
+#define CREATE_DOUBLE_UNREF_LIST(lhsDangling, lhsData, rhsDangling, rhsData)                                      \
+    (lhsDangling && rhsDangling ? data_list_t{lhsData, rhsData}                                                      \
+     : lhsDangling              ? data_list_t{lhsData}                                                                \
+     : rhsDangling              ? data_list_t{rhsData}                                                                \
                                 : data_list_t{})
 
-#define CREATE_TRIPLE_DANGLING_LIST(lhsDangling, lhsValue, midDangling, midValue, rhsDangling, rhsValue)               \
-    (lhsDangling && midDangling && rhsDangling ? data_list_t{lhsValue, midValue, rhsValue}                             \
-     : lhsDangling && midDangling              ? data_list_t{lhsValue, midValue}                                       \
-     : midDangling && rhsDangling              ? data_list_t{midValue, rhsValue}                                       \
-     : lhsDangling && rhsDangling              ? data_list_t{lhsValue, rhsValue}                                       \
-     : lhsDangling                             ? data_list_t{lhsValue}                                                 \
-     : midDangling                             ? data_list_t{midValue}                                                 \
-     : rhsDangling                             ? data_list_t{rhsValue}                                                 \
+#define CREATE_TRIPLE_UNREF_LIST(lhsDangling, lhsData, midDangling, midData, rhsDangling, rhsData)               \
+    (lhsDangling && midDangling && rhsDangling ? data_list_t{lhsData, midData, rhsData}                             \
+     : lhsDangling && midDangling              ? data_list_t{lhsData, midData}                                       \
+     : midDangling && rhsDangling              ? data_list_t{midData, rhsData}                                       \
+     : lhsDangling && rhsDangling              ? data_list_t{lhsData, rhsData}                                       \
+     : lhsDangling                             ? data_list_t{lhsData}                                                 \
+     : midDangling                             ? data_list_t{midData}                                                 \
+     : rhsDangling                             ? data_list_t{rhsData}                                                 \
                                                : data_list_t{})
 
 namespace InnerFuncDRefNodes {
@@ -141,26 +141,26 @@ class ASTConstructor : public OpenCMLVisitor {
     void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
 
-    data_ptr_t extractStaticValue(const ast_ptr_t &node);
-    std::pair<ast_ptr_t, data_ptr_t> makeDanglingValue(const ast_ptr_t &expr);
-    std::pair<data_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode);
-    std::pair<data_ptr_t, bool> extractValue(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
+    data_ptr_t extractStaticData(const ast_ptr_t &node);
+    std::pair<ast_ptr_t, data_ptr_t> makeRefData(const ast_ptr_t &expr);
+    std::pair<data_ptr_t, bool> extractData(const ast_ptr_t &node, ast_ptr_t &execNode);
+    std::pair<data_ptr_t, bool> extractData(const ast_ptr_t &node, ast_ptr_t &execNode, bool &dangling);
 
-    template <typename Ctx, typename Val> ast_ptr_t visitBinaryOpList(Ctx *context, std::vector<Val *> values) {
-        ast_ptr_t lhsNode = std::any_cast<ast_ptr_t>(visit(values[0]));
+    template <typename Ctx, typename Val> ast_ptr_t visitBinaryOpList(Ctx *context, std::vector<Val *> dataVec) {
+        ast_ptr_t lhsNode = std::any_cast<ast_ptr_t>(visit(dataVec[0]));
 
-        for (size_t i = 1; i < values.size(); i++) {
+        for (size_t i = 1; i < dataVec.size(); i++) {
             ast_ptr_t execNode = createAstNode<ExecASTLoad>();
-            ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visit(values[i]));
+            ast_ptr_t rhsNode = std::any_cast<ast_ptr_t>(visit(dataVec[i]));
 
             std::string op = context->children[i * 2 - 1]->getText();
             ast_ptr_t funcNode = InnerFuncDRefNodes::opNodesMap[op];
 
-            auto [lhsValue, lhsDangling] = extractValue(lhsNode, execNode);
-            auto [rhsValue, rhsDangling] = extractValue(rhsNode, execNode);
+            auto [lhsData, lhsDangling] = extractData(lhsNode, execNode);
+            auto [rhsData, rhsDangling] = extractData(rhsNode, execNode);
             ast_ptr_t dataNode =
-                createAstNode<DataASTLoad>(std::make_shared<TupleValue>(data_list_t{lhsValue, rhsValue}),
-                                           CREATE_DOUBLE_DANGLING_LIST(lhsDangling, lhsValue, rhsDangling, rhsValue));
+                createAstNode<DataASTLoad>(std::make_shared<TupleData>(data_list_t{lhsData, rhsData}),
+                                           CREATE_DOUBLE_UNREF_LIST(lhsDangling, lhsData, rhsDangling, rhsData));
 
             if (lhsDangling || rhsDangling) {
                 dataNode = reparent(dataNode, execNode);
