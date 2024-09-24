@@ -1443,7 +1443,7 @@ std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *con
             }
         } else if (context->bracedIndexKVPairs()) { // Map <T1, T2> { [K]: V }
             if (typeExprs.size() == 1) {
-                reportWarning("Map literal must have two type specifications", context->getStart());
+                throw BuildException("Map literal must have two type specifications", context->getStart());
             }
             const type_ptr_t &type1 = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
             const type_ptr_t &type2 = std::any_cast<type_ptr_t>(visitTypeExpr(typeExprs[1]));
@@ -1470,10 +1470,8 @@ std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *con
                 dataNode = reparent(dataNode, execNode);
             }
             return dataNode;
-        } else {
-            reportWarning("No pattern matched", context->getStart());
         }
-        throw BuildException("No pattern matched", context->getStart());
+        throw BuildException("Invalid type specification, no pattern matched", context->getStart());
     }
     case 8: { // lambdaExpr
         return visitLambdaExpr(context->lambdaExpr());

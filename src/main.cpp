@@ -143,6 +143,16 @@ int main(int argc, char *argv[]) {
             auto visitor = ASTConstructor();
             try {
                 ast = visitor.construct(tree);
+                auto &warns = visitor.warns();
+                while (!warns.empty()) {
+                    const auto &warning = warns.front();
+                    if (errorFormat != "json") {
+                        error << warning.what() << std::endl;
+                    } else {
+                        os << warning.json() << std::endl;
+                    }
+                    warns.pop();
+                }
             } catch (BuildException &e) {
                 if (errorFormat != "json") {
                     error << e.what() << std::endl;
@@ -157,6 +167,7 @@ int main(int argc, char *argv[]) {
                     return 1;
                 } else {
                     os << "{"
+                       << "\"type\": \"error\", "
                        << "\"filename\": \"" << targetFile << "\", "
                        << "\"line\": 0, "
                        << "\"column\": 0, "
