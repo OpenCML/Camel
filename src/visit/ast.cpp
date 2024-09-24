@@ -23,7 +23,7 @@
 #include "core/struct/token.h"
 #include "utils/log.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL -1
 
 namespace InnerFuncDRefNodes {
 ast_ptr_t __copy__ = nullptr;
@@ -1003,7 +1003,6 @@ std::any ASTConstructor::visitTernaryExpr(OpenCMLParser::TernaryExprContext *con
         ast_ptr_t trueNode = std::any_cast<ast_ptr_t>(visitTernaryExpr(context->ternaryExpr(0)));
         ast_ptr_t falseNode = std::any_cast<ast_ptr_t>(visitTernaryExpr(context->ternaryExpr(1)));
 
-        ast_ptr_t funcNode = InnerFuncDRefNodes::__ifexpr__;
         auto [condValue, condDangling] = extractValue(condNode, execNode);
         auto [trueValue, trueDangling] = extractValue(trueNode, execNode);
         auto [falseValue, falseDangling] = extractValue(falseNode, execNode);
@@ -1016,7 +1015,7 @@ std::any ASTConstructor::visitTernaryExpr(OpenCMLParser::TernaryExprContext *con
             dataNode = reparent(dataNode, execNode);
         }
 
-        return linkFunc(dataNode, funcNode);
+        return linkFunc(dataNode, InnerFuncDRefNodes::__ifexpr__);
     }
 
     return condNode;

@@ -443,18 +443,7 @@ class TupleType : public StructType {
     TupleType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
     TupleType(const std::vector<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
 
-    std::string toString() const override {
-        std::string result = "Tuple<";
-        for (const auto &type : types_) {
-            result += type->toString() + ", ";
-        }
-        if (!types_.empty()) {
-            result.pop_back();
-            result.pop_back();
-        }
-        result += ">";
-        return result;
-    }
+    std::string toString() const override;
 
     bool operator==(const Type &other) const override {
         if (other.code() != TypeCode::TUPLE) {
@@ -607,11 +596,8 @@ class NamedTupleType : public StructType {
     bool operator!=(const Type &other) const override;
 
     bool add(const std::string &key, const type_ptr_t &type, const data_ptr_t &value = nullptr) {
-        for (const auto &tuple : elements_) {
-            if (std::get<0>(tuple) == key) {
-                return false;
-            }
-        }
+        // here we allow duplicate keys, for the sake of simplicity
+        // we use key "" to represent indexed elements
         elements_.push_back({key, type, value});
         return true;
     }
@@ -623,6 +609,9 @@ class NamedTupleType : public StructType {
         auto result = std::map<std::string, type_ptr_t>();
         for (const auto &tuple : elements_) {
             const auto &[name, type, value] = tuple;
+            if (name.empty()) {
+                continue;
+            }
             result[name] = type;
         }
         return result;

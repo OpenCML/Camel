@@ -18,8 +18,8 @@
 
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <iterator>
+#include <sstream>
 
 #include "ast.h"
 
@@ -64,7 +64,14 @@ const std::string ASTNodeLoad::typeStr() const {
 
 const std::string DataASTLoad::toString() const {
     std::stringstream ss;
-    ss << "DATA: " << pointerToHex(data_.get()) << ", " << data_->type()->toString() << ", " << data_->toString();
+    ss << "DATA: " << pointerToHex(data_.get()) << ", ";
+    const auto &type = data_->type();
+    if (type) {
+        ss << type->toString();
+    } else {
+        ss << "NULL";
+    }
+    ss << ", " << data_->toString();
     return ss.str();
 }
 

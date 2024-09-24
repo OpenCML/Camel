@@ -16,11 +16,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "type.h"
+#include <iostream>
+
 #include "data.h"
 #include "entity.h"
 #include "function.h"
 #include "functor.h"
+#include "type.h"
 
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
@@ -326,6 +328,23 @@ TypeConv ArrayType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
+std::string TupleType::toString() const {
+    std::string result = "Tuple<";
+    for (const auto &type : types_) {
+        if (type) {
+            result += type->toString() + ", ";
+        } else {
+            result += "NULL, ";
+        }
+    }
+    if (!types_.empty()) {
+        result.pop_back();
+        result.pop_back();
+    }
+    result += ">";
+    return result;
+}
+
 TypeConv TupleType::convertibility(const Type &other) const {
     // TODO: not fully implemented
     if (other.structured()) {
@@ -558,11 +577,10 @@ TypeConv ListType::convertibility(const Type &other) const {
 }
 
 std::string NamedTupleType::toString() const {
-    // return "NamedTuple";
-    std::string result = "(";
+    std::string result = "NamedTuple<";
     for (const auto &tuple : elements_) {
         auto &[name, type, value] = tuple;
-        result += name + ": " + type->toString();
+        result += (name.empty() ? "" : name + ": ") + (type ? type->toString() : "NULL");
         if (value) {
             result += " = " + value->toString();
         }
@@ -572,7 +590,7 @@ std::string NamedTupleType::toString() const {
         result.pop_back();
         result.pop_back();
     }
-    result += ")";
+    result += ">";
     return result;
 }
 

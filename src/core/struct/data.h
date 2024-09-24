@@ -566,7 +566,15 @@ class NamedTupleValue : public Data {
     NamedTupleValue() : Data(std::make_shared<NamedTupleType>()) {}
     NamedTupleValue(const std::vector<data_ptr_t> &indexData,
                     const std::map<std::string, data_ptr_t> &namedData)
-        : Data(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {}
+        : Data(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {
+            std::shared_ptr<NamedTupleType> type = std::dynamic_pointer_cast<NamedTupleType>(type_);
+            for (const auto &e : indexData) {
+                type->add("", e->type(), nullptr);
+            }
+            for (const auto &e : namedData) {
+                type->add(e.first, e.second->type(), nullptr);
+            }
+        }
     virtual ~NamedTupleValue() = default;
 
     bool setType(type_ptr_t type);
