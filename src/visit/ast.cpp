@@ -824,7 +824,7 @@ std::any ASTConstructor::visitBracedPairedValues(OpenCMLParser::BracedPairedValu
     if (pairedValues) {
         return visitPairedValues(pairedValues);
     } else {
-        return std::vector<std::pair<std::string, ast_ptr_t>>();
+        return std::map<std::string, ast_ptr_t>();
     }
 };
 
@@ -1165,7 +1165,8 @@ std::any ASTConstructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext 
     debug(0) << "visitAnnotatedExpr" << std::endl;
     ast_ptr_t lhsNode = std::any_cast<ast_ptr_t>(visitPrimaryExpr(context->primaryExpr()));
 
-    for (const auto &child : context->children) {
+    for (size_t i = 1; i < context->children.size(); ++i) {
+        auto child = context->children[i];
         const char &op = child->children[0]->getText()[0];
         switch (op) {
         case '[': {
@@ -1288,9 +1289,8 @@ std::any ASTConstructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *con
         }
     } break;
     case 4: { // bracedPairedValues (for dict)
-        const std::vector<std::pair<std::string, ast_ptr_t>> &values =
-            std::any_cast<std::vector<std::pair<std::string, ast_ptr_t>>>(
-                visitBracedPairedValues(context->bracedPairedValues()));
+        const std::map<std::string, ast_ptr_t> &values =
+            std::any_cast<std::map<std::string, ast_ptr_t>>(visitBracedPairedValues(context->bracedPairedValues()));
         const auto &dictValue = std::make_shared<DictValue>();
         data_vec_t unrefVec;
         bool dangling = false;

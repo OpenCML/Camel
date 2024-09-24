@@ -774,11 +774,11 @@ primaryExpr
     | literal
     | bracketValues         // for list
     | bracedPairedValues    // for dict
-    | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a tuple
-    | parentValues          // for tuple
+    | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a
+tuple | parentValues          // for tuple
     \\ for vector | array | tensor | set | map
-    | '<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>' (bracketValues | bracedValues | bracedIndexKVPairs)
-    | lambdaExpr ;
+    | '<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>' (bracketValues | bracedValues |
+bracedIndexKVPairs) | lambdaExpr ;
 */
 std::any Formatter::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
     const auto &alt = context->getAltNumber();
@@ -858,7 +858,7 @@ arrayType
 */
 std::any Formatter::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
     std::string result = std::any_cast<std::string>(visitAtomType(context->atomType()));
-    for (int i = 1; i < context->children.size() - 1; i++) {
+    for (int i = 1; i < context->children.size(); i++) {
         result += context->children[i]->getText();
     }
     return result;

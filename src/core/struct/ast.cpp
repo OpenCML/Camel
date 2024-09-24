@@ -58,7 +58,7 @@ const std::string ASTNodeLoad::typeStr() const {
     case ASTNodeType::FROM:
         return "FROM";
     default:
-        return "UNKNOWN";
+        return "REF";
     }
 }
 

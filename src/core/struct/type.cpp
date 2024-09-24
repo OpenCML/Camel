@@ -42,6 +42,8 @@ type_ptr_t anyTypePtr;
 type_ptr_t voidTypePtr;
 type_ptr_t functorTypePtr;
 
+type_ptr_t refTypePtr;
+
 const signed char primeTypeConvMatrix[7][7] = {
     // INT32, INT64, FLOAT, DOUBLE, STRING, BOOL, CHAR
     {01, 01, 01, 01, 00, 01, -1}, // INT32
@@ -98,6 +100,8 @@ std::string typeCodeToString(TypeCode code) {
         return "Void";
     case TypeCode::FUNCTOR:
         return "Functor";
+    case TypeCode::REF:
+        return "REF";
     }
     return "Unknown";
 }
@@ -786,4 +790,7 @@ void initTypes() {
     anyTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::ANY));
     voidTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::VOID));
     functorTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<FunctorType>(nullptr, nullptr, anyTypePtr));
+
+    // initialize unknown type
+    refTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::REF));
 }

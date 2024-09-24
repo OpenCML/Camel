@@ -51,6 +51,8 @@ enum class TypeCode {
     ANY = 0b10'000000,
     VOID = 0b10'000001,
     FUNCTOR = 0b10'000010,
+    // for internal use
+    REF = 0b11'000000,
 };
 
 enum class TypeConv {
@@ -709,5 +711,7 @@ extern type_ptr_t listTypePtr;
 extern type_ptr_t anyTypePtr;
 extern type_ptr_t voidTypePtr;
 extern type_ptr_t functorTypePtr;
+
+extern type_ptr_t refTypePtr;
 
 void initTypes();

@@ -84,7 +84,7 @@ class DanglingValue : public Data {
     std::string ref_;
 
   public:
-    DanglingValue(const std::string &ref) : Data(nullptr), ref_(ref) {}
+    DanglingValue(const std::string &ref) : Data(refTypePtr), ref_(ref) {}
     virtual ~DanglingValue() = default;
 
     const std::string &ref() const { return ref_; }
