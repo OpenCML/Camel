@@ -37,12 +37,47 @@ class BuildException : public std::exception {
         message = msg;
     }
     const char *what() const noexcept override {
-        tmpMessage = "line " + std::to_string(line) + ", column " + std::to_string(column) + ": " + message;
+        tmpMessage = "error: line " + std::to_string(line) + ", column " + std::to_string(column) + ": " + message;
         return tmpMessage.c_str();
     }
 
     const char *json() const noexcept {
         tmpMessage = "{"
+                     "\"type\": \"error\", "
+                     "\"line\": " +
+                     std::to_string(line) +
+                     ", "
+                     "\"column\": " +
+                     std::to_string(column) +
+                     ", "
+                     "\"message\": \"" +
+                     message +
+                     "\""
+                     "}";
+        return tmpMessage.c_str();
+    }
+};
+
+class BuildWarning {
+  private:
+    std::string message;
+    size_t line;
+    size_t column;
+
+  public:
+    BuildWarning(const std::string &msg, antlr4::Token *token) {
+        line = token->getLine();
+        column = token->getCharPositionInLine();
+        message = msg;
+    }
+    const char *what() const noexcept {
+        tmpMessage = "warn: line " + std::to_string(line) + ", column " + std::to_string(column) + ": " + message;
+        return tmpMessage.c_str();
+    }
+
+    const char *json() const noexcept {
+        tmpMessage = "{"
+                     "\"type\": \"warn\", "
                      "\"line\": " +
                      std::to_string(line) +
                      ", "

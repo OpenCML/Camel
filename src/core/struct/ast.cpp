@@ -18,6 +18,7 @@
 
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 
 #include "ast.h"
@@ -32,6 +33,8 @@ const std::string ASTNodeLoad::typeStr() const {
     switch (type_) {
     case ASTNodeType::DATA:
         return "DATA";
+    case ASTNodeType::VARI:
+        return "VARI";
     case ASTNodeType::TYPE:
         return "TYPE";
     case ASTNodeType::FUNC:
@@ -40,8 +43,8 @@ const std::string ASTNodeLoad::typeStr() const {
         return "NREF";
     case ASTNodeType::DREF:
         return "DREF";
-    case ASTNodeType::ASSN:
-        return "ASSN";
+    case ASTNodeType::WAIT:
+        return "WAIT";
     case ASTNodeType::ANNO:
         return "ANNO";
     case ASTNodeType::LINK:
@@ -52,14 +55,23 @@ const std::string ASTNodeLoad::typeStr() const {
         return "RETN";
     case ASTNodeType::EXEC:
         return "EXEC";
+    case ASTNodeType::FROM:
+        return "FROM";
     default:
-        return "UNKNOWN";
+        return "REF";
     }
 }
 
 const std::string DataASTLoad::toString() const {
     std::stringstream ss;
-    ss << "DATA: " << pointerToHex(data_.get()) << ", " << data_->type()->toString() << ", " << data_->toString();
+    ss << "DATA: " << pointerToHex(data_.get()) << ", ";
+    const auto &type = data_->type();
+    if (type) {
+        ss << type->toString();
+    } else {
+        ss << "NULL";
+    }
+    ss << ", " << data_->toString();
     return ss.str();
 }
 
@@ -72,3 +84,26 @@ const std::string TypeASTLoad::toString() const {
 const std::string NRefASTLoad::toString() const { return "NREF: " + ident_; }
 
 const std::string DRefASTLoad::toString() const { return "DREF: " + ident_; }
+
+const std::string WaitASTLoad::toString() const {
+    std::ostringstream oss;
+    oss << "WAIT: ";
+    if (!idents_.empty()) {
+        std::copy(idents_.begin(), idents_.end() - 1, std::ostream_iterator<std::string>(oss, ", "));
+        oss << idents_.back();
+    }
+    return oss.str();
+}
+
+const std::string FromASTLoad::toString() const {
+    std::ostringstream oss;
+    oss << "FROM: '" << path_ << "' USE { ";
+    if (idents_.empty()) {
+        oss << "*";
+    } else {
+        std::copy(idents_.begin(), idents_.end() - 1, std::ostream_iterator<std::string>(oss, ", "));
+        oss << idents_.back();
+    }
+    oss << " }";
+    return oss.str();
+}

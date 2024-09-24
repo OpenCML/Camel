@@ -24,6 +24,7 @@ inline ast_ptr_t ast_ptr_cast(const tree_node_ptr_t<ast_load_ptr_t> &ptr) {
 }
 
 std::any GraphIRConstructor::visitASTNode(const ast_ptr_t &ast) {
+    // TODO: implement
     switch (ast->type()) {
     case ASTNodeType::DATA:
         return visitDataNode(ast);
@@ -35,8 +36,6 @@ std::any GraphIRConstructor::visitASTNode(const ast_ptr_t &ast) {
         return visitNRefNode(ast);
     case ASTNodeType::DREF:
         return visitDRefNode(ast);
-    case ASTNodeType::ASSN:
-        return visitAssnNode(ast);
     case ASTNodeType::ANNO:
         return visitAnnoNode(ast);
     case ASTNodeType::LINK:
@@ -119,9 +118,7 @@ node_ptr_t GraphIRConstructor::visitDRefNode(const ast_ptr_t &ast) {
 
 void_ptr_t GraphIRConstructor::visitAssnNode(const ast_ptr_t &ast) {}
 
-node_ptr_t GraphIRConstructor::visitAnnoNode(const ast_ptr_t &ast) {
-    throw std::runtime_error("Not implemented");
-}
+node_ptr_t GraphIRConstructor::visitAnnoNode(const ast_ptr_t &ast) { throw std::runtime_error("Not implemented"); }
 
 node_ptr_t GraphIRConstructor::visitLinkNode(const ast_ptr_t &ast) {
     auto srcResult = visitASTNode(ast_ptr_cast(ast->at(0)));
@@ -163,4 +160,11 @@ node_ptr_t GraphIRConstructor::visitWithNode(const ast_ptr_t &ast) {
     }
 }
 
-node_ptr_t GraphIRConstructor::visitRetnNode(const ast_ptr_t &ast) {}
+node_ptr_t GraphIRConstructor::visitRetnNode(const ast_ptr_t &ast) {
+    auto result = visitASTNode(ast_ptr_cast(ast->at(0)));
+    if (result.type() == typeid(node_ptr_t)) {
+        return std::any_cast<node_ptr_t>(result);
+    } else {
+        throw std::runtime_error("Unexpected result type from visiting child of RETN node");
+    }
+}

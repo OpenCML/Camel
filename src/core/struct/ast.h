@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "entity.h"
 #include "data.h"
+#include "entity.h"
 
 class ASTNode;
 using ast_ptr_t = std::shared_ptr<ASTNode>;
@@ -27,7 +27,7 @@ using ast_ptr_t = std::shared_ptr<ASTNode>;
 class ASTNodeLoad;
 using ast_load_ptr_t = std::shared_ptr<ASTNodeLoad>;
 
-enum class ASTNodeType { DATA, TYPE, FUNC, NREF, DREF, ASSN, ANNO, LINK, WITH, RETN, EXEC };
+enum class ASTNodeType { DATA, VARI, TYPE, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC, FROM };
 
 class ASTNodeLoad {
   protected:
@@ -44,8 +44,11 @@ class ASTNodeLoad {
     virtual void visit() { throw std::runtime_error("ASTNodeLoad::visit() not implemented"); };
 };
 
+template <typename NodeType, typename... Args> ast_ptr_t createAstNode(Args &&...args) {
+    return std::make_shared<ASTNode>(std::make_shared<NodeType>(std::forward<Args>(args)...));
+}
+
 class DataASTLoad : public ASTNodeLoad {
-  private:
     data_ptr_t data_;
     data_vec_t unrefDataVec_;
 
@@ -67,8 +70,18 @@ inline std::shared_ptr<DataASTLoad> data_ast_load_ptr_cast(const ast_load_ptr_t 
     return std::dynamic_pointer_cast<DataASTLoad>(ptr);
 }
 
+class VariASTLoad : public ASTNodeLoad {
+  public:
+    VariASTLoad() : ASTNodeLoad(ASTNodeType::VARI) {}
+
+    // const std::string toString() const override;
+};
+
+inline std::shared_ptr<VariASTLoad> vari_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<VariASTLoad>(ptr);
+}
+
 class TypeASTLoad : public ASTNodeLoad {
-  private:
     type_ptr_t type_;
 
   public:
@@ -83,7 +96,6 @@ inline std::shared_ptr<TypeASTLoad> type_ast_load_ptr_cast(const ast_load_ptr_t 
 }
 
 class FuncASTLoad : public ASTNodeLoad {
-  private:
   public:
     FuncASTLoad() : ASTNodeLoad(ASTNodeType::FUNC) {}
 
@@ -95,7 +107,6 @@ inline std::shared_ptr<FuncASTLoad> func_ast_load_ptr_cast(const ast_load_ptr_t 
 }
 
 class NRefASTLoad : public ASTNodeLoad {
-  private:
     std::string ident_;
 
   public:
@@ -111,7 +122,6 @@ inline std::shared_ptr<NRefASTLoad> nref_ast_load_ptr_cast(const ast_load_ptr_t 
 }
 
 class DRefASTLoad : public ASTNodeLoad {
-  private:
     std::string ident_;
 
   public:
@@ -126,19 +136,23 @@ inline std::shared_ptr<DRefASTLoad> dref_ast_load_ptr_cast(const ast_load_ptr_t 
     return std::dynamic_pointer_cast<DRefASTLoad>(ptr);
 }
 
-class AssnASTLoad : public ASTNodeLoad {
-  public:
-    AssnASTLoad() : ASTNodeLoad(ASTNodeType::ASSN) {}
+class WaitASTLoad : public ASTNodeLoad {
+    std::vector<std::string> idents_;
 
-    // const std::string toString() const override;
+  public:
+    WaitASTLoad() : ASTNodeLoad(ASTNodeType::WAIT) {}
+
+    void wait(const std::string &ident) { idents_.push_back(ident); }
+    const std::vector<std::string> &waited() const { return idents_; }
+
+    const std::string toString() const override;
 };
 
-inline std::shared_ptr<AssnASTLoad> assn_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<AssnASTLoad>(ptr);
+inline std::shared_ptr<WaitASTLoad> wait_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<WaitASTLoad>(ptr);
 }
 
 class AnnoASTLoad : public ASTNodeLoad {
-  private:
     std::string annotation_;
 
   public:
@@ -193,4 +207,22 @@ class ExecASTLoad : public ASTNodeLoad {
 
 inline std::shared_ptr<ExecASTLoad> exec_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<ExecASTLoad>(ptr);
+}
+
+class FromASTLoad : public ASTNodeLoad {
+    std::string path_;
+    std::vector<std::string> idents_; // if empty, load all(*)
+
+  public:
+    FromASTLoad(std::string &path, std::vector<std::string> &idents)
+        : ASTNodeLoad(ASTNodeType::FROM), path_(path), idents_(idents) {}
+
+    const std::string path() const { return path_; }
+    const std::vector<std::string> &idents() const { return idents_; }
+
+    const std::string toString() const override;
+};
+
+inline std::shared_ptr<FromASTLoad> from_ast_load_ptr_cast(const ast_load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<FromASTLoad>(ptr);
 }

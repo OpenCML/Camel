@@ -1,0 +1,10 @@
+
+enum Token = {
+    Number(i32),
+    Plus,
+    Minus,
+    Times,
+    Div,
+    LParen,
+    RParen,
+};

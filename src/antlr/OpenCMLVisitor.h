@@ -51,7 +51,7 @@ public:
 
     virtual std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) = 0;
 
-    virtual std::any visitAssignStmt(OpenCMLParser::AssignStmtContext *context) = 0;
+    virtual std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context) = 0;
 
     virtual std::any visitWithDef(OpenCMLParser::WithDefContext *context) = 0;
 
@@ -75,6 +75,10 @@ public:
 
     virtual std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) = 0;
 
+    virtual std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context) = 0;
+
+    virtual std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context) = 0;
+
     virtual std::any visitTypeList(OpenCMLParser::TypeListContext *context) = 0;
 
     virtual std::any visitIdentList(OpenCMLParser::IdentListContext *context) = 0;
@@ -87,6 +91,8 @@ public:
 
     virtual std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) = 0;
 
+    virtual std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) = 0;
+
     virtual std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) = 0;
 
     virtual std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context) = 0;
@@ -95,11 +101,19 @@ public:
 
     virtual std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context) = 0;
 
+    virtual std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context) = 0;
+
+    virtual std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context) = 0;
+
     virtual std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) = 0;
 
     virtual std::any visitBracketValues(OpenCMLParser::BracketValuesContext *context) = 0;
 
+    virtual std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) = 0;
+
     virtual std::any visitParentParams(OpenCMLParser::ParentParamsContext *context) = 0;
+
+    virtual std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context) = 0;
 
     virtual std::any visitParentValues(OpenCMLParser::ParentValuesContext *context) = 0;
 
@@ -107,41 +121,43 @@ public:
 
     virtual std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) = 0;
 
-    virtual std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) = 0;
-
-    virtual std::any visitPrimEntity(OpenCMLParser::PrimEntityContext *context) = 0;
-
-    virtual std::any visitEntityChain(OpenCMLParser::EntityChainContext *context) = 0;
-
-    virtual std::any visitEntityLink(OpenCMLParser::EntityLinkContext *context) = 0;
-
-    virtual std::any visitEntityUnit(OpenCMLParser::EntityUnitContext *context) = 0;
-
-    virtual std::any visitEntityWith(OpenCMLParser::EntityWithContext *context) = 0;
-
     virtual std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context) = 0;
 
-    virtual std::any visitRelaExpr(OpenCMLParser::RelaExprContext *context) = 0;
+    virtual std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) = 0;
 
-    virtual std::any visitAddExpr(OpenCMLParser::AddExprContext *context) = 0;
+    virtual std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) = 0;
 
-    virtual std::any visitMultiExpr(OpenCMLParser::MultiExprContext *context) = 0;
+    virtual std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) = 0;
+
+    virtual std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) = 0;
+
+    virtual std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) = 0;
+
+    virtual std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) = 0;
+
+    virtual std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) = 0;
 
     virtual std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) = 0;
 
-    virtual std::any visitPrimExpr(OpenCMLParser::PrimExprContext *context) = 0;
+    virtual std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context) = 0;
+
+    virtual std::any visitWithExpr(OpenCMLParser::WithExprContext *context) = 0;
+
+    virtual std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context) = 0;
+
+    virtual std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) = 0;
 
     virtual std::any visitLiteral(OpenCMLParser::LiteralContext *context) = 0;
 
     virtual std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) = 0;
 
-    virtual std::any visitUnaryType(OpenCMLParser::UnaryTypeContext *context) = 0;
+    virtual std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context) = 0;
 
     virtual std::any visitAtomType(OpenCMLParser::AtomTypeContext *context) = 0;
 
     virtual std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) = 0;
 
-    virtual std::any visitPrimType(OpenCMLParser::PrimTypeContext *context) = 0;
+    virtual std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) = 0;
 
     virtual std::any visitStructType(OpenCMLParser::StructTypeContext *context) = 0;
 
