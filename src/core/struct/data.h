@@ -26,13 +26,13 @@
 
 class UnsupportedConvError : public std::exception {};
 
-class ValueConvError : public std::exception {
+class DataConvError : public std::exception {
   private:
     std::string message_;
 
   public:
-    ValueConvError() = delete;
-    ValueConvError(const std::string &message) { message_ = "Data conversion failed: " + message; }
+    DataConvError() = delete;
+    DataConvError(const std::string &message) { message_ = "Data conversion failed: " + message; }
 
     virtual const char *what() const noexcept override { return message_.c_str(); }
 };
@@ -79,30 +79,30 @@ class Data : public std::enable_shared_from_this<Data> {
 // using data_ptr_t = std::shared_ptr<Data>;
 // using data_wptr_t = std::weak_ptr<Data>;
 
-class DanglingValue : public Data {
+class RefData : public Data {
   private:
     std::string ref_;
 
   public:
-    DanglingValue(const std::string &ref) : Data(refTypePtr), ref_(ref) {}
-    virtual ~DanglingValue() = default;
+    RefData(const std::string &ref) : Data(refTypePtr), ref_(ref) {}
+    virtual ~RefData() = default;
 
     const std::string &ref() const { return ref_; }
 
     virtual bool equals(const data_ptr_t &other) const override { return false; }
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
-        throw ValueConvError("Cannot convert DanglingValue to " + typeCodeToString(target->code()));
+        throw DataConvError("Cannot convert RefData to " + typeCodeToString(target->code()));
     }
-    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<DanglingValue>(ref_); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<RefData>(ref_); }
     virtual const std::string toString() const override { return "DREF<" + ref_ + ">"; }
 };
 
-using dang_value_ptr_t = std::shared_ptr<DanglingValue>;
+using ref_data_ptr_t = std::shared_ptr<RefData>;
 
-class NullValue : public Data {
+class NullData : public Data {
   public:
-    NullValue(type_ptr_t type = voidTypePtr) : Data(type) {}
-    virtual ~NullValue() = default;
+    NullData(type_ptr_t type = voidTypePtr) : Data(type) {}
+    virtual ~NullData() = default;
 
     virtual bool equals(const data_ptr_t &other) const override { return true; }
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
@@ -110,25 +110,25 @@ class NullValue : public Data {
             // same type, no need to convert
             return shared_from_this();
         }
-        throw ValueConvError("Cannot convert null to " + typeCodeToString(target->code()));
+        throw DataConvError("Cannot convert null to " + typeCodeToString(target->code()));
     }
-    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<NullValue>(); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<NullData>(); }
     virtual const std::string toString() const override { return "null"; }
 };
 
-class StringValue;
+class StringData;
 
-template <typename T> class PrimValue : public Data {
+template <typename T> class PrimData : public Data {
   private:
     T data_;
 
-    template <typename Dest, typename Src> std::shared_ptr<PrimValue<Dest>> convertAndMakeShared(const Src &value) {
-        return std::make_shared<PrimValue<Dest>>(static_cast<Dest>(value));
+    template <typename Dest, typename Src> std::shared_ptr<PrimData<Dest>> convertAndMakeShared(const Src &data) {
+        return std::make_shared<PrimData<Dest>>(static_cast<Dest>(data));
     }
 
   public:
-    PrimValue() = delete;
-    PrimValue(const T &data) : Data(), data_(data) {
+    PrimData() = delete;
+    PrimData(const T &data) : Data(), data_(data) {
         if constexpr (std::is_same_v<T, int32_t>) {
             type_ = int32TypePtr;
         } else if constexpr (std::is_same_v<T, int64_t>) {
@@ -149,7 +149,7 @@ template <typename T> class PrimValue : public Data {
     const T &data() const { return data_; }
 
     virtual bool equals(const data_ptr_t &other) const override {
-        if (auto o = std::dynamic_pointer_cast<PrimValue<T>>(other)) {
+        if (auto o = std::dynamic_pointer_cast<PrimData<T>>(other)) {
             return data_ == o->data_;
         }
         return false;
@@ -185,17 +185,17 @@ template <typename T> class PrimValue : public Data {
                     const bool &b = data_;
                     switch (target->code()) {
                     case TypeCode::INT32:
-                        return std::make_shared<PrimValue<int32_t>>(static_cast<int32_t>(b));
+                        return std::make_shared<PrimData<int32_t>>(static_cast<int32_t>(b));
                     case TypeCode::INT64:
-                        return std::make_shared<PrimValue<int64_t>>(static_cast<int64_t>(b));
+                        return std::make_shared<PrimData<int64_t>>(static_cast<int64_t>(b));
                     case TypeCode::FLOAT:
-                        return std::make_shared<PrimValue<float>>(static_cast<float>(b));
+                        return std::make_shared<PrimData<float>>(static_cast<float>(b));
                     case TypeCode::DOUBLE:
-                        return std::make_shared<PrimValue<double>>(static_cast<double>(b));
+                        return std::make_shared<PrimData<double>>(static_cast<double>(b));
                     case TypeCode::STRING:
-                        return std::make_shared<StringValue>(b ? "true" : "false");
+                        return std::make_shared<StringData>(b ? "true" : "false");
                     case TypeCode::CHAR:
-                        return std::make_shared<PrimValue<char>>(static_cast<char>(b));
+                        return std::make_shared<PrimData<char>>(static_cast<char>(b));
 
                     default:
                         throw UnsupportedConvError();
@@ -204,17 +204,17 @@ template <typename T> class PrimValue : public Data {
                     const char &c = data_;
                     switch (target->code()) {
                     case TypeCode::INT32:
-                        return std::make_shared<PrimValue<int32_t>>(static_cast<int32_t>(c));
+                        return std::make_shared<PrimData<int32_t>>(static_cast<int32_t>(c));
                     case TypeCode::INT64:
-                        return std::make_shared<PrimValue<int64_t>>(static_cast<int64_t>(c));
+                        return std::make_shared<PrimData<int64_t>>(static_cast<int64_t>(c));
                     case TypeCode::FLOAT:
-                        return std::make_shared<PrimValue<float>>(static_cast<float>(c));
+                        return std::make_shared<PrimData<float>>(static_cast<float>(c));
                     case TypeCode::DOUBLE:
-                        return std::make_shared<PrimValue<double>>(static_cast<double>(c));
+                        return std::make_shared<PrimData<double>>(static_cast<double>(c));
                     case TypeCode::STRING:
-                        return std::make_shared<StringValue>(std::string(1, c));
+                        return std::make_shared<StringData>(std::string(1, c));
                     case TypeCode::BOOL:
-                        return std::make_shared<PrimValue<bool>>(c != 0);
+                        return std::make_shared<PrimData<bool>>(c != 0);
 
                     default:
                         throw UnsupportedConvError();
@@ -224,29 +224,29 @@ template <typename T> class PrimValue : public Data {
                 }
             }
         } catch (const UnsupportedConvError &e) {
-            throw ValueConvError("Cannot convert " + typeCodeToString(type_->code()) + " to " +
-                                 typeCodeToString(target->code()));
+            throw DataConvError("Cannot convert " + typeCodeToString(type_->code()) + " to " +
+                                typeCodeToString(target->code()));
         } catch (const std::exception &e) {
-            throw ValueConvError(e.what());
+            throw DataConvError(e.what());
         }
-        throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     }
-    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimValue<T>>(data_); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimData<T>>(data_); }
     virtual const std::string toString() const override { return std::to_string(data_); }
 };
 
-class StringValue : public Data {
+class StringData : public Data {
   private:
     std::string data_;
 
   public:
-    StringValue() = delete;
-    StringValue(const std::string &data) : Data(stringTypePtr), data_(data) {}
+    StringData() = delete;
+    StringData(const std::string &data) : Data(stringTypePtr), data_(data) {}
 
     const std::string &data() const { return data_; }
 
     virtual bool equals(const data_ptr_t &other) const override {
-        if (auto o = std::dynamic_pointer_cast<StringValue>(other)) {
+        if (auto o = std::dynamic_pointer_cast<StringData>(other)) {
             return data_ == o->data_;
         }
         return false;
@@ -261,7 +261,7 @@ class StringValue : public Data {
             if (target->primitive()) {
                 switch (target->code()) {
                 case TypeCode::BOOL: {
-                    return std::make_shared<PrimValue<bool>>(data_.length() > 0);
+                    return std::make_shared<PrimData<bool>>(data_.length() > 0);
                 }
 
                 default:
@@ -269,25 +269,25 @@ class StringValue : public Data {
                 }
             }
         } catch (const UnsupportedConvError &e) {
-            throw ValueConvError("Cannot convert " + typeCodeToString(type_->code()) + " to " +
-                                 typeCodeToString(target->code()));
+            throw DataConvError("Cannot convert " + typeCodeToString(type_->code()) + " to " +
+                                typeCodeToString(target->code()));
         } catch (const std::exception &e) {
-            throw ValueConvError(e.what());
+            throw DataConvError(e.what());
         }
-        throw ValueConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     }
-    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<StringValue>(data_); }
+    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<StringData>(data_); }
     virtual const std::string toString() const override {
         std::regex re("\\n");
         return "\"" + std::regex_replace(data_, re, "\\n") + "\"";
     }
 };
 
-class StructValue : public Data {
+class StructData : public Data {
   public:
-    StructValue() = default;
-    StructValue(type_ptr_t type) : Data(type) {}
-    virtual ~StructValue() = default;
+    StructData() = default;
+    StructData(type_ptr_t type) : Data(type) {}
+    virtual ~StructData() = default;
 
     virtual bool equals(const data_ptr_t &other) const override = 0;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
@@ -295,16 +295,16 @@ class StructValue : public Data {
     virtual const std::string toString() const override = 0;
 };
 
-class SetValue : public StructValue {
+class SetData : public StructData {
   private:
     std::unordered_set<data_ptr_t> data_;
 
   public:
-    SetValue(type_ptr_t elType) : StructValue(std::make_shared<SetType>(elType)) {}
-    SetValue(type_ptr_t elType, data_list_t data) : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
-    SetValue(type_ptr_t elType, const std::unordered_set<data_ptr_t> &data)
-        : StructValue(std::make_shared<SetType>(elType)), data_(data) {}
-    virtual ~SetValue() = default;
+    SetData(type_ptr_t elType) : StructData(std::make_shared<SetType>(elType)) {}
+    SetData(type_ptr_t elType, data_list_t data) : StructData(std::make_shared<SetType>(elType)), data_(data) {}
+    SetData(type_ptr_t elType, const std::unordered_set<data_ptr_t> &data)
+        : StructData(std::make_shared<SetType>(elType)), data_(data) {}
+    virtual ~SetData() = default;
 
     bool add(const data_ptr_t &e) { return data_.insert(e).second; }
     bool del(const data_ptr_t &e) { return data_.erase(e) > 0; }
@@ -315,19 +315,17 @@ class SetValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class MapValue : public StructValue {
+class MapData : public StructData {
   private:
     std::unordered_map<data_ptr_t, data_ptr_t> data_;
 
   public:
-    MapValue(type_ptr_t keyType, type_ptr_t valueType) : StructValue(std::make_shared<MapType>(keyType, valueType)) {}
-    MapValue(type_ptr_t keyType, type_ptr_t valueType, const std::unordered_map<data_ptr_t, data_ptr_t> &data)
-        : StructValue(std::make_shared<MapType>(keyType, valueType)), data_(data) {}
-    virtual ~MapValue() = default;
+    MapData(type_ptr_t keyType, type_ptr_t dataType) : StructData(std::make_shared<MapType>(keyType, dataType)) {}
+    MapData(type_ptr_t keyType, type_ptr_t dataType, const std::unordered_map<data_ptr_t, data_ptr_t> &data)
+        : StructData(std::make_shared<MapType>(keyType, dataType)), data_(data) {}
+    virtual ~MapData() = default;
 
-    bool set(const data_ptr_t &key, const data_ptr_t &value) {
-        return data_.insert(std::make_pair(key, value)).second;
-    }
+    bool set(const data_ptr_t &key, const data_ptr_t &data) { return data_.insert(std::make_pair(key, data)).second; }
     bool del(const data_ptr_t &key) { return data_.erase(key) > 0; }
     data_ptr_t get(const data_ptr_t &key) const {
         auto it = data_.find(key);
@@ -343,15 +341,15 @@ class MapValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class DictValue : public StructValue {
+class DictData : public StructData {
   private:
     std::unordered_map<std::string, data_ptr_t> data_;
 
   public:
-    DictValue() : StructValue(std::make_shared<DictType>()) {}
-    DictValue(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
-    DictValue(const std::unordered_map<std::string, data_ptr_t> &data);
-    virtual ~DictValue() = default;
+    DictData() : StructData(std::make_shared<DictType>()) {}
+    DictData(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
+    DictData(const std::unordered_map<std::string, data_ptr_t> &data);
+    virtual ~DictData() = default;
 
     bool add(const std::string &key, const data_ptr_t &e);
 
@@ -375,15 +373,15 @@ class DictValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class ListValue : public StructValue {
+class ListData : public StructData {
   private:
     std::vector<data_ptr_t> data_;
 
   public:
-    ListValue() : StructValue(listTypePtr), data_() {}
-    ListValue(data_list_t data) : StructValue(listTypePtr), data_(data) {}
-    ListValue(const std::vector<data_ptr_t> &data) : StructValue(listTypePtr), data_(data) {}
-    virtual ~ListValue() = default;
+    ListData() : StructData(listTypePtr), data_() {}
+    ListData(data_list_t data) : StructData(listTypePtr), data_(data) {}
+    ListData(const std::vector<data_ptr_t> &data) : StructData(listTypePtr), data_(data) {}
+    virtual ~ListData() = default;
 
     void pushBack(const data_ptr_t &e) { data_.push_back(e); }
     data_ptr_t popBack() {
@@ -415,26 +413,26 @@ class ListValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class TupleValue : public StructValue {
+class TupleData : public StructData {
   private:
     std::vector<data_ptr_t> data_;
 
   public:
-    TupleValue(data_list_t data) : data_(data) {
+    TupleData(data_list_t data) : data_(data) {
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
             types.push_back(d->type());
         }
         type_ = std::make_shared<TupleType>(types);
     }
-    TupleValue(const std::vector<data_ptr_t> &data) : data_(data) {
+    TupleData(const std::vector<data_ptr_t> &data) : data_(data) {
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
             types.push_back(d->type());
         }
         type_ = std::make_shared<TupleType>(types);
     }
-    virtual ~TupleValue() = default;
+    virtual ~TupleData() = default;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -442,18 +440,16 @@ class TupleValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class ArrayValue : public StructValue {
+class ArrayData : public StructData {
   private:
     std::vector<data_ptr_t> data_;
 
   public:
-    ArrayValue(const std::shared_ptr<ArrayType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
+    ArrayData(const std::shared_ptr<ArrayType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
         type_ = type_;
     }
-    ArrayValue(const std::shared_ptr<ArrayType> &type, data_list_t data = {}) : data_(data) {
-        type_ = type_;
-    }
-    ArrayValue(type_ptr_t type, size_t length, const std::vector<data_ptr_t> &data) : data_(data) {
+    ArrayData(const std::shared_ptr<ArrayType> &type, data_list_t data = {}) : data_(data) { type_ = type_; }
+    ArrayData(type_ptr_t type, size_t length, const std::vector<data_ptr_t> &data) : data_(data) {
         // TODO: check element TYPES
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
@@ -462,7 +458,7 @@ class ArrayValue : public StructValue {
         type_ = std::make_shared<ArrayType>(type, length);
         data_.resize(length);
     }
-    ArrayValue(type_ptr_t type, size_t length, data_list_t data = {}) : data_(data) {
+    ArrayData(type_ptr_t type, size_t length, data_list_t data = {}) : data_(data) {
         // TODO: check element TYPES
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
@@ -471,7 +467,7 @@ class ArrayValue : public StructValue {
         type_ = std::make_shared<ArrayType>(type, length);
         data_.resize(length);
     }
-    virtual ~ArrayValue() = default;
+    virtual ~ArrayData() = default;
 
     data_ptr_t get(size_t index) const {
         if (index >= data_.size()) {
@@ -495,18 +491,16 @@ class ArrayValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class VectorValue : public StructValue {
+class VectorData : public StructData {
   private:
     std::vector<data_ptr_t> data_;
 
   public:
-    VectorValue(const std::shared_ptr<VectorType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
+    VectorData(const std::shared_ptr<VectorType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
         type_ = type_;
     }
-    VectorValue(const std::shared_ptr<VectorType> &type, data_list_t data = {}) : data_(data) {
-        type_ = type_;
-    }
-    VectorValue(type_ptr_t type, const std::vector<data_ptr_t> &data) : data_(data) {
+    VectorData(const std::shared_ptr<VectorType> &type, data_list_t data = {}) : data_(data) { type_ = type_; }
+    VectorData(type_ptr_t type, const std::vector<data_ptr_t> &data) : data_(data) {
         // TODO: check element TYPES
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
@@ -514,7 +508,7 @@ class VectorValue : public StructValue {
         }
         type_ = std::make_shared<VectorType>(type);
     }
-    VectorValue(type_ptr_t type, data_list_t data = {}) : data_(data) {
+    VectorData(type_ptr_t type, data_list_t data = {}) : data_(data) {
         // TODO: check element TYPES
         std::vector<type_ptr_t> types;
         for (const auto &d : data) {
@@ -522,7 +516,7 @@ class VectorValue : public StructValue {
         }
         type_ = std::make_shared<VectorType>(type);
     }
-    virtual ~VectorValue() = default;
+    virtual ~VectorData() = default;
 
     void pushBack(const data_ptr_t &e) { data_.push_back(e); }
     data_ptr_t popBack() {
@@ -556,26 +550,25 @@ class VectorValue : public StructValue {
     virtual const std::string toString() const override;
 };
 
-class NamedTupleValue : public Data {
+class ParamsData : public Data {
   private:
     bool typeResolved_ = false;
     std::vector<data_ptr_t> indexData_;
     std::map<std::string, data_ptr_t> namedData_;
 
   public:
-    NamedTupleValue() : Data(std::make_shared<NamedTupleType>()) {}
-    NamedTupleValue(const std::vector<data_ptr_t> &indexData,
-                    const std::map<std::string, data_ptr_t> &namedData)
-        : Data(std::make_shared<NamedTupleType>()), indexData_(indexData), namedData_(namedData) {
-            std::shared_ptr<NamedTupleType> type = std::dynamic_pointer_cast<NamedTupleType>(type_);
-            for (const auto &e : indexData) {
-                type->add("", e->type(), nullptr);
-            }
-            for (const auto &e : namedData) {
-                type->add(e.first, e.second->type(), nullptr);
-            }
+    ParamsData() : Data(std::make_shared<ParamsType>()) {}
+    ParamsData(const std::vector<data_ptr_t> &indexData, const std::map<std::string, data_ptr_t> &namedData)
+        : Data(std::make_shared<ParamsType>()), indexData_(indexData), namedData_(namedData) {
+        std::shared_ptr<ParamsType> type = std::dynamic_pointer_cast<ParamsType>(type_);
+        for (const auto &e : indexData) {
+            type->add("", e->type(), nullptr);
         }
-    virtual ~NamedTupleValue() = default;
+        for (const auto &e : namedData) {
+            type->add(e.first, e.second->type(), nullptr);
+        }
+    }
+    virtual ~ParamsData() = default;
 
     bool setType(type_ptr_t type);
 
@@ -587,14 +580,14 @@ class NamedTupleValue : public Data {
     virtual const std::string toString() const override;
 };
 
-class TensorValue : public StructValue {
+class TensorData : public StructData {
   private:
     data_ptr_t data_; // TODO: support multi-dimensional tensor
 
   public:
-    TensorValue(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-        : StructValue(std::make_shared<TensorType>(elementType, shape)) {}
-    virtual ~TensorValue() = default;
+    TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape)
+        : StructData(std::make_shared<TensorType>(elementType, shape)) {}
+    virtual ~TensorData() = default;
 
     data_ptr_t at(const std::vector<size_t> &index) const;
 

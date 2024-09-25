@@ -18,4 +18,6 @@
 
 #include "operator.h"
 
-std::unordered_map<std::string, Operator> operators;
+using namespace std;
+
+unordered_map<string, Operator> operators;

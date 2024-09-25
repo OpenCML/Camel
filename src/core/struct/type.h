@@ -46,7 +46,7 @@ enum class TypeCode {
     UNION = 0b01'000110,
     VECTOR = 0b01'000111,
     TENSOR = 0b01'001000,
-    NAMED_TUPLE = 0b01'001001,
+    PARAMS = 0b01'001001,
     // special types
     ANY = 0b10'000000,
     VOID = 0b10'000001,
@@ -75,7 +75,7 @@ class ListType;
 class DictType;
 class ArrayType;
 class UnionType;
-class NamedTupleType;
+class ParamsType;
 class VectorType;
 class TensorType;
 
@@ -585,12 +585,12 @@ class TensorType : public StructType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-class NamedTupleType : public StructType {
+class ParamsType : public StructType {
   private:
     std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> elements_;
 
   public:
-    NamedTupleType() : StructType(TypeCode::NAMED_TUPLE) {}
+    ParamsType() : StructType(TypeCode::PARAMS) {}
 
     std::string toString() const override;
 
@@ -627,16 +627,16 @@ class NamedTupleType : public StructType {
 class FunctorType : public SpecialType {
   private:
     std::unordered_set<FunctionModifier> modifiers_;
-    std::shared_ptr<NamedTupleType> withType_;
-    std::shared_ptr<NamedTupleType> paramsType_;
+    std::shared_ptr<ParamsType> withType_;
+    std::shared_ptr<ParamsType> paramsType_;
     std::unordered_map<std::string, bool> innerIdents_;
     bool hasSideEffect_ = false;
     type_ptr_t returnType_;
 
   public:
     FunctorType() = delete;
-    FunctorType(const std::shared_ptr<NamedTupleType> &withType = nullptr,
-                const std::shared_ptr<NamedTupleType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
+    FunctorType(const std::shared_ptr<ParamsType> &withType = nullptr,
+                const std::shared_ptr<ParamsType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
         : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
 
     void addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }

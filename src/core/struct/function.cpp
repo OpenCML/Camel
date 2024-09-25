@@ -21,7 +21,9 @@
 
 #include <stdexcept>
 
-FunctionModifier str2modifier(const std::string &str) {
+using namespace std;
+
+FunctionModifier str2modifier(const string &str) {
     if (str == "inner") {
         return FunctionModifier::INNER;
     } else if (str == "outer") {
@@ -33,11 +35,11 @@ FunctionModifier str2modifier(const std::string &str) {
     } else if (str == "sync") {
         return FunctionModifier::SYNC;
     } else {
-        throw std::runtime_error("Unknown modifier: " + str);
+        throw runtime_error("Unknown modifier: " + str);
     }
 }
 
-std::string modifier2str(FunctionModifier modifier) {
+string modifier2str(FunctionModifier modifier) {
     switch (modifier) {
     case FunctionModifier::INNER:
         return "inner";
@@ -50,7 +52,7 @@ std::string modifier2str(FunctionModifier modifier) {
     case FunctionModifier::SYNC:
         return "sync";
     default:
-        throw std::runtime_error("Unknown modifier: " + std::to_string(static_cast<int>(modifier)));
+        throw runtime_error("Unknown modifier: " + to_string(static_cast<int>(modifier)));
     }
 }
 

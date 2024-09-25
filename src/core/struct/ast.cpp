@@ -17,53 +17,55 @@
  */
 
 #include <iomanip>
-#include <iostream>
 #include <iterator>
 #include <sstream>
 
 #include "ast.h"
 
-std::string pointerToHex(const void *ptr) {
-    std::stringstream ss;
-    ss << "0x" << std::hex << std::setw(sizeof(void *) * 2) << std::setfill('0') << reinterpret_cast<uintptr_t>(ptr);
+using namespace std;
+using namespace ast;
+
+string pointerToHex(const void *ptr) {
+    stringstream ss;
+    ss << "0x" << hex << setw(sizeof(void *) * 2) << setfill('0') << reinterpret_cast<uintptr_t>(ptr);
     return ss.str();
 }
 
-const std::string ASTNodeLoad::typeStr() const {
+const string Load::typeStr() const {
     switch (type_) {
-    case ASTNodeType::DATA:
+    case NodeType::DATA:
         return "DATA";
-    case ASTNodeType::VARI:
+    case NodeType::VARI:
         return "VARI";
-    case ASTNodeType::TYPE:
+    case NodeType::TYPE:
         return "TYPE";
-    case ASTNodeType::FUNC:
+    case NodeType::FUNC:
         return "FUNC";
-    case ASTNodeType::NREF:
+    case NodeType::NREF:
         return "NREF";
-    case ASTNodeType::DREF:
+    case NodeType::DREF:
         return "DREF";
-    case ASTNodeType::WAIT:
+    case NodeType::WAIT:
         return "WAIT";
-    case ASTNodeType::ANNO:
+    case NodeType::ANNO:
         return "ANNO";
-    case ASTNodeType::LINK:
+    case NodeType::LINK:
         return "LINK";
-    case ASTNodeType::WITH:
+    case NodeType::WITH:
         return "WITH";
-    case ASTNodeType::RETN:
+    case NodeType::RETN:
         return "RETN";
-    case ASTNodeType::EXEC:
+    case NodeType::EXEC:
         return "EXEC";
-    case ASTNodeType::FROM:
+    case NodeType::FROM:
         return "FROM";
     default:
         return "REF";
     }
 }
 
-const std::string DataASTLoad::toString() const {
-    std::stringstream ss;
+const string DataLoad::toString() const {
+    stringstream ss;
     ss << "DATA: " << pointerToHex(data_.get()) << ", ";
     const auto &type = data_->type();
     if (type) {
@@ -75,33 +77,33 @@ const std::string DataASTLoad::toString() const {
     return ss.str();
 }
 
-const std::string TypeASTLoad::toString() const {
-    std::stringstream ss;
+const string TypeLoad::toString() const {
+    stringstream ss;
     ss << "TYPE: " << type_->toString();
     return ss.str();
 }
 
-const std::string NRefASTLoad::toString() const { return "NREF: " + ident_; }
+const string NRefLoad::toString() const { return "NREF: " + ident_; }
 
-const std::string DRefASTLoad::toString() const { return "DREF: " + ident_; }
+const string DRefLoad::toString() const { return "DREF: " + ident_; }
 
-const std::string WaitASTLoad::toString() const {
-    std::ostringstream oss;
+const string WaitLoad::toString() const {
+    ostringstream oss;
     oss << "WAIT: ";
     if (!idents_.empty()) {
-        std::copy(idents_.begin(), idents_.end() - 1, std::ostream_iterator<std::string>(oss, ", "));
+        copy(idents_.begin(), idents_.end() - 1, ostream_iterator<string>(oss, ", "));
         oss << idents_.back();
     }
     return oss.str();
 }
 
-const std::string FromASTLoad::toString() const {
-    std::ostringstream oss;
+const string FromLoad::toString() const {
+    ostringstream oss;
     oss << "FROM: '" << path_ << "' USE { ";
     if (idents_.empty()) {
         oss << "*";
     } else {
-        std::copy(idents_.begin(), idents_.end() - 1, std::ostream_iterator<std::string>(oss, ", "));
+        copy(idents_.begin(), idents_.end() - 1, ostream_iterator<string>(oss, ", "));
         oss << idents_.back();
     }
     oss << " }";

@@ -1,16 +1,1 @@
-atomic sync func placeComponents(
-    startIndex: Number,
-    count: Number, // best
-    dist: Point,
-    // node
-    pos: Point
-): Void {
-    let i = startIndex; // test
-    for(i, { i < startIndex + count }, /* block cmt */ { i += 1 }) {
-        let laser = LaserCW@[pos['x'], pos['y']];
-        let laserRect = laser['meta']['rect'];
-        let analyzer = Analyzer@[pos['x'] + dist['x'] + laserRect['width'], pos['y']];
-        laser()->analyzer;
-        pos['y'] += pos['y'] + dist['y'] + laserRect['height'];
-    }
-};
+<Int, Int>{ [1]: 2 };

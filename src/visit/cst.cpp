@@ -18,7 +18,9 @@
 
 #include "cst.h"
 
-std::any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, std::string nodeName) {
+using namespace std;
+
+any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
     bool isLast = false;
     auto children = context->children;
 
@@ -33,9 +35,9 @@ std::any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, std::string n
         }
     }
 
-    auto getHead = [=](bool last) -> std::string {
+    auto getHead = [=](bool last) -> string {
         int i = 0;
-        std::string ret = "";
+        string ret = "";
         while (i < depth - 1) {
             if (visible[i])
                 ret += "|  ";
@@ -52,14 +54,14 @@ std::any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, std::string n
         return ret;
     };
 
-    std::cout << getHead(isLast);
-    std::cout << nodeName;
+    cout << getHead(isLast);
+    cout << nodeName;
     if (children.size() == 0) {
-        std::string raw = context->getText();
-        std::string text = std::regex_replace(raw, std::regex(R"(\n)"), "\\n");
-        std::cout << " " << text;
+        string raw = context->getText();
+        string text = regex_replace(raw, regex(R"(\n)"), "\\n");
+        cout << " " << text;
     }
-    std::cout << std::endl;
+    cout << endl;
 
     if (depth > 0)
         for (int i = depth; i < visible.size(); i++)
@@ -67,11 +69,11 @@ std::any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, std::string n
 
     depth++;
 
-    std::any result = defaultResult();
+    any result = defaultResult();
     size_t n = children.size();
     for (size_t i = 0; i < n; i++) {
         if (children[i]->getTreeType() == antlr4::tree::ParseTreeType::RULE) {
-            std::any childResult = context->children[i]->accept(this);
+            any childResult = context->children[i]->accept(this);
             result = aggregateResult(std::move(result), std::move(childResult));
         } else {
             dumpCST(context->children[i], "");

@@ -25,24 +25,26 @@
 #include <any>
 #include <list>
 
+namespace GraphIR {
+
 enum class NodeType { OPERATOR, DATA, FUNCTOR, GRAPH };
 
-class GraphNode;
+class Node;
 
-using node_ptr_t = std::shared_ptr<GraphNode>;
-using node_wptr_t = std::weak_ptr<GraphNode>;
+using node_ptr_t = std::shared_ptr<Node>;
+using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;
 using node_vec_t = std::vector<node_ptr_t>;
 
-class GraphNode {
+class Node {
   protected:
     NodeType type_;
     node_vec_t inputs_;
     node_vec_t outputs_;
 
   public:
-    GraphNode() = default;
-    virtual ~GraphNode() = default;
+    Node() = default;
+    virtual ~Node() = default;
 
     NodeType type() const { return type_; }
 
@@ -58,7 +60,7 @@ class GraphNode {
     }
 };
 
-class Graph : public GraphNode {
+class Graph : public Node {
     node_vec_t nodes_;
     node_vec_t params_;
     node_vec_t superParams_;
@@ -83,24 +85,24 @@ class Graph : public GraphNode {
 
 using graph_ptr_t = std::shared_ptr<Graph>;
 
-class DataGraphNode : public GraphNode {
+class DataNode : public Node {
     data_ptr_t data_;
 
   public:
-    DataGraphNode(const data_ptr_t &data) : data_(data) { type_ = NodeType::DATA; }
-    ~DataGraphNode() = default;
+    DataNode(const data_ptr_t &data) : data_(data) { type_ = NodeType::DATA; }
+    ~DataNode() = default;
 };
 
-inline std::shared_ptr<DataGraphNode> data_graph_node_ptr_cast(const node_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<DataGraphNode>(ptr);
+inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<DataNode>(ptr);
 }
 
-class FuncGraphNode : public GraphNode {
+class FunctorNode : public Node {
     func_ptr_t func_;
     graph_ptr_t graph_;
 
   public:
-    FuncGraphNode(const func_ptr_t &func) : func_(func) {
+    FunctorNode(const func_ptr_t &func) : func_(func) {
         type_ = NodeType::FUNCTOR;
         inputs_.resize(2, nullptr);
     }
@@ -111,21 +113,24 @@ class FuncGraphNode : public GraphNode {
     node_ptr_t &superParams() { return inputs_[0]; }
     node_ptr_t &params() { return inputs_[1]; }
 
-    ~FuncGraphNode() = default;
+    ~FunctorNode() = default;
 };
 
-inline std::shared_ptr<FuncGraphNode> func_graph_node_ptr_cast(const node_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<FuncGraphNode>(ptr);
+inline std::shared_ptr<FunctorNode> func_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<FunctorNode>(ptr);
 }
 
-class OpGraphNode : public GraphNode {
+class OperatorNode : public Node {
     Operator *operation_;
 
   public:
-    OpGraphNode(Operator *operation) : operation_(operation) { type_ = NodeType::OPERATOR; }
-    ~OpGraphNode() = default;
+    OperatorNode(Operator *operation) : operation_(operation) { type_ = NodeType::OPERATOR; }
+    ~OperatorNode() = default;
 };
 
-inline std::shared_ptr<OpGraphNode> op_graph_node_ptr_cast(const node_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<OpGraphNode>(ptr);
+inline std::shared_ptr<OperatorNode> op_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<OperatorNode>(ptr);
 }
+} // namespace GraphIR
+
+namespace gir = GraphIR;

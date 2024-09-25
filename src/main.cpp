@@ -139,10 +139,20 @@ int main(int argc, char *argv[]) {
 
         if (!hasParseError) {
             initTypes();
-            ast_ptr_t ast = nullptr;
-            auto visitor = ASTConstructor();
+            ast::node_ptr_t ast = nullptr;
+            auto visitor = ast::Constructor();
             try {
                 ast = visitor.construct(tree);
+                auto &warns = visitor.warns();
+                while (!warns.empty()) {
+                    const auto &warning = warns.front();
+                    if (errorFormat != "json") {
+                        error << warning.what() << std::endl;
+                    } else {
+                        os << warning.json() << std::endl;
+                    }
+                    warns.pop();
+                }
             } catch (BuildException &e) {
                 if (errorFormat != "json") {
                     error << e.what() << std::endl;
@@ -157,6 +167,7 @@ int main(int argc, char *argv[]) {
                     return 1;
                 } else {
                     os << "{"
+                       << "\"type\": \"error\", "
                        << "\"filename\": \"" << targetFile << "\", "
                        << "\"line\": 0, "
                        << "\"column\": 0, "
