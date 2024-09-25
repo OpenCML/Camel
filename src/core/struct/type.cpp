@@ -24,6 +24,8 @@
 #include "functor.h"
 #include "type.h"
 
+using namespace std;
+
 type_ptr_t int32TypePtr;
 type_ptr_t int64TypePtr;
 type_ptr_t floatTypePtr;
@@ -55,7 +57,7 @@ const signed char primeTypeConvMatrix[7][7] = {
     {01, 01, 01, 01, 01, 01, 01}  // CHAR
 };
 
-std::string typeCodeToString(TypeCode code) {
+string typeCodeToString(TypeCode code) {
     switch (code) {
         // primitive types
     case TypeCode::INT32:
@@ -332,8 +334,8 @@ TypeConv ArrayType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-std::string TupleType::toString() const {
-    std::string result = "Tuple<";
+string TupleType::toString() const {
+    string result = "Tuple<";
     for (const auto &type : types_) {
         if (type) {
             result += type->toString() + ", ";
@@ -580,8 +582,8 @@ TypeConv ListType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-std::string ParamsType::toString() const {
-    std::string result = "Params<";
+string ParamsType::toString() const {
+    string result = "Params<";
     for (const auto &tuple : elements_) {
         auto &[name, type, value] = tuple;
         result += (name.empty() ? "" : name + ": ") + (type ? type->toString() : "NULL");
@@ -678,8 +680,8 @@ TypeConv ParamsType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-std::string FunctorType::toString() const {
-    std::string result = "";
+string FunctorType::toString() const {
+    string result = "";
     for (const auto &modifier : modifiers_) {
         result += modifier2str(modifier) + " ";
     }
@@ -770,13 +772,13 @@ TypeConv FunctorType::convertibility(const Type &other) const {
 
 void initTypes() {
     // initialize primitive types
-    int32TypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<PrimType>(TypeCode::INT32));
-    int64TypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<PrimType>(TypeCode::INT64));
-    floatTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<PrimType>(TypeCode::FLOAT));
-    doubleTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<PrimType>(TypeCode::DOUBLE));
-    stringTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<PrimType>(TypeCode::STRING));
-    boolTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<PrimType>(TypeCode::BOOL));
-    charTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<PrimType>(TypeCode::CHAR));
+    int32TypePtr = dynamic_pointer_cast<Type>(make_shared<PrimType>(TypeCode::INT32));
+    int64TypePtr = dynamic_pointer_cast<Type>(make_shared<PrimType>(TypeCode::INT64));
+    floatTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimType>(TypeCode::FLOAT));
+    doubleTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimType>(TypeCode::DOUBLE));
+    stringTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimType>(TypeCode::STRING));
+    boolTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimType>(TypeCode::BOOL));
+    charTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimType>(TypeCode::CHAR));
 
     // initialize alias types
     intTypePtr = int32TypePtr;
@@ -784,13 +786,13 @@ void initTypes() {
     numberTypePtr = doubleTypePtr;
 
     // initialize structured types
-    listTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<ListType>());
+    listTypePtr = dynamic_pointer_cast<Type>(make_shared<ListType>());
 
     // initialize special types
-    anyTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::ANY));
-    voidTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::VOID));
-    functorTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<FunctorType>(nullptr, nullptr, anyTypePtr));
+    anyTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::ANY));
+    voidTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::VOID));
+    functorTypePtr = dynamic_pointer_cast<Type>(make_shared<FunctorType>(nullptr, nullptr, anyTypePtr));
 
     // initialize unknown type
-    refTypePtr = std::dynamic_pointer_cast<Type>(std::make_shared<SpecialType>(TypeCode::REF));
+    refTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::REF));
 }

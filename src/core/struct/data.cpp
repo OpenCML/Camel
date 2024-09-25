@@ -19,6 +19,8 @@
 #include "data.h"
 #include "entity.h"
 
+using namespace std;
+
 /*
 SetData
 */
@@ -47,18 +49,18 @@ data_ptr_t SetData::convert(type_ptr_t target, bool inplace) {
 }
 
 data_ptr_t SetData::clone(bool deep) const {
-    std::unordered_set<data_ptr_t> cloned;
+    unordered_set<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.insert(e);
     }
-    return std::make_shared<SetData>(type_, cloned);
+    return make_shared<SetData>(type_, cloned);
 }
 
-const std::string SetData::toString() const {
+const string SetData::toString() const {
     if (data_.empty()) {
         return "{}";
     }
-    std::string str = "{ ";
+    string str = "{ ";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
     }
@@ -81,13 +83,13 @@ data_ptr_t MapData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t MapData::clone(bool deep) const { throw std::runtime_error("Not implemented"); }
+data_ptr_t MapData::clone(bool deep) const { throw runtime_error("Not implemented"); }
 
-const std::string MapData::toString() const {
+const string MapData::toString() const {
     if (data_.empty()) {
         return "{}";
     }
-    std::string str = "{ ";
+    string str = "{ ";
     for (const auto &[k, V] : data_) {
         str += "[" + k->toString() + "]: " + V->toString() + ", ";
     }
@@ -105,8 +107,8 @@ bool DictData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-DictData::DictData(std::initializer_list<std::pair<std::string, data_ptr_t>> data)
-    : StructData(std::make_shared<DictType>()) {
+DictData::DictData(initializer_list<pair<string, data_ptr_t>> data)
+    : StructData(make_shared<DictType>()) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     for (const auto &e : data) {
         data_[e.first] = e.second;
@@ -114,15 +116,15 @@ DictData::DictData(std::initializer_list<std::pair<std::string, data_ptr_t>> dat
     }
 }
 
-DictData::DictData(const std::unordered_map<std::string, data_ptr_t> &data)
-    : StructData(std::make_shared<DictType>()), data_(data) {
+DictData::DictData(const unordered_map<string, data_ptr_t> &data)
+    : StructData(make_shared<DictType>()), data_(data) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     for (const auto &e : data) {
         dictType.add(e.first, e.second->type());
     }
 }
 
-bool DictData::add(const std::string &key, const data_ptr_t &e) {
+bool DictData::add(const string &key, const data_ptr_t &e) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     if (dictType.add(key, e->type())) {
         data_[key] = e;
@@ -131,7 +133,7 @@ bool DictData::add(const std::string &key, const data_ptr_t &e) {
     return false;
 }
 
-bool DictData::del(const std::string &key) {
+bool DictData::del(const string &key) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     if (dictType.del(key)) {
         data_.erase(key);
@@ -140,15 +142,15 @@ bool DictData::del(const std::string &key) {
     return false;
 }
 
-bool DictData::has(const std::string &key) const { return data_.find(key) != data_.end(); }
+bool DictData::has(const string &key) const { return data_.find(key) != data_.end(); }
 
-void DictData::set(const std::string &key, const data_ptr_t &e) {
+void DictData::set(const string &key, const data_ptr_t &e) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     dictType.set(key, e->type());
     data_[key] = e;
 }
 
-data_ptr_t DictData::get(const std::string &key) const {
+data_ptr_t DictData::get(const string &key) const {
     auto it = data_.find(key);
     if (it != data_.end()) {
         return it->second;
@@ -175,13 +177,13 @@ data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t DictData::clone(bool deep) const { return std::make_shared<DictData>(data_); }
+data_ptr_t DictData::clone(bool deep) const { return make_shared<DictData>(data_); }
 
-const std::string DictData::toString() const {
+const string DictData::toString() const {
     if (data_.size() == 0) {
         return "{}";
     }
-    std::string str = "{ ";
+    string str = "{ ";
     for (const auto &e : data_) {
         str += e.first + ": " + e.second->toString() + ", ";
     }
@@ -220,15 +222,15 @@ data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
 }
 
 data_ptr_t ListData::clone(bool) const {
-    std::vector<data_ptr_t> cloned;
+    vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<ListData>(cloned);
+    return make_shared<ListData>(cloned);
 }
 
-const std::string ListData::toString() const {
-    std::string str = "[";
+const string ListData::toString() const {
+    string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
     }
@@ -255,15 +257,15 @@ data_ptr_t TupleData::convert(type_ptr_t target, bool inplace) {
 }
 
 data_ptr_t TupleData::clone(bool) const {
-    std::vector<data_ptr_t> cloned;
+    vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<TupleData>(cloned);
+    return make_shared<TupleData>(cloned);
 }
 
-const std::string TupleData::toString() const {
-    std::string str = "(";
+const string TupleData::toString() const {
+    string str = "(";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
     }
@@ -290,15 +292,15 @@ data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
 }
 
 data_ptr_t ArrayData::clone(bool) const {
-    std::vector<data_ptr_t> cloned;
+    vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<ArrayData>(std::dynamic_pointer_cast<ArrayType>(type_), cloned);
+    return make_shared<ArrayData>(dynamic_pointer_cast<ArrayType>(type_), cloned);
 }
 
-const std::string ArrayData::toString() const {
-    std::string str = "[";
+const string ArrayData::toString() const {
+    string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
     }
@@ -325,15 +327,15 @@ data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
 }
 
 data_ptr_t VectorData::clone(bool) const {
-    std::vector<data_ptr_t> cloned;
+    vector<data_ptr_t> cloned;
     for (const auto &e : data_) {
         cloned.push_back(e);
     }
-    return std::make_shared<VectorData>(std::dynamic_pointer_cast<VectorType>(type_), cloned);
+    return make_shared<VectorData>(dynamic_pointer_cast<VectorType>(type_), cloned);
 }
 
-const std::string VectorData::toString() const {
-    std::string str = "[";
+const string VectorData::toString() const {
+    string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
     }
@@ -363,8 +365,8 @@ bool ParamsData::setType(type_ptr_t type) {
         return false;
     }
     size_t idx = 0;
-    std::vector<data_ptr_t> indexResult;
-    std::map<std::string, data_ptr_t> namedResult;
+    vector<data_ptr_t> indexResult;
+    map<string, data_ptr_t> namedResult;
     for (size_t i = 0; i < typeList.size(); i++) {
         const auto &[key, typ, data] = typeList[i];
         // TODO: unused data
@@ -390,7 +392,7 @@ bool ParamsData::setType(type_ptr_t type) {
     return true;
 }
 
-bool ParamsData::add(const data_ptr_t &e, const std::string &key) {
+bool ParamsData::add(const data_ptr_t &e, const string &key) {
     if (typeResolved_) {
         return false;
     }
@@ -424,10 +426,10 @@ data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t ParamsData::clone(bool) const { return std::make_shared<ParamsData>(indexData_, namedData_); }
+data_ptr_t ParamsData::clone(bool) const { return make_shared<ParamsData>(indexData_, namedData_); }
 
-const std::string ParamsData::toString() const {
-    std::string str = "(";
+const string ParamsData::toString() const {
+    string str = "(";
     for (const auto &e : indexData_) {
         str += e->toString() + ", ";
     }
@@ -456,6 +458,6 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t TensorData::clone(bool) const { throw std::runtime_error("Not implemented"); }
+data_ptr_t TensorData::clone(bool) const { throw runtime_error("Not implemented"); }
 
-const std::string TensorData::toString() const { return std::string("TensorData"); }
+const string TensorData::toString() const { return string("TensorData"); }

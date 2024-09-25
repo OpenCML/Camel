@@ -19,6 +19,8 @@
 #include "init.h"
 #include "struct/type.h"
 
-Scope<std::string, data_ptr_t> globalRootScope;
+using namespace std;
+
+Scope<string, data_ptr_t> globalRootScope;
 
 void initGlobalRootScope(){};

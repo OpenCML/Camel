@@ -139,8 +139,8 @@ int main(int argc, char *argv[]) {
 
         if (!hasParseError) {
             initTypes();
-            ast_ptr_t ast = nullptr;
-            auto visitor = ASTConstructor();
+            ast::node_ptr_t ast = nullptr;
+            auto visitor = ast::Constructor();
             try {
                 ast = visitor.construct(tree);
                 auto &warns = visitor.warns();

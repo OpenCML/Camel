@@ -19,6 +19,8 @@
 #include "entity.h"
 #include "data.h"
 
+using namespace std;
+
 Entity::Entity(data_ptr_t data) : data_(data) {
     if (data_ != nullptr) {
         type_ = data_->type();
@@ -29,21 +31,21 @@ data_ptr_t Entity::meta() {
     if (meta_ == nullptr) {
         // Create a new value
         // TODO
-        throw std::runtime_error("Entity::meta() not implemented");
-        meta_ = std::make_shared<Data>();
+        throw runtime_error("Entity::meta() not implemented");
+        meta_ = make_shared<Data>();
         return meta_;
     }
     return meta_;
 }
 
 entity_ptr_t Entity::clone(bool deep) const {
-    entity_ptr_t entity = std::make_shared<Entity>(data_->clone(deep));
+    entity_ptr_t entity = make_shared<Entity>(data_->clone(deep));
     entity->type_ = type_;
     entity->meta_ = meta_->clone(deep);
     return entity;
 }
 
-std::string Entity::typeStr() const {
+string Entity::typeStr() const {
     auto type = type_.lock();
     if (type == nullptr) {
         return "NULL";
@@ -52,7 +54,7 @@ std::string Entity::typeStr() const {
     }
 }
 
-std::string Entity::metaStr() const {
+string Entity::metaStr() const {
     if (meta_ == nullptr) {
         return "NULL";
     } else {
@@ -60,7 +62,7 @@ std::string Entity::metaStr() const {
     }
 }
 
-std::string Entity::dataStr() const {
+string Entity::dataStr() const {
     if (data_ == nullptr) {
         return "NULL";
     } else {
