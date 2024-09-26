@@ -81,7 +81,7 @@ class Constructor {
     node_ptr_t visitDataNode(const ast::node_ptr_t &ast);
     node_ptr_t visitVariNode(const ast::node_ptr_t &ast);
     type_ptr_t visitTypeNode(const ast::node_ptr_t &ast);
-    func_ptr_t visitFuncNode(const ast::node_ptr_t &ast);
+    node_ptr_t visitFuncNode(const ast::node_ptr_t &ast);
     void_ptr_t visitNRefNode(const ast::node_ptr_t &ast);
     node_ptr_t visitDRefNode(const ast::node_ptr_t &ast);
     node_ptr_t visitWaitNode(const ast::node_ptr_t &ast);
@@ -90,6 +90,6 @@ class Constructor {
     node_ptr_t visitWithNode(const ast::node_ptr_t &ast);
     node_ptr_t visitRetnNode(const ast::node_ptr_t &ast);
     node_ptr_t visitExecNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitFromNode(const ast::node_ptr_t &ast);
+    void_ptr_t visitFromNode(const ast::node_ptr_t &ast);
 };
 } // namespace GraphIR

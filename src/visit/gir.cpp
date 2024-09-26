@@ -28,7 +28,6 @@ inline ast::node_ptr_t ast_ptr_cast(const tree_node_ptr_t<ast::load_ptr_t> &ptr)
 }
 
 any Constructor::visit(const ast::node_ptr_t &node) {
-    // TODO: implement
     switch (node->type()) {
     case ast::NodeType::DATA:
         return visitDataNode(node);
@@ -83,9 +82,12 @@ node_ptr_t Constructor::visitDataNode(const ast::node_ptr_t &ast) {
 
 node_ptr_t Constructor::visitVariNode(const ast::node_ptr_t &ast) { return nullptr; }
 
-type_ptr_t Constructor::visitTypeNode(const ast::node_ptr_t &ast) { return nullptr; }
+type_ptr_t Constructor::visitTypeNode(const ast::node_ptr_t &ast) {
+    const type_ptr_t &type = ast::type_load_ptr_cast(ast->load())->type();
+    return type;
+}
 
-func_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {}
 
 void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
     const string &ident = ast::nref_load_ptr_cast(ast->load())->ident();
@@ -134,19 +136,29 @@ node_ptr_t Constructor::visitWaitNode(const ast::node_ptr_t &ast) { throw runtim
 
 node_ptr_t Constructor::visitAnnoNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
 
+/*
+LINK
+ |- DATA, DREF, EXEC, NREF
+ \- DATA, DREF, EXEC, FUNC
+*/
 node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
-    auto srcResult = visit(ast_ptr_cast(ast->at(0)));
-    auto tgtResult = visit(ast_ptr_cast(ast->at(1)));
-    if (srcResult.type() == typeid(node_ptr_t) && tgtResult.type() == typeid(node_ptr_t)) {
-        node_ptr_t srcNode = any_cast<node_ptr_t>(srcResult);
-        node_ptr_t tgtNode = any_cast<node_ptr_t>(tgtResult);
-        if (tgtNode->type() == NodeType::FUNCTOR) {
-            auto funcNode = func_node_ptr_cast(tgtNode);
-            funcNode->setParams(srcNode);
+    any dataResult = visit(ast_ptr_cast(ast->at(0)));
+    any funcResult = visit(ast_ptr_cast(ast->at(1)));
+    if (dataResult.type() == typeid(node_ptr_t)) {
+        node_ptr_t dataNode = any_cast<node_ptr_t>(dataResult);
+        if (funcResult.type() == typeid(func_ptr_t)) {
+        } else if (funcResult.type() == typeid(node_ptr_t)) {}
+        else {
+            throw runtime_error("Unexpected result type from visiting children of LINK node");
+        }
+        node_ptr_t funcNode = any_cast<node_ptr_t>(funcResult);
+        if (funcNode->type() == NodeType::FUNCTOR) {
+            auto funcNode = func_node_ptr_cast(funcNode);
+            funcNode->setParams(dataNode);
         } else {
             throw runtime_error("Non-functor entities cannot be set with parameters");
         }
-        return tgtNode;
+        return funcNode;
     } else {
         throw runtime_error("Unexpected result type from visiting children of LINK node");
     }
@@ -183,6 +195,15 @@ node_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {
     }
 }
 
-node_ptr_t Constructor::visitExecNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
+node_ptr_t Constructor::visitExecNode(const ast::node_ptr_t &ast) {
+    node_ptr_t node;
+    for (size_t i = 0; i < ast->size(); i++) {
+        any result = visit(ast_ptr_cast(ast->at(i)));
+        if (result.type() == typeid(node_ptr_t)) {
+            node = any_cast<node_ptr_t>(result);
+        }
+    }
+    return node;
+}
 
-node_ptr_t Constructor::visitFromNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
+void_ptr_t Constructor::visitFromNode(const ast::node_ptr_t &ast) {}
