@@ -90,21 +90,21 @@ type_ptr_t Constructor::visitTypeNode(const ast::node_ptr_t &ast) {
 node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {}
 
 void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
-    const string &ident = ast::nref_load_ptr_cast(ast->load())->ident();
-    const ast::node_ptr_t &child = ast_ptr_cast(ast->childAt(0));
-    const ast::load_ptr_t &target = child->load();
-    if (target->type() == ast::NodeType::FUNC) {
-        func_ptr_t func = visitFuncNode(child);
-        funcScope_->insert(ident, func);
-    } else {
-        auto result = visit(child);
-        if (result.type() == typeid(node_ptr_t)) {
-            node_ptr_t node = any_cast<node_ptr_t>(result);
-            nodeScope_->insert(ident, node);
-        } else {
-            throw runtime_error("Unexpected result type from visiting the child of NREF node");
-        }
-    }
+    // const string &ident = ast::nref_load_ptr_cast(ast->load())->ident();
+    // const ast::node_ptr_t &child = ast_ptr_cast(ast->childAt(0));
+    // const ast::load_ptr_t &target = child->load();
+    // if (target->type() == ast::NodeType::FUNC) {
+    //     func_ptr_t func = visitFuncNode(child);
+    //     funcScope_->insert(ident, func);
+    // } else {
+    //     auto result = visit(child);
+    //     if (result.type() == typeid(node_ptr_t)) {
+    //         node_ptr_t node = any_cast<node_ptr_t>(result);
+    //         nodeScope_->insert(ident, node);
+    //     } else {
+    //         throw runtime_error("Unexpected result type from visiting the child of NREF node");
+    //     }
+    // }
     return nullptr;
 }
 
@@ -142,26 +142,27 @@ LINK
  \- DATA, DREF, EXEC, FUNC
 */
 node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
-    any dataResult = visit(ast_ptr_cast(ast->at(0)));
-    any funcResult = visit(ast_ptr_cast(ast->at(1)));
-    if (dataResult.type() == typeid(node_ptr_t)) {
-        node_ptr_t dataNode = any_cast<node_ptr_t>(dataResult);
-        if (funcResult.type() == typeid(func_ptr_t)) {
-        } else if (funcResult.type() == typeid(node_ptr_t)) {}
-        else {
-            throw runtime_error("Unexpected result type from visiting children of LINK node");
-        }
-        node_ptr_t funcNode = any_cast<node_ptr_t>(funcResult);
-        if (funcNode->type() == NodeType::FUNCTOR) {
-            auto funcNode = func_node_ptr_cast(funcNode);
-            funcNode->setParams(dataNode);
-        } else {
-            throw runtime_error("Non-functor entities cannot be set with parameters");
-        }
-        return funcNode;
-    } else {
-        throw runtime_error("Unexpected result type from visiting children of LINK node");
-    }
+    // any dataResult = visit(ast_ptr_cast(ast->at(0)));
+    // any funcResult = visit(ast_ptr_cast(ast->at(1)));
+    // if (dataResult.type() == typeid(node_ptr_t)) {
+    //     node_ptr_t dataNode = any_cast<node_ptr_t>(dataResult);
+    //     if (funcResult.type() == typeid(func_ptr_t)) {
+    //     } else if (funcResult.type() == typeid(node_ptr_t)) {}
+    //     else {
+    //         throw runtime_error("Unexpected result type from visiting children of LINK node");
+    //     }
+    //     node_ptr_t funcNode = any_cast<node_ptr_t>(funcResult);
+    //     if (funcNode->type() == NodeType::FUNCTOR) {
+    //         auto funcNode = func_node_ptr_cast(funcNode);
+    //         funcNode->setParams(dataNode);
+    //     } else {
+    //         throw runtime_error("Non-functor entities cannot be set with parameters");
+    //     }
+    //     return funcNode;
+    // } else {
+    //     throw runtime_error("Unexpected result type from visiting children of LINK node");
+    // }
+    return nullptr;
 }
 
 node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {

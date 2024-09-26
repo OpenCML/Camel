@@ -32,22 +32,6 @@
 
 #define DEBUG_LEVEL -1
 
-#ifdef NDEBUG
-
-#define debug(level)                                                                                                   \
-    do {                                                                                                               \
-    } while (false)
-
-#define debug_u(level)                                                                                                 \
-    do {                                                                                                               \
-    } while (false)
-
-#define assert(condition, message)                                                                                     \
-    do {                                                                                                               \
-    } while (false)
-
-#else
-
 #define debug(level)                                                                                                   \
     if (level <= DEBUG_LEVEL)                                                                                          \
     std::cout << _blue("   [" #level "] ")
@@ -55,6 +39,14 @@
 #define debug_u(level)                                                                                                 \
     if (level <= DEBUG_LEVEL)                                                                                          \
     std::cout
+
+#ifdef NDEBUG
+
+#define assert(condition, message)                                                                                     \
+    do {                                                                                                               \
+    } while (false)
+
+#else
 
 #define assert(condition, message)                                                                                     \
     do {                                                                                                               \

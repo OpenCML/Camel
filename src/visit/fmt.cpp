@@ -302,7 +302,7 @@ any Formatter::visitAnnotations(OpenCMLParser::AnnotationsContext *context, bool
 };
 
 /*
-modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 */
 any Formatter::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     string result;
@@ -310,6 +310,7 @@ any Formatter::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     (context->OUTER()).size() ? result += "outer " : result;
     (context->ATOMIC()).size() ? result += "atomic " : result;
     (context->STATIC()).size() ? result += "static " : result;
+    (context->SYNC()).size() ? result += "sync " : result;
     // remove trailing space
     if (!result.empty()) {
         result.pop_back();
@@ -333,10 +334,10 @@ any Formatter::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
 };
 
 /*
-keyParamPair : VAR? identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 */
 any Formatter::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
-    string result = context->VAR() ? "var " : "";
+    string result = "";
     result += any_cast<string>(visitIdentRef(context->identRef()));
     const auto &annotation = context->annotation();
     const auto &typeExpr = context->typeExpr();

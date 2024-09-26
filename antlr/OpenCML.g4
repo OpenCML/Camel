@@ -49,11 +49,11 @@ carrier    : identRef | bracedIdents | bracketIdents ;
 
 annotation  : '@' primaryExpr ;
 annotations : annotation+ ;
-modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : identRef ':' entityExpr ;
-keyParamPair : VAR? identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 indexKTPair  : '[' typeExpr ']' ':' typeExpr ;
 indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 

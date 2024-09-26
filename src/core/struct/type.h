@@ -642,7 +642,7 @@ class FunctorType : public SpecialType {
     void addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }
     void setModifiers(const std::unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
 
-    bool addIdent(const std::string &ident, bool variable) {
+    bool addIdent(const std::string &ident, bool variable = false) {
         if (innerIdents_.find(ident) != innerIdents_.end()) {
             return false;
         }
