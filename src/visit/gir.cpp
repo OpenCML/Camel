@@ -61,23 +61,24 @@ any Constructor::visit(const ast::node_ptr_t &node) {
 }
 
 node_ptr_t Constructor::visitDataNode(const ast::node_ptr_t &ast) {
-    const auto &dataNode = dynamic_pointer_cast<ast::DataLoad>(ast);
-    const data_ptr_t &data = dataNode->data();
-    node_ptr_t node = make_shared<DataNode>(data);
-    if (dataNode->resolved()) {
-        return node;
-    } else {
-        for (const auto &e : dataNode->getUnrefData()) {
-            const string &ref = dynamic_pointer_cast<RefData>(e)->ref();
-            auto optSrcNode = nodeScope_->at(ref);
-            if (optSrcNode.has_value()) {
-                Node::link(optSrcNode.value(), node);
-            } else {
-                throw runtime_error("Unresolved reference: " + ref);
-            }
-        }
-        return node;
-    }
+    // const auto &dataNode = dynamic_pointer_cast<ast::DataLoad>(ast);
+    // const data_ptr_t &data = dataNode->data();
+    // node_ptr_t node = make_shared<DataNode>(data);
+    // if (dataNode->resolved()) {
+    //     return node;
+    // } else {
+    //     for (const auto &e : dataNode->getUnrefData()) {
+    //         const string &ref = dynamic_pointer_cast<RefData>(e)->ref();
+    //         auto optSrcNode = nodeScope_->at(ref);
+    //         if (optSrcNode.has_value()) {
+    //             Node::link(optSrcNode.value(), node);
+    //         } else {
+    //             throw runtime_error("Unresolved reference: " + ref);
+    //         }
+    //     }
+    //     return node;
+    // }
+    return nullptr;
 }
 
 node_ptr_t Constructor::visitVariNode(const ast::node_ptr_t &ast) { return nullptr; }
@@ -109,27 +110,28 @@ void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
 }
 
 node_ptr_t Constructor::visitDRefNode(const ast::node_ptr_t &ast) {
-    const string &ident = dref_load_ptr_cast(ast->load())->ident();
-    auto optNode = nodeScope_->at(ident);
-    if (optNode.has_value()) {
-        return optNode.value();
-    }
-    auto optEntity = entityScope_->at(ident);
-    if (optEntity.has_value()) {
-        entity_ptr_t &entity = optEntity.value();
-        if (entity->isFunc()) {
-            const functor_ptr_t functor = dynamic_pointer_cast<Functor>(entity);
-            auto funcNode = make_shared<FunctorNode>(functor->func());
-            return funcNode;
-        } else {
-            return make_shared<DataNode>(entity->data());
-        }
-    }
-    auto optFunc = funcScope_->at(ident);
-    if (optFunc.has_value()) {
-        return make_shared<FunctorNode>(optFunc.value());
-    }
-    throw runtime_error("Unresolved reference: " + ident);
+    // const string &ident = dref_load_ptr_cast(ast->load())->ident();
+    // auto optNode = nodeScope_->at(ident);
+    // if (optNode.has_value()) {
+    //     return optNode.value();
+    // }
+    // auto optEntity = entityScope_->at(ident);
+    // if (optEntity.has_value()) {
+    //     entity_ptr_t &entity = optEntity.value();
+    //     if (entity->isFunc()) {
+    //         const functor_ptr_t functor = dynamic_pointer_cast<Functor>(entity);
+    //         auto funcNode = make_shared<FunctorNode>(functor->func());
+    //         return funcNode;
+    //     } else {
+    //         return make_shared<DataNode>(entity->data());
+    //     }
+    // }
+    // auto optFunc = funcScope_->at(ident);
+    // if (optFunc.has_value()) {
+    //     return make_shared<FunctorNode>(optFunc.value());
+    // }
+    // throw runtime_error("Unresolved reference: " + ident);
+    return nullptr;
 }
 
 node_ptr_t Constructor::visitWaitNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
@@ -166,25 +168,26 @@ node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
 }
 
 node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
-    auto withResult = visit(ast_ptr_cast(ast->at(0)));
-    if (withResult.type() == typeid(node_ptr_t)) {
-        node_ptr_t withNode = any_cast<node_ptr_t>(withResult);
-        auto funcResult = visit(ast_ptr_cast(ast->at(1)));
-        if (funcResult.type() == typeid(node_ptr_t)) {
-            node_ptr_t resNode = any_cast<node_ptr_t>(funcResult);
-            if (resNode->type() == NodeType::FUNCTOR) {
-                auto funcNode = func_node_ptr_cast(resNode);
-                funcNode->setSuperParams(withNode);
-                return resNode;
-            } else {
-                throw runtime_error("Non-functor entities cannot be set with super parameters");
-            }
-        } else {
-            throw runtime_error("Unexpected result type from visiting FUNC node");
-        }
-    } else {
-        throw runtime_error("Unexpected result type from visiting WITH node");
-    }
+    // auto withResult = visit(ast_ptr_cast(ast->at(0)));
+    // if (withResult.type() == typeid(node_ptr_t)) {
+    //     node_ptr_t withNode = any_cast<node_ptr_t>(withResult);
+    //     auto funcResult = visit(ast_ptr_cast(ast->at(1)));
+    //     if (funcResult.type() == typeid(node_ptr_t)) {
+    //         node_ptr_t resNode = any_cast<node_ptr_t>(funcResult);
+    //         if (resNode->type() == NodeType::FUNCTOR) {
+    //             auto funcNode = func_node_ptr_cast(resNode);
+    //             funcNode->setSuperParams(withNode);
+    //             return resNode;
+    //         } else {
+    //             throw runtime_error("Non-functor entities cannot be set with super parameters");
+    //         }
+    //     } else {
+    //         throw runtime_error("Unexpected result type from visiting FUNC node");
+    //     }
+    // } else {
+    //     throw runtime_error("Unexpected result type from visiting WITH node");
+    // }
+    return nullptr;
 }
 
 node_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {

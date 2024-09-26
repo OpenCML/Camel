@@ -923,7 +923,7 @@ any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) 
     if (pairedParams) {
         return visitPairedParams(pairedParams);
     } else {
-        return vector<tuple<string, type_ptr_t, data_ptr_t, bool>>();
+        return vector<tuple<string, type_ptr_t, data_ptr_t>>();
     }
 };
 
