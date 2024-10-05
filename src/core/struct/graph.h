@@ -30,11 +30,38 @@ namespace GraphIR {
 
 enum class NodeType { GRAPH, DATA, STRUCT, FUNCTOR, OPERATOR };
 
-enum class DataType {
-    STATIC_CONSTANT,  // shared among all copies of the graph and never changed
-    RUNTIME_CONSTANT, // produced during runtime and never changed once produced
-    STATIC_VARIABLE,  // shared among all copies of the graph and may be changed during runtime
-    RUNTIME_VARIABLE, // produced during runtime and may be changed during runtime
+enum class DataTypeEnum {
+    SHARED_CONSTANT,  // shared among all copies of the graph and never changed
+    SHARED_VARIABLE,  // produced during runtime and never changed once produced
+    RUNTIME_CONSTANT, // shared among all copies of the graph and may be changed during runtime
+    RUNTIME_VARIABLE  // produced during runtime and may be changed during runtime
+};
+
+struct DataType {
+    bool shared;
+    bool variable;
+
+    DataType(bool shared = false, bool variable = false) : shared(shared), variable(variable) {}
+    constexpr DataType(DataTypeEnum type) : shared(false), variable(false) {
+        switch (type) {
+        case DataTypeEnum::SHARED_CONSTANT:
+            shared = true;
+            variable = false;
+            break;
+        case DataTypeEnum::SHARED_VARIABLE:
+            shared = true;
+            variable = true;
+            break;
+        case DataTypeEnum::RUNTIME_CONSTANT:
+            shared = false;
+            variable = false;
+            break;
+        case DataTypeEnum::RUNTIME_VARIABLE:
+            shared = false;
+            variable = true;
+            break;
+        }
+    }
 };
 
 class Node;
@@ -52,19 +79,24 @@ class Node : public std::enable_shared_from_this<Node> {
   protected:
     NodeType nodeType_;
     DataType dataType_;
+    graph_ptr_t graph_;
     size_t dataIndex_;
-    graph_ptr_t graph_ = nullptr;
+
     node_vec_t inputs_;
     node_vec_t outputs_;
 
   public:
-    Node(NodeType type) : nodeType_(type) {};
+    Node(NodeType nodeType, DataType dataType, graph_ptr_t graph = nullptr)
+        : nodeType_(nodeType), dataType_(dataType), graph_(graph) {};
     virtual ~Node() = default;
 
-    NodeType type() const { return nodeType_; }
-    data_ptr_t data() const;
-
+    NodeType nodeType() const { return nodeType_; }
     DataType dataType() const { return dataType_; }
+
+    void makeVariable(bool shared = false);
+
+    graph_ptr_t graph() const { return graph_; }
+    data_ptr_t data() const;
 
     node_vec_t &inputs() { return inputs_; }
     node_vec_t &outputs() { return outputs_; }
@@ -72,7 +104,7 @@ class Node : public std::enable_shared_from_this<Node> {
     size_t inDegree() const { return inputs_.size(); }
     size_t outDegree() const { return outputs_.size(); }
 
-    virtual data_ptr_t eval() {};
+    virtual data_ptr_t eval() { return data(); };
 
     static void link(node_ptr_t &from, node_ptr_t &to) {
         from->outputs().push_back(to);
@@ -81,28 +113,35 @@ class Node : public std::enable_shared_from_this<Node> {
 };
 
 class Graph : public Node {
-    node_ptr_t output_ = nullptr;
+    struct InitIndex {
+        size_t index;
+        bool shared;
+    };
+
+    node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
     std::shared_ptr<node_vec_t> inputs_;
 
-    std::shared_ptr<data_vec_t> staticConstants_;
-    std::shared_ptr<data_vec_t> staticVariables_;
-    std::shared_ptr<std::vector<size_t>> rtConstantIndices_;
-    std::shared_ptr<std::vector<std::variant<size_t, data_ptr_t>>> runtimeConstants_;
-    std::shared_ptr<std::vector<size_t>> rtVariableIndices_;
-    std::shared_ptr<std::vector<std::variant<size_t, data_ptr_t>>> runtimeVariables_;
+    std::shared_ptr<data_vec_t> sharedConstants_;
+    std::shared_ptr<data_vec_t> sharedVariables_;
+    std::vector<data_ptr_t> runtimeConstants_;
+    std::shared_ptr<std::vector<InitIndex>> rtVariableIndices_;
+    std::vector<std::variant<InitIndex, data_ptr_t>> runtimeVariables_;
 
   public:
     Graph();
     Graph(Graph &other);
     ~Graph() = default;
 
-    data_ptr_t getConstant(size_t index) const;
-    data_ptr_t getVariable(size_t index) const;
-    size_t addConstant(const data_ptr_t &data);
-    size_t addVariable(const data_ptr_t &data);
     // set a constant to a variable, return the index of the variable
-    size_t setVariable(size_t index);
+    size_t makeVariable(size_t index, bool shared = false);
+    size_t addConstant(const data_ptr_t &data, bool shared = false);
+    // there is no addVariable() function
+    // because variables are created by makeVariable() function
+    data_ptr_t getConstant(size_t index, bool shared = false);
+    data_ptr_t getVariable(size_t index, bool shared = false);
+    void setConstant(size_t index, const data_ptr_t &data, bool shared = false);
+    void setVariable(size_t index, const data_ptr_t &data, bool shared = false);
 
     node_vec_t &nodes() { return *nodes_; }
     node_vec_t &inputs() { return *inputs_; }
@@ -112,10 +151,8 @@ class Graph : public Node {
 class DataNode : public Node {
 
   public:
-    DataNode(graph_ptr_t graph, const data_ptr_t &data);
+    DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
     ~DataNode() = default;
-
-    void setVariable();
 };
 
 inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
@@ -123,11 +160,13 @@ inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
 }
 
 class StructNode : public Node {
-    size_t dataIndex_;
+    data_vec_t unrefDataVec_;
 
   public:
-    StructNode(const data_ptr_t &data) : Node(NodeType::STRUCT) {}
+    StructNode(graph_ptr_t graph, const data_ptr_t &data, data_vec_t &unrefData);
     ~StructNode() = default;
+
+    virtual data_ptr_t eval() override;
 };
 
 inline std::shared_ptr<StructNode> struct_node_ptr_cast(const node_ptr_t &ptr) {
