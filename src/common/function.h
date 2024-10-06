@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "entity.h"
 #include "data.h"
+#include "entity.h"
 
 #include <string>
 

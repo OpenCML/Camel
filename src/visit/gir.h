@@ -20,12 +20,12 @@
 #include <iostream>
 
 #include "ast.h"
-#include "core/struct/ast.h"
-#include "core/struct/context.h"
-#include "core/struct/entity.h"
-#include "core/struct/function.h"
-#include "core/struct/graph.h"
-#include "core/struct/scope.h"
+#include "common/ast.h"
+#include "common/context.h"
+#include "common/entity.h"
+#include "common/function.h"
+#include "common/graph.h"
+#include "common/scope.h"
 #include "utils/log.h"
 
 inline void _dumpGIR() {

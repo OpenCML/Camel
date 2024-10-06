@@ -19,8 +19,8 @@
 #include "antlr/OpenCMLLexer.h"
 
 #include "ast.h"
-#include "core/struct/function.h"
-#include "core/struct/token.h"
+#include "common/function.h"
+#include "common/token.h"
 #include "utils/log.h"
 
 #define DEBUG_LEVEL -1

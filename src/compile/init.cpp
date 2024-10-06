@@ -17,10 +17,10 @@
  */
 
 #include "init.h"
-#include "struct/type.h"
+#include "common/type.h"
 
 using namespace std;
 
 Scope<string, data_ptr_t> globalRootScope;
 
-void initGlobalRootScope(){};
+void initGlobalRootScope() {};

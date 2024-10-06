@@ -18,13 +18,13 @@
 
 #pragma once
 
-#include "data.h"
 #include "context.h"
+#include "data.h"
 
-#include <unordered_map>
 #include <functional>
+#include <unordered_map>
 
-using Operator = std::function<data_ptr_t(Context&, data_lst_t&&)>;
+using Operator = std::function<data_ptr_t(Context &, data_lst_t &&)>;
 
 extern std::unordered_map<std::string, Operator> operators;
 

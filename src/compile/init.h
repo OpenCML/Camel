@@ -20,8 +20,8 @@
 
 #include <string>
 
-#include "struct/data.h"
-#include "struct/scope.h"
+#include "common/data.h"
+#include "common/scope.h"
 
 extern Scope<std::string, data_ptr_t> globalRootScope;
 

@@ -56,6 +56,4 @@ string modifier2str(FunctionModifier modifier) {
     }
 }
 
-graph_ptr_t Function::constructGraph() {
-    return nullptr;
-}
+graph_ptr_t Function::constructGraph() { return nullptr; }

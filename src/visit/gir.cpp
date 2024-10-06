@@ -17,8 +17,8 @@
  */
 
 #include "gir.h"
-#include "core/error/build.h"
-#include "core/struct/functor.h"
+#include "common/error/build.h"
+#include "common/functor.h"
 
 using namespace std;
 using namespace gir;

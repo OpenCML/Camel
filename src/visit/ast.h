@@ -25,10 +25,10 @@
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime.h"
-#include "core/error/build.h"
-#include "core/struct/ast.h"
-#include "core/struct/scope.h"
-#include "core/struct/tree.h"
+#include "common/ast.h"
+#include "common/error/build.h"
+#include "common/scope.h"
+#include "common/tree.h"
 
 namespace AbstractSyntaxTree {
 

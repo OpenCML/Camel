@@ -25,8 +25,8 @@
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime.h"
-#include "common/error/build.h"
 #include "common/ast.h"
+#include "common/error/build.h"
 #include "common/scope.h"
 #include "common/tree.h"
 
