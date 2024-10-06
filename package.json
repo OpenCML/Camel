@@ -1,0 +1,13 @@
+{
+  "name": "camel-scripts",
+  "private": true,
+  "type": "module",
+  "pre-commit": [
+    "upd"
+  ],
+  "scripts": {
+    "upd": "node ./scripts/update.js",
+    "cnt": "tokei --sort lines",
+    "gource": "gource -c 4 --frameless -f --logo ./logo.png --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
+  }
+}
