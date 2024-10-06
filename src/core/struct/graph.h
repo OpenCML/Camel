@@ -176,17 +176,12 @@ inline std::shared_ptr<StructNode> struct_node_ptr_cast(const node_ptr_t &ptr) {
 
 class FunctorNode : public Node {
     func_ptr_t func_;
-    graph_ptr_t graph_;
-    node_ptr_t output_;
     node_ptr_t linkParams_;
     node_ptr_t withParams_;
     node_ptr_t closure_;
 
   public:
-    FunctorNode(const func_ptr_t &func) : Node(NodeType::FUNCTOR), func_(func) {
-        nodeType_ = NodeType::FUNCTOR;
-        inputs_.resize(2, nullptr);
-    }
+    FunctorNode(graph_ptr_t graph, const func_ptr_t &func);
 
     void setSuperParams(const node_ptr_t &superParams) { inputs_[0] = superParams; }
     void setParams(const node_ptr_t &params) { inputs_[1] = params; }
@@ -202,10 +197,10 @@ inline std::shared_ptr<FunctorNode> func_node_ptr_cast(const node_ptr_t &ptr) {
 }
 
 class OperatorNode : public Node {
-    Operator *operation_;
+    Operator *operator_;
 
   public:
-    OperatorNode(Operator *operation) : Node(NodeType::OPERATOR), operation_(operation) {}
+    OperatorNode(graph_ptr_t graph, Operator *op);
     ~OperatorNode() = default;
 };
 

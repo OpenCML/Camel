@@ -185,3 +185,20 @@ data_ptr_t StructNode::eval() {
     }
     return data;
 }
+
+/*
+FunctorNode
+*/
+
+FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
+    : Node(NodeType::FUNCTOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), func_(func) {
+    nodeType_ = NodeType::FUNCTOR;
+    inputs_.resize(2, nullptr);
+}
+
+/*
+OperatorNode
+*/
+
+OperatorNode::OperatorNode(graph_ptr_t graph, Operator *op)
+    : Node(NodeType::OPERATOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), operator_(op) {}

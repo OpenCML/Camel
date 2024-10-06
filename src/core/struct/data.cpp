@@ -462,92 +462,6 @@ const string ListData::toString() const {
 }
 
 /*
-TupleData
-*/
-
-TupleData::TupleData(data_list_t data) : data_(data) {
-    std::vector<type_ptr_t> types;
-    size_t i = 0;
-    for (const auto &e : data) {
-        types.push_back(e->type());
-        if (e->type()->code() == TypeCode::REF) {
-            refs_.push_back(i);
-        }
-        i++;
-    }
-    type_ = std::make_shared<TupleType>(types);
-}
-
-void TupleData::emplace(const data_ptr_t &e) {
-    data_.push_back(e);
-    TupleType &tupleType = *static_cast<TupleType *>(type_.get());
-    tupleType.add(e->type());
-    if (e->type()->code() == TypeCode::REF) {
-        refs_.push_back(data_.size() - 1);
-    }
-}
-
-data_ptr_t TupleData::get(size_t index) const {
-    assert(resolved(), "Cannot get data from unresolved TupleData");
-    if (index >= data_.size()) {
-        return nullptr;
-    }
-    return data_[index];
-}
-
-bool TupleData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ListData
-    return true;
-}
-
-data_ptr_t TupleData::convert(type_ptr_t target, bool inplace) {
-    // TODO
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-}
-
-vector<string> TupleData::refs() const {
-    vector<string> res;
-    for (const auto &idx : refs_) {
-        data_ptr_t ref = data_[idx];
-        res.push_back(dynamic_pointer_cast<RefData>(ref)->ref());
-    }
-    return res;
-}
-
-void TupleData::resolve(const data_vec_t &dataList) {
-    if (refs_.empty()) {
-        return;
-    }
-    assert(refs_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refs_.size(); i++) {
-        size_t idx = refs_[i];
-        data_[idx] = dataList[i];
-    }
-    refs_.clear();
-}
-
-data_ptr_t TupleData::clone(bool) const {
-    vector<data_ptr_t> cloned;
-    for (const auto &e : data_) {
-        cloned.push_back(e);
-    }
-    return make_shared<TupleData>(cloned);
-}
-
-const string TupleData::toString() const {
-    string str = "(";
-    for (const auto &e : data_) {
-        str += e->toString() + ", ";
-    }
-    if (data_.size() > 0) {
-        str.pop_back();
-        str.pop_back();
-    }
-    str += ")";
-    return str;
-}
-
-/*
 ArrayData
 */
 
@@ -646,6 +560,92 @@ const string ArrayData::toString() const {
         str.pop_back();
     }
     str += "]";
+    return str;
+}
+
+/*
+TupleData
+*/
+
+TupleData::TupleData(data_list_t data) : data_(data) {
+    std::vector<type_ptr_t> types;
+    size_t i = 0;
+    for (const auto &e : data) {
+        types.push_back(e->type());
+        if (e->type()->code() == TypeCode::REF) {
+            refs_.push_back(i);
+        }
+        i++;
+    }
+    type_ = std::make_shared<TupleType>(types);
+}
+
+void TupleData::emplace(const data_ptr_t &e) {
+    data_.push_back(e);
+    TupleType &tupleType = *static_cast<TupleType *>(type_.get());
+    tupleType.add(e->type());
+    if (e->type()->code() == TypeCode::REF) {
+        refs_.push_back(data_.size() - 1);
+    }
+}
+
+data_ptr_t TupleData::get(size_t index) const {
+    assert(resolved(), "Cannot get data from unresolved TupleData");
+    if (index >= data_.size()) {
+        return nullptr;
+    }
+    return data_[index];
+}
+
+bool TupleData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ListData
+    return true;
+}
+
+data_ptr_t TupleData::convert(type_ptr_t target, bool inplace) {
+    // TODO
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+}
+
+vector<string> TupleData::refs() const {
+    vector<string> res;
+    for (const auto &idx : refs_) {
+        data_ptr_t ref = data_[idx];
+        res.push_back(dynamic_pointer_cast<RefData>(ref)->ref());
+    }
+    return res;
+}
+
+void TupleData::resolve(const data_vec_t &dataList) {
+    if (refs_.empty()) {
+        return;
+    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < refs_.size(); i++) {
+        size_t idx = refs_[i];
+        data_[idx] = dataList[i];
+    }
+    refs_.clear();
+}
+
+data_ptr_t TupleData::clone(bool) const {
+    vector<data_ptr_t> cloned;
+    for (const auto &e : data_) {
+        cloned.push_back(e);
+    }
+    return make_shared<TupleData>(cloned);
+}
+
+const string TupleData::toString() const {
+    string str = "(";
+    for (const auto &e : data_) {
+        str += e->toString() + ", ";
+    }
+    if (data_.size() > 0) {
+        str.pop_back();
+        str.pop_back();
+    }
+    str += ")";
     return str;
 }
 
@@ -775,26 +775,20 @@ ParamsData
 
 ParamsData::ParamsData() : StructData(std::make_shared<ParamsType>()) {}
 
-type_ptr_t ParamsData::type() const {
-    assert(typeResolved_, "Cannot get type for unresolved ParamsData");
-    return type_;
-}
-
 bool ParamsData::emplace(const data_ptr_t &val, const std::string &key) {
-    assert(!typeResolved_, "Cannot emplace data for type-resolved ParamsData");
-    if (key.empty()) {
-        indexData_.push_back(val);
-    } else {
-        if (namedData_.find(key) != namedData_.end()) {
-            return false;
-        }
+    ParamsType &paramsType = *static_cast<ParamsType *>(type_.get());
+    indexData_.push_back(val);
+    if (!key.empty()) {
         namedData_[key] = val;
+    }
+    paramsType.add(key, val->type());
+    if (val->type()->code() == TypeCode::REF) {
+        refs_.emplace_back(indexData_.size() - 1, key);
     }
     return true;
 }
 
 vector<string> ParamsData::refs() const {
-    assert(typeResolved_, "Cannot get refs for type-unresolved ParamsData");
     vector<string> res;
     for (const auto &[idx, _] : refs_) {
         const data_ptr_t &ref = indexData_[idx];
@@ -803,13 +797,7 @@ vector<string> ParamsData::refs() const {
     return res;
 }
 
-bool ParamsData::resolved() const {
-    assert(typeResolved_, "Cannot check resolved for type-unresolved ParamsData");
-    return refs_.empty();
-}
-
 void ParamsData::resolve(const data_vec_t &dataList) {
-    assert(typeResolved_, "Cannot resolve data for type-unresolved ParamsData");
     if (refs_.empty()) {
         return;
     }
@@ -817,47 +805,52 @@ void ParamsData::resolve(const data_vec_t &dataList) {
     for (size_t i = 0; i < refs_.size(); i++) {
         const auto &[idx, key] = refs_[i];
         indexData_[idx] = dataList[i];
-        namedData_[key] = dataList[i];
+        if (!key.empty()) {
+            namedData_[key] = dataList[i];
+        }
     }
     refs_.clear();
 }
 
-void ParamsData::resolveType(type_ptr_t type) {
-    assert(!typeResolved_, "Cannot resolve type for already resolved ParamsData.");
-    assert(type->code() == TypeCode::PARAMS, "Cannot resolve non-Params type for ParamsData.");
-    const auto &typeList = static_cast<ParamsType *>(type.get())->elements();
-    size_t idx = 0;
-    vector<data_ptr_t> indexResult;
-    map<string, data_ptr_t> namedResult;
+data_ptr_t ParamsData::convertToParams(shared_ptr<ParamsType> &other, bool inplace) {
+    const auto &typeList = other->elements();
+    vector<pair<size_t, string>> refs;
+    vector<data_ptr_t> indexData;
+    map<string, data_ptr_t> namedData;
     for (size_t i = 0; i < typeList.size(); i++) {
         const auto &[key, valType, defaultData] = typeList[i];
         data_ptr_t val = defaultData;
         if (namedData_.find(key) != namedData_.end()) {
             val = namedData_[key];
-        } else if (idx < indexData_.size()) {
-            val = indexData_[idx];
-            idx++;
+        } else if (i < indexData_.size()) {
+            val = indexData_[i];
         }
         if (!val) {
-            // TODO: need more elegant way to handle missing value
-            // this error should be reported when resolving type
-            throw runtime_error("Missing value for key " + key);
+            throw DataConvError("Missing value for key " + key);
         }
         // TODO: need to check type compatibility
         // notice that we cannot check type compatibility here, because the ref of val may not be resolved yet
-        // if (val->type()->convertibility(*valType) != TypeConv::SAFE) {
-        //     throw DataConvError("Cannot convert " + val->type()->toString() + " to " + valType->toString());
-        // }
-        indexResult.push_back(val);
-        namedResult[key] = val;
+        indexData.push_back(val);
+        if (!key.empty()) {
+            namedData[key] = val;
+        }
         if (val->type()->code() == TypeCode::REF) {
-            refs_.emplace_back(i, key);
+            refs.emplace_back(i, key);
         }
     }
-    indexData_ = std::move(indexResult);
-    namedData_ = std::move(namedResult);
-    type_ = type;
-    typeResolved_ = true;
+    if (inplace) {
+        type_ = other;
+        refs_ = std::move(refs);
+        indexData_ = std::move(indexData);
+        namedData_ = std::move(namedData);
+        return shared_from_this();
+    } else {
+        auto params = make_shared<ParamsData>();
+        params->type_ = other;
+        params->refs_ = std::move(refs);
+        params->indexData_ = std::move(indexData);
+        params->namedData_ = std::move(namedData);
+    }
 }
 
 bool ParamsData::equals(const data_ptr_t &other) const {

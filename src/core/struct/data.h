@@ -420,29 +420,6 @@ class ListData : public StructData {
     virtual const std::string toString() const override;
 };
 
-class TupleData : public StructData {
-  private:
-    std::vector<size_t> refs_;
-    std::vector<data_ptr_t> data_;
-
-  public:
-    TupleData(data_list_t data);
-    virtual ~TupleData() = default;
-
-    void emplace(const data_ptr_t &e);
-
-    data_ptr_t get(size_t index) const;
-
-    virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
-    virtual void resolve(const data_vec_t &dataList) override;
-
-    virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual data_ptr_t clone(bool deep = false) const override;
-    virtual const std::string toString() const override;
-};
-
 class ArrayData : public StructData {
   private:
     std::vector<size_t> refs_;
@@ -458,6 +435,29 @@ class ArrayData : public StructData {
     bool set(size_t index, const data_ptr_t &e);
     size_t size() const;
     size_t length() const;
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual void resolve(const data_vec_t &dataList) override;
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};
+
+class TupleData : public StructData {
+  private:
+    std::vector<size_t> refs_;
+    std::vector<data_ptr_t> data_;
+
+  public:
+    TupleData(data_list_t data);
+    virtual ~TupleData() = default;
+
+    void emplace(const data_ptr_t &e);
+
+    data_ptr_t get(size_t index) const;
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
@@ -499,24 +499,21 @@ class VectorData : public StructData {
 
 class ParamsData : public StructData {
   private:
-    bool typeResolved_ = false;
     std::vector<std::pair<size_t, std::string>> refs_;
     std::vector<data_ptr_t> indexData_;
     std::map<std::string, data_ptr_t> namedData_;
+
+    data_ptr_t convertToParams(std::shared_ptr<ParamsType> &target, bool inplace = false);
 
   public:
     ParamsData();
     virtual ~ParamsData() = default;
 
-    virtual type_ptr_t type() const override;
-
     bool emplace(const data_ptr_t &val, const std::string &key = "");
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
-
-    void resolveType(type_ptr_t type);
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
