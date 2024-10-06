@@ -37,11 +37,13 @@ function updateFile(filePath) {
         let lines = []
         let hasCreatedLine = false
         let updateIndex = 0
+
         const updatedLine = ` * Updated: ${updatedDate}`
 
         rl.on('line', (line) => lines.push(line))
 
         rl.on('close', () => {
+            lines.push('')
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].includes('* Created:')) {
                     hasCreatedLine = true
@@ -89,5 +91,5 @@ function traverseDirectory(dir) {
     })
 }
 
-const targetDirectory = 'D:\\Projects\\Camel\\test'
+const targetDirectory = 'src'
 traverseDirectory(targetDirectory)
