@@ -30,24 +30,6 @@
 #include "core/struct/scope.h"
 #include "core/struct/tree.h"
 
-#define CREATE_SINGLE_UNREF_LIST(dangling, data) (dangling ? data_list_t{data} : data_list_t{})
-
-#define CREATE_DOUBLE_UNREF_LIST(lhsDangling, lhsData, rhsDangling, rhsData)                                           \
-    (lhsDangling && rhsDangling ? data_list_t{lhsData, rhsData}                                                        \
-     : lhsDangling              ? data_list_t{lhsData}                                                                 \
-     : rhsDangling              ? data_list_t{rhsData}                                                                 \
-                                : data_list_t{})
-
-#define CREATE_TRIPLE_UNREF_LIST(lhsDangling, lhsData, midDangling, midData, rhsDangling, rhsData)                     \
-    (lhsDangling && midDangling && rhsDangling ? data_list_t{lhsData, midData, rhsData}                                \
-     : lhsDangling && midDangling              ? data_list_t{lhsData, midData}                                         \
-     : midDangling && rhsDangling              ? data_list_t{midData, rhsData}                                         \
-     : lhsDangling && rhsDangling              ? data_list_t{lhsData, rhsData}                                         \
-     : lhsDangling                             ? data_list_t{lhsData}                                                  \
-     : midDangling                             ? data_list_t{midData}                                                  \
-     : rhsDangling                             ? data_list_t{rhsData}                                                  \
-                                               : data_list_t{})
-
 namespace AbstractSyntaxTree {
 
 namespace InnerFuncDRefNodes {
@@ -162,7 +144,7 @@ class Constructor : public OpenCMLVisitor {
             auto [rhsData, rhsDangling] = extractData(rhsNode, execNode);
             node_ptr_t dataNode =
                 createNode<DataLoad>(std::make_shared<TupleData>(data_list_t{lhsData, rhsData}),
-                                           CREATE_DOUBLE_UNREF_LIST(lhsDangling, lhsData, rhsDangling, rhsData));
+                                     CREATE_DOUBLE_UNREF_LIST(lhsDangling, lhsData, rhsDangling, rhsData));
 
             if (lhsDangling || rhsDangling) {
                 dataNode = reparent(dataNode, execNode);

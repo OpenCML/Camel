@@ -426,13 +426,7 @@ class TupleData : public StructData {
     std::vector<data_ptr_t> data_;
 
   public:
-    TupleData(data_list_t data) : data_(data) {
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<TupleType>(types);
-    }
+    TupleData(data_list_t data);
     virtual ~TupleData() = default;
 
     void emplace(const data_ptr_t &e);

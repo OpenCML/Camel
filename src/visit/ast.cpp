@@ -28,6 +28,14 @@
 using namespace std;
 using namespace ast;
 
+template <typename LoadType, typename... Args> node_ptr_t createNode(Args &&...args) {
+    return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
+}
+
+template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&...args) {
+    return createNode<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
+}
+
 namespace AbstractSyntaxTree::InnerFuncDRefNodes {
 node_ptr_t __copy__ = nullptr;
 node_ptr_t __cast__ = nullptr;
@@ -330,9 +338,7 @@ any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         node_ptr_t baseNode = nullptr;
 
         if (type) {
-            node_ptr_t dataNode =
-                createNode<DataLoad>(make_shared<TupleData>(data_list_t{exprValue, make_shared<NullData>(type)}),
-                                        CREATE_SINGLE_UNREF_LIST(dangling, exprValue));
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<NullData>(type)});
 
             if (dangling) {
                 dataNode = reparent(dataNode, execNode);
@@ -363,9 +369,7 @@ any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         for (size_t i = 0; i < idents.size(); i++) {
             const string &ident = idents[i];
             node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode = createNode<DataLoad>(
-                make_shared<TupleData>(data_list_t{exprValue, make_shared<PrimData<int32_t>>(i)}),
-                CREATE_SINGLE_UNREF_LIST(dangling, exprValue));
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimData<int32_t>>(i)});
             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
             *execNode << nRefNode;
         }
@@ -389,9 +393,7 @@ any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         for (size_t i = 0; i < idents.size(); i++) {
             const string &ident = idents[i];
             node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode =
-                createNode<DataLoad>(make_shared<TupleData>(data_list_t{exprValue, make_shared<StringData>(ident)}),
-                                        CREATE_SINGLE_UNREF_LIST(dangling, exprValue));
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<StringData>(ident)});
             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
             *execNode << nRefNode;
         }
@@ -1008,9 +1010,7 @@ any Constructor::visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) {
         auto [trueData, trueDang] = extractData(trueNode, execNode);
         auto [falseData, falseDang] = extractData(falseNode, execNode);
 
-        node_ptr_t dataNode = createNode<DataLoad>(
-            make_shared<TupleData>(data_list_t{condData, trueData, falseData}),
-            CREATE_TRIPLE_UNREF_LIST(condDang, condData, trueDang, trueData, falseDang, falseData));
+        node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{condData, trueData, falseData});
 
         if (condDang || trueDang || falseDang) {
             dataNode = reparent(dataNode, execNode);
@@ -1101,8 +1101,7 @@ any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
     node_ptr_t funcNode = InnerFuncDRefNodes::opNodesMap[op];
 
     auto [linkData, linkDang] = extractData(linkNode, execNode);
-    node_ptr_t dataNode = createNode<DataLoad>(make_shared<TupleData>(data_list_t{linkData}),
-                                                  CREATE_SINGLE_UNREF_LIST(linkDang, linkData));
+    node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{linkData});
 
     if (linkDang) {
         dataNode = reparent(dataNode, execNode);
@@ -1175,9 +1174,7 @@ any Constructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context
             node_ptr_t execNode = createNode<ExecLoad>();
             auto [resultData, resultDang] = extractData(lhsNode, execNode);
             auto [memberData, memberDang] = extractData(rhsNode, execNode);
-            node_ptr_t dataNode =
-                createNode<DataLoad>(make_shared<TupleData>(data_list_t{resultData, memberData}),
-                                        CREATE_DOUBLE_UNREF_LIST(resultDang, resultData, memberDang, memberData));
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{resultData, memberData});
             if (resultDang || memberDang) {
                 dataNode = reparent(dataNode, execNode);
             }
@@ -1187,20 +1184,18 @@ any Constructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context
         case '(': {
             auto [rawIndexArgs, rawNamedArgs] =
                 any_cast<pair<vector<node_ptr_t>, map<string, node_ptr_t>>>(visit(child));
+            auto &paramsPtr = make_shared<ParamsData>();
             node_ptr_t execNode = createNode<ExecLoad>();
             bool dangling = false;
-            vector<data_ptr_t> indexArgs;
-            map<string, data_ptr_t> namedArgs;
             for (const auto &arg : rawIndexArgs) {
                 auto [argData, _] = extractData(arg, execNode, dangling);
-                indexArgs.push_back(argData);
+                paramsPtr->emplace(argData);
             }
             for (const auto &[name, arg] : rawNamedArgs) {
                 auto [argData, _] = extractData(arg, execNode, dangling);
-                namedArgs[name] = argData;
+                paramsPtr->emplace(argData, name);
             }
-            const auto &arguesData = make_shared<ParamsData>(indexArgs, namedArgs);
-            node_ptr_t dataNode = createNode<DataLoad>(arguesData);
+            node_ptr_t dataNode = createNode<DataLoad>(paramsPtr);
             node_ptr_t linkNode = createNode<LinkLoad>();
             *linkNode << dataNode << lhsNode;
             if (dangling) {
@@ -1213,20 +1208,18 @@ any Constructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context
         case '<': {
             auto [rawIndexArgs, rawNamedArgs] =
                 any_cast<pair<vector<node_ptr_t>, map<string, node_ptr_t>>>(visit(child));
+            auto &paramsPtr = make_shared<ParamsData>();
             node_ptr_t execNode = createNode<ExecLoad>();
             bool dangling = false;
-            vector<data_ptr_t> indexArgs;
-            map<string, data_ptr_t> namedArgs;
             for (const auto &arg : rawIndexArgs) {
                 auto [argData, _] = extractData(arg, execNode, dangling);
-                indexArgs.push_back(argData);
+                paramsPtr->emplace(argData);
             }
             for (const auto &[name, arg] : rawNamedArgs) {
                 auto [argData, _] = extractData(arg, execNode, dangling);
-                namedArgs[name] = argData;
+                paramsPtr->emplace(argData, name);
             }
-            const auto &arguesData = make_shared<ParamsData>(indexArgs, namedArgs);
-            node_ptr_t dataNode = createNode<DataLoad>(arguesData);
+            node_ptr_t dataNode = createNode<DataLoad>(paramsPtr);
             node_ptr_t withNode = createNode<WithLoad>();
             *withNode << dataNode << lhsNode;
             if (dangling) {
@@ -1271,17 +1264,13 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
     case 3: { // bracketValues (for list)
         const vector<node_ptr_t> &dataVec = any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
         const auto &listData = make_shared<ListData>();
-        data_vec_t unrefVec;
         bool dangling = false;
         node_ptr_t execNode = createNode<ExecLoad>();
         for (const auto &node : dataVec) {
-            auto [data, dang] = extractData(node, execNode, dangling);
-            listData->pushBack(data);
-            if (dang) {
-                unrefVec.push_back(data);
-            }
+            auto [data, _] = extractData(node, execNode, dangling);
+            listData->emplace(data);
         }
-        node_ptr_t dataNode = createNode<DataLoad>(listData, std::move(unrefVec));
+        node_ptr_t dataNode = createNode<DataLoad>(listData);
         if (dangling) {
             return reparent(dataNode, execNode);
         } else {
@@ -1292,17 +1281,13 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
         const map<string, node_ptr_t> &dataVec =
             any_cast<map<string, node_ptr_t>>(visitBracedPairedValues(context->bracedPairedValues()));
         const auto &dictData = make_shared<DictData>();
-        data_vec_t unrefVec;
         bool dangling = false;
         node_ptr_t execNode = createNode<ExecLoad>();
         for (const auto &[key, node] : dataVec) {
-            auto [data, dang] = extractData(node, execNode, dangling);
-            dictData->add(key, data);
-            if (dang) {
-                unrefVec.push_back(data);
-            }
+            auto [data, _] = extractData(node, execNode, dangling);
+            dictData->emplace(key, data);
         }
-        node_ptr_t dataNode = createNode<DataLoad>(dictData, std::move(unrefVec));
+        node_ptr_t dataNode = createNode<DataLoad>(dictData);
         if (dangling) {
             return reparent(dataNode, execNode);
         } else {
@@ -1314,19 +1299,14 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
     } break;
     case 6: { // parentValues (for tuple)
         const vector<node_ptr_t> &dataVec = any_cast<vector<node_ptr_t>>(visitParentValues(context->parentValues()));
-        vector<data_ptr_t> tupleDataVec;
-        data_vec_t unrefVec;
+        auto &tuplePtr = make_shared<TupleData>();
         bool dangling = false;
         node_ptr_t execNode = createNode<ExecLoad>();
         for (const auto &node : dataVec) {
-            auto [data, dang] = extractData(node, execNode, dangling);
-            tupleDataVec.push_back(data);
-            if (dang) {
-                unrefVec.push_back(data);
-            }
+            auto [data, _] = extractData(node, execNode, dangling);
+            tuplePtr->emplace(data);
         }
-        const auto &tupleData = make_shared<TupleData>(tupleDataVec);
-        node_ptr_t dataNode = createNode<DataLoad>(tupleData, std::move(unrefVec));
+        node_ptr_t dataNode = createNode<DataLoad>(tuplePtr);
         if (dangling) {
             dataNode = reparent(dataNode, execNode);
         }
@@ -1345,18 +1325,14 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
                     const type_ptr_t &type = any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
                     const vector<node_ptr_t> &dataVec =
                         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
-                    const auto &vectorData = make_shared<VectorData>(type);
-                    data_vec_t unrefVec;
+                    const auto &vectorPtr = make_shared<VectorData>(type);
                     bool dangling = false;
                     node_ptr_t execNode = createNode<ExecLoad>();
                     for (const auto &node : dataVec) {
-                        auto [data, dang] = extractData(node, execNode, dangling);
-                        vectorData->pushBack(data);
-                        if (dang) {
-                            unrefVec.push_back(data);
-                        }
+                        auto [data, _] = extractData(node, execNode, dangling);
+                        vectorPtr->emplace(data);
                     }
-                    node_ptr_t dataNode = createNode<DataLoad>(vectorData, std::move(unrefVec));
+                    node_ptr_t dataNode = createNode<DataLoad>(vectorPtr);
                     if (dangling) {
                         dataNode = reparent(dataNode, execNode);
                     }
@@ -1366,18 +1342,14 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
                     const int size = stoi(integers[0]->getText());
                     const vector<node_ptr_t> &dataVec =
                         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
-                    const auto &arrayData = make_shared<ArrayData>(type, size);
-                    data_vec_t unrefVec;
+                    const auto &arrayPtr = make_shared<ArrayData>(type, size);
                     bool dangling = false;
                     node_ptr_t execNode = createNode<ExecLoad>();
                     for (size_t i = 0; i < dataVec.size(); ++i) {
-                        auto [data, dang] = extractData(dataVec[i], execNode, dangling);
-                        arrayData->set(i, data);
-                        if (dang) {
-                            unrefVec.push_back(data);
-                        }
+                        auto [data, _] = extractData(dataVec[i], execNode, dangling);
+                        arrayPtr->emplace(data, i);
                     }
-                    node_ptr_t dataNode = createNode<DataLoad>(arrayData, std::move(unrefVec));
+                    node_ptr_t dataNode = createNode<DataLoad>(arrayPtr);
                     if (dangling) {
                         dataNode = reparent(dataNode, execNode);
                     }
@@ -1390,13 +1362,12 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
                     }
                     const vector<node_ptr_t> &dataVec =
                         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
-                    const auto &tensorData = make_shared<TensorData>(type, shape);
-                    data_vec_t unrefVec;
+                    const auto &tensorPtr = make_shared<TensorData>(type, shape);
                     bool dangling = false;
                     node_ptr_t execNode = createNode<ExecLoad>();
                     // TODO: Implement tensor data setting
                     reportWarning("Tensor data setting is not implemented yet", context->getStart());
-                    node_ptr_t dataNode = createNode<DataLoad>(tensorData, std::move(unrefVec));
+                    node_ptr_t dataNode = createNode<DataLoad>(tensorPtr);
                     if (dangling) {
                         dataNode = reparent(dataNode, execNode);
                     }
@@ -1411,18 +1382,14 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
                 const type_ptr_t &type = any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
                 const vector<node_ptr_t> &dataVec =
                     any_cast<vector<node_ptr_t>>(visitBracedValues(context->bracedValues()));
-                const auto &setData = make_shared<SetData>(type);
-                data_vec_t unrefVec;
+                const auto &setPtr = make_shared<SetData>(type);
                 bool dangling = false;
                 node_ptr_t execNode = createNode<ExecLoad>();
                 for (const auto &node : dataVec) {
-                    auto [data, dang] = extractData(node, execNode, dangling);
-                    setData->add(data);
-                    if (dang) {
-                        unrefVec.push_back(data);
-                    }
+                    auto [data, _] = extractData(node, execNode, dangling);
+                    setPtr->emplace(data);
                 }
-                node_ptr_t dataNode = createNode<DataLoad>(setData, std::move(unrefVec));
+                node_ptr_t dataNode = createNode<DataLoad>(setPtr);
                 if (dangling) {
                     dataNode = reparent(dataNode, execNode);
                 }
@@ -1446,22 +1413,15 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
             const type_ptr_t &type2 = any_cast<type_ptr_t>(visitTypeExpr(typeExprs[1]));
             const vector<pair<node_ptr_t, node_ptr_t>> &dataVec =
                 any_cast<vector<pair<node_ptr_t, node_ptr_t>>>(visitBracedIndexKVPairs(context->bracedIndexKVPairs()));
-            const auto &mapData = make_shared<MapData>(type1, type2);
-            data_vec_t unrefVec;
+            auto &mapPtr = make_shared<MapData>(type1, type2);
             bool dangling = false;
             node_ptr_t execNode = createNode<ExecLoad>();
             for (const auto &[key, data] : dataVec) {
-                auto [keyData, keyDang] = extractData(key, execNode, dangling);
-                auto [valData, valDang] = extractData(data, execNode, dangling);
-                mapData->set(keyData, valData);
-                if (keyDang) {
-                    unrefVec.push_back(keyData);
-                }
-                if (valDang) {
-                    unrefVec.push_back(valData);
-                }
+                auto [keyData, _] = extractData(key, execNode, dangling);
+                auto [valData, _] = extractData(data, execNode, dangling);
+                mapPtr->emplace(keyData, valData);
             }
-            node_ptr_t dataNode = createNode<DataLoad>(mapData, std::move(unrefVec));
+            node_ptr_t dataNode = createNode<DataLoad>(mapPtr);
             if (dangling) {
                 dataNode = reparent(dataNode, execNode);
             }

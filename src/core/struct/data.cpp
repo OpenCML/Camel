@@ -867,9 +867,11 @@ void ParamsData::resolveType(type_ptr_t type) {
             // this error should be reported when resolving type
             throw runtime_error("Missing value for key " + key);
         }
-        if (val->type()->convertibility(*valType) != TypeConv::SAFE) {
-            throw DataConvError("Cannot convert " + val->type()->toString() + " to " + valType->toString());
-        }
+        // TODO: need to check type compatibility
+        // notice that we cannot check type compatibility here, because the ref of val may not be resolved yet
+        // if (val->type()->convertibility(*valType) != TypeConv::SAFE) {
+        //     throw DataConvError("Cannot convert " + val->type()->toString() + " to " + valType->toString());
+        // }
         indexResult.push_back(val);
         namedResult[key] = val;
         if (val->type()->code() == TypeCode::REF) {
