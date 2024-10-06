@@ -16,6 +16,8 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#pragma once
+
 #include "special.h"
 
 class FunctorType : public SpecialType {

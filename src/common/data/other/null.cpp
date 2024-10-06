@@ -15,5 +15,3 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
-
-#pragma once

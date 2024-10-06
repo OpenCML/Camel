@@ -20,21 +20,25 @@
 
 #include "struct.h"
 
-class TensorType : public StructType {
+class TupleData : public StructData {
   private:
-    type_ptr_t elementType_;
-    std::vector<size_t> shape_;
+    std::vector<size_t> refs_;
+    std::vector<data_ptr_t> data_;
 
   public:
-    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape);
+    TupleData(data_list_t data);
+    virtual ~TupleData() = default;
 
-    std::vector<size_t> shape() const { return shape_; }
-    type_ptr_t elementType() const { return elementType_; }
+    void emplace(const data_ptr_t &e);
 
-    std::string toString() const override;
+    data_ptr_t get(size_t index) const;
 
-    bool operator==(const Type &other) const override;
-    bool operator!=(const Type &other) const override;
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual void resolve(const data_vec_t &dataList) override;
 
-    TypeConv convertibility(const Type &other) const override;
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
 };

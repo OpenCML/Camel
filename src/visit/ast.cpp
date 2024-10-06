@@ -369,7 +369,7 @@ any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         for (size_t i = 0; i < idents.size(); i++) {
             const string &ident = idents[i];
             node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimData<int32_t>>(i)});
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
             *execNode << nRefNode;
         }
@@ -1454,11 +1454,11 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     switch (context->getAltNumber()) {
     case 1: // INTEGER UNIT?
         data = dynamic_pointer_cast<Data>(
-            make_shared<PrimData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
+            make_shared<PrimaryData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
         break;
     case 2: // REAL UNIT?
         data =
-            dynamic_pointer_cast<Data>(make_shared<PrimData<double>>(parseNumber<double>(context->REAL()->getText())));
+            dynamic_pointer_cast<Data>(make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
         break;
     case 3: // STRING
     {
@@ -1477,10 +1477,10 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
         data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3)));
     } break;
     case 6: // TRUE
-        data = dynamic_pointer_cast<Data>(make_shared<PrimData<bool>>(true));
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true));
         break;
     case 7: // FALSE
-        data = dynamic_pointer_cast<Data>(make_shared<PrimData<bool>>(false));
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false));
         break;
     case 8: // NULL
         data = dynamic_pointer_cast<Data>(make_shared<NullData>());

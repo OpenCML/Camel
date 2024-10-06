@@ -16,6 +16,8 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#pragma once
+
 #include "type.h"
 
 extern type_ptr_t int32TypePtr;
