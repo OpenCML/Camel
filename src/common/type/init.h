@@ -15,3 +15,27 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "type.h"
+
+extern type_ptr_t int32TypePtr;
+extern type_ptr_t int64TypePtr;
+extern type_ptr_t floatTypePtr;
+extern type_ptr_t doubleTypePtr;
+extern type_ptr_t stringTypePtr;
+extern type_ptr_t boolTypePtr;
+extern type_ptr_t charTypePtr;
+
+extern type_ptr_t intTypePtr;
+extern type_ptr_t realTypePtr;
+extern type_ptr_t numberTypePtr;
+
+extern type_ptr_t listTypePtr;
+
+extern type_ptr_t anyTypePtr;
+extern type_ptr_t voidTypePtr;
+extern type_ptr_t functorTypePtr;
+
+extern type_ptr_t refTypePtr;
+
+void initTypes();

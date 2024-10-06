@@ -15,3 +15,22 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "struct.h"
+
+class VectorType : public StructType {
+  private:
+    type_ptr_t elementType_;
+
+  public:
+    VectorType(const type_ptr_t &elementType);
+
+    type_ptr_t elementType() const;
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
+
+    TypeConv convertibility(const Type &other) const override;
+};

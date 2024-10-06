@@ -16,4 +16,23 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "struct.h"
+
+class TensorType : public StructType {
+  private:
+    type_ptr_t elementType_;
+    std::vector<size_t> shape_;
+
+  public:
+    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape);
+
+    std::vector<size_t> shape() const { return shape_; }
+    type_ptr_t elementType() const { return elementType_; }
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
+
+    TypeConv convertibility(const Type &other) const override;
+};

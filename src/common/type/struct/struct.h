@@ -15,3 +15,18 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "../type.h"
+
+class StructType : public Type {
+  public:
+    StructType() = delete;
+    StructType(TypeCode code) : Type(code) {}
+
+    virtual std::string toString() const override = 0;
+
+    virtual bool operator==(const Type &other) const override = 0;
+    virtual bool operator!=(const Type &other) const override = 0;
+
+    virtual TypeConv convertibility(const Type &other) const override = 0;
+};

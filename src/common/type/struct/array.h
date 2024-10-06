@@ -15,3 +15,25 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "struct.h"
+
+class ArrayType : public StructType {
+  private:
+    size_t size_;
+    type_ptr_t elementType_;
+
+  public:
+    ArrayType() = delete;
+    ArrayType(const type_ptr_t &elementType, size_t size);
+
+    size_t size() const;
+    type_ptr_t elementType() const;
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
+
+    TypeConv convertibility(const Type &other) const override;
+};

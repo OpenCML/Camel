@@ -15,3 +15,25 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "struct.h"
+
+class MapType : public StructType {
+  private:
+    type_ptr_t keyType_;
+    type_ptr_t valueType_;
+
+  public:
+    MapType() = delete;
+    MapType(const type_ptr_t &keyType, const type_ptr_t &valueType);
+
+    type_ptr_t keyType() const { return keyType_; }
+    type_ptr_t valueType() const { return valueType_; }
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
+
+    TypeConv convertibility(const Type &other) const override;
+};

@@ -15,3 +15,18 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "../type.h"
+
+class SpecialType : public Type {
+  public:
+    SpecialType() = delete;
+    SpecialType(TypeCode code) : Type(code) {}
+
+    virtual std::string toString() const override { return typeCodeToString(code_); }
+
+    virtual bool operator==(const Type &other) const override { return code_ == other.code(); }
+    virtual bool operator!=(const Type &other) const override { return code_ != other.code(); }
+
+    virtual TypeConv convertibility(const Type &other) const override;
+};

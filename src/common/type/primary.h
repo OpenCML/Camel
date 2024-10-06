@@ -15,3 +15,13 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "type.h"
+
+class PrimaryType : public Type {
+  public:
+    PrimaryType() = delete;
+    PrimaryType(TypeCode code) : Type(code) {}
+
+    TypeConv convertibility(const Type &other) const override;
+};

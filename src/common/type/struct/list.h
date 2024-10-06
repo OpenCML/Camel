@@ -12,23 +12,20 @@
  * See the [Open Source License] for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 9, 2024
+ * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "struct.h"
 
-#include "type/type.h"
-#include "type/init.h"
-#include "type/primary.h"
-#include "type/special/functor.h"
-#include "type/struct/array.h"
-#include "type/struct/dict.h"
-#include "type/struct/list.h"
-#include "type/struct/map.h"
-#include "type/struct/params.h"
-#include "type/struct/set.h"
-#include "type/struct/tensor.h"
-#include "type/struct/tuple.h"
-#include "type/struct/union.h"
-#include "type/struct/vector.h"
+class ListType : public StructType {
+  public:
+    ListType() : StructType(TypeCode::LIST) {}
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
+
+    TypeConv convertibility(const Type &other) const override;
+};

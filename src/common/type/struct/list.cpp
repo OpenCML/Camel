@@ -16,51 +16,45 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "primary.h"
+#include "list.h"
 
-TypeConv PrimaryType::convertibility(const Type &other) const {
-    const TypeCode otherCode = other.code();
-    if (otherCode == code_) {
-        return TypeConv::SAFE;
-    }
-    if (other.primitive()) {
-        const int thisIndex = static_cast<int>(code_) & 0b00'000111;
-        const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
-        return static_cast<TypeConv>(primeTypeConvMatrix[thisIndex][otherIndex]);
-    }
+using namespace std;
+
+ListType::ListType() : StructType(TypeCode::LIST) {}
+
+string ListType::toString() const { return "List"; }
+
+bool ListType::operator==(const Type &other) const { return true; }
+
+bool ListType::operator!=(const Type &other) const { return false; }
+
+TypeConv ListType::convertibility(const Type &other) const {
     if (other.structured()) {
-        switch (otherCode) {
-        case TypeCode::UNION:
-            [[fallthrough]];
+        switch (other.code()) {
         case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET:
+            [[fallthrough]];
+        case TypeCode::MAP:
             [[fallthrough]];
         case TypeCode::ARRAY:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
             [[fallthrough]];
         case TypeCode::VECTOR:
             [[fallthrough]];
         case TypeCode::TENSOR:
-            [[fallthrough]];
-        case TypeCode::SET:
-            return TypeConv::SAFE;
-        case TypeCode::MAP:
-            [[fallthrough]];
-        case TypeCode::DICT:
             return TypeConv::FORBIDDEN;
+
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.special()) {
-        switch (otherCode) {
-        case TypeCode::ANY:
-            return TypeConv::SAFE;
-        case TypeCode::VOID:
-            return TypeConv::UNSAFE;
-        case TypeCode::FUNCTOR:
-            return TypeConv::FORBIDDEN;
-        default:
-            return TypeConv::FORBIDDEN;
-        }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
     }
+    // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }

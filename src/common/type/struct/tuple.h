@@ -15,3 +15,29 @@
  * Created: Oct. 6, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "struct.h"
+
+class TupleType : public StructType {
+  private:
+    std::vector<type_ptr_t> types_;
+
+  public:
+    TupleType();
+    TupleType(const std::initializer_list<type_ptr_t> &types);
+    TupleType(const std::vector<type_ptr_t> &types);
+
+    std::string toString() const override;
+
+    bool operator==(const Type &other) const override;
+    bool operator!=(const Type &other) const override;
+
+    void add(const type_ptr_t &type);
+    void set(size_t index, const type_ptr_t &type);
+
+    size_t size() const;
+
+    const std::vector<type_ptr_t> &types() const;
+
+    TypeConv convertibility(const Type &other) const override;
+};
