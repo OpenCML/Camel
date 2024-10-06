@@ -1,9 +1,12 @@
-with <capture: Any, condition: Functor, update: Functor>
-func test(target: Functor): Void {
-    return ifexpr(condition<capture>(), () => {
-        exec<() => {
-            update<capture>();
-            test<capture, condition, update>(target)
-        }>(target);
-    }, null)
-};
+// with <capture: Any, condition: Functor, update: Functor>
+// func test(target: Functor): Void {
+//     return ifexpr(condition<capture>(), () => {
+//         exec<() => {
+//             update<capture>();
+//             test<capture, condition, update>(target)
+//         }>(target);
+//     }, null)
+// };
+
+let a = b * (c + d);
+let e = (() => {})(b);

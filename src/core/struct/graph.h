@@ -24,10 +24,45 @@
 
 #include <any>
 #include <list>
+#include <variant>
 
 namespace GraphIR {
 
-enum class NodeType { OPERATOR, DATA, FUNCTOR, GRAPH };
+enum class NodeType { GRAPH, DATA, STRUCT, FUNCTOR, OPERATOR };
+
+enum class DataTypeEnum {
+    SHARED_CONSTANT,  // shared among all copies of the graph and never changed
+    SHARED_VARIABLE,  // produced during runtime and never changed once produced
+    RUNTIME_CONSTANT, // shared among all copies of the graph and may be changed during runtime
+    RUNTIME_VARIABLE  // produced during runtime and may be changed during runtime
+};
+
+struct DataType {
+    bool shared;
+    bool variable;
+
+    DataType(bool shared = false, bool variable = false) : shared(shared), variable(variable) {}
+    constexpr DataType(DataTypeEnum type) : shared(false), variable(false) {
+        switch (type) {
+        case DataTypeEnum::SHARED_CONSTANT:
+            shared = true;
+            variable = false;
+            break;
+        case DataTypeEnum::SHARED_VARIABLE:
+            shared = true;
+            variable = true;
+            break;
+        case DataTypeEnum::RUNTIME_CONSTANT:
+            shared = false;
+            variable = false;
+            break;
+        case DataTypeEnum::RUNTIME_VARIABLE:
+            shared = false;
+            variable = true;
+            break;
+        }
+    }
+};
 
 class Node;
 
@@ -36,23 +71,40 @@ using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;
 using node_vec_t = std::vector<node_ptr_t>;
 
-class Node {
+class Graph;
+
+using graph_ptr_t = std::shared_ptr<Graph>;
+
+class Node : public std::enable_shared_from_this<Node> {
   protected:
-    NodeType type_;
+    NodeType nodeType_;
+    DataType dataType_;
+    graph_ptr_t graph_;
+    size_t dataIndex_;
+
     node_vec_t inputs_;
     node_vec_t outputs_;
 
   public:
-    Node() = default;
+    Node(NodeType nodeType, DataType dataType, graph_ptr_t graph = nullptr)
+        : nodeType_(nodeType), dataType_(dataType), graph_(graph) {};
     virtual ~Node() = default;
 
-    NodeType type() const { return type_; }
+    NodeType nodeType() const { return nodeType_; }
+    DataType dataType() const { return dataType_; }
+
+    void makeVariable(bool shared = false);
+
+    graph_ptr_t graph() const { return graph_; }
+    data_ptr_t data() const;
 
     node_vec_t &inputs() { return inputs_; }
     node_vec_t &outputs() { return outputs_; }
 
     size_t inDegree() const { return inputs_.size(); }
     size_t outDegree() const { return outputs_.size(); }
+
+    virtual data_ptr_t eval() { return data(); };
 
     static void link(node_ptr_t &from, node_ptr_t &to) {
         from->outputs().push_back(to);
@@ -61,51 +113,75 @@ class Node {
 };
 
 class Graph : public Node {
-    node_vec_t nodes_;
-    node_vec_t params_;
-    node_vec_t superParams_;
+    struct InitIndex {
+        size_t index;
+        bool shared;
+    };
+
     node_ptr_t output_;
+    std::shared_ptr<node_vec_t> nodes_;
+
+    std::shared_ptr<data_vec_t> sharedConstants_;
+    std::shared_ptr<data_vec_t> sharedVariables_;
+    std::vector<data_ptr_t> runtimeConstants_;
+    std::shared_ptr<std::vector<InitIndex>> rtVariableIndices_;
+    std::vector<std::variant<InitIndex, data_ptr_t>> runtimeVariables_;
 
   public:
-    Graph() { type_ = NodeType::GRAPH; }
+    Graph();
+    Graph(Graph &other);
     ~Graph() = default;
 
-    node_vec_t &nodes() { return nodes_; }
-    node_vec_t &params() { return params_; }
-    node_vec_t &superParams() { return superParams_; }
-    node_ptr_t &output() { return output_; }
+    void addNode(const node_ptr_t &node) { nodes_->push_back(node); }
 
-    void setOutput(node_ptr_t &&output) { output_ = std::move(output); }
-    void setParams(node_vec_t &&params) { params_ = std::move(params); }
-    void setSuperParams(node_vec_t &&superParams) { superParams_ = std::move(superParams); }
+    // set a constant to a variable, return the index of the variable
+    size_t makeVariable(size_t index, bool shared = false);
+    size_t addConstant(const data_ptr_t &data, bool shared = false);
+    // there is no addVariable() function
+    // because variables are created by makeVariable() function
+    data_ptr_t getConstant(size_t index, bool shared = false);
+    data_ptr_t getVariable(size_t index, bool shared = false);
+    void setConstant(size_t index, const data_ptr_t &data, bool shared = false);
+    void setVariable(size_t index, const data_ptr_t &data, bool shared = false);
 
-    void addNode(const node_ptr_t &node) { nodes_.push_back(node); }
-    void delNode(const node_ptr_t &node) { nodes_.pop_back(); }
+    node_vec_t &nodes() { return *nodes_; }
 };
 
-using graph_ptr_t = std::shared_ptr<Graph>;
-
 class DataNode : public Node {
-    data_ptr_t data_;
+  private:
+    DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
+    ~DataNode() = default;
 
   public:
-    DataNode(const data_ptr_t &data) : data_(data) { type_ = NodeType::DATA; }
-    ~DataNode() = default;
+    static node_ptr_t create(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
 };
 
 inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
     return std::dynamic_pointer_cast<DataNode>(ptr);
 }
 
-class FunctorNode : public Node {
-    func_ptr_t func_;
-    graph_ptr_t graph_;
+class StructNode : public Node {
+  private:
+    StructNode(graph_ptr_t graph, const data_ptr_t &data);
+    ~StructNode() = default;
 
   public:
-    FunctorNode(const func_ptr_t &func) : func_(func) {
-        type_ = NodeType::FUNCTOR;
-        inputs_.resize(2, nullptr);
-    }
+    static node_ptr_t create(graph_ptr_t graph, const data_ptr_t &data);
+    virtual data_ptr_t eval() override;
+};
+
+inline std::shared_ptr<StructNode> struct_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<StructNode>(ptr);
+}
+
+class FunctorNode : public Node {
+    func_ptr_t func_;
+    node_ptr_t linkParams_;
+    node_ptr_t withParams_;
+    node_ptr_t closure_;
+
+  public:
+    FunctorNode(graph_ptr_t graph, const func_ptr_t &func);
 
     void setSuperParams(const node_ptr_t &superParams) { inputs_[0] = superParams; }
     void setParams(const node_ptr_t &params) { inputs_[1] = params; }
@@ -121,10 +197,10 @@ inline std::shared_ptr<FunctorNode> func_node_ptr_cast(const node_ptr_t &ptr) {
 }
 
 class OperatorNode : public Node {
-    Operator *operation_;
+    Operator *operator_;
 
   public:
-    OperatorNode(Operator *operation) : operation_(operation) { type_ = NodeType::OPERATOR; }
+    OperatorNode(graph_ptr_t graph, Operator *op);
     ~OperatorNode() = default;
 };
 

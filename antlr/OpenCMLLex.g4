@@ -19,6 +19,7 @@ INNER       : 'inner';
 OUTER       : 'outer';
 ATOMIC      : 'atomic';
 STATIC      : 'static';
+SYNC        : 'sync';
 
 NULL        : 'null';
 TRUE        : 'true';

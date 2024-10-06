@@ -46,24 +46,13 @@ class Load {
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
 };
 
-template <typename NodeType, typename... Args> node_ptr_t createNode(Args &&...args) {
-    return std::make_shared<Node>(std::make_shared<NodeType>(std::forward<Args>(args)...));
-}
-
 class DataLoad : public Load {
     data_ptr_t data_;
-    data_vec_t unrefDataVec_;
 
   public:
-    DataLoad(data_ptr_t data, data_vec_t &&unrefVec)
-        : Load(NodeType::DATA), data_(data), unrefDataVec_(std::move(unrefVec)) {}
-    DataLoad(data_ptr_t data, data_list_t unrefList = {})
-        : Load(NodeType::DATA), data_(data), unrefDataVec_(unrefList) {}
-
-    bool resolved() const { return unrefDataVec_.empty(); }
+    DataLoad(data_ptr_t data) : Load(NodeType::DATA), data_(data) {}
 
     data_ptr_t data() { return data_; }
-    data_vec_t &getUnrefData() { return unrefDataVec_; }
 
     const std::string toString() const override;
 };

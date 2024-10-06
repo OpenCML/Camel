@@ -108,6 +108,10 @@ string typeCodeToString(TypeCode code) {
     return "Unknown";
 }
 
+/*
+PrimType
+*/
+
 TypeConv PrimType::convertibility(const Type &other) const {
     const TypeCode otherCode = other.code();
     if (otherCode == code_) {
@@ -155,6 +159,10 @@ TypeConv PrimType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
+/*
+SpecialType
+*/
+
 TypeConv SpecialType::convertibility(const Type &other) const {
     if (other.code() == code_) {
         return TypeConv::SAFE;
@@ -165,6 +173,33 @@ TypeConv SpecialType::convertibility(const Type &other) const {
     if (other.code() == TypeCode::VOID)
         return TypeConv::UNSAFE;
     return TypeConv::FORBIDDEN;
+}
+
+/*
+SetType
+*/
+
+SetType::SetType(const type_ptr_t &valueType) : StructType(TypeCode::SET), valueType_(valueType) {}
+
+type_ptr_t SetType::valueType() const { return valueType_; }
+
+std::string SetType::toString() const { return "Set<" + valueType_->toString() + ">"; }
+
+bool SetType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::SET) {
+        return false;
+    }
+    const SetType &otherMap = dynamic_cast<const SetType &>(other);
+
+    return valueType_->equals(otherMap.valueType_);
+}
+bool SetType::operator!=(const Type &other) const {
+    if (other.code() != TypeCode::SET) {
+        return true;
+    }
+    const SetType &otherMap = dynamic_cast<const SetType &>(other);
+
+    return !valueType_->equals(otherMap.valueType_);
 }
 
 TypeConv SetType::convertibility(const Type &other) const {
@@ -203,6 +238,37 @@ TypeConv SetType::convertibility(const Type &other) const {
     }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
+}
+
+/*
+MapType
+*/
+
+MapType::MapType(const type_ptr_t &keyType, const type_ptr_t &valueType)
+    : StructType(TypeCode::MAP), keyType_(keyType), valueType_(valueType) {}
+
+type_ptr_t MapType::keyType() const { return keyType_; }
+
+type_ptr_t MapType::valueType() const { return valueType_; }
+
+std::string MapType::toString() const { return "Map<" + keyType_->toString() + ", " + valueType_->toString() + ">"; }
+
+bool MapType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::MAP) {
+        return false;
+    }
+    const MapType &otherMap = dynamic_cast<const MapType &>(other);
+
+    return keyType_->equals(otherMap.keyType_) && valueType_->equals(otherMap.valueType_);
+}
+
+bool MapType::operator!=(const Type &other) const {
+    if (other.code() != TypeCode::MAP) {
+        return true;
+    }
+    const MapType &otherMap = dynamic_cast<const MapType &>(other);
+
+    return !keyType_->equals(otherMap.keyType_) || !valueType_->equals(otherMap.valueType_);
 }
 
 TypeConv MapType::convertibility(const Type &other) const {
@@ -244,6 +310,104 @@ TypeConv MapType::convertibility(const Type &other) const {
     }
     // primitive types and special types are forbidden
     return TypeConv::FORBIDDEN;
+}
+
+/*
+DictType
+*/
+
+DictType::DictType() : StructType(TypeCode::DICT) {}
+
+std::string DictType::toString() const {
+    if (fields_.empty()) {
+        return "{}";
+    }
+    std::string result = "{ ";
+    for (const auto &field : fields_) {
+        result += field.first + ": ";
+        if (field.second) {
+            result += field.second->toString() + ", ";
+        } else {
+            result += "NULL, ";
+        }
+    }
+    result.pop_back();
+    result.pop_back();
+    result += " }";
+    return result;
+}
+
+bool DictType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::DICT) {
+        return false;
+    }
+    const DictType &otherDict = dynamic_cast<const DictType &>(other);
+
+    if (fields_.size() != otherDict.fields_.size()) {
+        return false;
+    }
+    for (const auto &field : otherDict.fields_) {
+        const auto &ident = field.first;
+        const auto &type = field.second;
+        if (!fields_.count(ident)) {
+            return false;
+        }
+        const auto &fieldType = fields_.at(ident);
+        if (fieldType->code() != type->code()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool DictType::operator!=(const Type &other) const { return !(*this == other); }
+
+bool DictType::add(const std::string &name, const type_ptr_t &type) {
+    if (has(name)) {
+        return false;
+    }
+    fields_[name] = type;
+    return true;
+}
+
+bool DictType::del(const std::string &name) { return fields_.erase(name) > 0; }
+
+bool DictType::has(const std::string &name) const { return fields_.find(name) != fields_.end(); }
+
+void DictType::set(const std::string &name, const type_ptr_t &type) { fields_.at(name) = type; }
+
+type_ptr_t DictType::get(const std::string &name) const { return fields_.at(name); }
+
+void DictType::clear() { fields_.clear(); }
+
+type_ptr_t DictType::operator|(const DictType &other) const {
+    auto result = std::make_shared<DictType>();
+    for (const auto &field : fields_) {
+        result->add(field.first, field.second);
+    }
+    for (const auto &field : other.fields_) {
+        const auto &ident = field.first;
+        const auto &type = field.second;
+        if (!result->has(ident)) {
+            result->add(ident, type);
+        } else {
+            // if the field already exists, use the rhs type and value
+            result->set(ident, type);
+        }
+    }
+    return result;
+}
+
+type_ptr_t DictType::operator&(const DictType &other) const {
+    auto result = std::make_shared<DictType>();
+    for (const auto &field : fields_) {
+        const auto &ident = field.first;
+        if (other.has(ident)) {
+            const type_ptr_t &otherType = other.get(ident);
+            result->add(ident, otherType);
+        }
+    }
+    return result;
 }
 
 TypeConv DictType::convertibility(const Type &other) const {
@@ -295,32 +459,36 @@ TypeConv DictType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-TypeConv ArrayType::convertibility(const Type &other) const {
+/*
+ListType
+*/
+
+ListType::ListType() : StructType(TypeCode::LIST) {}
+
+std::string ListType::toString() const { return "List"; }
+
+bool ListType::operator==(const Type &other) const { return true; }
+
+bool ListType::operator!=(const Type &other) const { return false; }
+
+TypeConv ListType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::ARRAY: {
-            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            return elementType_->convertibility(*otherArray.elementType());
-        }
         case TypeCode::LIST:
             return TypeConv::SAFE;
-        case TypeCode::SET: {
-            const SetType &otherSet = dynamic_cast<const SetType &>(other);
-            return elementType_->convertibility(*otherSet.valueType());
-        }
-        case TypeCode::VECTOR: {
-            // we cannot know the size of the array
-            return TypeConv::FORBIDDEN;
-        }
-        case TypeCode::TENSOR: {
-            // we cannot know the size of the array
-            return TypeConv::FORBIDDEN;
-        }
+        case TypeCode::SET:
+            [[fallthrough]];
         case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::ARRAY:
             [[fallthrough]];
         case TypeCode::DICT:
             [[fallthrough]];
         case TypeCode::UNION:
+            [[fallthrough]];
+        case TypeCode::VECTOR:
+            [[fallthrough]];
+        case TypeCode::TENSOR:
             return TypeConv::FORBIDDEN;
 
         default:
@@ -334,14 +502,56 @@ TypeConv ArrayType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-string TupleType::toString() const {
-    string result = "Tuple<";
+/*
+UnionType
+*/
+
+void UnionType::insertUnion(const UnionType &other) {
+    // flatten the union type
+    for (const auto &type : other.types_) {
+        if (type->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*type));
+        else
+            types_.insert(type);
+    }
+}
+
+UnionType::UnionType() : StructType(TypeCode::UNION) {}
+
+UnionType::UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs) : StructType(TypeCode::UNION) {
+    if (lhs->code() == TypeCode::UNION)
+        insertUnion(dynamic_cast<const UnionType &>(*lhs));
+    else
+        types_.insert(lhs);
+
+    if (rhs->code() == TypeCode::UNION)
+        insertUnion(dynamic_cast<const UnionType &>(*rhs));
+    else
+        types_.insert(rhs);
+}
+
+UnionType::UnionType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::UNION) {
+    for (const auto &type : types) {
+        if (type->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*type));
+        else
+            types_.insert(type);
+    }
+}
+
+UnionType::UnionType(const std::vector<type_ptr_t> &types) : StructType(TypeCode::UNION) {
+    for (const auto &type : types) {
+        if (type->code() == TypeCode::UNION)
+            insertUnion(dynamic_cast<const UnionType &>(*type));
+        else
+            types_.insert(type);
+    }
+}
+
+std::string UnionType::toString() const {
+    std::string result = "Union<";
     for (const auto &type : types_) {
-        if (type) {
-            result += type->toString() + ", ";
-        } else {
-            result += "NULL, ";
-        }
+        result += type->toString() + ", ";
     }
     if (!types_.empty()) {
         result.pop_back();
@@ -351,37 +561,28 @@ string TupleType::toString() const {
     return result;
 }
 
-TypeConv TupleType::convertibility(const Type &other) const {
-    // TODO: not fully implemented
-    if (other.structured()) {
-        switch (other.code()) {
-        case TypeCode::TENSOR:
-            return TypeConv::SAFE;
-        case TypeCode::LIST:
-            return TypeConv::SAFE;
-        case TypeCode::SET:
-            return TypeConv::SAFE;
-        case TypeCode::ARRAY:
-            return TypeConv::SAFE;
-        case TypeCode::VECTOR:
-            return TypeConv::SAFE;
-        case TypeCode::MAP:
-            return TypeConv::SAFE;
-        case TypeCode::DICT:
-            return TypeConv::SAFE;
-        case TypeCode::UNION:
-            return TypeConv::SAFE;
+bool UnionType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::UNION) {
+        return false;
+    }
+    const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
 
-        default:
-            return TypeConv::FORBIDDEN;
+    if (types_.size() != otherUnion.types_.size()) {
+        return false;
+    }
+    for (const auto &type : otherUnion.types_) {
+        if (types_.find(type) == types_.end()) {
+            return false;
         }
     }
-    if (other.code() == TypeCode::ANY) {
-        return TypeConv::SAFE;
-    }
-    // primitive types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return true;
 }
+
+bool UnionType::operator!=(const Type &other) const { return !(*this == other); }
+
+void UnionType::add(const type_ptr_t &type) { types_.insert(type); }
+
+bool UnionType::has(const type_ptr_t &type) const { return types_.find(type) != types_.end(); }
 
 TypeConv UnionType::convertibility(const Type &other) const {
     if (other.structured()) {
@@ -469,6 +670,187 @@ TypeConv UnionType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
+/*
+ArrayType
+*/
+
+ArrayType::ArrayType(const type_ptr_t &elementType, size_t size)
+    : StructType(TypeCode::ARRAY), size_(size), elementType_(elementType) {}
+
+size_t ArrayType::size() const { return size_; }
+
+type_ptr_t ArrayType::elementType() const { return elementType_; }
+
+std::string ArrayType::toString() const {
+    return "Array<" + elementType_->toString() + ", " + std::to_string(size_) + ">";
+}
+
+bool ArrayType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::ARRAY) {
+        return false;
+    }
+    const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+    return size_ == otherArray.size_ && elementType_->equals(otherArray.elementType_);
+}
+
+bool ArrayType::operator!=(const Type &other) const {
+    if (other.code() != TypeCode::ARRAY) {
+        return true;
+    }
+    const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+    return size_ != otherArray.size_ || !elementType_->equals(otherArray.elementType_);
+}
+
+TypeConv ArrayType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::ARRAY: {
+            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+            return elementType_->convertibility(*otherArray.elementType());
+        }
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET: {
+            const SetType &otherSet = dynamic_cast<const SetType &>(other);
+            return elementType_->convertibility(*otherSet.valueType());
+        }
+        case TypeCode::VECTOR: {
+            // we cannot know the size of the array
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::TENSOR: {
+            // we cannot know the size of the array
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+/*
+TupleType
+*/
+
+TupleType::TupleType() : StructType(TypeCode::TUPLE) {}
+
+TupleType::TupleType(const std::initializer_list<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+
+TupleType::TupleType(const std::vector<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+
+string TupleType::toString() const {
+    string result = "Tuple<";
+    for (const auto &type : types_) {
+        if (type) {
+            result += type->toString() + ", ";
+        } else {
+            result += "NULL, ";
+        }
+    }
+    if (!types_.empty()) {
+        result.pop_back();
+        result.pop_back();
+    }
+    result += ">";
+    return result;
+}
+
+bool TupleType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::TUPLE) {
+        return false;
+    }
+    const TupleType &otherTuple = dynamic_cast<const TupleType &>(other);
+
+    if (types_.size() != otherTuple.types_.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < types_.size(); i++) {
+        if (!types_[i]->equals(otherTuple.types_[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+bool TupleType::operator!=(const Type &other) const { return !(*this == other); }
+
+void TupleType::add(const type_ptr_t &type) { types_.push_back(type); }
+
+void TupleType::set(size_t index, const type_ptr_t &type) { types_[index] = type; }
+
+size_t TupleType::size() const { return types_.size(); }
+
+const std::vector<type_ptr_t> &TupleType::types() const { return types_; }
+
+TypeConv TupleType::convertibility(const Type &other) const {
+    // TODO: not fully implemented
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::TENSOR:
+            return TypeConv::SAFE;
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::SET:
+            return TypeConv::SAFE;
+        case TypeCode::ARRAY:
+            return TypeConv::SAFE;
+        case TypeCode::VECTOR:
+            return TypeConv::SAFE;
+        case TypeCode::MAP:
+            return TypeConv::SAFE;
+        case TypeCode::DICT:
+            return TypeConv::SAFE;
+        case TypeCode::UNION:
+            return TypeConv::SAFE;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+/*
+VectorType
+*/
+
+VectorType::VectorType(const type_ptr_t &elementType) : StructType(TypeCode::VECTOR), elementType_(elementType) {}
+
+type_ptr_t VectorType::elementType() const { return elementType_; }
+
+std::string VectorType::toString() const { return "Vector<" + elementType_->toString() + ">"; }
+
+bool VectorType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::VECTOR) {
+        return false;
+    }
+    const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+    return elementType_->equals(otherVector.elementType_);
+}
+
+bool VectorType::operator!=(const Type &other) const {
+    if (other.code() != TypeCode::VECTOR) {
+        return true;
+    }
+    const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+    return !elementType_->equals(otherVector.elementType_);
+}
+
 TypeConv VectorType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
@@ -509,78 +891,33 @@ TypeConv VectorType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
-TypeConv TensorType::convertibility(const Type &other) const {
-    if (other.structured()) {
-        switch (other.code()) {
-        case TypeCode::TENSOR: {
-            const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
-            if (shape_ == otherMatrix.shape()) {
-                return elementType_->convertibility(*otherMatrix.elementType());
-            }
-            return TypeConv::FORBIDDEN;
-        }
-        case TypeCode::LIST:
-            return TypeConv::SAFE;
-        case TypeCode::VECTOR: {
-            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            return elementType_->convertibility(*otherVector.elementType());
-        }
-        case TypeCode::ARRAY: {
-            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            return elementType_->convertibility(*otherArray.elementType());
-        }
-        case TypeCode::SET: {
-            const SetType &otherSet = dynamic_cast<const SetType &>(other);
-            return elementType_->convertibility(*otherSet.valueType());
-        }
-        case TypeCode::MAP:
-            [[fallthrough]];
-        case TypeCode::DICT:
-            [[fallthrough]];
-        case TypeCode::UNION:
-            return TypeConv::FORBIDDEN;
+/*
+ParamsType
+*/
 
-        default:
+TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
+    // TODO: not fully implemented
+    if (elements_.size() != other.elements_.size()) {
+        return TypeConv::FORBIDDEN;
+    }
+    TypeConv result = TypeConv::SAFE;
+    for (size_t i = 0; i < elements_.size(); i++) {
+        const auto &[name, type, value] = elements_[i];
+        const auto &[otherName, otherType, otherValue] = other.elements_[i];
+        if (name != otherName) {
             return TypeConv::FORBIDDEN;
         }
+        TypeConv paramConv = type->convertibility(*otherType);
+        if (paramConv == TypeConv::FORBIDDEN) {
+            return TypeConv::FORBIDDEN;
+        } else if (paramConv == TypeConv::UNSAFE) {
+            result = TypeConv::UNSAFE;
+        }
     }
-    if (other.code() == TypeCode::ANY) {
-        return TypeConv::SAFE;
-    }
-    // primitive types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return result;
 }
 
-TypeConv ListType::convertibility(const Type &other) const {
-    if (other.structured()) {
-        switch (other.code()) {
-        case TypeCode::LIST:
-            return TypeConv::SAFE;
-        case TypeCode::SET:
-            [[fallthrough]];
-        case TypeCode::MAP:
-            [[fallthrough]];
-        case TypeCode::ARRAY:
-            [[fallthrough]];
-        case TypeCode::DICT:
-            [[fallthrough]];
-        case TypeCode::UNION:
-            [[fallthrough]];
-        case TypeCode::VECTOR:
-            [[fallthrough]];
-        case TypeCode::TENSOR:
-            return TypeConv::FORBIDDEN;
-
-        default:
-            return TypeConv::FORBIDDEN;
-        }
-    }
-    if (other.code() == TypeCode::ANY) {
-        return TypeConv::SAFE;
-    }
-    // primitive types and special types are forbidden
-    return TypeConv::FORBIDDEN;
-}
+ParamsType::ParamsType() : StructType(TypeCode::PARAMS) {}
 
 string ParamsType::toString() const {
     string result = "Params<";
@@ -626,6 +963,28 @@ bool ParamsType::operator==(const Type &other) const {
 }
 
 bool ParamsType::operator!=(const Type &other) const { return !(*this == other); }
+
+bool ParamsType::add(const std::string &key, const type_ptr_t &type, const data_ptr_t &value = nullptr) {
+    // here we allow duplicate keys, for the sake of simplicity
+    // we use "" to represent the unnamed parameter
+    elements_.push_back({key, type, value});
+    return true;
+}
+
+size_t ParamsType::size() const { return elements_.size(); }
+
+const std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> &ParamsType::elements() const { return elements_; }
+
+std::map<std::string, type_ptr_t> ParamsType::map() const {
+    auto result = std::map<std::string, type_ptr_t>();
+    for (const auto &tuple : elements_) {
+        const auto &[name, type, value] = tuple;
+        result[name] = type;
+    }
+    return result;
+}
+
+void ParamsType::clear() { elements_.clear(); }
 
 TypeConv ParamsType::convertibility(const Type &other) const {
     // TODO: not fully implemented
@@ -680,6 +1039,127 @@ TypeConv ParamsType::convertibility(const Type &other) const {
     return TypeConv::FORBIDDEN;
 }
 
+/*
+TensorType
+*/
+
+TensorType::TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape)
+    : StructType(TypeCode::TENSOR), elementType_(elementType), shape_(shape) {
+    if (shape_.size() == 0) {
+        throw std::invalid_argument("Tensor shape must at least have 1 dim");
+    }
+    // element type must be a primitive type
+    if (!elementType->primitive()) {
+        throw std::invalid_argument("Tensor element type must be primitive");
+    }
+}
+
+std::vector<size_t> TensorType::shape() const { return shape_; }
+
+type_ptr_t TensorType::elementType() const { return elementType_; }
+
+std::string TensorType::toString() const {
+    std::string result = "Tensor<" + elementType_->toString() + ", [";
+    for (const auto &dim : shape_) {
+        result += std::to_string(dim) + ", ";
+    }
+    if (!shape_.empty()) {
+        result.pop_back();
+        result.pop_back();
+    }
+    result += "]>";
+    return result;
+}
+
+bool TensorType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::TENSOR) {
+        return false;
+    }
+    const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
+    return shape_ == otherMatrix.shape_ && elementType_->equals(otherMatrix.elementType_);
+}
+
+bool TensorType::operator!=(const Type &other) const {
+    if (other.code() != TypeCode::TENSOR) {
+        return true;
+    }
+    const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
+    return shape_ != otherMatrix.shape_ || !elementType_->equals(otherMatrix.elementType_);
+}
+
+TypeConv TensorType::convertibility(const Type &other) const {
+    if (other.structured()) {
+        switch (other.code()) {
+        case TypeCode::TENSOR: {
+            const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
+            if (shape_ == otherMatrix.shape()) {
+                return elementType_->convertibility(*otherMatrix.elementType());
+            }
+            return TypeConv::FORBIDDEN;
+        }
+        case TypeCode::LIST:
+            return TypeConv::SAFE;
+        case TypeCode::VECTOR: {
+            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+            return elementType_->convertibility(*otherVector.elementType());
+        }
+        case TypeCode::ARRAY: {
+            const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
+            return elementType_->convertibility(*otherArray.elementType());
+        }
+        case TypeCode::SET: {
+            const SetType &otherSet = dynamic_cast<const SetType &>(other);
+            return elementType_->convertibility(*otherSet.valueType());
+        }
+        case TypeCode::MAP:
+            [[fallthrough]];
+        case TypeCode::DICT:
+            [[fallthrough]];
+        case TypeCode::UNION:
+            return TypeConv::FORBIDDEN;
+
+        default:
+            return TypeConv::FORBIDDEN;
+        }
+    }
+    if (other.code() == TypeCode::ANY) {
+        return TypeConv::SAFE;
+    }
+    // primitive types and special types are forbidden
+    return TypeConv::FORBIDDEN;
+}
+
+/*
+FunctorType
+*/
+
+FunctorType::FunctorType(const std::shared_ptr<ParamsType> &withType = nullptr,
+                         const std::shared_ptr<ParamsType> &paramsType = nullptr,
+                         const type_ptr_t &returnType = nullptr)
+    : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
+
+void FunctorType::addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }
+
+void FunctorType::setModifiers(const std::unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
+
+bool FunctorType::addIdent(const std::string &ident) {
+    if (innerIdents_.find(ident) != innerIdents_.end()) {
+        return false;
+    }
+    innerIdents_.insert(ident);
+    return true;
+}
+
+bool FunctorType::hasSideEffect() const { return hasSideEffect_; }
+
+const std::unordered_set<std::string> &FunctorType::innerIdents() const { return innerIdents_; }
+
+type_ptr_t FunctorType::withType() const { return std::dynamic_pointer_cast<Type>(withType_); }
+
+type_ptr_t FunctorType::paramsType() const { return std::dynamic_pointer_cast<Type>(paramsType_); }
+
+type_ptr_t FunctorType::returnType() const { return std::dynamic_pointer_cast<Type>(returnType_); }
+
 string FunctorType::toString() const {
     string result = "";
     for (const auto &modifier : modifiers_) {
@@ -728,6 +1208,25 @@ string FunctorType::toString() const {
     }
     return result;
 }
+
+bool FunctorType::operator==(const Type &other) const {
+    if (other.code() != TypeCode::FUNCTOR) {
+        return false;
+    }
+    const FunctorType &otherFunctor = dynamic_cast<const FunctorType &>(other);
+    if (withType_ != nullptr && !withType_->equals(otherFunctor.withType_)) {
+        return false;
+    }
+    if (paramsType_ != nullptr && !paramsType_->equals(otherFunctor.paramsType_)) {
+        return false;
+    }
+    if (returnType_ != nullptr && !returnType_->equals(otherFunctor.returnType_)) {
+        return false;
+    }
+    return true;
+}
+
+bool FunctorType::operator!=(const Type &other) const { return !(*this == other); }
 
 TypeConv FunctorType::convertibility(const Type &other) const {
     // TODO: not fully implemented

@@ -32,10 +32,30 @@
 
 #define DEBUG_LEVEL -1
 
-#define debug(level)          \
-	if (level <= DEBUG_LEVEL) \
-	std::cout << _blue("   [" #level "] ")
+#define debug(level)                                                                                                   \
+    if (level <= DEBUG_LEVEL)                                                                                          \
+    std::cout << _blue("   [" #level "] ")
 
-#define debug_u(level)        \
-	if (level <= DEBUG_LEVEL) \
-	std::cout
+#define debug_u(level)                                                                                                 \
+    if (level <= DEBUG_LEVEL)                                                                                          \
+    std::cout
+
+#ifdef NDEBUG
+
+#define assert(condition, message)                                                                                     \
+    do {                                                                                                               \
+    } while (false)
+
+#else
+
+#define assert(condition, message)                                                                                     \
+    do {                                                                                                               \
+        if (!(condition)) {                                                                                            \
+            std::cerr << "Assertion failed: (" #condition "), function " << __FUNCTION__ << ", file " << __FILE__      \
+                      << ", line " << __LINE__ << ".\n"                                                                \
+                      << "Message: " << message << std::endl;                                                          \
+            std::abort();                                                                                              \
+        }                                                                                                              \
+    } while (false)
+
+#endif
