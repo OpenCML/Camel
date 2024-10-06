@@ -465,6 +465,12 @@ class TupleType : public StructType {
     }
     bool operator!=(const Type &other) const override { return !(*this == other); }
 
+    void add(const type_ptr_t &type) { types_.push_back(type); }
+
+    void set(size_t index, const type_ptr_t &type) { types_[index] = type; }
+
+    size_t size() const { return types_.size(); }
+
     const std::vector<type_ptr_t> &types() const { return types_; }
 
     TypeConv convertibility(const Type &other) const override;
@@ -599,7 +605,6 @@ class ParamsType : public StructType {
 
     bool add(const std::string &key, const type_ptr_t &type, const data_ptr_t &value = nullptr) {
         // here we allow duplicate keys, for the sake of simplicity
-        // we use key "" to represent indexed elements
         elements_.push_back({key, type, value});
         return true;
     }
@@ -611,9 +616,6 @@ class ParamsType : public StructType {
         auto result = std::map<std::string, type_ptr_t>();
         for (const auto &tuple : elements_) {
             const auto &[name, type, value] = tuple;
-            if (name.empty()) {
-                continue;
-            }
             result[name] = type;
         }
         return result;

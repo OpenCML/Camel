@@ -48,7 +48,7 @@ class Data : public std::enable_shared_from_this<Data> {
     Data(type_ptr_t type) : type_(type) {}
     virtual ~Data() = default;
 
-    type_ptr_t type() const { return type_; }
+    virtual type_ptr_t type() const { return type_; }
     entity_ptr_t entity() {
         if (entity_.expired()) {
             entity_ptr_t entity = std::make_shared<Entity>(shared_from_this());
@@ -61,6 +61,10 @@ class Data : public std::enable_shared_from_this<Data> {
 
     bool variable() const { return mutable_; }
     void setVariable() { mutable_ = true; }
+
+    virtual std::vector<std::string> refs() const { return std::vector<std::string>(); }
+    virtual bool resolved() const { return true; }                    // check if all data references are resolved
+    virtual bool resolve(const data_vec_t &dataList) { return true; } // resolve data references by dataList
 
     virtual bool equals(const data_ptr_t &other) const {
         throw std::runtime_error("Base Data::equals() not implemented");
@@ -289,6 +293,12 @@ class StructData : public Data {
     StructData(type_ptr_t type) : Data(type) {}
     virtual ~StructData() = default;
 
+    virtual type_ptr_t type() const override { return type_; }
+
+    virtual std::vector<std::string> refs() const override { return std::vector<std::string>(); }
+    virtual bool resolved() const override { return true; }
+    virtual bool resolve(const data_vec_t &dataList) override { return true; }
+
     virtual bool equals(const data_ptr_t &other) const override = 0;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
     virtual data_ptr_t clone(bool deep = false) const override = 0;
@@ -297,17 +307,24 @@ class StructData : public Data {
 
 class SetData : public StructData {
   private:
+    std::vector<data_ptr_t> refs_;
+    // TODO: need to implement a hash function for data_ptr_t
     std::unordered_set<data_ptr_t> data_;
 
   public:
-    SetData(type_ptr_t elType) : StructData(std::make_shared<SetType>(elType)) {}
-    SetData(type_ptr_t elType, data_list_t data) : StructData(std::make_shared<SetType>(elType)), data_(data) {}
-    SetData(type_ptr_t elType, const std::unordered_set<data_ptr_t> &data)
-        : StructData(std::make_shared<SetType>(elType)), data_(data) {}
+    SetData(type_ptr_t elType);
+    SetData(type_ptr_t elType, data_list_t data);
     virtual ~SetData() = default;
 
-    bool add(const data_ptr_t &e) { return data_.insert(e).second; }
-    bool del(const data_ptr_t &e) { return data_.erase(e) > 0; }
+    // append element to the set during construction
+    bool emplace(const data_ptr_t &e);
+
+    bool add(const data_ptr_t &e);
+    bool del(const data_ptr_t &e);
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -317,23 +334,23 @@ class SetData : public StructData {
 
 class MapData : public StructData {
   private:
+    std::vector<std::pair<data_ptr_t, bool>> refs_; // bool indicates if the ptr is key
+    // TODO: need to implement a hash function for data_ptr_t
     std::unordered_map<data_ptr_t, data_ptr_t> data_;
 
   public:
-    MapData(type_ptr_t keyType, type_ptr_t dataType) : StructData(std::make_shared<MapType>(keyType, dataType)) {}
-    MapData(type_ptr_t keyType, type_ptr_t dataType, const std::unordered_map<data_ptr_t, data_ptr_t> &data)
-        : StructData(std::make_shared<MapType>(keyType, dataType)), data_(data) {}
+    MapData(type_ptr_t keyType, type_ptr_t dataType);
     virtual ~MapData() = default;
 
-    bool set(const data_ptr_t &key, const data_ptr_t &data) { return data_.insert(std::make_pair(key, data)).second; }
-    bool del(const data_ptr_t &key) { return data_.erase(key) > 0; }
-    data_ptr_t get(const data_ptr_t &key) const {
-        auto it = data_.find(key);
-        if (it == data_.end()) {
-            return nullptr;
-        }
-        return it->second;
-    }
+    bool emplace(const data_ptr_t &key, const data_ptr_t &val);
+
+    bool set(const data_ptr_t &key, const data_ptr_t &val);
+    bool del(const data_ptr_t &key);
+    data_ptr_t get(const data_ptr_t &key) const;
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -343,22 +360,20 @@ class MapData : public StructData {
 
 class DictData : public StructData {
   private:
+    std::vector<std::string> refs_;
     std::unordered_map<std::string, data_ptr_t> data_;
 
   public:
-    DictData() : StructData(std::make_shared<DictType>()) {}
+    DictData();
     DictData(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
-    DictData(const std::unordered_map<std::string, data_ptr_t> &data);
     virtual ~DictData() = default;
 
-    bool add(const std::string &key, const data_ptr_t &e);
+    bool emplace(const std::string &key, const data_ptr_t &val);
 
+    bool add(const std::string &key, const data_ptr_t &val);
     bool del(const std::string &key);
-
     bool has(const std::string &key) const;
-
-    void set(const std::string &key, const data_ptr_t &e);
-
+    void set(const std::string &key, const data_ptr_t &val);
     data_ptr_t get(const std::string &key) const;
 
     void clear() {
@@ -366,6 +381,10 @@ class DictData : public StructData {
         dictType.clear();
         data_.clear();
     }
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -375,37 +394,25 @@ class DictData : public StructData {
 
 class ListData : public StructData {
   private:
+    std::vector<size_t> refs_;
     std::vector<data_ptr_t> data_;
 
   public:
-    ListData() : StructData(listTypePtr), data_() {}
-    ListData(data_list_t data) : StructData(listTypePtr), data_(data) {}
-    ListData(const std::vector<data_ptr_t> &data) : StructData(listTypePtr), data_(data) {}
+    ListData();
+    ListData(data_list_t data);
     virtual ~ListData() = default;
 
-    void pushBack(const data_ptr_t &e) { data_.push_back(e); }
-    data_ptr_t popBack() {
-        if (data_.empty()) {
-            return nullptr;
-        }
-        data_ptr_t back = data_.back();
-        data_.pop_back();
-        return back;
-    }
+    void emplace(const data_ptr_t &e);
 
-    data_ptr_t get(size_t index) const {
-        if (index >= data_.size()) {
-            return nullptr;
-        }
-        return data_[index];
-    }
-    bool set(size_t index, const data_ptr_t &e) {
-        if (index >= data_.size()) {
-            return false;
-        }
-        data_[index] = e;
-        return true;
-    }
+    void pushBack(const data_ptr_t &e);
+    data_ptr_t popBack();
+
+    data_ptr_t get(size_t index) const;
+    bool set(size_t index, const data_ptr_t &e);
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -415,6 +422,7 @@ class ListData : public StructData {
 
 class TupleData : public StructData {
   private:
+    std::vector<size_t> refs_;
     std::vector<data_ptr_t> data_;
 
   public:
@@ -425,14 +433,15 @@ class TupleData : public StructData {
         }
         type_ = std::make_shared<TupleType>(types);
     }
-    TupleData(const std::vector<data_ptr_t> &data) : data_(data) {
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<TupleType>(types);
-    }
     virtual ~TupleData() = default;
+
+    void emplace(const data_ptr_t &e);
+
+    data_ptr_t get(size_t index) const;
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -442,48 +451,23 @@ class TupleData : public StructData {
 
 class ArrayData : public StructData {
   private:
+    std::vector<size_t> refs_;
     std::vector<data_ptr_t> data_;
 
   public:
-    ArrayData(const std::shared_ptr<ArrayType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
-        type_ = type_;
-    }
-    ArrayData(const std::shared_ptr<ArrayType> &type, data_list_t data = {}) : data_(data) { type_ = type_; }
-    ArrayData(type_ptr_t type, size_t length, const std::vector<data_ptr_t> &data) : data_(data) {
-        // TODO: check element TYPES
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<ArrayType>(type, length);
-        data_.resize(length);
-    }
-    ArrayData(type_ptr_t type, size_t length, data_list_t data = {}) : data_(data) {
-        // TODO: check element TYPES
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<ArrayType>(type, length);
-        data_.resize(length);
-    }
+    ArrayData(type_ptr_t type, size_t length, data_list_t data = {});
     virtual ~ArrayData() = default;
 
-    data_ptr_t get(size_t index) const {
-        if (index >= data_.size()) {
-            return nullptr;
-        }
-        return data_[index];
-    }
-    bool set(size_t index, const data_ptr_t &e) {
-        if (index >= data_.size()) {
-            return false;
-        }
-        data_[index] = e;
-        return true;
-    }
-    size_t size() const { return data_.size(); }
-    size_t length() const { return data_.size(); }
+    bool emplace(const data_ptr_t &e, size_t index);
+
+    data_ptr_t get(size_t index) const;
+    bool set(size_t index, const data_ptr_t &e);
+    size_t size() const;
+    size_t length() const;
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -493,56 +477,25 @@ class ArrayData : public StructData {
 
 class VectorData : public StructData {
   private:
+    std::vector<size_t> refs_;
     std::vector<data_ptr_t> data_;
 
   public:
-    VectorData(const std::shared_ptr<VectorType> &type, const std::vector<data_ptr_t> &data) : data_(data) {
-        type_ = type_;
-    }
-    VectorData(const std::shared_ptr<VectorType> &type, data_list_t data = {}) : data_(data) { type_ = type_; }
-    VectorData(type_ptr_t type, const std::vector<data_ptr_t> &data) : data_(data) {
-        // TODO: check element TYPES
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<VectorType>(type);
-    }
-    VectorData(type_ptr_t type, data_list_t data = {}) : data_(data) {
-        // TODO: check element TYPES
-        std::vector<type_ptr_t> types;
-        for (const auto &d : data) {
-            types.push_back(d->type());
-        }
-        type_ = std::make_shared<VectorType>(type);
-    }
+    VectorData(type_ptr_t type, data_list_t data = {});
     virtual ~VectorData() = default;
 
-    void pushBack(const data_ptr_t &e) { data_.push_back(e); }
-    data_ptr_t popBack() {
-        if (data_.empty()) {
-            return nullptr;
-        }
-        data_ptr_t back = data_.back();
-        data_.pop_back();
-        return back;
-    }
+    void emplace(const data_ptr_t &e);
 
-    data_ptr_t get(size_t index) const {
-        if (index >= data_.size()) {
-            return nullptr;
-        }
-        return data_[index];
-    }
-    bool set(size_t index, const data_ptr_t &e) {
-        if (index >= data_.size()) {
-            return false;
-        }
-        data_[index] = e;
-        return true;
-    }
-    size_t size() const { return data_.size(); }
-    size_t length() const { return data_.size(); }
+    void pushBack(const data_ptr_t &e);
+    data_ptr_t popBack();
+    data_ptr_t get(size_t index) const;
+    bool set(size_t index, const data_ptr_t &e);
+    size_t size() const;
+    size_t length() const;
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -550,29 +503,26 @@ class VectorData : public StructData {
     virtual const std::string toString() const override;
 };
 
-class ParamsData : public Data {
+class ParamsData : public StructData {
   private:
     bool typeResolved_ = false;
+    std::vector<std::pair<size_t, std::string>> refs_;
     std::vector<data_ptr_t> indexData_;
     std::map<std::string, data_ptr_t> namedData_;
 
   public:
-    ParamsData() : Data(std::make_shared<ParamsType>()) {}
-    ParamsData(const std::vector<data_ptr_t> &indexData, const std::map<std::string, data_ptr_t> &namedData)
-        : Data(std::make_shared<ParamsType>()), indexData_(indexData), namedData_(namedData) {
-        std::shared_ptr<ParamsType> type = std::dynamic_pointer_cast<ParamsType>(type_);
-        for (const auto &e : indexData) {
-            type->add("", e->type(), nullptr);
-        }
-        for (const auto &e : namedData) {
-            type->add(e.first, e.second->type(), nullptr);
-        }
-    }
+    ParamsData();
     virtual ~ParamsData() = default;
 
-    bool setType(type_ptr_t type);
+    virtual type_ptr_t type() const override;
 
-    bool add(const data_ptr_t &e, const std::string &key = "");
+    bool emplace(const data_ptr_t &val, const std::string &key = "");
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override;
+    virtual bool resolve(const data_vec_t &dataList) override;
+
+    void resolveType(type_ptr_t type);
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -582,14 +532,18 @@ class ParamsData : public Data {
 
 class TensorData : public StructData {
   private:
+    std::vector<data_ptr_t> refs_;
     data_ptr_t data_; // TODO: support multi-dimensional tensor
 
   public:
-    TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-        : StructData(std::make_shared<TensorType>(elementType, shape)) {}
+    TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape);
     virtual ~TensorData() = default;
 
     data_ptr_t at(const std::vector<size_t> &index) const;
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
