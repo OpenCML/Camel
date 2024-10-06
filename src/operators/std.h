@@ -18,4 +18,4 @@
 
 #pragma once
 
-#include "core/struct/operator.h"
+#include "common/operator.h"

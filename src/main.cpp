@@ -24,15 +24,15 @@
 #include "antlr/OpenCMLParser.h"
 #include "antlr4-runtime.h"
 
+#include "common/error/error.h"
+#include "common/error/json.h"
+#include "common/type.h"
+#include "compile/parse/ast.h"
+#include "compile/parse/cst.h"
+#include "compile/parse/gir.h"
 #include "config.h"
-#include "core/error/error.h"
-#include "core/error/json.h"
-#include "core/struct/type.h"
+#include "service/formatter/fmt.h"
 #include "utils/log.h"
-#include "visit/ast.h"
-#include "visit/cst.h"
-#include "visit/fmt.h"
-#include "visit/gir.h"
 
 using namespace antlr4;
 

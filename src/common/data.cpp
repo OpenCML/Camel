@@ -19,7 +19,7 @@
 #include "data.h"
 #include "entity.h"
 
-#include "log.h"
+#include "utils/log.h"
 
 using namespace std;
 
