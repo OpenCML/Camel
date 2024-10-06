@@ -120,7 +120,6 @@ class Graph : public Node {
 
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
-    std::shared_ptr<node_vec_t> inputs_;
 
     std::shared_ptr<data_vec_t> sharedConstants_;
     std::shared_ptr<data_vec_t> sharedVariables_;
@@ -133,6 +132,8 @@ class Graph : public Node {
     Graph(Graph &other);
     ~Graph() = default;
 
+    void addNode(const node_ptr_t &node) { nodes_->push_back(node); }
+
     // set a constant to a variable, return the index of the variable
     size_t makeVariable(size_t index, bool shared = false);
     size_t addConstant(const data_ptr_t &data, bool shared = false);
@@ -144,15 +145,15 @@ class Graph : public Node {
     void setVariable(size_t index, const data_ptr_t &data, bool shared = false);
 
     node_vec_t &nodes() { return *nodes_; }
-    node_vec_t &inputs() { return *inputs_; }
-    node_ptr_t &output() { return output_; }
 };
 
 class DataNode : public Node {
-
-  public:
+  private:
     DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
     ~DataNode() = default;
+
+  public:
+    static node_ptr_t create(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
 };
 
 inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
@@ -160,12 +161,12 @@ inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
 }
 
 class StructNode : public Node {
-    data_vec_t unrefDataVec_;
-
-  public:
-    StructNode(graph_ptr_t graph, const data_ptr_t &data, data_vec_t &unrefData);
+  private:
+    StructNode(graph_ptr_t graph, const data_ptr_t &data);
     ~StructNode() = default;
 
+  public:
+    static node_ptr_t create(graph_ptr_t graph, const data_ptr_t &data);
     virtual data_ptr_t eval() override;
 };
 

@@ -631,7 +631,7 @@ class FunctorType : public SpecialType {
     std::unordered_set<FunctionModifier> modifiers_;
     std::shared_ptr<ParamsType> withType_;
     std::shared_ptr<ParamsType> paramsType_;
-    std::unordered_map<std::string, bool> innerIdents_;
+    std::unordered_set<std::string> innerIdents_;
     bool hasSideEffect_ = false;
     type_ptr_t returnType_;
 
@@ -644,25 +644,16 @@ class FunctorType : public SpecialType {
     void addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }
     void setModifiers(const std::unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
 
-    bool addIdent(const std::string &ident, bool variable = false) {
+    bool addIdent(const std::string &ident) {
         if (innerIdents_.find(ident) != innerIdents_.end()) {
             return false;
         }
-        innerIdents_[ident] = variable;
-        if (variable) {
-            hasSideEffect_ = true;
-        }
+        innerIdents_.insert(ident);
         return true;
     }
     bool hasSideEffect() const { return hasSideEffect_; }
-    std::unordered_set<std::string> variables() const {
-        std::unordered_set<std::string> result;
-        for (const auto &ident : innerIdents_) {
-            if (ident.second) {
-                result.insert(ident.first);
-            }
-        }
-        return result;
+    const std::unordered_set<std::string> &innerIdents() const {
+        return innerIdents_;
     }
 
     type_ptr_t withType() const { return std::dynamic_pointer_cast<Type>(withType_); }

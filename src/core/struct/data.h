@@ -63,8 +63,8 @@ class Data : public std::enable_shared_from_this<Data> {
     void setVariable() { mutable_ = true; }
 
     virtual std::vector<std::string> refs() const { return std::vector<std::string>(); }
-    virtual bool resolved() const { return true; }                    // check if all data references are resolved
-    virtual bool resolve(const data_vec_t &dataList) { return true; } // resolve data references by dataList
+    virtual bool resolved() const { return true; }      // check if all data references are resolved
+    virtual void resolve(const data_vec_t &dataList) {} // resolve data references by dataList
 
     virtual bool equals(const data_ptr_t &other) const {
         throw std::runtime_error("Base Data::equals() not implemented");
@@ -297,7 +297,7 @@ class StructData : public Data {
 
     virtual std::vector<std::string> refs() const override { return std::vector<std::string>(); }
     virtual bool resolved() const override { return true; }
-    virtual bool resolve(const data_vec_t &dataList) override { return true; }
+    virtual void resolve(const data_vec_t &dataList) override {}
 
     virtual bool equals(const data_ptr_t &other) const override = 0;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
@@ -324,7 +324,7 @@ class SetData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -350,7 +350,7 @@ class MapData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -384,7 +384,7 @@ class DictData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -412,7 +412,7 @@ class ListData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -435,7 +435,7 @@ class TupleData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -461,7 +461,7 @@ class ArrayData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -489,7 +489,7 @@ class VectorData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
@@ -514,7 +514,7 @@ class ParamsData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override;
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     void resolveType(type_ptr_t type);
 
@@ -537,7 +537,7 @@ class TensorData : public StructData {
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
-    virtual bool resolve(const data_vec_t &dataList) override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;

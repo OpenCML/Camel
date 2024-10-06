@@ -86,13 +86,11 @@ vector<string> SetData::refs() const {
     return res;
 }
 
-bool SetData::resolve(const data_vec_t &dataList) {
+void SetData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         data_ptr_t ref = refs_[i];
         data_ptr_t data = dataList[i];
@@ -100,7 +98,6 @@ bool SetData::resolve(const data_vec_t &dataList) {
         data_.insert(data);
     }
     refs_.clear();
-    return true;
 }
 
 data_ptr_t SetData::clone(bool deep) const {
@@ -182,13 +179,11 @@ vector<string> MapData::refs() const {
     return res;
 }
 
-bool MapData::resolve(const data_vec_t &dataList) {
+void MapData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         auto &[ref, isKey] = refs_[i];
         data_ptr_t data = dataList[i];
@@ -200,7 +195,6 @@ bool MapData::resolve(const data_vec_t &dataList) {
         }
     }
     refs_.clear();
-    return true;
 }
 
 data_ptr_t MapData::clone(bool deep) const { throw runtime_error("Not implemented"); }
@@ -315,13 +309,11 @@ data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
 
 vector<string> DictData::refs() const { return refs_; }
 
-bool DictData::resolve(const data_vec_t &dataList) {
+void DictData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     DictType &dictType = *static_cast<DictType *>(type_.get());
     for (size_t i = 0; i < refs_.size(); i++) {
         const string &key = refs_[i];
@@ -330,7 +322,6 @@ bool DictData::resolve(const data_vec_t &dataList) {
         dictType.set(key, data->type());
     }
     refs_.clear();
-    return true;
 }
 
 data_ptr_t DictData::clone(bool deep) const { return make_shared<DictData>(data_); }
@@ -437,19 +428,16 @@ vector<string> ListData::refs() const {
     return res;
 }
 
-bool ListData::resolve(const data_vec_t &dataList) {
+void ListData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         data_[idx] = dataList[i];
     }
     refs_.clear();
-    return true;
 }
 
 data_ptr_t ListData::clone(bool) const {
@@ -526,19 +514,16 @@ vector<string> TupleData::refs() const {
     return res;
 }
 
-bool TupleData::resolve(const data_vec_t &dataList) {
+void TupleData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         data_[idx] = dataList[i];
     }
     refs_.clear();
-    return true;
 }
 
 data_ptr_t TupleData::clone(bool) const {
@@ -630,20 +615,17 @@ vector<string> ArrayData::refs() const {
     return res;
 }
 
-bool ArrayData::resolve(const data_vec_t &dataList) {
+void ArrayData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         // TODO: need to check type compatibility
         data_[idx] = dataList[i];
     }
     refs_.clear();
-    return true;
 }
 
 data_ptr_t ArrayData::clone(bool) const {
@@ -754,19 +736,16 @@ vector<string> VectorData::refs() const {
     return res;
 }
 
-bool VectorData::resolve(const data_vec_t &dataList) {
+void VectorData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         data_[idx] = dataList[i];
     }
     refs_.clear();
-    return true;
 }
 
 data_ptr_t VectorData::clone(bool) const {
@@ -829,21 +808,18 @@ bool ParamsData::resolved() const {
     return refs_.empty();
 }
 
-bool ParamsData::resolve(const data_vec_t &dataList) {
+void ParamsData::resolve(const data_vec_t &dataList) {
     assert(typeResolved_, "Cannot resolve data for type-unresolved ParamsData");
     if (refs_.empty()) {
-        return true;
+        return;
     }
-    if (refs_.size() != dataList.size()) {
-        return false;
-    }
+    assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         const auto &[idx, key] = refs_[i];
         indexData_[idx] = dataList[i];
         namedData_[key] = dataList[i];
     }
     refs_.clear();
-    return true;
 }
 
 void ParamsData::resolveType(type_ptr_t type) {
@@ -943,7 +919,7 @@ std::vector<std::string> TensorData::refs() const {
     throw runtime_error("Not implemented");
 }
 
-bool TensorData::resolve(const data_vec_t &dataList) {
+void TensorData::resolve(const data_vec_t &dataList) {
     // TODO
     throw runtime_error("Not implemented");
 }
@@ -957,10 +933,6 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
     // TODO
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
-
-vector<string> TensorData::refs() const {}
-
-bool TensorData::resolve(const data_vec_t &dataList) {}
 
 data_ptr_t TensorData::clone(bool) const { throw runtime_error("Not implemented"); }
 

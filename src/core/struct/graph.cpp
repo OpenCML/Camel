@@ -47,15 +47,13 @@ Graph
 
 gir::Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(std::make_shared<node_vec_t>()),
-      inputs_(std::make_shared<node_vec_t>()), sharedConstants_(std::make_shared<data_vec_t>()),
-      sharedVariables_(std::make_shared<data_vec_t>()), rtVariableIndices_(std::make_shared<std::vector<InitIndex>>()),
-      runtimeConstants_(), runtimeVariables_() {}
+      sharedConstants_(std::make_shared<data_vec_t>()), sharedVariables_(std::make_shared<data_vec_t>()),
+      rtVariableIndices_(std::make_shared<std::vector<InitIndex>>()), runtimeConstants_(), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
-    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), inputs_(other.inputs_), output_(other.output_),
-      sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
-      rtVariableIndices_(other.rtVariableIndices_), runtimeConstants_(other.runtimeConstants_.size()),
-      runtimeVariables_() {
+    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), sharedConstants_(other.sharedConstants_),
+      sharedVariables_(other.sharedVariables_), rtVariableIndices_(other.rtVariableIndices_),
+      runtimeConstants_(other.runtimeConstants_.size()), runtimeVariables_() {
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
     }
@@ -148,22 +146,42 @@ DataNode::DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared)
     dataIndex_ = graph->addConstant(data, shared);
 }
 
+node_ptr_t DataNode::create(graph_ptr_t graph, const data_ptr_t &data, bool shared) {
+    const auto res = std::make_shared<DataNode>(graph, data, shared);
+    graph->addNode(res);
+    return res;
+}
+
 /*
 StructNode
 */
 
-StructNode::StructNode(graph_ptr_t graph, const data_ptr_t &data, data_vec_t &unrefData)
-    : Node(NodeType::STRUCT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), unrefDataVec_(std::move(unrefData)) {
+StructNode::StructNode(graph_ptr_t graph, const data_ptr_t &data)
+    : Node(NodeType::STRUCT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph) {
     assert(graph, "Graph is not set for StructNode.");
     // add data to graph as a runtime constant
     dataIndex_ = graph->addConstant(data, false);
 }
 
+node_ptr_t StructNode::create(graph_ptr_t graph, const data_ptr_t &data) {
+    const auto res = std::make_shared<StructNode>(graph, data);
+    graph->addNode(res);
+    return res;
+}
+
 data_ptr_t StructNode::eval() {
     data_ptr_t data = Node::data();
-    // unref the data
-    for (const auto &d : unrefDataVec_) {
-        d->unref();
+    if (data->resolved()) {
+        return data;
+    } else {
+        data_vec_t resVec;
+        for (auto node : inputs_) {
+            const data_ptr_t &data = node->data();
+            assert(data, "Input data is null.");
+            assert(data->resolved(), "Input data is not resolved.");
+            resVec.push_back(data);
+        }
+        data->resolve(resVec);
     }
     return data;
 }
