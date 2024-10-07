@@ -18,8 +18,11 @@
  */
 
 #include "vector.h"
+#include "params.h"
 #include "utils/log.h"
 
+#include "../other/any.h"
+#include "../other/null.h"
 #include "../other/ref.h"
 
 using namespace std;
@@ -94,7 +97,38 @@ bool VectorData::equals(const data_ptr_t &other) const {
 }
 
 data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
-    // TODO
+    if (target == type_ || type_->equals(target)) {
+        // same type, no need to convert
+        return shared_from_this();
+    }
+    try {
+        if (target->structured()) {
+            switch (target->code()) {
+                // TODO: implement conversion to other structured types
+            case TypeCode::PARAMS:
+                return convertToParams(dynamic_pointer_cast<ParamsType>(target));
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        } else if (target->special()) {
+            switch (target->code()) {
+            case TypeCode::ANY:
+                return make_shared<AnyData>(shared_from_this());
+                break;
+            case TypeCode::VOID:
+                return make_shared<NullData>();
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        }
+        throw UnsupportedConvError();
+    } catch (const UnsupportedConvError &e) {
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    } catch (const std::exception &e) {
+        throw DataConvError(e.what());
+    }
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
@@ -138,4 +172,12 @@ const string VectorData::toString() const {
     }
     str += "]";
     return str;
+}
+
+data_ptr_t VectorData::convertToParams(std::shared_ptr<ParamsType> &target) {
+    auto params = make_shared<ParamsData>();
+    for (const auto &e : data_) {
+        params->emplace(e);
+    }
+    return params->convertToParams(target);
 }

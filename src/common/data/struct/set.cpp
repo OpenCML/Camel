@@ -20,6 +20,8 @@
 #include "set.h"
 #include "utils/log.h"
 
+#include "../other/any.h"
+#include "../other/null.h"
 #include "../other/ref.h"
 
 using namespace std;
@@ -62,15 +64,30 @@ data_ptr_t SetData::convert(type_ptr_t target, bool inplace) {
         // same type, no need to convert
         return shared_from_this();
     }
-    if (target->structured()) {
-        switch (target->code()) {
-        case TypeCode::SET:
-            /* code */
-            break;
-
-        default:
-            break;
+    try {
+        if (target->structured()) {
+            switch (target->code()) {
+                // TODO: implement conversion to other structured types
+            default:
+                throw UnsupportedConvError();
+            }
+        } else if (target->special()) {
+            switch (target->code()) {
+            case TypeCode::ANY:
+                return make_shared<AnyData>(shared_from_this());
+                break;
+            case TypeCode::VOID:
+                return make_shared<NullData>();
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
         }
+        throw UnsupportedConvError();
+    } catch (const UnsupportedConvError &e) {
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    } catch (const std::exception &e) {
+        throw DataConvError(e.what());
     }
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }

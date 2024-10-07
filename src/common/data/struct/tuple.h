@@ -42,4 +42,6 @@ class TupleData : public StructData {
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
+
+    data_ptr_t convertToParams(std::shared_ptr<ParamsType> &target);
 };

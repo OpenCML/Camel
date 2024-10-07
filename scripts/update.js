@@ -20,6 +20,8 @@ function formatDate(date) {
     return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
 }
 
+let updatedFiles = 0
+
 function updateFile(filePath) {
     fs.stat(filePath, (err, stats) => {
         if (err) {
@@ -35,7 +37,7 @@ function updateFile(filePath) {
         })
 
         let lines = []
-        let hasCreatedLine = false
+        let needUpdate = false
         let updateIndex = 0
 
         const updatedLine = ` * Updated: ${updatedDate}`
@@ -46,20 +48,24 @@ function updateFile(filePath) {
             lines.push('')
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].includes('* Created:')) {
-                    hasCreatedLine = true
+                    needUpdate = true
                     if (lines[i + 1].includes('* Updated:')) {
                         lines[i + 1] = updatedLine
+                        if (lines[i + 1] == updatedLine) {
+                            needUpdate = false
+                        }
                     } else {
                         updateIndex = i + 1
                     }
                     break
                 }
             }
-            if (hasCreatedLine) {
+            if (needUpdate) {
                 if (updateIndex) {
                     lines.splice(updateIndex, 0, updatedLine)
                 }
                 fs.writeFileSync(filePath, lines.join('\r\n'), 'utf8')
+                updatedFiles++
                 console.log(`Updated: ${filePath}`)
             }
         })
@@ -95,3 +101,5 @@ const targetDirs = ['src', 'include']
 targetDirs.forEach((targetDirectory) => {
     traverseDirectory(targetDirectory)
 })
+
+console.log(`Updated ${updatedFiles} files`)

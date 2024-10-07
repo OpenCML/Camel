@@ -23,7 +23,7 @@
 
 class NullData : public Data {
   public:
-    NullData(type_ptr_t type = voidTypePtr);
+    NullData();
     virtual ~NullData() = default;
 
     virtual bool equals(const data_ptr_t &other) const override;

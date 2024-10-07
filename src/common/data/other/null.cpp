@@ -20,7 +20,7 @@
 #include "null.h"
 #include "any.h"
 
-NullData::NullData(type_ptr_t type = voidTypePtr) : Data(type) {}
+NullData::NullData() : Data(voidTypePtr) {}
 
 bool NullData::equals(const data_ptr_t &other) const { return true; }
 

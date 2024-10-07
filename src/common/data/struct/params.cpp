@@ -23,6 +23,8 @@
 #include "tuple.h"
 #include "utils/log.h"
 
+#include "../other/any.h"
+#include "../other/null.h"
 #include "../other/ref.h"
 
 using namespace std;
@@ -64,6 +66,73 @@ void ParamsData::resolve(const data_vec_t &dataList) {
         }
     }
     refs_.clear();
+}
+
+bool ParamsData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ParamsData
+    return true;
+}
+
+data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
+    if (target == type_ || type_->equals(target)) {
+        // same type, no need to convert
+        return shared_from_this();
+    }
+    try {
+        if (target->structured()) {
+            switch (target->code()) {
+            case TypeCode::MAP:
+                return convertToMap();
+                break;
+            case TypeCode::LIST:
+                return convertToList();
+                break;
+            case TypeCode::TUPLE:
+                return convertToTuple();
+                break;
+            case TypeCode::PARAMS:
+                return convertToParams(dynamic_pointer_cast<ParamsType>(target), inplace);
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        } else if (target->special()) {
+            switch (target->code()) {
+            case TypeCode::ANY:
+                return make_shared<AnyData>(shared_from_this());
+                break;
+            case TypeCode::VOID:
+                return make_shared<NullData>();
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        }
+        throw UnsupportedConvError();
+    } catch (const UnsupportedConvError &e) {
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    } catch (const std::exception &e) {
+        throw DataConvError(e.what());
+    }
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+}
+
+data_ptr_t ParamsData::clone(bool) const { return make_shared<ParamsData>(indexData_, namedData_); }
+
+const string ParamsData::toString() const {
+    string str = "(";
+    for (const auto &e : indexData_) {
+        str += e->toString() + ", ";
+    }
+    for (const auto &e : namedData_) {
+        str += e.first + ": " + e.second->toString() + ", ";
+    }
+    if (str.length() > 1) {
+        str.pop_back();
+        str.pop_back();
+    }
+    str += ")";
+    return str;
 }
 
 data_ptr_t ParamsData::convertToMap() {
@@ -132,54 +201,4 @@ data_ptr_t ParamsData::convertToParams(shared_ptr<ParamsType> &other, bool inpla
         params->indexData_ = std::move(indexData);
         params->namedData_ = std::move(namedData);
     }
-}
-
-bool ParamsData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ParamsData
-    return true;
-}
-
-data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
-    // TODO
-    if (target == type_ || type_->equals(target)) {
-        // same type, no need to convert
-        return shared_from_this();
-    }
-    if (target->structured()) {
-        switch (target->code()) {
-        case TypeCode::MAP:
-            return convertToMap();
-            break;
-        case TypeCode::LIST:
-            return convertToList();
-            break;
-        case TypeCode::TUPLE:
-            return convertToTuple();
-            break;
-        case TypeCode::PARAMS:
-            return convertToParams(dynamic_pointer_cast<ParamsType>(target), inplace);
-            break;
-        default:
-            throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-        }
-    }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-}
-
-data_ptr_t ParamsData::clone(bool) const { return make_shared<ParamsData>(indexData_, namedData_); }
-
-const string ParamsData::toString() const {
-    string str = "(";
-    for (const auto &e : indexData_) {
-        str += e->toString() + ", ";
-    }
-    for (const auto &e : namedData_) {
-        str += e.first + ": " + e.second->toString() + ", ";
-    }
-    if (str.length() > 1) {
-        str.pop_back();
-        str.pop_back();
-    }
-    str += ")";
-    return str;
 }
