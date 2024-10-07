@@ -53,8 +53,6 @@ TypeConv PrimaryType::convertibility(const Type &other) const {
             return TypeConv::SAFE;
         case TypeCode::VOID:
             return TypeConv::UNSAFE;
-        case TypeCode::FUNCTOR:
-            return TypeConv::FORBIDDEN;
         default:
             return TypeConv::FORBIDDEN;
         }

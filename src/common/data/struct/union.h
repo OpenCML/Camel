@@ -12,33 +12,28 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 7, 2024
  * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "struct.h"
+#include "../data.h"
 
-class MapData : public StructData {
-  private:
-    std::vector<std::pair<data_ptr_t, bool>> refs_; // bool indicates if the ptr is key
-    // TODO: need to implement a hash function for data_ptr_t
-    std::unordered_map<data_ptr_t, data_ptr_t> data_;
+class UnionData : public Data {
+    data_ptr_t data_;
+    std::string ref_;
 
   public:
-    MapData(type_ptr_t keyType, type_ptr_t dataType);
-    virtual ~MapData() = default;
+    UnionData(const type_ptr_t &type, const data_ptr_t &data);
+    virtual ~UnionData() = default;
 
-    bool emplace(const data_ptr_t &key, const data_ptr_t &val);
-
-    bool set(const data_ptr_t &key, const data_ptr_t &val);
-    bool del(const data_ptr_t &key);
-    data_ptr_t get(const data_ptr_t &key) const;
+    data_ptr_t data() const;
+    type_ptr_t actualType() const;
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolved() const override;
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

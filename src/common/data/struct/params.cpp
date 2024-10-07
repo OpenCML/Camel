@@ -71,7 +71,7 @@ data_ptr_t ParamsData::convertToMap() {
     auto mapData = make_shared<MapData>(mapType);
     for (const auto &e : namedData_) {
         const auto &key = dynamic_pointer_cast<Data>(make_shared<StringData>(e.first));
-        const auto &val = e.second->convert(anyTypePtr, true);
+        const auto &val = e.second->convert(anyTypePtr);
         mapData->emplace(key, val);
     }
     return mapData;

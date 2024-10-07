@@ -33,7 +33,7 @@ bool StringData::equals(const data_ptr_t &other) const {
     return false;
 }
 
-data_ptr_t StringData::convert(type_ptr_t target, bool inplace = false) {
+data_ptr_t StringData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();
@@ -47,18 +47,7 @@ data_ptr_t StringData::convert(type_ptr_t target, bool inplace = false) {
             default:
                 throw UnsupportedConvError();
             }
-        } else if (target->structured()) {
-            switch (target->code()) {
-            case TypeCode::LIST: {
-                auto listData = std::make_shared<ListData>();
-                for (const auto &c : data_) {
-                    listData->emplace(std::make_shared<StringData>(std::string(1, c)));
-                }
-                return listData;
-            }
-            default:
-                throw UnsupportedConvError();
-            }
+
         } else if (target->special()) {
             switch (target->code()) {
             case TypeCode::ANY: {
@@ -77,7 +66,7 @@ data_ptr_t StringData::convert(type_ptr_t target, bool inplace = false) {
     }
 }
 
-data_ptr_t StringData::clone(bool deep = false) const { return std::make_shared<StringData>(data_); }
+data_ptr_t StringData::clone(bool deep) const { return std::make_shared<StringData>(data_); }
 
 const std::string StringData::toString() const {
     std::regex re("\\n");
