@@ -91,5 +91,7 @@ function traverseDirectory(dir) {
     })
 }
 
-const targetDirectory = 'src'
-traverseDirectory(targetDirectory)
+const targetDirs = ['src', 'include']
+targetDirs.forEach((targetDirectory) => {
+    traverseDirectory(targetDirectory)
+})

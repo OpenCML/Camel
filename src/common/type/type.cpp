@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,7 +87,7 @@ Type::Type(TypeCode type) : code_(type) {}
 
 const TypeCode &Type::code() const { return code_; }
 
-bool Type::primitive() const { return (static_cast<int>(code_) & 0b11'000000) == 0b00'000000; }
+bool Type::primary() const { return (static_cast<int>(code_) & 0b11'000000) == 0b00'000000; }
 
 bool Type::structured() const { return (static_cast<int>(code_) & 0b11'000000) == 0b01'000000; }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shap
         throw invalid_argument("Tensor shape must at least have 1 dim");
     }
     // element type must be a primitive type
-    if (!elementType->primitive()) {
+    if (!elementType->primary()) {
         throw invalid_argument("Tensor element type must be primitive");
     }
 }

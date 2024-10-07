@@ -12,25 +12,24 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 7, 2024
  * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "special.h"
+#pragma once
 
-TypeConv SpecialType::convertibility(const Type &other) const {
-    if (other.code() == code_) {
-        return TypeConv::SAFE;
-    }
-    if (other.code() == TypeCode::ANY) {
-        return TypeConv::SAFE;
-    }
-    if (other.primary() || other.structured()) {
-        return TypeConv::FORBIDDEN;
-    }
-    if (other.code() == TypeCode::VOID) {
-        return TypeConv::UNSAFE;
-    }
-    return TypeConv::FORBIDDEN;
-}
+#include "../data.h"
+
+class AnyData : public Data {
+    data_ptr_t data_;
+
+  public:
+    AnyData(const data_ptr_t &data);
+    virtual ~AnyData() = default;
+
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+};

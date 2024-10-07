@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,7 +64,7 @@ template <typename T> class PrimaryData : public Data {
             return shared_from_this();
         }
         try {
-            if (target->primitive()) {
+            if (target->primary()) {
                 if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> || std::is_same_v<T, float> ||
                               std::is_same_v<T, double>) {
                     switch (target->code()) {

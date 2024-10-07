@@ -13,11 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "params.h"
+#include "list.h"
+#include "map.h"
+#include "tuple.h"
 #include "utils/log.h"
 
 #include "../other/ref.h"
@@ -63,14 +66,41 @@ void ParamsData::resolve(const data_vec_t &dataList) {
     refs_.clear();
 }
 
+data_ptr_t ParamsData::convertToMap() {
+    auto mapType = make_shared<MapType>(stringTypePtr, anyTypePtr);
+    auto mapData = make_shared<MapData>(mapType);
+    for (const auto &e : namedData_) {
+        const auto &key = dynamic_pointer_cast<Data>(make_shared<StringData>(e.first));
+        const auto &val = e.second->convert(anyTypePtr, true);
+        mapData->emplace(key, val);
+    }
+    return mapData;
+}
+
+data_ptr_t ParamsData::convertToList() {
+    auto listData = make_shared<ListData>();
+    for (const auto &e : indexData_) {
+        listData->emplace(e);
+    }
+    return listData;
+}
+
+data_ptr_t ParamsData::convertToTuple() {
+    auto tupleData = make_shared<TupleData>();
+    for (const auto &e : indexData_) {
+        tupleData->emplace(e);
+    }
+    return tupleData;
+}
+
 data_ptr_t ParamsData::convertToParams(shared_ptr<ParamsType> &other, bool inplace) {
     const auto &typeList = other->elements();
     vector<pair<size_t, string>> refs;
     vector<data_ptr_t> indexData;
     map<string, data_ptr_t> namedData;
     for (size_t i = 0; i < typeList.size(); i++) {
-        const auto &[key, valType, defaultData] = typeList[i];
-        data_ptr_t val = defaultData;
+        const auto &[key, _, value] = typeList[i];
+        data_ptr_t val = value;
         if (namedData_.find(key) != namedData_.end()) {
             val = namedData_[key];
         } else if (i < indexData_.size()) {
@@ -117,12 +147,20 @@ data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
     }
     if (target->structured()) {
         switch (target->code()) {
-        case TypeCode::SET:
-            /* code */
+        case TypeCode::MAP:
+            return convertToMap();
             break;
-
+        case TypeCode::LIST:
+            return convertToList();
+            break;
+        case TypeCode::TUPLE:
+            return convertToTuple();
+            break;
+        case TypeCode::PARAMS:
+            return convertToParams(dynamic_pointer_cast<ParamsType>(target), inplace);
+            break;
         default:
-            break;
+            throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
         }
     }
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));

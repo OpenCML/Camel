@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -107,7 +107,17 @@ data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
             break;
 
         default:
+            throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        }
+    }
+    if (target->special()) {
+        switch (target->code()) {
+        case TypeCode::ANY:
+            /* code */
             break;
+
+        default:
+            throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
         }
     }
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));

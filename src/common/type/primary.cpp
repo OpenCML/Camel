@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@ TypeConv PrimaryType::convertibility(const Type &other) const {
     if (otherCode == code_) {
         return TypeConv::SAFE;
     }
-    if (other.primitive()) {
+    if (other.primary()) {
         const int thisIndex = static_cast<int>(code_) & 0b00'000111;
         const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
         return static_cast<TypeConv>(primeTypeConvMatrix[thisIndex][otherIndex]);
@@ -43,10 +43,6 @@ TypeConv PrimaryType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::SET:
             return TypeConv::SAFE;
-        case TypeCode::MAP:
-            [[fallthrough]];
-        case TypeCode::DICT:
-            return TypeConv::FORBIDDEN;
         default:
             return TypeConv::FORBIDDEN;
         }

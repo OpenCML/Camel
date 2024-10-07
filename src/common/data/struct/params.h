@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,9 @@ class ParamsData : public StructData {
     std::vector<data_ptr_t> indexData_;
     std::map<std::string, data_ptr_t> namedData_;
 
+    data_ptr_t convertToMap();
+    data_ptr_t convertToList();
+    data_ptr_t convertToTuple();
     data_ptr_t convertToParams(std::shared_ptr<ParamsType> &target, bool inplace = false);
 
   public:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 7, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,6 +63,7 @@ class Data : public std::enable_shared_from_this<Data> {
     virtual const std::string toString() const;
 };
 
+class AnyData;
 class RefData;
 class NullData;
 class StringData;
