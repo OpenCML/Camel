@@ -137,6 +137,8 @@ void gir::Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) 
     }
 }
 
+data_ptr_t gir::Graph::eval() {}
+
 /*
 DataNode
 */

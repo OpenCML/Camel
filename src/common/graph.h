@@ -121,6 +121,7 @@ class Graph : public Node {
 
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
+    std::shared_ptr<node_vec_t> ports_;
 
     std::shared_ptr<data_vec_t> sharedConstants_;
     std::shared_ptr<data_vec_t> sharedVariables_;
@@ -146,10 +147,13 @@ class Graph : public Node {
     void setVariable(size_t index, const data_ptr_t &data, bool shared = false);
 
     node_vec_t &nodes() { return *nodes_; }
+
+    void fulfill(const data_vec_t &dataList);
+
+    virtual data_ptr_t eval() override;
 };
 
 class DataNode : public Node {
-  private:
     DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
     ~DataNode() = default;
 
@@ -162,7 +166,6 @@ inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
 }
 
 class StructNode : public Node {
-  private:
     StructNode(graph_ptr_t graph, const data_ptr_t &data);
     ~StructNode() = default;
 
