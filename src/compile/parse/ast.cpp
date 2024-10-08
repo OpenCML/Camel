@@ -370,7 +370,8 @@ any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         for (size_t i = 0; i < idents.size(); i++) {
             const string &ident = idents[i];
             node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
+            node_ptr_t dataNode =
+                createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
             *execNode << nRefNode;
         }
@@ -515,6 +516,12 @@ any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     if (modifiers) {
         const auto &modSet = any_cast<unordered_set<FunctionModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
+        try {
+            funcType->checkModifiers();
+        } catch (const exception &e) {
+            const auto &token = modifiers->getStart();
+            throw BuildException(e.what(), token);
+        }
     }
 
     const auto funcTypeNode = createNode<TypeLoad>(dynamic_pointer_cast<Type>(funcType));
@@ -598,7 +605,14 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     if (modifiers) {
         const auto &modSet = any_cast<unordered_set<FunctionModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
+        try {
+            funcType->checkModifiers();
+        } catch (const exception &e) {
+            const auto &token = modifiers->getStart();
+            throw BuildException(e.what(), token);
+        }
     }
+
     const auto funcTypeNode = createNode<TypeLoad>(funcType);
     const auto funcNode = createNode<FuncLoad>();
 
@@ -650,7 +664,7 @@ any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
 };
 
 /*
-modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | SHARED)+ ;
 */
 any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     debug(0) << "visitModifiers" << endl;
@@ -1459,8 +1473,8 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
             make_shared<PrimaryData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
         break;
     case 2: // REAL UNIT?
-        data =
-            dynamic_pointer_cast<Data>(make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
+        data = dynamic_pointer_cast<Data>(
+            make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
         break;
     case 3: // STRING
     {
@@ -1652,6 +1666,12 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     if (modifiers) {
         const auto &modSet = any_cast<unordered_set<FunctionModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
+        try {
+            funcType->checkModifiers();
+        } catch (const exception &e) {
+            const auto &token = modifiers->getStart();
+            throw BuildException(e.what(), token);
+        }
     }
 
     return funcType;

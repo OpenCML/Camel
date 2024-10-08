@@ -49,7 +49,7 @@ carrier    : identRef | bracedIdents | bracketIdents ;
 
 annotation  : '@' primaryExpr ;
 annotations : annotation+ ;
-modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : identRef ':' entityExpr ;

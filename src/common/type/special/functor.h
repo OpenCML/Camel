@@ -38,6 +38,14 @@ class FunctorType : public SpecialType {
     void addModifier(FunctionModifier modifier);
     void setModifiers(const std::unordered_set<FunctionModifier> &modifiers);
 
+    void checkModifiers() const; // throws exception
+
+    bool sync() const { return modifiers_.find(FunctionModifier::SYNC) != modifiers_.end(); }
+    bool shared() const { return modifiers_.find(FunctionModifier::SHARED) != modifiers_.end(); }
+    bool atomic() const { return modifiers_.find(FunctionModifier::ATOMIC) != modifiers_.end(); }
+    bool inner() const { return modifiers_.find(FunctionModifier::INNER) != modifiers_.end(); }
+    bool outer() const { return modifiers_.find(FunctionModifier::OUTER) != modifiers_.end(); }
+
     bool addIdent(const std::string &ident, bool isVar);
     bool hasSideEffect() const;
 

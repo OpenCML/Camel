@@ -302,14 +302,14 @@ any Formatter::visitAnnotations(OpenCMLParser::AnnotationsContext *context, bool
 };
 
 /*
-modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC)+ ;
 */
 any Formatter::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     string result;
     (context->INNER()).size() ? result += "inner " : result;
     (context->OUTER()).size() ? result += "outer " : result;
     (context->ATOMIC()).size() ? result += "atomic " : result;
-    (context->STATIC()).size() ? result += "static " : result;
+    (context->SHARED()).size() ? result += "static " : result;
     (context->SYNC()).size() ? result += "sync " : result;
     // remove trailing space
     if (!result.empty()) {

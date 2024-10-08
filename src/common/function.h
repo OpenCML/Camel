@@ -28,7 +28,7 @@ enum class FunctionModifier {
     INNER = 0b00000001,
     OUTER = 0b00000010,
     ATOMIC = 0b00000100,
-    STATIC = 0b00001000,
+    SHARED = 0b00001000,
     SYNC = 0b00010000,
 };
 
@@ -54,7 +54,7 @@ class Function {
     bool inner() const { return flags_ & static_cast<unsigned char>(FunctionModifier::INNER); }
     bool outer() const { return flags_ & static_cast<unsigned char>(FunctionModifier::OUTER); }
     bool atomic() const { return flags_ & static_cast<unsigned char>(FunctionModifier::ATOMIC); }
-    bool static_() const { return flags_ & static_cast<unsigned char>(FunctionModifier::STATIC); }
+    bool static_() const { return flags_ & static_cast<unsigned char>(FunctionModifier::SHARED); }
     bool sync() const { return flags_ & static_cast<unsigned char>(FunctionModifier::SYNC); }
 
     void setFlags(unsigned char value) { flags_ = value; }

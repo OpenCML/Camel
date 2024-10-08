@@ -32,7 +32,7 @@ FunctionModifier str2modifier(const string &str) {
     } else if (str == "atomic") {
         return FunctionModifier::ATOMIC;
     } else if (str == "static") {
-        return FunctionModifier::STATIC;
+        return FunctionModifier::SHARED;
     } else if (str == "sync") {
         return FunctionModifier::SYNC;
     } else {
@@ -48,7 +48,7 @@ string modifier2str(FunctionModifier modifier) {
         return "outer";
     case FunctionModifier::ATOMIC:
         return "atomic";
-    case FunctionModifier::STATIC:
+    case FunctionModifier::SHARED:
         return "static";
     case FunctionModifier::SYNC:
         return "sync";

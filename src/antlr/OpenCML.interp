@@ -55,7 +55,7 @@ null
 'inner'
 'outer'
 'atomic'
-'static'
+'shared'
 'sync'
 'null'
 'true'
@@ -151,7 +151,7 @@ RETURN
 INNER
 OUTER
 ATOMIC
-STATIC
+SHARED
 SYNC
 NULL
 TRUE

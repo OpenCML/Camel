@@ -91,7 +91,7 @@ void opencmlParserInitialize() {
       "'!='", "'<='", "'>='", "'+'", "'-'", "'^'", "'/'", "'%'", "'!'", 
       "'~'", "'->'", "'.'", "'&'", "'|'", "';'", "'as'", "'is'", "'let'", 
       "'var'", "'use'", "'from'", "'func'", "'type'", "'with'", "'wait'", 
-      "'return'", "'inner'", "'outer'", "'atomic'", "'static'", "'sync'", 
+      "'return'", "'inner'", "'outer'", "'atomic'", "'shared'", "'sync'", 
       "'null'", "'true'", "'false'", "'Int'", "'Int32'", "'Int64'", "'Real'", 
       "'Float'", "'Double'", "'Number'", "'String'", "'Bool'", "'Char'", 
       "'Set'", "'Map'", "'List'", "'Dict'", "'Array'", "'Tuple'", "'Union'", 
@@ -102,7 +102,7 @@ void opencmlParserInitialize() {
       "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
       "", "", "", "", "", "", "", "SEP", "AS", "IS", "LET", "VAR", "USE", 
       "FROM", "FUNC", "TYPE", "WITH", "WAIT", "RETURN", "INNER", "OUTER", 
-      "ATOMIC", "STATIC", "SYNC", "NULL", "TRUE", "FALSE", "INTEGER_TYPE", 
+      "ATOMIC", "SHARED", "SYNC", "NULL", "TRUE", "FALSE", "INTEGER_TYPE", 
       "INTEGER32_TYPE", "INTEGER64_TYPE", "REAL_TYPE", "FLOAT_TYPE", "DOUBLE_TYPE", 
       "NUMBER_TYPE", "STRING_TYPE", "BOOL_TYPE", "CHAR_TYPE", "SET_TYPE", 
       "MAP_TYPE", "LIST_TYPE", "DICT_TYPE", "ARRAY_TYPE", "TUPLE_TYPE", 
@@ -1644,12 +1644,12 @@ tree::TerminalNode* OpenCMLParser::ModifiersContext::ATOMIC(size_t i) {
   return getToken(OpenCMLParser::ATOMIC, i);
 }
 
-std::vector<tree::TerminalNode *> OpenCMLParser::ModifiersContext::STATIC() {
-  return getTokens(OpenCMLParser::STATIC);
+std::vector<tree::TerminalNode *> OpenCMLParser::ModifiersContext::SHARED() {
+  return getTokens(OpenCMLParser::SHARED);
 }
 
-tree::TerminalNode* OpenCMLParser::ModifiersContext::STATIC(size_t i) {
-  return getToken(OpenCMLParser::STATIC, i);
+tree::TerminalNode* OpenCMLParser::ModifiersContext::SHARED(size_t i) {
+  return getToken(OpenCMLParser::SHARED, i);
 }
 
 std::vector<tree::TerminalNode *> OpenCMLParser::ModifiersContext::SYNC() {
@@ -4143,7 +4143,7 @@ OpenCMLParser::UnaryExprContext* OpenCMLParser::unaryExpr() {
       case OpenCMLParser::INNER:
       case OpenCMLParser::OUTER:
       case OpenCMLParser::ATOMIC:
-      case OpenCMLParser::STATIC:
+      case OpenCMLParser::SHARED:
       case OpenCMLParser::SYNC:
       case OpenCMLParser::NULL_:
       case OpenCMLParser::TRUE:
@@ -4606,7 +4606,7 @@ OpenCMLParser::PrimaryExprContext* OpenCMLParser::primaryExpr() {
           case OpenCMLParser::INNER:
           case OpenCMLParser::OUTER:
           case OpenCMLParser::ATOMIC:
-          case OpenCMLParser::STATIC:
+          case OpenCMLParser::SHARED:
           case OpenCMLParser::SYNC:
           case OpenCMLParser::INTEGER_TYPE:
           case OpenCMLParser::INTEGER32_TYPE:

@@ -18,7 +18,7 @@ RETURN      : 'return';
 INNER       : 'inner';
 OUTER       : 'outer';
 ATOMIC      : 'atomic';
-STATIC      : 'static';
+SHARED      : 'shared';
 SYNC        : 'sync';
 
 NULL        : 'null';

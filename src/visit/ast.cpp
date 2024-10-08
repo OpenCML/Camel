@@ -650,7 +650,7 @@ any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
 };
 
 /*
-modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | SHARED)+ ;
 */
 any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     debug(0) << "visitModifiers" << endl;

@@ -30,11 +30,23 @@ void FunctorType::addModifier(FunctionModifier modifier) { modifiers_.insert(mod
 
 void FunctorType::setModifiers(const unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
 
+void FunctorType::checkModifiers() const {
+    if (hasSideEffect_ && !sync()) {
+        throw runtime_error("Functor with side effect must be sync.");
+    }
+    if (inner() && outer()) {
+        throw runtime_error("Functor cannot be both inner and outer.");
+    }
+}
+
 bool FunctorType::addIdent(const string &ident, bool isVar) {
     if (variableMap_.find(ident) != variableMap_.end()) {
         return false;
     }
     variableMap_.insert({ident, isVar});
+    if (isVar) {
+        hasSideEffect_ = true;
+    }
     return true;
 }
 
