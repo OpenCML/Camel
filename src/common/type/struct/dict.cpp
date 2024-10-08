@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -160,6 +160,6 @@ TypeConv DictType::convertibility(const Type &other) const {
     if (other.code() == TypeCode::ANY) {
         return TypeConv::SAFE;
     }
-    // primitive types and special types are forbidden
+    // primary types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }

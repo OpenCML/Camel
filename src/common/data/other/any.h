@@ -12,19 +12,24 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 7, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "type.h"
+#include "../data.h"
 
-class PrimaryType : public Type {
+class AnyData : public Data {
+    data_ptr_t data_;
+
   public:
-    PrimaryType() = delete;
-    PrimaryType(TypeCode code) : Type(code) {}
+    AnyData(const data_ptr_t &data);
+    virtual ~AnyData() = default;
 
-    TypeConv convertibility(const Type &other) const override;
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
 };

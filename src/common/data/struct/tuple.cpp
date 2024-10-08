@@ -13,13 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
+#include "params.h"
 #include "utils/log.h"
 
+#include "../other/any.h"
+#include "../other/null.h"
 #include "../other/ref.h"
 
 using namespace std;
@@ -55,12 +58,40 @@ data_ptr_t TupleData::get(size_t index) const {
 }
 
 bool TupleData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ListData
+    // TODO: implement equals for TupleData
     return true;
 }
 
 data_ptr_t TupleData::convert(type_ptr_t target, bool inplace) {
-    // TODO
+    if (target == type_ || type_->equals(target)) {
+        // same type, no need to convert
+        return shared_from_this();
+    }
+    try {
+        if (target->structured()) {
+            switch (target->code()) {
+                // TODO: implement conversion to other structured types
+            default:
+                throw UnsupportedConvError();
+            }
+        } else if (target->special()) {
+            switch (target->code()) {
+            case TypeCode::ANY:
+                return make_shared<AnyData>(shared_from_this());
+                break;
+            case TypeCode::VOID:
+                return make_shared<NullData>();
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        }
+        throw UnsupportedConvError();
+    } catch (const UnsupportedConvError &e) {
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    } catch (const std::exception &e) {
+        throw DataConvError(e.what());
+    }
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
@@ -104,4 +135,12 @@ const string TupleData::toString() const {
     }
     str += ")";
     return str;
+}
+
+data_ptr_t TupleData::convertToParams(std::shared_ptr<ParamsType> &target) {
+    auto params = make_shared<ParamsData>();
+    for (const auto &e : data_) {
+        params->emplace(e);
+    }
+    return params->convertToParams(target);
 }

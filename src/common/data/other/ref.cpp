@@ -13,6 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "ref.h"
+
+RefData::RefData(const std::string &ref) : Data(refTypePtr), ref_(ref) {}
+
+const std::string &RefData::ref() const { return ref_; }
+
+bool RefData::equals(const data_ptr_t &other) const { return false; }
+
+data_ptr_t RefData::convert(type_ptr_t target, bool inplace = false) {
+    throw DataConvError("Cannot convert RefData to " + typeCodeToString(target->code()));
+}
+
+data_ptr_t RefData::clone(bool deep = false) const { return std::make_shared<RefData>(ref_); }
+
+const std::string RefData::toString() const { return "DREF<" + ref_ + ">"; }

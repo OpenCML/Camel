@@ -13,13 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "params.h"
+#include "list.h"
+#include "map.h"
+#include "tuple.h"
 #include "utils/log.h"
 
+#include "../other/any.h"
+#include "../other/null.h"
 #include "../other/ref.h"
 
 using namespace std;
@@ -63,14 +68,108 @@ void ParamsData::resolve(const data_vec_t &dataList) {
     refs_.clear();
 }
 
+bool ParamsData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ParamsData
+    return true;
+}
+
+data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
+    if (target == type_ || type_->equals(target)) {
+        // same type, no need to convert
+        return shared_from_this();
+    }
+    try {
+        if (target->structured()) {
+            switch (target->code()) {
+            case TypeCode::MAP:
+                return convertToMap();
+                break;
+            case TypeCode::LIST:
+                return convertToList();
+                break;
+            case TypeCode::TUPLE:
+                return convertToTuple();
+                break;
+            case TypeCode::PARAMS:
+                return convertToParams(dynamic_pointer_cast<ParamsType>(target), inplace);
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        } else if (target->special()) {
+            switch (target->code()) {
+            case TypeCode::ANY:
+                return make_shared<AnyData>(shared_from_this());
+                break;
+            case TypeCode::VOID:
+                return make_shared<NullData>();
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        }
+        throw UnsupportedConvError();
+    } catch (const UnsupportedConvError &e) {
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    } catch (const std::exception &e) {
+        throw DataConvError(e.what());
+    }
+    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+}
+
+data_ptr_t ParamsData::clone(bool) const { return make_shared<ParamsData>(indexData_, namedData_); }
+
+const string ParamsData::toString() const {
+    string str = "(";
+    for (const auto &e : indexData_) {
+        str += e->toString() + ", ";
+    }
+    for (const auto &e : namedData_) {
+        str += e.first + ": " + e.second->toString() + ", ";
+    }
+    if (str.length() > 1) {
+        str.pop_back();
+        str.pop_back();
+    }
+    str += ")";
+    return str;
+}
+
+data_ptr_t ParamsData::convertToMap() {
+    auto mapType = make_shared<MapType>(stringTypePtr, anyTypePtr);
+    auto mapData = make_shared<MapData>(mapType);
+    for (const auto &e : namedData_) {
+        const auto &key = dynamic_pointer_cast<Data>(make_shared<StringData>(e.first));
+        const auto &val = e.second->convert(anyTypePtr);
+        mapData->emplace(key, val);
+    }
+    return mapData;
+}
+
+data_ptr_t ParamsData::convertToList() {
+    auto listData = make_shared<ListData>();
+    for (const auto &e : indexData_) {
+        listData->emplace(e);
+    }
+    return listData;
+}
+
+data_ptr_t ParamsData::convertToTuple() {
+    auto tupleData = make_shared<TupleData>();
+    for (const auto &e : indexData_) {
+        tupleData->emplace(e);
+    }
+    return tupleData;
+}
+
 data_ptr_t ParamsData::convertToParams(shared_ptr<ParamsType> &other, bool inplace) {
     const auto &typeList = other->elements();
     vector<pair<size_t, string>> refs;
     vector<data_ptr_t> indexData;
     map<string, data_ptr_t> namedData;
     for (size_t i = 0; i < typeList.size(); i++) {
-        const auto &[key, valType, defaultData] = typeList[i];
-        data_ptr_t val = defaultData;
+        const auto &[key, _, value] = typeList[i];
+        data_ptr_t val = value;
         if (namedData_.find(key) != namedData_.end()) {
             val = namedData_[key];
         } else if (i < indexData_.size()) {
@@ -102,46 +201,4 @@ data_ptr_t ParamsData::convertToParams(shared_ptr<ParamsType> &other, bool inpla
         params->indexData_ = std::move(indexData);
         params->namedData_ = std::move(namedData);
     }
-}
-
-bool ParamsData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ParamsData
-    return true;
-}
-
-data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
-    // TODO
-    if (target == type_ || type_->equals(target)) {
-        // same type, no need to convert
-        return shared_from_this();
-    }
-    if (target->structured()) {
-        switch (target->code()) {
-        case TypeCode::SET:
-            /* code */
-            break;
-
-        default:
-            break;
-        }
-    }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-}
-
-data_ptr_t ParamsData::clone(bool) const { return make_shared<ParamsData>(indexData_, namedData_); }
-
-const string ParamsData::toString() const {
-    string str = "(";
-    for (const auto &e : indexData_) {
-        str += e->toString() + ", ";
-    }
-    for (const auto &e : namedData_) {
-        str += e.first + ": " + e.second->toString() + ", ";
-    }
-    if (str.length() > 1) {
-        str.pop_back();
-        str.pop_back();
-    }
-    str += ")";
-    return str;
 }

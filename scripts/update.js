@@ -17,7 +17,7 @@ function formatDate(date) {
         'Nov.',
         'Dec.'
     ]
-    return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
+    return `${months[date.getMonth()]} ${date.getDate().toString().padStart(2, '0')}, ${date.getFullYear()}`
 }
 
 function updateFile(filePath) {
@@ -35,7 +35,7 @@ function updateFile(filePath) {
         })
 
         let lines = []
-        let hasCreatedLine = false
+        let needUpdate = false
         let updateIndex = 0
 
         const updatedLine = ` * Updated: ${updatedDate}`
@@ -46,8 +46,12 @@ function updateFile(filePath) {
             lines.push('')
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].includes('* Created:')) {
-                    hasCreatedLine = true
+                    needUpdate = true
                     if (lines[i + 1].includes('* Updated:')) {
+                        if (lines[i + 1] == updatedLine) {
+                            needUpdate = false
+                            break
+                        }
                         lines[i + 1] = updatedLine
                     } else {
                         updateIndex = i + 1
@@ -55,7 +59,7 @@ function updateFile(filePath) {
                     break
                 }
             }
-            if (hasCreatedLine) {
+            if (needUpdate) {
                 if (updateIndex) {
                     lines.splice(updateIndex, 0, updatedLine)
                 }
@@ -91,5 +95,7 @@ function traverseDirectory(dir) {
     })
 }
 
-const targetDirectory = 'src'
-traverseDirectory(targetDirectory)
+const targetDirs = ['src', 'include']
+targetDirs.forEach((targetDirectory) => {
+    traverseDirectory(targetDirectory)
+})

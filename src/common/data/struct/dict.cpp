@@ -13,12 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "dict.h"
+#include "params.h"
 #include "utils/log.h"
+
+#include "../other/any.h"
+#include "../other/null.h"
 
 using namespace std;
 
@@ -95,20 +99,37 @@ bool DictData::equals(const data_ptr_t &other) const {
 }
 
 data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
-    // TODO
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
     }
-    if (target->structured()) {
-        switch (target->code()) {
-        case TypeCode::SET:
-            /* code */
-            break;
-
-        default:
-            break;
+    try {
+        if (target->structured()) {
+            switch (target->code()) {
+                // TODO: implement conversion to other structured types
+            case TypeCode::PARAMS:
+                return convertToParams(dynamic_pointer_cast<ParamsType>(target));
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
+        } else if (target->special()) {
+            switch (target->code()) {
+            case TypeCode::ANY:
+                return make_shared<AnyData>(shared_from_this());
+                break;
+            case TypeCode::VOID:
+                return make_shared<NullData>();
+                break;
+            default:
+                throw UnsupportedConvError();
+            }
         }
+        throw UnsupportedConvError();
+    } catch (const UnsupportedConvError &e) {
+        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    } catch (const std::exception &e) {
+        throw DataConvError(e.what());
     }
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
@@ -144,4 +165,12 @@ const string DictData::toString() const {
     str.pop_back();
     str += " }";
     return str;
+}
+
+data_ptr_t DictData::convertToParams(std::shared_ptr<ParamsType> &target) {
+    auto params = make_shared<ParamsData>();
+    for (const auto &[key, val] : data_) {
+        params->emplace(val, key);
+    }
+    return params->convertToParams(target);
 }

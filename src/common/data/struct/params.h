@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,8 +26,6 @@ class ParamsData : public StructData {
     std::vector<std::pair<size_t, std::string>> refs_;
     std::vector<data_ptr_t> indexData_;
     std::map<std::string, data_ptr_t> namedData_;
-
-    data_ptr_t convertToParams(std::shared_ptr<ParamsType> &target, bool inplace = false);
 
   public:
     ParamsData();
@@ -43,4 +41,9 @@ class ParamsData : public StructData {
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
+
+    data_ptr_t convertToMap();
+    data_ptr_t convertToList();
+    data_ptr_t convertToTuple();
+    data_ptr_t convertToParams(std::shared_ptr<ParamsType> &target, bool inplace = false);
 };

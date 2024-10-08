@@ -12,34 +12,28 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 7, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "struct.h"
+#include "../data.h"
 
-class SetData : public StructData {
-  private:
-    std::vector<data_ptr_t> refs_;
-    // TODO: need to implement a hash function for data_ptr_t
-    std::unordered_set<data_ptr_t> data_;
+class UnionData : public Data {
+    data_ptr_t data_;
+    std::string ref_;
 
   public:
-    SetData(type_ptr_t elType);
-    SetData(type_ptr_t elType, data_list_t data);
-    virtual ~SetData() = default;
+    UnionData(const type_ptr_t &type, const data_ptr_t &data);
+    virtual ~UnionData() = default;
 
-    // append element to the set during construction
-    bool emplace(const data_ptr_t &e);
-
-    bool add(const data_ptr_t &e);
-    bool del(const data_ptr_t &e);
+    data_ptr_t data() const;
+    type_ptr_t actualType() const;
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolved() const override;
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

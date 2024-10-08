@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -122,7 +122,7 @@ class Type {
 
     const TypeCode &code() const;
 
-    bool primitive() const;
+    bool primary() const;
     bool structured() const;
     bool special() const;
 

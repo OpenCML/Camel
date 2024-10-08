@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,21 +23,29 @@
 using namespace std;
 
 TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
-    // TODO: not fully implemented
-    if (elements_.size() != other.elements_.size()) {
-        return TypeConv::FORBIDDEN;
-    }
+    const auto &indexEls = indexElements();
+    const auto &namedEls = namedElements();
     TypeConv result = TypeConv::SAFE;
-    for (size_t i = 0; i < elements_.size(); i++) {
-        const auto &[name, type, value] = elements_[i];
-        const auto &[otherName, otherType, otherValue] = other.elements_[i];
-        if (name != otherName) {
-            return TypeConv::FORBIDDEN;
+    size_t idx = 0;
+    for (size_t i = 0; i < other.elements_.size(); i++) {
+        const auto &[name, type, value] = other.elements_[i];
+        type_ptr_t elType = nullptr;
+        if (name.empty() || namedEls.find(name) == namedEls.end()) {
+            if (idx >= indexEls.size()) {
+                if (!value) {
+                    return TypeConv::FORBIDDEN;
+                }
+                continue;
+            }
+            elType = indexEls[idx];
+            idx++;
+        } else {
+            elType = namedEls.at(name);
         }
-        TypeConv paramConv = type->convertibility(*otherType);
-        if (paramConv == TypeConv::FORBIDDEN) {
+        TypeConv elConv = elType->convertibility(*type);
+        if (elConv == TypeConv::FORBIDDEN) {
             return TypeConv::FORBIDDEN;
-        } else if (paramConv == TypeConv::UNSAFE) {
+        } else if (elConv == TypeConv::UNSAFE) {
             result = TypeConv::UNSAFE;
         }
     }
@@ -102,11 +110,24 @@ size_t ParamsType::size() const { return elements_.size(); }
 
 const vector<tuple<string, type_ptr_t, data_ptr_t>> &ParamsType::elements() const { return elements_; }
 
-map<string, type_ptr_t> ParamsType::map() const {
-    auto result = std::map<string, type_ptr_t>();
+std::vector<type_ptr_t> ParamsType::indexElements() const {
+    auto result = std::vector<type_ptr_t>();
     for (const auto &tuple : elements_) {
         const auto &[name, type, value] = tuple;
-        result[name] = type;
+        if (name.empty()) {
+            result.push_back(type);
+        }
+    }
+    return result;
+}
+
+std::unordered_map<std::string, type_ptr_t> ParamsType::namedElements() const {
+    auto result = std::unordered_map<string, type_ptr_t>();
+    for (const auto &tuple : elements_) {
+        const auto &[name, type, value] = tuple;
+        if (!name.empty()) {
+            result[name] = type;
+        }
     }
     return result;
 }
@@ -162,6 +183,6 @@ TypeConv ParamsType::convertibility(const Type &other) const {
     if (other.code() == TypeCode::ANY) {
         return TypeConv::SAFE;
     }
-    // primitive types and special types are forbidden
+    // primary types and special types are forbidden
     return TypeConv::FORBIDDEN;
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -121,6 +121,7 @@ class Graph : public Node {
 
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
+    std::shared_ptr<node_vec_t> ports_;
 
     std::shared_ptr<data_vec_t> sharedConstants_;
     std::shared_ptr<data_vec_t> sharedVariables_;
@@ -146,10 +147,13 @@ class Graph : public Node {
     void setVariable(size_t index, const data_ptr_t &data, bool shared = false);
 
     node_vec_t &nodes() { return *nodes_; }
+
+    void fulfill(const data_vec_t &dataList);
+
+    virtual data_ptr_t eval() override;
 };
 
 class DataNode : public Node {
-  private:
     DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
     ~DataNode() = default;
 
@@ -162,7 +166,6 @@ inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
 }
 
 class StructNode : public Node {
-  private:
     StructNode(graph_ptr_t graph, const data_ptr_t &data);
     ~StructNode() = default;
 
@@ -177,20 +180,20 @@ inline std::shared_ptr<StructNode> struct_node_ptr_cast(const node_ptr_t &ptr) {
 
 class FunctorNode : public Node {
     func_ptr_t func_;
-    node_ptr_t linkParams_;
-    node_ptr_t withParams_;
+    graph_ptr_t subGraph_;
+    node_ptr_t linkNode_;
+    node_ptr_t withNode_;
     node_ptr_t closure_;
 
   public:
     FunctorNode(graph_ptr_t graph, const func_ptr_t &func);
-
-    void setSuperParams(const node_ptr_t &superParams) { inputs_[0] = superParams; }
-    void setParams(const node_ptr_t &params) { inputs_[1] = params; }
-
-    node_ptr_t &superParams() { return inputs_[0]; }
-    node_ptr_t &params() { return inputs_[1]; }
-
     ~FunctorNode() = default;
+
+    node_ptr_t &linkNode() { return inputs_[0]; }
+    node_ptr_t &withNode() { return inputs_[1]; }
+    node_ptr_t &closure() { return inputs_[2]; }
+
+    virtual data_ptr_t eval() override;
 };
 
 inline std::shared_ptr<FunctorNode> func_node_ptr_cast(const node_ptr_t &ptr) {

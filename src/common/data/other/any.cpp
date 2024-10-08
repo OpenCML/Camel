@@ -12,29 +12,32 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 7, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "null.h"
 #include "any.h"
+#include "null.h"
 
-NullData::NullData() : Data(voidTypePtr) {}
+AnyData::AnyData(const data_ptr_t &data) : Data(anyTypePtr) {
+    if (data) {
+        data_ = data;
+    } else {
+        data_ = std::make_shared<NullData>();
+    }
+}
 
-bool NullData::equals(const data_ptr_t &other) const { return true; }
+bool AnyData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t NullData::convert(type_ptr_t target, bool inplace = false) {
+data_ptr_t AnyData::convert(type_ptr_t target, bool inplace = false) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();
     }
-    if (target->code() == TypeCode::ANY) {
-        return std::make_shared<AnyData>(shared_from_this());
-    }
-    throw DataConvError("Cannot convert null to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert any to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t NullData::clone(bool deep = false) const { return std::make_shared<NullData>(); }
+data_ptr_t AnyData::clone(bool deep = false) const { return std::make_shared<AnyData>(data_->clone(deep)); }
 
-const std::string NullData::toString() const { return "null"; }
+const std::string AnyData::toString() const { return data_->toString(); }

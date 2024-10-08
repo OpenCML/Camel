@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,17 +26,15 @@ class RefData : public Data {
     std::string ref_;
 
   public:
-    RefData(const std::string &ref) : Data(refTypePtr), ref_(ref) {}
+    RefData(const std::string &ref);
     virtual ~RefData() = default;
 
-    const std::string &ref() const { return ref_; }
+    const std::string &ref() const;
 
-    virtual bool equals(const data_ptr_t &other) const override { return false; }
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
-        throw DataConvError("Cannot convert RefData to " + typeCodeToString(target->code()));
-    }
-    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<RefData>(ref_); }
-    virtual const std::string toString() const override { return "DREF<" + ref_ + ">"; }
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
 };
 
 using ref_data_ptr_t = std::shared_ptr<RefData>;

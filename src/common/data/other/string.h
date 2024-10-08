@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 6, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,44 +31,13 @@ class StringData : public Data {
 
   public:
     StringData() = delete;
-    StringData(const std::string &data) : Data(stringTypePtr), data_(data) {}
+    StringData(const std::string &data);
 
-    const std::string &data() const { return data_; }
+    const std::string &data() const;
 
-    virtual bool equals(const data_ptr_t &other) const override {
-        if (auto o = std::dynamic_pointer_cast<StringData>(other)) {
-            return data_ == o->data_;
-        }
-        return false;
-    }
+    virtual bool equals(const data_ptr_t &other) const override;
 
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
-        if (target == type_ || type_->code() == target->code()) {
-            // same type, no need to convert
-            return shared_from_this();
-        }
-        try {
-            if (target->primitive()) {
-                switch (target->code()) {
-                case TypeCode::BOOL: {
-                    return std::make_shared<PrimaryData<bool>>(data_.length() > 0);
-                }
-
-                default:
-                    throw UnsupportedConvError();
-                }
-            }
-        } catch (const UnsupportedConvError &e) {
-            throw DataConvError("Cannot convert " + typeCodeToString(type_->code()) + " to " +
-                                typeCodeToString(target->code()));
-        } catch (const std::exception &e) {
-            throw DataConvError(e.what());
-        }
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-    }
-    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<StringData>(data_); }
-    virtual const std::string toString() const override {
-        std::regex re("\\n");
-        return "\"" + std::regex_replace(data_, re, "\\n") + "\"";
-    }
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
 };

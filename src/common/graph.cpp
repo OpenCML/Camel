@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 6, 2024
+ * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -137,6 +137,8 @@ void gir::Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) 
     }
 }
 
+data_ptr_t gir::Graph::eval() {}
+
 /*
 DataNode
 */
@@ -194,7 +196,7 @@ FunctorNode
 FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
     : Node(NodeType::FUNCTOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), func_(func) {
     nodeType_ = NodeType::FUNCTOR;
-    inputs_.resize(2, nullptr);
+    inputs_.resize(3, nullptr);
 }
 
 /*
