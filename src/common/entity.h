@@ -24,7 +24,6 @@
 class Entity : public std::enable_shared_from_this<Entity> {
   protected:
     size_t refs_ = 0;
-    bool isFunc_ = false;
 
     // nullptr type means null entity
     type_wptr_t type_;
@@ -41,8 +40,6 @@ class Entity : public std::enable_shared_from_this<Entity> {
     data_ptr_t meta();
 
     virtual entity_ptr_t clone(bool deep = false) const;
-
-    bool isFunc() const { return isFunc_; }
 
     virtual std::string typeStr() const;
     virtual std::string metaStr() const;
@@ -73,7 +70,3 @@ class Entity : public std::enable_shared_from_this<Entity> {
 
     const entity_ptr_t convert(type_ptr_t target, bool inplace);
 };
-
-// definition below is forwarded to type.h
-// using data_ptr_t = std::shared_ptr<Data>;
-// using data_wptr_t = std::weak_ptr<Data>;

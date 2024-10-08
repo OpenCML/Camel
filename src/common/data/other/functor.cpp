@@ -12,32 +12,30 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 07, 2024
+ * Created: Oct. 08, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "any.h"
-#include "null.h"
+#include "functor.h"
 
-AnyData::AnyData(const data_ptr_t &data) : Data(anyTypePtr) {
-    if (data) {
-        data_ = data;
-    } else {
-        data_ = std::make_shared<NullData>();
-    }
-}
+using namespace std;
 
-bool AnyData::equals(const data_ptr_t &other) const { return true; }
+FunctorData::FunctorData(const type_ptr_t &type) : Data(type) {};
 
-data_ptr_t AnyData::convert(type_ptr_t target, bool inplace = false) {
+bool FunctorData::equals(const data_ptr_t &other) const { return true; }
+
+data_ptr_t FunctorData::convert(type_ptr_t target, bool inplace = false) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();
     }
-    throw DataConvError("Cannot convert any to " + typeCodeToString(target->code()));
+    throw DataConvError("Cannot convert functor to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t AnyData::clone(bool deep = false) const { return std::make_shared<AnyData>(data_->clone(deep)); }
+data_ptr_t FunctorData::clone(bool deep = false) const { throw runtime_error("FunctorData::clone() not implemented"); }
 
-const std::string AnyData::toString() const { return data_->toString(); }
+const std::string FunctorData::toString() const {
+    FunctorType *type = dynamic_cast<FunctorType *>(type_.get());
+    return "Functor<" + type->toString() + ">";
+}

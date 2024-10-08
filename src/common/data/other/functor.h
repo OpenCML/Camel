@@ -12,29 +12,23 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 5, 2024
+ * Created: Oct. 08, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "data.h"
-#include "entity.h"
+#include "../data.h"
 
-class Functor : public Entity {
-    func_ptr_t func_;
+class FunctorData : public Data {
 
   public:
-    Functor() = delete;
-    Functor(const func_ptr_t &func, const data_ptr_t &with = nullptr) : Entity(with), func_(func) { isFunc_ = true; }
+    FunctorData(const type_ptr_t &type);
+    virtual ~FunctorData() = default;
 
-    virtual entity_ptr_t clone(bool deep = false) const override {
-        entity_ptr_t entity = std::make_shared<Functor>(func_, data_->clone(deep));
-        return entity;
-    }
-
-    func_ptr_t func() const { return func_; }
-
-    virtual ~Functor() = default;
+    virtual bool equals(const data_ptr_t &other) const override;
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
 };
