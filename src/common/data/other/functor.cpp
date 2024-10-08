@@ -18,22 +18,25 @@
  */
 
 #include "functor.h"
+#include "common/graph.h"
 
 using namespace std;
+using namespace GraphIR;
 
-FunctorData::FunctorData(const type_ptr_t &type) : Data(type) {};
+FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph) : Data(type), graph_(graph) {};
+
+GraphIR::graph_ptr_t FunctorData::graph() const { return graph_; }
 
 bool FunctorData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t FunctorData::convert(type_ptr_t target, bool inplace = false) {
-    if (target == type_ || type_->code() == target->code()) {
-        // same type, no need to convert
-        return shared_from_this();
-    }
+data_ptr_t FunctorData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert functor to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t FunctorData::clone(bool deep = false) const { throw runtime_error("FunctorData::clone() not implemented"); }
+data_ptr_t FunctorData::clone(bool deep) const {
+    auto newGraph = make_shared<Graph>(*graph_);
+    return std::make_shared<FunctorData>(type_, newGraph);
+}
 
 const std::string FunctorData::toString() const {
     FunctorType *type = dynamic_cast<FunctorType *>(type_.get());

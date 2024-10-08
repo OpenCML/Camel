@@ -23,8 +23,6 @@
 
 class Entity : public std::enable_shared_from_this<Entity> {
   protected:
-    size_t refs_ = 0;
-
     // nullptr type means null entity
     type_wptr_t type_;
     data_ptr_t meta_ = nullptr;
@@ -48,19 +46,6 @@ class Entity : public std::enable_shared_from_this<Entity> {
     virtual std::string toString() const { return typeStr() + ", " + metaStr() + ", " + dataStr(); }
 
     virtual bool equals(const entity_ptr_t &other) const;
-
-    void ref() { refs_++; }
-    void unref() {
-        if (refs_ > 0) {
-            refs_--;
-        }
-    }
-    size_t refs() const { return refs_; }
-
-    bool unique() const { return refs_ == 1; }
-    bool shared() const { return refs_ > 1; }
-    bool expired() const { return refs_ == 0; }
-    bool valid() const { return refs_ > 0; }
 
     bool isNull() const { return data_ != nullptr; }
     bool hasMeta() const { return meta_ != nullptr; }

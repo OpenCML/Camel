@@ -59,7 +59,7 @@ string modifier2str(FunctorModifier modifier) {
 
 FunctorType::FunctorType(const shared_ptr<ParamsType> &withType = nullptr,
                          const shared_ptr<ParamsType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
-    : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
+    : SpecialType(TypeCode::FUNCTOR), withType_(withType), linkType_(paramsType), returnType_(returnType) {}
 
 void FunctorType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
 
@@ -89,7 +89,7 @@ bool FunctorType::hasSideEffect() const { return hasSideEffect_; }
 
 type_ptr_t FunctorType::withType() const { return dynamic_pointer_cast<Type>(withType_); }
 
-type_ptr_t FunctorType::paramsType() const { return dynamic_pointer_cast<Type>(paramsType_); }
+type_ptr_t FunctorType::linkType() const { return dynamic_pointer_cast<Type>(linkType_); }
 
 type_ptr_t FunctorType::returnType() const { return dynamic_pointer_cast<Type>(returnType_); }
 
@@ -117,8 +117,8 @@ string FunctorType::toString() const {
         result += "> ";
     }
     result += "(";
-    if (paramsType_ && paramsType_->size() > 0) {
-        const auto &params = dynamic_cast<const ParamsType &>(*paramsType_);
+    if (linkType_ && linkType_->size() > 0) {
+        const auto &params = dynamic_cast<const ParamsType &>(*linkType_);
         const auto &elements = params.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
@@ -150,7 +150,7 @@ bool FunctorType::operator==(const Type &other) const {
     if (withType_ != nullptr && !withType_->equals(otherFunctor.withType_)) {
         return false;
     }
-    if (paramsType_ != nullptr && !paramsType_->equals(otherFunctor.paramsType_)) {
+    if (linkType_ != nullptr && !linkType_->equals(otherFunctor.linkType_)) {
         return false;
     }
     if (returnType_ != nullptr && !returnType_->equals(otherFunctor.returnType_)) {
@@ -175,8 +175,8 @@ TypeConv FunctorType::convertibility(const Type &other) const {
                 result = TypeConv::UNSAFE;
             }
         }
-        if (paramsType_ && !otherFunctor.paramsType_) {
-            const TypeConv paramsTypeConv = paramsType_->convertibility(*otherFunctor.paramsType_);
+        if (linkType_ && !otherFunctor.linkType_) {
+            const TypeConv paramsTypeConv = linkType_->convertibility(*otherFunctor.linkType_);
             if (paramsTypeConv == TypeConv::FORBIDDEN) {
                 return TypeConv::FORBIDDEN;
             }

@@ -24,7 +24,7 @@ NullData::NullData() : Data(voidTypePtr) {}
 
 bool NullData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t NullData::convert(type_ptr_t target, bool inplace = false) {
+data_ptr_t NullData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();
@@ -35,6 +35,6 @@ data_ptr_t NullData::convert(type_ptr_t target, bool inplace = false) {
     throw DataConvError("Cannot convert null to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t NullData::clone(bool deep = false) const { return std::make_shared<NullData>(); }
+data_ptr_t NullData::clone(bool deep) const { return std::make_shared<NullData>(); }
 
 const std::string NullData::toString() const { return "null"; }

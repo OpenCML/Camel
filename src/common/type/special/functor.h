@@ -36,7 +36,7 @@ class FunctorType : public SpecialType {
   private:
     std::unordered_set<FunctorModifier> modifiers_;
     std::shared_ptr<ParamsType> withType_;
-    std::shared_ptr<ParamsType> paramsType_;
+    std::shared_ptr<ParamsType> linkType_;
     std::unordered_map<std::string, bool> variableMap_;
     bool hasSideEffect_ = false;
     type_ptr_t returnType_;
@@ -61,7 +61,7 @@ class FunctorType : public SpecialType {
     bool hasSideEffect() const;
 
     type_ptr_t withType() const;
-    type_ptr_t paramsType() const;
+    type_ptr_t linkType() const;
     type_ptr_t returnType() const;
 
     std::string toString() const override;

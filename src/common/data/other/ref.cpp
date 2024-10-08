@@ -25,10 +25,10 @@ const std::string &RefData::ref() const { return ref_; }
 
 bool RefData::equals(const data_ptr_t &other) const { return false; }
 
-data_ptr_t RefData::convert(type_ptr_t target, bool inplace = false) {
+data_ptr_t RefData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert RefData to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t RefData::clone(bool deep = false) const { return std::make_shared<RefData>(ref_); }
+data_ptr_t RefData::clone(bool deep) const { return std::make_shared<RefData>(ref_); }
 
 const std::string RefData::toString() const { return "DREF<" + ref_ + ">"; }
