@@ -22,7 +22,7 @@ import OpenCMLLex;
 
 program : stmtList? EOF;
 
-stmtList : stmt (SEP stmt)* SEP? ;
+stmtList : stmt (SEP? stmt)* SEP? ;
 
 stmt
     : letStmt
@@ -53,7 +53,7 @@ modifiers   : (INNER | OUTER | ATOMIC | STATIC | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : identRef ':' entityExpr ;
-keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+keyParamPair : VAR? identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 indexKTPair  : '[' typeExpr ']' ':' typeExpr ;
 indexKVPair  : '[' entityExpr ']' ':' entityExpr ;
 

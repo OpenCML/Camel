@@ -442,6 +442,7 @@ public:
     virtual size_t getRuleIndex() const override;
     IdentRefContext *identRef();
     TypeExprContext *typeExpr();
+    antlr4::tree::TerminalNode *VAR();
     AnnotationContext *annotation();
     EntityExprContext *entityExpr();
 

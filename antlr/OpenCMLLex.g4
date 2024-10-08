@@ -51,7 +51,7 @@ VOID_TYPE     : 'Void';
 FUNCTOR_TYPE  : 'Functor';
 
 BLANK
-    : [ \n\r\t\u000C]+ -> skip
+    : [ \r\n\t\u000C]+ -> skip
     ;
 
 LIN_CMT_HASH
