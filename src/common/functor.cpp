@@ -18,3 +18,5 @@
  */
 
 #include "functor.h"
+
+using namespace std;

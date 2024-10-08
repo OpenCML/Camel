@@ -20,7 +20,6 @@
 #pragma once
 
 #include "data.h"
-#include "function.h"
 #include "operator.h"
 
 #include <any>

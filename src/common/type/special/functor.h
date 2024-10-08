@@ -21,9 +21,20 @@
 
 #include "special.h"
 
+enum class FunctorModifier {
+    INNER = 0b00000001,
+    OUTER = 0b00000010,
+    ATOMIC = 0b00000100,
+    SHARED = 0b00001000,
+    SYNC = 0b00010000,
+};
+
+FunctorModifier str2modifier(const std::string &str);
+std::string modifier2str(FunctorModifier modifier);
+
 class FunctorType : public SpecialType {
   private:
-    std::unordered_set<FunctionModifier> modifiers_;
+    std::unordered_set<FunctorModifier> modifiers_;
     std::shared_ptr<ParamsType> withType_;
     std::shared_ptr<ParamsType> paramsType_;
     std::unordered_map<std::string, bool> variableMap_;
@@ -35,16 +46,16 @@ class FunctorType : public SpecialType {
     FunctorType(const std::shared_ptr<ParamsType> &withType = nullptr,
                 const std::shared_ptr<ParamsType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr);
 
-    void addModifier(FunctionModifier modifier);
-    void setModifiers(const std::unordered_set<FunctionModifier> &modifiers);
+    void addModifier(FunctorModifier modifier);
+    void setModifiers(const std::unordered_set<FunctorModifier> &modifiers);
 
     void checkModifiers() const; // throws exception
 
-    bool sync() const { return modifiers_.find(FunctionModifier::SYNC) != modifiers_.end(); }
-    bool shared() const { return modifiers_.find(FunctionModifier::SHARED) != modifiers_.end(); }
-    bool atomic() const { return modifiers_.find(FunctionModifier::ATOMIC) != modifiers_.end(); }
-    bool inner() const { return modifiers_.find(FunctionModifier::INNER) != modifiers_.end(); }
-    bool outer() const { return modifiers_.find(FunctionModifier::OUTER) != modifiers_.end(); }
+    bool sync() const { return modifiers_.find(FunctorModifier::SYNC) != modifiers_.end(); }
+    bool shared() const { return modifiers_.find(FunctorModifier::SHARED) != modifiers_.end(); }
+    bool atomic() const { return modifiers_.find(FunctorModifier::ATOMIC) != modifiers_.end(); }
+    bool inner() const { return modifiers_.find(FunctorModifier::INNER) != modifiers_.end(); }
+    bool outer() const { return modifiers_.find(FunctorModifier::OUTER) != modifiers_.end(); }
 
     bool addIdent(const std::string &ident, bool isVar);
     bool hasSideEffect() const;

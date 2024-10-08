@@ -21,7 +21,6 @@
 
 #include "data.h"
 #include "entity.h"
-#include "function.h"
 
 class Functor : public Entity {
     func_ptr_t func_;
@@ -39,7 +38,3 @@ class Functor : public Entity {
 
     virtual ~Functor() = default;
 };
-
-// definition below is forwarded to type.h
-// using functor_ptr_t = std::shared_ptr<Functor>;
-// using functor_wptr_t = std::weak_ptr<Functor>;

@@ -18,17 +18,52 @@
  */
 
 #include "functor.h"
-#include "common/function.h"
+
+#include "../../data.h"
+#include "../struct/params.h"
 
 using namespace std;
+
+FunctorModifier str2modifier(const string &str) {
+    if (str == "inner") {
+        return FunctorModifier::INNER;
+    } else if (str == "outer") {
+        return FunctorModifier::OUTER;
+    } else if (str == "atomic") {
+        return FunctorModifier::ATOMIC;
+    } else if (str == "static") {
+        return FunctorModifier::SHARED;
+    } else if (str == "sync") {
+        return FunctorModifier::SYNC;
+    } else {
+        throw runtime_error("Unknown modifier: " + str);
+    }
+}
+
+string modifier2str(FunctorModifier modifier) {
+    switch (modifier) {
+    case FunctorModifier::INNER:
+        return "inner";
+    case FunctorModifier::OUTER:
+        return "outer";
+    case FunctorModifier::ATOMIC:
+        return "atomic";
+    case FunctorModifier::SHARED:
+        return "static";
+    case FunctorModifier::SYNC:
+        return "sync";
+    default:
+        throw runtime_error("Unknown modifier: " + to_string(static_cast<int>(modifier)));
+    }
+}
 
 FunctorType::FunctorType(const shared_ptr<ParamsType> &withType = nullptr,
                          const shared_ptr<ParamsType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
     : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
 
-void FunctorType::addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }
+void FunctorType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
 
-void FunctorType::setModifiers(const unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
+void FunctorType::setModifiers(const unordered_set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
 
 void FunctorType::checkModifiers() const {
     if (hasSideEffect_ && !sync()) {

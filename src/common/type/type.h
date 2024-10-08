@@ -92,9 +92,6 @@ using data_lst_t = std::list<data_ptr_t>;
 using data_vec_t = std::vector<data_ptr_t>;
 using data_list_t = std::initializer_list<data_ptr_t>;
 
-class Function;
-using func_ptr_t = std::shared_ptr<Function>;
-
 class Entity;
 using entity_ptr_t = std::shared_ptr<Entity>;
 using entity_wptr_t = std::weak_ptr<Entity>;
@@ -103,13 +100,13 @@ using entity_vec_t = std::vector<entity_ptr_t>;
 using entity_list_t = std::initializer_list<entity_ptr_t>;
 
 class Functor;
-using functor_ptr_t = std::shared_ptr<Functor>;
-using functor_wptr_t = std::weak_ptr<Functor>;
-using functor_lst_t = std::list<functor_ptr_t>;
-using functor_vec_t = std::vector<functor_ptr_t>;
-using functor_list_t = std::initializer_list<functor_ptr_t>;
+using func_ptr_t = std::shared_ptr<Functor>;
+using func_wptr_t = std::weak_ptr<Functor>;
+using func_lst_t = std::list<func_ptr_t>;
+using func_vec_t = std::vector<func_ptr_t>;
+using func_list_t = std::initializer_list<func_ptr_t>;
 
-enum class FunctionModifier;
+enum class FunctorModifier;
 
 class Type {
   protected:

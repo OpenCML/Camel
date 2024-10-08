@@ -513,7 +513,7 @@ any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
 
     const auto &modifiers = context->modifiers();
     if (modifiers) {
-        const auto &modSet = any_cast<unordered_set<FunctionModifier>>(visitModifiers(modifiers));
+        const auto &modSet = any_cast<unordered_set<FunctorModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
 
@@ -596,7 +596,7 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
 
     const auto &modifiers = context->modifiers();
     if (modifiers) {
-        const auto &modSet = any_cast<unordered_set<FunctionModifier>>(visitModifiers(modifiers));
+        const auto &modSet = any_cast<unordered_set<FunctorModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
     const auto funcTypeNode = createNode<TypeLoad>(funcType);
@@ -654,7 +654,7 @@ modifiers   : (INNER | OUTER | ATOMIC | SHARED)+ ;
 */
 any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     debug(0) << "visitModifiers" << endl;
-    unordered_set<FunctionModifier> modifiers;
+    unordered_set<FunctorModifier> modifiers;
     for (const auto &mod : context->children) {
         modifiers.insert(str2modifier(mod->getText()));
     }
@@ -1649,7 +1649,7 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
 
     const auto &modifiers = context->modifiers();
     if (modifiers) {
-        const auto &modSet = any_cast<unordered_set<FunctionModifier>>(visitModifiers(modifiers));
+        const auto &modSet = any_cast<unordered_set<FunctorModifier>>(visitModifiers(modifiers));
         funcType->setModifiers(modSet);
     }
 
