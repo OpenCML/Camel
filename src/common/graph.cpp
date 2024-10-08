@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 7, 2024
+ * Updated: Oct. 8, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -194,7 +194,7 @@ FunctorNode
 FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
     : Node(NodeType::FUNCTOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), func_(func) {
     nodeType_ = NodeType::FUNCTOR;
-    inputs_.resize(2, nullptr);
+    inputs_.resize(3, nullptr);
 }
 
 /*
