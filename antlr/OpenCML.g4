@@ -29,7 +29,7 @@ stmt
     | useStmt
     | typeStmt
     | exprStmt
-    | waitStmt  
+    | waitStmt
     | funcDef
     | retStmt
     ;

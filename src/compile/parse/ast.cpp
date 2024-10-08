@@ -489,10 +489,10 @@ any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
 
     const auto &withDef = context->withDef();
     if (withDef) {
-        const auto &pairedParams = any_cast<vector<tuple<string, type_ptr_t, data_ptr_t>>>(visitWithDef(withDef));
-        for (const auto &[name, type, data] : pairedParams) {
+        const auto &pairedParams = any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitWithDef(withDef));
+        for (const auto &[name, type, data, isVar] : pairedParams) {
             withType->add(name, type, data);
-            bool success = funcType->addIdent(name);
+            bool success = funcType->addIdent(name, isVar);
             if (!success) {
                 const auto &token = context->getStart();
                 throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
@@ -501,10 +501,10 @@ any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     }
 
     const auto &params =
-        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t>>>(visitParentParams(context->parentParams()));
-    for (const auto &[name, type, data] : params) {
+        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitParentParams(context->parentParams()));
+    for (const auto &[name, type, data, isVar] : params) {
         paramsType->add(name, type, data);
-        bool success = funcType->addIdent(name);
+        bool success = funcType->addIdent(name, isVar);
         if (!success) {
             const auto &token = context->getStart();
             throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
@@ -560,10 +560,10 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
 
     if (context->angledParams()) {
         const auto &withParams =
-            any_cast<vector<tuple<string, type_ptr_t, data_ptr_t>>>(visitAngledParams(context->angledParams()));
-        for (const auto &[name, type, data] : withParams) {
+            any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitAngledParams(context->angledParams()));
+        for (const auto &[name, type, data, isVar] : withParams) {
             withType->add(name, type, data);
-            bool success = funcType->addIdent(name);
+            bool success = funcType->addIdent(name, isVar);
             if (!success) {
                 const auto &token = context->getStart();
                 throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
@@ -572,10 +572,10 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     }
 
     const auto &params =
-        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t>>>(visitParentParams(context->parentParams()));
-    for (const auto &[name, type, data] : params) {
+        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitParentParams(context->parentParams()));
+    for (const auto &[name, type, data, isVar] : params) {
         paramsType->add(name, type, data);
-        bool success = funcType->addIdent(name);
+        bool success = funcType->addIdent(name, isVar);
         if (!success) {
             const auto &token = context->getStart();
             throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
@@ -679,10 +679,11 @@ any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) 
 };
 
 /*
-keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+keyParamPair : VAR? identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 */
 any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
     debug(0) << "visitKeyParamPair" << endl;
+    bool isVar = context->VAR() != nullptr;
     type_ptr_t type = any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
     data_ptr_t defaultData = nullptr;
     if (context->entityExpr()) {
@@ -694,7 +695,7 @@ any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) 
             throw BuildException("Default data must not be expressions", exprToken);
         }
     }
-    return make_tuple(context->identRef()->getText(), type, defaultData);
+    return make_tuple(context->identRef()->getText(), type, defaultData, isVar);
 };
 
 /*
@@ -782,9 +783,9 @@ pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
     debug(0) << "visitPairedParams" << endl;
-    vector<tuple<string, type_ptr_t, data_ptr_t>> pairedParams;
+    vector<tuple<string, type_ptr_t, data_ptr_t, bool>> pairedParams;
     for (const auto &pair : context->keyParamPair()) {
-        pairedParams.push_back(any_cast<tuple<string, type_ptr_t, data_ptr_t>>(visitKeyParamPair(pair)));
+        pairedParams.push_back(any_cast<tuple<string, type_ptr_t, data_ptr_t, bool>>(visitKeyParamPair(pair)));
     }
     return pairedParams;
 };
@@ -926,7 +927,7 @@ any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) 
     if (pairedParams) {
         return visitPairedParams(pairedParams);
     } else {
-        return vector<tuple<string, type_ptr_t, data_ptr_t>>();
+        return vector<tuple<string, type_ptr_t, data_ptr_t, bool>>();
     }
 };
 
@@ -965,7 +966,7 @@ any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) 
     if (pairedParams) {
         return visitPairedParams(pairedParams);
     } else {
-        return vector<tuple<string, type_ptr_t, data_ptr_t>>();
+        return vector<tuple<string, type_ptr_t, data_ptr_t, bool>>();
     }
 };
 
@@ -1625,10 +1626,10 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
 
     if (context->angledParams()) {
         const auto &withParams =
-            any_cast<vector<tuple<string, type_ptr_t, data_ptr_t>>>(visitAngledParams(context->angledParams()));
-        for (const auto &[name, type, data] : withParams) {
+            any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitAngledParams(context->angledParams()));
+        for (const auto &[name, type, data, isVar] : withParams) {
             withType->add(name, type, data);
-            bool success = funcType->addIdent(name);
+            bool success = funcType->addIdent(name, isVar);
             if (!success) {
                 const auto &token = context->getStart();
                 throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
@@ -1637,10 +1638,10 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     }
 
     const auto &params =
-        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t>>>(visitParentParams(context->parentParams()));
-    for (const auto &[name, type, data] : params) {
+        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitParentParams(context->parentParams()));
+    for (const auto &[name, type, data, isVar] : params) {
         paramsType->add(name, type, data);
-        bool success = funcType->addIdent(name);
+        bool success = funcType->addIdent(name, isVar);
         if (!success) {
             const auto &token = context->getStart();
             throw BuildException("Identifier '" + name + "' already exists in the function signature", token);

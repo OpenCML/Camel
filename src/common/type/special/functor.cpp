@@ -30,17 +30,15 @@ void FunctorType::addModifier(FunctionModifier modifier) { modifiers_.insert(mod
 
 void FunctorType::setModifiers(const unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
 
-bool FunctorType::addIdent(const string &ident) {
-    if (innerIdents_.find(ident) != innerIdents_.end()) {
+bool FunctorType::addIdent(const string &ident, bool isVar) {
+    if (variableMap_.find(ident) != variableMap_.end()) {
         return false;
     }
-    innerIdents_.insert(ident);
+    variableMap_.insert({ident, isVar});
     return true;
 }
 
 bool FunctorType::hasSideEffect() const { return hasSideEffect_; }
-
-const unordered_set<string> &FunctorType::innerIdents() const { return innerIdents_; }
 
 type_ptr_t FunctorType::withType() const { return dynamic_pointer_cast<Type>(withType_); }
 

@@ -26,7 +26,7 @@ class FunctorType : public SpecialType {
     std::unordered_set<FunctionModifier> modifiers_;
     std::shared_ptr<ParamsType> withType_;
     std::shared_ptr<ParamsType> paramsType_;
-    std::unordered_set<std::string> innerIdents_;
+    std::unordered_map<std::string, bool> variableMap_;
     bool hasSideEffect_ = false;
     type_ptr_t returnType_;
 
@@ -38,9 +38,8 @@ class FunctorType : public SpecialType {
     void addModifier(FunctionModifier modifier);
     void setModifiers(const std::unordered_set<FunctionModifier> &modifiers);
 
-    bool addIdent(const std::string &ident);
+    bool addIdent(const std::string &ident, bool isVar);
     bool hasSideEffect() const;
-    const std::unordered_set<std::string> &innerIdents() const;
 
     type_ptr_t withType() const;
     type_ptr_t paramsType() const;

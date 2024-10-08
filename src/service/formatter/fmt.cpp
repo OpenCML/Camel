@@ -335,10 +335,10 @@ any Formatter::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
 };
 
 /*
-keyParamPair : identRef annotation? ':' typeExpr ('=' entityExpr)? ;
+keyParamPair : VAR? identRef annotation? ':' typeExpr ('=' entityExpr)? ;
 */
 any Formatter::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
-    string result = "";
+    string result = context->VAR() ? "var " : "";
     result += any_cast<string>(visitIdentRef(context->identRef()));
     const auto &annotation = context->annotation();
     const auto &typeExpr = context->typeExpr();
