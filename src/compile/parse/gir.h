@@ -24,7 +24,6 @@
 #include "common/ast.h"
 #include "common/context.h"
 #include "common/entity.h"
-#include "common/function.h"
 #include "common/graph.h"
 #include "common/scope.h"
 #include "utils/log.h"

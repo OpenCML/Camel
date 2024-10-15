@@ -33,10 +33,12 @@ class Formatter : public OpenCMLVisitor {
     // bool compact = false;
     // unsigned int threshold = 80;
     std::string indent = "    ";
-    std::string currentIndent = "";
     std::string newline = "\r\n";
+    bool preferSemis = false;
     QuotePreference quotePrefer = QuotePreference::Single;
     CommentPreference cmtPrefer = CommentPreference::Slash;
+
+    std::string currentIndent = "";
 
     const std::vector<antlr4::Token *> tokens;
 
@@ -66,8 +68,13 @@ class Formatter : public OpenCMLVisitor {
     inline std::string hash2slash(const std::string &input) { return std::regex_replace(input, std::regex("#"), "//"); }
 
     template <typename T>
-    std::any formatList(const std::vector<T *> &list, antlr4::ParserRuleContext *context, bool trailingComma = false,
-                        std::string comma = ",", bool padding = true, bool forceMultiLine = false) {
+    std::any formatList(const std::vector<T *> &list, antlr4::ParserRuleContext *context,
+                        const std::string &&iComma, // inline comma
+                        const std::string &&nComma, // new line comma
+                        bool tComma = false,        // trailing comma
+                        bool padding = true,        // padding spaces
+                        bool multiLine = false      // force multi-line
+    ) {
         std::string result;
 
         const auto findCmtRange = [&](size_t start, bool inverse = false) -> std::pair<size_t, size_t> {
@@ -90,7 +97,7 @@ class Formatter : public OpenCMLVisitor {
                 }
             } else {
                 if (++predCmtStart < tokens.size()) {
-                    if (tokens[predCmtStart]->getText() == comma) {
+                    if (tokens[predCmtStart]->getText() == iComma) {
                         predCmtStart++;
                     }
                     if (predCmtStart < tokens.size() && tokens[predCmtStart]->getChannel() > 1) {
@@ -107,13 +114,13 @@ class Formatter : public OpenCMLVisitor {
             return std::make_pair(predCmtStart, predCmtEnd);
         };
 
-        bool multiLine = false || forceMultiLine;
-        bool wrappedWithBraces = false;
-
-        if (!forceMultiLine) {
+        if (!multiLine) {
             // the elements are on one line if and only if
             // all elements' last token is on the same line
             // with the first token of the next element
+            // that's to say, although the multi-line is set to false,
+            // the list may still be formatted in multiple lines
+            // if the elements are not in one line already
             auto lastEleLine = list[0]->getStop()->getLine();
             for (int i = 1; i < list.size(); i++) {
                 const auto &currEleLine = list[i]->getStart()->getLine();
@@ -128,6 +135,7 @@ class Formatter : public OpenCMLVisitor {
         // check if the list is wrapped with braces
         // if so, we don't need to add line breaks before and after the list
         // that makes the code more compact
+        bool wrappedWithBraces = false;
         const std::string snippet = context->getText();
         const std::string firstChar = snippet.substr(0, 1);
         const std::string lastChar = snippet.substr(snippet.size() - 1, 1);
@@ -202,8 +210,8 @@ class Formatter : public OpenCMLVisitor {
 
             result += std::any_cast<std::string>(visit(list[i]));
 
-            if (i < list.size() - 1 || trailingComma) {
-                result += comma + (multiLine ? "" : " ");
+            if (i < list.size() - 1 || tComma) {
+                result += multiLine ? nComma : iComma;
             }
 
             lastStopLine = list[i]->getStop()->getLine();
@@ -246,7 +254,7 @@ class Formatter : public OpenCMLVisitor {
                 popIndent();
                 result += lineEnd();
             }
-        } else if (padding && !trailingComma) {
+        } else if (padding && !tComma) {
             result += " ";
         }
 

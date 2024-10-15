@@ -12,7 +12,7 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 06, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
@@ -36,6 +36,9 @@ class ParamsData : public StructData {
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
+
+    data_vec_t &indexData() { return indexData_; }
+    std::map<std::string, data_ptr_t> &namedData() { return namedData_; }
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;

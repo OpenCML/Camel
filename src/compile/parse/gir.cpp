@@ -120,7 +120,7 @@ node_ptr_t Constructor::visitDRefNode(const ast::node_ptr_t &ast) {
     // if (optEntity.has_value()) {
     //     entity_ptr_t &entity = optEntity.value();
     //     if (entity->isFunc()) {
-    //         const functor_ptr_t functor = dynamic_pointer_cast<Functor>(entity);
+    //         const func_ptr_t functor = dynamic_pointer_cast<Functor>(entity);
     //         auto funcNode = make_shared<FunctorNode>(functor->func());
     //         return funcNode;
     //     } else {

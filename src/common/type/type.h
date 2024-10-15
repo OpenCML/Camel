@@ -12,7 +12,7 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 06, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
@@ -92,24 +92,12 @@ using data_lst_t = std::list<data_ptr_t>;
 using data_vec_t = std::vector<data_ptr_t>;
 using data_list_t = std::initializer_list<data_ptr_t>;
 
-class Function;
-using func_ptr_t = std::shared_ptr<Function>;
-
 class Entity;
 using entity_ptr_t = std::shared_ptr<Entity>;
 using entity_wptr_t = std::weak_ptr<Entity>;
 using entity_lst_t = std::list<entity_ptr_t>;
 using entity_vec_t = std::vector<entity_ptr_t>;
 using entity_list_t = std::initializer_list<entity_ptr_t>;
-
-class Functor;
-using functor_ptr_t = std::shared_ptr<Functor>;
-using functor_wptr_t = std::weak_ptr<Functor>;
-using functor_lst_t = std::list<functor_ptr_t>;
-using functor_vec_t = std::vector<functor_ptr_t>;
-using functor_list_t = std::initializer_list<functor_ptr_t>;
-
-enum class FunctionModifier;
 
 class Type {
   protected:

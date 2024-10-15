@@ -38,7 +38,7 @@ public:
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
     T__38 = 39, T__39 = 40, SEP = 41, AS = 42, IS = 43, LET = 44, VAR = 45, 
     USE = 46, FROM = 47, FUNC = 48, TYPE = 49, WITH = 50, WAIT = 51, RETURN = 52, 
-    INNER = 53, OUTER = 54, ATOMIC = 55, STATIC = 56, SYNC = 57, NULL_ = 58, 
+    INNER = 53, OUTER = 54, ATOMIC = 55, SHARED = 56, SYNC = 57, NULL_ = 58, 
     TRUE = 59, FALSE = 60, INTEGER_TYPE = 61, INTEGER32_TYPE = 62, INTEGER64_TYPE = 63, 
     REAL_TYPE = 64, FLOAT_TYPE = 65, DOUBLE_TYPE = 66, NUMBER_TYPE = 67, 
     STRING_TYPE = 68, BOOL_TYPE = 69, CHAR_TYPE = 70, SET_TYPE = 71, MAP_TYPE = 72, 
@@ -85,6 +85,17 @@ public:
   const antlr4::dfa::Vocabulary& getVocabulary() const override;
 
   antlr4::atn::SerializedATNView getSerializedATN() const override;
+
+
+  bool isAdjacent() {
+      const antlr4::Token *last = _input->LT(-1);
+      const antlr4::Token *curr = _input->LT(1);
+      if (last == nullptr || curr == nullptr)
+          return false;
+      if (last->getStopIndex() + 1 != curr->getStartIndex())
+          return false;
+      return true;
+  }
 
 
   class ProgramContext;
@@ -396,8 +407,8 @@ public:
     antlr4::tree::TerminalNode* OUTER(size_t i);
     std::vector<antlr4::tree::TerminalNode *> ATOMIC();
     antlr4::tree::TerminalNode* ATOMIC(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> STATIC();
-    antlr4::tree::TerminalNode* STATIC(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> SHARED();
+    antlr4::tree::TerminalNode* SHARED(size_t i);
     std::vector<antlr4::tree::TerminalNode *> SYNC();
     antlr4::tree::TerminalNode* SYNC(size_t i);
 
@@ -442,6 +453,7 @@ public:
     virtual size_t getRuleIndex() const override;
     IdentRefContext *identRef();
     TypeExprContext *typeExpr();
+    antlr4::tree::TerminalNode *VAR();
     AnnotationContext *annotation();
     EntityExprContext *entityExpr();
 
@@ -924,14 +936,14 @@ public:
     AnnotatedExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrimaryExprContext *primaryExpr();
+    std::vector<AnnotationContext *> annotation();
+    AnnotationContext* annotation(size_t i);
     std::vector<MemberAccessContext *> memberAccess();
     MemberAccessContext* memberAccess(size_t i);
     std::vector<ParentArguesContext *> parentArgues();
     ParentArguesContext* parentArgues(size_t i);
     std::vector<AngledValuesContext *> angledValues();
     AngledValuesContext* angledValues(size_t i);
-    std::vector<AnnotationContext *> annotation();
-    AnnotationContext* annotation(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -1127,6 +1139,10 @@ public:
 
   IdentRefContext* identRef();
 
+
+  bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;
+
+  bool annotatedExprSempred(AnnotatedExprContext *_localctx, size_t predicateIndex);
 
   // By default the static state used to implement the parser is lazily initialized during the first
   // call to the constructor. You can call this function if you wish to initialize the static state

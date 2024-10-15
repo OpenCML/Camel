@@ -20,6 +20,7 @@
 #include "graph.h"
 #include "utils/log.h"
 
+using namespace std;
 using namespace gir;
 
 /*
@@ -47,17 +48,31 @@ Graph
 */
 
 gir::Graph::Graph()
-    : Node(NodeType::GRAPH, DataType{}), nodes_(std::make_shared<node_vec_t>()),
-      sharedConstants_(std::make_shared<data_vec_t>()), sharedVariables_(std::make_shared<data_vec_t>()),
-      rtVariableIndices_(std::make_shared<std::vector<InitIndex>>()), runtimeConstants_(), runtimeVariables_() {}
+    : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
+      ports_(make_shared<vector<pair<size_t, bool>>>()), sharedConstants_(make_shared<data_vec_t>()),
+      sharedVariables_(make_shared<data_vec_t>()), rtVariableIndices_(make_shared<vector<InitIndex>>()),
+      runtimeConstants_(), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
-    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), sharedConstants_(other.sharedConstants_),
-      sharedVariables_(other.sharedVariables_), rtVariableIndices_(other.rtVariableIndices_),
-      runtimeConstants_(other.runtimeConstants_.size()), runtimeVariables_() {
+    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_),
+      sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
+      rtVariableIndices_(other.rtVariableIndices_), runtimeConstants_(other.runtimeConstants_.size()),
+      runtimeVariables_() {
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
     }
+}
+
+void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
+
+node_ptr_t gir::Graph::addPort(bool isVar = false) {
+    node_ptr_t node = DataNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);
+    if (isVar) {
+        node->makeVariable();
+    }
+    size_t idx = node->index();
+    ports_->push_back({idx, isVar});
+    return node;
 }
 
 size_t gir::Graph::makeVariable(size_t index, bool shared) {
@@ -85,24 +100,24 @@ size_t gir::Graph::addConstant(const data_ptr_t &data, bool shared) {
 
 data_ptr_t gir::Graph::getConstant(size_t index, bool shared) {
     if (shared) {
-        assert(index < sharedConstants_->size(), "Constant index out of range");
+        assert(index < sharedConstants_->size(), "Constant index out of range.");
         return sharedConstants_->at(index);
     } else {
-        assert(index < runtimeConstants_.size(), "Constant index out of range");
+        assert(index < runtimeConstants_.size(), "Constant index out of range.");
         return runtimeConstants_.at(index);
     }
 }
 
 data_ptr_t gir::Graph::getVariable(size_t index, bool shared) {
     if (shared) {
-        assert(index < sharedVariables_->size(), "Variable index out of range");
+        assert(index < sharedVariables_->size(), "Variable index out of range.");
         return sharedVariables_->at(index);
     } else {
-        assert(index < runtimeVariables_.size(), "Variable index out of range");
+        assert(index < runtimeVariables_.size(), "Variable index out of range.");
         auto &var = runtimeVariables_.at(index);
-        if (std::holds_alternative<InitIndex>(var)) {
+        if (holds_alternative<InitIndex>(var)) {
             // on first access, replace the index with the copied(deep) actual data
-            InitIndex &i = std::get<InitIndex>(var);
+            InitIndex &i = get<InitIndex>(var);
             data_ptr_t data = nullptr;
             if (i.shared) {
                 data = sharedConstants_->at(i.index)->clone(true);
@@ -112,28 +127,41 @@ data_ptr_t gir::Graph::getVariable(size_t index, bool shared) {
             var = data;
             return data;
         } else {
-            return std::get<data_ptr_t>(var);
+            return get<data_ptr_t>(var);
         }
     }
 }
 
 void gir::Graph::setConstant(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
-        assert(index < sharedConstants_->size(), "Constant index out of range");
+        assert(index < sharedConstants_->size(), "Constant index out of range.");
         sharedConstants_->at(index) = data;
     } else {
-        assert(index < runtimeConstants_.size(), "Constant index out of range");
+        assert(index < runtimeConstants_.size(), "Constant index out of range.");
         runtimeConstants_.at(index) = data;
     }
 }
 
 void gir::Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
-        assert(index < sharedVariables_->size(), "Variable index out of range");
+        assert(index < sharedVariables_->size(), "Variable index out of range.");
         sharedVariables_->at(index) = data;
     } else {
-        assert(index < runtimeVariables_.size(), "Variable index out of range");
+        assert(index < runtimeVariables_.size(), "Variable index out of range.");
         runtimeVariables_.at(index) = data;
+    }
+}
+
+void gir::Graph::fulfill(const data_vec_t &dataList) {
+    assert(dataList.size() == ports_->size(), "Data list size does not match ports size.");
+    for (size_t i = 0; i < dataList.size(); i++) {
+        const auto &data = dataList[i];
+        const auto &[index, isVar] = ports_->at(i);
+        if (isVar) {
+            setVariable(index, data, false);
+        } else {
+            setConstant(index, data, false);
+        }
     }
 }
 
@@ -150,7 +178,7 @@ DataNode::DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared)
 }
 
 node_ptr_t DataNode::create(graph_ptr_t graph, const data_ptr_t &data, bool shared) {
-    const auto res = std::make_shared<DataNode>(graph, data, shared);
+    const auto res = make_shared<DataNode>(graph, data, shared);
     graph->addNode(res);
     return res;
 }
@@ -167,7 +195,7 @@ StructNode::StructNode(graph_ptr_t graph, const data_ptr_t &data)
 }
 
 node_ptr_t StructNode::create(graph_ptr_t graph, const data_ptr_t &data) {
-    const auto res = std::make_shared<StructNode>(graph, data);
+    const auto res = make_shared<StructNode>(graph, data);
     graph->addNode(res);
     return res;
 }
@@ -198,6 +226,63 @@ FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
     nodeType_ = NodeType::FUNCTOR;
     inputs_.resize(3, nullptr);
 }
+
+inline shared_ptr<ParamsData> inputToParams(const node_ptr_t &node, const type_ptr_t &type) {
+    data_ptr_t data = node->data();
+
+    if (node->refCnt() == 0) {
+        // if the node is a temporary created node
+        TypeCode code = data->type()->code();
+        switch (code) {
+            // if the data is not a tuple, list, vector, or array, wrap it in a tuple
+        case TypeCode::TUPLE:
+            [[fallthrough]];
+        case TypeCode::LIST:
+            [[fallthrough]];
+        case TypeCode::VECTOR:
+            [[fallthrough]];
+        case TypeCode::ARRAY:
+            [[fallthrough]];
+        case TypeCode::PARAMS:
+            break;
+        default:
+            data = make_shared<TupleData>(data_list_t{data});
+            break;
+        }
+    } else {
+        data = make_shared<TupleData>(data_list_t{data});
+    }
+
+    // TODO: should we convert type in place here?
+    data = data->convert(type, false);
+
+    return dynamic_pointer_cast<ParamsData>(data);
+}
+
+void FunctorNode::fulfill() {
+    const auto &withNode = inputs_[0];
+    const auto &linkNode = inputs_[1];
+
+    assert(withNode, "With node is not set.");
+    assert(linkNode, "Link node is not set.");
+
+    FunctorType *func = dynamic_cast<FunctorType *>(func_->type().get());
+
+    auto withData = inputToParams(withNode, func->withType());
+    auto linkData = inputToParams(linkNode, func->linkType());
+
+    data_vec_t params;
+    for (const auto &e : withData->indexData()) {
+        params.push_back(e);
+    }
+    for (const auto &e : linkData->indexData()) {
+        params.push_back(e);
+    }
+
+    func_->graph()->fulfill(params);
+}
+
+data_ptr_t FunctorNode::eval() {}
 
 /*
 OperatorNode

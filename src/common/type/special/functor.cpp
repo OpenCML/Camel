@@ -12,39 +12,84 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 6, 2024
+ * Created: Oct. 06, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "functor.h"
-#include "common/function.h"
+
+#include "../../data.h"
+#include "../struct/params.h"
 
 using namespace std;
 
+FunctorModifier str2modifier(const string &str) {
+    if (str == "inner") {
+        return FunctorModifier::INNER;
+    } else if (str == "outer") {
+        return FunctorModifier::OUTER;
+    } else if (str == "atomic") {
+        return FunctorModifier::ATOMIC;
+    } else if (str == "static") {
+        return FunctorModifier::SHARED;
+    } else if (str == "sync") {
+        return FunctorModifier::SYNC;
+    } else {
+        throw runtime_error("Unknown modifier: " + str);
+    }
+}
+
+string modifier2str(FunctorModifier modifier) {
+    switch (modifier) {
+    case FunctorModifier::INNER:
+        return "inner";
+    case FunctorModifier::OUTER:
+        return "outer";
+    case FunctorModifier::ATOMIC:
+        return "atomic";
+    case FunctorModifier::SHARED:
+        return "static";
+    case FunctorModifier::SYNC:
+        return "sync";
+    default:
+        throw runtime_error("Unknown modifier: " + to_string(static_cast<int>(modifier)));
+    }
+}
+
 FunctorType::FunctorType(const shared_ptr<ParamsType> &withType = nullptr,
                          const shared_ptr<ParamsType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
-    : SpecialType(TypeCode::FUNCTOR), withType_(withType), paramsType_(paramsType), returnType_(returnType) {}
+    : SpecialType(TypeCode::FUNCTOR), withType_(withType), linkType_(paramsType), returnType_(returnType) {}
 
-void FunctorType::addModifier(FunctionModifier modifier) { modifiers_.insert(modifier); }
+void FunctorType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
 
-void FunctorType::setModifiers(const unordered_set<FunctionModifier> &modifiers) { modifiers_ = modifiers; }
+void FunctorType::setModifiers(const unordered_set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
 
-bool FunctorType::addIdent(const string &ident) {
-    if (innerIdents_.find(ident) != innerIdents_.end()) {
+void FunctorType::checkModifiers() const {
+    if (hasSideEffect_ && !sync()) {
+        throw runtime_error("Functor with side effect must be sync.");
+    }
+    if (inner() && outer()) {
+        throw runtime_error("Functor cannot be both inner and outer.");
+    }
+}
+
+bool FunctorType::addIdent(const string &ident, bool isVar) {
+    if (variableMap_.find(ident) != variableMap_.end()) {
         return false;
     }
-    innerIdents_.insert(ident);
+    variableMap_.insert({ident, isVar});
+    if (isVar) {
+        hasSideEffect_ = true;
+    }
     return true;
 }
 
 bool FunctorType::hasSideEffect() const { return hasSideEffect_; }
 
-const unordered_set<string> &FunctorType::innerIdents() const { return innerIdents_; }
-
 type_ptr_t FunctorType::withType() const { return dynamic_pointer_cast<Type>(withType_); }
 
-type_ptr_t FunctorType::paramsType() const { return dynamic_pointer_cast<Type>(paramsType_); }
+type_ptr_t FunctorType::linkType() const { return dynamic_pointer_cast<Type>(linkType_); }
 
 type_ptr_t FunctorType::returnType() const { return dynamic_pointer_cast<Type>(returnType_); }
 
@@ -72,8 +117,8 @@ string FunctorType::toString() const {
         result += "> ";
     }
     result += "(";
-    if (paramsType_ && paramsType_->size() > 0) {
-        const auto &params = dynamic_cast<const ParamsType &>(*paramsType_);
+    if (linkType_ && linkType_->size() > 0) {
+        const auto &params = dynamic_cast<const ParamsType &>(*linkType_);
         const auto &elements = params.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
@@ -105,7 +150,7 @@ bool FunctorType::operator==(const Type &other) const {
     if (withType_ != nullptr && !withType_->equals(otherFunctor.withType_)) {
         return false;
     }
-    if (paramsType_ != nullptr && !paramsType_->equals(otherFunctor.paramsType_)) {
+    if (linkType_ != nullptr && !linkType_->equals(otherFunctor.linkType_)) {
         return false;
     }
     if (returnType_ != nullptr && !returnType_->equals(otherFunctor.returnType_)) {
@@ -130,8 +175,8 @@ TypeConv FunctorType::convertibility(const Type &other) const {
                 result = TypeConv::UNSAFE;
             }
         }
-        if (paramsType_ && !otherFunctor.paramsType_) {
-            const TypeConv paramsTypeConv = paramsType_->convertibility(*otherFunctor.paramsType_);
+        if (linkType_ && !otherFunctor.linkType_) {
+            const TypeConv paramsTypeConv = linkType_->convertibility(*otherFunctor.linkType_);
             if (paramsTypeConv == TypeConv::FORBIDDEN) {
                 return TypeConv::FORBIDDEN;
             }

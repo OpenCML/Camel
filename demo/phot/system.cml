@@ -1,14 +1,14 @@
-use { Transmitter, Receiver } from "optical_communication";
-use { Fiber } from "optical_fiber";
-use { constellation_diagram, eye_diagram } from "visualization";
+use { Transmitter, Receiver } from 'optical_communication';
+use { Fiber } from 'optical_fiber';
+use { constellation_diagram, eye_diagram } from 'visualization';
 
 let fiberConfig = {
-    num_spans = 5,  # 多少个 span (每个span经过一次放大器)
-    span_length = 75,  # 一个 span 的长度 (km)
-    delta_z = 1,  # 单步步长 (km)
-    alpha = 0.2,
-    beta2 = 21.6676e-24,
-    gamma = 1.3
+    num_spans: 5, // 多少个 span (每个span经过一次放大器)
+    span_length: 75, // 一个 span 的长度 (km)
+    delta_z: 1, // 单步步长 (km)
+    alpha: 0.2,
+    beta2: 21.6676e-24,
+    gamma: 1.3
 };
 
 let [signals, prev_signals] = Transmitter();

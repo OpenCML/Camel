@@ -12,36 +12,37 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
+ * Created: Oct. 08, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "struct.h"
+#include "../data.h"
 
-class TupleData : public StructData {
-  private:
-    std::vector<size_t> refs_;
-    std::vector<data_ptr_t> data_;
+namespace GraphIR {
+class Graph;
+using graph_ptr_t = std::shared_ptr<Graph>;
+} // namespace GraphIR
+
+class FunctorData : public Data {
+    GraphIR::graph_ptr_t graph_;
 
   public:
-    TupleData(data_list_t data);
-    virtual ~TupleData() = default;
+    FunctorData(const type_ptr_t &type, GraphIR::graph_ptr_t graph);
+    virtual ~FunctorData() = default;
 
-    void emplace(const data_ptr_t &e);
-
-    data_ptr_t get(size_t index) const;
-
-    virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
-    virtual void resolve(const data_vec_t &dataList) override;
+    GraphIR::graph_ptr_t graph() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-
-    data_ptr_t convertToParams(std::shared_ptr<ParamsType> &target);
 };
+
+using func_ptr_t = std::shared_ptr<FunctorData>;
+using func_wptr_t = std::weak_ptr<FunctorData>;
+using func_lst_t = std::list<func_ptr_t>;
+using func_vec_t = std::vector<func_ptr_t>;
+using func_list_t = std::initializer_list<func_ptr_t>;

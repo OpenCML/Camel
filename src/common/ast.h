@@ -12,7 +12,7 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 5, 2024
+ * Created: May. 05, 2024
  * Updated: Oct. 08, 2024
  * Supported by: National Key Research and Development Program of China
  */

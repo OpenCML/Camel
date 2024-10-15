@@ -19,13 +19,14 @@
 
 #pragma once
 
-#include "data.h"
-#include "function.h"
-#include "operator.h"
-
 #include <any>
 #include <list>
 #include <variant>
+
+#include "data.h"
+#include "operator.h"
+
+#include "data/other/functor.h"
 
 namespace GraphIR {
 
@@ -78,6 +79,7 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 
 class Node : public std::enable_shared_from_this<Node> {
   protected:
+    size_t refs_ = 0;
     NodeType nodeType_;
     DataType dataType_;
     graph_ptr_t graph_;
@@ -98,12 +100,21 @@ class Node : public std::enable_shared_from_this<Node> {
 
     graph_ptr_t graph() const { return graph_; }
     data_ptr_t data() const;
+    size_t index() const { return dataIndex_; }
 
     node_vec_t &inputs() { return inputs_; }
     node_vec_t &outputs() { return outputs_; }
 
     size_t inDegree() const { return inputs_.size(); }
     size_t outDegree() const { return outputs_.size(); }
+
+    void ref() { refs_++; }
+    void unref() {
+        if (refs_ > 0) {
+            refs_--;
+        }
+    }
+    size_t refCnt() const { return refs_; }
 
     virtual data_ptr_t eval() { return data(); };
 
@@ -121,7 +132,7 @@ class Graph : public Node {
 
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
-    std::shared_ptr<node_vec_t> ports_;
+    std::shared_ptr<std::vector<std::pair<size_t, bool>>> ports_;
 
     std::shared_ptr<data_vec_t> sharedConstants_;
     std::shared_ptr<data_vec_t> sharedVariables_;
@@ -134,7 +145,8 @@ class Graph : public Node {
     Graph(Graph &other);
     ~Graph() = default;
 
-    void addNode(const node_ptr_t &node) { nodes_->push_back(node); }
+    void addNode(const node_ptr_t &node);
+    node_ptr_t addPort(bool isVar = false);
 
     // set a constant to a variable, return the index of the variable
     size_t makeVariable(size_t index, bool shared = false);
@@ -180,18 +192,16 @@ inline std::shared_ptr<StructNode> struct_node_ptr_cast(const node_ptr_t &ptr) {
 
 class FunctorNode : public Node {
     func_ptr_t func_;
-    graph_ptr_t subGraph_;
-    node_ptr_t linkNode_;
-    node_ptr_t withNode_;
-    node_ptr_t closure_;
 
   public:
     FunctorNode(graph_ptr_t graph, const func_ptr_t &func);
     ~FunctorNode() = default;
 
-    node_ptr_t &linkNode() { return inputs_[0]; }
-    node_ptr_t &withNode() { return inputs_[1]; }
-    node_ptr_t &closure() { return inputs_[2]; }
+    graph_ptr_t subGraph() const { return func_->graph(); }
+    node_ptr_t &withNode() { return inputs_[0]; }
+    node_ptr_t &linkNode() { return inputs_[1]; }
+
+    void fulfill();
 
     virtual data_ptr_t eval() override;
 };
