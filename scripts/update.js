@@ -47,21 +47,13 @@ function calculateMD5Base64(filePath) {
     return hash.digest('base64')
 }
 
-async function compareAndCacheMD5(srcPath) {
+async function compareMD5(srcPath) {
     const srcMD5Base64 = calculateMD5Base64(srcPath)
     const cachedMD5Base64 = cacheMap[srcPath]
-
-    let isSame = false
     if (cachedMD5Base64) {
-        isSame = cachedMD5Base64 === srcMD5Base64
+        return cachedMD5Base64 === srcMD5Base64
     }
-
-    if (!isSame) {
-        cacheMap[srcPath] = srcMD5Base64
-        cacheHasChanges = true
-    }
-
-    return isSame
+    return false
 }
 
 function formatDate(date) {
@@ -120,12 +112,14 @@ async function updateFile(filePath) {
                 break
             }
         }
-        if (needUpdate && !(await compareAndCacheMD5(filePath))) {
+        if (needUpdate && !(await compareMD5(filePath))) {
             if (updateIndex) {
                 lines.splice(updateIndex, 0, updatedLine)
             }
             await fsp.writeFile(filePath, lines.join('\r\n'), 'utf8')
             console.log(`Updated: ${filePath}`)
+            cacheMap[srcPath] = calculateMD5Base64(filePath)
+            cacheHasChanges = true
             updatedFiles++
         }
     } catch (err) {
@@ -177,7 +171,7 @@ async function cleanUpCache() {
     await cleanUpCache()
 
     if (cacheHasChanges) {
-        console.log('Cache has changes. Updating cache file...')
         await updateCacheFile()
+        console.log('Cache has been updated.')
     }
 })()
