@@ -87,6 +87,17 @@ public:
   antlr4::atn::SerializedATNView getSerializedATN() const override;
 
 
+  bool isAdjacent() {
+      const antlr4::Token *last = _input->LT(-1);
+      const antlr4::Token *curr = _input->LT(1);
+      if (last == nullptr || curr == nullptr)
+          return false;
+      if (last->getStopIndex() + 1 != curr->getStartIndex())
+          return false;
+      return true;
+  }
+
+
   class ProgramContext;
   class StmtListContext;
   class StmtContext;
@@ -925,14 +936,14 @@ public:
     AnnotatedExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrimaryExprContext *primaryExpr();
+    std::vector<AnnotationContext *> annotation();
+    AnnotationContext* annotation(size_t i);
     std::vector<MemberAccessContext *> memberAccess();
     MemberAccessContext* memberAccess(size_t i);
     std::vector<ParentArguesContext *> parentArgues();
     ParentArguesContext* parentArgues(size_t i);
     std::vector<AngledValuesContext *> angledValues();
     AngledValuesContext* angledValues(size_t i);
-    std::vector<AnnotationContext *> annotation();
-    AnnotationContext* annotation(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -1128,6 +1139,10 @@ public:
 
   IdentRefContext* identRef();
 
+
+  bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;
+
+  bool annotatedExprSempred(AnnotatedExprContext *_localctx, size_t predicateIndex);
 
   // By default the static state used to implement the parser is lazily initialized during the first
   // call to the constructor. You can call this function if you wish to initialize the static state

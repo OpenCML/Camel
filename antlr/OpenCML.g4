@@ -20,6 +20,18 @@ import OpenCMLLex;
  */
 }
 
+@parser::members {
+bool isAdjacent() {
+    const antlr4::Token *last = _input->LT(-1);
+    const antlr4::Token *curr = _input->LT(1);
+    if (last == nullptr || curr == nullptr)
+        return false;
+    if (last->getStopIndex() + 1 != curr->getStartIndex())
+        return false;
+    return true;
+}
+}
+
 program : stmtList? EOF;
 
 stmtList : stmt (SEP? stmt)* SEP? ;
@@ -130,7 +142,7 @@ withExpr
     ;
 
 annotatedExpr
-    : primaryExpr (memberAccess | parentArgues | angledValues | annotation)*
+    : primaryExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues) | annotation)*
     ;
 
 primaryExpr
