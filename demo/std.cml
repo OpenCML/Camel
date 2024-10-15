@@ -43,6 +43,8 @@ type Power = {
     powerOutput: ElSignal
 };
 
+use Pwr = Power;
+
 @[14, 7]
 @{ boxed: true, color: 'blue' }
 func PowerControlEl(input: ElSignal): ElSignal {
