@@ -241,6 +241,8 @@ node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
     return res;
 }
 
+func_type_ptr_t FunctorNode::type() const { return std::dynamic_pointer_cast<FunctorType>(func_->type()); }
+
 inline shared_ptr<ParamsData> inputToParams(const node_ptr_t &node, const type_ptr_t &type) {
     data_ptr_t data = node->data();
 
@@ -309,4 +311,49 @@ node_ptr_t OperatorNode::create(graph_ptr_t graph, Operator op) {
     const auto res = make_shared<OperatorNode>(graph, op);
     graph->addNode(res);
     return res;
+}
+
+/*
+SelectNode
+*/
+
+SelectNode::SelectNode(graph_ptr_t graph, node_vec_t &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), funcs_(make_shared<node_vec_t>(cases)) {}
+
+SelectNode::SelectNode(graph_ptr_t graph, std::vector<operator_ptr_t> &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph),
+      ops_(make_shared<std::vector<operator_ptr_t>>(cases)) {}
+
+node_ptr_t SelectNode::create(graph_ptr_t graph, node_vec_t &cases) {
+    const auto res = make_shared<SelectNode>(graph, cases);
+    // temporary node, not added to graph
+    return res;
+}
+
+node_ptr_t SelectNode::create(graph_ptr_t graph, std::vector<operator_ptr_t> &cases) {
+    const auto res = make_shared<SelectNode>(graph, cases);
+    // temporary node, not added to graph
+    return res;
+}
+
+std::vector<func_type_ptr_t> SelectNode::types() const {
+    std::vector<func_type_ptr_t> res;
+    if (funcs_) {
+        for (const auto &node : *funcs_) {
+            res.push_back(dynamic_pointer_cast<FunctorNode>(node)->type());
+        }
+    } else {
+        for (const auto &op : *ops_) {
+            res.push_back(op->type());
+        }
+    }
+    return res;
+}
+
+node_ptr_t &SelectNode::caseAt(size_t index) {
+    if (funcs_) {
+        return funcs_->at(index);
+    } else {
+        return OperatorNode::create(graph_, *ops_->at(index));
+    }
 }

@@ -30,7 +30,7 @@
 
 namespace GraphIR {
 
-enum class NodeType { GRAPH, DATA, STRUCT, FUNCTOR, OPERATOR };
+enum class NodeType { GRAPH, DATA, STRUCT, SELECT, FUNCTOR, OPERATOR };
 
 enum class DataTypeEnum {
     SHARED_CONSTANT,  // shared among all copies of the graph and never changed
@@ -93,7 +93,7 @@ class Node : public std::enable_shared_from_this<Node> {
         : nodeType_(nodeType), dataType_(dataType), graph_(graph) {};
     virtual ~Node() = default;
 
-    NodeType nodeType() const { return nodeType_; }
+    NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataType_; }
 
     void makeVariable(bool shared = false);
@@ -207,6 +207,8 @@ class FunctorNode : public Node {
   public:
     static node_ptr_t create(graph_ptr_t graph, const func_ptr_t &func);
 
+    func_type_ptr_t type() const;
+
     graph_ptr_t subGraph() const { return func_->graph(); }
     node_ptr_t &withNode() { return inputs_[0]; }
     node_ptr_t &linkNode() { return inputs_[1]; }
@@ -237,6 +239,28 @@ inline std::shared_ptr<OperatorNode> op_node_ptr_cast(const node_ptr_t &ptr) {
 }
 
 using op_node_ptr_t = std::shared_ptr<OperatorNode>;
+
+class SelectNode : public Node {
+    std::shared_ptr<node_vec_t> funcs_;
+    std::shared_ptr<std::vector<operator_ptr_t>> ops_;
+
+    SelectNode(graph_ptr_t graph, node_vec_t &cases);
+    SelectNode(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
+    ~SelectNode() = default;
+
+  public:
+    static node_ptr_t create(graph_ptr_t graph, node_vec_t &cases);
+    static node_ptr_t create(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
+
+    std::vector<func_type_ptr_t> types() const;
+    node_ptr_t &caseAt(size_t index);
+};
+
+inline std::shared_ptr<SelectNode> select_node_ptr_cast(const node_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<SelectNode>(ptr);
+}
+
+using select_node_ptr_t = std::shared_ptr<SelectNode>;
 
 } // namespace GraphIR
 

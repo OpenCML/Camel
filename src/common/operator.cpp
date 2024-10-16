@@ -21,4 +21,12 @@
 
 using namespace std;
 
-unordered_map<string, operator_ptr_t> globalOperators;
+unordered_map<string, std::vector<operator_ptr_t>> globalOperators;
+
+void registerOperator(const std::string &name, operator_ptr_t &op) {
+    if (globalOperators.find(name) == globalOperators.end()) {
+        globalOperators[name] = {op};
+    } else {
+        globalOperators[name].push_back(op);
+    }
+}

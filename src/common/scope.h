@@ -43,7 +43,7 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
         : map_(std::move(map)), outer_(std::move(outer)) {}
     Scope(std::shared_ptr<Scope<K, V>> outer) : map_(), outer_(std::move(outer)) {}
 
-    std::shared_ptr<Scope<K, V>> outer() { return outer_; }
+    std::shared_ptr<Scope<K, V>> &outer() { return outer_; }
 
     std::optional<V> at(const K &k, bool recursive = true) {
         // std::shared_lock<std::shared_mutex> lock(rwMutex_);
