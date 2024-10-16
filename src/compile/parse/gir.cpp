@@ -98,7 +98,16 @@ type_ptr_t Constructor::visitTypeNode(const ast::node_ptr_t &ast) {
     return type;
 }
 
-node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
+    debug(0) << "Visiting FUNC node" << endl;
+    context_->pushScope();
+    const auto &type = visitTypeNode(ast_ptr_cast(ast->childAt(0)));
+    visitExecNode(ast_ptr_cast(ast->childAt(1)));
+    func_ptr_t func = make_shared<FunctorData>(type, context_->graph());
+    auto &funcNode = gir::FunctorNode::create(context_->graph(), func);
+    context_->popScope();
+    return funcNode;
+}
 
 void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
     debug(0) << "Visiting NREF node" << endl;
@@ -127,26 +136,28 @@ node_ptr_t Constructor::visitWaitNode(const ast::node_ptr_t &ast) { throw runtim
 node_ptr_t Constructor::visitAnnoNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
 
 node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
-    // any dataResult = visit(ast_ptr_cast(ast->at(0)));
-    // any funcResult = visit(ast_ptr_cast(ast->at(1)));
-    // if (dataResult.type() == typeid(node_ptr_t)) {
-    //     node_ptr_t dataNode = any_cast<node_ptr_t>(dataResult);
-    //     if (funcResult.type() == typeid(func_ptr_t)) {
-    //     } else if (funcResult.type() == typeid(node_ptr_t)) {}
-    //     else {
-    //         throw runtime_error("Unexpected result type from visiting children of LINK node");
-    //     }
-    //     node_ptr_t funcNode = any_cast<node_ptr_t>(funcResult);
-    //     if (funcNode->type() == NodeType::FUNCTOR) {
-    //         auto funcNode = func_node_ptr_cast(funcNode);
-    //         funcNode->setParams(dataNode);
-    //     } else {
-    //         throw runtime_error("Non-functor entities cannot be set with parameters");
-    //     }
-    //     return funcNode;
-    // } else {
-    //     throw runtime_error("Unexpected result type from visiting children of LINK node");
-    // }
+    debug(0) << "Visiting LINK node" << endl;
+    // TODO: consider functor and operator overriden
+    any dataResult = visit(ast_ptr_cast(ast->at(0)));
+    any funcResult = visit(ast_ptr_cast(ast->at(1)));
+    if (dataResult.type() == typeid(node_ptr_t)) {
+        node_ptr_t dataNode = any_cast<node_ptr_t>(dataResult);
+        if (funcResult.type() == typeid(func_ptr_t)) {
+        } else if (funcResult.type() == typeid(node_ptr_t)) {}
+        else {
+            throw runtime_error("Unexpected result type from visiting children of LINK node");
+        }
+        node_ptr_t funcNode = any_cast<node_ptr_t>(funcResult);
+        if (funcNode->type() == NodeType::FUNCTOR) {
+            auto funcNode = func_node_ptr_cast(funcNode);
+            funcNode->setParams(dataNode);
+        } else {
+            throw runtime_error("Non-functor entities cannot be set with parameters");
+        }
+        return funcNode;
+    } else {
+        throw runtime_error("Unexpected result type from visiting children of LINK node");
+    }
     return nullptr;
 }
 

@@ -21,4 +21,4 @@
 
 using namespace std;
 
-unordered_map<string, Operator> globalOperators;
+unordered_map<string, operator_ptr_t> globalOperators;

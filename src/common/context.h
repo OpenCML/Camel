@@ -35,7 +35,7 @@ class Context {
     gir::graph_ptr_t currGraph_;
     node_scope_ptr_t scope_;
     operator_scope_ptr_t opScope_;
-    gir::func_node_ptr_t currFunc_;
+    // gir::func_node_ptr_t currFunc_;
 
   public:
     Context();
@@ -44,7 +44,7 @@ class Context {
     node_scope_t &scope() { return *scope_; }
     operator_scope_t &opScope() { return *opScope_; }
     gir::graph_ptr_t &graph() { return currGraph_; }
-    gir::func_node_ptr_t &func() { return currFunc_; }
+    // gir::func_node_ptr_t &func() { return currFunc_; }
 
     void pushScope() {
         scope_ = scope_->push();
@@ -65,7 +65,7 @@ class Context {
         }
         auto opOp = opScope_->at(name);
         if (opOp) {
-            return std::make_shared<gir::OperatorNode>(currGraph_, *opOp);
+            return gir::OperatorNode::create(currGraph_, *opOp);
         }
         return std::nullopt;
     }

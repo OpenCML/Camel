@@ -201,9 +201,11 @@ using struct_node_ptr_t = std::shared_ptr<StructNode>;
 class FunctorNode : public Node {
     func_ptr_t func_;
 
-  public:
     FunctorNode(graph_ptr_t graph, const func_ptr_t &func);
     ~FunctorNode() = default;
+
+  public:
+    static node_ptr_t create(graph_ptr_t graph, const func_ptr_t &func);
 
     graph_ptr_t subGraph() const { return func_->graph(); }
     node_ptr_t &withNode() { return inputs_[0]; }
@@ -221,11 +223,13 @@ inline std::shared_ptr<FunctorNode> func_node_ptr_cast(const node_ptr_t &ptr) {
 using func_node_ptr_t = std::shared_ptr<FunctorNode>;
 
 class OperatorNode : public Node {
-    Operator *operator_;
+    Operator operator_;
+
+    OperatorNode(graph_ptr_t graph, Operator op);
+    ~OperatorNode() = default;
 
   public:
-    OperatorNode(graph_ptr_t graph, Operator *op);
-    ~OperatorNode() = default;
+    static node_ptr_t create(graph_ptr_t graph, Operator op);
 };
 
 inline std::shared_ptr<OperatorNode> op_node_ptr_cast(const node_ptr_t &ptr) {

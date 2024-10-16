@@ -235,6 +235,12 @@ FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
     inputs_.resize(3, nullptr);
 }
 
+node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
+    const auto res = make_shared<FunctorNode>(graph, func);
+    graph->addNode(res);
+    return res;
+}
+
 inline shared_ptr<ParamsData> inputToParams(const node_ptr_t &node, const type_ptr_t &type) {
     data_ptr_t data = node->data();
 
@@ -296,5 +302,11 @@ data_ptr_t FunctorNode::eval() {}
 OperatorNode
 */
 
-OperatorNode::OperatorNode(graph_ptr_t graph, Operator *op)
+OperatorNode::OperatorNode(graph_ptr_t graph, Operator op)
     : Node(NodeType::OPERATOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), operator_(op) {}
+
+node_ptr_t OperatorNode::create(graph_ptr_t graph, Operator op) {
+    const auto res = make_shared<OperatorNode>(graph, op);
+    graph->addNode(res);
+    return res;
+}

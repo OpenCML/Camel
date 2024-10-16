@@ -26,8 +26,25 @@
 
 class Context;
 
-using Operator = std::function<data_ptr_t(Context &, data_lst_t &&)>;
+using OperatorFunction = std::function<data_ptr_t(Context &, data_lst_t &&)>;
 
-extern std::unordered_map<std::string, Operator> globalOperators;
+class Operator {
+  private:
+    std::string name_;
+    func_type_ptr_t type_;
+    OperatorFunction func_;
 
-void registerOperator(const std::string &name, Operator &&op);
+  public:
+    Operator(const std::string &name, func_type_ptr_t &type, OperatorFunction &&func)
+        : name_(name), type_(type), func_(func) {}
+
+    const std::string &name() const { return name_; }
+    const func_type_ptr_t &type() const { return type_; }
+    const OperatorFunction &func() const { return func_; }
+};
+
+using operator_ptr_t = std::shared_ptr<Operator>;
+
+extern std::unordered_map<std::string, operator_ptr_t> globalOperators;
+
+void registerOperator(const std::string &name, operator_ptr_t &op);
