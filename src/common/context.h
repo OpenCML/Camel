@@ -31,6 +31,8 @@ using operator_scope_t = Scope<std::string, Operator>;
 using operator_scope_ptr_t = scope_ptr_t<std::string, Operator>;
 
 class Context {
+    gir::graph_ptr_t rootGraph_;
+    gir::graph_ptr_t currGraph_;
     node_scope_ptr_t scope_;
     operator_scope_ptr_t opScope_;
 
@@ -44,12 +46,28 @@ class Context {
     void pushScope() {
         scope_ = scope_->push();
         opScope_ = opScope_->push();
+        currGraph_ = gir::Graph::create(currGraph_);
     }
 
     void popScope() {
         scope_ = scope_->pop();
         opScope_ = opScope_->pop();
+        currGraph_ = currGraph_->outer();
     }
+
+    std::optional<gir::node_ptr_t> nodeAt(const std::string &name) {
+        auto opNode = scope_->at(name);
+        if (opNode) {
+            return *opNode;
+        }
+        auto opOp = opScope_->at(name);
+        if (opOp) {
+            return std::make_shared<gir::OperatorNode>(currGraph_, *opOp);
+        }
+        return std::nullopt;
+    }
+
+    void insert(const std::string &name, const gir::node_ptr_t &node) { scope_->insert(name, node); }
 };
 
 using context_ptr_t = std::shared_ptr<Context>;

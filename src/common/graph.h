@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
     void makeVariable(bool shared = false);
 
-    graph_ptr_t graph() const { return graph_; }
+    graph_ptr_t outer() const { return graph_; }
     data_ptr_t data() const;
     size_t index() const { return dataIndex_; }
 
@@ -144,6 +144,8 @@ class Graph : public Node {
     Graph();
     Graph(Graph &other);
     ~Graph() = default;
+
+    static graph_ptr_t create(graph_ptr_t graph = nullptr);
 
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isVar = false);

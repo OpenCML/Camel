@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,12 @@ gir::Graph::Graph(Graph &other)
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
     }
+}
+
+graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
+    const auto res = make_shared<Graph>();
+    res->graph_ = graph;
+    return res;
 }
 
 void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }

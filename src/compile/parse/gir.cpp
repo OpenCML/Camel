@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "gir.h"
 #include "common/error/build.h"
-#include "common/functor.h"
 
 using namespace std;
 using namespace gir;
