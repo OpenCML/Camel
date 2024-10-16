@@ -81,6 +81,8 @@ node_ptr_t gir::Graph::addPort(bool isVar = false) {
     return node;
 }
 
+void gir::Graph::setOutput(const node_ptr_t &node) { output_ = node; }
+
 size_t gir::Graph::makeVariable(size_t index, bool shared) {
     if (shared) {
         assert(!dataType_.shared, "Cannot make a shared variable from a runtime constant.");

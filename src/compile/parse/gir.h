@@ -24,7 +24,6 @@
 #include "common/ast.h"
 #include "common/context.h"
 #include "common/graph.h"
-#include "utils/log.h"
 
 inline void _dumpGIR() {
     std::ifstream file("D:\\Projects\\Camel\\demo\\feat\\gir.txt");
@@ -65,7 +64,7 @@ class Constructor {
     node_ptr_t visitAnnoNode(const ast::node_ptr_t &ast);
     node_ptr_t visitLinkNode(const ast::node_ptr_t &ast);
     node_ptr_t visitWithNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitRetnNode(const ast::node_ptr_t &ast);
+    void_ptr_t visitRetnNode(const ast::node_ptr_t &ast);
     node_ptr_t visitExecNode(const ast::node_ptr_t &ast);
     void_ptr_t visitFromNode(const ast::node_ptr_t &ast);
 };

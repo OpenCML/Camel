@@ -150,6 +150,8 @@ class Graph : public Node {
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isVar = false);
 
+    void setOutput(const node_ptr_t &node);
+
     // set a constant to a variable, return the index of the variable
     size_t makeVariable(size_t index, bool shared = false);
     size_t addConstant(const data_ptr_t &data, bool shared = false);
@@ -179,6 +181,8 @@ inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
     return std::dynamic_pointer_cast<DataNode>(ptr);
 }
 
+using data_node_ptr_t = std::shared_ptr<DataNode>;
+
 class StructNode : public Node {
     StructNode(graph_ptr_t graph, const data_ptr_t &data);
     ~StructNode() = default;
@@ -191,6 +195,8 @@ class StructNode : public Node {
 inline std::shared_ptr<StructNode> struct_node_ptr_cast(const node_ptr_t &ptr) {
     return std::dynamic_pointer_cast<StructNode>(ptr);
 }
+
+using struct_node_ptr_t = std::shared_ptr<StructNode>;
 
 class FunctorNode : public Node {
     func_ptr_t func_;
@@ -212,6 +218,8 @@ inline std::shared_ptr<FunctorNode> func_node_ptr_cast(const node_ptr_t &ptr) {
     return std::dynamic_pointer_cast<FunctorNode>(ptr);
 }
 
+using func_node_ptr_t = std::shared_ptr<FunctorNode>;
+
 class OperatorNode : public Node {
     Operator *operator_;
 
@@ -223,6 +231,9 @@ class OperatorNode : public Node {
 inline std::shared_ptr<OperatorNode> op_node_ptr_cast(const node_ptr_t &ptr) {
     return std::dynamic_pointer_cast<OperatorNode>(ptr);
 }
+
+using op_node_ptr_t = std::shared_ptr<OperatorNode>;
+
 } // namespace GraphIR
 
 namespace gir = GraphIR;
