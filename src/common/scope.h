@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,8 +39,9 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
 
   public:
     Scope() = default;
-
-    explicit Scope(std::shared_ptr<Scope<K, V>> outer) : map_(), outer_(std::move(outer)) {}
+    Scope(std::unordered_map<K, V> map, std::shared_ptr<Scope<K, V>> outer = nullptr)
+        : map_(std::move(map)), outer_(std::move(outer)) {}
+    Scope(std::shared_ptr<Scope<K, V>> outer) : map_(), outer_(std::move(outer)) {}
 
     std::shared_ptr<Scope<K, V>> outer() { return outer_; }
 
@@ -100,11 +101,14 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
         return std::make_shared<Scope<K, V>>(outer);
     }
 
-    static std::shared_ptr<Scope<K, V>> push(std::shared_ptr<Scope<K, V>> target) {
-        return std::make_shared<Scope<K, V>>(target);
+    static std::shared_ptr<Scope<K, V>> create(std::unordered_map<K, V> map,
+                                               std::shared_ptr<Scope<K, V>> outer = nullptr) {
+        return std::make_shared<Scope<K, V>>(map, outer);
     }
 
-    static std::shared_ptr<Scope<K, V>> pop(std::shared_ptr<Scope<K, V>> target) {
+    static std::shared_ptr<Scope<K, V>> push() { return std::make_shared<Scope<K, V>>(shared_from_this()); }
+
+    static std::shared_ptr<Scope<K, V>> pop() {
         // TODO: Shall we free the scope?
         return target->outer();
     }

@@ -118,7 +118,7 @@ async function updateFile(filePath) {
             }
             await fsp.writeFile(filePath, lines.join('\r\n'), 'utf8')
             console.log(`Updated: ${filePath}`)
-            cacheMap[srcPath] = calculateMD5Base64(filePath)
+            cacheMap[filePath] = calculateMD5Base64(filePath)
             cacheHasChanges = true
             updatedFiles++
         }

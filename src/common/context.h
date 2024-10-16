@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,19 +21,35 @@
 
 #include <string>
 
-#include "entity.h"
+#include "graph.h"
+#include "operator.h"
 #include "scope.h"
 
-using entity_scope_t = Scope<std::string, entity_ptr_t>;
-using entity_scope_ptr_t = scope_ptr_t<std::string, entity_ptr_t>;
+using node_scope_t = Scope<std::string, gir::node_ptr_t>;
+using node_scope_ptr_t = scope_ptr_t<std::string, gir::node_ptr_t>;
+using operator_scope_t = Scope<std::string, Operator>;
+using operator_scope_ptr_t = scope_ptr_t<std::string, Operator>;
 
 class Context {
-    entity_scope_ptr_t global_;
-    entity_scope_ptr_t scope_;
+    node_scope_ptr_t scope_;
+    operator_scope_ptr_t opScope_;
 
   public:
-    Context() = default;
+    Context();
     virtual ~Context() = default;
+
+    node_scope_t &scope() { return *scope_; }
+    operator_scope_t &opScope() { return *opScope_; }
+
+    void pushScope() {
+        scope_ = scope_->push();
+        opScope_ = opScope_->push();
+    }
+
+    void popScope() {
+        scope_ = scope_->pop();
+        opScope_ = opScope_->pop();
+    }
 };
 
 using context_ptr_t = std::shared_ptr<Context>;

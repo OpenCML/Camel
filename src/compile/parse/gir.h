@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,9 +23,7 @@
 #include "ast.h"
 #include "common/ast.h"
 #include "common/context.h"
-#include "common/entity.h"
 #include "common/graph.h"
-#include "common/scope.h"
 #include "utils/log.h"
 
 inline void _dumpGIR() {
@@ -44,11 +42,6 @@ namespace GraphIR {
 
 namespace ast = AbstractSyntaxTree;
 
-using node_scope_t = Scope<std::string, node_ptr_t>;
-using node_scope_ptr_t = scope_ptr_t<std::string, node_ptr_t>;
-using func_scope_t = Scope<std::string, func_ptr_t>;
-using func_scope_ptr_t = scope_ptr_t<std::string, func_ptr_t>;
-
 using void_ptr_t = void *;
 
 class Constructor {
@@ -59,22 +52,6 @@ class Constructor {
 
   private:
     context_ptr_t context_;
-
-    node_scope_ptr_t nodeScope_; // TODO: init required
-    entity_scope_ptr_t entityScope_;
-    func_scope_ptr_t funcScope_;
-
-    void pushScope(const std::string &name) {
-        nodeScope_ = node_scope_t::push(nodeScope_);
-        entityScope_ = entity_scope_t::push(entityScope_);
-        funcScope_ = func_scope_t::push(funcScope_);
-    }
-
-    void popScope() {
-        nodeScope_ = node_scope_t::pop(nodeScope_);
-        entityScope_ = entity_scope_t::pop(entityScope_);
-        funcScope_ = func_scope_t::pop(funcScope_);
-    }
 
     std::any visit(const ast::node_ptr_t &ast);
 

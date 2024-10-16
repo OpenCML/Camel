@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,4 +21,4 @@
 
 using namespace std;
 
-unordered_map<string, Operator> operators;
+unordered_map<string, Operator> globalOperators;

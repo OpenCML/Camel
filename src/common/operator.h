@@ -13,20 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "context.h"
 #include "data.h"
 
 #include <functional>
 #include <unordered_map>
 
+class Context;
+
 using Operator = std::function<data_ptr_t(Context &, data_lst_t &&)>;
 
-extern std::unordered_map<std::string, Operator> operators;
+extern std::unordered_map<std::string, Operator> globalOperators;
 
 void registerOperator(const std::string &name, Operator &&op);
