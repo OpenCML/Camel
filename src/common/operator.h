@@ -13,20 +13,38 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "context.h"
 #include "data.h"
 
 #include <functional>
 #include <unordered_map>
 
-using Operator = std::function<data_ptr_t(Context &, data_lst_t &&)>;
+class Context;
 
-extern std::unordered_map<std::string, Operator> operators;
+using OperatorFunction = std::function<data_ptr_t(Context &, data_lst_t &&)>;
 
-void registerOperator(const std::string &name, Operator &&op);
+class Operator {
+  private:
+    std::string name_;
+    func_type_ptr_t type_;
+    OperatorFunction func_;
+
+  public:
+    Operator(const std::string &name, func_type_ptr_t &type, OperatorFunction &&func)
+        : name_(name), type_(type), func_(func) {}
+
+    const std::string &name() const { return name_; }
+    const func_type_ptr_t &type() const { return type_; }
+    const OperatorFunction &func() const { return func_; }
+};
+
+using operator_ptr_t = std::shared_ptr<Operator>;
+
+extern std::unordered_map<std::string, std::shared_ptr<std::vector<operator_ptr_t>>> globalOperators;
+
+void registerOperator(const std::string &name, operator_ptr_t &op);

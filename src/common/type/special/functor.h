@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 16, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,3 +71,5 @@ class FunctorType : public SpecialType {
 
     TypeConv convertibility(const Type &other) const override;
 };
+
+using func_type_ptr_t = std::shared_ptr<FunctorType>;

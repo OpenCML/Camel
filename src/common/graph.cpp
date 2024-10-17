@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,9 +63,15 @@ gir::Graph::Graph(Graph &other)
     }
 }
 
+graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
+    const auto res = make_shared<Graph>();
+    res->graph_ = graph;
+    return res;
+}
+
 void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
 
-node_ptr_t gir::Graph::addPort(bool isVar = false) {
+node_ptr_t gir::Graph::addPort(bool isVar) {
     node_ptr_t node = DataNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);
     if (isVar) {
         node->makeVariable();
@@ -74,6 +80,8 @@ node_ptr_t gir::Graph::addPort(bool isVar = false) {
     ports_->push_back({idx, isVar});
     return node;
 }
+
+void gir::Graph::setOutput(const node_ptr_t &node) { output_ = node; }
 
 size_t gir::Graph::makeVariable(size_t index, bool shared) {
     if (shared) {
@@ -227,6 +235,14 @@ FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
     inputs_.resize(3, nullptr);
 }
 
+node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
+    const auto res = make_shared<FunctorNode>(graph, func);
+    graph->addNode(res);
+    return res;
+}
+
+func_type_ptr_t FunctorNode::type() const { return std::dynamic_pointer_cast<FunctorType>(func_->type()); }
+
 inline shared_ptr<ParamsData> inputToParams(const node_ptr_t &node, const type_ptr_t &type) {
     data_ptr_t data = node->data();
 
@@ -288,5 +304,56 @@ data_ptr_t FunctorNode::eval() {}
 OperatorNode
 */
 
-OperatorNode::OperatorNode(graph_ptr_t graph, Operator *op)
+OperatorNode::OperatorNode(graph_ptr_t graph, Operator op)
     : Node(NodeType::OPERATOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), operator_(op) {}
+
+node_ptr_t OperatorNode::create(graph_ptr_t graph, Operator op) {
+    const auto res = make_shared<OperatorNode>(graph, op);
+    graph->addNode(res);
+    return res;
+}
+
+/*
+SelectNode
+*/
+
+SelectNode::SelectNode(graph_ptr_t graph, node_vec_t &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), funcs_(make_shared<node_vec_t>(cases)) {}
+
+SelectNode::SelectNode(graph_ptr_t graph, std::vector<operator_ptr_t> &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph),
+      ops_(make_shared<std::vector<operator_ptr_t>>(cases)) {}
+
+node_ptr_t SelectNode::create(graph_ptr_t graph, node_vec_t &cases) {
+    const auto res = make_shared<SelectNode>(graph, cases);
+    // temporary node, not added to graph
+    return res;
+}
+
+node_ptr_t SelectNode::create(graph_ptr_t graph, std::vector<operator_ptr_t> &cases) {
+    const auto res = make_shared<SelectNode>(graph, cases);
+    // temporary node, not added to graph
+    return res;
+}
+
+std::vector<func_type_ptr_t> SelectNode::types() const {
+    std::vector<func_type_ptr_t> res;
+    if (funcs_) {
+        for (const auto &node : *funcs_) {
+            res.push_back(dynamic_pointer_cast<FunctorNode>(node)->type());
+        }
+    } else {
+        for (const auto &op : *ops_) {
+            res.push_back(op->type());
+        }
+    }
+    return res;
+}
+
+node_ptr_t SelectNode::caseAt(size_t index) {
+    if (funcs_) {
+        return funcs_->at(index);
+    } else {
+        return OperatorNode::create(graph_, *ops_->at(index));
+    }
+}

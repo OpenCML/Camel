@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,7 +99,7 @@ bool ParamsType::operator==(const Type &other) const {
 
 bool ParamsType::operator!=(const Type &other) const { return !(*this == other); }
 
-bool ParamsType::add(const string &key, const type_ptr_t &type, const data_ptr_t &value = nullptr) {
+bool ParamsType::add(const string &key, const type_ptr_t &type, const data_ptr_t &value) {
     // here we allow duplicate keys, for the sake of simplicity
     // we use "" to represent the unnamed parameter
     elements_.push_back({key, type, value});

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -143,9 +143,7 @@ class Constructor : public OpenCMLVisitor {
 
             auto [lhsData, lhsDangling] = extractData(lhsNode, execNode);
             auto [rhsData, rhsDangling] = extractData(rhsNode, execNode);
-            node_ptr_t dataNode =
-                createNode<DataLoad>(std::make_shared<TupleData>(data_list_t{lhsData, rhsData}),
-                                     CREATE_DOUBLE_UNREF_LIST(lhsDangling, lhsData, rhsDangling, rhsData));
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{lhsData, rhsData});
 
             if (lhsDangling || rhsDangling) {
                 dataNode = reparent(dataNode, execNode);

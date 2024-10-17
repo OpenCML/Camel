@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,8 +30,8 @@ class MapType : public StructType {
     MapType() = delete;
     MapType(const type_ptr_t &keyType, const type_ptr_t &valueType);
 
-    type_ptr_t keyType() const { return keyType_; }
-    type_ptr_t valueType() const { return valueType_; }
+    type_ptr_t keyType() const;
+    type_ptr_t valueType() const;
 
     std::string toString() const override;
 

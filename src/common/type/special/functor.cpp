@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ FunctorModifier str2modifier(const string &str) {
         return FunctorModifier::OUTER;
     } else if (str == "atomic") {
         return FunctorModifier::ATOMIC;
-    } else if (str == "static") {
+    } else if (str == "shared") {
         return FunctorModifier::SHARED;
     } else if (str == "sync") {
         return FunctorModifier::SYNC;
@@ -49,7 +49,7 @@ string modifier2str(FunctorModifier modifier) {
     case FunctorModifier::ATOMIC:
         return "atomic";
     case FunctorModifier::SHARED:
-        return "static";
+        return "shared";
     case FunctorModifier::SYNC:
         return "sync";
     default:
@@ -57,8 +57,8 @@ string modifier2str(FunctorModifier modifier) {
     }
 }
 
-FunctorType::FunctorType(const shared_ptr<ParamsType> &withType = nullptr,
-                         const shared_ptr<ParamsType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr)
+FunctorType::FunctorType(const shared_ptr<ParamsType> &withType, const shared_ptr<ParamsType> &paramsType,
+                         const type_ptr_t &returnType)
     : SpecialType(TypeCode::FUNCTOR), withType_(withType), linkType_(paramsType), returnType_(returnType) {}
 
 void FunctorType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }

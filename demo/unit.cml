@@ -8,5 +8,7 @@
 //     }, null)
 // };
 
-let a = b * (c + d);
-let e = (() => {})(b);
+let a = b * (c + d)
+//
+
+let e = (() => {})(b)

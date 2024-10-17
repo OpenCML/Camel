@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,6 +50,6 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t TensorData::clone(bool) const { throw runtime_error("Not implemented"); }
+data_ptr_t TensorData::clone(bool deep) const { throw runtime_error("Not implemented"); }
 
 const string TensorData::toString() const { return string("TensorData"); }

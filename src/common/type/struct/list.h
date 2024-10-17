@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class ListType : public StructType {
   public:
-    ListType() : StructType(TypeCode::LIST) {}
+    ListType();
 
     std::string toString() const override;
 

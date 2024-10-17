@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -116,12 +116,13 @@ void TupleData::resolve(const data_vec_t &dataList) {
     refs_.clear();
 }
 
-data_ptr_t TupleData::clone(bool) const {
-    vector<data_ptr_t> cloned;
+data_ptr_t TupleData::clone(bool deep) const {
+    auto tuple = make_shared<TupleData>();
+    tuple->type_ = type_;
     for (const auto &e : data_) {
-        cloned.push_back(e);
+        tuple->emplace(deep ? e->clone(deep) : e);
     }
-    return make_shared<TupleData>(cloned);
+    return tuple;
 }
 
 const string TupleData::toString() const {
@@ -137,7 +138,7 @@ const string TupleData::toString() const {
     return str;
 }
 
-data_ptr_t TupleData::convertToParams(std::shared_ptr<ParamsType> &target) {
+data_ptr_t TupleData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();
     for (const auto &e : data_) {
         params->emplace(e);

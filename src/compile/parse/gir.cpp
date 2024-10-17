@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "gir.h"
 #include "common/error/build.h"
-#include "common/functor.h"
+#include "utils/log.h"
+
+#define DEBUG_LEVEL 0
 
 using namespace std;
 using namespace gir;
@@ -62,76 +64,79 @@ any Constructor::visit(const ast::node_ptr_t &node) {
 }
 
 node_ptr_t Constructor::visitDataNode(const ast::node_ptr_t &ast) {
-    // const auto &dataNode = dynamic_pointer_cast<ast::DataLoad>(ast);
-    // const data_ptr_t &data = dataNode->data();
-    // node_ptr_t node = make_shared<DataNode>(data);
-    // if (dataNode->resolved()) {
-    //     return node;
-    // } else {
-    //     for (const auto &e : dataNode->getUnrefData()) {
-    //         const string &ref = dynamic_pointer_cast<RefData>(e)->ref();
-    //         auto optSrcNode = nodeScope_->at(ref);
-    //         if (optSrcNode.has_value()) {
-    //             Node::link(optSrcNode.value(), node);
-    //         } else {
-    //             throw runtime_error("Unresolved reference: " + ref);
-    //         }
-    //     }
-    //     return node;
-    // }
-    return nullptr;
+    debug(0) << "Visiting DATA node" << endl;
+    const auto &dataNode = dynamic_pointer_cast<ast::DataLoad>(ast);
+    const data_ptr_t &data = dataNode->data();
+    node_ptr_t node = DataNode::create(context_->graph(), data, false);
+    if (!data->resolved()) {
+        for (const string &ref : data->refs()) {
+            auto optSrcNode = context_->nodeAt(ref);
+            if (optSrcNode.has_value()) {
+                Node::link(optSrcNode.value(), node);
+            } else {
+                throw runtime_error("Unresolved reference: " + ref);
+            }
+        }
+    }
+    return node;
 }
 
-node_ptr_t Constructor::visitVariNode(const ast::node_ptr_t &ast) { return nullptr; }
+node_ptr_t Constructor::visitVariNode(const ast::node_ptr_t &ast) {
+    debug(0) << "Visiting VARI node" << endl;
+    const auto &res = visit(ast_ptr_cast(ast->childAt(0)));
+    if (res.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from visiting the child of VARI node");
+    }
+    node_ptr_t node = any_cast<node_ptr_t>(res);
+    node->makeVariable();
+    return node;
+}
 
 type_ptr_t Constructor::visitTypeNode(const ast::node_ptr_t &ast) {
+    debug(0) << "Visiting TYPE node" << endl;
     const type_ptr_t &type = ast::type_load_ptr_cast(ast->load())->type();
     return type;
 }
 
-node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
+    debug(0) << "Visiting FUNC node" << endl;
+    context_->pushScope();
+    const auto &type = visitTypeNode(ast_ptr_cast(ast->childAt(0)));
+    // TODO: addPort
+    visitExecNode(ast_ptr_cast(ast->childAt(1)));
+    func_ptr_t func = make_shared<FunctorData>(type, context_->graph());
+    const auto &funcNode = gir::FunctorNode::create(context_->graph(), func);
+    context_->popScope();
+    return funcNode;
+}
 
 void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
-    // const string &ident = ast::nref_load_ptr_cast(ast->load())->ident();
-    // const ast::node_ptr_t &child = ast_ptr_cast(ast->childAt(0));
-    // const ast::load_ptr_t &target = child->load();
-    // if (target->type() == ast::NodeType::FUNC) {
-    //     func_ptr_t func = visitFuncNode(child);
-    //     funcScope_->insert(ident, func);
-    // } else {
-    //     auto result = visit(child);
-    //     if (result.type() == typeid(node_ptr_t)) {
-    //         node_ptr_t node = any_cast<node_ptr_t>(result);
-    //         nodeScope_->insert(ident, node);
-    //     } else {
-    //         throw runtime_error("Unexpected result type from visiting the child of NREF node");
-    //     }
-    // }
-    return nullptr;
+    debug(0) << "Visiting NREF node" << endl;
+    const string &ident = ast::nref_load_ptr_cast(ast->load())->ident();
+    const auto &res = visit(ast_ptr_cast(ast->childAt(0)));
+    if (res.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from visiting the child of NREF node");
+    }
+    node_ptr_t node = any_cast<node_ptr_t>(res);
+    if (node->type() == gir::NodeType::FUNCTOR) {
+        if (!context_->insertFunc(ident, node)) {
+            throw runtime_error("Redeclaration of functor: " + ident);
+        }
+    } else {
+        if (!context_->insertData(ident, node)) {
+            throw runtime_error("Redeclaration of entity: " + ident);
+        }
+    }
 }
 
 node_ptr_t Constructor::visitDRefNode(const ast::node_ptr_t &ast) {
-    // const string &ident = dref_load_ptr_cast(ast->load())->ident();
-    // auto optNode = nodeScope_->at(ident);
-    // if (optNode.has_value()) {
-    //     return optNode.value();
-    // }
-    // auto optEntity = entityScope_->at(ident);
-    // if (optEntity.has_value()) {
-    //     entity_ptr_t &entity = optEntity.value();
-    //     if (entity->isFunc()) {
-    //         const func_ptr_t functor = dynamic_pointer_cast<Functor>(entity);
-    //         auto funcNode = make_shared<FunctorNode>(functor->func());
-    //         return funcNode;
-    //     } else {
-    //         return make_shared<DataNode>(entity->data());
-    //     }
-    // }
-    // auto optFunc = funcScope_->at(ident);
-    // if (optFunc.has_value()) {
-    //     return make_shared<FunctorNode>(optFunc.value());
-    // }
-    // throw runtime_error("Unresolved reference: " + ident);
+    debug(0) << "Visiting DREF node" << endl;
+    const string &ident = dref_load_ptr_cast(ast->load())->ident();
+    auto optNode = context_->nodeAt(ident);
+    if (optNode.has_value()) {
+        return optNode.value();
+    }
+    throw runtime_error("Unresolved reference: " + ident);
     return nullptr;
 }
 
@@ -139,68 +144,81 @@ node_ptr_t Constructor::visitWaitNode(const ast::node_ptr_t &ast) { throw runtim
 
 node_ptr_t Constructor::visitAnnoNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
 
-/*
-LINK
- |- DATA, DREF, EXEC, NREF
- \- DATA, DREF, EXEC, FUNC
-*/
 node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
-    // any dataResult = visit(ast_ptr_cast(ast->at(0)));
-    // any funcResult = visit(ast_ptr_cast(ast->at(1)));
-    // if (dataResult.type() == typeid(node_ptr_t)) {
-    //     node_ptr_t dataNode = any_cast<node_ptr_t>(dataResult);
-    //     if (funcResult.type() == typeid(func_ptr_t)) {
-    //     } else if (funcResult.type() == typeid(node_ptr_t)) {}
-    //     else {
-    //         throw runtime_error("Unexpected result type from visiting children of LINK node");
-    //     }
-    //     node_ptr_t funcNode = any_cast<node_ptr_t>(funcResult);
-    //     if (funcNode->type() == NodeType::FUNCTOR) {
-    //         auto funcNode = func_node_ptr_cast(funcNode);
-    //         funcNode->setParams(dataNode);
-    //     } else {
-    //         throw runtime_error("Non-functor entities cannot be set with parameters");
-    //     }
-    //     return funcNode;
-    // } else {
-    //     throw runtime_error("Unexpected result type from visiting children of LINK node");
-    // }
-    return nullptr;
-}
+    debug(0) << "Visiting LINK node" << endl;
+    // TODO: consider functor and operator overriden
+    // for now, we just ignore it
+    // because we cannot get the exact type of unref elements of struct data yet
+    any dataRes = visit(ast_ptr_cast(ast->at(0)));
+    any funcRes = visit(ast_ptr_cast(ast->at(1)));
+    if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from visiting children of LINK node");
+    }
+    node_ptr_t dataNode = any_cast<node_ptr_t>(dataRes);
+    node_ptr_t linkNode = any_cast<node_ptr_t>(funcRes);
+    node_ptr_t funcNode = nullptr;
+    switch (linkNode->type()) {
+        {
+        case NodeType::FUNCTOR:
+            funcNode = linkNode;
+            break;
+        case NodeType::OPERATOR:
+            funcNode = linkNode;
+            break;
+        case NodeType::SELECT:
+            funcNode = select_node_ptr_cast(linkNode)->caseAt(0);
+            break;
 
-node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
-    // auto withResult = visit(ast_ptr_cast(ast->at(0)));
-    // if (withResult.type() == typeid(node_ptr_t)) {
-    //     node_ptr_t withNode = any_cast<node_ptr_t>(withResult);
-    //     auto funcResult = visit(ast_ptr_cast(ast->at(1)));
-    //     if (funcResult.type() == typeid(node_ptr_t)) {
-    //         node_ptr_t resNode = any_cast<node_ptr_t>(funcResult);
-    //         if (resNode->type() == NodeType::FUNCTOR) {
-    //             auto funcNode = func_node_ptr_cast(resNode);
-    //             funcNode->setSuperParams(withNode);
-    //             return resNode;
-    //         } else {
-    //             throw runtime_error("Non-functor entities cannot be set with super parameters");
-    //         }
-    //     } else {
-    //         throw runtime_error("Unexpected result type from visiting FUNC node");
-    //     }
-    // } else {
-    //     throw runtime_error("Unexpected result type from visiting WITH node");
-    // }
-    return nullptr;
-}
-
-node_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {
-    auto result = visit(ast_ptr_cast(ast->at(0)));
-    if (result.type() == typeid(node_ptr_t)) {
-        return any_cast<node_ptr_t>(result);
-    } else {
-        throw runtime_error("Unexpected result type from visiting child of RETN node");
+        default:
+            throw runtime_error("Unexpected node type of LINK node");
+        }
+        Node::link(dataNode, funcNode, 1);
+        return funcNode;
     }
 }
 
+node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
+    debug(0) << "Visiting WITH node" << endl;
+    any dataRes = visit(ast_ptr_cast(ast->at(0)));
+    any funcRes = visit(ast_ptr_cast(ast->at(1)));
+    if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from visiting children of LINK node");
+    }
+    node_ptr_t dataNode = any_cast<node_ptr_t>(dataRes);
+    node_ptr_t withNode = any_cast<node_ptr_t>(funcRes);
+    node_ptr_t funcNode = nullptr;
+    switch (withNode->type()) {
+        {
+        case NodeType::FUNCTOR:
+            funcNode = withNode;
+            break;
+        case NodeType::OPERATOR:
+            funcNode = withNode;
+            break;
+        case NodeType::SELECT:
+            funcNode = select_node_ptr_cast(withNode)->caseAt(0);
+            break;
+
+        default:
+            throw runtime_error("Unexpected node type of WITH node");
+        }
+        Node::link(dataNode, funcNode, 0);
+        return funcNode;
+    }
+}
+
+void_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {
+    debug(0) << "Visiting RETN node" << endl;
+    auto res = visit(ast_ptr_cast(ast->at(0)));
+    if (res.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from visiting child of RETN node");
+    }
+    const auto &node = any_cast<node_ptr_t>(res);
+    context_->graph()->setOutput(node);
+}
+
 node_ptr_t Constructor::visitExecNode(const ast::node_ptr_t &ast) {
+    debug(0) << "Visiting EXEC node" << endl;
     node_ptr_t node;
     for (size_t i = 0; i < ast->size(); i++) {
         any result = visit(ast_ptr_cast(ast->at(i)));
