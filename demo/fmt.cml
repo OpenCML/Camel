@@ -95,38 +95,38 @@ with <
     loader: Functor = psl,
     d: Functor = psl
 >
-inner static func load(path: String): Any {
+inner shared func load(path: String): Any {
     // inner func
 };
 
 /*
 * This PSL module will be imported by interpreter automatically,
 * and can be accessed Anywhere in Any PSL script.
-*/ 
+*/
 
 // psl, json, phtc, xml, toml
 
 with <loader: Functor = psl>
-inner static func load(path: String): Any {
+inner shared func load(path: String): Any {
     // inner func
 };
 
 with <path: String, ftype: String = 'psl'>
-inner static func save(entity: Any): Void {
+inner shared func save(entity: Any): Void {
     // inner func
 };
 
 with <stream: String = 'stdout'>
-inner static func print(data: Any): Void {
+inner shared func print(data: Any): Void {
     // inner func
 };
 
 with <diagram: Functor = eye>
-inner static func analyze(data: Any): Void {
+inner shared func analyze(data: Any): Void {
     // inner func:Void
 };
 
-inner static func ifexpr(
+inner shared func ifexpr(
     condition: Bool,
     trueValue: Any,
     falseValue: Any
@@ -141,13 +141,13 @@ inner func exec(block: Functor): Void {
 };
 
 with <after: Functor>
-inner static func skip(entity: Any): Void {
+inner shared func skip(entity: Any): Void {
     // skip an entity in an entity chain
 };
 
 let else = skip;
 
-static func if(condition: Bool): Void {
+shared func if(condition: Bool): Void {
     return ifexpr(condition, exec, skip<skip>)
 };
 

@@ -31,7 +31,7 @@ FunctorModifier str2modifier(const string &str) {
         return FunctorModifier::OUTER;
     } else if (str == "atomic") {
         return FunctorModifier::ATOMIC;
-    } else if (str == "static") {
+    } else if (str == "shared") {
         return FunctorModifier::SHARED;
     } else if (str == "sync") {
         return FunctorModifier::SYNC;
@@ -49,7 +49,7 @@ string modifier2str(FunctorModifier modifier) {
     case FunctorModifier::ATOMIC:
         return "atomic";
     case FunctorModifier::SHARED:
-        return "static";
+        return "shared";
     case FunctorModifier::SYNC:
         return "sync";
     default:
