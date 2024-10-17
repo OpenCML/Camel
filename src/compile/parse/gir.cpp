@@ -147,50 +147,64 @@ node_ptr_t Constructor::visitAnnoNode(const ast::node_ptr_t &ast) { throw runtim
 node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
     debug(0) << "Visiting LINK node" << endl;
     // TODO: consider functor and operator overriden
-    // any dataResult = visit(ast_ptr_cast(ast->at(0)));
-    // any funcResult = visit(ast_ptr_cast(ast->at(1)));
-    // if (dataResult.type() == typeid(node_ptr_t)) {
-    //     node_ptr_t dataNode = any_cast<node_ptr_t>(dataResult);
-    //     if (funcResult.type() == typeid(func_ptr_t)) {
-    //     } else if (funcResult.type() == typeid(node_ptr_t)) {
-    //     } else {
-    //         throw runtime_error("Unexpected result type from visiting children of LINK node");
-    //     }
-    //     node_ptr_t funcNode = any_cast<node_ptr_t>(funcResult);
-    //     if (funcNode->type() == NodeType::FUNCTOR) {
-    //         auto funcNode = func_node_ptr_cast(funcNode);
-    //         funcNode->setParams(dataNode);
-    //     } else {
-    //         throw runtime_error("Non-functor entities cannot be set with parameters");
-    //     }
-    //     return funcNode;
-    // } else {
-    //     throw runtime_error("Unexpected result type from visiting children of LINK node");
-    // }
-    // return nullptr;
+    // for now, we just ignore it
+    // because we cannot get the exact type of unref elements of struct data yet
+    any dataRes = visit(ast_ptr_cast(ast->at(0)));
+    any funcRes = visit(ast_ptr_cast(ast->at(1)));
+    if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from visiting children of LINK node");
+    }
+    node_ptr_t dataNode = any_cast<node_ptr_t>(dataRes);
+    node_ptr_t linkNode = any_cast<node_ptr_t>(funcRes);
+    node_ptr_t funcNode = nullptr;
+    switch (linkNode->type()) {
+        {
+        case NodeType::FUNCTOR:
+            funcNode = linkNode;
+            break;
+        case NodeType::OPERATOR:
+            funcNode = linkNode;
+            break;
+        case NodeType::SELECT:
+            funcNode = select_node_ptr_cast(linkNode)->caseAt(0);
+            break;
+
+        default:
+            throw runtime_error("Unexpected node type of LINK node");
+        }
+        Node::link(dataNode, funcNode, 1);
+        return funcNode;
+    }
 }
 
 node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
-    // auto withResult = visit(ast_ptr_cast(ast->at(0)));
-    // if (withResult.type() == typeid(node_ptr_t)) {
-    //     node_ptr_t withNode = any_cast<node_ptr_t>(withResult);
-    //     auto funcResult = visit(ast_ptr_cast(ast->at(1)));
-    //     if (funcResult.type() == typeid(node_ptr_t)) {
-    //         node_ptr_t resNode = any_cast<node_ptr_t>(funcResult);
-    //         if (resNode->type() == NodeType::FUNCTOR) {
-    //             auto funcNode = func_node_ptr_cast(resNode);
-    //             funcNode->setSuperParams(withNode);
-    //             return resNode;
-    //         } else {
-    //             throw runtime_error("Non-functor entities cannot be set with super parameters");
-    //         }
-    //     } else {
-    //         throw runtime_error("Unexpected result type from visiting FUNC node");
-    //     }
-    // } else {
-    //     throw runtime_error("Unexpected result type from visiting WITH node");
-    // }
-    return nullptr;
+    debug(0) << "Visiting WITH node" << endl;
+    any dataRes = visit(ast_ptr_cast(ast->at(0)));
+    any funcRes = visit(ast_ptr_cast(ast->at(1)));
+    if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from visiting children of LINK node");
+    }
+    node_ptr_t dataNode = any_cast<node_ptr_t>(dataRes);
+    node_ptr_t withNode = any_cast<node_ptr_t>(funcRes);
+    node_ptr_t funcNode = nullptr;
+    switch (withNode->type()) {
+        {
+        case NodeType::FUNCTOR:
+            funcNode = withNode;
+            break;
+        case NodeType::OPERATOR:
+            funcNode = withNode;
+            break;
+        case NodeType::SELECT:
+            funcNode = select_node_ptr_cast(withNode)->caseAt(0);
+            break;
+
+        default:
+            throw runtime_error("Unexpected node type of WITH node");
+        }
+        Node::link(dataNode, funcNode, 0);
+        return funcNode;
+    }
 }
 
 void_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {

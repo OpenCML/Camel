@@ -118,9 +118,14 @@ class Node : public std::enable_shared_from_this<Node> {
 
     virtual data_ptr_t eval() { return data(); };
 
-    static void link(node_ptr_t &from, node_ptr_t &to) {
-        from->outputs().push_back(to);
-        to->inputs().push_back(from);
+    static void link(node_ptr_t &from, node_ptr_t &to, int index = -1) {
+        if (index >= 0) {
+            from->outputs().at(index) = to;
+            to->inputs().at(index) = from;
+        } else {
+            from->outputs().push_back(to);
+            to->inputs().push_back(from);
+        }
     }
 };
 
