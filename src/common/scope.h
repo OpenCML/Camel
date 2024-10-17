@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -106,11 +106,11 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
         return std::make_shared<Scope<K, V>>(map, outer);
     }
 
-    static std::shared_ptr<Scope<K, V>> push() { return std::make_shared<Scope<K, V>>(shared_from_this()); }
+    std::shared_ptr<Scope<K, V>> push() { return std::make_shared<Scope<K, V>>(shared_from_this()); }
 
-    static std::shared_ptr<Scope<K, V>> pop() {
+    std::shared_ptr<Scope<K, V>> pop() {
         // TODO: Shall we free the scope?
-        return target->outer();
+        return outer();
     }
 };
 

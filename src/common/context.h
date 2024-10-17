@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,7 +83,7 @@ class Context {
 
     bool insertFunc(const std::string &name, const gir::node_ptr_t &node) {
         if (scope_->has(name)) {
-            auto &nodes = scope_->at(name).value();
+            const auto &nodes = scope_->at(name).value();
             // TODO: check if the func node is already in the list
             nodes->push_back(node);
         }
@@ -93,7 +93,7 @@ class Context {
 
     bool insertOperator(const std::string &name, const operator_ptr_t &op) {
         if (opScope_->has(name)) {
-            auto &ops = opScope_->at(name).value();
+            const auto &ops = opScope_->at(name).value();
             // TODO: check if the operator is already in the list
             ops->push_back(op);
         }

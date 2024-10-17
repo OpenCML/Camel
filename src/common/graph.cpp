@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,7 +71,7 @@ graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
 
 void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
 
-node_ptr_t gir::Graph::addPort(bool isVar = false) {
+node_ptr_t gir::Graph::addPort(bool isVar) {
     node_ptr_t node = DataNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);
     if (isVar) {
         node->makeVariable();
@@ -350,7 +350,7 @@ std::vector<func_type_ptr_t> SelectNode::types() const {
     return res;
 }
 
-node_ptr_t &SelectNode::caseAt(size_t index) {
+node_ptr_t SelectNode::caseAt(size_t index) {
     if (funcs_) {
         return funcs_->at(index);
     } else {

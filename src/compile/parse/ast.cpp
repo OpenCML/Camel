@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -338,7 +338,7 @@ any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         node_ptr_t baseNode = nullptr;
 
         if (type) {
-            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<NullData>(type)});
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<NullData>()});
 
             if (dangling) {
                 dataNode = reparent(dataNode, execNode);
@@ -1199,7 +1199,7 @@ any Constructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context
         case '(': {
             auto [rawIndexArgs, rawNamedArgs] =
                 any_cast<pair<vector<node_ptr_t>, map<string, node_ptr_t>>>(visit(child));
-            auto &paramsPtr = make_shared<ParamsData>();
+            auto paramsPtr = make_shared<ParamsData>();
             node_ptr_t execNode = createNode<ExecLoad>();
             bool dangling = false;
             for (const auto &arg : rawIndexArgs) {
@@ -1223,7 +1223,7 @@ any Constructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context
         case '<': {
             auto [rawIndexArgs, rawNamedArgs] =
                 any_cast<pair<vector<node_ptr_t>, map<string, node_ptr_t>>>(visit(child));
-            auto &paramsPtr = make_shared<ParamsData>();
+            auto paramsPtr = make_shared<ParamsData>();
             node_ptr_t execNode = createNode<ExecLoad>();
             bool dangling = false;
             for (const auto &arg : rawIndexArgs) {
@@ -1314,7 +1314,7 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
     } break;
     case 6: { // parentValues (for tuple)
         const vector<node_ptr_t> &dataVec = any_cast<vector<node_ptr_t>>(visitParentValues(context->parentValues()));
-        auto &tuplePtr = make_shared<TupleData>();
+        auto tuplePtr = make_shared<TupleData>();
         bool dangling = false;
         node_ptr_t execNode = createNode<ExecLoad>();
         for (const auto &node : dataVec) {
@@ -1428,12 +1428,12 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
             const type_ptr_t &type2 = any_cast<type_ptr_t>(visitTypeExpr(typeExprs[1]));
             const vector<pair<node_ptr_t, node_ptr_t>> &dataVec =
                 any_cast<vector<pair<node_ptr_t, node_ptr_t>>>(visitBracedIndexKVPairs(context->bracedIndexKVPairs()));
-            auto &mapPtr = make_shared<MapData>(type1, type2);
+            auto mapPtr = make_shared<MapData>(type1, type2);
             bool dangling = false;
             node_ptr_t execNode = createNode<ExecLoad>();
             for (const auto &[key, data] : dataVec) {
-                auto [keyData, _] = extractData(key, execNode, dangling);
-                auto [valData, _] = extractData(data, execNode, dangling);
+                auto [keyData, a] = extractData(key, execNode, dangling);
+                auto [valData, b] = extractData(data, execNode, dangling);
                 mapPtr->emplace(keyData, valData);
             }
             node_ptr_t dataNode = createNode<DataLoad>(mapPtr);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,12 +153,12 @@ void VectorData::resolve(const data_vec_t &dataList) {
     refs_.clear();
 }
 
-data_ptr_t VectorData::clone(bool) const {
-    vector<data_ptr_t> cloned;
+data_ptr_t VectorData::clone(bool deep) const {
+    auto vec = make_shared<VectorData>(type_);
     for (const auto &e : data_) {
-        cloned.push_back(e);
+        vec->emplace(deep ? e->clone(deep) : e);
     }
-    return make_shared<VectorData>(dynamic_pointer_cast<VectorType>(type_), cloned);
+    return vec;
 }
 
 const string VectorData::toString() const {
@@ -174,7 +174,7 @@ const string VectorData::toString() const {
     return str;
 }
 
-data_ptr_t VectorData::convertToParams(std::shared_ptr<ParamsType> &target) {
+data_ptr_t VectorData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();
     for (const auto &e : data_) {
         params->emplace(e);

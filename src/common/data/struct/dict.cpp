@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -107,9 +107,10 @@ data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
         if (target->structured()) {
             switch (target->code()) {
                 // TODO: implement conversion to other structured types
-            case TypeCode::PARAMS:
-                return convertToParams(dynamic_pointer_cast<ParamsType>(target));
-                break;
+            case TypeCode::PARAMS: {
+                auto res = dynamic_pointer_cast<ParamsType>(target);
+                return convertToParams(res);
+            } break;
             default:
                 throw UnsupportedConvError();
             }
@@ -151,7 +152,13 @@ void DictData::resolve(const data_vec_t &dataList) {
     refs_.clear();
 }
 
-data_ptr_t DictData::clone(bool deep) const { return make_shared<DictData>(data_); }
+data_ptr_t DictData::clone(bool deep) const {
+    auto dict = make_shared<DictData>();
+    for (const auto &[key, val] : data_) {
+        dict->emplace(key, deep ? val->clone(true) : val);
+    }
+    return dict;
+}
 
 const string DictData::toString() const {
     if (data_.size() == 0) {
@@ -167,7 +174,7 @@ const string DictData::toString() const {
     return str;
 }
 
-data_ptr_t DictData::convertToParams(std::shared_ptr<ParamsType> &target) {
+data_ptr_t DictData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();
     for (const auto &[key, val] : data_) {
         params->emplace(val, key);

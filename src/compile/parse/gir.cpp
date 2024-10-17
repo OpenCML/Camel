@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -105,7 +105,7 @@ node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
     // TODO: addPort
     visitExecNode(ast_ptr_cast(ast->childAt(1)));
     func_ptr_t func = make_shared<FunctorData>(type, context_->graph());
-    auto &funcNode = gir::FunctorNode::create(context_->graph(), func);
+    const auto &funcNode = gir::FunctorNode::create(context_->graph(), func);
     context_->popScope();
     return funcNode;
 }

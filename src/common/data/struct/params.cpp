@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,7 @@
 #include "../other/any.h"
 #include "../other/null.h"
 #include "../other/ref.h"
+#include "../other/string.h"
 
 using namespace std;
 
@@ -117,7 +118,17 @@ data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t ParamsData::clone(bool) const { return make_shared<ParamsData>(indexData_, namedData_); }
+data_ptr_t ParamsData::clone(bool deep) const {
+    auto params = make_shared<ParamsData>();
+    params->type_ = type_;
+    for (const auto &e : indexData_) {
+        params->indexData_.push_back(deep ? e->clone(deep) : e);
+    }
+    for (const auto &e : namedData_) {
+        params->namedData_[e.first] = deep ? e.second->clone(deep) : e.second;
+    }
+    return params;
+}
 
 const string ParamsData::toString() const {
     string str = "(";
@@ -136,8 +147,7 @@ const string ParamsData::toString() const {
 }
 
 data_ptr_t ParamsData::convertToMap() {
-    auto mapType = make_shared<MapType>(stringTypePtr, anyTypePtr);
-    auto mapData = make_shared<MapData>(mapType);
+    auto mapData = make_shared<MapData>(stringTypePtr, anyTypePtr);
     for (const auto &e : namedData_) {
         const auto &key = dynamic_pointer_cast<Data>(make_shared<StringData>(e.first));
         const auto &val = e.second->convert(anyTypePtr);
@@ -162,7 +172,7 @@ data_ptr_t ParamsData::convertToTuple() {
     return tupleData;
 }
 
-data_ptr_t ParamsData::convertToParams(shared_ptr<ParamsType> &other, bool inplace) {
+data_ptr_t ParamsData::convertToParams(const shared_ptr<ParamsType> &other, bool inplace) {
     const auto &typeList = other->elements();
     vector<pair<size_t, string>> refs;
     vector<data_ptr_t> indexData;

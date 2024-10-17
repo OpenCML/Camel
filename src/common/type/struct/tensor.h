@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,8 +29,8 @@ class TensorType : public StructType {
   public:
     TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape);
 
-    std::vector<size_t> shape() const { return shape_; }
-    type_ptr_t elementType() const { return elementType_; }
+    std::vector<size_t> shape() const;
+    type_ptr_t elementType() const;
 
     std::string toString() const override;
 

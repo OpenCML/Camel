@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,9 +86,10 @@ data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
         if (target->structured()) {
             switch (target->code()) {
                 // TODO: implement conversion to other structured types
-            case TypeCode::PARAMS:
-                return convertToParams(dynamic_pointer_cast<ParamsType>(target));
-                break;
+            case TypeCode::PARAMS: {
+                auto res = dynamic_pointer_cast<ParamsType>(target);
+                return convertToParams(res);
+            } break;
             default:
                 throw UnsupportedConvError();
             }
@@ -135,12 +136,12 @@ void ArrayData::resolve(const data_vec_t &dataList) {
     refs_.clear();
 }
 
-data_ptr_t ArrayData::clone(bool) const {
-    vector<data_ptr_t> cloned;
-    for (const auto &e : data_) {
-        cloned.push_back(e);
+data_ptr_t ArrayData::clone(bool deep) const {
+    auto res = make_shared<ArrayData>(dynamic_pointer_cast<ArrayType>(type_), data_.size());
+    for (size_t i = 0; i < data_.size(); i++) {
+        res->emplace(deep ? data_[i]->clone(true) : data_[i], i);
     }
-    return make_shared<ArrayData>(dynamic_pointer_cast<ArrayType>(type_), cloned);
+    return res;
 }
 
 const string ArrayData::toString() const {
@@ -156,7 +157,7 @@ const string ArrayData::toString() const {
     return str;
 }
 
-data_ptr_t ArrayData::convertToParams(std::shared_ptr<ParamsType> &target) {
+data_ptr_t ArrayData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();
     for (const auto &e : data_) {
         params->emplace(e);

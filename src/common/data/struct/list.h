@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,5 +48,5 @@ class ListData : public StructData {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 
-    data_ptr_t convertToParams(std::shared_ptr<ParamsType> &target);
+    data_ptr_t convertToParams(const std::shared_ptr<ParamsType> &target);
 };

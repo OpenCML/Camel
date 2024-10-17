@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -115,11 +115,11 @@ void SetData::resolve(const data_vec_t &dataList) {
 }
 
 data_ptr_t SetData::clone(bool deep) const {
-    unordered_set<data_ptr_t> cloned;
+    auto set = make_shared<SetData>(type_);
     for (const auto &e : data_) {
-        cloned.insert(e);
+        set->emplace(deep ? e->clone(deep) : e);
     }
-    return make_shared<SetData>(type_, cloned);
+    return set;
 }
 
 const string SetData::toString() const {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -175,10 +175,10 @@ class Graph : public Node {
 };
 
 class DataNode : public Node {
+  public:
     DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
     ~DataNode() = default;
 
-  public:
     static node_ptr_t create(graph_ptr_t graph, const data_ptr_t &data, bool shared = false);
 };
 
@@ -189,10 +189,10 @@ inline std::shared_ptr<DataNode> data_node_ptr_cast(const node_ptr_t &ptr) {
 using data_node_ptr_t = std::shared_ptr<DataNode>;
 
 class StructNode : public Node {
+  public:
     StructNode(graph_ptr_t graph, const data_ptr_t &data);
     ~StructNode() = default;
 
-  public:
     static node_ptr_t create(graph_ptr_t graph, const data_ptr_t &data);
     virtual data_ptr_t eval() override;
 };
@@ -206,10 +206,10 @@ using struct_node_ptr_t = std::shared_ptr<StructNode>;
 class FunctorNode : public Node {
     func_ptr_t func_;
 
+  public:
     FunctorNode(graph_ptr_t graph, const func_ptr_t &func);
     ~FunctorNode() = default;
 
-  public:
     static node_ptr_t create(graph_ptr_t graph, const func_ptr_t &func);
 
     func_type_ptr_t type() const;
@@ -232,10 +232,10 @@ using func_node_ptr_t = std::shared_ptr<FunctorNode>;
 class OperatorNode : public Node {
     Operator operator_;
 
+  public:
     OperatorNode(graph_ptr_t graph, Operator op);
     ~OperatorNode() = default;
 
-  public:
     static node_ptr_t create(graph_ptr_t graph, Operator op);
 };
 
@@ -249,16 +249,16 @@ class SelectNode : public Node {
     std::shared_ptr<node_vec_t> funcs_;
     std::shared_ptr<std::vector<operator_ptr_t>> ops_;
 
+  public:
     SelectNode(graph_ptr_t graph, node_vec_t &cases);
     SelectNode(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
     ~SelectNode() = default;
 
-  public:
     static node_ptr_t create(graph_ptr_t graph, node_vec_t &cases);
     static node_ptr_t create(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
 
     std::vector<func_type_ptr_t> types() const;
-    node_ptr_t &caseAt(size_t index);
+    node_ptr_t caseAt(size_t index);
 };
 
 inline std::shared_ptr<SelectNode> select_node_ptr_cast(const node_ptr_t &ptr) {

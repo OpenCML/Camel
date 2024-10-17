@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 17, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,6 @@ data_ptr_t NullData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert null to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t NullData::clone(bool deep) const { return std::make_shared<NullData>(); }
 
+data_ptr_t NullData::clone(bool deep) const { return std::make_shared<NullData>(); }
 const std::string NullData::toString() const { return "null"; }
