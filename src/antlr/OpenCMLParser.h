@@ -1,16 +1,16 @@
 
 /**
- * Copyright (c) 2022 Beijing Jiaotong University
- * PhotLab is licensed under [Open Source License].
- * You can use this software according to the terms and conditions of the [Open
- * Source License]. You may obtain a copy of [Open Source License] at:
- * [https://open.source.license/]
+ * Copyright (c) 2024 Beijing Jiaotong University
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the [Open Source License] for more details.
+ * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
  * Supported by: National Key Research and Development Program of China
@@ -38,15 +38,15 @@ public:
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
     T__38 = 39, T__39 = 40, SEP = 41, AS = 42, IS = 43, LET = 44, VAR = 45, 
     USE = 46, FROM = 47, FUNC = 48, TYPE = 49, WITH = 50, WAIT = 51, RETURN = 52, 
-    INNER = 53, OUTER = 54, ATOMIC = 55, STATIC = 56, NULL_ = 57, TRUE = 58, 
-    FALSE = 59, INTEGER_TYPE = 60, INTEGER32_TYPE = 61, INTEGER64_TYPE = 62, 
-    REAL_TYPE = 63, FLOAT_TYPE = 64, DOUBLE_TYPE = 65, NUMBER_TYPE = 66, 
-    STRING_TYPE = 67, BOOL_TYPE = 68, CHAR_TYPE = 69, SET_TYPE = 70, MAP_TYPE = 71, 
-    LIST_TYPE = 72, DICT_TYPE = 73, ARRAY_TYPE = 74, TUPLE_TYPE = 75, UNION_TYPE = 76, 
-    VECTOR_TYPE = 77, TENSOR_TYPE = 78, ANY_TYPE = 79, VOID_TYPE = 80, FUNCTOR_TYPE = 81, 
-    BLANK = 82, LIN_CMT_HASH = 83, LIN_CMT_SLASH = 84, BLK_CMT = 85, MULTI_STR = 86, 
-    IDENTIFIER = 87, UNIT = 88, STRING = 89, FSTRING = 90, INTEGER = 91, 
-    REAL = 92
+    INNER = 53, OUTER = 54, ATOMIC = 55, SHARED = 56, SYNC = 57, NULL_ = 58, 
+    TRUE = 59, FALSE = 60, INTEGER_TYPE = 61, INTEGER32_TYPE = 62, INTEGER64_TYPE = 63, 
+    REAL_TYPE = 64, FLOAT_TYPE = 65, DOUBLE_TYPE = 66, NUMBER_TYPE = 67, 
+    STRING_TYPE = 68, BOOL_TYPE = 69, CHAR_TYPE = 70, SET_TYPE = 71, MAP_TYPE = 72, 
+    LIST_TYPE = 73, DICT_TYPE = 74, ARRAY_TYPE = 75, TUPLE_TYPE = 76, UNION_TYPE = 77, 
+    VECTOR_TYPE = 78, TENSOR_TYPE = 79, ANY_TYPE = 80, VOID_TYPE = 81, FUNCTOR_TYPE = 82, 
+    BLANK = 83, LIN_CMT_HASH = 84, LIN_CMT_SLASH = 85, BLK_CMT = 86, MULTI_STR = 87, 
+    IDENTIFIER = 88, UNIT = 89, STRING = 90, FSTRING = 91, INTEGER = 92, 
+    REAL = 93
   };
 
   enum {
@@ -85,6 +85,17 @@ public:
   const antlr4::dfa::Vocabulary& getVocabulary() const override;
 
   antlr4::atn::SerializedATNView getSerializedATN() const override;
+
+
+  bool isAdjacent() {
+      const antlr4::Token *last = _input->LT(-1);
+      const antlr4::Token *curr = _input->LT(1);
+      if (last == nullptr || curr == nullptr)
+          return false;
+      if (last->getStopIndex() + 1 != curr->getStartIndex())
+          return false;
+      return true;
+  }
 
 
   class ProgramContext;
@@ -396,8 +407,10 @@ public:
     antlr4::tree::TerminalNode* OUTER(size_t i);
     std::vector<antlr4::tree::TerminalNode *> ATOMIC();
     antlr4::tree::TerminalNode* ATOMIC(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> STATIC();
-    antlr4::tree::TerminalNode* STATIC(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> SHARED();
+    antlr4::tree::TerminalNode* SHARED(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> SYNC();
+    antlr4::tree::TerminalNode* SYNC(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -923,14 +936,14 @@ public:
     AnnotatedExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrimaryExprContext *primaryExpr();
+    std::vector<AnnotationContext *> annotation();
+    AnnotationContext* annotation(size_t i);
     std::vector<MemberAccessContext *> memberAccess();
     MemberAccessContext* memberAccess(size_t i);
     std::vector<ParentArguesContext *> parentArgues();
     ParentArguesContext* parentArgues(size_t i);
     std::vector<AngledValuesContext *> angledValues();
     AngledValuesContext* angledValues(size_t i);
-    std::vector<AnnotationContext *> annotation();
-    AnnotationContext* annotation(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -1126,6 +1139,10 @@ public:
 
   IdentRefContext* identRef();
 
+
+  bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;
+
+  bool annotatedExprSempred(AnnotatedExprContext *_localctx, size_t predicateIndex);
 
   // By default the static state used to implement the parser is lazily initialized during the first
   // call to the constructor. You can call this function if you wish to initialize the static state

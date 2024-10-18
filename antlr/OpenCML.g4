@@ -3,33 +3,45 @@ import OpenCMLLex;
 
 @header {
 /**
- * Copyright (c) 2022 Beijing Jiaotong University
- * PhotLab is licensed under [Open Source License].
- * You can use this software according to the terms and conditions of the [Open
- * Source License]. You may obtain a copy of [Open Source License] at:
- * [https://open.source.license/]
+ * Copyright (c) 2024 Beijing Jiaotong University
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the [Open Source License] for more details.
+ * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
  * Supported by: National Key Research and Development Program of China
  */
 }
 
+@parser::members {
+bool isAdjacent() {
+    const antlr4::Token *last = _input->LT(-1);
+    const antlr4::Token *curr = _input->LT(1);
+    if (last == nullptr || curr == nullptr)
+        return false;
+    if (last->getStopIndex() + 1 != curr->getStartIndex())
+        return false;
+    return true;
+}
+}
+
 program : stmtList? EOF;
 
-stmtList : stmt (SEP stmt)* SEP? ;
+stmtList : stmt (SEP? stmt)* SEP? ;
 
 stmt
     : letStmt
     | useStmt
     | typeStmt
     | exprStmt
-    | waitStmt  
+    | waitStmt
     | funcDef
     | retStmt
     ;
@@ -49,7 +61,7 @@ carrier    : identRef | bracedIdents | bracketIdents ;
 
 annotation  : '@' primaryExpr ;
 annotations : annotation+ ;
-modifiers   : (INNER | OUTER | ATOMIC | STATIC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC)+ ;
 
 keyTypePair  : identRef ':' typeExpr ;
 keyValuePair : identRef ':' entityExpr ;
@@ -130,7 +142,7 @@ withExpr
     ;
 
 annotatedExpr
-    : primaryExpr (memberAccess | parentArgues | angledValues | annotation)*
+    : primaryExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues) | annotation)*
     ;
 
 primaryExpr

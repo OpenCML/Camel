@@ -1,4 +1,8 @@
-(1, 2);
-let var2 = b->(a.at(b))<>()[1]()@{}();
-let c = <Int>{a, c, v}; // set
-let f = <Int, Int>{[a]:b};
+let a = 1
+let b = 2
+
+func add(a: Int, b: Int): Int {
+    return a + b
+}
+
+(a, b)->add

@@ -1,14 +1,14 @@
 /**
- * Copyright (c) 2022 Beijing Jiaotong University
- * PhotLab is licensed under [Open Source License].
- * You can use this software according to the terms and conditions of the [Open Source License].
- * You may obtain a copy of [Open Source License] at: [https://open.source.license/]
+ * Copyright (c) 2024 Beijing Jiaotong University
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the the MIT license.
+ * You may obtain a copy of the MIT license at: [https://opensource.org/license/mit]
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
  * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the [Open Source License] for more details.
+ * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
@@ -20,93 +20,82 @@
  * and can be accessed Anywhere in Any CML script.
  */ 
 
-# psl, json, phtc, xml, toml
+// psl, json, phtc, xml, toml
 
 with <loader: Functor = psl>
-inner static sync func load(path: String): Any {
-    # inner func
+inner func load(path: String): Any {
+    // inner func
 };
 
 with <path: String, ftype: String = 'psl'>
-inner static sync func save(entity: Any) {
-    # inner func
+inner func save(entity: Any) {
+    // inner func
 };
-
-use from = load;
 
 with <stream: String = 'stdout'>
 inner static func print(data: Any) {
-    # inner func
+    // inner func
 };
 
 with <diagram: Functor = eye>
 inner static func analyze(data: Any) {
-    # inner func
+    // inner func
 };
 
 inner static func help() {
-    # inner func
+    // inner func
 };
 
 inner static func version() {
-    # inner func
+    // inner func
 };
 
 inner static func about() {
-    # inner func
+    // inner func
 };
 
 inner static func exit() {
-    # inner func
+    // inner func
 };
 
 inner static func map() {
-    # inner func
+    // inner func
 };
 
 inner static func reduce() {
-    # inner func
+    // inner func
 };
 
-inner static sync func ifexpr(
+inner static func ifexpr(
     condition: Bool,
     trueValue: Any,
     falseValue: Any
 ) {
-    # return trueValue if condition is true, otherwise return falseValue
+    // return trueValue if condition is true, otherwise return falseValue
 };
 
 with <after: Functor>
-inner sync func exec(block: Functor): Void {
-    # execute the following block synchronously
-    # if after is specified, run it after execution of block
+inner func exec(block: Functor): Void {
+    // execute the following block synchronously
+    // if after is specified, run it after execution of block
 };
 
 with <after: Functor>
-inner static sync func skip(entity: Any): Void {
-    # skip an entity in an entity chain
+inner static func skip(entity: Any): Void {
+    // skip an entity in an entity chain
 };
 
-use else = skip;
+let else = skip;
 
-static sync func if(condition: Bool) {
+static func if(condition: Bool) {
     return ifexpr(condition, exec, skip<skip>)
 };
 
-with <capture: Any, condition: Functor, update: Functor>
-sync func test(target: Functor) {
-    return ifexpr(condition<capture>(), {
-        exec<{
-            update<capture > test < capture, condition, update>(target)
-        }>(target);
-    }, null);
-};
-
-static sync func while(condition: Functor) {
+static func while(condition: Functor) {
     return test<condition: condition>
 };
 
-static sync func for(
+static func for(
     capture: Any,
     condition: Functor,
     update: Functor
@@ -116,22 +105,22 @@ static sync func for(
 
 with <f: Functor>
 inner func map(entity: Any) {
-    # apply f to each element in entity
+    // apply f to each element in entity
 };
 
 with <f: Functor>
 inner func foreach(entity: Any) {
-    # for each element in entity, apply f to it
+    // for each element in entity, apply f to it
 };
 
 inner func plus(lhs: Any, rhs: Any): Any {
-    # return lhs + rhs
+    // return lhs + rhs
 };
 
 inner func minus(lhs: Any, rhs: Any): Any {
-    # return lhs - rhs
+    // return lhs - rhs
 };
 
 inner func leq(lhs: Any, rhs: Any): Bool {
-    # return lhs <= rhs
+    // return lhs <= rhs
 };

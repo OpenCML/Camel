@@ -18,30 +18,32 @@ let photodiodeSetting: String = {
     temperature: 300`K`
 };
 
-type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List> } & { c: Any }>> | (Vector<Number, 5> | Tensor<Number, [5, 5]>);
-type test2 = (Array<String> | Union<Int, String>[])[] | { a: Number, b: String }[] | (Int | String)[];
+type test1 = Set<Map<String, { a: Number, b: Tuple<Number, List> } & { c: Any }>> | (Array<Number, 5> | Tensor<Number, [5, 5]>);
+type test2 = (Array<String, 2> | Union<Int, String>[])[] | { a: Number, b: String }[] | (Int | String)[];
 
 let var2 = b->(a.at(b))<>()[1]()@{}();
 let var3 = c->a.b->d;
 var a = 1;
 wait a = 1;
 let b = [a, b, c];
-let b_ = <a>[];
+let b_ = [];
 let c = {};
 let d = { b: a };
 let e = (1, 2);
-let e_ = <n>();
-let f = {[a]:b};
+let e_ = (a, b);
+let f = <Int, Int>{[a]:b};
 
 let powerInput = Const<5`V`>;
 let powerOutput = true ? powerInput : Const<3`V`>;
 let r = A ? B ? a : b : C ? c : d;
-let result = a == 1 ? b : c = 4;
+// let result = (a == 1 ? b : c);
 
 type Power = {
     dcOutput: ElSignal,
     powerOutput: ElSignal
 };
+
+let Pwr = Power;
 
 @[14, 7]
 @{ boxed: true, color: 'blue' }
@@ -90,7 +92,7 @@ with <
     loader: Functor = psl,
     loader: Functor = psl
 >
-inner static func load(path: string): Any {
+inner shared func load(path: string): Any {
     // inner func
 };
 
@@ -102,26 +104,26 @@ inner static func load(path: string): Any {
 // psl, json, phtc, xml, toml
 
 with <loader: Functor = psl>
-inner static func load(path: string): Any {
+inner shared func load(path: string): Any {
     // inner func
 };
 
 with <path: string, ftype: string = 'psl'>
-inner static func save(entity: Any) :Void{
+inner shared func save(entity: Any) :Void{
     // inner func
 };
 
 with <stream: string = 'stdout'>
-inner static func print(data: Any):Void {
+inner shared func print(data: Any):Void {
     // inner func
 };
 
 with <diagram: Functor = eye>
-inner static func analyze(data: Any):Void {
+inner shared func analyze(data: Any):Void {
     // inner func:Void
 };
 
-inner static  func ifexpr(
+inner shared  func ifexpr(
     condition: Bool,
     trueValue: Any,
     falseValue: Any
@@ -136,13 +138,13 @@ inner  func exec(block: Functor): Void {
 };
 
 with <after: Functor>
-inner static  func skip(entity: Any): Void {
+inner shared  func skip(entity: Any): Void {
     // skip an entity in an entity chain
 };
 
-use else = skip;
+let else = skip;
 
-static  func if(condition: Bool) :Void{
+shared  func if(condition: Bool) :Void{
     return ifexpr(condition, exec, skip<skip>)
 };
 
