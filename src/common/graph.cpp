@@ -23,6 +23,48 @@
 using namespace std;
 using namespace gir;
 
+ostream &gir::operator<<(ostream &os, NodeType type) {
+    switch (type) {
+    case NodeType::GRAPH:
+        os << "GRAPH";
+        break;
+    case NodeType::DATA:
+        os << "DATA";
+        break;
+    case NodeType::STRUCT:
+        os << "STRUCT";
+        break;
+    case NodeType::SELECT:
+        os << "SELECT";
+        break;
+    case NodeType::FUNCTOR:
+        os << "FUNCTOR";
+        break;
+    case NodeType::OPERATOR:
+        os << "OPERATOR";
+        break;
+    }
+    return os;
+}
+
+ostream &gir::operator<<(ostream &os, DataTypeEnum type) {
+    switch (type) {
+    case DataTypeEnum::SHARED_CONSTANT:
+        os << "SHARED_CONSTANT";
+        break;
+    case DataTypeEnum::SHARED_VARIABLE:
+        os << "SHARED_VARIABLE";
+        break;
+    case DataTypeEnum::RUNTIME_CONSTANT:
+        os << "RUNTIME_CONSTANT";
+        break;
+    case DataTypeEnum::RUNTIME_VARIABLE:
+        os << "RUNTIME_VARIABLE";
+        break;
+    }
+    return os;
+}
+
 /*
 Node
 */
@@ -233,8 +275,7 @@ FunctorNode
 
 FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
     : Node(NodeType::FUNCTOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), func_(func) {
-    nodeType_ = NodeType::FUNCTOR;
-    inputs_.resize(3, nullptr);
+    inputs_.resize(2, nullptr);
 }
 
 node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
@@ -243,7 +284,7 @@ node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
     return res;
 }
 
-func_type_ptr_t FunctorNode::type() const { return std::dynamic_pointer_cast<FunctorType>(func_->type()); }
+func_type_ptr_t FunctorNode::type() const { return dynamic_pointer_cast<FunctorType>(func_->type()); }
 
 inline shared_ptr<ParamsData> inputToParams(const node_ptr_t &node, const type_ptr_t &type) {
     data_ptr_t data = node->data();
@@ -307,7 +348,9 @@ OperatorNode
 */
 
 OperatorNode::OperatorNode(graph_ptr_t graph, Operator op)
-    : Node(NodeType::OPERATOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), operator_(op) {}
+    : Node(NodeType::OPERATOR, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), operator_(op) {
+    inputs_.resize(2, nullptr);
+}
 
 node_ptr_t OperatorNode::create(graph_ptr_t graph, Operator op) {
     const auto res = make_shared<OperatorNode>(graph, op);
@@ -322,9 +365,9 @@ SelectNode
 SelectNode::SelectNode(graph_ptr_t graph, node_vec_t &cases)
     : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), funcs_(make_shared<node_vec_t>(cases)) {}
 
-SelectNode::SelectNode(graph_ptr_t graph, std::vector<operator_ptr_t> &cases)
+SelectNode::SelectNode(graph_ptr_t graph, vector<operator_ptr_t> &cases)
     : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph),
-      ops_(make_shared<std::vector<operator_ptr_t>>(cases)) {}
+      ops_(make_shared<vector<operator_ptr_t>>(cases)) {}
 
 node_ptr_t SelectNode::create(graph_ptr_t graph, node_vec_t &cases) {
     const auto res = make_shared<SelectNode>(graph, cases);
@@ -332,14 +375,14 @@ node_ptr_t SelectNode::create(graph_ptr_t graph, node_vec_t &cases) {
     return res;
 }
 
-node_ptr_t SelectNode::create(graph_ptr_t graph, std::vector<operator_ptr_t> &cases) {
+node_ptr_t SelectNode::create(graph_ptr_t graph, vector<operator_ptr_t> &cases) {
     const auto res = make_shared<SelectNode>(graph, cases);
     // temporary node, not added to graph
     return res;
 }
 
-std::vector<func_type_ptr_t> SelectNode::types() const {
-    std::vector<func_type_ptr_t> res;
+vector<func_type_ptr_t> SelectNode::types() const {
+    vector<func_type_ptr_t> res;
     if (funcs_) {
         for (const auto &node : *funcs_) {
             res.push_back(dynamic_pointer_cast<FunctorNode>(node)->type());
