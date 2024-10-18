@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -184,7 +184,9 @@ int main(int argc, char *argv[]) {
             }
 
             if (dumpGIR) {
-                _dumpGIR();
+                auto ctx = std::make_shared<Context>();
+                auto visitor = gir::Constructor(ctx);
+                auto graph = visitor.construct(ast);
                 return 0;
             }
         }

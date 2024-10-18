@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,18 +24,6 @@
 #include "common/ast.h"
 #include "common/context.h"
 #include "common/graph.h"
-
-inline void _dumpGIR() {
-    std::ifstream file("D:\\Projects\\Camel\\demo\\feat\\gir.txt");
-
-    if (file) {
-        std::string content((std::istreambuf_iterator<char>(file)), (std::istreambuf_iterator<char>()));
-        std::cout << content << std::endl;
-        file.close();
-    } else {
-        error << "Error dumping GIR" << std::endl;
-    }
-}
 
 namespace GraphIR {
 

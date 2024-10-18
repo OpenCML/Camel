@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,17 +40,17 @@ bool MapData::emplace(const data_ptr_t &key, const data_ptr_t &val) {
 }
 
 bool MapData::set(const data_ptr_t &key, const data_ptr_t &val) {
-    assert(resolved(), "Cannot set data to unresolved MapData");
+    cml_assert(resolved(), "Cannot set data to unresolved MapData");
     return data_.insert(std::make_pair(key, val)).second;
 }
 
 bool MapData::del(const data_ptr_t &key) {
-    assert(resolved(), "Cannot delete data from unresolved MapData");
+    cml_assert(resolved(), "Cannot delete data from unresolved MapData");
     return data_.erase(key) > 0;
 }
 
 data_ptr_t MapData::get(const data_ptr_t &key) const {
-    assert(resolved(), "Cannot get data from unresolved MapData");
+    cml_assert(resolved(), "Cannot get data from unresolved MapData");
     auto it = data_.find(key);
     if (it == data_.end()) {
         return nullptr;
@@ -112,7 +112,7 @@ void MapData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         auto &[ref, isKey] = refs_[i];
         data_ptr_t data = dataList[i];

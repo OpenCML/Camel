@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,7 @@ template <typename T> class PrimaryData : public Data {
         } else if constexpr (std::is_same_v<T, char>) {
             type_ = boolTypePtr;
         } else {
-            static_assert(!std::is_same_v<T, T>, "Unsupported type");
+            static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
     }
 
@@ -123,7 +123,7 @@ template <typename T> class PrimaryData : public Data {
                         throw UnsupportedConvError();
                     }
                 } else {
-                    static_assert(!std::is_same_v<T, T>, "Unsupported type");
+                    static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
                 }
             }
         } catch (const UnsupportedConvError &e) {

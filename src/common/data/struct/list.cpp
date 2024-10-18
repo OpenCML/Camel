@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,12 +47,12 @@ void ListData::emplace(const data_ptr_t &e) {
 }
 
 void ListData::pushBack(const data_ptr_t &e) {
-    assert(resolved(), "Cannot push data to unresolved ListData");
+    cml_assert(resolved(), "Cannot push data to unresolved ListData");
     data_.push_back(e);
 }
 
 data_ptr_t ListData::popBack() {
-    assert(resolved(), "Cannot pop data from unresolved ListData");
+    cml_assert(resolved(), "Cannot pop data from unresolved ListData");
     if (data_.empty()) {
         return nullptr;
     }
@@ -62,7 +62,7 @@ data_ptr_t ListData::popBack() {
 }
 
 data_ptr_t ListData::get(size_t index) const {
-    assert(resolved(), "Cannot get data from unresolved ListData");
+    cml_assert(resolved(), "Cannot get data from unresolved ListData");
     if (index >= data_.size()) {
         return nullptr;
     }
@@ -70,7 +70,7 @@ data_ptr_t ListData::get(size_t index) const {
 }
 
 bool ListData::set(size_t index, const data_ptr_t &e) {
-    assert(resolved(), "Cannot set data to unresolved ListData");
+    cml_assert(resolved(), "Cannot set data to unresolved ListData");
     if (index >= data_.size()) {
         return false;
     }
@@ -132,7 +132,7 @@ void ListData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         data_[idx] = dataList[i];

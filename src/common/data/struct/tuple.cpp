@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,7 +50,7 @@ void TupleData::emplace(const data_ptr_t &e) {
 }
 
 data_ptr_t TupleData::get(size_t index) const {
-    assert(resolved(), "Cannot get data from unresolved TupleData");
+    cml_assert(resolved(), "Cannot get data from unresolved TupleData");
     if (index >= data_.size()) {
         return nullptr;
     }
@@ -108,7 +108,7 @@ void TupleData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         data_[idx] = dataList[i];

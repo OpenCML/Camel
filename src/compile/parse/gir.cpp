@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -127,6 +127,7 @@ void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
             throw runtime_error("Redeclaration of entity: " + ident);
         }
     }
+    return nullptr;
 }
 
 node_ptr_t Constructor::visitDRefNode(const ast::node_ptr_t &ast) {
@@ -158,23 +159,21 @@ node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
     node_ptr_t linkNode = any_cast<node_ptr_t>(funcRes);
     node_ptr_t funcNode = nullptr;
     switch (linkNode->type()) {
-        {
-        case NodeType::FUNCTOR:
-            funcNode = linkNode;
-            break;
-        case NodeType::OPERATOR:
-            funcNode = linkNode;
-            break;
-        case NodeType::SELECT:
-            funcNode = select_node_ptr_cast(linkNode)->caseAt(0);
-            break;
+    case NodeType::FUNCTOR:
+        funcNode = linkNode;
+        break;
+    case NodeType::OPERATOR:
+        funcNode = linkNode;
+        break;
+    case NodeType::SELECT:
+        funcNode = select_node_ptr_cast(linkNode)->caseAt(0);
+        break;
 
-        default:
-            throw runtime_error("Unexpected node type of LINK node");
-        }
-        Node::link(dataNode, funcNode, 1);
-        return funcNode;
+    default:
+        throw runtime_error("Unexpected node type of LINK node");
     }
+    Node::link(dataNode, funcNode, 1);
+    return funcNode;
 }
 
 node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
@@ -188,23 +187,21 @@ node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
     node_ptr_t withNode = any_cast<node_ptr_t>(funcRes);
     node_ptr_t funcNode = nullptr;
     switch (withNode->type()) {
-        {
-        case NodeType::FUNCTOR:
-            funcNode = withNode;
-            break;
-        case NodeType::OPERATOR:
-            funcNode = withNode;
-            break;
-        case NodeType::SELECT:
-            funcNode = select_node_ptr_cast(withNode)->caseAt(0);
-            break;
+    case NodeType::FUNCTOR:
+        funcNode = withNode;
+        break;
+    case NodeType::OPERATOR:
+        funcNode = withNode;
+        break;
+    case NodeType::SELECT:
+        funcNode = select_node_ptr_cast(withNode)->caseAt(0);
+        break;
 
-        default:
-            throw runtime_error("Unexpected node type of WITH node");
-        }
-        Node::link(dataNode, funcNode, 0);
-        return funcNode;
+    default:
+        throw runtime_error("Unexpected node type of WITH node");
     }
+    Node::link(dataNode, funcNode, 0);
+    return funcNode;
 }
 
 void_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {
@@ -215,6 +212,7 @@ void_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {
     }
     const auto &node = any_cast<node_ptr_t>(res);
     context_->graph()->setOutput(node);
+    return nullptr;
 }
 
 node_ptr_t Constructor::visitExecNode(const ast::node_ptr_t &ast) {
@@ -229,4 +227,4 @@ node_ptr_t Constructor::visitExecNode(const ast::node_ptr_t &ast) {
     return node;
 }
 
-void_ptr_t Constructor::visitFromNode(const ast::node_ptr_t &ast) {}
+void_ptr_t Constructor::visitFromNode(const ast::node_ptr_t &ast) { return nullptr; }

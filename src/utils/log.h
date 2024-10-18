@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 01, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,13 +43,13 @@
 
 #ifdef NDEBUG
 
-#define assert(condition, message)                                                                                     \
+#define cml_assert(condition, message)                                                                                     \
     do {                                                                                                               \
     } while (false)
 
 #else
 
-#define assert(condition, message)                                                                                     \
+#define cml_assert(condition, message)                                                                                     \
     do {                                                                                                               \
         if (!(condition)) {                                                                                            \
             std::cerr << "Assertion failed: (" #condition "), function " << __FUNCTION__ << ", file " << __FILE__      \

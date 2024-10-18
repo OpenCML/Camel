@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -657,6 +657,7 @@ any Formatter::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
         result += " " + context->children[i * 2 - 1]->getText() + " " +
                   any_cast<string>(visitRelationalExpr(context->relationalExpr(i)));
     }
+    return result;
 };
 
 /*
