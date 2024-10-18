@@ -50,8 +50,8 @@ Graph
 gir::Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
       ports_(make_shared<vector<pair<size_t, bool>>>()), sharedConstants_(make_shared<data_vec_t>()),
-      sharedVariables_(make_shared<data_vec_t>()), rtVariableIndices_(make_shared<vector<InitIndex>>()),
-      runtimeConstants_(), runtimeVariables_() {}
+      sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
+      rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
     : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_),

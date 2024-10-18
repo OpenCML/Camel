@@ -35,7 +35,10 @@ class Constructor {
   public:
     Constructor(context_ptr_t &context) : context_(context) {}
 
-    graph_ptr_t construct(ast::node_ptr_t &ast) { return nullptr; }
+    graph_ptr_t construct(ast::node_ptr_t &ast) {
+        visit(ast);
+        return context_->graph();
+    }
 
   private:
     context_ptr_t context_;

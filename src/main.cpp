@@ -36,6 +36,7 @@
 #include "utils/log.h"
 
 using namespace antlr4;
+using namespace std;
 
 // #define DEBUG_LEVEL 1
 
@@ -43,29 +44,29 @@ int main(int argc, char *argv[]) {
     if (!parseArgs(argc, argv))
         return 0;
 
-    std::ostream &os = std::cout;
+    ostream &os = cout;
 
-    std::chrono::high_resolution_clock::time_point startTime, endTime;
+    chrono::high_resolution_clock::time_point startTime, endTime;
 
     while (repeat--) {
         bool hasParseError = false;
 
         if (profile) {
-            startTime = std::chrono::high_resolution_clock::now();
+            startTime = chrono::high_resolution_clock::now();
         }
 
         ANTLRInputStream input;
 
         if (targetFile != "") {
-            auto src = std::ifstream();
+            auto src = ifstream();
             src.open(targetFile);
             if (!src.is_open()) {
-                error << "Error opening file " << targetFile << std::endl;
+                error << "Error opening file " << targetFile << endl;
                 return 1;
             }
             input = ANTLRInputStream(src);
         } else {
-            input = ANTLRInputStream(std::cin);
+            input = ANTLRInputStream(cin);
         }
 
         OpenCMLLexer lexer(&input);
@@ -77,10 +78,10 @@ int main(int argc, char *argv[]) {
 
         try {
             interpreter->setPredictionMode(atn::PredictionMode::SLL);
-            parser.setErrorHandler(std::make_shared<BailErrorStrategy>());
+            parser.setErrorHandler(make_shared<BailErrorStrategy>());
             tree = parser.program();
         } catch (ParseCancellationException &e) {
-            debug(1) << "Parse failed, retrying with LL mode" << std::endl;
+            debug(1) << "Parse failed, retrying with LL mode" << endl;
 
             CamelErrorListener *listener = nullptr;
 
@@ -89,7 +90,7 @@ int main(int argc, char *argv[]) {
             } else if (errorFormat == "json") {
                 listener = new JSONErrorListener(targetFile, os);
             } else {
-                error << "Unknown error format: " << errorFormat << std::endl;
+                error << "Unknown error format: " << errorFormat << endl;
                 return 1;
             }
 
@@ -98,27 +99,27 @@ int main(int argc, char *argv[]) {
             parser.reset();
             tokens.reset();
             interpreter->setPredictionMode(atn::PredictionMode::LL);
-            parser.setErrorHandler(std::make_shared<DefaultErrorStrategy>());
+            parser.setErrorHandler(make_shared<DefaultErrorStrategy>());
 
             try {
                 tree = parser.program();
-            } catch (std::exception &e) {
-                error << "Parse failed" << std::endl;
+            } catch (exception &e) {
+                error << "Parse failed" << endl;
                 return 1;
             }
 
             hasParseError = listener->hasErrors();
 
-        } catch (std::exception &e) {
-            error << "Parse failed" << std::endl;
+        } catch (exception &e) {
+            error << "Parse failed" << endl;
             return 1;
         }
 
         if (dumpTokens) {
             for (auto &token : tokens.getTokens()) {
-                os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3) << std::right
-                   << token->getLine() << ":" << std::setw(3) << std::left << token->getCharPositionInLine() << "] ("
-                   << token->getChannel() << ") : " << token->getText() << std::endl;
+                os << setw(4) << right << token->getTokenIndex() << " [" << setw(3) << right << token->getLine() << ":"
+                   << setw(3) << left << token->getCharPositionInLine() << "] (" << token->getChannel()
+                   << ") : " << token->getText() << endl;
             }
             return 0;
         }
@@ -126,7 +127,7 @@ int main(int argc, char *argv[]) {
         if (format && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
 
-            const std::string formattedCode = std::any_cast<std::string>(formatter.visit(tree));
+            const string formattedCode = any_cast<string>(formatter.visit(tree));
 
             os << formattedCode;
             return 0;
@@ -148,23 +149,23 @@ int main(int argc, char *argv[]) {
                 while (!warns.empty()) {
                     const auto &warning = warns.front();
                     if (errorFormat != "json") {
-                        error << warning.what() << std::endl;
+                        error << warning.what() << endl;
                     } else {
-                        os << warning.json() << std::endl;
+                        os << warning.json() << endl;
                     }
                     warns.pop();
                 }
             } catch (BuildException &e) {
                 if (errorFormat != "json") {
-                    error << e.what() << std::endl;
+                    error << e.what() << endl;
                     return 1;
                 } else {
-                    os << e.json() << std::endl;
+                    os << e.json() << endl;
                     return 0;
                 }
-            } catch (std::exception &e) {
+            } catch (exception &e) {
                 if (errorFormat != "json") {
-                    error << "AST construction failed: " << e.what() << std::endl;
+                    error << "AST construction failed: " << e.what() << endl;
                     return 1;
                 } else {
                     os << "{"
@@ -173,7 +174,7 @@ int main(int argc, char *argv[]) {
                        << "\"line\": 0, "
                        << "\"column\": 0, "
                        << "\"message\": \"AST construction failed: " << e.what() << "\""
-                       << "}" << std::endl;
+                       << "}" << endl;
                     return 0;
                 }
             }
@@ -184,17 +185,24 @@ int main(int argc, char *argv[]) {
             }
 
             if (dumpGIR) {
-                auto ctx = std::make_shared<Context>();
+                cout << "Dumping GIR" << endl;
+                auto ctx = make_shared<Context>();
                 auto visitor = gir::Constructor(ctx);
-                auto graph = visitor.construct(ast);
+                try {
+
+                    auto graph = visitor.construct(ast);
+                } catch (exception &e) {
+                    error << "GIR construction failed: " << e.what() << endl;
+                    return 1;
+                }
                 return 0;
             }
         }
 
         if (profile) {
-            endTime = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
-            info << "Time used " << duration << " us" << std::endl;
+            endTime = chrono::high_resolution_clock::now();
+            auto duration = chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
+            info << "Time used " << duration << " us" << endl;
         }
     }
 

@@ -13,10 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "context.h"
 
-Context::Context() : opScope_(operator_scope_t::create(globalOperators)) {}
+Context::Context()
+    : rootGraph_(gir::Graph::create()), scope_(node_scope_t::create()),
+      opScope_(operator_scope_t::create(globalOperators)) {
+    currGraph_ = rootGraph_;
+}

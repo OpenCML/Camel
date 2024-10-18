@@ -21,7 +21,7 @@
 #include "common/error/build.h"
 #include "utils/log.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL 1
 
 using namespace std;
 using namespace gir;
@@ -65,7 +65,7 @@ any Constructor::visit(const ast::node_ptr_t &node) {
 
 node_ptr_t Constructor::visitDataNode(const ast::node_ptr_t &ast) {
     debug(0) << "Visiting DATA node" << endl;
-    const auto &dataNode = dynamic_pointer_cast<ast::DataLoad>(ast);
+    const auto &dataNode = ast::data_load_ptr_cast(ast->load());
     const data_ptr_t &data = dataNode->data();
     node_ptr_t node = DataNode::create(context_->graph(), data, false);
     if (!data->resolved()) {
