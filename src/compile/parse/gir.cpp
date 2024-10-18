@@ -106,7 +106,7 @@ node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
     context_->pushScope();
     const auto &type = visitTypeNode(ast_ptr_cast(ast->childAt(0)));
     auto functorType = dynamic_pointer_cast<FunctorType>(type);
-    const auto &varMap = functorType->variableMap(); 
+    const auto &varMap = functorType->variableMap();
     const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
     const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
     graph_ptr_t &graph = context_->graph();
@@ -176,18 +176,15 @@ node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
     node_ptr_t linkNode = any_cast<node_ptr_t>(funcRes);
     node_ptr_t funcNode = nullptr;
     switch (linkNode->type()) {
-    case NodeType::FUNCTOR:
-        funcNode = linkNode;
-        break;
-    case NodeType::OPERATOR:
-        funcNode = linkNode;
-        break;
     case NodeType::SELECT:
         funcNode = select_node_ptr_cast(linkNode)->caseAt(0);
         break;
 
     default:
-        throw runtime_error("Unexpected node type of LINK node");
+        // TODO: consider other node types
+        // etc. functor, operator, null(port)
+        funcNode = linkNode;
+        break;
     }
     Node::link(dataNode, funcNode, 1);
     debug(1) << "Leave LINK node" << endl;
@@ -205,18 +202,13 @@ node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
     node_ptr_t withNode = any_cast<node_ptr_t>(funcRes);
     node_ptr_t funcNode = nullptr;
     switch (withNode->type()) {
-    case NodeType::FUNCTOR:
-        funcNode = withNode;
-        break;
-    case NodeType::OPERATOR:
-        funcNode = withNode;
-        break;
     case NodeType::SELECT:
         funcNode = select_node_ptr_cast(withNode)->caseAt(0);
         break;
 
     default:
-        throw runtime_error("Unexpected node type of WITH node");
+        funcNode = withNode;
+        break;
     }
     Node::link(dataNode, funcNode, 0);
     debug(1) << "Leave WITH node" << endl;

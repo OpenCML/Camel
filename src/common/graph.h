@@ -32,7 +32,7 @@ namespace GraphIR {
 
 enum class NodeType { GRAPH, DATA, STRUCT, SELECT, FUNCTOR, OPERATOR };
 
-std::ostream& operator<<(std::ostream& os, NodeType type);
+std::ostream &operator<<(std::ostream &os, NodeType type);
 
 enum class DataTypeEnum {
     SHARED_CONSTANT,  // shared among all copies of the graph and never changed
@@ -41,7 +41,7 @@ enum class DataTypeEnum {
     RUNTIME_VARIABLE  // produced during runtime and may be changed during runtime
 };
 
-std::ostream& operator<<(std::ostream& os, DataTypeEnum type);
+std::ostream &operator<<(std::ostream &os, DataTypeEnum type);
 
 struct DataType {
     bool shared;
@@ -126,6 +126,11 @@ class Node : public std::enable_shared_from_this<Node> {
     static void link(node_ptr_t &from, node_ptr_t &to, int index = -1) {
         if (index >= 0) {
             from->outputs().push_back(to);
+            if (index > to->inputs().size()) {
+                // this can only happen when the link target is a variable
+                // etc. port, variable
+                to->inputs().resize(index + 1);
+            }
             to->inputs().at(index) = from;
         } else {
             from->outputs().push_back(to);
