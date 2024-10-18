@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,8 @@ using namespace std;
 
 unordered_map<string, std::shared_ptr<std::vector<operator_ptr_t>>> globalOperators;
 
-void registerOperator(const std::string &name, operator_ptr_t &op) {
+void registerOperator(const operator_ptr_t &&op) {
+    const auto &name = op->name();
     if (globalOperators.find(name) == globalOperators.end()) {
         globalOperators[name] = make_shared<std::vector<operator_ptr_t>>(1, op);
     } else {

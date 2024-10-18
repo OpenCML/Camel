@@ -13,8 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "std.h"
+#include "init.h"
+#include "common/type.h"
+
+void initOperators() {
+    registerOperator(std::make_shared<Operator>(
+        "__add__",
+        std::make_shared<FunctorType>(
+            std::make_shared<ParamsType>(
+                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
+            std::make_shared<ParamsType>(
+                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
+            int64TypePtr),
+        [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
+}

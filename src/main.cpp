@@ -32,6 +32,7 @@
 #include "compile/parse/cst.h"
 #include "compile/parse/gir.h"
 #include "config.h"
+#include "operators/init.h"
 #include "service/formatter/fmt.h"
 #include "utils/log.h"
 
@@ -185,7 +186,7 @@ int main(int argc, char *argv[]) {
             }
 
             if (dumpGIR) {
-                cout << "Dumping GIR" << endl;
+                initOperators();
                 auto ctx = make_shared<Context>();
                 auto visitor = gir::Constructor(ctx);
                 try {
