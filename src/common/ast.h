@@ -35,12 +35,20 @@ enum class NodeType { DATA, VARI, TYPE, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH
 class Load {
   protected:
     NodeType type_;
+    size_t tokenStart_;
+    size_t tokenEnd_;
 
   public:
     Load(NodeType type) : type_(type) {}
     virtual ~Load() = default;
 
+    void setToken(size_t start, size_t end) {
+        tokenStart_ = start;
+        tokenEnd_ = end;
+    }
+
     NodeType type() const { return type_; }
+    std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
     const std::string typeStr() const;
 
     virtual const std::string toString() const { return typeStr(); }
