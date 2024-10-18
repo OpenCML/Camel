@@ -105,7 +105,19 @@ node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
     debug(0) << "Enter FUNC node" << endl;
     context_->pushScope();
     const auto &type = visitTypeNode(ast_ptr_cast(ast->childAt(0)));
-    // TODO: addPort
+    auto functorType = dynamic_pointer_cast<FunctorType>(type);
+    const auto &varMap = functorType->variableMap(); 
+    const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
+    const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
+    graph_ptr_t &graph = context_->graph();
+    for (const auto &[name, type, data] : withType->elements()) {
+        node_ptr_t node = graph->addPort(varMap.at(name));
+        context_->insertData(name, node);
+    }
+    for (const auto &[name, type, data] : linkType->elements()) {
+        node_ptr_t node = graph->addPort(varMap.at(name));
+        context_->insertData(name, node);
+    }
     visitExecNode(ast_ptr_cast(ast->childAt(1)));
     func_ptr_t func = make_shared<FunctorData>(type, context_->graph());
     const auto &funcNode = gir::FunctorNode::create(context_->graph(), func);

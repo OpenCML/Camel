@@ -82,11 +82,11 @@ class Formatter : public OpenCMLVisitor {
             size_t predCmtStart = start, predCmtEnd = start;
 
             if (!reverse) { // forward lookup
-                // here we assumes that the the first character of the iComma
-                // will always be the comma itself (etc. ','), not a comma with a space (etc. ', '), ether only a space
-                // (etc. ' ')
                 predCmtStart++;
                 if (predCmtStart < tokens.size() && tokens[predCmtStart]->getText()[0] == iComma[0]) {
+                    // here we assumes that the the first character of the iComma
+                    // will always be the comma itself (etc. ','), not a comma with a space (etc. ', '),
+                    // ether only a space (etc. ' ')
                     predCmtStart++;
                 }
                 predCmtEnd = predCmtStart;
