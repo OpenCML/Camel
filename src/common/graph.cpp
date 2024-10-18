@@ -28,18 +28,20 @@ Node
 */
 
 data_ptr_t Node::data() const {
-    cml_assert(graph_, "Graph is not set.");
+    const auto wg = graph_.lock();
+    cml_assert(wg, "Graph is not set.");
     if (dataType_.variable) {
-        return graph_->getVariable(dataIndex_);
+        return wg->getVariable(dataIndex_);
     } else {
-        return graph_->getConstant(dataIndex_);
+        return wg->getConstant(dataIndex_);
     }
 }
 
 void Node::makeVariable(bool shared) {
-    cml_assert(graph_ != nullptr, "Graph is not set for Node.");
+    const auto wg = graph_.lock();
+    cml_assert(wg, "Graph is not set for Node.");
     cml_assert(!dataType_.variable, "Node is already a variable.");
-    dataIndex_ = graph_->makeVariable(dataIndex_, shared);
+    dataIndex_ = wg->makeVariable(dataIndex_, shared);
     dataType_.shared = shared;
 }
 
@@ -56,7 +58,7 @@ gir::Graph::Graph()
 gir::Graph::Graph(Graph &other)
     : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_),
       sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
-      rtVariableIndices_(other.rtVariableIndices_), runtimeConstants_(other.runtimeConstants_.size()),
+      runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
       runtimeVariables_() {
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
@@ -173,7 +175,7 @@ void gir::Graph::fulfill(const data_vec_t &dataList) {
     }
 }
 
-data_ptr_t gir::Graph::eval() {}
+data_ptr_t gir::Graph::eval() { return nullptr; }
 
 /*
 DataNode
@@ -298,7 +300,7 @@ void FunctorNode::fulfill() {
     func_->graph()->fulfill(params);
 }
 
-data_ptr_t FunctorNode::eval() {}
+data_ptr_t FunctorNode::eval() { return nullptr; }
 
 /*
 OperatorNode
@@ -354,6 +356,6 @@ node_ptr_t SelectNode::caseAt(size_t index) {
     if (funcs_) {
         return funcs_->at(index);
     } else {
-        return OperatorNode::create(graph_, *ops_->at(index));
+        return OperatorNode::create(graph_.lock(), *ops_->at(index));
     }
 }
