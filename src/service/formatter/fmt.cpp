@@ -81,7 +81,7 @@ void Formatter::insertComment(antlr4::Token *comment, string &result) {
         break;
 
     default:
-        break;
+        throw runtime_error("Trying to insert a comment that is not from a comment channel");
     }
 };
 
