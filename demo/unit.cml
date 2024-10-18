@@ -1,14 +1,8 @@
-// with <capture: Any, condition: Functor, update: Functor>
-// func test(target: Functor): Void {
-//     return ifexpr(condition<capture>(), () => {
-//         exec<() => {
-//             update<capture>();
-//             test<capture, condition, update>(target)
-//         }>(target);
-//     }, null)
-// };
+let a = 1
+let b = 2
 
-let a = b * (c + d)
-//
+func add(a: Int, b: Int): Int {
+    return a + b
+}
 
-let e = (() => {})(b)
+(a, b)->add

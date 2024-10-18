@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,6 +53,9 @@ TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
 }
 
 ParamsType::ParamsType() : StructType(TypeCode::PARAMS) {}
+
+ParamsType::ParamsType(const std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>> &&elements)
+    : StructType(TypeCode::PARAMS), elements_(std::move(elements)) {}
 
 string ParamsType::toString() const {
     string result = "Params<";

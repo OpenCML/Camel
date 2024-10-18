@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@ class ParamsType : public StructType {
 
   public:
     ParamsType();
+    ParamsType(const std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>> &&elements);
 
     std::string toString() const override;
 

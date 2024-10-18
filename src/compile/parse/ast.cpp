@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1447,6 +1447,9 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
     case 8: { // lambdaExpr
         return visitLambdaExpr(context->lambdaExpr());
     } break;
+
+    default:
+        throw BuildException("Invalid primary expression", context->getStart());
     }
 };
 

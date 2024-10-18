@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,7 +53,7 @@ bool DictData::emplace(const std::string &key, const data_ptr_t &val) {
 }
 
 bool DictData::add(const string &key, const data_ptr_t &val) {
-    assert(resolved(), "Cannot add data to unresolved DictData");
+    cml_assert(resolved(), "Cannot add data to unresolved DictData");
     DictType &dictType = *static_cast<DictType *>(type_.get());
     if (dictType.add(key, val->type())) {
         data_[key] = val;
@@ -63,7 +63,7 @@ bool DictData::add(const string &key, const data_ptr_t &val) {
 }
 
 bool DictData::del(const string &key) {
-    assert(resolved(), "Cannot delete data from unresolved DictData");
+    cml_assert(resolved(), "Cannot delete data from unresolved DictData");
     DictType &dictType = *static_cast<DictType *>(type_.get());
     if (dictType.del(key)) {
         data_.erase(key);
@@ -73,19 +73,19 @@ bool DictData::del(const string &key) {
 }
 
 bool DictData::has(const string &key) const {
-    assert(resolved(), "Cannot check data from unresolved DictData");
+    cml_assert(resolved(), "Cannot check data from unresolved DictData");
     return data_.find(key) != data_.end();
 }
 
 void DictData::set(const string &key, const data_ptr_t &val) {
-    assert(resolved(), "Cannot set data to unresolved DictData");
+    cml_assert(resolved(), "Cannot set data to unresolved DictData");
     DictType &dictType = *static_cast<DictType *>(type_.get());
     dictType.set(key, val->type());
     data_[key] = val;
 }
 
 data_ptr_t DictData::get(const string &key) const {
-    assert(resolved(), "Cannot get data from unresolved DictData");
+    cml_assert(resolved(), "Cannot get data from unresolved DictData");
     auto it = data_.find(key);
     if (it != data_.end()) {
         return it->second;
@@ -141,7 +141,7 @@ void DictData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
     DictType &dictType = *static_cast<DictType *>(type_.get());
     for (size_t i = 0; i < refs_.size(); i++) {
         const string &key = refs_[i];

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 16, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,6 +63,8 @@ class FunctorType : public SpecialType {
     type_ptr_t withType() const;
     type_ptr_t linkType() const;
     type_ptr_t returnType() const;
+
+    const std::unordered_map<std::string, bool> &variableMap() const { return variableMap_; }
 
     std::string toString() const override;
 

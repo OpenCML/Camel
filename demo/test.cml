@@ -1,1 +1,15 @@
-<Int, Int>{ [1]: 2 };
+// baba
+
+let a = 1;
+
+// haha
+
+let b = 2
+
+// mama
+
+{
+    a: a,
+    // hah
+    b: b
+}

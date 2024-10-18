@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,11 +77,34 @@ class Formatter : public OpenCMLVisitor {
     ) {
         std::string result;
 
-        const auto findCmtRange = [&](size_t start, bool inverse = false) -> std::pair<size_t, size_t> {
-            size_t predCmtStart = start;
-            size_t predCmtEnd = start;
+        // given a start index, find the range of comments in the token stream
+        const auto findCmtRange = [&](size_t start, bool reverse = false) -> std::pair<size_t, size_t> {
+            size_t predCmtStart = start, predCmtEnd = start;
 
-            if (inverse) {
+            if (!reverse) { // forward lookup
+                predCmtStart++;
+                if (predCmtStart < tokens.size() && tokens[predCmtStart]->getText()[0] == iComma[0]) {
+                    // here we assumes that the the first character of the iComma
+                    // will always be the comma itself (etc. ','), not a comma with a space (etc. ', '),
+                    // ether only a space (etc. ' ')
+                    predCmtStart++;
+                }
+                predCmtEnd = predCmtStart;
+                size_t j;
+                for (j = predCmtStart; j < tokens.size(); j++) {
+                    if (tokens[j]->getChannel() <= 1) {
+                        predCmtEnd = j;
+                        break;
+                    }
+                }
+                if (j == tokens.size() - 1 && tokens[tokens.size() - 1]->getChannel() > 1) {
+                    predCmtEnd = tokens.size();
+                }
+            } else { // backward lookup
+                if (predCmtEnd > 1 && tokens[predCmtEnd - 1]->getText()[0] == iComma[0]) {
+                    predCmtEnd--;
+                }
+                predCmtStart = predCmtEnd;
                 if (predCmtEnd > 0) {
                     size_t j;
                     for (j = predCmtEnd - 1; j != 0; j--) {
@@ -93,20 +116,6 @@ class Formatter : public OpenCMLVisitor {
                     }
                     if (j == 0 && tokens[0]->getChannel() > 1) {
                         predCmtStart = 0;
-                    }
-                }
-            } else {
-                if (++predCmtStart < tokens.size()) {
-                    if (tokens[predCmtStart]->getText() == iComma) {
-                        predCmtStart++;
-                    }
-                    if (predCmtStart < tokens.size() && tokens[predCmtStart]->getChannel() > 1) {
-                        for (size_t j = predCmtStart; j <= tokens.size(); j++) {
-                            if (j == tokens.size() || tokens[j]->getChannel() <= 1) {
-                                predCmtEnd = j;
-                                break;
-                            }
-                        }
                     }
                 }
             }
@@ -186,7 +195,6 @@ class Formatter : public OpenCMLVisitor {
             if (i == 0) {
                 auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStart()->getTokenIndex(), true);
                 int cmtSkips = 0;
-
                 for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                     const auto &comment = tokens[j];
                     const auto &commentText = comment->getText();
@@ -216,7 +224,6 @@ class Formatter : public OpenCMLVisitor {
 
             lastStopLine = list[i]->getStop()->getLine();
             auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStop()->getTokenIndex(), false);
-
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                 const auto &comment = tokens[j];
                 const auto &commentText = comment->getText();

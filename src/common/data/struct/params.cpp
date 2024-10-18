@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,7 +58,7 @@ void ParamsData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         const auto &[idx, key] = refs_[i];
         indexData_[idx] = dataList[i];
@@ -210,5 +210,6 @@ data_ptr_t ParamsData::convertToParams(const shared_ptr<ParamsType> &other, bool
         params->refs_ = std::move(refs);
         params->indexData_ = std::move(indexData);
         params->namedData_ = std::move(namedData);
+        return params;
     }
 }

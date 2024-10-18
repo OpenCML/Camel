@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 18, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,12 +32,16 @@ namespace GraphIR {
 
 enum class NodeType { GRAPH, DATA, STRUCT, SELECT, FUNCTOR, OPERATOR };
 
+std::ostream &operator<<(std::ostream &os, NodeType type);
+
 enum class DataTypeEnum {
     SHARED_CONSTANT,  // shared among all copies of the graph and never changed
     SHARED_VARIABLE,  // produced during runtime and never changed once produced
     RUNTIME_CONSTANT, // shared among all copies of the graph and may be changed during runtime
     RUNTIME_VARIABLE  // produced during runtime and may be changed during runtime
 };
+
+std::ostream &operator<<(std::ostream &os, DataTypeEnum type);
 
 struct DataType {
     bool shared;
@@ -76,13 +80,14 @@ using node_vec_t = std::vector<node_ptr_t>;
 class Graph;
 
 using graph_ptr_t = std::shared_ptr<Graph>;
+using graph_wptr_t = std::weak_ptr<Graph>;
 
 class Node : public std::enable_shared_from_this<Node> {
   protected:
     size_t refs_ = 0;
     NodeType nodeType_;
     DataType dataType_;
-    graph_ptr_t graph_;
+    graph_wptr_t graph_;
     size_t dataIndex_;
 
     node_vec_t inputs_;
@@ -98,7 +103,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
     void makeVariable(bool shared = false);
 
-    graph_ptr_t outer() const { return graph_; }
+    graph_ptr_t outer() const { return graph_.lock(); }
     data_ptr_t data() const;
     size_t index() const { return dataIndex_; }
 
@@ -120,7 +125,12 @@ class Node : public std::enable_shared_from_this<Node> {
 
     static void link(node_ptr_t &from, node_ptr_t &to, int index = -1) {
         if (index >= 0) {
-            from->outputs().at(index) = to;
+            from->outputs().push_back(to);
+            if (index > to->inputs().size()) {
+                // this can only happen when the link target is a variable
+                // etc. port, variable
+                to->inputs().resize(index + 1);
+            }
             to->inputs().at(index) = from;
         } else {
             from->outputs().push_back(to);
