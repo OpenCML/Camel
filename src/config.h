@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#define CAMEL_VERSION "0.0.9"
+#define CAMEL_VERSION "0.0.10"
 
 #include <string>
 
