@@ -199,9 +199,9 @@ any Formatter::visitWithDef(OpenCMLParser::WithDefContext *context) {
 };
 
 /*
-funcDef    : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
+funcDecl   : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? ;
 */
-any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
+std::any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     string result;
     const auto &annotations = context->annotations();
     const auto &withDef = context->withDef();
@@ -209,7 +209,6 @@ any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     const auto &identRef = context->identRef();
     const auto &parentParams = context->parentParams();
     const auto &typeExpr = context->typeExpr();
-    const auto &bracedStmts = context->bracedStmts();
     if (annotations) {
         result += any_cast<string>(visitAnnotations(annotations, true)) + lineEnd();
     }
@@ -223,7 +222,17 @@ any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     if (typeExpr) {
         result += ": " + any_cast<string>(visitTypeExpr(typeExpr));
     }
-    return result + " " + any_cast<string>(visitBracedStmts(bracedStmts));
+    return result;
+}
+
+/*
+funcDef    : funcDecl bracedStmts ;
+*/
+any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
+    string result;
+    const auto &funcDecl = context->funcDecl();
+    const auto &bracedStmts = context->bracedStmts();
+    return result + any_cast<string>(visitFuncDecl(funcDecl)) + " " + any_cast<string>(visitBracedStmts(bracedStmts));
 };
 
 /*

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,7 @@ std::string modifier2str(FunctorModifier modifier);
 
 class FunctorType : public SpecialType {
   private:
+    std::string name_;
     std::unordered_set<FunctorModifier> modifiers_;
     std::shared_ptr<ParamsType> withType_;
     std::shared_ptr<ParamsType> linkType_;
@@ -43,8 +44,10 @@ class FunctorType : public SpecialType {
 
   public:
     FunctorType() = delete;
-    FunctorType(const std::shared_ptr<ParamsType> &withType = nullptr,
-                const std::shared_ptr<ParamsType> &paramsType = nullptr, const type_ptr_t &returnType = nullptr);
+    FunctorType(const std::string &&name, const std::shared_ptr<ParamsType> &withType,
+                const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
+
+    const std::string &name() const { return name_; }
 
     void addModifier(FunctorModifier modifier);
     void setModifiers(const std::unordered_set<FunctorModifier> &modifiers);

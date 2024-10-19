@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,8 @@ const string Load::typeStr() const {
         return "VARI";
     case NodeType::TYPE:
         return "TYPE";
+    case NodeType::DECL:
+        return "DECL";
     case NodeType::FUNC:
         return "FUNC";
     case NodeType::NREF:
@@ -80,7 +82,19 @@ const string DataLoad::toString() const {
 
 const string TypeLoad::toString() const {
     stringstream ss;
-    ss << "TYPE: " << type_->toString();
+    ss << "TYPE: " << dataType_->toString();
+    return ss.str();
+}
+
+const string DeclLoad::toString() const {
+    stringstream ss;
+    ss << "DECL: " << funcType_->toString();
+    return ss.str();
+}
+
+const string FuncLoad::toString() const {
+    stringstream ss;
+    ss << "FUNC: " << funcType_->name();
     return ss.str();
 }
 
@@ -100,7 +114,7 @@ const string WaitLoad::toString() const {
 
 const string FromLoad::toString() const {
     ostringstream oss;
-    oss << "FROM: '" << path_ << "' USE { ";
+    oss << "FROM: " << path_ << " USE { ";
     if (idents_.empty()) {
         oss << "*";
     } else {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@ using node_ptr_t = std::shared_ptr<Node>;
 class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
-enum class NodeType { DATA, VARI, TYPE, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC, FROM };
+enum class NodeType { DATA, VARI, TYPE, DECL, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC, FROM };
 
 class Load {
   protected:
@@ -82,11 +82,11 @@ inline std::shared_ptr<VariLoad> vari_load_ptr_cast(const load_ptr_t &ptr) {
 }
 
 class TypeLoad : public Load {
-    type_ptr_t type_;
+    type_ptr_t dataType_;
 
   public:
-    TypeLoad(type_ptr_t type) : Load(NodeType::TYPE), type_(type) {}
-    type_ptr_t type() const { return type_; }
+    TypeLoad(type_ptr_t type) : Load(NodeType::TYPE), dataType_(type) {}
+    type_ptr_t dataType() const { return dataType_; }
 
     const std::string toString() const override;
 };
@@ -95,11 +95,28 @@ inline std::shared_ptr<TypeLoad> type_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<TypeLoad>(ptr);
 }
 
-class FuncLoad : public Load {
-  public:
-    FuncLoad() : Load(NodeType::FUNC) {}
+class DeclLoad : public Load {
+    func_type_ptr_t funcType_;
 
-    // const std::string toString() const override;
+  public:
+    DeclLoad(func_type_ptr_t type) : Load(NodeType::DECL), funcType_(type) {}
+    func_type_ptr_t funcType() const { return funcType_; }
+
+    const std::string toString() const override;
+};
+
+inline std::shared_ptr<DeclLoad> decl_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<DeclLoad>(ptr);
+}
+
+class FuncLoad : public Load {
+    func_type_ptr_t funcType_;
+
+  public:
+    FuncLoad(func_type_ptr_t type) : Load(NodeType::FUNC), funcType_(type) {}
+    func_type_ptr_t funcType() const { return funcType_; }
+
+    const std::string toString() const override;
 };
 
 inline std::shared_ptr<FuncLoad> func_load_ptr_cast(const load_ptr_t &ptr) {

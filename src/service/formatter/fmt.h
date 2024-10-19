@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -309,6 +309,8 @@ class Formatter : public OpenCMLVisitor {
     std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
 
     std::any visitWithDef(OpenCMLParser::WithDefContext *context);
+
+    std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
 
     std::any visitFuncDef(OpenCMLParser::FuncDefContext *context);
 

@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include <string>
 #include <iostream>
+#include <string>
 
 #include "graph.h"
 #include "operator.h"
@@ -37,6 +37,9 @@ class Context {
     node_scope_ptr_t scope_;
     operator_scope_ptr_t opScope_;
 
+    std::unordered_map<void *, std::tuple<node_scope_ptr_t, operator_scope_ptr_t, gir::graph_ptr_t>> consCache_;
+    std::unordered_map<void *, gir::node_ptr_t> nodeCache_;
+
   public:
     Context();
     virtual ~Context() = default;
@@ -45,17 +48,33 @@ class Context {
     operator_scope_t &opScope() { return *opScope_; }
     gir::graph_ptr_t &graph() { return currGraph_; }
 
-    void pushScope() {
-        scope_ = scope_->push();
-        opScope_ = opScope_->push();
-        currGraph_ = gir::Graph::create(currGraph_);
+    void pushScope(void *key) {
+        if (consCache_.find(key) != consCache_.end()) {
+            auto [scope, opScope, graph] = consCache_[key];
+            scope_ = scope;
+            opScope_ = opScope;
+            currGraph_ = graph;
+        } else {
+            scope_ = scope_->push();
+            opScope_ = opScope_->push();
+            currGraph_ = gir::Graph::create(currGraph_);
+            consCache_[key] = std::make_tuple(scope_, opScope_, currGraph_);
+        }
     }
 
-    void popScope() {
+    void popScope(void *key = nullptr) {
         scope_ = scope_->pop();
         opScope_ = opScope_->pop();
         currGraph_ = currGraph_->outer();
+        if (key != nullptr) {
+            consCache_.erase(key);
+        }
     }
+
+    bool cached(void *key) { return consCache_.find(key) != consCache_.end(); }
+    void cacheNode(void *key, const gir::node_ptr_t &node) { nodeCache_[key] = node; }
+    void eraseCachedNode(void *key) { nodeCache_.erase(key); }
+    gir::node_ptr_t getCachedNode(void *key) { return nodeCache_[key]; }
 
     std::optional<gir::node_ptr_t> nodeAt(const std::string &name) {
         auto opNode = scope_->at(name);

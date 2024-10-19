@@ -55,6 +55,8 @@ public:
 
     virtual std::any visitWithDef(OpenCMLParser::WithDefContext *context) = 0;
 
+    virtual std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) = 0;
+
     virtual std::any visitFuncDef(OpenCMLParser::FuncDefContext *context) = 0;
 
     virtual std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) = 0;

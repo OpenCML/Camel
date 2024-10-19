@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,8 +35,8 @@ class Operator {
     OperatorFunction func_;
 
   public:
-    Operator(const std::string &&name, const func_type_ptr_t &&type, OperatorFunction &&func)
-        : name_(std::move(name)), type_(std::move(type)), func_(std::move(func)) {}
+    Operator(const func_type_ptr_t &&type, OperatorFunction &&func)
+        : name_(type->name()), type_(std::move(type)), func_(std::move(func)) {}
 
     const std::string &name() const { return name_; }
     const func_type_ptr_t &type() const { return type_; }

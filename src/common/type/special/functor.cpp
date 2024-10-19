@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,9 +57,10 @@ string modifier2str(FunctorModifier modifier) {
     }
 }
 
-FunctorType::FunctorType(const shared_ptr<ParamsType> &withType, const shared_ptr<ParamsType> &paramsType,
-                         const type_ptr_t &returnType)
-    : SpecialType(TypeCode::FUNCTOR), withType_(withType), linkType_(paramsType), returnType_(returnType) {}
+FunctorType::FunctorType(const std::string &&name, const shared_ptr<ParamsType> &withType,
+                         const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
+    : SpecialType(TypeCode::FUNCTOR), name_(std::move(name)), withType_(withType), linkType_(paramsType),
+      returnType_(returnType) {}
 
 void FunctorType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context) { return dumpCST(context, "WaitStmt"); };
 
     std::any visitWithDef(OpenCMLParser::WithDefContext *context) { return dumpCST(context, "WithDef"); };
+
+    std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) { return dumpCST(context, "FuncDecl"); };
 
     std::any visitFuncDef(OpenCMLParser::FuncDefContext *context) { return dumpCST(context, "FuncDef"); };
 

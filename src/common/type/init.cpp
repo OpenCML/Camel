@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,7 +66,7 @@ void initTypes() {
     // initialize special types
     anyTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::ANY));
     voidTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::VOID));
-    functorTypePtr = dynamic_pointer_cast<Type>(make_shared<FunctorType>(nullptr, nullptr, anyTypePtr));
+    functorTypePtr = dynamic_pointer_cast<Type>(make_shared<FunctorType>("", nullptr, nullptr, anyTypePtr));
 
     // initialize unknown type
     refTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::REF));
