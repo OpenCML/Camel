@@ -1,11 +1,7 @@
-// type Signal = Array<Int, 2>
+// Total system
+SignalGenEl->SignalProcOp->SignalRecvEl->SignalProcOp->SignalRecvEl;
 
-// // atomic func add(sig1: Signal, sig2: Signal): Signal {
-// //     return [sig1[0] + sig2[0], sig1[1] + sig2[1]]
-// // }
+// Path: demo/test.cml
+// Compare this snippet from demo/fmt.cml:
 
-// inner func map(f: (a: Int) => Int): Signal {
-//     return [f(this[0]), f(this[1])]
-// }
-
-let a: (var a: Any) => Any = a
+let a = 1

@@ -1598,8 +1598,9 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
                 dataNode = reparent(dataNode, execNode);
             }
             res = dataNode;
+        } else {
+            throw BuildException("Invalid type specification, no pattern matched", context->getStart());
         }
-        throw BuildException("Invalid type specification, no pattern matched", context->getStart());
     }
     case 8: { // lambdaExpr
         res = visitLambdaExpr(context->lambdaExpr());
