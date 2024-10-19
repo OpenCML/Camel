@@ -1271,10 +1271,10 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
         node_ptr_t execNode = createNode<ExecLoad>();
         node_ptr_t rhsNode = any_cast<node_ptr_t>(visitAnnotatedExpr(annotatedExprs[i]));
 
-        node_ptr_t linkNode = createNode<LinkLoad>();
-        *linkNode << lhsNode << rhsNode;
+        node_ptr_t withNode = createNode<WithLoad>();
+        *withNode << lhsNode << rhsNode;
 
-        lhsNode = linkNode;
+        lhsNode = withNode;
     }
 
     leave("WithExpr");

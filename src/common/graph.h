@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -148,6 +148,7 @@ class Graph : public Node {
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
     std::shared_ptr<std::vector<std::pair<size_t, bool>>> ports_;
+    std::vector<graph_ptr_t> subGraphs_;
 
     std::shared_ptr<data_vec_t> sharedConstants_;
     std::shared_ptr<data_vec_t> sharedVariables_;
@@ -164,6 +165,7 @@ class Graph : public Node {
 
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isVar = false);
+    void addSubGraph(const graph_ptr_t &graph);
 
     void setOutput(const node_ptr_t &node);
 

@@ -54,7 +54,7 @@ inline std::string repeatPattern(const std::string &pattern, int n) {
 #define enter(target)                                                                                                  \
     do {                                                                                                               \
         if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << repeatPattern("| ", __depth__) << _blue("[enter] ") << target << std::endl;                   \
+            std::cout << repeatPattern("|   ", __depth__) << _blue("[enter] ") << target << std::endl;                   \
         }                                                                                                              \
         __depth__++;                                                                                                   \
     } while (false)
@@ -63,7 +63,7 @@ inline std::string repeatPattern(const std::string &pattern, int n) {
     do {                                                                                                               \
         __depth__--;                                                                                                   \
         if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << repeatPattern("| ", __depth__) << _green("[leave] ") << target << std::endl;                  \
+            std::cout << repeatPattern("|   ", __depth__) << _green("[leave] ") << target << std::endl;                  \
         }                                                                                                              \
     } while (false)
 
