@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 01, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,17 @@
 #define error std::cout << _red("[error] ")
 #define fatal std::cout << _red("[fatal] ")
 
-#define DEBUG_LEVEL -1
+extern size_t __depth__;
+
+inline std::string repeatPattern(const std::string &pattern, int n) {
+    std::string result;
+    for (int i = 0; i < n; ++i) {
+        result.append(pattern);
+    }
+    return result;
+}
+
+// #define DEBUG_LEVEL -1
 
 #define debug(level)                                                                                                   \
     if (level <= DEBUG_LEVEL)                                                                                          \
@@ -41,15 +51,31 @@
     if (level <= DEBUG_LEVEL)                                                                                          \
     std::cout
 
+#define enter(target)                                                                                                  \
+    do {                                                                                                               \
+        if (DEBUG_LEVEL > 0) {                                                                                         \
+            std::cout << repeatPattern("|   ", __depth__) << _blue("[enter] ") << target << std::endl;                   \
+        }                                                                                                              \
+        __depth__++;                                                                                                   \
+    } while (false)
+
+#define leave(target)                                                                                                  \
+    do {                                                                                                               \
+        __depth__--;                                                                                                   \
+        if (DEBUG_LEVEL > 0) {                                                                                         \
+            std::cout << repeatPattern("|   ", __depth__) << _green("[leave] ") << target << std::endl;                  \
+        }                                                                                                              \
+    } while (false)
+
 #ifdef NDEBUG
 
-#define cml_assert(condition, message)                                                                                     \
+#define cml_assert(condition, message)                                                                                 \
     do {                                                                                                               \
     } while (false)
 
 #else
 
-#define cml_assert(condition, message)                                                                                     \
+#define cml_assert(condition, message)                                                                                 \
     do {                                                                                                               \
         if (!(condition)) {                                                                                            \
             std::cerr << "Assertion failed: (" #condition "), function " << __FUNCTION__ << ", file " << __FILE__      \

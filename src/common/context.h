@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <string>
+#include <iostream>
 
 #include "graph.h"
 #include "operator.h"
@@ -35,7 +36,6 @@ class Context {
     gir::graph_ptr_t currGraph_;
     node_scope_ptr_t scope_;
     operator_scope_ptr_t opScope_;
-    // gir::func_node_ptr_t currFunc_;
 
   public:
     Context();
@@ -44,7 +44,6 @@ class Context {
     node_scope_t &scope() { return *scope_; }
     operator_scope_t &opScope() { return *opScope_; }
     gir::graph_ptr_t &graph() { return currGraph_; }
-    // gir::func_node_ptr_t &func() { return currFunc_; }
 
     void pushScope() {
         scope_ = scope_->push();

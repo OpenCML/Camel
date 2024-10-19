@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,15 +93,20 @@ Graph
 
 gir::Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
-      ports_(make_shared<vector<pair<size_t, bool>>>()), sharedConstants_(make_shared<data_vec_t>()),
+      ports_(make_shared<vector<pair<size_t, bool>>>()), subGraphs_(), sharedConstants_(make_shared<data_vec_t>()),
       sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
       rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
-    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_),
+    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(),
       sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
       runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
       runtimeVariables_() {
+    for (const auto &g : other.subGraphs_) {
+        subGraphs_.push_back(
+            make_shared<Graph>(*g)
+        );
+    }
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
     }
@@ -110,6 +115,9 @@ gir::Graph::Graph(Graph &other)
 graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
     const auto res = make_shared<Graph>();
     res->graph_ = graph;
+    if (graph) {
+        graph->addSubGraph(res);
+    }
     return res;
 }
 
@@ -123,6 +131,11 @@ node_ptr_t gir::Graph::addPort(bool isVar) {
     size_t idx = node->index();
     ports_->push_back({idx, isVar});
     return node;
+}
+
+void gir::Graph::addSubGraph(const graph_ptr_t &graph) {
+    // here we assume that the subgraph is a new blank graph
+    subGraphs_.push_back(graph);
 }
 
 void gir::Graph::setOutput(const node_ptr_t &node) { output_ = node; }

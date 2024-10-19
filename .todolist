@@ -1,5 +1,12 @@
-[0.0.9]
-修复三元表达式解析问题
-修复lambda表达式ast解析问题
+[0.0.10]
 为ast添加token range
-修复map遇到的问题
+精确报错
+func decl
+use sort
+
+[0.0.11]
+dumppass
+schedule
+graphviz
+
+[0.0.12]
