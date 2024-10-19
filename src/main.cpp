@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,7 @@
 using namespace antlr4;
 using namespace std;
 
-// #define DEBUG_LEVEL 1
+#define DEBUG_LEVEL -1
 
 int main(int argc, char *argv[]) {
     if (!parseArgs(argc, argv))

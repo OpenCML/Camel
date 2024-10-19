@@ -101,7 +101,7 @@ entityExpr
     ;
 
 ternaryExpr
-    : relationalExpr ('?' ternaryExpr ':' ternaryExpr)?
+    : logicalOrExpr ('?' ternaryExpr ':' ternaryExpr)?
     ;
 
 logicalOrExpr

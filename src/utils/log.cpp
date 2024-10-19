@@ -12,15 +12,11 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 18, 2024
+ * Created: Oct. 19, 2024
  * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "context.h"
+#include "log.h"
 
-Context::Context()
-    : rootGraph_(gir::Graph::create()), scope_(node_scope_t::create()),
-      opScope_(operator_scope_t::create(globalOperators)) {
-    currGraph_ = rootGraph_;
-}
+size_t __depth__ = 0;

@@ -282,7 +282,7 @@ void opencmlParserInitialize() {
   	3,56,28,0,444,443,1,0,0,0,444,445,1,0,0,0,445,447,1,0,0,0,446,448,5,8,
   	0,0,447,446,1,0,0,0,447,448,1,0,0,0,448,449,1,0,0,0,449,450,5,14,0,0,
   	450,83,1,0,0,0,451,454,3,86,43,0,452,453,7,2,0,0,453,455,3,86,43,0,454,
-  	452,1,0,0,0,454,455,1,0,0,0,455,85,1,0,0,0,456,462,3,94,47,0,457,458,
+  	452,1,0,0,0,454,455,1,0,0,0,455,85,1,0,0,0,456,462,3,88,44,0,457,458,
   	5,23,0,0,458,459,3,86,43,0,459,460,5,1,0,0,460,461,3,86,43,0,461,463,
   	1,0,0,0,462,457,1,0,0,0,462,463,1,0,0,0,463,87,1,0,0,0,464,469,3,90,45,
   	0,465,466,5,24,0,0,466,468,3,90,45,0,467,465,1,0,0,0,468,471,1,0,0,0,
@@ -3571,8 +3571,8 @@ OpenCMLParser::TernaryExprContext::TernaryExprContext(ParserRuleContext *parent,
   : antlr4::RuleContextWithAltNum(parent, invokingState) {
 }
 
-OpenCMLParser::RelationalExprContext* OpenCMLParser::TernaryExprContext::relationalExpr() {
-  return getRuleContext<OpenCMLParser::RelationalExprContext>(0);
+OpenCMLParser::LogicalOrExprContext* OpenCMLParser::TernaryExprContext::logicalOrExpr() {
+  return getRuleContext<OpenCMLParser::LogicalOrExprContext>(0);
 }
 
 std::vector<OpenCMLParser::TernaryExprContext *> OpenCMLParser::TernaryExprContext::ternaryExpr() {
@@ -3610,7 +3610,7 @@ OpenCMLParser::TernaryExprContext* OpenCMLParser::ternaryExpr() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(456);
-    relationalExpr();
+    logicalOrExpr();
     setState(462);
     _errHandler->sync(this);
 
@@ -3671,7 +3671,6 @@ std::any OpenCMLParser::LogicalOrExprContext::accept(tree::ParseTreeVisitor *vis
 OpenCMLParser::LogicalOrExprContext* OpenCMLParser::logicalOrExpr() {
   LogicalOrExprContext *_localctx = _tracker.createInstance<LogicalOrExprContext>(_ctx, getState());
   enterRule(_localctx, 88, OpenCMLParser::RuleLogicalOrExpr);
-  size_t _la = 0;
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -3681,20 +3680,23 @@ OpenCMLParser::LogicalOrExprContext* OpenCMLParser::logicalOrExpr() {
     exitRule();
   });
   try {
+    size_t alt;
     enterOuterAlt(_localctx, 1);
     setState(464);
     logicalAndExpr();
     setState(469);
     _errHandler->sync(this);
-    _la = _input->LA(1);
-    while (_la == OpenCMLParser::T__23) {
-      setState(465);
-      match(OpenCMLParser::T__23);
-      setState(466);
-      logicalAndExpr();
+    alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 57, _ctx);
+    while (alt != 2 && alt != atn::ATN::INVALID_ALT_NUMBER) {
+      if (alt == 1) {
+        setState(465);
+        match(OpenCMLParser::T__23);
+        setState(466);
+        logicalAndExpr(); 
+      }
       setState(471);
       _errHandler->sync(this);
-      _la = _input->LA(1);
+      alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 57, _ctx);
     }
    
   }
@@ -3737,7 +3739,6 @@ std::any OpenCMLParser::LogicalAndExprContext::accept(tree::ParseTreeVisitor *vi
 OpenCMLParser::LogicalAndExprContext* OpenCMLParser::logicalAndExpr() {
   LogicalAndExprContext *_localctx = _tracker.createInstance<LogicalAndExprContext>(_ctx, getState());
   enterRule(_localctx, 90, OpenCMLParser::RuleLogicalAndExpr);
-  size_t _la = 0;
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -3747,20 +3748,23 @@ OpenCMLParser::LogicalAndExprContext* OpenCMLParser::logicalAndExpr() {
     exitRule();
   });
   try {
+    size_t alt;
     enterOuterAlt(_localctx, 1);
     setState(472);
     equalityExpr();
     setState(477);
     _errHandler->sync(this);
-    _la = _input->LA(1);
-    while (_la == OpenCMLParser::T__24) {
-      setState(473);
-      match(OpenCMLParser::T__24);
-      setState(474);
-      equalityExpr();
+    alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 58, _ctx);
+    while (alt != 2 && alt != atn::ATN::INVALID_ALT_NUMBER) {
+      if (alt == 1) {
+        setState(473);
+        match(OpenCMLParser::T__24);
+        setState(474);
+        equalityExpr(); 
+      }
       setState(479);
       _errHandler->sync(this);
-      _la = _input->LA(1);
+      alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 58, _ctx);
     }
    
   }
@@ -3813,31 +3817,32 @@ OpenCMLParser::EqualityExprContext* OpenCMLParser::equalityExpr() {
     exitRule();
   });
   try {
+    size_t alt;
     enterOuterAlt(_localctx, 1);
     setState(480);
     relationalExpr();
     setState(485);
     _errHandler->sync(this);
-    _la = _input->LA(1);
-    while (_la == OpenCMLParser::T__25
+    alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 59, _ctx);
+    while (alt != 2 && alt != atn::ATN::INVALID_ALT_NUMBER) {
+      if (alt == 1) {
+        setState(481);
+        _la = _input->LA(1);
+        if (!(_la == OpenCMLParser::T__25
 
-    || _la == OpenCMLParser::T__26) {
-      setState(481);
-      _la = _input->LA(1);
-      if (!(_la == OpenCMLParser::T__25
-
-      || _la == OpenCMLParser::T__26)) {
-      _errHandler->recoverInline(this);
+        || _la == OpenCMLParser::T__26)) {
+        _errHandler->recoverInline(this);
+        }
+        else {
+          _errHandler->reportMatch(this);
+          consume();
+        }
+        setState(482);
+        relationalExpr(); 
       }
-      else {
-        _errHandler->reportMatch(this);
-        consume();
-      }
-      setState(482);
-      relationalExpr();
       setState(487);
       _errHandler->sync(this);
-      _la = _input->LA(1);
+      alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 59, _ctx);
     }
    
   }
