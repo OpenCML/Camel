@@ -791,7 +791,7 @@ public:
   public:
     TernaryExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    RelationalExprContext *relationalExpr();
+    LogicalOrExprContext *logicalOrExpr();
     std::vector<TernaryExprContext *> ternaryExpr();
     TernaryExprContext* ternaryExpr(size_t i);
 

@@ -1008,13 +1008,13 @@ any Constructor::visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
 
 /*
 ternaryExpr
-    : relationalExpr ('?' ternaryExpr ':' ternaryExpr)?
+    : logicalOrExpr ('?' ternaryExpr ':' ternaryExpr)?
     ;
 */
 any Constructor::visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) {
     debug(0) << "visitTernaryExpr" << endl;
-    const auto &relationalExpr = context->relationalExpr();
-    node_ptr_t condNode = any_cast<node_ptr_t>(visitRelationalExpr(relationalExpr));
+    const auto &logicOrExpr = context->logicalOrExpr();
+    node_ptr_t condNode = any_cast<node_ptr_t>(visitLogicalOrExpr(logicOrExpr));
 
     if (context->children.size() > 1) {
         node_ptr_t execNode = createNode<ExecLoad>();

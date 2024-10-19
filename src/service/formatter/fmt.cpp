@@ -616,11 +616,11 @@ any Formatter::visitEntityExpr(OpenCMLParser::EntityExprContext *context) {
 
 /*
 ternaryExpr
-    : relationalExpr ('?' ternaryExpr ':' ternaryExpr)?
+    : logicalOrExpr ('?' ternaryExpr ':' ternaryExpr)?
     ;
 */
 any Formatter::visitTernaryExpr(OpenCMLParser::TernaryExprContext *context) {
-    string result = any_cast<string>(visitRelationalExpr(context->relationalExpr()));
+    string result = any_cast<string>(visitLogicalOrExpr(context->logicalOrExpr()));
     if (context->children.size() > 1) {
         result += " ? " + any_cast<string>(visitTernaryExpr(context->ternaryExpr(0))) + " : " +
                   any_cast<string>(visitTernaryExpr(context->ternaryExpr(1)));
