@@ -43,8 +43,4 @@ func process(signals: Signal[]): Void {
 let signal1: Signal = [1, 2]
 let signal2: Signal = [3, 4]
 
-inner func comp1(signal: Signal): Signal {
-    return signal.map((x: Int) => x + 1)
-}
-
 [signal1, signal2]->process->print

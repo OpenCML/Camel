@@ -93,15 +93,20 @@ Graph
 
 gir::Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
-      ports_(make_shared<vector<pair<size_t, bool>>>()), sharedConstants_(make_shared<data_vec_t>()),
+      ports_(make_shared<vector<pair<size_t, bool>>>()), subGraphs_(), sharedConstants_(make_shared<data_vec_t>()),
       sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
       rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
-    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_),
+    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(),
       sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
       runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
       runtimeVariables_() {
+    for (const auto &g : other.subGraphs_) {
+        subGraphs_.push_back(
+            make_shared<Graph>(*g)
+        );
+    }
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
     }

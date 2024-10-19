@@ -258,7 +258,7 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
 };
 
 /*
-stmtList : stmt (SEP stmt)* SEP? ;
+stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     enter("StmtList");
