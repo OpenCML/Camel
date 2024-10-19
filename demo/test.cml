@@ -1,15 +1,11 @@
-// baba
+// type Signal = Array<Int, 2>
 
-let a = 1;
+// // atomic func add(sig1: Signal, sig2: Signal): Signal {
+// //     return [sig1[0] + sig2[0], sig1[1] + sig2[1]]
+// // }
 
-// haha
+// inner func map(f: (a: Int) => Int): Signal {
+//     return [f(this[0]), f(this[1])]
+// }
 
-let b = 2
-
-// mama
-
-{
-    a: a,
-    // hah
-    b: b
-}
+let a: (var a: Any) => Any = a
