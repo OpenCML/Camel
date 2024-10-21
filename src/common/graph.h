@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -232,7 +232,9 @@ class FunctorNode : public Node {
 
     static node_ptr_t create(graph_ptr_t graph, const func_ptr_t &func);
 
+    func_ptr_t func() const;
     func_type_ptr_t type() const;
+    std::shared_ptr<FunctorNode> copyTo(graph_ptr_t graph) const;
 
     graph_ptr_t subGraph() const { return func_->graph(); }
     node_ptr_t &withNode() { return inputs_[0]; }

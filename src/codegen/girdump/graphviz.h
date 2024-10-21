@@ -24,6 +24,7 @@
 
 class GraphVizPass : public GraphPass {
     context_ptr_t context_;
+    std::unordered_set<void *> visitedFunc_;
 
     size_t depth_ = 0;
     std::string baseIndent_;

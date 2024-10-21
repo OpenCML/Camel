@@ -1,5 +1,8 @@
-type Signal = Array<Int, 2>
+with <src: Int[]>
+inner func map(in: (a: Int) => Int): Int[] {
+    return [f(src[0]), f(src[1])]
+}
 
-atomic func add(sig1: Signal, sig2: Signal): Signal {
-    return [sig1[0] + sig2[0], sig1[1] + sig2[1]]
+inner func f(any: Any): Void {
+    // print the signal
 }

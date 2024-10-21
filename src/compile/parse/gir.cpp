@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -137,7 +137,8 @@ node_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
 node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
     enter("FUNC");
     node_ptr_t funcNode = visitDeclNode(ast_ptr_cast(ast->childAt(0)));
-    void *key = dynamic_pointer_cast<FunctorNode>(funcNode)->type().get();
+    func_type_ptr_t funcType = dynamic_pointer_cast<FunctorNode>(funcNode)->type();
+    void *key = funcType.get();
     context_->pushScope(key);
     visitExecNode(ast_ptr_cast(ast->childAt(1)));
     context_->popScope(key);
@@ -175,7 +176,9 @@ node_ptr_t Constructor::visitDRefNode(const ast::node_ptr_t &ast) {
         throw runtime_error("Unresolved reference: " + ident);
     }
     leave("DREF");
-    return optNode.value();
+    node_ptr_t res = optNode.value();
+    res->ref();
+    return res;
 }
 
 node_ptr_t Constructor::visitWaitNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
@@ -197,15 +200,21 @@ node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
     node_ptr_t funcNode = nullptr;
     switch (linkNode->type()) {
     case NodeType::SELECT:
+        // TODO: select matched case
         funcNode = select_node_ptr_cast(linkNode)->caseAt(0);
+        if (funcNode->type() == NodeType::FUNCTOR) {
+            funcNode = dynamic_pointer_cast<FunctorNode>(funcNode)->copyTo(context_->graph());
+        }
         break;
 
     default:
         // TODO: consider other node types
         // etc. functor, operator, null(port)
+        // TODO: shall we copy the node?
         funcNode = linkNode;
         break;
     }
+    funcNode->ref();
     Node::link(dataNode, funcNode, 1);
     leave("LINK");
     return funcNode;
@@ -224,12 +233,16 @@ node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
     switch (withNode->type()) {
     case NodeType::SELECT:
         funcNode = select_node_ptr_cast(withNode)->caseAt(0);
+        if (funcNode->type() == NodeType::FUNCTOR) {
+            funcNode = dynamic_pointer_cast<FunctorNode>(funcNode)->copyTo(context_->graph());
+        }
         break;
 
     default:
         funcNode = withNode;
         break;
     }
+    funcNode->ref();
     Node::link(dataNode, funcNode, 0);
     leave("WITH");
     return funcNode;

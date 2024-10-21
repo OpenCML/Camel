@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,13 +84,18 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             break;
         }
         case NodeType::FUNCTOR: {
-            func_node_ptr_t func = func_node_ptr_cast(node);
-            label = func->type()->name();
-            graph_ptr_t subGraph = func->subGraph();
-            res += baseIndent_;
-            pushIndent();
-            res += any_cast<string>(apply(subGraph));
-            popIndent();
+            func_ptr_t func = func_node_ptr_cast(node)->func();
+            func_type_ptr_t type = func->funcType();
+            label = type->name();
+            // cout << pointerToIdent(type->defGraph().get()) << " " << pointerToIdent(graph.get()) << endl;
+            if (func->baseGraph() == graph && visitedFunc_.find(type.get()) == visitedFunc_.end()) {
+                res += baseIndent_;
+                pushIndent();
+                graph_ptr_t subGraph = func->graph();
+                res += any_cast<string>(apply(subGraph));
+                popIndent();
+                visitedFunc_.insert(type.get());
+            }
             shape = "parallelogram";
             break;
         }
@@ -103,8 +108,10 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         default:
             throw runtime_error("Unknown node type");
         }
-        res +=
-            baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
+        if (node->inDegree() > 0 || node->outDegree() > 0) {
+            res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape +
+                   "];\r\n";
+        }
         if (node.get() == retNodePtr) {
             res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + "RET_" + funcId + ";\r\n";
         }
@@ -119,7 +126,7 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
                    " [label=\"" + to_string(i) + "\"];\r\n";
         }
     }
-    res += baseIndent_ + indent_ + "RET_" + funcId + " [label=\"ret\", shape=doublecircle];\r\n";
+    res += baseIndent_ + indent_ + "RET_" + funcId + " [label=\"RET\", shape=doublecircle];\r\n";
     res += baseIndent_ + "}\r\n";
     return res;
 }

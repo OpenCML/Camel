@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,7 @@ gir::Graph::Graph()
       rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
-    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(),
+    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(other.subGraphs_),
       sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
       runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
       runtimeVariables_() {
@@ -304,7 +304,16 @@ node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
     return res;
 }
 
+func_ptr_t FunctorNode::func() const { return func_; }
+
 func_type_ptr_t FunctorNode::type() const { return dynamic_pointer_cast<FunctorType>(func_->type()); }
+
+func_node_ptr_t FunctorNode::copyTo(graph_ptr_t graph) const {
+    func_node_ptr_t node =
+        make_shared<FunctorNode>(graph, dynamic_pointer_cast<FunctorData>(func_->clone()));
+    graph->addNode(node);
+    return node;
+}
 
 inline shared_ptr<ParamsData> inputToParams(const node_ptr_t &node, const type_ptr_t &type) {
     data_ptr_t data = node->data();
