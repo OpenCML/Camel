@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,7 @@ class FunctorData : public Data {
     virtual ~FunctorData() = default;
 
     GraphIR::graph_ptr_t graph() const;
+    std::string name() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;

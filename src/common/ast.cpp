@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 using namespace std;
 using namespace ast;
 
-string pointerToHex(const void *ptr) {
+inline string pointerToHex(const void *ptr) {
     stringstream ss;
     ss << "0x" << hex << setw(sizeof(void *) * 2) << setfill('0') << reinterpret_cast<uintptr_t>(ptr);
     return ss.str();

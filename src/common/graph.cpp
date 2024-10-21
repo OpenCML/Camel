@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -103,9 +103,7 @@ gir::Graph::Graph(Graph &other)
       runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
       runtimeVariables_() {
     for (const auto &g : other.subGraphs_) {
-        subGraphs_.push_back(
-            make_shared<Graph>(*g)
-        );
+        subGraphs_.push_back(make_shared<Graph>(*g));
     }
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
@@ -119,6 +117,15 @@ graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
         graph->addSubGraph(res);
     }
     return res;
+}
+
+void gir::Graph::setFunc(const func_ptr_t &func) { func_ = func; }
+
+func_ptr_t gir::Graph::func() const {
+    if (func_.expired()) {
+        throw runtime_error("This graph has not been set to a functor.");
+    }
+    return func_.lock();
 }
 
 void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }

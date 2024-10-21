@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -145,6 +145,8 @@ class Graph : public Node {
         bool shared;
     };
 
+    func_wptr_t func_;
+
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
     std::shared_ptr<std::vector<std::pair<size_t, bool>>> ports_;
@@ -162,6 +164,9 @@ class Graph : public Node {
     ~Graph() = default;
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr);
+
+    void setFunc(const func_ptr_t &func);
+    func_ptr_t func() const;
 
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isVar = false);
@@ -247,6 +252,8 @@ class OperatorNode : public Node {
   public:
     OperatorNode(graph_ptr_t graph, Operator op);
     ~OperatorNode() = default;
+
+    std::string opName() const { return operator_.name(); }
 
     static node_ptr_t create(graph_ptr_t graph, Operator op);
 };

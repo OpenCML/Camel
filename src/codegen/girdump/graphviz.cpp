@@ -18,9 +18,83 @@
  */
 
 #include "graphviz.h"
+#include <iomanip>
+#include <sstream>
+
+using namespace std;
+using namespace gir;
+
+inline string pointerToHex(const void *ptr) {
+    stringstream ss;
+    ss << "0x" << hex << setw(sizeof(void *) * 2) << setfill('0') << reinterpret_cast<uintptr_t>(ptr);
+    return ss.str();
+}
+
+void GraphVizPass::pushIndent() {
+    indent_ += string(tabSize_, ' ');
+    depth_++;
+}
+
+void GraphVizPass::popIndent() {
+    indent_ = indent_.substr(0, indent_.size() - tabSize_);
+    depth_--;
+}
 
 void GraphVizPass::reset() {}
 
-void GraphVizPass::apply(gir::graph_ptr_t &graph) {}
+void GraphVizPass::reset(context_ptr_t &context) { context_ = context; }
 
-std::any GraphVizPass::result() {}
+std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
+    string res;
+    if (depth_ == 0) {
+        res += "digraph GraphIR {\r\n";
+    } else {
+        func_ptr_t func = graph->func();
+        res += "subgraph cluster_" + pointerToHex(graph.get()) + " {\r\n";
+        res += indent_ + "label=" + func->name() + ";\r\n";
+    }
+    size_t cnt = 0;
+    pushIndent();
+    for (const auto &node : graph->nodes()) {
+        res += indent_;
+        string label;
+        switch (node->type()) {
+        case NodeType::STRUCT:
+            [[fallthrough]];
+        case NodeType::DATA: {
+            const auto &name = context_->getNodeIdent(node);
+            if (name.has_value()) {
+                label = name.value();
+            } else {
+                label = to_string(cnt++);
+            }
+            break;
+        }
+        case NodeType::FUNCTOR: {
+            func_node_ptr_t func = func_node_ptr_cast(node);
+            label = func->type()->name();
+            graph_ptr_t subGraph = func->subGraph();
+            res += any_cast<string>(subGraph);
+            break;
+        }
+        case NodeType::OPERATOR: {
+            op_node_ptr_t op = op_node_ptr_cast(node);
+            label = op->opName();
+            break;
+        }
+        default:
+            throw runtime_error("Unknown node type");
+        }
+        res += pointerToHex(node.get()) + " [label=" + label + "];\r\n";
+    }
+    for (const auto &node : graph->nodes()) {
+        const auto &vec = node->outputs();
+        for (size_t i = 0; i < vec.size(); i++) {
+            res += indent_ + pointerToHex(node.get()) + " -> " + pointerToHex(vec[i].get()) + "[label=" + to_string(i) +
+                   "];\r\n";
+        }
+    }
+    popIndent();
+    res += "}\r\n";
+    return res;
+}

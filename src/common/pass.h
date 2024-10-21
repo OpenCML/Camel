@@ -27,6 +27,5 @@ class GraphPass {
     virtual ~GraphPass() = default;
 
     virtual void reset() = 0;
-    virtual void apply(gir::graph_ptr_t &graph) = 0;
-    virtual std::any result() = 0;
+    virtual std::any apply(gir::graph_ptr_t &graph) = 0;
 };

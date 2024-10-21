@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,9 +23,16 @@
 using namespace std;
 using namespace GraphIR;
 
-FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph) : Data(type), graph_(graph) {};
+FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph) : Data(type), graph_(graph) {
+    graph_->setFunc(dynamic_pointer_cast<FunctorData>(shared_from_this()));
+};
 
 GraphIR::graph_ptr_t FunctorData::graph() const { return graph_; }
+
+std::string FunctorData::name() const {
+    auto func = dynamic_pointer_cast<FunctorType>(type_);
+    return func->name();
+}
 
 bool FunctorData::equals(const data_ptr_t &other) const { return true; }
 

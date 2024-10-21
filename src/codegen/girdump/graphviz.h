@@ -19,14 +19,23 @@
 
 #pragma once
 
+#include "common/context.h"
 #include "common/pass.h"
 
 class GraphVizPass : public GraphPass {
+    context_ptr_t context_;
+    size_t depth_ = 0;
+    size_t tabSize_ = 4;
+    std::string indent_;
+
+    void pushIndent();
+    void popIndent();
+
   public:
-    GraphVizPass() = default;
+    GraphVizPass(const context_ptr_t &context) : context_(context) {};
     virtual ~GraphVizPass() = default;
 
     void reset() override;
-    void apply(gir::graph_ptr_t &graph) override;
-    std::any result() override;
+    void reset(context_ptr_t &context);
+    std::any apply(gir::graph_ptr_t &graph) override;
 };

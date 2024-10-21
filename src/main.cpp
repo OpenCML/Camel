@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include "antlr/OpenCMLParser.h"
 #include "antlr4-runtime.h"
 
+#include "codegen/girdump/graphviz.h"
 #include "common/error/error.h"
 #include "common/error/json.h"
 #include "common/type.h"
@@ -190,12 +191,14 @@ int main(int argc, char *argv[]) {
                 auto ctx = make_shared<Context>();
                 auto visitor = gir::Constructor(ctx);
                 try {
-
                     auto graph = visitor.construct(ast);
                 } catch (exception &e) {
                     error << "GIR construction failed: " << e.what() << endl;
                     return 1;
                 }
+                GraphVizPass pass(ctx);
+                auto res = pass.apply(ctx->graph());
+                os << any_cast<string>(res);
                 return 0;
             }
         }
