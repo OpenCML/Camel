@@ -173,6 +173,7 @@ class Graph : public Node {
     node_ptr_t addPort(bool isVar = false);
     void addSubGraph(const graph_ptr_t &graph);
 
+    const node_ptr_t &output() const { return output_; }
     void setOutput(const node_ptr_t &node);
 
     // set a constant to a variable, return the index of the variable

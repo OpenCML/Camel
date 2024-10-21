@@ -39,14 +39,15 @@ void GraphVizPass::reset(context_ptr_t &context) { context_ = context; }
 
 inline string pointerToIdent(const void *ptr) {
     stringstream ss;
-    ss << "P" << hex << setw(8) << setfill('0') << reinterpret_cast<uintptr_t>(ptr);
+    ss << "P" << hex << uppercase << setw(8) << setfill('0') << reinterpret_cast<uintptr_t>(ptr) << dec << nouppercase;
     return ss.str();
 }
 
 std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
+    string funcId = pointerToIdent(graph.get());
     string res = baseIndent_;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
-    void *ret;
+    void *retNodePtr = graph->output().get();
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
@@ -55,13 +56,14 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         for (const auto &[idx, _, isVar] : graph->ports()) {
             portsNameMap[idx] = make_pair(type->nameAt(idx), isVar);
         }
-        res += "subgraph cluster_" + pointerToIdent(graph.get()) + " {\r\n";
+        res += "subgraph cluster_" + funcId + " {\r\n";
         res += baseIndent_ + indent_ + "label=\"" + func->name() + "\";\r\n";
     }
     size_t cnt = 0;
     node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); i++) {
         string label;
+        string shape;
         const node_ptr_t &node = nodes[i];
         switch (node->type()) {
         case NodeType::STRUCT:
@@ -69,13 +71,15 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         case NodeType::DATA: {
             if (portsNameMap.find(i) != portsNameMap.end()) {
                 label = portsNameMap[i].first;
+                shape = "circle";
             } else {
                 const auto &name = context_->getNodeIdent(node);
                 if (name.has_value()) {
                     label = name.value();
                 } else {
-                    label = to_string(cnt++);
+                    label = "D" + to_string(cnt++);
                 }
+                shape = "cylinder";
             }
             break;
         }
@@ -87,17 +91,23 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             pushIndent();
             res += any_cast<string>(apply(subGraph));
             popIndent();
+            shape = "parallelogram";
             break;
         }
         case NodeType::OPERATOR: {
             op_node_ptr_t op = op_node_ptr_cast(node);
             label = op->opName();
+            shape = "diamond";
             break;
         }
         default:
             throw runtime_error("Unknown node type");
         }
-        res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\"];\r\n";
+        res +=
+            baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
+        if (node.get() == retNodePtr) {
+            res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + "RET_" + funcId + ";\r\n";
+        }
     }
     for (const auto &node : graph->nodes()) {
         const auto &vec = node->inputs();
@@ -109,6 +119,7 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
                    " [label=\"" + to_string(i) + "\"];\r\n";
         }
     }
+    res += baseIndent_ + indent_ + "RET_" + funcId + " [label=\"ret\", shape=doublecircle];\r\n";
     res += baseIndent_ + "}\r\n";
     return res;
 }
