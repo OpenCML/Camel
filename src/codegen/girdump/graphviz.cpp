@@ -18,25 +18,18 @@
  */
 
 #include "graphviz.h"
-#include <iomanip>
-#include <sstream>
+#include "utils/log.h"
 
 using namespace std;
 using namespace gir;
 
-inline string pointerToHex(const void *ptr) {
-    stringstream ss;
-    ss << "0x" << hex << setw(sizeof(void *) * 2) << setfill('0') << reinterpret_cast<uintptr_t>(ptr);
-    return ss.str();
-}
-
 void GraphVizPass::pushIndent() {
-    indent_ += string(tabSize_, ' ');
+    baseIndent_ += indent_;
     depth_++;
 }
 
 void GraphVizPass::popIndent() {
-    indent_ = indent_.substr(0, indent_.size() - tabSize_);
+    baseIndent_ = baseIndent_.substr(0, baseIndent_.size() - indent_.size());
     depth_--;
 }
 
@@ -45,18 +38,16 @@ void GraphVizPass::reset() {}
 void GraphVizPass::reset(context_ptr_t &context) { context_ = context; }
 
 std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
-    string res;
+    string res = baseIndent_;
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
         func_ptr_t func = graph->func();
         res += "subgraph cluster_" + pointerToHex(graph.get()) + " {\r\n";
-        res += indent_ + "label=" + func->name() + ";\r\n";
+        res += baseIndent_ + indent_ + "label=" + func->name() + ";\r\n";
     }
     size_t cnt = 0;
-    pushIndent();
     for (const auto &node : graph->nodes()) {
-        res += indent_;
         string label;
         switch (node->type()) {
         case NodeType::STRUCT:
@@ -74,7 +65,10 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             func_node_ptr_t func = func_node_ptr_cast(node);
             label = func->type()->name();
             graph_ptr_t subGraph = func->subGraph();
+            res += baseIndent_;
+            pushIndent();
             res += any_cast<string>(apply(subGraph));
+            popIndent();
             break;
         }
         case NodeType::OPERATOR: {
@@ -85,16 +79,15 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         default:
             throw runtime_error("Unknown node type");
         }
-        res += pointerToHex(node.get()) + " [label=" + label + "];\r\n";
+        res += baseIndent_ + indent_ + pointerToHex(node.get()) + " [label=" + label + "];\r\n";
     }
     for (const auto &node : graph->nodes()) {
         const auto &vec = node->outputs();
         for (size_t i = 0; i < vec.size(); i++) {
-            res += indent_ + pointerToHex(node.get()) + " -> " + pointerToHex(vec[i].get()) +
+            res += baseIndent_ + indent_ + pointerToHex(node.get()) + " -> " + pointerToHex(vec[i].get()) +
                    " [label=" + to_string(i) + "];\r\n";
         }
     }
-    popIndent();
-    res += "}\r\n";
+    res += baseIndent_ + "}\r\n";
     return res;
 }

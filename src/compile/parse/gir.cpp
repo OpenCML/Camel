@@ -21,7 +21,7 @@
 #include "common/error/build.h"
 #include "utils/log.h"
 
-#define DEBUG_LEVEL 1
+#define DEBUG_LEVEL 0
 
 using namespace std;
 using namespace gir;
@@ -127,7 +127,7 @@ node_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
     }
     func_ptr_t func = make_shared<FunctorData>(funcType, graph);
     graph->setFunc(func);
-    const auto &funcNode = gir::FunctorNode::create(graph, func);
+    const auto &funcNode = gir::FunctorNode::create(graph->outer(), func);
     context_->popScope();
     context_->cacheNode(key, funcNode);
     leave("DECL");

@@ -17,20 +17,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include <iomanip>
 #include <iterator>
-#include <sstream>
 
 #include "ast.h"
+#include "utils/log.h"
 
 using namespace std;
 using namespace ast;
-
-inline string pointerToHex(const void *ptr) {
-    stringstream ss;
-    ss << "0x" << hex << setw(sizeof(void *) * 2) << setfill('0') << reinterpret_cast<uintptr_t>(ptr);
-    return ss.str();
-}
 
 const string Load::typeStr() const {
     switch (type_) {

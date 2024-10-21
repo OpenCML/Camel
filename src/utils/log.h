@@ -19,7 +19,9 @@
 
 #pragma once
 
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 #define _red(x) "\033[31m" << x << "\033[0m"
 #define _blue(x) "\033[34m" << x << "\033[0m"
@@ -41,6 +43,12 @@ inline std::string repeatPattern(const std::string &pattern, int n) {
     return result;
 }
 
+inline std::string pointerToHex(const void *ptr) {
+    std::stringstream ss;
+    ss << "0x" << std::hex << std::setw(sizeof(void *) * 2) << std::setfill('0') << reinterpret_cast<uintptr_t>(ptr);
+    return ss.str();
+}
+
 // #define DEBUG_LEVEL -1
 
 #define debug(level)                                                                                                   \
@@ -54,7 +62,7 @@ inline std::string repeatPattern(const std::string &pattern, int n) {
 #define enter(target)                                                                                                  \
     do {                                                                                                               \
         if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << repeatPattern("|   ", __depth__) << _blue("[enter] ") << target << std::endl;                   \
+            std::cout << repeatPattern("|   ", __depth__) << _blue("[enter] ") << target << std::endl;                 \
         }                                                                                                              \
         __depth__++;                                                                                                   \
     } while (false)
@@ -63,7 +71,7 @@ inline std::string repeatPattern(const std::string &pattern, int n) {
     do {                                                                                                               \
         __depth__--;                                                                                                   \
         if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << repeatPattern("|   ", __depth__) << _green("[leave] ") << target << std::endl;                  \
+            std::cout << repeatPattern("|   ", __depth__) << _green("[leave] ") << target << std::endl;                \
         }                                                                                                              \
     } while (false)
 

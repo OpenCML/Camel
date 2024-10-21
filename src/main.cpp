@@ -197,7 +197,7 @@ int main(int argc, char *argv[]) {
                     return 1;
                 }
                 GraphVizPass pass(ctx);
-                auto res = pass.apply(ctx->graph());
+                auto res = pass.apply(ctx->rootGraph());
                 os << any_cast<string>(res);
                 return 0;
             }

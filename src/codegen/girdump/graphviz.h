@@ -24,9 +24,10 @@
 
 class GraphVizPass : public GraphPass {
     context_ptr_t context_;
+
     size_t depth_ = 0;
-    size_t tabSize_ = 4;
-    std::string indent_;
+    std::string baseIndent_;
+    const std::string indent_ = "    ";
 
     void pushIndent();
     void popIndent();

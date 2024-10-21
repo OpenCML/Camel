@@ -128,7 +128,9 @@ func_ptr_t gir::Graph::func() const {
     return func_.lock();
 }
 
-void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
+void gir::Graph::addNode(const node_ptr_t &node) {
+    nodes_->push_back(node);
+}
 
 node_ptr_t gir::Graph::addPort(bool isVar) {
     node_ptr_t node = DataNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);

@@ -50,6 +50,8 @@ class Context {
 
     node_scope_t &scope() { return *scope_; }
     operator_scope_t &opScope() { return *opScope_; }
+
+    gir::graph_ptr_t &rootGraph() { return rootGraph_; }
     gir::graph_ptr_t &graph() { return currGraph_; }
 
     std::optional<std::string> getNodeIdent(const gir::node_ptr_t &node);
