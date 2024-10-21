@@ -18,19 +18,19 @@ inner func comp1(signal: Signal): Signal {
 }
 
 inner func comp2(signal: Signal): Signal {
-    return signal.map((x: Int) => x / 2);
+    return signal.map((x: Int) => x / 2)
 }
 
 inner func comp3(signal: Signal): Signal {
-    return signal.map((x: Int) => x * 3);
+    return signal.map((x: Int) => x * 3)
 }
 
 inner func analyzer1(signal: Signal): Void {
-    print('Analyzer 1: ', signal);
+    print('Analyzer 1: ', signal)
 }
 
 inner func analyzer2(signal: Signal): Void {
-    print('Analyzer 2: ', signal);
+    print('Analyzer 2: ', signal)
 }
 
 func process(signals: Signal[]): Void {
