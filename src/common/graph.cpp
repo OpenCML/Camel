@@ -93,8 +93,8 @@ Graph
 
 gir::Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
-      ports_(make_shared<vector<pair<size_t, bool>>>()), subGraphs_(), sharedConstants_(make_shared<data_vec_t>()),
-      sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
+      ports_(make_shared<vector<tuple<size_t, size_t, bool>>>()), subGraphs_(),
+      sharedConstants_(make_shared<data_vec_t>()), sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
       rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
@@ -128,9 +128,7 @@ func_ptr_t gir::Graph::func() const {
     return func_.lock();
 }
 
-void gir::Graph::addNode(const node_ptr_t &node) {
-    nodes_->push_back(node);
-}
+void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
 
 node_ptr_t gir::Graph::addPort(bool isVar) {
     node_ptr_t node = DataNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);
@@ -138,7 +136,7 @@ node_ptr_t gir::Graph::addPort(bool isVar) {
         node->makeVariable();
     }
     size_t idx = node->index();
-    ports_->push_back({idx, isVar});
+    ports_->push_back({nodes_->size() - 1, idx, isVar});
     return node;
 }
 
@@ -230,11 +228,11 @@ void gir::Graph::fulfill(const data_vec_t &dataList) {
     cml_assert(dataList.size() == ports_->size(), "Data list size does not match ports size.");
     for (size_t i = 0; i < dataList.size(); i++) {
         const auto &data = dataList[i];
-        const auto &[index, isVar] = ports_->at(i);
+        const auto &[_, dataIndex, isVar] = ports_->at(i);
         if (isVar) {
-            setVariable(index, data, false);
+            setVariable(dataIndex, data, false);
         } else {
-            setConstant(index, data, false);
+            setConstant(dataIndex, data, false);
         }
     }
 }

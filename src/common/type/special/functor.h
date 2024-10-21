@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,6 +48,7 @@ class FunctorType : public SpecialType {
                 const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
 
     const std::string &name() const { return name_; }
+    const std::string &nameAt(size_t idx) const;
 
     void addModifier(FunctorModifier modifier);
     void setModifiers(const std::unordered_set<FunctorModifier> &modifiers);

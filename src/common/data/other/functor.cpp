@@ -32,6 +32,10 @@ std::string FunctorData::name() const {
     return func->name();
 }
 
+func_type_ptr_t FunctorData::funcType() const {
+    return dynamic_pointer_cast<FunctorType>(type_);
+}
+
 bool FunctorData::equals(const data_ptr_t &other) const { return true; }
 
 data_ptr_t FunctorData::convert(type_ptr_t target, bool inplace) {

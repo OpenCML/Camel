@@ -1,7 +1,5 @@
-// Total system
-SignalGenEl->SignalProcOp->SignalRecvEl->SignalProcOp->SignalRecvEl;
+type Signal = Array<Int, 2>
 
-// Path: demo/test.cml
-// Compare this snippet from demo/fmt.cml:
-
-let a = 1
+atomic func add(sig1: Signal, sig2: Signal): Signal {
+    return [sig1[0] + sig2[0], sig1[1] + sig2[1]]
+}

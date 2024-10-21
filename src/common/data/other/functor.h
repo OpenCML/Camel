@@ -35,6 +35,7 @@ class FunctorData : public Data {
 
     GraphIR::graph_ptr_t graph() const;
     std::string name() const;
+    func_type_ptr_t funcType() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;

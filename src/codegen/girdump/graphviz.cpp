@@ -45,25 +45,37 @@ inline string pointerToIdent(const void *ptr) {
 
 std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     string res = baseIndent_;
+    unordered_map<size_t, pair<string, bool>> portsNameMap;
+    void *ret;
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
         func_ptr_t func = graph->func();
+        func_type_ptr_t type = func->funcType();
+        for (const auto &[idx, _, isVar] : graph->ports()) {
+            portsNameMap[idx] = make_pair(type->nameAt(idx), isVar);
+        }
         res += "subgraph cluster_" + pointerToIdent(graph.get()) + " {\r\n";
         res += baseIndent_ + indent_ + "label=\"" + func->name() + "\";\r\n";
     }
     size_t cnt = 0;
-    for (const auto &node : graph->nodes()) {
+    node_vec_t &nodes = graph->nodes();
+    for (size_t i = 0; i < nodes.size(); i++) {
         string label;
+        const node_ptr_t &node = nodes[i];
         switch (node->type()) {
         case NodeType::STRUCT:
             [[fallthrough]];
         case NodeType::DATA: {
-            const auto &name = context_->getNodeIdent(node);
-            if (name.has_value()) {
-                label = name.value();
+            if (portsNameMap.find(i) != portsNameMap.end()) {
+                label = portsNameMap[i].first;
             } else {
-                label = to_string(cnt++);
+                const auto &name = context_->getNodeIdent(node);
+                if (name.has_value()) {
+                    label = name.value();
+                } else {
+                    label = to_string(cnt++);
+                }
             }
             break;
         }

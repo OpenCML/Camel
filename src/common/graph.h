@@ -149,7 +149,8 @@ class Graph : public Node {
 
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
-    std::shared_ptr<std::vector<std::pair<size_t, bool>>> ports_;
+    // nodeIndex, dataIndex, isVar
+    std::shared_ptr<std::vector<std::tuple<size_t, size_t, bool>>> ports_;
     std::vector<graph_ptr_t> subGraphs_;
 
     std::shared_ptr<data_vec_t> sharedConstants_;
@@ -184,6 +185,7 @@ class Graph : public Node {
     void setConstant(size_t index, const data_ptr_t &data, bool shared = false);
     void setVariable(size_t index, const data_ptr_t &data, bool shared = false);
 
+    const std::vector<std::tuple<size_t, size_t, bool>> &ports() const { return *ports_; }
     node_vec_t &nodes() { return *nodes_; }
 
     void fulfill(const data_vec_t &dataList);
