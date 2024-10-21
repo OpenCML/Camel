@@ -37,14 +37,20 @@ void GraphVizPass::reset() {}
 
 void GraphVizPass::reset(context_ptr_t &context) { context_ = context; }
 
+inline string pointerToIdent(const void *ptr) {
+    stringstream ss;
+    ss << "P" << hex << setw(8) << setfill('0') << reinterpret_cast<uintptr_t>(ptr);
+    return ss.str();
+}
+
 std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     string res = baseIndent_;
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
         func_ptr_t func = graph->func();
-        res += "subgraph cluster_" + pointerToHex(graph.get()) + " {\r\n";
-        res += baseIndent_ + indent_ + "label=" + func->name() + ";\r\n";
+        res += "subgraph cluster_" + pointerToIdent(graph.get()) + " {\r\n";
+        res += baseIndent_ + indent_ + "label=\"" + func->name() + "\";\r\n";
     }
     size_t cnt = 0;
     for (const auto &node : graph->nodes()) {
@@ -79,13 +85,16 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         default:
             throw runtime_error("Unknown node type");
         }
-        res += baseIndent_ + indent_ + pointerToHex(node.get()) + " [label=" + label + "];\r\n";
+        res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\"];\r\n";
     }
     for (const auto &node : graph->nodes()) {
-        const auto &vec = node->outputs();
+        const auto &vec = node->inputs();
         for (size_t i = 0; i < vec.size(); i++) {
-            res += baseIndent_ + indent_ + pointerToHex(node.get()) + " -> " + pointerToHex(vec[i].get()) +
-                   " [label=" + to_string(i) + "];\r\n";
+            if (vec[i] == nullptr) {
+                continue;
+            }
+            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
+                   " [label=\"" + to_string(i) + "\"];\r\n";
         }
     }
     res += baseIndent_ + "}\r\n";
