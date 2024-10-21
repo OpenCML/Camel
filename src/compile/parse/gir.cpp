@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,6 +126,7 @@ node_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
         context_->insertData(name, node);
     }
     func_ptr_t func = make_shared<FunctorData>(funcType, graph);
+    graph->setFunc(func);
     const auto &funcNode = gir::FunctorNode::create(graph, func);
     context_->popScope();
     context_->cacheNode(key, funcNode);

@@ -74,7 +74,7 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             func_node_ptr_t func = func_node_ptr_cast(node);
             label = func->type()->name();
             graph_ptr_t subGraph = func->subGraph();
-            res += any_cast<string>(subGraph);
+            res += any_cast<string>(apply(subGraph));
             break;
         }
         case NodeType::OPERATOR: {
@@ -90,8 +90,8 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     for (const auto &node : graph->nodes()) {
         const auto &vec = node->outputs();
         for (size_t i = 0; i < vec.size(); i++) {
-            res += indent_ + pointerToHex(node.get()) + " -> " + pointerToHex(vec[i].get()) + "[label=" + to_string(i) +
-                   "];\r\n";
+            res += indent_ + pointerToHex(node.get()) + " -> " + pointerToHex(vec[i].get()) +
+                   " [label=" + to_string(i) + "];\r\n";
         }
     }
     popIndent();

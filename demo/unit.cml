@@ -1,8 +1,6 @@
 let a = 1
 let b = 2
 
-use { Rx_El_mQAM_BER, Tx_El_mQAM } from 'phot/tr';
-
 func add(a: Int, b: Int): Int {
     return a + b
 }

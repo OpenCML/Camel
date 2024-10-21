@@ -23,9 +23,7 @@
 using namespace std;
 using namespace GraphIR;
 
-FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph) : Data(type), graph_(graph) {
-    graph_->setFunc(dynamic_pointer_cast<FunctorData>(shared_from_this()));
-};
+FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph) : Data(type), graph_(graph) {};
 
 GraphIR::graph_ptr_t FunctorData::graph() const { return graph_; }
 
