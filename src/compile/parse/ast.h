@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -118,6 +118,7 @@ class Constructor : public OpenCMLVisitor {
     node_ptr_t root_;
     size_t indentIndex_ = 0;
     scope_ptr_t<std::string, type_ptr_t> typeScope_;
+    std::unordered_map<void*, func_type_ptr_t> funcDecls_;
 
     std::queue<BuildWarning> warnQueue_;
 
@@ -172,6 +173,8 @@ class Constructor : public OpenCMLVisitor {
     std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
 
     std::any visitWithDef(OpenCMLParser::WithDefContext *context);
+
+    std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
 
     std::any visitFuncDef(OpenCMLParser::FuncDefContext *context);
 

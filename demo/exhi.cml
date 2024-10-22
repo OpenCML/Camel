@@ -10,7 +10,7 @@ inner func print(any: Any): Void {
 
 with <src: Signal>
 inner func map(f: (a: Int) => Int): Signal {
-    return [f(src[0]), f(src[1])]
+    return [f(src[0]), f(src[1])] // f is data
 }
 
 inner func comp1(signal: Signal): Signal {
@@ -18,19 +18,19 @@ inner func comp1(signal: Signal): Signal {
 }
 
 inner func comp2(signal: Signal): Signal {
-    return signal.map((x: Int) => x / 2);
+    return signal.map((x: Int) => x / 2)
 }
 
 inner func comp3(signal: Signal): Signal {
-    return signal.map((x: Int) => x * 3);
+    return signal.map((x: Int) => x * 3)
 }
 
 inner func analyzer1(signal: Signal): Void {
-    print('Analyzer 1: ', signal);
+    print('Analyzer 1: ', signal)
 }
 
 inner func analyzer2(signal: Signal): Void {
-    print('Analyzer 2: ', signal);
+    print('Analyzer 2: ', signal)
 }
 
 func process(signals: Signal[]): Void {

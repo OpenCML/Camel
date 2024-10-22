@@ -18,6 +18,7 @@
  */
 
 #include "fmt.h"
+#include <algorithm>
 
 using namespace std;
 
@@ -96,11 +97,24 @@ any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
 };
 
 /*
-stmtList : stmt (SEP stmt)* SEP? ;
+stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context, bool padding, bool forceMultiLine,
                              bool trailingComma) {
-    return formatList(context->stmt(), context, "; ", (preferSemis ? ";" : ""), trailingComma, padding, forceMultiLine);
+    vector<OpenCMLParser::StmtContext *> head, tail;
+    for (const auto &stmt : context->stmt()) {
+        if (stmt->useStmt()) {
+            head.push_back(stmt);
+        } else {
+            tail.push_back(stmt);
+        }
+    }
+    sort(head.begin(), head.end(), [](OpenCMLParser::StmtContext *a, OpenCMLParser::StmtContext *b) {
+        return a->useStmt()->STRING()->getText() < b->useStmt()->STRING()->getText();
+    });
+    string headStr = formatList(head, "; ", (preferSemis ? ";" : ""), trailingComma, padding, forceMultiLine, 1);
+    string tailStr = formatList(tail, "; ", (preferSemis ? ";" : ""), trailingComma, padding, forceMultiLine);
+    return headStr + (head.empty() || tail.empty() ? "" : lineEnd()) + tailStr;
 };
 
 /*
@@ -199,9 +213,9 @@ any Formatter::visitWithDef(OpenCMLParser::WithDefContext *context) {
 };
 
 /*
-funcDef    : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
+funcDecl   : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? ;
 */
-any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
+std::any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     string result;
     const auto &annotations = context->annotations();
     const auto &withDef = context->withDef();
@@ -209,7 +223,6 @@ any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     const auto &identRef = context->identRef();
     const auto &parentParams = context->parentParams();
     const auto &typeExpr = context->typeExpr();
-    const auto &bracedStmts = context->bracedStmts();
     if (annotations) {
         result += any_cast<string>(visitAnnotations(annotations, true)) + lineEnd();
     }
@@ -223,7 +236,17 @@ any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     if (typeExpr) {
         result += ": " + any_cast<string>(visitTypeExpr(typeExpr));
     }
-    return result + " " + any_cast<string>(visitBracedStmts(bracedStmts));
+    return result;
+}
+
+/*
+funcDef    : funcDecl bracedStmts ;
+*/
+any Formatter::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
+    string result;
+    const auto &funcDecl = context->funcDecl();
+    const auto &bracedStmts = context->bracedStmts();
+    return result + any_cast<string>(visitFuncDecl(funcDecl)) + " " + any_cast<string>(visitBracedStmts(bracedStmts));
 };
 
 /*
@@ -373,7 +396,7 @@ typeList     : typeExpr (',' typeExpr)* ;
 */
 any Formatter::visitTypeList(OpenCMLParser::TypeListContext *context, bool trailingComma, bool padding,
                              bool forceMultiLine) {
-    return formatList(context->typeExpr(), context, ", ", ",", trailingComma, padding, forceMultiLine);
+    return formatList(context->typeExpr(), ", ", ",", trailingComma, padding, forceMultiLine);
 };
 
 /*
@@ -381,7 +404,7 @@ identList    : identRef (',' identRef)* ;
 */
 any Formatter::visitIdentList(OpenCMLParser::IdentListContext *context, bool trailingComma, bool padding,
                               bool forceMultiLine) {
-    return formatList(context->identRef(), context, ", ", ",", trailingComma, padding, forceMultiLine);
+    return formatList(context->identRef(), ", ", ",", trailingComma, padding, forceMultiLine);
 };
 
 /*
@@ -389,7 +412,7 @@ valueList    : entityExpr (',' entityExpr)* ;
 */
 any Formatter::visitValueList(OpenCMLParser::ValueListContext *context, bool trailingComma, bool padding,
                               bool forceMultiLine) {
-    return formatList(context->entityExpr(), context, ", ", ",", trailingComma, padding, forceMultiLine);
+    return formatList(context->entityExpr(), ", ", ",", trailingComma, padding, forceMultiLine);
 };
 
 /*
@@ -397,7 +420,7 @@ pairedTypes  : keyTypePair (',' keyTypePair)* ;
 */
 any Formatter::visitPairedTypes(OpenCMLParser::PairedTypesContext *context, bool trailingComma, bool padding,
                                 bool forceMultiLine) {
-    return formatList(context->keyTypePair(), context, ", ", ",", trailingComma, padding, forceMultiLine);
+    return formatList(context->keyTypePair(), ", ", ",", trailingComma, padding, forceMultiLine);
 };
 
 /*
@@ -405,7 +428,7 @@ pairedValues : keyValuePair (',' keyValuePair)* ;
 */
 any Formatter::visitPairedValues(OpenCMLParser::PairedValuesContext *context, bool trailingComma, bool padding,
                                  bool forceMultiLine) {
-    return formatList(context->keyValuePair(), context, ", ", ",", trailingComma, padding, forceMultiLine);
+    return formatList(context->keyValuePair(), ", ", ",", trailingComma, padding, forceMultiLine);
 };
 
 /*
@@ -413,7 +436,7 @@ pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 any Formatter::visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool padding,
                                  bool forceMultiLine) {
-    return formatList(context->keyParamPair(), context, ", ", ",", trailingComma, padding, forceMultiLine);
+    return formatList(context->keyParamPair(), ", ", ",", trailingComma, padding, forceMultiLine);
 };
 
 /*
@@ -421,7 +444,7 @@ indexKVPairs : indexKVPair (',' indexKVPair)* ;
 */
 any Formatter::visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool padding,
                                  bool forceMultiLine) {
-    return formatList(context->indexKVPair(), context, ", ", ",", trailingComma, padding, forceMultiLine);
+    return formatList(context->indexKVPair(), ", ", ",", trailingComma, padding, forceMultiLine);
 }
 
 /*
@@ -634,7 +657,7 @@ logicalOrExpr
     ;
 */
 any Formatter::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
-    return formatList(context->logicalAndExpr(), context, " || ", " ||", false, false, false);
+    return formatList(context->logicalAndExpr(), " || ", " ||", false, false, false);
 };
 
 /*
@@ -643,7 +666,7 @@ logicalAndExpr
     ;
 */
 any Formatter::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {
-    return formatList(context->equalityExpr(), context, " && ", " &&", false, false, false);
+    return formatList(context->equalityExpr(), " && ", " &&", false, false, false);
 };
 
 /*

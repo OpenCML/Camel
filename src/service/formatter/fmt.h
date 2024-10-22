@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <algorithm>
-#include <iostream>
 #include <regex>
 #include <string>
+#include <unordered_set>
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime.h"
@@ -43,6 +43,7 @@ class Formatter : public OpenCMLVisitor {
     const std::vector<antlr4::Token *> tokens;
 
     int indentLevel = -1;
+    std::unordered_set<size_t> insertedCommentIndices;
 
     void popIndent() {
         indentLevel--;
@@ -68,14 +69,18 @@ class Formatter : public OpenCMLVisitor {
     inline std::string hash2slash(const std::string &input) { return std::regex_replace(input, std::regex("#"), "//"); }
 
     template <typename T>
-    std::any formatList(const std::vector<T *> &list, antlr4::ParserRuleContext *context,
-                        const std::string &&iComma, // inline comma
-                        const std::string &&nComma, // new line comma
-                        bool tComma = false,        // trailing comma
-                        bool padding = true,        // padding spaces
-                        bool multiLine = false      // force multi-line
+    std::string formatList(const std::vector<T *> &list,
+                           const std::string &&iComma, // inline comma
+                           const std::string &&nComma, // new line comma
+                           bool tComma = false,        // trailing comma
+                           bool padding = true,        // padding spaces
+                           bool multiLine = false,     // force multi-line
+                           int maxSkips = 2            // maximum number of line skips
     ) {
         std::string result;
+        if (list.empty()) {
+            return result;
+        }
 
         // given a start index, find the range of comments in the token stream
         const auto findCmtRange = [&](size_t start, bool reverse = false) -> std::pair<size_t, size_t> {
@@ -141,32 +146,9 @@ class Formatter : public OpenCMLVisitor {
             }
         }
 
-        // check if the list is wrapped with braces
-        // if so, we don't need to add line breaks before and after the list
-        // that makes the code more compact
-        bool wrappedWithBraces = false;
-        const std::string snippet = context->getText();
-        const std::string firstChar = snippet.substr(0, 1);
-        const std::string lastChar = snippet.substr(snippet.size() - 1, 1);
-        if (firstChar == "{" && lastChar == "}") {
-            wrappedWithBraces = true;
-        } else if (firstChar == "[" && lastChar == "]") {
-            wrappedWithBraces = true;
-        } else if (firstChar == "<" && lastChar == ">") {
-            wrappedWithBraces = true;
-        } else if (firstChar == "(" && lastChar == ")") {
-            wrappedWithBraces = true;
-        }
-
         if (multiLine) {
-            // if wrapped with braces
-            // we don't need to add line breaks before and after the list
-            // and we don't need to add padding spaces
-            // it's better to use the indent level of the outer context
-            if (!wrappedWithBraces) {
-                pushIndent();
-                result += lineEnd();
-            }
+            pushIndent();
+            result += lineEnd();
         } else if (padding) {
             result += " ";
         }
@@ -186,7 +168,8 @@ class Formatter : public OpenCMLVisitor {
                 remainedSkips = std::max(remainedSkips, 1);
             }
 
-            for (int j = 0; j < remainedSkips; j++) {
+            int numSkips = std::min(remainedSkips, maxSkips);
+            for (int j = 0; j < numSkips; j++) {
                 result += lineEnd();
             }
 
@@ -205,9 +188,15 @@ class Formatter : public OpenCMLVisitor {
                         result += lineEnd();
                     }
 
-                    insertComment(comment, result);
-
-                    lastStopLine = comment->getLine() + countLines(commentText);
+                    // incase the comment is already inserted
+                    // for example, stmtList(exprList(exprList))
+                    if (insertedCommentIndices.find(j) == insertedCommentIndices.end()) {
+                        insertComment(comment, result);
+                        insertedCommentIndices.insert(j);
+                        lastStopLine = comment->getLine() + countLines(commentText);
+                    } else {
+                        lastStopLine = currLine;
+                    }
                 }
 
                 cmtSkips = currLine - lastStopLine;
@@ -238,7 +227,10 @@ class Formatter : public OpenCMLVisitor {
                     result += lineEnd();
                 }
 
-                insertComment(comment, result);
+                if (insertedCommentIndices.find(j) == insertedCommentIndices.end()) {
+                    insertComment(comment, result);
+                    insertedCommentIndices.insert(j);
+                }
 
                 lastStopLine = comment->getLine() + countLines(commentText);
             }
@@ -257,10 +249,8 @@ class Formatter : public OpenCMLVisitor {
         }
 
         if (multiLine) {
-            if (!wrappedWithBraces) {
-                popIndent();
-                result += lineEnd();
-            }
+            popIndent();
+            result += lineEnd();
         } else if (padding && !tComma) {
             result += " ";
         }
@@ -309,6 +299,8 @@ class Formatter : public OpenCMLVisitor {
     std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
 
     std::any visitWithDef(OpenCMLParser::WithDefContext *context);
+
+    std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
 
     std::any visitFuncDef(OpenCMLParser::FuncDefContext *context);
 

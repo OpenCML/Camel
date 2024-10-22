@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,19 +93,17 @@ Graph
 
 gir::Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
-      ports_(make_shared<vector<pair<size_t, bool>>>()), subGraphs_(), sharedConstants_(make_shared<data_vec_t>()),
-      sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
+      ports_(make_shared<vector<tuple<size_t, size_t, bool>>>()), subGraphs_(),
+      sharedConstants_(make_shared<data_vec_t>()), sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
       rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
 gir::Graph::Graph(Graph &other)
-    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(),
+    : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(other.subGraphs_),
       sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
       runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
       runtimeVariables_() {
     for (const auto &g : other.subGraphs_) {
-        subGraphs_.push_back(
-            make_shared<Graph>(*g)
-        );
+        subGraphs_.push_back(make_shared<Graph>(*g));
     }
     for (const auto &idx : *rtVariableIndices_) {
         runtimeVariables_.push_back(idx);
@@ -121,6 +119,15 @@ graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
     return res;
 }
 
+void gir::Graph::setFunc(const func_ptr_t &func) { func_ = func; }
+
+func_ptr_t gir::Graph::func() const {
+    if (func_.expired()) {
+        throw runtime_error("This graph has not been set to a functor.");
+    }
+    return func_.lock();
+}
+
 void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
 
 node_ptr_t gir::Graph::addPort(bool isVar) {
@@ -129,7 +136,7 @@ node_ptr_t gir::Graph::addPort(bool isVar) {
         node->makeVariable();
     }
     size_t idx = node->index();
-    ports_->push_back({idx, isVar});
+    ports_->push_back({nodes_->size() - 1, idx, isVar});
     return node;
 }
 
@@ -221,11 +228,11 @@ void gir::Graph::fulfill(const data_vec_t &dataList) {
     cml_assert(dataList.size() == ports_->size(), "Data list size does not match ports size.");
     for (size_t i = 0; i < dataList.size(); i++) {
         const auto &data = dataList[i];
-        const auto &[index, isVar] = ports_->at(i);
+        const auto &[_, dataIndex, isVar] = ports_->at(i);
         if (isVar) {
-            setVariable(index, data, false);
+            setVariable(dataIndex, data, false);
         } else {
-            setConstant(index, data, false);
+            setConstant(dataIndex, data, false);
         }
     }
 }
@@ -297,7 +304,15 @@ node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
     return res;
 }
 
+func_ptr_t FunctorNode::func() const { return func_; }
+
 func_type_ptr_t FunctorNode::type() const { return dynamic_pointer_cast<FunctorType>(func_->type()); }
+
+func_node_ptr_t FunctorNode::copyTo(graph_ptr_t graph) const {
+    func_node_ptr_t node = make_shared<FunctorNode>(graph, dynamic_pointer_cast<FunctorData>(func_->clone()));
+    graph->addNode(node);
+    return node;
+}
 
 inline shared_ptr<ParamsData> inputToParams(const node_ptr_t &node, const type_ptr_t &type) {
     data_ptr_t data = node->data();
@@ -375,20 +390,19 @@ node_ptr_t OperatorNode::create(graph_ptr_t graph, Operator op) {
 SelectNode
 */
 
-SelectNode::SelectNode(graph_ptr_t graph, node_vec_t &cases)
-    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), funcs_(make_shared<node_vec_t>(cases)) {}
+SelectNode::SelectNode(graph_ptr_t graph, const func_vec_t &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), funcs_(make_shared<func_vec_t>(cases)) {}
 
-SelectNode::SelectNode(graph_ptr_t graph, vector<operator_ptr_t> &cases)
-    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph),
-      ops_(make_shared<vector<operator_ptr_t>>(cases)) {}
+SelectNode::SelectNode(graph_ptr_t graph, const oper_vec_t &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), opers_(make_shared<oper_vec_t>(cases)) {}
 
-node_ptr_t SelectNode::create(graph_ptr_t graph, node_vec_t &cases) {
+node_ptr_t SelectNode::create(graph_ptr_t graph, const func_vec_t &cases) {
     const auto res = make_shared<SelectNode>(graph, cases);
     // temporary node, not added to graph
     return res;
 }
 
-node_ptr_t SelectNode::create(graph_ptr_t graph, vector<operator_ptr_t> &cases) {
+node_ptr_t SelectNode::create(graph_ptr_t graph, const oper_vec_t &cases) {
     const auto res = make_shared<SelectNode>(graph, cases);
     // temporary node, not added to graph
     return res;
@@ -397,21 +411,21 @@ node_ptr_t SelectNode::create(graph_ptr_t graph, vector<operator_ptr_t> &cases) 
 vector<func_type_ptr_t> SelectNode::types() const {
     vector<func_type_ptr_t> res;
     if (funcs_) {
-        for (const auto &node : *funcs_) {
-            res.push_back(dynamic_pointer_cast<FunctorNode>(node)->type());
+        for (const auto &func : *funcs_) {
+            res.push_back(dynamic_pointer_cast<FunctorType>(func->type()));
         }
     } else {
-        for (const auto &op : *ops_) {
-            res.push_back(op->type());
+        for (const auto &oper : *opers_) {
+            res.push_back(oper->type());
         }
     }
     return res;
 }
 
-node_ptr_t SelectNode::caseAt(size_t index) {
+node_ptr_t SelectNode::select(size_t index) {
     if (funcs_) {
-        return funcs_->at(index);
+        return FunctorNode::create(graph_.lock(), funcs_->at(index));
     } else {
-        return OperatorNode::create(graph_.lock(), *ops_->at(index));
+        return OperatorNode::create(graph_.lock(), *opers_->at(index));
     }
 }

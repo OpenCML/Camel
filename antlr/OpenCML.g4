@@ -53,7 +53,8 @@ exprStmt   : annotations? entityExpr ;
 waitStmt   : WAIT entityExpr ;
 
 withDef    : WITH angledParams ;
-funcDef    : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
+funcDecl   : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? ;
+funcDef    : funcDecl bracedStmts ;
 retStmt    : RETURN entityExpr? ;
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' (bracedStmts | entityExpr) ;
 

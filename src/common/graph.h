@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -145,9 +145,12 @@ class Graph : public Node {
         bool shared;
     };
 
+    func_wptr_t func_;
+
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
-    std::shared_ptr<std::vector<std::pair<size_t, bool>>> ports_;
+    // nodeIndex, dataIndex, isVar
+    std::shared_ptr<std::vector<std::tuple<size_t, size_t, bool>>> ports_;
     std::vector<graph_ptr_t> subGraphs_;
 
     std::shared_ptr<data_vec_t> sharedConstants_;
@@ -163,10 +166,16 @@ class Graph : public Node {
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr);
 
+    void setFunc(const func_ptr_t &func);
+    func_ptr_t func() const;
+
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isVar = false);
-    void addSubGraph(const graph_ptr_t &graph);
 
+    void addSubGraph(const graph_ptr_t &graph);
+    std::vector<graph_ptr_t> &subGraphs() { return subGraphs_; }
+
+    const node_ptr_t &output() const { return output_; }
     void setOutput(const node_ptr_t &node);
 
     // set a constant to a variable, return the index of the variable
@@ -179,6 +188,7 @@ class Graph : public Node {
     void setConstant(size_t index, const data_ptr_t &data, bool shared = false);
     void setVariable(size_t index, const data_ptr_t &data, bool shared = false);
 
+    const std::vector<std::tuple<size_t, size_t, bool>> &ports() const { return *ports_; }
     node_vec_t &nodes() { return *nodes_; }
 
     void fulfill(const data_vec_t &dataList);
@@ -224,7 +234,9 @@ class FunctorNode : public Node {
 
     static node_ptr_t create(graph_ptr_t graph, const func_ptr_t &func);
 
+    func_ptr_t func() const;
     func_type_ptr_t type() const;
+    std::shared_ptr<FunctorNode> copyTo(graph_ptr_t graph) const;
 
     graph_ptr_t subGraph() const { return func_->graph(); }
     node_ptr_t &withNode() { return inputs_[0]; }
@@ -248,29 +260,31 @@ class OperatorNode : public Node {
     OperatorNode(graph_ptr_t graph, Operator op);
     ~OperatorNode() = default;
 
+    std::string operName() const { return operator_.name(); }
+
     static node_ptr_t create(graph_ptr_t graph, Operator op);
 };
 
-inline std::shared_ptr<OperatorNode> op_node_ptr_cast(const node_ptr_t &ptr) {
+inline std::shared_ptr<OperatorNode> oper_node_ptr_cast(const node_ptr_t &ptr) {
     return std::dynamic_pointer_cast<OperatorNode>(ptr);
 }
 
-using op_node_ptr_t = std::shared_ptr<OperatorNode>;
+using oper_node_ptr_t = std::shared_ptr<OperatorNode>;
 
 class SelectNode : public Node {
-    std::shared_ptr<node_vec_t> funcs_;
-    std::shared_ptr<std::vector<operator_ptr_t>> ops_;
+    std::shared_ptr<func_vec_t> funcs_;
+    std::shared_ptr<oper_vec_t> opers_;
 
   public:
-    SelectNode(graph_ptr_t graph, node_vec_t &cases);
-    SelectNode(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
+    SelectNode(graph_ptr_t graph, const func_vec_t &cases);
+    SelectNode(graph_ptr_t graph, const oper_vec_t &cases);
     ~SelectNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, node_vec_t &cases);
-    static node_ptr_t create(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
+    static node_ptr_t create(graph_ptr_t graph, const func_vec_t &cases);
+    static node_ptr_t create(graph_ptr_t graph, const oper_vec_t &cases);
 
     std::vector<func_type_ptr_t> types() const;
-    node_ptr_t caseAt(size_t index);
+    node_ptr_t select(size_t index);
 };
 
 inline std::shared_ptr<SelectNode> select_node_ptr_cast(const node_ptr_t &ptr) {

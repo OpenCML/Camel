@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,17 +37,23 @@ class Constructor {
 
     graph_ptr_t construct(ast::node_ptr_t &ast) {
         visit(ast);
-        return context_->graph();
+        return context_->currGraph();
     }
 
   private:
     context_ptr_t context_;
+    std::unordered_map<func_type_ptr_t, func_ptr_t> funcCache_;
+
+    void cacheFunc(func_type_ptr_t key, func_ptr_t node) { funcCache_[key] = node; }
+    void delCachedFunc(func_type_ptr_t key) { funcCache_.erase(key); }
+    func_ptr_t getCachedFunc(func_type_ptr_t key) { return funcCache_[key]; }
 
     std::any visit(const ast::node_ptr_t &ast);
 
     node_ptr_t visitDataNode(const ast::node_ptr_t &ast);
     node_ptr_t visitVariNode(const ast::node_ptr_t &ast);
     type_ptr_t visitTypeNode(const ast::node_ptr_t &ast);
+    func_ptr_t visitDeclNode(const ast::node_ptr_t &ast);
     node_ptr_t visitFuncNode(const ast::node_ptr_t &ast);
     void_ptr_t visitNRefNode(const ast::node_ptr_t &ast);
     node_ptr_t visitDRefNode(const ast::node_ptr_t &ast);
