@@ -28,10 +28,10 @@
 
 using node_scope_t = Scope<std::string, gir::node_ptr_t>;
 using node_scope_ptr_t = scope_ptr_t<std::string, gir::node_ptr_t>;
-using func_scope_t = Scope<std::string, std::shared_ptr<gir::node_vec_t>>;
-using func_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<gir::node_vec_t>>;
-using operator_scope_t = Scope<std::string, std::shared_ptr<std::vector<operator_ptr_t>>>;
-using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<std::vector<operator_ptr_t>>>;
+using func_scope_t = Scope<std::string, std::shared_ptr<func_vec_t>>;
+using func_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<func_vec_t>>;
+using operator_scope_t = Scope<std::string, std::shared_ptr<oper_vec_t>>;
+using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<oper_vec_t>>;
 
 class Context {
     gir::graph_ptr_t rootGraph_;
@@ -40,9 +40,9 @@ class Context {
     func_scope_ptr_t funcScope_;
     operator_scope_ptr_t opScope_;
 
-    std::unordered_map<void *, std::tuple<node_scope_ptr_t, func_scope_ptr_t, operator_scope_ptr_t, gir::graph_ptr_t>>
-        consCache_;
-    std::unordered_map<void *, gir::node_ptr_t> nodeCache_;
+    std::unordered_map<func_type_ptr_t,
+                       std::tuple<node_scope_ptr_t, func_scope_ptr_t, operator_scope_ptr_t, gir::graph_ptr_t>>
+        funcCache_;
 
     // only generated when getNodeIdent() is called to save memory
     std::unordered_map<gir::node_ptr_t, std::string> nodeIdentsMap_;
@@ -61,19 +61,16 @@ class Context {
 
     std::optional<std::string> getNodeIdent(const gir::node_ptr_t &node);
 
-    void pushScope(void *key);
-    void popScope(void *key = nullptr);
+    void pushScope(func_type_ptr_t key);
+    void popScope(func_type_ptr_t key = nullptr);
 
-    bool cached(void *key) { return consCache_.find(key) != consCache_.end(); }
-    void cacheNode(void *key, const gir::node_ptr_t &node) { nodeCache_[key] = node; }
-    void eraseCachedNode(void *key) { nodeCache_.erase(key); }
-    gir::node_ptr_t getCachedNode(void *key) { return nodeCache_[key]; }
+    bool cached(func_type_ptr_t key) { return funcCache_.find(key) != funcCache_.end(); }
 
     std::optional<gir::node_ptr_t> nodeAt(const std::string &name);
 
     bool insertNode(const std::string &name, const gir::node_ptr_t &node);
-    bool insertFunc(const std::string &name, const gir::node_ptr_t &node);
-    bool insertOperator(const std::string &name, const operator_ptr_t &op);
+    bool insertFunc(const std::string &name, func_ptr_t func);
+    bool insertOperator(const std::string &name, const oper_ptr_t &op);
 };
 
 using context_ptr_t = std::shared_ptr<Context>;

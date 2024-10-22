@@ -26,12 +26,12 @@ Context::Context()
     : rootGraph_(gir::Graph::create()), nodeScope_(node_scope_t::create()), funcScope_(func_scope_t::create()),
       opScope_(operator_scope_t::create(globalOperators)) {
     currGraph_ = rootGraph_;
-    consCache_[nullptr] = {nodeScope_, funcScope_, opScope_, currGraph_};
+    funcCache_[nullptr] = {nodeScope_, funcScope_, opScope_, currGraph_};
 }
 
 void Context::generateNodeIdentsMap() {
     multiset<string> idents;
-    for (auto &[key, cache] : consCache_) {
+    for (auto &[key, cache] : funcCache_) {
         auto &[scope, _, __, ___] = cache;
         for (auto &[k, node] : scope->self()) {
             idents.insert(k);
@@ -56,9 +56,9 @@ std::optional<std::string> Context::getNodeIdent(const gir::node_ptr_t &node) {
     return std::nullopt;
 }
 
-void Context::pushScope(void *key) {
-    if (consCache_.find(key) != consCache_.end()) {
-        auto [nodeScope, funcScope, opScope, graph] = consCache_[key];
+void Context::pushScope(func_type_ptr_t key) {
+    if (funcCache_.find(key) != funcCache_.end()) {
+        auto [nodeScope, funcScope, opScope, graph] = funcCache_[key];
         nodeScope_ = nodeScope;
         funcScope_ = funcScope;
         opScope_ = opScope;
@@ -68,17 +68,17 @@ void Context::pushScope(void *key) {
         funcScope_ = funcScope_->push();
         opScope_ = opScope_->push();
         currGraph_ = gir::Graph::create(currGraph_);
-        consCache_[key] = std::make_tuple(nodeScope_, funcScope_, opScope_, currGraph_);
+        funcCache_[key] = std::make_tuple(nodeScope_, funcScope_, opScope_, currGraph_);
     }
 }
 
-void Context::popScope(void *key) {
+void Context::popScope(func_type_ptr_t key) {
     nodeScope_ = nodeScope_->pop();
     funcScope_ = funcScope_->pop();
     opScope_ = opScope_->pop();
     currGraph_ = currGraph_->outer();
     if (key != nullptr) {
-        consCache_.erase(key);
+        funcCache_.erase(key);
     }
 }
 
@@ -89,7 +89,7 @@ std::optional<gir::node_ptr_t> Context::nodeAt(const std::string &name) {
     }
     auto opFunc = funcScope_->at(name);
     if (opFunc.has_value()) {
-        gir::node_vec_t &funcs = *opFunc.value();
+        func_vec_t &funcs = *opFunc.value();
         return gir::SelectNode::create(currGraph_, funcs);
     }
     auto opOp = opScope_->at(name);
@@ -107,22 +107,22 @@ bool Context::insertNode(const std::string &name, const gir::node_ptr_t &node) {
     return true;
 }
 
-bool Context::insertFunc(const std::string &name, const gir::node_ptr_t &node) {
+bool Context::insertFunc(const std::string &name, func_ptr_t func) {
     if (funcScope_->has(name, false)) {
         const auto funcs = funcScope_->at(name).value();
         // TODO: check if the func node is already in the list
-        funcs->push_back(node);
+        funcs->push_back(func);
     }
-    funcScope_->insert(name, std::make_shared<gir::node_vec_t>(1, node));
+    funcScope_->insert(name, std::make_shared<func_vec_t>(1, func));
     return true;
 }
 
-bool Context::insertOperator(const std::string &name, const operator_ptr_t &op) {
+bool Context::insertOperator(const std::string &name, const oper_ptr_t &op) {
     if (opScope_->has(name, false)) {
         const auto ops = opScope_->at(name).value();
         // TODO: check if the operator is already in the list
         ops->push_back(op);
     }
-    opScope_->insert(name, std::make_shared<std::vector<operator_ptr_t>>(1, op));
+    opScope_->insert(name, std::make_shared<oper_vec_t>(1, op));
     return true;
 }

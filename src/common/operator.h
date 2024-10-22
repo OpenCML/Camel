@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,8 +43,9 @@ class Operator {
     const OperatorFunction &func() const { return func_; }
 };
 
-using operator_ptr_t = std::shared_ptr<Operator>;
+using oper_ptr_t = std::shared_ptr<Operator>;
+using oper_vec_t = std::vector<oper_ptr_t>;
 
-extern std::unordered_map<std::string, std::shared_ptr<std::vector<operator_ptr_t>>> globalOperators;
+extern std::unordered_map<std::string, std::shared_ptr<oper_vec_t>> globalOperators;
 
-void registerOperator(const operator_ptr_t &&op);
+void registerOperator(const oper_ptr_t &&op);

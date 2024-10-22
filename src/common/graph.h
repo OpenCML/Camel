@@ -171,7 +171,9 @@ class Graph : public Node {
 
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isVar = false);
+
     void addSubGraph(const graph_ptr_t &graph);
+    std::vector<graph_ptr_t> &subGraphs() { return subGraphs_; }
 
     const node_ptr_t &output() const { return output_; }
     void setOutput(const node_ptr_t &node);
@@ -258,31 +260,31 @@ class OperatorNode : public Node {
     OperatorNode(graph_ptr_t graph, Operator op);
     ~OperatorNode() = default;
 
-    std::string opName() const { return operator_.name(); }
+    std::string operName() const { return operator_.name(); }
 
     static node_ptr_t create(graph_ptr_t graph, Operator op);
 };
 
-inline std::shared_ptr<OperatorNode> op_node_ptr_cast(const node_ptr_t &ptr) {
+inline std::shared_ptr<OperatorNode> oper_node_ptr_cast(const node_ptr_t &ptr) {
     return std::dynamic_pointer_cast<OperatorNode>(ptr);
 }
 
-using op_node_ptr_t = std::shared_ptr<OperatorNode>;
+using oper_node_ptr_t = std::shared_ptr<OperatorNode>;
 
 class SelectNode : public Node {
-    std::shared_ptr<node_vec_t> funcs_;
-    std::shared_ptr<std::vector<operator_ptr_t>> ops_;
+    std::shared_ptr<func_vec_t> funcs_;
+    std::shared_ptr<oper_vec_t> opers_;
 
   public:
-    SelectNode(graph_ptr_t graph, node_vec_t &cases);
-    SelectNode(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
+    SelectNode(graph_ptr_t graph, const func_vec_t &cases);
+    SelectNode(graph_ptr_t graph, const oper_vec_t &cases);
     ~SelectNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, node_vec_t &cases);
-    static node_ptr_t create(graph_ptr_t graph, std::vector<operator_ptr_t> &cases);
+    static node_ptr_t create(graph_ptr_t graph, const func_vec_t &cases);
+    static node_ptr_t create(graph_ptr_t graph, const oper_vec_t &cases);
 
     std::vector<func_type_ptr_t> types() const;
-    node_ptr_t caseAt(size_t index);
+    node_ptr_t select(size_t index);
 };
 
 inline std::shared_ptr<SelectNode> select_node_ptr_cast(const node_ptr_t &ptr) {

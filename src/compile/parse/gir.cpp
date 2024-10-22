@@ -103,20 +103,19 @@ type_ptr_t Constructor::visitTypeNode(const ast::node_ptr_t &ast) {
     return type;
 }
 
-node_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
+func_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
     enter("DECL");
     func_type_ptr_t funcType = ast::decl_load_ptr_cast(ast->load())->funcType();
-    void *key = funcType.get();
-    if (context_->cached(key)) {
+    if (context_->cached(funcType)) {
         leave("DECL");
-        return context_->getCachedNode(key);
+        return getCachedFunc(funcType);
     }
     auto functorType = dynamic_pointer_cast<FunctorType>(funcType);
     const auto &varMap = functorType->variableMap();
     const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
     const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
 
-    context_->pushScope(key);
+    context_->pushScope(funcType);
     graph_ptr_t &graph = context_->currGraph();
     for (const auto &[name, type, data] : withType->elements()) {
         node_ptr_t node = graph->addPort(varMap.at(name));
@@ -128,26 +127,24 @@ node_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
     }
     func_ptr_t func = make_shared<FunctorData>(funcType, graph);
     graph->setFunc(func);
-    const auto &funcNode = gir::FunctorNode::create(graph->outer(), func);
     context_->popScope();
 
-    context_->insertFunc(funcType->name(), funcNode);
-    context_->cacheNode(key, funcNode);
+    context_->insertFunc(funcType->name(), func);
+    cacheFunc(funcType, func);
     leave("DECL");
-    return funcNode;
+    return func;
 }
 
 node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
     enter("FUNC");
-    node_ptr_t funcNode = visitDeclNode(ast_ptr_cast(ast->childAt(0)));
-    func_type_ptr_t funcType = dynamic_pointer_cast<FunctorNode>(funcNode)->type();
-    void *key = funcType.get();
-    context_->pushScope(key);
+    func_ptr_t func = visitDeclNode(ast_ptr_cast(ast->childAt(0)));
+    func_type_ptr_t funcType = func->funcType();
+    context_->pushScope(funcType);
     visitExecNode(ast_ptr_cast(ast->childAt(1)));
-    context_->popScope(key);
-    context_->eraseCachedNode(key);
+    context_->popScope(funcType);
+    delCachedFunc(funcType);
     leave("FUNC");
-    return funcNode;
+    return SelectNode::create(context_->currGraph(), func_vec_t{func});
 }
 
 void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
@@ -185,9 +182,9 @@ node_ptr_t Constructor::visitAnnoNode(const ast::node_ptr_t &ast) { throw runtim
 inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
     node_ptr_t res = selNode;
     if (selNode->type() == NodeType::SELECT) {
-        res = select_node_ptr_cast(selNode)->caseAt(0);
+        res = select_node_ptr_cast(selNode)->select(0);
         if (res->type() == NodeType::FUNCTOR) {
-            res = dynamic_pointer_cast<FunctorNode>(res)->copyTo(tgtGraph);
+            res = dynamic_pointer_cast<FunctorNode>(res);
         }
     }
     return res;

@@ -309,8 +309,7 @@ func_ptr_t FunctorNode::func() const { return func_; }
 func_type_ptr_t FunctorNode::type() const { return dynamic_pointer_cast<FunctorType>(func_->type()); }
 
 func_node_ptr_t FunctorNode::copyTo(graph_ptr_t graph) const {
-    func_node_ptr_t node =
-        make_shared<FunctorNode>(graph, dynamic_pointer_cast<FunctorData>(func_->clone()));
+    func_node_ptr_t node = make_shared<FunctorNode>(graph, dynamic_pointer_cast<FunctorData>(func_->clone()));
     graph->addNode(node);
     return node;
 }
@@ -391,20 +390,19 @@ node_ptr_t OperatorNode::create(graph_ptr_t graph, Operator op) {
 SelectNode
 */
 
-SelectNode::SelectNode(graph_ptr_t graph, node_vec_t &cases)
-    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), funcs_(make_shared<node_vec_t>(cases)) {}
+SelectNode::SelectNode(graph_ptr_t graph, const func_vec_t &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), funcs_(make_shared<func_vec_t>(cases)) {}
 
-SelectNode::SelectNode(graph_ptr_t graph, vector<operator_ptr_t> &cases)
-    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph),
-      ops_(make_shared<vector<operator_ptr_t>>(cases)) {}
+SelectNode::SelectNode(graph_ptr_t graph, const oper_vec_t &cases)
+    : Node(NodeType::SELECT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph), opers_(make_shared<oper_vec_t>(cases)) {}
 
-node_ptr_t SelectNode::create(graph_ptr_t graph, node_vec_t &cases) {
+node_ptr_t SelectNode::create(graph_ptr_t graph, const func_vec_t &cases) {
     const auto res = make_shared<SelectNode>(graph, cases);
     // temporary node, not added to graph
     return res;
 }
 
-node_ptr_t SelectNode::create(graph_ptr_t graph, vector<operator_ptr_t> &cases) {
+node_ptr_t SelectNode::create(graph_ptr_t graph, const oper_vec_t &cases) {
     const auto res = make_shared<SelectNode>(graph, cases);
     // temporary node, not added to graph
     return res;
@@ -413,21 +411,21 @@ node_ptr_t SelectNode::create(graph_ptr_t graph, vector<operator_ptr_t> &cases) 
 vector<func_type_ptr_t> SelectNode::types() const {
     vector<func_type_ptr_t> res;
     if (funcs_) {
-        for (const auto &node : *funcs_) {
-            res.push_back(dynamic_pointer_cast<FunctorNode>(node)->type());
+        for (const auto &func : *funcs_) {
+            res.push_back(dynamic_pointer_cast<FunctorType>(func->type()));
         }
     } else {
-        for (const auto &op : *ops_) {
-            res.push_back(op->type());
+        for (const auto &oper : *opers_) {
+            res.push_back(oper->type());
         }
     }
     return res;
 }
 
-node_ptr_t SelectNode::caseAt(size_t index) {
+node_ptr_t SelectNode::select(size_t index) {
     if (funcs_) {
-        return funcs_->at(index);
+        return FunctorNode::create(graph_.lock(), funcs_->at(index));
     } else {
-        return OperatorNode::create(graph_.lock(), *ops_->at(index));
+        return OperatorNode::create(graph_.lock(), *opers_->at(index));
     }
 }

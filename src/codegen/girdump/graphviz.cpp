@@ -48,6 +48,7 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     string res = baseIndent_;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
     void *retNodePtr = graph->output().get();
+
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
@@ -59,6 +60,14 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         res += "subgraph cluster_" + funcId + " {\r\n";
         res += baseIndent_ + indent_ + "label=\"" + func->name() + "\";\r\n";
     }
+
+    for (auto &subGraph : graph->subGraphs()) {
+        res += baseIndent_;
+        pushIndent();
+        res += any_cast<string>(apply(subGraph));
+        popIndent();
+    }
+
     size_t cnt = 0;
     node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); i++) {
@@ -87,37 +96,23 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             func_ptr_t func = func_node_ptr_cast(node)->func();
             func_type_ptr_t type = func->funcType();
             label = type->name();
-            // cout << pointerToIdent(type->defGraph().get()) << " " << pointerToIdent(graph.get()) << endl;
-            if (func->baseGraph() == graph && visitedFunc_.find(type.get()) == visitedFunc_.end()) {
-                res += baseIndent_;
-                pushIndent();
-                graph_ptr_t subGraph = func->graph();
-                res += any_cast<string>(apply(subGraph));
-                popIndent();
-                visitedFunc_.insert(type.get());
-            }
             shape = "parallelogram";
             break;
         }
         case NodeType::OPERATOR: {
-            op_node_ptr_t op = op_node_ptr_cast(node);
-            label = op->opName();
+            oper_node_ptr_t oper = oper_node_ptr_cast(node);
+            label = oper->operName();
             shape = "diamond";
             break;
         }
         default:
             throw runtime_error("Unknown node type");
         }
-        if (node->inDegree() > 0 || node->outDegree() > 0) {
-            // res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " " + to_string(node->inDegree()) + " " +
-            //        to_string(node->outDegree()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
-            res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape +
-                   "];\r\n";
-        }
-        if (node.get() == retNodePtr) {
-            res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + "RET_" + funcId + ";\r\n";
-        }
+        res +=
+            baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
     }
+    res += baseIndent_ + indent_ + funcId + " [label=\"RET\", shape=doublecircle];\r\n";
+
     for (const auto &node : graph->nodes()) {
         const auto &vec = node->inputs();
         for (size_t i = 0; i < vec.size(); i++) {
@@ -127,8 +122,11 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
                    " [label=\"" + to_string(i) + "\"];\r\n";
         }
+        if (node.get() == retNodePtr) {
+            res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + funcId + ";\r\n";
+        }
     }
-    res += baseIndent_ + indent_ + "RET_" + funcId + " [label=\"RET\", shape=doublecircle];\r\n";
+
     res += baseIndent_ + "}\r\n";
     return res;
 }
