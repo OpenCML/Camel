@@ -23,6 +23,19 @@
 using namespace std;
 using namespace gir;
 
+string GraphVizPass::pointerToIdent(const void *ptr) {
+    uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
+    if (!showRawPtr) {
+        if (ptrsMap_.find(ptrVal) == ptrsMap_.end()) {
+            ptrsMap_[ptrVal] = ptrCnt++;
+        }
+        ptrVal = ptrsMap_[ptrVal];
+    }
+    stringstream ss;
+    ss << "P" << hex << uppercase << setw(6) << setfill('0') << ptrVal << dec << nouppercase;
+    return ss.str();
+}
+
 void GraphVizPass::pushIndent() {
     baseIndent_ += indent_;
     depth_++;
@@ -37,13 +50,7 @@ void GraphVizPass::reset() {}
 
 void GraphVizPass::reset(context_ptr_t &context) { context_ = context; }
 
-inline string pointerToIdent(const void *ptr) {
-    stringstream ss;
-    ss << "P" << hex << uppercase << setw(8) << setfill('0') << reinterpret_cast<uintptr_t>(ptr) << dec << nouppercase;
-    return ss.str();
-}
-
-std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
+any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     string funcId = pointerToIdent(graph.get());
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;

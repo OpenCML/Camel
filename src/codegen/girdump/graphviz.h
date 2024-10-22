@@ -24,6 +24,10 @@
 
 class GraphVizPass : public GraphPass {
     context_ptr_t context_;
+
+    uintptr_t ptrCnt = 0;
+    bool showRawPtr = false;
+    std::unordered_map<uintptr_t, uintptr_t> ptrsMap_;
     std::unordered_map<func_ptr_t, std::string> lambdaFuncIdents_;
 
     size_t depth_ = 0;
@@ -32,6 +36,8 @@ class GraphVizPass : public GraphPass {
 
     void pushIndent();
     void popIndent();
+
+    std::string pointerToIdent(const void *ptr);
 
   public:
     GraphVizPass(const context_ptr_t &context) : context_(context) {};
