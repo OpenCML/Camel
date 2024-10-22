@@ -69,6 +69,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitFuncDef(OpenCMLParser::FuncDefContext *ctx) override {
     return visitChildren(ctx);
   }

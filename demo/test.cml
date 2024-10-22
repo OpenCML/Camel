@@ -1,11 +1,8 @@
-// type Signal = Array<Int, 2>
+with <src: Int[]>
+inner func map(in: (a: Int) => Int): Int[] {
+    return [f(src[0]), f(src[1])]
+}
 
-// // atomic func add(sig1: Signal, sig2: Signal): Signal {
-// //     return [sig1[0] + sig2[0], sig1[1] + sig2[1]]
-// // }
-
-// inner func map(f: (a: Int) => Int): Signal {
-//     return [f(this[0]), f(this[1])]
-// }
-
-let a: (var a: Any) => Any = a
+inner func f(sig: Int[]): Void {
+    return sig.map((x: Int): Int => x + 1)
+}

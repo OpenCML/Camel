@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -264,7 +264,35 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     enter("StmtList");
     pushScope();
     node_ptr_t execNode = createNode<ExecLoad>();
+    vector<OpenCMLParser::UseStmtContext *> froms;
+    vector<OpenCMLParser::TypeStmtContext *> types;
+    vector<OpenCMLParser::FuncDeclContext *> decls;
+    vector<OpenCMLParser::StmtContext *> stmts;
     for (const auto &stmt : context->stmt()) {
+        if (stmt->useStmt()) {
+            froms.push_back(stmt->useStmt());
+        } else if (stmt->typeStmt()) {
+            types.push_back(stmt->typeStmt());
+        } else if (stmt->funcDef()) {
+            decls.push_back(stmt->funcDef()->funcDecl());
+            stmts.push_back(stmt);
+        } else {
+            stmts.push_back(stmt);
+        }
+    }
+    // first process froms and types, then decls, finally stmts
+    for (const auto &stmt : froms) {
+        *execNode << any_cast<node_ptr_t>(visitUseStmt(stmt));
+    }
+    for (const auto &stmt : types) {
+        *execNode << any_cast<node_ptr_t>(visitTypeStmt(stmt));
+    }
+    for (const auto &decl : decls) {
+        func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
+        node_ptr_t declNode = createNode<DeclLoad>(funcType);
+        *execNode << declNode;
+    }
+    for (const auto &stmt : stmts) {
         *execNode << any_cast<node_ptr_t>(visitStmt(stmt));
     }
     popScope();
@@ -485,10 +513,16 @@ any Constructor::visitWithDef(OpenCMLParser::WithDefContext *context) {
 };
 
 /*
-funcDef    : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? bracedStmts ;
+funcDecl   : annotations? withDef? modifiers? FUNC identRef parentParams (':' typeExpr)? ;
 */
-any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
-    enter("FuncDef");
+std::any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
+    enter("FuncDecl");
+
+    if (funcDecls_.find(context) != funcDecls_.end()) {
+        leave("FuncDecl");
+        return funcDecls_[context];
+    }
+
     // TODO: Implement annotations
     const string ident = any_cast<string>(visitIdentRef(context->identRef()));
     shared_ptr<FunctorType> funcType = nullptr;
@@ -498,10 +532,10 @@ any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
     const auto &typeExpr = context->typeExpr();
     if (typeExpr) {
         const auto returnType = any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
-        funcType = make_shared<FunctorType>(withType, paramsType, returnType);
+        funcType = make_shared<FunctorType>(std::move(ident), withType, paramsType, returnType);
     } else {
         // if no return type is specified, the default return type is void
-        funcType = make_shared<FunctorType>(withType, paramsType, voidTypePtr);
+        funcType = make_shared<FunctorType>(std::move(ident), withType, paramsType, voidTypePtr);
     }
 
     const auto &withDef = context->withDef();
@@ -540,15 +574,25 @@ any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
         }
     }
 
-    const auto funcTypeNode = createNode<TypeLoad>(dynamic_pointer_cast<Type>(funcType));
-    const auto funcNode = createNode<FuncLoad>();
-    *funcNode << funcTypeNode << any_cast<node_ptr_t>(visitBracedStmts(context->bracedStmts()));
+    // note: this node may be shared
+    funcDecls_[context] = funcType;
+    leave("FuncDecl");
+    return funcType;
+}
 
-    node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-    *nRefNode << funcNode;
+/*
+funcDef    : funcDecl bracedStmts ;
+*/
+any Constructor::visitFuncDef(OpenCMLParser::FuncDefContext *context) {
+    enter("FuncDef");
+    // TODO: Implement annotations
+    func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(context->funcDecl()));
+    node_ptr_t declNode = createNode<DeclLoad>(funcType);
+    const auto funcNode = createNode<FuncLoad>(funcType);
+    *funcNode << declNode << any_cast<node_ptr_t>(visitBracedStmts(context->bracedStmts()));
 
     leave("FuncDef");
-    return nRefNode;
+    return funcNode;
 };
 
 /*
@@ -569,7 +613,7 @@ lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' (bracedS
 */
 any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     enter("LambdaExpr");
-    shared_ptr<FunctorType> funcType = nullptr;
+    func_type_ptr_t funcType = nullptr;
     node_ptr_t bodyNode = nullptr;
     const auto withType = make_shared<ParamsType>();
     const auto paramsType = make_shared<ParamsType>();
@@ -577,10 +621,10 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     const auto &typeExpr = context->typeExpr();
     if (typeExpr) {
         const auto returnType = any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
-        funcType = make_shared<FunctorType>(withType, paramsType, returnType);
+        funcType = make_shared<FunctorType>("", withType, paramsType, returnType);
     } else {
         // if no return type is specified, the default return type is void
-        funcType = make_shared<FunctorType>(withType, paramsType, voidTypePtr);
+        funcType = make_shared<FunctorType>("", withType, paramsType, voidTypePtr);
     }
 
     if (context->angledParams()) {
@@ -631,10 +675,10 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
         }
     }
 
-    const auto funcTypeNode = createNode<TypeLoad>(funcType);
-    const auto funcNode = createNode<FuncLoad>();
+    const auto declNode = createNode<DeclLoad>(funcType);
+    const auto funcNode = createNode<FuncLoad>(funcType);
 
-    *funcNode << funcTypeNode << bodyNode;
+    *funcNode << declNode << bodyNode;
 
     leave("LambdaExpr");
     return funcNode;
@@ -1552,8 +1596,9 @@ any Constructor::visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context) {
                 dataNode = reparent(dataNode, execNode);
             }
             res = dataNode;
+        } else {
+            throw BuildException("Invalid type specification, no pattern matched", context->getStart());
         }
-        throw BuildException("Invalid type specification, no pattern matched", context->getStart());
     }
     case 8: { // lambdaExpr
         res = visitLambdaExpr(context->lambdaExpr());
@@ -1755,10 +1800,10 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     const auto &typeExpr = context->typeExpr();
     if (typeExpr) {
         const auto returnType = any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
-        funcType = make_shared<FunctorType>(withType, paramsType, returnType);
+        funcType = make_shared<FunctorType>("", withType, paramsType, returnType);
     } else {
         // if no return type is specified, the default return type is void
-        funcType = make_shared<FunctorType>(withType, paramsType, voidTypePtr);
+        funcType = make_shared<FunctorType>("", withType, paramsType, voidTypePtr);
     }
 
     if (context->angledParams()) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,8 @@ class ParamsType : public StructType {
     bool add(const std::string &key, const type_ptr_t &type, const data_ptr_t &value = nullptr);
 
     size_t size() const;
+    const std::tuple<std::string, type_ptr_t, data_ptr_t> &elementAt(size_t idx) const;
+
     const std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> &elements() const;
     std::vector<type_ptr_t> indexElements() const;
     std::unordered_map<std::string, type_ptr_t> namedElements() const;

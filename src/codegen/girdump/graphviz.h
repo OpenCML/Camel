@@ -12,22 +12,32 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 17, 2024
+ * Created: Oct. 21, 2024
  * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "operator.h"
+#pragma once
 
-using namespace std;
+#include "common/context.h"
+#include "common/pass.h"
 
-unordered_map<string, std::shared_ptr<oper_vec_t>> globalOperators;
+class GraphVizPass : public GraphPass {
+    context_ptr_t context_;
+    std::unordered_map<func_ptr_t, std::string> lambdaFuncIdents_;
 
-void registerOperator(const oper_ptr_t &&op) {
-    const auto &name = op->name();
-    if (globalOperators.find(name) == globalOperators.end()) {
-        globalOperators[name] = make_shared<oper_vec_t>(1, op);
-    } else {
-        globalOperators[name]->push_back(op);
-    }
-}
+    size_t depth_ = 0;
+    std::string baseIndent_;
+    const std::string indent_ = "    ";
+
+    void pushIndent();
+    void popIndent();
+
+  public:
+    GraphVizPass(const context_ptr_t &context) : context_(context) {};
+    virtual ~GraphVizPass() = default;
+
+    void reset() override;
+    void reset(context_ptr_t &context);
+    std::any apply(gir::graph_ptr_t &graph) override;
+};

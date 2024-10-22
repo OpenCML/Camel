@@ -1,12 +1,15 @@
 [0.0.10]
-为ast添加token range
-精确报错
 func decl
 use sort
-
-[0.0.11]
 dumppass
-schedule
 graphviz
 
+[0.0.11]
+为ast添加token range
+精确报错
+schedule
+graph data -> func data
+
 [0.0.12]
+type system
+func as a param

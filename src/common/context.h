@@ -13,93 +13,64 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <string>
 #include <iostream>
+#include <string>
 
 #include "graph.h"
 #include "operator.h"
 #include "scope.h"
 
-using node_scope_t = Scope<std::string, std::shared_ptr<gir::node_vec_t>>;
-using node_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<gir::node_vec_t>>;
-using operator_scope_t = Scope<std::string, std::shared_ptr<std::vector<operator_ptr_t>>>;
-using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<std::vector<operator_ptr_t>>>;
+using node_scope_t = Scope<std::string, gir::node_ptr_t>;
+using node_scope_ptr_t = scope_ptr_t<std::string, gir::node_ptr_t>;
+using func_scope_t = Scope<std::string, std::shared_ptr<func_vec_t>>;
+using func_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<func_vec_t>>;
+using operator_scope_t = Scope<std::string, std::shared_ptr<oper_vec_t>>;
+using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<oper_vec_t>>;
 
 class Context {
     gir::graph_ptr_t rootGraph_;
     gir::graph_ptr_t currGraph_;
-    node_scope_ptr_t scope_;
+    node_scope_ptr_t nodeScope_;
+    func_scope_ptr_t funcScope_;
     operator_scope_ptr_t opScope_;
+
+    std::unordered_map<func_type_ptr_t,
+                       std::tuple<node_scope_ptr_t, func_scope_ptr_t, operator_scope_ptr_t, gir::graph_ptr_t>>
+        funcCache_;
+
+    // only generated when getNodeIdent() is called to save memory
+    std::unordered_map<gir::node_ptr_t, std::string> nodeIdentsMap_;
+    void generateNodeIdentsMap();
 
   public:
     Context();
     virtual ~Context() = default;
 
-    node_scope_t &scope() { return *scope_; }
+    node_scope_t &nodeScope() { return *nodeScope_; }
+    func_scope_t &funcScope() { return *funcScope_; }
     operator_scope_t &opScope() { return *opScope_; }
-    gir::graph_ptr_t &graph() { return currGraph_; }
 
-    void pushScope() {
-        scope_ = scope_->push();
-        opScope_ = opScope_->push();
-        currGraph_ = gir::Graph::create(currGraph_);
-    }
+    gir::graph_ptr_t &rootGraph() { return rootGraph_; }
+    gir::graph_ptr_t &currGraph() { return currGraph_; }
 
-    void popScope() {
-        scope_ = scope_->pop();
-        opScope_ = opScope_->pop();
-        currGraph_ = currGraph_->outer();
-    }
+    std::optional<std::string> getNodeIdent(const gir::node_ptr_t &node);
 
-    std::optional<gir::node_ptr_t> nodeAt(const std::string &name) {
-        auto opNode = scope_->at(name);
-        if (opNode.has_value()) {
-            gir::node_vec_t &nodes = *opNode.value();
-            if (nodes.size() == 1 && nodes[0]->type() != gir::NodeType::FUNCTOR) {
-                return nodes[0];
-            }
-            return gir::SelectNode::create(currGraph_, nodes);
-        }
-        auto opOp = opScope_->at(name);
-        if (opOp.has_value()) {
-            return gir::SelectNode::create(currGraph_, *opOp.value());
-        }
-        return std::nullopt;
-    }
+    void pushScope(func_type_ptr_t key);
+    void popScope(func_type_ptr_t key = nullptr);
 
-    bool insertData(const std::string &name, const gir::node_ptr_t &node) {
-        if (scope_->has(name)) {
-            return false;
-        }
-        scope_->insert(name, std::make_shared<gir::node_vec_t>(1, node));
-        return true;
-    }
+    bool cached(func_type_ptr_t key) { return funcCache_.find(key) != funcCache_.end(); }
 
-    bool insertFunc(const std::string &name, const gir::node_ptr_t &node) {
-        if (scope_->has(name)) {
-            const auto nodes = scope_->at(name).value();
-            // TODO: check if the func node is already in the list
-            nodes->push_back(node);
-        }
-        scope_->insert(name, std::make_shared<gir::node_vec_t>(1, node));
-        return true;
-    }
+    std::optional<gir::node_ptr_t> nodeAt(const std::string &name);
 
-    bool insertOperator(const std::string &name, const operator_ptr_t &op) {
-        if (opScope_->has(name)) {
-            const auto ops = opScope_->at(name).value();
-            // TODO: check if the operator is already in the list
-            ops->push_back(op);
-        }
-        opScope_->insert(name, std::make_shared<std::vector<operator_ptr_t>>(1, op));
-        return true;
-    }
+    bool insertNode(const std::string &name, const gir::node_ptr_t &node);
+    bool insertFunc(const std::string &name, func_ptr_t func);
+    bool insertOperator(const std::string &name, const oper_ptr_t &op);
 };
 
 using context_ptr_t = std::shared_ptr<Context>;

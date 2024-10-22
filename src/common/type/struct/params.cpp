@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -110,6 +110,13 @@ bool ParamsType::add(const string &key, const type_ptr_t &type, const data_ptr_t
 }
 
 size_t ParamsType::size() const { return elements_.size(); }
+
+const std::tuple<std::string, type_ptr_t, data_ptr_t> &ParamsType::elementAt(size_t idx) const {
+    if (idx >= elements_.size()) {
+        throw out_of_range("Index out of range");
+    }
+    return elements_[idx];
+}
 
 const vector<tuple<string, type_ptr_t, data_ptr_t>> &ParamsType::elements() const { return elements_; }
 

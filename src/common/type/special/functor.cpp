@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,9 +57,17 @@ string modifier2str(FunctorModifier modifier) {
     }
 }
 
-FunctorType::FunctorType(const shared_ptr<ParamsType> &withType, const shared_ptr<ParamsType> &paramsType,
-                         const type_ptr_t &returnType)
-    : SpecialType(TypeCode::FUNCTOR), withType_(withType), linkType_(paramsType), returnType_(returnType) {}
+FunctorType::FunctorType(const std::string &&name, const shared_ptr<ParamsType> &withType,
+                         const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
+    : SpecialType(TypeCode::FUNCTOR), name_(std::move(name)), withType_(withType), linkType_(paramsType),
+      returnType_(returnType) {}
+
+const std::string &FunctorType::nameAt(size_t idx) const {
+    if (idx < withType_->size())
+        return std::get<0>(withType_->elementAt(idx));
+    else
+        return std::get<0>(linkType_->elementAt(idx - withType_->size()));
+}
 
 void FunctorType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
 
@@ -116,6 +124,7 @@ string FunctorType::toString() const {
         }
         result += "> ";
     }
+    result += name_;
     result += "(";
     if (linkType_ && linkType_->size() > 0) {
         const auto &params = dynamic_cast<const ParamsType &>(*linkType_);

@@ -52,22 +52,22 @@ public:
   enum {
     RuleProgram = 0, RuleStmtList = 1, RuleStmt = 2, RuleLetStmt = 3, RuleUseStmt = 4, 
     RuleTypeStmt = 5, RuleExprStmt = 6, RuleWaitStmt = 7, RuleWithDef = 8, 
-    RuleFuncDef = 9, RuleRetStmt = 10, RuleLambdaExpr = 11, RuleCarrier = 12, 
-    RuleAnnotation = 13, RuleAnnotations = 14, RuleModifiers = 15, RuleKeyTypePair = 16, 
-    RuleKeyValuePair = 17, RuleKeyParamPair = 18, RuleIndexKTPair = 19, 
-    RuleIndexKVPair = 20, RuleTypeList = 21, RuleIdentList = 22, RuleValueList = 23, 
-    RulePairedTypes = 24, RulePairedValues = 25, RulePairedParams = 26, 
-    RuleIndexKVPairs = 27, RuleArgumentList = 28, RuleBracedPairedValues = 29, 
-    RuleBracedIdents = 30, RuleBracedStmts = 31, RuleBracedValues = 32, 
-    RuleBracedIndexKVPairs = 33, RuleBracketIdents = 34, RuleBracketValues = 35, 
-    RuleMemberAccess = 36, RuleParentParams = 37, RuleParentArgues = 38, 
-    RuleParentValues = 39, RuleAngledParams = 40, RuleAngledValues = 41, 
-    RuleEntityExpr = 42, RuleTernaryExpr = 43, RuleLogicalOrExpr = 44, RuleLogicalAndExpr = 45, 
-    RuleEqualityExpr = 46, RuleRelationalExpr = 47, RuleAdditiveExpr = 48, 
-    RuleMultiplicativeExpr = 49, RuleUnaryExpr = 50, RuleLinkExpr = 51, 
-    RuleWithExpr = 52, RuleAnnotatedExpr = 53, RulePrimaryExpr = 54, RuleLiteral = 55, 
-    RuleTypeExpr = 56, RuleArrayType = 57, RuleAtomType = 58, RuleLambdaType = 59, 
-    RulePrimaryType = 60, RuleStructType = 61, RuleSpecialType = 62, RuleIdentRef = 63
+    RuleFuncDecl = 9, RuleFuncDef = 10, RuleRetStmt = 11, RuleLambdaExpr = 12, 
+    RuleCarrier = 13, RuleAnnotation = 14, RuleAnnotations = 15, RuleModifiers = 16, 
+    RuleKeyTypePair = 17, RuleKeyValuePair = 18, RuleKeyParamPair = 19, 
+    RuleIndexKTPair = 20, RuleIndexKVPair = 21, RuleTypeList = 22, RuleIdentList = 23, 
+    RuleValueList = 24, RulePairedTypes = 25, RulePairedValues = 26, RulePairedParams = 27, 
+    RuleIndexKVPairs = 28, RuleArgumentList = 29, RuleBracedPairedValues = 30, 
+    RuleBracedIdents = 31, RuleBracedStmts = 32, RuleBracedValues = 33, 
+    RuleBracedIndexKVPairs = 34, RuleBracketIdents = 35, RuleBracketValues = 36, 
+    RuleMemberAccess = 37, RuleParentParams = 38, RuleParentArgues = 39, 
+    RuleParentValues = 40, RuleAngledParams = 41, RuleAngledValues = 42, 
+    RuleEntityExpr = 43, RuleTernaryExpr = 44, RuleLogicalOrExpr = 45, RuleLogicalAndExpr = 46, 
+    RuleEqualityExpr = 47, RuleRelationalExpr = 48, RuleAdditiveExpr = 49, 
+    RuleMultiplicativeExpr = 50, RuleUnaryExpr = 51, RuleLinkExpr = 52, 
+    RuleWithExpr = 53, RuleAnnotatedExpr = 54, RulePrimaryExpr = 55, RuleLiteral = 56, 
+    RuleTypeExpr = 57, RuleArrayType = 58, RuleAtomType = 59, RuleLambdaType = 60, 
+    RulePrimaryType = 61, RuleStructType = 62, RuleSpecialType = 63, RuleIdentRef = 64
   };
 
   explicit OpenCMLParser(antlr4::TokenStream *input);
@@ -107,6 +107,7 @@ public:
   class ExprStmtContext;
   class WaitStmtContext;
   class WithDefContext;
+  class FuncDeclContext;
   class FuncDefContext;
   class RetStmtContext;
   class LambdaExprContext;
@@ -303,18 +304,31 @@ public:
 
   WithDefContext* withDef();
 
-  class  FuncDefContext : public antlr4::RuleContextWithAltNum {
+  class  FuncDeclContext : public antlr4::RuleContextWithAltNum {
   public:
-    FuncDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    FuncDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *FUNC();
     IdentRefContext *identRef();
     ParentParamsContext *parentParams();
-    BracedStmtsContext *bracedStmts();
     AnnotationsContext *annotations();
     WithDefContext *withDef();
     ModifiersContext *modifiers();
     TypeExprContext *typeExpr();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  FuncDeclContext* funcDecl();
+
+  class  FuncDefContext : public antlr4::RuleContextWithAltNum {
+  public:
+    FuncDefContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    FuncDeclContext *funcDecl();
+    BracedStmtsContext *bracedStmts();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

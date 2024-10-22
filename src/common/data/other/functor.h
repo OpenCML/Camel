@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,13 +27,17 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 
 class FunctorData : public Data {
-    GraphIR::graph_ptr_t graph_;
+    GraphIR::graph_ptr_t baseGraph_;
+    GraphIR::graph_ptr_t thisGraph_;
 
   public:
-    FunctorData(const type_ptr_t &type, GraphIR::graph_ptr_t graph);
+    FunctorData(const type_ptr_t &type, GraphIR::graph_ptr_t graph, GraphIR::graph_ptr_t base = nullptr);
     virtual ~FunctorData() = default;
 
     GraphIR::graph_ptr_t graph() const;
+    GraphIR::graph_ptr_t baseGraph() const;
+    std::string name() const;
+    func_type_ptr_t funcType() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;

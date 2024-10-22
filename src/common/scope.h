@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 21, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,6 +44,7 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
     Scope(std::shared_ptr<Scope<K, V>> outer) : map_(), outer_(std::move(outer)) {}
 
     std::shared_ptr<Scope<K, V>> &outer() { return outer_; }
+    std::unordered_map<K, V> &map() { return map_; }
 
     std::optional<V> at(const K &k, bool recursive = true) {
         // std::shared_lock<std::shared_mutex> lock(rwMutex_);
@@ -58,6 +59,9 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
     }
 
     void insert(const K &k, const V &v) {
+        // this method won't check if the key already exists
+        // keep in mind that the insertion is successful
+        // even if the key already exists in the outer scope
         // std::unique_lock<std::shared_mutex> lock(rwMutex_);
         map_.insert({k, v});
     }
