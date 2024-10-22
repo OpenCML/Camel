@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,18 +26,22 @@
 #include "operator.h"
 #include "scope.h"
 
-using node_scope_t = Scope<std::string, std::shared_ptr<gir::node_vec_t>>;
-using node_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<gir::node_vec_t>>;
+using node_scope_t = Scope<std::string, gir::node_ptr_t>;
+using node_scope_ptr_t = scope_ptr_t<std::string, gir::node_ptr_t>;
+using func_scope_t = Scope<std::string, std::shared_ptr<gir::node_vec_t>>;
+using func_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<gir::node_vec_t>>;
 using operator_scope_t = Scope<std::string, std::shared_ptr<std::vector<operator_ptr_t>>>;
 using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<std::vector<operator_ptr_t>>>;
 
 class Context {
     gir::graph_ptr_t rootGraph_;
     gir::graph_ptr_t currGraph_;
-    node_scope_ptr_t scope_;
+    node_scope_ptr_t nodeScope_;
+    func_scope_ptr_t funcScope_;
     operator_scope_ptr_t opScope_;
 
-    std::unordered_map<void *, std::tuple<node_scope_ptr_t, operator_scope_ptr_t, gir::graph_ptr_t>> consCache_;
+    std::unordered_map<void *, std::tuple<node_scope_ptr_t, func_scope_ptr_t, operator_scope_ptr_t, gir::graph_ptr_t>>
+        consCache_;
     std::unordered_map<void *, gir::node_ptr_t> nodeCache_;
 
     // only generated when getNodeIdent() is called to save memory
@@ -48,11 +52,12 @@ class Context {
     Context();
     virtual ~Context() = default;
 
-    node_scope_t &scope() { return *scope_; }
+    node_scope_t &nodeScope() { return *nodeScope_; }
+    func_scope_t &funcScope() { return *funcScope_; }
     operator_scope_t &opScope() { return *opScope_; }
 
     gir::graph_ptr_t &rootGraph() { return rootGraph_; }
-    gir::graph_ptr_t &graph() { return currGraph_; }
+    gir::graph_ptr_t &currGraph() { return currGraph_; }
 
     std::optional<std::string> getNodeIdent(const gir::node_ptr_t &node);
 
@@ -66,7 +71,7 @@ class Context {
 
     std::optional<gir::node_ptr_t> nodeAt(const std::string &name);
 
-    bool insertData(const std::string &name, const gir::node_ptr_t &node);
+    bool insertNode(const std::string &name, const gir::node_ptr_t &node);
     bool insertFunc(const std::string &name, const gir::node_ptr_t &node);
     bool insertOperator(const std::string &name, const operator_ptr_t &op);
 };

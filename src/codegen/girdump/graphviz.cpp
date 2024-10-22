@@ -109,6 +109,8 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             throw runtime_error("Unknown node type");
         }
         if (node->inDegree() > 0 || node->outDegree() > 0) {
+            // res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " " + to_string(node->inDegree()) + " " +
+            //        to_string(node->outDegree()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
             res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape +
                    "];\r\n";
         }

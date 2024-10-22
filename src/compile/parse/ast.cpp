@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -290,9 +290,7 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     for (const auto &decl : decls) {
         func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
         node_ptr_t declNode = createNode<DeclLoad>(funcType);
-        node_ptr_t nRefNode = createNode<NRefLoad>(funcType->name());
-        *nRefNode << declNode;
-        *execNode << nRefNode;
+        *execNode << declNode;
     }
     for (const auto &stmt : stmts) {
         *execNode << any_cast<node_ptr_t>(visitStmt(stmt));

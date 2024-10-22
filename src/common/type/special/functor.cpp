@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -124,6 +124,7 @@ string FunctorType::toString() const {
         }
         result += "> ";
     }
+    result += name_;
     result += "(";
     if (linkType_ && linkType_->size() > 0) {
         const auto &params = dynamic_cast<const ParamsType &>(*linkType_);

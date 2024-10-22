@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ class Constructor {
 
     graph_ptr_t construct(ast::node_ptr_t &ast) {
         visit(ast);
-        return context_->graph();
+        return context_->currGraph();
     }
 
   private:

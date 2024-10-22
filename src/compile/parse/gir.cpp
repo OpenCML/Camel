@@ -69,7 +69,7 @@ node_ptr_t Constructor::visitDataNode(const ast::node_ptr_t &ast) {
     enter("DATA");
     const auto &dataNode = ast::data_load_ptr_cast(ast->load());
     const data_ptr_t &data = dataNode->data();
-    node_ptr_t node = DataNode::create(context_->graph(), data, false);
+    node_ptr_t node = DataNode::create(context_->currGraph(), data, false);
     if (!data->resolved()) {
         for (const string &ref : data->refs()) {
             auto optSrcNode = context_->nodeAt(ref);
@@ -111,24 +111,27 @@ node_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
         leave("DECL");
         return context_->getCachedNode(key);
     }
-    context_->pushScope(key);
     auto functorType = dynamic_pointer_cast<FunctorType>(funcType);
     const auto &varMap = functorType->variableMap();
     const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
     const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
-    graph_ptr_t &graph = context_->graph();
+
+    context_->pushScope(key);
+    graph_ptr_t &graph = context_->currGraph();
     for (const auto &[name, type, data] : withType->elements()) {
         node_ptr_t node = graph->addPort(varMap.at(name));
-        context_->insertData(name, node);
+        context_->insertNode(name, node);
     }
     for (const auto &[name, type, data] : linkType->elements()) {
         node_ptr_t node = graph->addPort(varMap.at(name));
-        context_->insertData(name, node);
+        context_->insertNode(name, node);
     }
     func_ptr_t func = make_shared<FunctorData>(funcType, graph);
     graph->setFunc(func);
     const auto &funcNode = gir::FunctorNode::create(graph->outer(), func);
     context_->popScope();
+
+    context_->insertFunc(funcType->name(), funcNode);
     context_->cacheNode(key, funcNode);
     leave("DECL");
     return funcNode;
@@ -155,14 +158,8 @@ void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
         throw runtime_error("Unexpected result type from Enter the child of NREF node");
     }
     node_ptr_t node = any_cast<node_ptr_t>(res);
-    if (node->type() == gir::NodeType::FUNCTOR) {
-        if (!context_->insertFunc(ident, node)) {
-            throw runtime_error("Redeclaration of functor: " + ident);
-        }
-    } else {
-        if (!context_->insertData(ident, node)) {
-            throw runtime_error("Redeclaration of entity: " + ident);
-        }
+    if (!context_->insertNode(ident, node)) {
+        throw runtime_error("Redeclaration of entity: " + ident);
     }
     leave("NREF");
     return nullptr;
@@ -185,6 +182,17 @@ node_ptr_t Constructor::visitWaitNode(const ast::node_ptr_t &ast) { throw runtim
 
 node_ptr_t Constructor::visitAnnoNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
 
+inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
+    node_ptr_t res = selNode;
+    if (selNode->type() == NodeType::SELECT) {
+        res = select_node_ptr_cast(selNode)->caseAt(0);
+        if (res->type() == NodeType::FUNCTOR) {
+            res = dynamic_pointer_cast<FunctorNode>(res)->copyTo(tgtGraph);
+        }
+    }
+    return res;
+}
+
 node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
     enter("LINK");
     // TODO: consider functor and operator overriden
@@ -195,29 +203,11 @@ node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
     if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter children of LINK node");
     }
-    node_ptr_t dataNode = any_cast<node_ptr_t>(dataRes);
-    node_ptr_t linkNode = any_cast<node_ptr_t>(funcRes);
-    node_ptr_t funcNode = nullptr;
-    switch (linkNode->type()) {
-    case NodeType::SELECT:
-        // TODO: select matched case
-        funcNode = select_node_ptr_cast(linkNode)->caseAt(0);
-        if (funcNode->type() == NodeType::FUNCTOR) {
-            funcNode = dynamic_pointer_cast<FunctorNode>(funcNode)->copyTo(context_->graph());
-        }
-        break;
-
-    default:
-        // TODO: consider other node types
-        // etc. functor, operator, null(port)
-        // TODO: shall we copy the node?
-        funcNode = linkNode;
-        break;
-    }
-    funcNode->ref();
-    Node::link(dataNode, funcNode, 1);
+    node_ptr_t dataNode = selectNode(any_cast<node_ptr_t>(dataRes), context_->currGraph());
+    node_ptr_t linkNode = selectNode(any_cast<node_ptr_t>(funcRes), context_->currGraph());
+    Node::link(dataNode, linkNode, 1);
     leave("LINK");
-    return funcNode;
+    return linkNode;
 }
 
 node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
@@ -227,25 +217,11 @@ node_ptr_t Constructor::visitWithNode(const ast::node_ptr_t &ast) {
     if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter children of LINK node");
     }
-    node_ptr_t dataNode = any_cast<node_ptr_t>(dataRes);
-    node_ptr_t withNode = any_cast<node_ptr_t>(funcRes);
-    node_ptr_t funcNode = nullptr;
-    switch (withNode->type()) {
-    case NodeType::SELECT:
-        funcNode = select_node_ptr_cast(withNode)->caseAt(0);
-        if (funcNode->type() == NodeType::FUNCTOR) {
-            funcNode = dynamic_pointer_cast<FunctorNode>(funcNode)->copyTo(context_->graph());
-        }
-        break;
-
-    default:
-        funcNode = withNode;
-        break;
-    }
-    funcNode->ref();
-    Node::link(dataNode, funcNode, 0);
+    node_ptr_t dataNode = selectNode(any_cast<node_ptr_t>(dataRes), context_->currGraph());
+    node_ptr_t withNode = selectNode(any_cast<node_ptr_t>(funcRes), context_->currGraph());
+    Node::link(dataNode, withNode, 0);
     leave("WITH");
-    return funcNode;
+    return withNode;
 }
 
 void_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {
@@ -255,7 +231,7 @@ void_ptr_t Constructor::visitRetnNode(const ast::node_ptr_t &ast) {
         throw runtime_error("Unexpected result type from Enter child of RETN node");
     }
     const auto &node = any_cast<node_ptr_t>(res);
-    context_->graph()->setOutput(node);
+    context_->currGraph()->setOutput(node);
     leave("RETN");
     return nullptr;
 }
