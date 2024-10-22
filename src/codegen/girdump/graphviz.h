@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 
 class GraphVizPass : public GraphPass {
     context_ptr_t context_;
-    std::unordered_set<void *> visitedFunc_;
+    std::unordered_map<func_ptr_t, std::string> lambdaFuncIdents_;
 
     size_t depth_ = 0;
     std::string baseIndent_;

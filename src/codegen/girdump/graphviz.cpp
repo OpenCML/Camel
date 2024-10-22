@@ -45,10 +45,11 @@ inline string pointerToIdent(const void *ptr) {
 
 std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     string funcId = pointerToIdent(graph.get());
-    string res = baseIndent_;
+    string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
     void *retNodePtr = graph->output().get();
 
+    res += baseIndent_;
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
@@ -58,17 +59,22 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
             portsNameMap[idx] = make_pair(type->nameAt(idx), isVar);
         }
         res += "subgraph cluster_" + funcId + " {\r\n";
-        res += baseIndent_ + indent_ + "label=\"" + func->name() + "\";\r\n";
+        string funcName = type->name().empty() ? lambdaFuncIdents_[func] : type->name();
+        res += baseIndent_ + indent_ + "label=\"" + funcName + "\";\r\n";
     }
 
+    size_t lambdaFuncCnt = 0;
     for (auto &subGraph : graph->subGraphs()) {
-        res += baseIndent_;
         pushIndent();
+        func_ptr_t func = subGraph->func();
+        if (func->name().empty()) {
+            lambdaFuncIdents_[func] = "__lambda_" + to_string(lambdaFuncCnt++) + "__";
+        }
         res += any_cast<string>(apply(subGraph));
         popIndent();
     }
 
-    size_t cnt = 0;
+    size_t dataCnt = 0;
     node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); i++) {
         string label;
@@ -86,7 +92,7 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
                 if (name.has_value()) {
                     label = name.value();
                 } else {
-                    label = "D" + to_string(cnt++);
+                    label = "__D" + to_string(dataCnt++) + "__";
                 }
                 shape = "cylinder";
             }
@@ -95,7 +101,7 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         case NodeType::FUNCTOR: {
             func_ptr_t func = func_node_ptr_cast(node)->func();
             func_type_ptr_t type = func->funcType();
-            label = type->name();
+            label = type->name().empty() ? lambdaFuncIdents_[func] : type->name();
             shape = "parallelogram";
             break;
         }

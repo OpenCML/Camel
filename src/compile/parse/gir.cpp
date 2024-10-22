@@ -30,6 +30,17 @@ inline ast::node_ptr_t ast_ptr_cast(const tree_node_ptr_t<ast::load_ptr_t> &ptr)
     return dynamic_pointer_cast<ast::Node>(ptr);
 }
 
+inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
+    node_ptr_t res = selNode;
+    if (selNode->type() == NodeType::SELECT) {
+        res = select_node_ptr_cast(selNode)->select(0);
+        if (res->type() == NodeType::FUNCTOR) {
+            res = dynamic_pointer_cast<FunctorNode>(res);
+        }
+    }
+    return res;
+}
+
 any Constructor::visit(const ast::node_ptr_t &node) {
     switch (node->type()) {
     case ast::NodeType::DATA:
@@ -74,7 +85,8 @@ node_ptr_t Constructor::visitDataNode(const ast::node_ptr_t &ast) {
         for (const string &ref : data->refs()) {
             auto optSrcNode = context_->nodeAt(ref);
             if (optSrcNode.has_value()) {
-                Node::link(optSrcNode.value(), node);
+                node_ptr_t srcNode = selectNode(optSrcNode.value(), context_->currGraph());
+                Node::link(srcNode, node);
             } else {
                 throw runtime_error("Unresolved reference: " + ref);
             }
@@ -129,7 +141,10 @@ func_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
     graph->setFunc(func);
     context_->popScope();
 
-    context_->insertFunc(funcType->name(), func);
+    if (!functorType->name().empty()) {
+        // lambda functors my not have a name
+        context_->insertFunc(funcType->name(), func);
+    }
     cacheFunc(funcType, func);
     leave("DECL");
     return func;
@@ -147,12 +162,22 @@ node_ptr_t Constructor::visitFuncNode(const ast::node_ptr_t &ast) {
     return SelectNode::create(context_->currGraph(), func_vec_t{func});
 }
 
+inline bool validateIdent(const std::string &str) {
+    if (str.length() < 4) {
+        return true;
+    }
+    return !(str.substr(0, 2) == "__" && str.substr(str.length() - 2) == "__");
+}
+
 void_ptr_t Constructor::visitNRefNode(const ast::node_ptr_t &ast) {
     enter("NREF");
     const string &ident = ast::nref_load_ptr_cast(ast->load())->ident();
+    if (!validateIdent(ident)) {
+        throw runtime_error("Identifiers starting and ending with '__' are reserved for internal use.");
+    }
     const auto &res = visit(ast_ptr_cast(ast->childAt(0)));
     if (res.type() != typeid(node_ptr_t)) {
-        throw runtime_error("Unexpected result type from Enter the child of NREF node");
+        throw runtime_error("Unexpected result type from Enter the child of NREF node.");
     }
     node_ptr_t node = any_cast<node_ptr_t>(res);
     if (!context_->insertNode(ident, node)) {
@@ -178,17 +203,6 @@ node_ptr_t Constructor::visitDRefNode(const ast::node_ptr_t &ast) {
 node_ptr_t Constructor::visitWaitNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
 
 node_ptr_t Constructor::visitAnnoNode(const ast::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
-
-inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
-    node_ptr_t res = selNode;
-    if (selNode->type() == NodeType::SELECT) {
-        res = select_node_ptr_cast(selNode)->select(0);
-        if (res->type() == NodeType::FUNCTOR) {
-            res = dynamic_pointer_cast<FunctorNode>(res);
-        }
-    }
-    return res;
-}
 
 node_ptr_t Constructor::visitLinkNode(const ast::node_ptr_t &ast) {
     enter("LINK");

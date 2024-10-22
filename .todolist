@@ -11,3 +11,5 @@ schedule
 graph data -> func data
 
 [0.0.12]
+type system
+func as a param

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 01, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,8 @@ inline std::string repeatPattern(const std::string &pattern, int n) {
 
 inline std::string pointerToHex(const void *ptr) {
     std::stringstream ss;
-    ss << "0x" << std::hex << std::setw(sizeof(void *) * 2) << std::setfill('0') << reinterpret_cast<uintptr_t>(ptr);
+    ss << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0') << reinterpret_cast<uintptr_t>(ptr)
+       << std::dec << std::nouppercase;
     return ss.str();
 }
 
