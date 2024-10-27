@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Oct. 27, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,8 @@ FunctorModifier str2modifier(const string &str) {
         return FunctorModifier::SHARED;
     } else if (str == "sync") {
         return FunctorModifier::SYNC;
+    } else if (str == "macro") {
+        return FunctorModifier::MACRO;
     } else {
         throw runtime_error("Unknown modifier: " + str);
     }
@@ -52,6 +54,8 @@ string modifier2str(FunctorModifier modifier) {
         return "shared";
     case FunctorModifier::SYNC:
         return "sync";
+    case FunctorModifier::MACRO:
+        return "macro";
     default:
         throw runtime_error("Unknown modifier: " + to_string(static_cast<int>(modifier)));
     }

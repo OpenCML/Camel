@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Oct. 27, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@ enum class FunctorModifier {
     ATOMIC = 0b00000100,
     SHARED = 0b00001000,
     SYNC = 0b00010000,
+    MACRO = 0b00100000,
 };
 
 FunctorModifier str2modifier(const std::string &str);

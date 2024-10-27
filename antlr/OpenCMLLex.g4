@@ -20,6 +20,7 @@ OUTER       : 'outer';
 ATOMIC      : 'atomic';
 SHARED      : 'shared';
 SYNC        : 'sync';
+MACRO       : 'macro';
 
 NULL        : 'null';
 TRUE        : 'true';

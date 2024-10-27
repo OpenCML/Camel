@@ -38,15 +38,15 @@ public:
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
     T__38 = 39, T__39 = 40, SEP = 41, AS = 42, IS = 43, LET = 44, VAR = 45, 
     USE = 46, FROM = 47, FUNC = 48, TYPE = 49, WITH = 50, WAIT = 51, RETURN = 52, 
-    INNER = 53, OUTER = 54, ATOMIC = 55, SHARED = 56, SYNC = 57, NULL_ = 58, 
-    TRUE = 59, FALSE = 60, INTEGER_TYPE = 61, INTEGER32_TYPE = 62, INTEGER64_TYPE = 63, 
-    REAL_TYPE = 64, FLOAT_TYPE = 65, DOUBLE_TYPE = 66, NUMBER_TYPE = 67, 
-    STRING_TYPE = 68, BOOL_TYPE = 69, CHAR_TYPE = 70, SET_TYPE = 71, MAP_TYPE = 72, 
-    LIST_TYPE = 73, DICT_TYPE = 74, ARRAY_TYPE = 75, TUPLE_TYPE = 76, UNION_TYPE = 77, 
-    VECTOR_TYPE = 78, TENSOR_TYPE = 79, ANY_TYPE = 80, VOID_TYPE = 81, FUNCTOR_TYPE = 82, 
-    BLANK = 83, LIN_CMT_HASH = 84, LIN_CMT_SLASH = 85, BLK_CMT = 86, MULTI_STR = 87, 
-    IDENTIFIER = 88, UNIT = 89, STRING = 90, FSTRING = 91, INTEGER = 92, 
-    REAL = 93
+    INNER = 53, OUTER = 54, ATOMIC = 55, SHARED = 56, SYNC = 57, MACRO = 58, 
+    NULL_ = 59, TRUE = 60, FALSE = 61, INTEGER_TYPE = 62, INTEGER32_TYPE = 63, 
+    INTEGER64_TYPE = 64, REAL_TYPE = 65, FLOAT_TYPE = 66, DOUBLE_TYPE = 67, 
+    NUMBER_TYPE = 68, STRING_TYPE = 69, BOOL_TYPE = 70, CHAR_TYPE = 71, 
+    SET_TYPE = 72, MAP_TYPE = 73, LIST_TYPE = 74, DICT_TYPE = 75, ARRAY_TYPE = 76, 
+    TUPLE_TYPE = 77, UNION_TYPE = 78, VECTOR_TYPE = 79, TENSOR_TYPE = 80, 
+    ANY_TYPE = 81, VOID_TYPE = 82, FUNCTOR_TYPE = 83, BLANK = 84, LIN_CMT_HASH = 85, 
+    LIN_CMT_SLASH = 86, BLK_CMT = 87, MULTI_STR = 88, IDENTIFIER = 89, UNIT = 90, 
+    STRING = 91, FSTRING = 92, INTEGER = 93, REAL = 94
   };
 
   enum {
@@ -425,6 +425,8 @@ public:
     antlr4::tree::TerminalNode* SHARED(size_t i);
     std::vector<antlr4::tree::TerminalNode *> SYNC();
     antlr4::tree::TerminalNode* SYNC(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> MACRO();
+    antlr4::tree::TerminalNode* MACRO(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
