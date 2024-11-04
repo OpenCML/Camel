@@ -28,7 +28,7 @@ class GraphVizPass : public GraphPass {
     uintptr_t ptrCnt = 0;
     bool showRawPtr = false;
     std::unordered_map<uintptr_t, uintptr_t> ptrsMap_;
-    std::unordered_map<func_ptr_t, std::string> lambdaFuncIdents_;
+    std::unordered_map<func_type_ptr_t, std::string> lambdaFuncIdents_;
 
     size_t depth_ = 0;
     std::string baseIndent_;

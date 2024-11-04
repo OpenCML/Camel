@@ -53,7 +53,7 @@ data_ptr_t FunctorData::convert(type_ptr_t target, bool inplace) {
 data_ptr_t FunctorData::clone(bool deep) const {
     auto newGraph = make_shared<Graph>(*thisGraph_);
     func_ptr_t func = std::make_shared<FunctorData>(type_, newGraph, baseGraph_);
-    newGraph->setFunc(func);
+    newGraph->setFuncType(func);
     return func;
 }
 

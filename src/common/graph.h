@@ -145,7 +145,7 @@ class Graph : public Node {
         bool shared;
     };
 
-    func_wptr_t func_;
+    func_type_ptr_t funcType_;
 
     node_ptr_t output_;
     std::shared_ptr<node_vec_t> nodes_;
@@ -166,8 +166,8 @@ class Graph : public Node {
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr);
 
-    void setFunc(const func_ptr_t &func);
-    func_ptr_t func() const;
+    void setFuncType(const func_type_ptr_t &type);
+    func_type_ptr_t funcType() const;
 
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isVar = false);

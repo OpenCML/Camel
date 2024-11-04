@@ -119,13 +119,13 @@ graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
     return res;
 }
 
-void gir::Graph::setFunc(const func_ptr_t &func) { func_ = func; }
+void gir::Graph::setFuncType(const func_type_ptr_t &type) { funcType_ = type; }
 
-func_ptr_t gir::Graph::func() const {
-    if (func_.expired()) {
+func_type_ptr_t gir::Graph::funcType() const {
+    if (funcType_ == nullptr) {
         throw runtime_error("This graph has not been set to a functor.");
     }
-    return func_.lock();
+    return funcType_;
 }
 
 void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }

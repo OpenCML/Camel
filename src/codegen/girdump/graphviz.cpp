@@ -60,22 +60,21 @@ any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
-        func_ptr_t func = graph->func();
-        func_type_ptr_t type = func->funcType();
+        func_type_ptr_t type = graph->funcType();
         for (const auto &[idx, _, isVar] : graph->ports()) {
-            portsNameMap[idx] = make_pair(type->nameAt(idx), isVar);
+            portsNameMap[idx] = make_pair(type->argNameAt(idx), isVar);
         }
         res += "subgraph cluster_" + funcId + " {\r\n";
-        string funcName = type->name().empty() ? lambdaFuncIdents_[func] : type->name();
+        string funcName = type->name().empty() ? lambdaFuncIdents_[type] : type->name();
         res += baseIndent_ + indent_ + "label=\"" + funcName + "\";\r\n";
     }
 
     size_t lambdaFuncCnt = 0;
     for (auto &subGraph : graph->subGraphs()) {
         pushIndent();
-        func_ptr_t func = subGraph->func();
-        if (func->name().empty()) {
-            lambdaFuncIdents_[func] = "__lambda_" + to_string(lambdaFuncCnt++) + "__";
+        func_type_ptr_t type = subGraph->funcType();
+        if (type->name().empty()) {
+            lambdaFuncIdents_[type] = "__lambda_" + to_string(lambdaFuncCnt++) + "__";
         }
         res += any_cast<string>(apply(subGraph));
         popIndent();
@@ -108,7 +107,7 @@ any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         case NodeType::FUNCTOR: {
             func_ptr_t func = func_node_ptr_cast(node)->func();
             func_type_ptr_t type = func->funcType();
-            label = type->name().empty() ? lambdaFuncIdents_[func] : type->name();
+            label = type->name().empty() ? lambdaFuncIdents_[type] : type->name();
             shape = "parallelogram";
             break;
         }

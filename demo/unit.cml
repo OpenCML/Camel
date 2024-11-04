@@ -6,8 +6,8 @@ func add(lft: Int, rgt: Int): Int {
     return lft + rgt // __add__
 }
 
-(a, b)->add
-add(a, b)
+add(a, b)   // regular invocation
+(a, b)->add // entity invocation
 
 // chain call
 let c = 3
