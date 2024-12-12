@@ -1,8 +1,59 @@
+// link(normal) parameters passing
 let a = 1
 let b = 2
 
 func add(lft: Int, rgt: Int): Int {
-    return lft + rgt
+    return lft + rgt // __add__
 }
 
-(a, b)->add
+add(a, b)   // regular invocation
+(a, b)->add // entity invocation
+
+// chain call
+let c = 3
+let d = c->A->B->C
+let d = C(B(A(c)))
+
+// with(super) parameters passing
+// functional programming support
+with <src: Any[]>
+inner func map(f: (a: Int) => Int): Any {
+    // return for each element in src, apply f to it
+}
+
+// let src = [1, 2, 3]
+// let res = src.map((x: Int): Int => x + 1)
+
+// object oriented coding simulation
+type SomeObject = {
+    a: Int,
+    b: Int
+}
+
+with <this: SomeObject>
+func method():Any {
+    return this['a'] + this['b']
+}
+
+let obj: SomeObject = { a: 1, b: 2 }
+obj.method()
+
+// constants and async by default
+// auto concurrency when nassary
+func process(signals: Signal[]): Void {
+    let res1 = signals[0]->comp1->comp2
+    res1[0]->analyzer1
+    let res2 = signals[1]->comp3
+    [res1[1], res2]->add->analyzer2
+}
+
+// variables and sync for explicit
+// some tricks to remove cyclic dependencies
+sync func update(var target: Int): Void {
+    wait target = add(target, 1)
+}
+
+var c = 3
+print(c)
+wait update(c)
+print(c) // c_1

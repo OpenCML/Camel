@@ -138,7 +138,7 @@ func_ptr_t Constructor::visitDeclNode(const ast::node_ptr_t &ast) {
         context_->insertNode(name, node);
     }
     func_ptr_t func = make_shared<FunctorData>(funcType, graph);
-    graph->setFunc(func);
+    graph->setFuncType(funcType);
     context_->popScope();
 
     if (!functorType->name().empty()) {

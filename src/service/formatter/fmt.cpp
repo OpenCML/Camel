@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Oct. 27, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -325,7 +325,7 @@ any Formatter::visitAnnotations(OpenCMLParser::AnnotationsContext *context, bool
 };
 
 /*
-modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC)+ ;
+modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC | MACRO)+ ;
 */
 any Formatter::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     string result;
@@ -334,6 +334,7 @@ any Formatter::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     (context->ATOMIC()).size() ? result += "atomic " : result;
     (context->SHARED()).size() ? result += "shared " : result;
     (context->SYNC()).size() ? result += "sync " : result;
+    (context->MACRO()).size() ? result += "macro " : result;
     // remove trailing space
     if (!result.empty()) {
         result.pop_back();

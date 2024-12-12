@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Oct. 22, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#define CAMEL_VERSION "0.0.10"
+#define CAMEL_VERSION "0.0.11"
 
 #include <string>
 
