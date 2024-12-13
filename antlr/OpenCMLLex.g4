@@ -11,55 +11,59 @@ USE         : 'use';
 FROM        : 'from';
 FUNC        : 'func';
 TYPE        : 'type';
+ENUM        : 'enum';
 WITH        : 'with';
 WAIT        : 'wait';
 RETURN      : 'return';
+MODULE      : 'module';
+IMPORT      : 'import';
+EXPORT      : 'export';
+TYPEAS      : 'typeas';
+TYPEOF      : 'typeof';
 
+IF          : 'if';
+THEN        : 'then';
+ELSE        : 'else';
+MATCH       : 'match';
+CASE        : 'case';
+FOR         : 'for';
+IN          : 'in';
+
+SYNC        : 'sync';
+MACRO       : 'macro';
 INNER       : 'inner';
 OUTER       : 'outer';
 ATOMIC      : 'atomic';
 SHARED      : 'shared';
-SYNC        : 'sync';
-MACRO       : 'macro';
 
 NULL        : 'null';
 TRUE        : 'true';
 FALSE       : 'false';
 
-INTEGER_TYPE    : 'Int';
-INTEGER32_TYPE  : 'Int32';
-INTEGER64_TYPE  : 'Int64';
-REAL_TYPE       : 'Real';
-FLOAT_TYPE      : 'Float';
-DOUBLE_TYPE     : 'Double';
-NUMBER_TYPE     : 'Number';
-STRING_TYPE     : 'String';
-BOOL_TYPE       : 'Bool';
-CHAR_TYPE       : 'Char';
-
-SET_TYPE        : 'Set';
-MAP_TYPE        : 'Map';
-LIST_TYPE       : 'List';
-DICT_TYPE       : 'Dict';
-ARRAY_TYPE      : 'Array';
-TUPLE_TYPE      : 'Tuple';
-UNION_TYPE      : 'Union';
-VECTOR_TYPE     : 'Vector';
-TENSOR_TYPE     : 'Tensor';
-
-ANY_TYPE      : 'Any';
-VOID_TYPE     : 'Void';
-FUNCTOR_TYPE  : 'Functor';
+INNER_ATOM_TYPE
+    : 'Int'
+    | 'Int32'
+    | 'Int64'
+    | 'Real'
+    | 'Float'
+    | 'Double'
+    | 'Number'
+    | 'String'
+    | 'Bool'
+    | 'Char'
+    | 'Any'
+    | 'Void'
+    ;
 
 BLANK
     : [ \r\n\t\u000C]+ -> skip
     ;
 
-LIN_CMT_HASH
+COMMAND
     : '#' ~[\r\n\f]* -> channel(2)
     ;
 
-LIN_CMT_SLASH
+LIN_CMT
     : '//' ~[\r\n]* -> channel(3)
     ;
 
@@ -76,10 +80,6 @@ IDENTIFIER
     : [a-zA-Z_] [a-zA-Z_0-9]*
     ;
 
-UNIT
-    : '`' ('\\`' | '\\\\' | .)*? '`'
-    ;
-
 STRING
     : '"' ('\\"' | '\\\\' | .)*? '"'
     | '\'' ('\\\'' | '\\\\' | .)*? '\''
@@ -90,44 +90,31 @@ FSTRING
  ;
 
 INTEGER
-    : DECIMAL
-    | OCTAL
-    | HEXADECIMAL
-    | BINARY
-    | EXPONENT_DECIMAL
+    : (DEC | OCT | HEX | BIN) EXPONENT?
     ;
 
 REAL
-    : FLOAT
-    | EXPONENT_FLOAT
+    : FLOAT EXPONENT?
     ;
 
-fragment DECIMAL
+fragment DEC
     : [+-]? ([1-9] [0-9]* | '0')
     ;
 
-fragment OCTAL
+fragment OCT
     : [+-]? '0' [0-7]+
     ;
 
-fragment HEXADECIMAL
+fragment HEX
     : [+-]? '0x' [0-9a-fA-F]+
     ;
 
-fragment BINARY
+fragment BIN
     : [+-]? '0b' [01]+
     ;
 
 fragment FLOAT
     : [+-]? [0-9]+ '.' [0-9]+
-    ;
-
-fragment EXPONENT_FLOAT
-    : FLOAT EXPONENT
-    ;
-
-fragment EXPONENT_DECIMAL
-    : DECIMAL EXPONENT
     ;
 
 fragment EXPONENT

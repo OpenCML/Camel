@@ -14,9 +14,19 @@
 
 传统的FP语言语法的设计对于众多工业界开发者和学生来说是陌生的、难以理解的
 
-## Based on DAG models
+现代的许多语言逐步引入函数式编程范式
 
-## Customizable Runtime
+例如JS/C++函子/python
+
+传统的函数式编程语言语法相比于其他语言显得太过陌生
+
+## Handle the graph as you wish
+
+Based on DAG models
+
+Customizable Runtime
+
+## born for async and parallel
 
 Openness
 
