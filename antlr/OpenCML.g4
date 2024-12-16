@@ -190,7 +190,6 @@ literal
     | TRUE
     | FALSE
     | NULL
-    | complex
     ;
 
 typeName
@@ -236,5 +235,3 @@ lambdaType
 
 identDef : IDENTIFIER ;
 identRef : (IDENTIFIER '::')* IDENTIFIER ;
-
-complex : '`' (INTEGER | REAL) '+' (INTEGER | REAL) 'i' '`' ;

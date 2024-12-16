@@ -86,8 +86,8 @@ STRING
     ;
 
 FSTRING
- : 'f' STRING
- ;
+    : '`' ('\\`' | '\\\\' | .)*? '`'
+    ;
 
 INTEGER
     : (DEC | OCT | HEX | BIN) EXPONENT?
