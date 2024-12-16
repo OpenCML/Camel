@@ -75,9 +75,9 @@ annotation  : '@' primaryData ;
 annotations : annotation+ ;
 modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC | MACRO)+ ;
 
-indexValue   : dataExpr | '...' listExpr ;
+indexValue   : dataExpr | '...' dataExpr ;
 keyTypePair  : identDef ':' typeExpr ;
-keyValuePair : identDef ':' dataExpr | '...' dictExpr ;
+keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 keyParamPair : VAR? identDef annotation? ':' (typeExpr | typeName) ('=' dataExpr)? ;
 
 typeList     : typeExpr (',' typeExpr)* ;
