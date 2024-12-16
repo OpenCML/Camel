@@ -36,17 +36,16 @@ public:
     T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
-    T__38 = 39, T__39 = 40, SEP = 41, AS = 42, IS = 43, LET = 44, VAR = 45, 
-    USE = 46, FROM = 47, FUNC = 48, TYPE = 49, WITH = 50, WAIT = 51, RETURN = 52, 
-    INNER = 53, OUTER = 54, ATOMIC = 55, SHARED = 56, SYNC = 57, MACRO = 58, 
-    NULL_ = 59, TRUE = 60, FALSE = 61, INTEGER_TYPE = 62, INTEGER32_TYPE = 63, 
-    INTEGER64_TYPE = 64, REAL_TYPE = 65, FLOAT_TYPE = 66, DOUBLE_TYPE = 67, 
-    NUMBER_TYPE = 68, STRING_TYPE = 69, BOOL_TYPE = 70, CHAR_TYPE = 71, 
-    SET_TYPE = 72, MAP_TYPE = 73, LIST_TYPE = 74, DICT_TYPE = 75, ARRAY_TYPE = 76, 
-    TUPLE_TYPE = 77, UNION_TYPE = 78, VECTOR_TYPE = 79, TENSOR_TYPE = 80, 
-    ANY_TYPE = 81, VOID_TYPE = 82, FUNCTOR_TYPE = 83, BLANK = 84, LIN_CMT_HASH = 85, 
-    LIN_CMT_SLASH = 86, BLK_CMT = 87, MULTI_STR = 88, IDENTIFIER = 89, UNIT = 90, 
-    STRING = 91, FSTRING = 92, INTEGER = 93, REAL = 94
+    T__38 = 39, T__39 = 40, T__40 = 41, T__41 = 42, T__42 = 43, T__43 = 44, 
+    T__44 = 45, T__45 = 46, T__46 = 47, T__47 = 48, T__48 = 49, SEP = 50, 
+    AS = 51, IS = 52, LET = 53, VAR = 54, USE = 55, FROM = 56, FUNC = 57, 
+    TYPE = 58, ENUM = 59, WITH = 60, WAIT = 61, RETURN = 62, MODULE = 63, 
+    IMPORT = 64, EXPORT = 65, TYPEAS = 66, TYPEOF = 67, IF = 68, THEN = 69, 
+    ELSE = 70, MATCH = 71, CASE = 72, FOR = 73, IN = 74, SYNC = 75, MACRO = 76, 
+    INNER = 77, OUTER = 78, ATOMIC = 79, SHARED = 80, NULL_ = 81, TRUE = 82, 
+    FALSE = 83, INNER_ATOM_TYPE = 84, BLANK = 85, COMMAND = 86, LIN_CMT = 87, 
+    BLK_CMT = 88, MULTI_STR = 89, IDENTIFIER = 90, STRING = 91, FSTRING = 92, 
+    INTEGER = 93, REAL = 94
   };
 
   explicit OpenCMLLexer(antlr4::CharStream *input);

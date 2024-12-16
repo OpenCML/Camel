@@ -37,11 +37,31 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitStmtList(OpenCMLParser::StmtListContext *ctx) override {
+  virtual std::any visitDecl(OpenCMLParser::DeclContext *ctx) override {
     return visitChildren(ctx);
   }
 
   virtual std::any visitStmt(OpenCMLParser::StmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitStmtList(OpenCMLParser::StmtListContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitModuleDecl(OpenCMLParser::ModuleDeclContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitImportDecl(OpenCMLParser::ImportDeclContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitExportDecl(OpenCMLParser::ExportDeclContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -57,27 +77,19 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitEnumStmt(OpenCMLParser::EnumStmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitExprStmt(OpenCMLParser::ExprStmtContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitWithDef(OpenCMLParser::WithDefContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitFuncDef(OpenCMLParser::FuncDefContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitRetStmt(OpenCMLParser::RetStmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -101,6 +113,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitIndexValue(OpenCMLParser::IndexValueContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -110,14 +126,6 @@ public:
   }
 
   virtual std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -133,6 +141,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitIndexValues(OpenCMLParser::IndexValuesContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitPairedTypes(OpenCMLParser::PairedTypesContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -145,15 +157,7 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitArgumentList(OpenCMLParser::ArgumentListContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -161,23 +165,7 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBracedValues(OpenCMLParser::BracedValuesContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBracketValues(OpenCMLParser::BracketValuesContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -205,11 +193,15 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitEntityExpr(OpenCMLParser::EntityExprContext *ctx) override {
+  virtual std::any visitBlockExpr(OpenCMLParser::BlockExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *ctx) override {
+  virtual std::any visitDataExpr(OpenCMLParser::DataExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitStructExpr(OpenCMLParser::StructExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -237,11 +229,19 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitNullableExpr(OpenCMLParser::NullableExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
   virtual std::any visitLinkExpr(OpenCMLParser::LinkExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitBindExpr(OpenCMLParser::BindExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -253,7 +253,15 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *ctx) override {
+  virtual std::any visitDictExpr(OpenCMLParser::DictExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitListExpr(OpenCMLParser::ListExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitPrimaryData(OpenCMLParser::PrimaryDataContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -261,19 +269,23 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitTypeName(OpenCMLParser::TypeNameContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitTypeExpr(OpenCMLParser::TypeExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitArrayType(OpenCMLParser::ArrayTypeContext *ctx) override {
+  virtual std::any visitUnionType(OpenCMLParser::UnionTypeContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitAtomType(OpenCMLParser::AtomTypeContext *ctx) override {
+  virtual std::any visitListType(OpenCMLParser::ListTypeContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *ctx) override {
+  virtual std::any visitArgsType(OpenCMLParser::ArgsTypeContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -281,11 +293,19 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitStructType(OpenCMLParser::StructTypeContext *ctx) override {
+  virtual std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *ctx) override {
+  virtual std::any visitDictType(OpenCMLParser::DictTypeContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitIdentDef(OpenCMLParser::IdentDefContext *ctx) override {
     return visitChildren(ctx);
   }
 

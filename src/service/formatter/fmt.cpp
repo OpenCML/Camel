@@ -64,25 +64,10 @@ inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
 
 void Formatter::insertComment(antlr4::Token *comment, string &result) {
     const auto &commentText = comment->getText();
-    switch (comment->getChannel()) {
-    case 2: {
-        if (cmtPrefer == CommentPreference::Slash)
-            result += hash2slash(commentText);
-        else
-            result += commentText;
-    } break;
-    case 3: {
-        if (cmtPrefer == CommentPreference::Hash)
-            result += slash2hash(commentText);
-        else
-            result += commentText;
-    } break;
-    case 4:
-        result += commentText + " ";
-        break;
-
-    default:
-        throw runtime_error("Trying to insert a comment that is not from a comment channel");
+    result += commentText;
+    if (comment->getChannel() == 4) {
+        // block comment
+        result += " ";
     }
 };
 
