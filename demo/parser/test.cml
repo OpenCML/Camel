@@ -23,7 +23,7 @@ enum c = {
 
 type c = typeof v
 
-export sync func haha(b:typeas T) sync {
+export sync func haha(b: typeas T) sync {
     sync {
         a->uu::baba->b..c::c
     }

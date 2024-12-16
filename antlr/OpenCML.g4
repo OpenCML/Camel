@@ -200,7 +200,11 @@ typeName
     ;
 
 typeExpr
-    : listType '?'?
+    : unionType '?'?
+    ;
+
+unionType
+    : listType ('|' listType)*
     ;
 
 listType
@@ -221,7 +225,7 @@ primaryType
     ;
 
 dictExprType
-    : dictType (('&' | '|' | '^') dictType)*
+    : dictType (('&' | '^') dictType)*
     ;
 
 dictType
