@@ -47,7 +47,6 @@ stmt
     | typeStmt
     | enumStmt
     | exprStmt
-    | waitStmt
     | retStmt
     | stmtBlock
     ;
@@ -64,8 +63,7 @@ useStmt    : USE (identDef '=')? identRef ;
 typeStmt   : TYPE identDef '=' typeExpr ;
 enumStmt   : ENUM identDef '=' bracedIdents ;
 exprStmt   : annotations? dataExpr ;
-waitStmt   : WAIT dataExpr ;
-retStmt    : RETURN dataExpr? ;
+retStmt    : RETURN dataExpr ;
 
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 
@@ -108,7 +106,7 @@ blockExpr
     ;
 
 dataExpr
-    : structExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') structExpr)?
+    : WAIT? structExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') structExpr)?
     ;
 
 structExpr
