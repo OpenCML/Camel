@@ -37,15 +37,16 @@ public:
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
     T__38 = 39, T__39 = 40, T__40 = 41, T__41 = 42, T__42 = 43, T__43 = 44, 
-    T__44 = 45, T__45 = 46, T__46 = 47, T__47 = 48, T__48 = 49, SEP = 50, 
-    AS = 51, IS = 52, LET = 53, VAR = 54, USE = 55, FROM = 56, FUNC = 57, 
-    TYPE = 58, ENUM = 59, WITH = 60, WAIT = 61, RETURN = 62, MODULE = 63, 
-    IMPORT = 64, EXPORT = 65, TYPEAS = 66, TYPEOF = 67, IF = 68, THEN = 69, 
-    ELSE = 70, MATCH = 71, CASE = 72, FOR = 73, IN = 74, SYNC = 75, MACRO = 76, 
-    INNER = 77, OUTER = 78, ATOMIC = 79, SHARED = 80, NULL_ = 81, TRUE = 82, 
-    FALSE = 83, INNER_ATOM_TYPE = 84, BLANK = 85, COMMAND = 86, LIN_CMT = 87, 
-    BLK_CMT = 88, MULTI_STR = 89, IDENTIFIER = 90, STRING = 91, FSTRING = 92, 
-    INTEGER = 93, REAL = 94
+    T__44 = 45, T__45 = 46, T__46 = 47, T__47 = 48, T__48 = 49, T__49 = 50, 
+    T__50 = 51, SEP = 52, AS = 53, IS = 54, LET = 55, VAR = 56, USE = 57, 
+    FROM = 58, FUNC = 59, TYPE = 60, ENUM = 61, WITH = 62, WAIT = 63, RETURN = 64, 
+    MODULE = 65, IMPORT = 66, EXPORT = 67, TYPEAS = 68, TYPEOF = 69, IF = 70, 
+    THEN = 71, ELSE = 72, MATCH = 73, CASE = 74, FOR = 75, IN = 76, OF = 77, 
+    TRY = 78, CATCH = 79, FINALLY = 80, THROW = 81, RAISE = 82, SYNC = 83, 
+    MACRO = 84, INNER = 85, OUTER = 86, ATOMIC = 87, SHARED = 88, NULL_ = 89, 
+    TRUE = 90, FALSE = 91, INNER_ATOM_TYPE = 92, BLANK = 93, COMMAND = 94, 
+    LIN_CMT = 95, BLK_CMT = 96, MULTI_STR = 97, IDENTIFIER = 98, STRING = 99, 
+    FSTRING = 100, INTEGER = 101, REAL = 102
   };
 
   explicit OpenCMLLexer(antlr4::CharStream *input);

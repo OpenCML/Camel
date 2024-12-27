@@ -1,6 +1,4 @@
 lexer grammar OpenCMLLex;
-// 纯词法的语法声明
-// PSL的词法规则定义，它定义了一些词法规则来识别PSL源码中的不同类型的词法单元。
 
 SEP         : ';';
 AS          : 'as';
@@ -28,6 +26,12 @@ MATCH       : 'match';
 CASE        : 'case';
 FOR         : 'for';
 IN          : 'in';
+OF          : 'of';
+TRY         : 'try';
+CATCH       : 'catch';
+FINALLY     : 'finally';
+THROW       : 'throw';
+RAISE       : 'raise';
 
 SYNC        : 'sync';
 MACRO       : 'macro';

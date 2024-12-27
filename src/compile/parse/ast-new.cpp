@@ -246,7 +246,7 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
 /*
 program : SEP? ((decl | stmt) SEP?)* EOF;
 */
-std::any visitProgram(OpenCMLParser::ProgramContext *context) {}
+any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {}
 
 /*
 decl
@@ -256,277 +256,284 @@ decl
     | funcDecl
     ;
 */
-std::any visitDecl(OpenCMLParser::DeclContext *context) {}
+any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {}
 
 /*
 stmt
     : letStmt
     | useStmt
+    | retStmt
     | typeStmt
     | enumStmt
     | exprStmt
-    | retStmt
     | stmtBlock
     ;
 */
-std::any visitStmt(OpenCMLParser::StmtContext *context) {}
+any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {}
 
 /*
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
-std::any visitStmtList(OpenCMLParser::StmtListContext *context) {}
+any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {}
 
 /*
 moduleDecl : MODULE identDef ;
 */
-std::any visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {}
+any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {}
 
 /*
 importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 */
-std::any visitImportDecl(OpenCMLParser::ImportDeclContext *context) {}
+any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {}
 
 /*
 exportDecl : EXPORT (letStmt | typeStmt | bracedIdents) ;
 */
-std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context) {}
-
-/*
-funcDecl   : annotations? (WITH angledParams)? EXPORT? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
-*/
-std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {}
-
-/*
-letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
-*/
-std::any visitLetStmt(OpenCMLParser::LetStmtContext *context) {}
-
-/*
-useStmt    : USE (identDef '=')? identRef ;
-*/
-std::any visitUseStmt(OpenCMLParser::UseStmtContext *context) {}
-
-/*
-typeStmt   : TYPE identDef '=' typeExpr ;
-*/
-std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context) {}
-
-/*
-enumStmt   : ENUM identDef '=' bracedIdents ;
-*/
-std::any visitEnumStmt(OpenCMLParser::EnumStmtContext *context) {}
-
-/*
-exprStmt   : annotations? dataExpr ;
-*/
-std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) {}
-
-/*
-retStmt    : RETURN dataExpr ;
-*/
-std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) {}
+any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {}
 
 /*
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
-std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {}
+any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {}
 
 /*
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 */
-std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {}
+any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {}
+
+/*
+funcDecl   : annotations? (WITH angledParams)? EXPORT? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+*/
+any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {}
+
+/*
+parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
+*/
+any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {}
+
+/*
+bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
+*/
+any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {}
+
+/*
+bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
+*/
+any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {}
 
 /*
 carrier    : identDef | bracedIdents | bracketIdents ;
 */
-std::any visitCarrier(OpenCMLParser::CarrierContext *context) {}
+any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {}
+
+/*
+letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
+*/
+any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {}
+
+/*
+useStmt    : USE (identDef '=')? identRef ;
+*/
+any Constructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {}
+
+/*
+retStmt    : (RETURN | RAISE | THROW) dataExpr ;
+*/
+any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {}
+
+/*
+typeStmt   : TYPE identDef '=' typeExpr ;
+*/
+any Constructor::visitTypeStmt(OpenCMLParser::TypeStmtContext *context) {}
+
+/*
+enumStmt   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
+*/
+any Constructor::visitEnumStmt(OpenCMLParser::EnumStmtContext *context) {}
+
+/*
+exprStmt   : annotations? dataExpr ;
+*/
+any Constructor::visitExprStmt(OpenCMLParser::ExprStmtContext *context) {}
 
 /*
 annotation  : '@' primaryData ;
 */
-std::any visitAnnotation(OpenCMLParser::AnnotationContext *context) {}
+any Constructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) {}
 
 /*
 annotations : annotation+ ;
 */
-std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context) {}
+any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {}
 
 /*
 modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC | MACRO)+ ;
 */
-std::any visitModifiers(OpenCMLParser::ModifiersContext *context) {}
+any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {}
 
 /*
 indexValue   : dataExpr | '...' dataExpr ;
 */
-std::any visitIndexValue(OpenCMLParser::IndexValueContext *context) {}
+any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) {}
 
 /*
 keyTypePair  : identDef ':' typeExpr ;
 */
-std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {}
+any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {}
 
 /*
 keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
-std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {}
+any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {}
 
 /*
-keyParamPair : VAR? identDef annotation? ':' (typeExpr | typeName) ('=' dataExpr)? ;
+keyParamPair : VAR? identDef annotation? ':' (typeExpr | TYPEAS identDef) ('=' dataExpr)? ;
 */
-std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {}
-
-/*
-typeList     : typeExpr (',' typeExpr)* ;
-*/
-std::any visitTypeList(OpenCMLParser::TypeListContext *context) {}
+any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {}
 
 /*
 identList    : identDef (',' identDef)* ;
 */
-std::any visitIdentList(OpenCMLParser::IdentListContext *context) {}
+any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {}
 
 /*
 valueList    : dataExpr (',' dataExpr)* ;
 */
-std::any visitValueList(OpenCMLParser::ValueListContext *context) {}
+any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) {}
 
 /*
 indexValues  : indexValue (',' indexValue)* ;
 */
-std::any visitIndexValues(OpenCMLParser::IndexValuesContext *context) {}
-
-/*
-pairedTypes  : keyTypePair (',' keyTypePair)* ;
-*/
-std::any visitPairedTypes(OpenCMLParser::PairedTypesContext *context) {}
+any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {}
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
-std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context) {}
+any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {}
 
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
-std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) {}
+any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {}
 
 /*
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
-std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) {}
+any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {}
 
 /*
-bracedIdents       : '{' identList? ','? '}' ;    // for dict unpacking
+memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
-std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {}
+any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {}
 
 /*
-bracketIdents      : '[' identList? ','? ']' ;    // for list unpacking
+parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
 */
-std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {}
+any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {}
 
 /*
-memberAccess       : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
 */
-std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {}
+any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {}
 
 /*
-parentParams       : '(' pairedParams? ','? ')' ; // for functor parameters definition
+angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 */
-std::any visitParentParams(OpenCMLParser::ParentParamsContext *context) {}
+any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {}
 
 /*
-parentArgues       : '(' argumentList? ','? ')' ; // for functor arguments
+angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 */
-std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context) {}
+any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {}
 
 /*
-parentValues       : '(' valueList? ','? ')' ;    // for literal construction of tuple
+blockExpr : stmtBlock | dataExpr ;
 */
-std::any visitParentValues(OpenCMLParser::ParentValuesContext *context) {}
-
-/*
-angledParams       : '<' pairedParams? ','? '>' ; // for functor super parameters definition
-*/
-std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) {}
-
-/*
-angledValues       : '<' argumentList? ','? '>' ; // for functor super arguments
-*/
-std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) {}
-
-/*
-blockExpr
-    : stmtBlock | dataExpr
-    ;
-*/
-std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context) {}
+any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {}
 
 /*
 dataExpr
     : WAIT? structExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') structExpr)?
     ;
 */
-std::any visitDataExpr(OpenCMLParser::DataExprContext *context) {}
+any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) {}
+
+/*
+pattern
+    : identRef
+    | literal
+    | '(' (valueList | identList)? ','? ')'
+    | '{' (pairedValues | identList)? ','? '}'
+    | '_' // wildcard
+    ;
+*/
+any Constructor::visitPattern(OpenCMLParser::PatternContext *context) {}
+
+/*
+matchCase
+    : CASE pattern ('|' pattern)* '=>' blockExpr
+    ;
+*/
+any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {}
 
 /*
 structExpr
     : logicalOrExpr
     | IF logicalOrExpr THEN blockExpr ELSE blockExpr
-    | MATCH identRef '{' (CASE dataExpr '=>' blockExpr)+ '}'
+    | MATCH identRef '{' matchCase+ '}'
+    | TRY stmtBlock (CATCH identDef ':' typeExpr stmtBlock)+ (FINALLY stmtBlock)?
     ;
 */
-std::any visitStructExpr(OpenCMLParser::StructExprContext *context) {}
+any Constructor::visitStructExpr(OpenCMLParser::StructExprContext *context) {}
 
 /*
 logicalOrExpr
     : logicalAndExpr ('||' logicalAndExpr)*
     ;
 */
-std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {}
+any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {}
 
 /*
 logicalAndExpr
     : equalityExpr ('&&' equalityExpr)*
     ;
 */
-std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {}
+any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {}
 
 /*
 equalityExpr
     : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
     ;
 */
-std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {}
+any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {}
 
 /*
 relationalExpr
     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
     ;
 */
-std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {}
+any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {}
 
 /*
 additiveExpr
     : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
     ;
 */
-std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {}
+any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {}
 
 /*
 multiplicativeExpr
     : nullableExpr (('^' | '*' | '/' | '%') nullableExpr)*
     ;
 */
-std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {}
+any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {}
 
 /*
 nullableExpr
-    : unaryExpr ('??' dataExpr)?
+    : unaryExpr (('??' | '!!') dataExpr)?
     ;
 */
-std::any visitNullableExpr(OpenCMLParser::NullableExprContext *context) {}
+any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {}
 
 /*
 unaryExpr
@@ -534,49 +541,49 @@ unaryExpr
     | ('!' | '-' | '~') linkExpr
     ;
 */
-std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {}
+any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {}
 
 /*
 linkExpr
     : bindExpr (('->' | '?->') bindExpr)*
     ;
 */
-std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context) {}
+any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {}
 
 /*
 bindExpr
     : withExpr (('..' | '?..') withExpr)*
     ;
 */
-std::any visitBindExpr(OpenCMLParser::BindExprContext *context) {}
+any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {}
 
 /*
 withExpr
-    : annotatedExpr (('.' | '?.') annotatedExpr)*
+    : annoExpr (('.' | '?.') annoExpr)*
     ;
 */
-std::any visitWithExpr(OpenCMLParser::WithExprContext *context) {}
+any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {}
 
 /*
-annotatedExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues) | annotation)*
+annoExpr
+    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!') | annotation)*
     ;
 */
-std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context) {}
+any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {}
 
 /*
 dictExpr
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
     ;
 */
-std::any visitDictExpr(OpenCMLParser::DictExprContext *context) {}
+any Constructor::visitDictExpr(OpenCMLParser::DictExprContext *context) {}
 
 /*
 listExpr
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 */
-std::any visitListExpr(OpenCMLParser::ListExprContext *context) {}
+any Constructor::visitListExpr(OpenCMLParser::ListExprContext *context) {}
 
 /*
 primaryData
@@ -584,11 +591,12 @@ primaryData
     | literal
     | listExpr
     | dictExpr
-    | '(' dataExpr ')'      // if there is only one data, it will be recognized as a primary expression rather than a
-tuple | parentValues          // for tuple | lambdaExpr
+    | '(' dataExpr ')'        // if there is only one data, it will be recognized as a primary expression rather than a tuple
+    | '(' valueList? ','? ')' // for tuple
+    | lambdaExpr
     ;
 */
-std::any visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {}
+any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {}
 
 /*
 literal
@@ -602,42 +610,40 @@ literal
     | NULL
     ;
 */
-std::any visitLiteral(OpenCMLParser::LiteralContext *context) {}
-
-/*
-typeName
-    : TYPEAS identDef
-    ;
-*/
-std::any visitTypeName(OpenCMLParser::TypeNameContext *context) {}
+any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {}
 
 /*
 typeExpr
-    : unionType '?'?
+    : unionType ('?' unionType?)?
     ;
 */
-std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context) {}
+any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {}
 
 /*
 unionType
-    : listType ('|' listType)*
+    : unionUnit ('|' unionUnit)*
     ;
 */
-std::any visitUnionType(OpenCMLParser::UnionTypeContext *context) {}
+any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {}
+
+/*
+unionUnit : (identDef OF)? listType ;
+*/
+any Constructor::visitUnionUnit(OpenCMLParser::UnionUnitContext *context) {}
 
 /*
 listType
     : argsType ('[' ']')*
     ;
 */
-std::any visitListType(OpenCMLParser::ListTypeContext *context) {}
+any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {}
 
 /*
 argsType
-    : primaryType ('<' typeList? '>')?
+    : primaryType ('<' (typeExpr | primaryData) (',' (typeExpr | primaryData))* '>')?
     ;
 */
-std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context) {}
+any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {}
 
 /*
 primaryType
@@ -645,39 +651,47 @@ primaryType
     | dictExprType
     | identRef
     | '(' typeExpr ')'
+    | tupleType
     | lambdaType
     | TYPEOF dataExpr
     ;
 */
-std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {}
+any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {}
 
 /*
 dictExprType
     : dictType (('&' | '^') dictType)*
     ;
 */
-std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context) {}
+any Constructor::visitDictExprType(OpenCMLParser::DictExprTypeContext *context) {}
 
 /*
 dictType
-    : '{' pairedTypes? ','? '}'
+    : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
     ;
 */
-std::any visitDictType(OpenCMLParser::DictTypeContext *context) {}
+any Constructor::visitDictType(OpenCMLParser::DictTypeContext *context) {}
+
+/*
+tupleType
+    : '(' (typeExpr (',' typeExpr)*)? ','? ')'
+    ;
+*/
+any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) {}
 
 /*
 lambdaType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
-std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {}
+any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {}
 
 /*
 identDef : IDENTIFIER ;
 */
-std::any visitIdentDef(OpenCMLParser::IdentDefContext *context) {}
+any Constructor::visitIdentDef(OpenCMLParser::IdentDefContext *context) {}
 
 /*
 identRef : (IDENTIFIER '::')* IDENTIFIER ;
 */
-std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) {}
+any Constructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {}

@@ -118,7 +118,7 @@ class Constructor : public OpenCMLVisitor {
     node_ptr_t root_;
     size_t indentIndex_ = 0;
     scope_ptr_t<std::string, type_ptr_t> typeScope_;
-    std::unordered_map<void*, func_type_ptr_t> funcDecls_;
+    std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
     std::queue<BuildWarning> warnQueue_;
 
@@ -170,25 +170,31 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context);
 
+    std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
+
+    std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
+
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
+
+    std::any visitParentIdents(OpenCMLParser::ParentIdentsContext *context);
+
+    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
+
+    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context);
+
+    std::any visitCarrier(OpenCMLParser::CarrierContext *context);
 
     std::any visitLetStmt(OpenCMLParser::LetStmtContext *context);
 
     std::any visitUseStmt(OpenCMLParser::UseStmtContext *context);
+
+    std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
 
     std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context);
 
     std::any visitEnumStmt(OpenCMLParser::EnumStmtContext *context);
 
     std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context);
-
-    std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
-
-    std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
-
-    std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
-
-    std::any visitCarrier(OpenCMLParser::CarrierContext *context);
 
     std::any visitAnnotation(OpenCMLParser::AnnotationContext *context);
 
@@ -204,15 +210,11 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context);
 
-    std::any visitTypeList(OpenCMLParser::TypeListContext *context);
-
     std::any visitIdentList(OpenCMLParser::IdentListContext *context);
 
     std::any visitValueList(OpenCMLParser::ValueListContext *context);
 
     std::any visitIndexValues(OpenCMLParser::IndexValuesContext *context);
-
-    std::any visitPairedTypes(OpenCMLParser::PairedTypesContext *context);
 
     std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context);
 
@@ -220,17 +222,11 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context);
 
-    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
-
-    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context);
-
     std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
 
     std::any visitParentParams(OpenCMLParser::ParentParamsContext *context);
 
     std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context);
-
-    std::any visitParentValues(OpenCMLParser::ParentValuesContext *context);
 
     std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context);
 
@@ -239,6 +235,10 @@ class Constructor : public OpenCMLVisitor {
     std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
     std::any visitDataExpr(OpenCMLParser::DataExprContext *context);
+
+    std::any visitPattern(OpenCMLParser::PatternContext *context);
+
+    std::any visitMatchCase(OpenCMLParser::MatchCaseContext *context);
 
     std::any visitStructExpr(OpenCMLParser::StructExprContext *context);
 
@@ -264,7 +264,7 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
 
-    std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context);
+    std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 
     std::any visitDictExpr(OpenCMLParser::DictExprContext *context);
 
@@ -274,11 +274,11 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
 
-    std::any visitTypeName(OpenCMLParser::TypeNameContext *context);
-
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
 
     std::any visitUnionType(OpenCMLParser::UnionTypeContext *context);
+
+    std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context);
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context);
 
@@ -289,6 +289,8 @@ class Constructor : public OpenCMLVisitor {
     std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context);
 
     std::any visitDictType(OpenCMLParser::DictTypeContext *context);
+
+    std::any visitTupleType(OpenCMLParser::TupleTypeContext *context);
 
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
 

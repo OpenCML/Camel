@@ -70,3 +70,34 @@ OCaml的纯[函数式编程](https://zhida.zhihu.com/search?content_id=325419118
 ## Rust
 
 - Option设计值得借鉴
+- Rust 是一门系统编程语言，但它也汲取了许多函数式编程语言（如 Haskell、Scala 等）的特性
+
+## MoonBit
+
+[Introduction — MoonBit Document v0.1.20241216 documentation](https://docs.moonbitlang.com/en/latest/language/introduction.html)
+
+自称从全方位角度考虑和AI的结合，更好地支持AI编程。
+
+从语法上看从rust借鉴了很多。是rust，js，go的混合物（和我审美很像），可能是rust with gc。
+
+明确提出综合考虑IDE开发工具的需求来设计语法特性。
+
+诞生2年左右，从GPT出现后开始研发。
+
+团队效率很高，已经开始打造全球影响力。3个月2k提交，逆天。
+
+其主要推动者似乎也是Rescript的作者。OCaml前核心开发成员。
+
+说的很玄学，所谓“用静态分析加快开发过程，提高安全性”，强调编程语言与AI的交互及其安全性。
+
+全程强调所谓的“容易被机器理解”，其实就是静态类型分析。
+
+好像底层是基于wasm？？？解决问题的出发点是在wasm平台上实现物联网的开发？？
+
+原来是wasm gc语言，同一生态位的还有dart，kotlin。
+
+看样子是个多后端的转译语言。这不是kotlin吗？然后来蹭AI热度？
+
+## Clojure
+
+没搞懂 ，语法难看。
