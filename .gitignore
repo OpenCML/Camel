@@ -1,4 +1,5 @@
 .idea/
+.vs/
 .vscode/
 .VSCodeCounter
 
@@ -10,3 +11,4 @@ vendor/
 **/.cache/
 *.cmo
 build/
+out/

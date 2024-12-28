@@ -49,6 +49,9 @@ string Formatter::formatStringLiteral(const string &input) {
 }
 
 inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
+    if (context->children.size() < 2) {
+        return false;
+    }
     const size_t firstTokenLine = context->getStart()->getLine();
     size_t secondTokenLine = 0;
     // get second token
@@ -135,8 +138,7 @@ any Formatter::visitStmt(OpenCMLParser::StmtContext *context) { return visit(con
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    int multiLine = isMultiLine(context);
-    return formatList(context->stmt(), "", this->newline, PADDING | PUSH_SCOPE | multiLine);
+    return formatList(context->stmt(), "", this->newline, PADDING | PUSH_SCOPE | MULTILINE);
 }
 
 /*
@@ -151,16 +153,15 @@ importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 */
 any Formatter::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     string result = "import ";
-    const string path = context->getToken(OpenCMLParser::STRING, 0)->getText();
+    const string path = context->STRING()->getText();
     const auto &identDef = context->identDef();
     const auto &bracedIdents = context->bracedIdents();
-    result += formatStringLiteral(path);
     if (context->FROM()) {
-        const string from = context->getToken(OpenCMLParser::STRING, 1)->getText();
-        return result +
-               (identDef ? any_cast<string>(visitIdentDef(identDef))
-                         : any_cast<string>(visitBracedIdents(bracedIdents))) +
-               " from " + formatStringLiteral(from);
+        result +=
+            (identDef ? any_cast<string>(visitIdentDef(identDef)) : any_cast<string>(visitBracedIdents(bracedIdents))) +
+            " from " + formatStringLiteral(path);
+    } else {
+        result += formatStringLiteral(path);
     }
     return result;
 }
@@ -752,8 +753,12 @@ unaryExpr
 any Formatter::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
     string result = any_cast<string>(visitLinkExpr(context->linkExpr()));
     if (context->getAltNumber() == 1) {
-        return result + " " + context->children[0]->getText() + " " +
-               any_cast<string>(visitTypeExpr(context->typeExpr()));
+        if (context->typeExpr()) {
+            return result + " " + context->children[1]->getText() + " " +
+                   any_cast<string>(visitTypeExpr(context->typeExpr()));
+        } else {
+            return result;
+        }
     } else {
         return context->children[0]->getText() + result;
     }

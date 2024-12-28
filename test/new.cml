@@ -1,0 +1,43 @@
+import { dense, dropout, relu, softmax } from 'nn'
+
+with <prob: Float>
+macro func dropout(x: Tensor<Float>): Tensor<Float> {
+    return x.map((x: Float) => x * (rand() >= prob))
+}
+
+var w1: Tensor = random([784, 512])
+var b1: Tensor = random([512])
+var w2: Tensor = random([512, 512])
+var b2: Tensor = random([512])
+var w3: Tensor = random([512, 10])
+var b3: Tensor= random([10])
+
+let dropout = nn::dropout<prob: 0.2>
+
+func forward(x: Tensor) {
+    let layer1 = dense<w1, b1>..relu..dropout
+    let layer2 = dense<w2, b2>..relu..dropout
+    let layer3 = dense<w3, b3>..softmax
+    return x->layer1->layer2->layer3
+}
+
+func compute_loss(x: Tensor, y: Tensor) {
+    return [x, y]->cross_entropy->reduce_sum
+}
+
+let compute_loss = cross_entropy..reduce_sum
+
+let batch_train = apply_gradients<optimizer::adam>(forward..compute_loss)
+
+with <epochs: Int, batch_size: Int>
+sync func train(x_train: Tensor, y_train: Tensor) {
+    let batches = batch<batch_size>(x_train, y_train)
+    return wait batches.map(batch_train)
+}
+
+let x_train: Tensor = load<npy>('path/to/x_train.npy')
+let y_train: Tensor = load<npy>('path/to/y_train.npy')
+
+func main() {
+    [x_train, y_train]->train<epochs: 10, batch_size: 128>
+}
