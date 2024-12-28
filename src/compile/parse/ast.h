@@ -184,15 +184,15 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitCarrier(OpenCMLParser::CarrierContext *context);
 
-    std::any visitLetStmt(OpenCMLParser::LetStmtContext *context);
+    std::any visitLetDecl(OpenCMLParser::LetDeclContext *context);
 
-    std::any visitUseStmt(OpenCMLParser::UseStmtContext *context);
+    std::any visitUseDecl(OpenCMLParser::UseDeclContext *context);
 
     std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
 
-    std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context);
+    std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context);
 
-    std::any visitEnumStmt(OpenCMLParser::EnumStmtContext *context);
+    std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context);
 
     std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context);
 
@@ -240,6 +240,8 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitMatchCase(OpenCMLParser::MatchCaseContext *context);
 
+    std::any visitCatchClause(OpenCMLParser::CatchClauseContext *context);
+
     std::any visitStructExpr(OpenCMLParser::StructExprContext *context);
 
     std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context);
@@ -281,6 +283,8 @@ class Constructor : public OpenCMLVisitor {
     std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context);
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context);
+
+    std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context);
 
     std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context);
 

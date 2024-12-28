@@ -260,11 +260,11 @@ any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {}
 
 /*
 stmt
-    : letStmt
-    | useStmt
+    : letDecl
+    | useDecl
     | retStmt
-    | typeStmt
-    | enumStmt
+    | typeDecl
+    | enumDecl
     | exprStmt
     | stmtBlock
     ;
@@ -287,7 +287,7 @@ importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {}
 
 /*
-exportDecl : EXPORT (letStmt | typeStmt | bracedIdents) ;
+exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
 */
 any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {}
 
@@ -327,14 +327,14 @@ carrier    : identDef | bracedIdents | bracketIdents ;
 any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {}
 
 /*
-letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
+letDecl    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
 */
-any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {}
+any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {}
 
 /*
-useStmt    : USE (identDef '=')? identRef ;
+useDecl    : USE (identDef '=')? identRef ;
 */
-any Constructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {}
+any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {}
 
 /*
 retStmt    : (RETURN | RAISE | THROW) dataExpr ;
@@ -342,14 +342,14 @@ retStmt    : (RETURN | RAISE | THROW) dataExpr ;
 any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {}
 
 /*
-typeStmt   : TYPE identDef '=' typeExpr ;
+typeDecl   : TYPE identDef '=' typeExpr ;
 */
-any Constructor::visitTypeStmt(OpenCMLParser::TypeStmtContext *context) {}
+any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {}
 
 /*
-enumStmt   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
+enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
 */
-any Constructor::visitEnumStmt(OpenCMLParser::EnumStmtContext *context) {}
+any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) {}
 
 /*
 exprStmt   : annotations? dataExpr ;
@@ -477,11 +477,18 @@ matchCase
 any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {}
 
 /*
+catchClause
+    : CATCH identDef ':' typeExpr stmtBlock
+    ;
+*/
+any Constructor::visitCatchClause(OpenCMLParser::CatchClauseContext *context) {}
+
+/*
 structExpr
     : logicalOrExpr
     | IF logicalOrExpr THEN blockExpr ELSE blockExpr
     | MATCH identRef '{' matchCase+ '}'
-    | TRY stmtBlock (CATCH identDef ':' typeExpr stmtBlock)+ (FINALLY stmtBlock)?
+    | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 */
 any Constructor::visitStructExpr(OpenCMLParser::StructExprContext *context) {}
@@ -639,8 +646,15 @@ listType
 any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {}
 
 /*
+typeOrData : typeExpr | primaryData ;
+*/
+any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) {
+    return visit(context->children[0]);
+}
+
+/*
 argsType
-    : primaryType ('<' (typeExpr | primaryData) (',' (typeExpr | primaryData))* '>')?
+    : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 */
 any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {}

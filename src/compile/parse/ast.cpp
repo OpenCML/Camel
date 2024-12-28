@@ -264,15 +264,15 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     enter("StmtList");
     pushScope();
     node_ptr_t execNode = createNode<ExecLoad>();
-    vector<OpenCMLParser::UseStmtContext *> froms;
-    vector<OpenCMLParser::TypeStmtContext *> types;
+    vector<OpenCMLParser::UseDeclContext *> froms;
+    vector<OpenCMLParser::TypeDeclContext *> types;
     vector<OpenCMLParser::FuncDeclContext *> decls;
     vector<OpenCMLParser::StmtContext *> stmts;
     for (const auto &stmt : context->stmt()) {
-        if (stmt->useStmt()) {
-            froms.push_back(stmt->useStmt());
-        } else if (stmt->typeStmt()) {
-            types.push_back(stmt->typeStmt());
+        if (stmt->useDecl()) {
+            froms.push_back(stmt->useDecl());
+        } else if (stmt->typeDecl()) {
+            types.push_back(stmt->typeDecl());
         } else if (stmt->funcDef()) {
             decls.push_back(stmt->funcDef()->funcDecl());
             stmts.push_back(stmt);
@@ -282,10 +282,10 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     }
     // first process froms and types, then decls, finally stmts
     for (const auto &stmt : froms) {
-        *execNode << any_cast<node_ptr_t>(visitUseStmt(stmt));
+        *execNode << any_cast<node_ptr_t>(visitUseDecl(stmt));
     }
     for (const auto &stmt : types) {
-        *execNode << any_cast<node_ptr_t>(visitTypeStmt(stmt));
+        *execNode << any_cast<node_ptr_t>(visitTypeDecl(stmt));
     }
     for (const auto &decl : decls) {
         func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
@@ -302,9 +302,9 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
 
 /*
 stmt
-    : letStmt
-    | useStmt
-    | typeStmt
+    : letDecl
+    | useDecl
+    | typeDecl
     | exprStmt
     | waitStmt
     | funcDef
@@ -316,13 +316,13 @@ any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
     any res;
     switch (context->getAltNumber()) {
     case 1:
-        res = visitLetStmt(context->letStmt());
+        res = visitLetDecl(context->letDecl());
         break;
     case 2:
-        res = visitUseStmt(context->useStmt());
+        res = visitUseDecl(context->useDecl());
         break;
     case 3:
-        res = visitTypeStmt(context->typeStmt());
+        res = visitTypeDecl(context->typeDecl());
         break;
     case 4:
         res = visitExprStmt(context->exprStmt());
@@ -345,10 +345,10 @@ any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
 };
 
 /*
-letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' entityExpr ;
+letDecl    : (LET | VAR) carrier (':' typeExpr)? '=' entityExpr ;
 */
-any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
-    enter("LetStmt");
+any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
+    enter("LetDecl");
     const auto &[carrierType, carrier] = any_cast<pair<size_t, any>>(visitCarrier(context->carrier()));
     const auto &typeExpr = context->typeExpr();
     type_ptr_t type = nullptr;
@@ -445,15 +445,15 @@ any Constructor::visitLetStmt(OpenCMLParser::LetStmtContext *context) {
         resultNode = variNode;
     }
 
-    leave("LetStmt");
+    leave("LetDecl");
     return resultNode;
 };
 
 /*
-useStmt    : USE (identRef | bracedIdents | '*') FROM STRING ;
+useDecl    : USE (identRef | bracedIdents | '*') FROM STRING ;
 */
-any Constructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
-    enter("UseStmt");
+any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
+    enter("UseDecl");
     string path = context->STRING()->getText();
     vector<string> idents;
 
@@ -465,20 +465,20 @@ any Constructor::visitUseStmt(OpenCMLParser::UseStmtContext *context) {
 
     node_ptr_t result = createNode<FromLoad>(path, idents);
 
-    leave("UseStmt");
+    leave("UseDecl");
     return result;
 };
 
 /*
-typeStmt : TYPE identRef '=' typeExpr ;
+typeDecl : TYPE identRef '=' typeExpr ;
 */
-any Constructor::visitTypeStmt(OpenCMLParser::TypeStmtContext *context) {
-    enter("TypeStmt");
+any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
+    enter("TypeDecl");
     const string &ident = context->identRef()->getText();
     type_ptr_t type = any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
     typeScope_->insert(ident, type);
     node_ptr_t result = createNode<TypeLoad>(type);
-    leave("TypeStmt");
+    leave("TypeDecl");
     return result;
 };
 

@@ -65,15 +65,15 @@ public:
 
     virtual std::any visitCarrier(OpenCMLParser::CarrierContext *context) = 0;
 
-    virtual std::any visitLetStmt(OpenCMLParser::LetStmtContext *context) = 0;
+    virtual std::any visitLetDecl(OpenCMLParser::LetDeclContext *context) = 0;
 
-    virtual std::any visitUseStmt(OpenCMLParser::UseStmtContext *context) = 0;
+    virtual std::any visitUseDecl(OpenCMLParser::UseDeclContext *context) = 0;
 
     virtual std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) = 0;
 
-    virtual std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context) = 0;
+    virtual std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context) = 0;
 
-    virtual std::any visitEnumStmt(OpenCMLParser::EnumStmtContext *context) = 0;
+    virtual std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context) = 0;
 
     virtual std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) = 0;
 
@@ -121,6 +121,8 @@ public:
 
     virtual std::any visitMatchCase(OpenCMLParser::MatchCaseContext *context) = 0;
 
+    virtual std::any visitCatchClause(OpenCMLParser::CatchClauseContext *context) = 0;
+
     virtual std::any visitStructExpr(OpenCMLParser::StructExprContext *context) = 0;
 
     virtual std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) = 0;
@@ -162,6 +164,8 @@ public:
     virtual std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context) = 0;
 
     virtual std::any visitListType(OpenCMLParser::ListTypeContext *context) = 0;
+
+    virtual std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) = 0;
 
     virtual std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context) = 0;
 

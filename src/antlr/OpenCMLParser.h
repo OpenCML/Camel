@@ -53,22 +53,23 @@ public:
     RuleProgram = 0, RuleDecl = 1, RuleStmt = 2, RuleStmtList = 3, RuleModuleDecl = 4, 
     RuleImportDecl = 5, RuleExportDecl = 6, RuleStmtBlock = 7, RuleLambdaExpr = 8, 
     RuleFuncDecl = 9, RuleParentIdents = 10, RuleBracedIdents = 11, RuleBracketIdents = 12, 
-    RuleCarrier = 13, RuleLetStmt = 14, RuleUseStmt = 15, RuleRetStmt = 16, 
-    RuleTypeStmt = 17, RuleEnumStmt = 18, RuleExprStmt = 19, RuleAnnotation = 20, 
+    RuleCarrier = 13, RuleLetDecl = 14, RuleUseDecl = 15, RuleRetStmt = 16, 
+    RuleTypeDecl = 17, RuleEnumDecl = 18, RuleExprStmt = 19, RuleAnnotation = 20, 
     RuleAnnotations = 21, RuleModifiers = 22, RuleIndexValue = 23, RuleKeyTypePair = 24, 
     RuleKeyValuePair = 25, RuleKeyParamPair = 26, RuleIdentList = 27, RuleValueList = 28, 
     RuleIndexValues = 29, RulePairedValues = 30, RulePairedParams = 31, 
     RuleArgumentList = 32, RuleMemberAccess = 33, RuleParentParams = 34, 
     RuleParentArgues = 35, RuleAngledParams = 36, RuleAngledValues = 37, 
     RuleBlockExpr = 38, RuleDataExpr = 39, RulePattern = 40, RuleMatchCase = 41, 
-    RuleStructExpr = 42, RuleLogicalOrExpr = 43, RuleLogicalAndExpr = 44, 
-    RuleEqualityExpr = 45, RuleRelationalExpr = 46, RuleAdditiveExpr = 47, 
-    RuleMultiplicativeExpr = 48, RuleNullableExpr = 49, RuleUnaryExpr = 50, 
-    RuleLinkExpr = 51, RuleBindExpr = 52, RuleWithExpr = 53, RuleAnnoExpr = 54, 
-    RuleDictExpr = 55, RuleListExpr = 56, RulePrimaryData = 57, RuleLiteral = 58, 
-    RuleTypeExpr = 59, RuleUnionType = 60, RuleUnionUnit = 61, RuleListType = 62, 
-    RuleArgsType = 63, RulePrimaryType = 64, RuleDictExprType = 65, RuleDictType = 66, 
-    RuleTupleType = 67, RuleLambdaType = 68, RuleIdentDef = 69, RuleIdentRef = 70
+    RuleCatchClause = 42, RuleStructExpr = 43, RuleLogicalOrExpr = 44, RuleLogicalAndExpr = 45, 
+    RuleEqualityExpr = 46, RuleRelationalExpr = 47, RuleAdditiveExpr = 48, 
+    RuleMultiplicativeExpr = 49, RuleNullableExpr = 50, RuleUnaryExpr = 51, 
+    RuleLinkExpr = 52, RuleBindExpr = 53, RuleWithExpr = 54, RuleAnnoExpr = 55, 
+    RuleDictExpr = 56, RuleListExpr = 57, RulePrimaryData = 58, RuleLiteral = 59, 
+    RuleTypeExpr = 60, RuleUnionType = 61, RuleUnionUnit = 62, RuleListType = 63, 
+    RuleTypeOrData = 64, RuleArgsType = 65, RulePrimaryType = 66, RuleDictExprType = 67, 
+    RuleDictType = 68, RuleTupleType = 69, RuleLambdaType = 70, RuleIdentDef = 71, 
+    RuleIdentRef = 72
   };
 
   explicit OpenCMLParser(antlr4::TokenStream *input);
@@ -113,11 +114,11 @@ public:
   class BracedIdentsContext;
   class BracketIdentsContext;
   class CarrierContext;
-  class LetStmtContext;
-  class UseStmtContext;
+  class LetDeclContext;
+  class UseDeclContext;
   class RetStmtContext;
-  class TypeStmtContext;
-  class EnumStmtContext;
+  class TypeDeclContext;
+  class EnumDeclContext;
   class ExprStmtContext;
   class AnnotationContext;
   class AnnotationsContext;
@@ -141,6 +142,7 @@ public:
   class DataExprContext;
   class PatternContext;
   class MatchCaseContext;
+  class CatchClauseContext;
   class StructExprContext;
   class LogicalOrExprContext;
   class LogicalAndExprContext;
@@ -162,6 +164,7 @@ public:
   class UnionTypeContext;
   class UnionUnitContext;
   class ListTypeContext;
+  class TypeOrDataContext;
   class ArgsTypeContext;
   class PrimaryTypeContext;
   class DictExprTypeContext;
@@ -180,8 +183,6 @@ public:
     antlr4::tree::TerminalNode* SEP(size_t i);
     std::vector<DeclContext *> decl();
     DeclContext* decl(size_t i);
-    std::vector<StmtContext *> stmt();
-    StmtContext* stmt(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -197,7 +198,11 @@ public:
     ModuleDeclContext *moduleDecl();
     ImportDeclContext *importDecl();
     ExportDeclContext *exportDecl();
+    LetDeclContext *letDecl();
+    UseDeclContext *useDecl();
     FuncDeclContext *funcDecl();
+    TypeDeclContext *typeDecl();
+    EnumDeclContext *enumDecl();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -210,11 +215,12 @@ public:
   public:
     StmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    LetStmtContext *letStmt();
-    UseStmtContext *useStmt();
+    LetDeclContext *letDecl();
+    UseDeclContext *useDecl();
+    FuncDeclContext *funcDecl();
+    TypeDeclContext *typeDecl();
+    EnumDeclContext *enumDecl();
     RetStmtContext *retStmt();
-    TypeStmtContext *typeStmt();
-    EnumStmtContext *enumStmt();
     ExprStmtContext *exprStmt();
     StmtBlockContext *stmtBlock();
 
@@ -277,8 +283,8 @@ public:
     ExportDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *EXPORT();
-    LetStmtContext *letStmt();
-    TypeStmtContext *typeStmt();
+    LetDeclContext *letDecl();
+    TypeDeclContext *typeDecl();
     BracedIdentsContext *bracedIdents();
 
 
@@ -396,9 +402,9 @@ public:
 
   CarrierContext* carrier();
 
-  class  LetStmtContext : public antlr4::RuleContextWithAltNum {
+  class  LetDeclContext : public antlr4::RuleContextWithAltNum {
   public:
-    LetStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    LetDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     CarrierContext *carrier();
     DataExprContext *dataExpr();
@@ -411,11 +417,11 @@ public:
    
   };
 
-  LetStmtContext* letStmt();
+  LetDeclContext* letDecl();
 
-  class  UseStmtContext : public antlr4::RuleContextWithAltNum {
+  class  UseDeclContext : public antlr4::RuleContextWithAltNum {
   public:
-    UseStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    UseDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *USE();
     IdentRefContext *identRef();
@@ -426,7 +432,7 @@ public:
    
   };
 
-  UseStmtContext* useStmt();
+  UseDeclContext* useDecl();
 
   class  RetStmtContext : public antlr4::RuleContextWithAltNum {
   public:
@@ -444,9 +450,9 @@ public:
 
   RetStmtContext* retStmt();
 
-  class  TypeStmtContext : public antlr4::RuleContextWithAltNum {
+  class  TypeDeclContext : public antlr4::RuleContextWithAltNum {
   public:
-    TypeStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    TypeDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *TYPE();
     IdentDefContext *identDef();
@@ -457,11 +463,11 @@ public:
    
   };
 
-  TypeStmtContext* typeStmt();
+  TypeDeclContext* typeDecl();
 
-  class  EnumStmtContext : public antlr4::RuleContextWithAltNum {
+  class  EnumDeclContext : public antlr4::RuleContextWithAltNum {
   public:
-    EnumStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    EnumDeclContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *ENUM();
     IdentDefContext *identDef();
@@ -474,7 +480,7 @@ public:
    
   };
 
-  EnumStmtContext* enumStmt();
+  EnumDeclContext* enumDecl();
 
   class  ExprStmtContext : public antlr4::RuleContextWithAltNum {
   public:
@@ -813,6 +819,22 @@ public:
 
   MatchCaseContext* matchCase();
 
+  class  CatchClauseContext : public antlr4::RuleContextWithAltNum {
+  public:
+    CatchClauseContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *CATCH();
+    IdentDefContext *identDef();
+    TypeExprContext *typeExpr();
+    StmtBlockContext *stmtBlock();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  CatchClauseContext* catchClause();
+
   class  StructExprContext : public antlr4::RuleContextWithAltNum {
   public:
     StructExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
@@ -830,12 +852,8 @@ public:
     antlr4::tree::TerminalNode *TRY();
     std::vector<StmtBlockContext *> stmtBlock();
     StmtBlockContext* stmtBlock(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> CATCH();
-    antlr4::tree::TerminalNode* CATCH(size_t i);
-    std::vector<IdentDefContext *> identDef();
-    IdentDefContext* identDef(size_t i);
-    std::vector<TypeExprContext *> typeExpr();
-    TypeExprContext* typeExpr(size_t i);
+    std::vector<CatchClauseContext *> catchClause();
+    CatchClauseContext* catchClause(size_t i);
     antlr4::tree::TerminalNode *FINALLY();
 
 
@@ -1149,15 +1167,27 @@ public:
 
   ListTypeContext* listType();
 
+  class  TypeOrDataContext : public antlr4::RuleContextWithAltNum {
+  public:
+    TypeOrDataContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    TypeExprContext *typeExpr();
+    PrimaryDataContext *primaryData();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  TypeOrDataContext* typeOrData();
+
   class  ArgsTypeContext : public antlr4::RuleContextWithAltNum {
   public:
     ArgsTypeContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrimaryTypeContext *primaryType();
-    std::vector<TypeExprContext *> typeExpr();
-    TypeExprContext* typeExpr(size_t i);
-    std::vector<PrimaryDataContext *> primaryData();
-    PrimaryDataContext* primaryData(size_t i);
+    std::vector<TypeOrDataContext *> typeOrData();
+    TypeOrDataContext* typeOrData(size_t i);
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;

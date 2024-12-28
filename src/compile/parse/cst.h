@@ -58,15 +58,15 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitCarrier(OpenCMLParser::CarrierContext *context) { return dumpCST(context, "Carrier"); };
 
-    std::any visitLetStmt(OpenCMLParser::LetStmtContext *context) { return dumpCST(context, "LetStmt"); };
+    std::any visitLetDecl(OpenCMLParser::LetDeclContext *context) { return dumpCST(context, "LetDecl"); };
 
-    std::any visitUseStmt(OpenCMLParser::UseStmtContext *context) { return dumpCST(context, "UseStmt"); };
+    std::any visitUseDecl(OpenCMLParser::UseDeclContext *context) { return dumpCST(context, "UseDecl"); };
 
     std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) { return dumpCST(context, "RetStmt"); };
 
-    std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context) { return dumpCST(context, "TypeStmt"); };
+    std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context) { return dumpCST(context, "TypeDecl"); };
 
-    std::any visitEnumStmt(OpenCMLParser::EnumStmtContext *context) { return dumpCST(context, "EnumStmt"); };
+    std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return dumpCST(context, "EnumDecl"); };
 
     std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) { return dumpCST(context, "ExprStmt"); };
 
@@ -114,6 +114,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitMatchCase(OpenCMLParser::MatchCaseContext *context) { return dumpCST(context, "MatchCase"); };
 
+    std::any visitCatchClause(OpenCMLParser::CatchClauseContext *context) { return dumpCST(context, "CatchClause"); };
+
     std::any visitStructExpr(OpenCMLParser::StructExprContext *context) { return dumpCST(context, "StructExpr"); };
 
     std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) { return dumpCST(context, "LogicalOrExpr"); };
@@ -155,6 +157,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context) { return dumpCST(context, "UnionUnit"); };
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context) { return dumpCST(context, "ListType"); };
+
+    std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return dumpCST(context, "TypeOrData"); };
 
     std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context) { return dumpCST(context, "ArgsType"); };
 

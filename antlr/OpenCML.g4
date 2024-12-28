@@ -32,21 +32,26 @@ bool isAdjacent() {
 }
 }
 
-program : SEP? ((decl | stmt) SEP?)* EOF;
+program : SEP? (decl SEP?)* EOF;
 
 decl
     : moduleDecl
     | importDecl
     | exportDecl
+    | letDecl
+    | useDecl
     | funcDecl
+    | typeDecl
+    | enumDecl
     ;
 
 stmt
-    : letStmt
-    | useStmt
+    : letDecl
+    | useDecl
+    | funcDecl
+    | typeDecl
+    | enumDecl
     | retStmt
-    | typeStmt
-    | enumStmt
     | exprStmt
     | stmtBlock
     ;
@@ -55,7 +60,7 @@ stmtList : stmt (SEP? stmt)* SEP? ;
 
 moduleDecl : MODULE identDef ;
 importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
-exportDecl : EXPORT (letStmt | typeStmt | bracedIdents) ;
+exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
 
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
@@ -66,11 +71,11 @@ bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
 bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
 carrier       : identDef | parentIdents | bracedIdents | bracketIdents ;
 
-letStmt    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
-useStmt    : USE (identDef '=')? identRef ;
+letDecl    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
+useDecl    : USE (identDef '=')? identRef ;
 retStmt    : (RETURN | RAISE | THROW) dataExpr ;
-typeStmt   : TYPE identDef '=' typeExpr ;
-enumStmt   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
+typeDecl   : TYPE identDef '=' typeExpr ;
+enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
 exprStmt   : annotations? dataExpr ;
 
 annotation  : '@' primaryData ;
@@ -115,11 +120,15 @@ matchCase
     : CASE pattern ('|' pattern)* '=>' blockExpr
     ;
 
+catchClause
+    : CATCH identDef ':' typeExpr stmtBlock
+    ;
+
 structExpr
     : logicalOrExpr
     | IF logicalOrExpr THEN blockExpr ELSE blockExpr
     | MATCH identRef '{' matchCase+ '}'
-    | TRY stmtBlock (CATCH identDef ':' typeExpr stmtBlock)+ (FINALLY stmtBlock)?
+    | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 
 logicalOrExpr
@@ -214,8 +223,10 @@ listType
     : argsType ('[' ']')*
     ;
 
+typeOrData : typeExpr | primaryData ;
+
 argsType
-    : primaryType ('<' (typeExpr | primaryData) (',' (typeExpr | primaryData))* '>')?
+    : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 
 primaryType
