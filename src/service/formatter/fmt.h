@@ -95,10 +95,10 @@ class Formatter : public OpenCMLVisitor {
 
     template <typename T>
     std::string formatList(const std::vector<T *> &list,
-                           const std::string &&iComma, // inline comma
-                           const std::string &&nComma, // new line comma
-                           int flags = 0,              // combined flags
-                           int maxSkips = 2            // maximum number of line skips
+                           const std::string iComma, // inline comma
+                           const std::string nComma, // new line comma
+                           int flags = 0,            // combined flags
+                           int maxSkips = 2          // maximum number of line skips
     ) {
         // Parse flags
         bool tComma = flags & TRAIL_COMMA;
@@ -110,13 +110,13 @@ class Formatter : public OpenCMLVisitor {
 
     template <typename T>
     std::string formatList(const std::vector<T *> &list,
-                           const std::string &&iComma, // inline comma
-                           const std::string &&nComma, // new line comma
-                           bool tComma,                // trailing comma
-                           bool padding,               // padding spaces
-                           bool multiLine,             // force multi-line
-                           bool pushScope,             // push indent
-                           int maxSkips                // maximum number of line skips
+                           const std::string iComma, // inline comma
+                           const std::string nComma, // new line comma
+                           bool tComma,              // trailing comma
+                           bool padding,             // padding spaces
+                           bool multiLine,           // force multi-line
+                           bool pushScope,           // push indent
+                           int maxSkips              // maximum number of line skips
     ) {
         std::string result;
         if (list.empty()) {

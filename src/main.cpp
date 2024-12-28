@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        if (!hasParseError) {
+        if ((dumpAST || dumpGIR) && !hasParseError) {
             initTypes();
             ast::node_ptr_t ast = nullptr;
             auto visitor = ast::Constructor();

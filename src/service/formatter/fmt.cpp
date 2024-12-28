@@ -136,7 +136,7 @@ stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context) {
     int multiLine = isMultiLine(context);
-    return formatList(context->stmt(), "", std::move(this->newline), PADDING | PUSH_SCOPE | multiLine);
+    return formatList(context->stmt(), "", this->newline, PADDING | PUSH_SCOPE | multiLine);
 }
 
 /*
@@ -162,6 +162,7 @@ any Formatter::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
                          : any_cast<string>(visitBracedIdents(bracedIdents))) +
                " from " + formatStringLiteral(from);
     }
+    return result;
 }
 
 /*
@@ -503,10 +504,10 @@ any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
     const int multiLine = isMultiLine(context) ? MULTILINE : NONE;
     string result;
     if (indexValues) {
-        result += formatList(indexValues->children, ", ", ",", PADDING | PUSH_SCOPE | multiLine);
+        result += formatList(indexValues->indexValue(), ", ", ",", PADDING | PUSH_SCOPE | multiLine);
     }
     if (pairedValues) {
-        result += formatList(pairedValues->children, ", ", ",", PADDING | PUSH_SCOPE | multiLine);
+        result += formatList(pairedValues->keyValuePair(), ", ", ",", PADDING | PUSH_SCOPE | multiLine);
     }
     return result;
 }
@@ -660,11 +661,11 @@ any Formatter::visitStructExpr(OpenCMLParser::StructExprContext *context) {
         break;
     case 3: // MATCH identRef '{' matchCase+ '}'
         return "match " + any_cast<string>(visitIdentRef(context->identRef())) + " {" +
-               formatList(context->matchCase(), " ", std::move(this->newline), PADDING | MULTILINE | PUSH_SCOPE) + "}";
+               formatList(context->matchCase(), " ", this->newline, PADDING | MULTILINE | PUSH_SCOPE) + "}";
         break;
     case 4: // TRY stmtBlock (CATCH identDef ':' typeExpr stmtBlock)+ (FINALLY stmtBlock)?
         return "try " + any_cast<string>(visitStmtBlock(context->stmtBlock(0))) +
-               formatList(context->catchClause(), " ", std::move(this->newline), MULTILINE) +
+               formatList(context->catchClause(), " ", this->newline, MULTILINE) +
                (context->FINALLY() ? "finally " + any_cast<string>(visitStmtBlock(context->stmtBlock(1))) : "");
         break;
 
