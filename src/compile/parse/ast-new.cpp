@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Dec. 28, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -246,7 +246,7 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
 /*
 program : SEP? ((decl | stmt) SEP?)* EOF;
 */
-any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {}
+any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) { return nullptr; }
 
 /*
 decl
@@ -256,7 +256,7 @@ decl
     | funcDecl
     ;
 */
-any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {}
+any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return nullptr; }
 
 /*
 stmt
@@ -269,194 +269,194 @@ stmt
     | stmtBlock
     ;
 */
-any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {}
+any Constructor::visitStmt(OpenCMLParser::StmtContext *context) { return nullptr; }
 
 /*
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
-any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {}
+any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) { return nullptr; }
 
 /*
 moduleDecl : MODULE identDef ;
 */
-any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {}
+any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) { return nullptr; }
 
 /*
 importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 */
-any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {}
+any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) { return nullptr; }
 
 /*
 exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
 */
-any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {}
+any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) { return nullptr; }
 
 /*
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
-any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {}
+any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) { return nullptr; }
 
 /*
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 */
-any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {}
+any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return nullptr; }
 
 /*
 funcDecl   : annotations? (WITH angledParams)? EXPORT? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
-any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {}
+any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) { return nullptr; }
 
 /*
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
 */
-any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {}
+any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) { return nullptr; }
 
 /*
 bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
 */
-any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {}
+any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) { return nullptr; }
 
 /*
 bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
 */
-any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {}
+any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) { return nullptr; }
 
 /*
 carrier    : identDef | bracedIdents | bracketIdents ;
 */
-any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {}
+any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) { return nullptr; }
 
 /*
 letDecl    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
 */
-any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {}
+any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) { return nullptr; }
 
 /*
 useDecl    : USE (identDef '=')? identRef ;
 */
-any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {}
+any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) { return nullptr; }
 
 /*
 retStmt    : (RETURN | RAISE | THROW) dataExpr ;
 */
-any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {}
+any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) { return nullptr; }
 
 /*
 typeDecl   : TYPE identDef '=' typeExpr ;
 */
-any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {}
+any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) { return nullptr; }
 
 /*
 enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
 */
-any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) {}
+any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return nullptr; }
 
 /*
 exprStmt   : annotations? dataExpr ;
 */
-any Constructor::visitExprStmt(OpenCMLParser::ExprStmtContext *context) {}
+any Constructor::visitExprStmt(OpenCMLParser::ExprStmtContext *context) { return nullptr; }
 
 /*
 annotation  : '@' primaryData ;
 */
-any Constructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) {}
+any Constructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) { return nullptr; }
 
 /*
 annotations : annotation+ ;
 */
-any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {}
+any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) { return nullptr; }
 
 /*
 modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC | MACRO)+ ;
 */
-any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {}
+any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) { return nullptr; }
 
 /*
 indexValue   : dataExpr | '...' dataExpr ;
 */
-any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) {}
+any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) { return nullptr; }
 
 /*
 keyTypePair  : identDef ':' typeExpr ;
 */
-any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {}
+any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) { return nullptr; }
 
 /*
 keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
-any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {}
+any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) { return nullptr; }
 
 /*
 keyParamPair : VAR? identDef annotation? ':' (typeExpr | TYPEAS identDef) ('=' dataExpr)? ;
 */
-any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {}
+any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return nullptr; }
 
 /*
 identList    : identDef (',' identDef)* ;
 */
-any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {}
+any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) { return nullptr; }
 
 /*
 valueList    : dataExpr (',' dataExpr)* ;
 */
-any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) {}
+any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) { return nullptr; }
 
 /*
 indexValues  : indexValue (',' indexValue)* ;
 */
-any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {}
+any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) { return nullptr; }
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
-any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {}
+any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) { return nullptr; }
 
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
-any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {}
+any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) { return nullptr; }
 
 /*
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
-any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {}
+any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return nullptr; }
 
 /*
 memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
-any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {}
+any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) { return nullptr; }
 
 /*
 parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
 */
-any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {}
+any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) { return nullptr; }
 
 /*
 parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
 */
-any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {}
+any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) { return nullptr; }
 
 /*
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 */
-any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {}
+any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) { return nullptr; }
 
 /*
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 */
-any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {}
+any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return nullptr; }
 
 /*
 blockExpr : stmtBlock | dataExpr ;
 */
-any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {}
+any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return nullptr; }
 
 /*
 dataExpr
     : WAIT? structExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') structExpr)?
     ;
 */
-any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) {}
+any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) { return nullptr; }
 
 /*
 pattern
@@ -467,21 +467,21 @@ pattern
     | '_' // wildcard
     ;
 */
-any Constructor::visitPattern(OpenCMLParser::PatternContext *context) {}
+any Constructor::visitPattern(OpenCMLParser::PatternContext *context) { return nullptr; }
 
 /*
 matchCase
     : CASE pattern ('|' pattern)* '=>' blockExpr
     ;
 */
-any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {}
+any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) { return nullptr; }
 
 /*
 catchClause
     : CATCH identDef ':' typeExpr stmtBlock
     ;
 */
-any Constructor::visitCatchClause(OpenCMLParser::CatchClauseContext *context) {}
+any Constructor::visitCatchClause(OpenCMLParser::CatchClauseContext *context) { return nullptr; }
 
 /*
 structExpr
@@ -491,56 +491,56 @@ structExpr
     | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 */
-any Constructor::visitStructExpr(OpenCMLParser::StructExprContext *context) {}
+any Constructor::visitStructExpr(OpenCMLParser::StructExprContext *context) { return nullptr; }
 
 /*
 logicalOrExpr
     : logicalAndExpr ('||' logicalAndExpr)*
     ;
 */
-any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {}
+any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) { return nullptr; }
 
 /*
 logicalAndExpr
     : equalityExpr ('&&' equalityExpr)*
     ;
 */
-any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {}
+any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) { return nullptr; }
 
 /*
 equalityExpr
     : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
     ;
 */
-any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {}
+any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) { return nullptr; }
 
 /*
 relationalExpr
     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
     ;
 */
-any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {}
+any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) { return nullptr; }
 
 /*
 additiveExpr
     : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
     ;
 */
-any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {}
+any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) { return nullptr; }
 
 /*
 multiplicativeExpr
     : nullableExpr (('^' | '*' | '/' | '%') nullableExpr)*
     ;
 */
-any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {}
+any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) { return nullptr; }
 
 /*
 nullableExpr
     : unaryExpr (('??' | '!!') dataExpr)?
     ;
 */
-any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {}
+any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) { return nullptr; }
 
 /*
 unaryExpr
@@ -548,49 +548,49 @@ unaryExpr
     | ('!' | '-' | '~') linkExpr
     ;
 */
-any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {}
+any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) { return nullptr; }
 
 /*
 linkExpr
     : bindExpr (('->' | '?->') bindExpr)*
     ;
 */
-any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {}
+any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) { return nullptr; }
 
 /*
 bindExpr
     : withExpr (('..' | '?..') withExpr)*
     ;
 */
-any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {}
+any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) { return nullptr; }
 
 /*
 withExpr
     : annoExpr (('.' | '?.') annoExpr)*
     ;
 */
-any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {}
+any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) { return nullptr; }
 
 /*
 annoExpr
     : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!') | annotation)*
     ;
 */
-any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {}
+any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }
 
 /*
 dictExpr
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
     ;
 */
-any Constructor::visitDictExpr(OpenCMLParser::DictExprContext *context) {}
+any Constructor::visitDictExpr(OpenCMLParser::DictExprContext *context) { return nullptr; }
 
 /*
 listExpr
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 */
-any Constructor::visitListExpr(OpenCMLParser::ListExprContext *context) {}
+any Constructor::visitListExpr(OpenCMLParser::ListExprContext *context) { return nullptr; }
 
 /*
 primaryData
@@ -603,7 +603,7 @@ primaryData
     | lambdaExpr
     ;
 */
-any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {}
+any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) { return nullptr; }
 
 /*
 literal
@@ -617,33 +617,33 @@ literal
     | NULL
     ;
 */
-any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {}
+any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) { return nullptr; }
 
 /*
 typeExpr
     : unionType ('?' unionType?)?
     ;
 */
-any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {}
+any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) { return nullptr; }
 
 /*
 unionType
     : unionUnit ('|' unionUnit)*
     ;
 */
-any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {}
+any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) { return nullptr; }
 
 /*
 unionUnit : (identDef OF)? listType ;
 */
-any Constructor::visitUnionUnit(OpenCMLParser::UnionUnitContext *context) {}
+any Constructor::visitUnionUnit(OpenCMLParser::UnionUnitContext *context) { return nullptr; }
 
 /*
 listType
     : argsType ('[' ']')*
     ;
 */
-any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {}
+any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) { return nullptr; }
 
 /*
 typeOrData : typeExpr | primaryData ;
@@ -657,7 +657,7 @@ argsType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 */
-any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {}
+any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) { return nullptr; }
 
 /*
 primaryType
@@ -670,42 +670,42 @@ primaryType
     | TYPEOF dataExpr
     ;
 */
-any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {}
+any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return nullptr; }
 
 /*
 dictExprType
     : dictType (('&' | '^') dictType)*
     ;
 */
-any Constructor::visitDictExprType(OpenCMLParser::DictExprTypeContext *context) {}
+any Constructor::visitDictExprType(OpenCMLParser::DictExprTypeContext *context) { return nullptr; }
 
 /*
 dictType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
     ;
 */
-any Constructor::visitDictType(OpenCMLParser::DictTypeContext *context) {}
+any Constructor::visitDictType(OpenCMLParser::DictTypeContext *context) { return nullptr; }
 
 /*
 tupleType
     : '(' (typeExpr (',' typeExpr)*)? ','? ')'
     ;
 */
-any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) {}
+any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) { return nullptr; }
 
 /*
 lambdaType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
-any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {}
+any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) { return nullptr; }
 
 /*
 identDef : IDENTIFIER ;
 */
-any Constructor::visitIdentDef(OpenCMLParser::IdentDefContext *context) {}
+any Constructor::visitIdentDef(OpenCMLParser::IdentDefContext *context) { return nullptr; }
 
 /*
 identRef : (IDENTIFIER '::')* IDENTIFIER ;
 */
-any Constructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {}
+any Constructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) { return nullptr; }
