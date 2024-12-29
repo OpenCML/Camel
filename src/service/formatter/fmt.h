@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Dec. 28, 2024
+ * Updated: Dec. 29, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,7 @@ class Formatter : public OpenCMLVisitor {
 
     const std::vector<antlr4::Token *> tokens;
 
-    int indentLevel = -1;
+    int indentLevel = 0;
     std::unordered_set<size_t> insertedCommentIndices;
 
     void popIndent() {
@@ -59,7 +59,16 @@ class Formatter : public OpenCMLVisitor {
 
     void insertComment(antlr4::Token *comment, std::string &result);
 
-    inline std::string lineEnd() { return newline + currentIndent; }
+    inline std::string lineEnd(int repeat = 1) {
+        if (repeat <= 0) {
+            return "";
+        }
+        std::string result;
+        for (int i = 0; i < repeat; ++i) {
+            result += newline;
+        }
+        return result + currentIndent;
+    }
 
     inline size_t countLines(const std::string &input) { return std::count(input.begin(), input.end(), '\n'); }
 
@@ -86,11 +95,14 @@ class Formatter : public OpenCMLVisitor {
     }
 
     enum FormatListFlags {
-        NONE = 0,
-        PADDING = 1 << 0,    // Include padding spaces
-        MULTILINE = 1 << 1,  // Force multi-line formatting
-        PUSH_SCOPE = 1 << 2, // Push indent for multi-line
-        TRAIL_COMMA = 1 << 3 // Include trailing comma
+        PaddingSP = 1 << 0,  // Padding with spaces
+        PaddingNL = 1 << 1,  // Padding with new lines
+        Multiline = 1 << 2,  // Force multi-line formatting
+        InOneLine = 1 << 3,  // Force in one line
+        PushScope = 1 << 4,  // Push indent for multi-line
+        TrailingC = 1 << 5,  // Include trailing comma
+        PLeftOnly = 1 << 6,  // Padding on left only
+        PRightOnly = 1 << 7, // Padding on right only
     };
 
     template <typename T>
@@ -101,11 +113,16 @@ class Formatter : public OpenCMLVisitor {
                            int maxSkips = 2          // maximum number of line skips
     ) {
         // Parse flags
-        bool tComma = flags & TRAIL_COMMA;
-        bool padding = flags & PADDING;
-        bool multiLine = flags & MULTILINE;
-        bool pushScope = flags & PUSH_SCOPE;
-        return formatList(list, iComma, nComma, tComma, padding, multiLine, pushScope, maxSkips);
+        bool tComma = flags & TrailingC;
+        bool paddingSP = flags & PaddingSP;
+        bool paddingNL = flags & PaddingNL;
+        bool multiLine = flags & Multiline;
+        bool inOneLine = flags & InOneLine;
+        bool pushScope = flags & PushScope;
+        bool pLeftOnly = flags & PLeftOnly;
+        bool pRightOnly = flags & PRightOnly;
+        return formatList(list, iComma, nComma, tComma, paddingSP, paddingNL, pLeftOnly, pRightOnly, multiLine,
+                          inOneLine, pushScope, maxSkips);
     }
 
     template <typename T>
@@ -113,8 +130,12 @@ class Formatter : public OpenCMLVisitor {
                            const std::string iComma, // inline comma
                            const std::string nComma, // new line comma
                            bool tComma,              // trailing comma
-                           bool padding,             // padding spaces
+                           bool paddingSP,           // padding spaces
+                           bool paddingNL,           // padding new lines
+                           bool pLeftOnly,           // padding on left only
+                           bool pRightOnly,          // padding on right only
                            bool multiLine,           // force multi-line
+                           bool inOneLine,           // force in one line
                            bool pushScope,           // push indent
                            int maxSkips              // maximum number of line skips
     ) {
@@ -169,7 +190,7 @@ class Formatter : public OpenCMLVisitor {
             return std::make_pair(predCmtStart, predCmtEnd);
         };
 
-        if (!multiLine) {
+        if (!multiLine && !inOneLine) {
             // the elements are on one line if and only if
             // all elements' last token is on the same line
             // with the first token of the next element
@@ -187,15 +208,15 @@ class Formatter : public OpenCMLVisitor {
             }
         }
 
-        if (padding) {
-            if (multiLine) {
-                if (pushScope) {
-                    pushIndent();
-                }
-                result += lineEnd();
-            } else {
-                result += " ";
+        if (paddingNL && multiLine) {
+            if (pushScope) {
+                pushIndent();
             }
+            if (!pRightOnly) {
+                result += lineEnd();
+            }
+        } else if (paddingSP && !pRightOnly) {
+            result += " ";
         }
 
         int lastCommentLines = 0;
@@ -293,15 +314,15 @@ class Formatter : public OpenCMLVisitor {
             lastLine = list[i]->getStop()->getLine() + countLines(list[i]->getStop()->getText());
         }
 
-        if (padding) {
-            if (multiLine) {
-                if (pushScope) {
-                    popIndent();
-                }
-                result += lineEnd();
-            } else if (!tComma) {
-                result += " ";
+        if (paddingNL && multiLine) {
+            if (pushScope) {
+                popIndent();
             }
+            if (!pLeftOnly) {
+                result += lineEnd();
+            }
+        } else if (paddingSP && !tComma && !pLeftOnly) {
+            result += " ";
         }
 
         return result;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Dec. 28, 2024
+ * Updated: Dec. 30, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,11 +99,12 @@ any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
             headStr += ";";
         }
         headStr += lineEnd();
-        headStr += lineEnd();
     }
-    headStr += formatList(head, "; ", (this->preferSemis ? ";" : ""), TRAIL_COMMA | MULTILINE, 1);
-    string tailStr = formatList(tail, "; ", (this->preferSemis ? ";" : ""), TRAIL_COMMA | MULTILINE);
-    return headStr + (head.empty() || tail.empty() ? "" : lineEnd()) + tailStr + lineEnd();
+    headStr +=
+        formatList(head, "; ", (this->preferSemis ? ";" : ""), TrailingC | Multiline | PaddingNL | PRightOnly, 1);
+    string tailStr =
+        formatList(tail, "; ", (this->preferSemis ? ";" : ""), TrailingC | Multiline | PaddingNL | PRightOnly);
+    return headStr + (head.empty() || tail.empty() ? "" : lineEnd()) + tailStr;
 }
 
 /*
@@ -138,7 +139,7 @@ any Formatter::visitStmt(OpenCMLParser::StmtContext *context) { return visit(con
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    return formatList(context->stmt(), "", this->newline, PADDING | PUSH_SCOPE | MULTILINE);
+    return formatList(context->stmt(), "", "", PaddingNL | PushScope | Multiline);
 }
 
 /*
@@ -462,38 +463,35 @@ any Formatter::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
 identList    : identDef (',' identDef)* ;
 */
 any Formatter::visitIdentList(OpenCMLParser::IdentListContext *context) {
-    return formatList(context->identDef(), ", ", ",", PADDING | PUSH_SCOPE | (isMultiLine(context) ? MULTILINE : NONE));
+    return formatList(context->identDef(), ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 valueList    : dataExpr (',' dataExpr)* ;
 */
 any Formatter::visitValueList(OpenCMLParser::ValueListContext *context) {
-    return formatList(context->dataExpr(), ", ", ",", PADDING | PUSH_SCOPE | (isMultiLine(context) ? MULTILINE : NONE));
+    return formatList(context->dataExpr(), ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 indexValues  : indexValue (',' indexValue)* ;
 */
 any Formatter::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
-    return formatList(context->indexValue(), ", ", ",",
-                      PADDING | PUSH_SCOPE | (isMultiLine(context) ? MULTILINE : NONE));
+    return formatList(context->indexValue(), ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
 any Formatter::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
-    return formatList(context->keyValuePair(), ", ", ",",
-                      PADDING | PUSH_SCOPE | (isMultiLine(context) ? MULTILINE : NONE));
+    return formatList(context->keyValuePair(), ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 any Formatter::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
-    return formatList(context->keyParamPair(), ", ", ",",
-                      PADDING | PUSH_SCOPE | (isMultiLine(context) ? MULTILINE : NONE));
+    return formatList(context->keyParamPair(), ", ", ",", PaddingNL | PushScope);
 }
 
 /*
@@ -502,13 +500,12 @@ argumentList : indexValues (',' pairedValues)? | pairedValues ;
 any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
     const auto &indexValues = context->indexValues();
     const auto &pairedValues = context->pairedValues();
-    const int multiLine = isMultiLine(context) ? MULTILINE : NONE;
     string result;
     if (indexValues) {
-        result += formatList(indexValues->indexValue(), ", ", ",", PADDING | PUSH_SCOPE | multiLine);
+        result += formatList(indexValues->indexValue(), ", ", ",", PaddingNL | PushScope);
     }
     if (pairedValues) {
-        result += formatList(pairedValues->keyValuePair(), ", ", ",", PADDING | PUSH_SCOPE | multiLine);
+        result += formatList(pairedValues->keyValuePair(), ", ", ",", PaddingNL | PushScope);
     }
     return result;
 }
@@ -613,7 +610,7 @@ any Formatter::visitPattern(OpenCMLParser::PatternContext *context) {
                "}";
         break;
     case 5: // '_'
-        return "_";
+        return string("_");
         break;
 
     default:
@@ -662,11 +659,11 @@ any Formatter::visitStructExpr(OpenCMLParser::StructExprContext *context) {
         break;
     case 3: // MATCH identRef '{' matchCase+ '}'
         return "match " + any_cast<string>(visitIdentRef(context->identRef())) + " {" +
-               formatList(context->matchCase(), " ", this->newline, PADDING | MULTILINE | PUSH_SCOPE) + "}";
+               formatList(context->matchCase(), " ", "", PaddingNL | Multiline | PushScope) + "}";
         break;
     case 4: // TRY stmtBlock (CATCH identDef ':' typeExpr stmtBlock)+ (FINALLY stmtBlock)?
         return "try " + any_cast<string>(visitStmtBlock(context->stmtBlock(0))) +
-               formatList(context->catchClause(), " ", this->newline, MULTILINE) +
+               formatList(context->catchClause(), " ", "", PaddingSP | InOneLine) +
                (context->FINALLY() ? "finally " + any_cast<string>(visitStmtBlock(context->stmtBlock(1))) : "");
         break;
 
@@ -802,9 +799,9 @@ any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
         const auto &token = context->children[i];
         if (antlr4::tree::TerminalNode::is(token)) {
             antlr4::tree::TerminalNode *terminalNode = dynamic_cast<antlr4::tree::TerminalNode *>(token);
-            return terminalNode->getText();
+            result += terminalNode->getText();
         } else {
-            return visit(token);
+            result += any_cast<string>(visit(token));
         }
     }
     return result;
@@ -955,7 +952,7 @@ any Formatter::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {
     const auto &children = context->children;
     if (children.size() > 2) {
         result += "<";
-        result += formatList(context->typeOrData(), ", ", ",", PUSH_SCOPE);
+        result += formatList(context->typeOrData(), ", ", ",", PushScope);
         result += ">";
     }
     return result;
@@ -1017,8 +1014,7 @@ dictType
 */
 any Formatter::visitDictType(OpenCMLParser::DictTypeContext *context) {
     const auto &keyTypePairs = context->keyTypePair();
-    return "{" + formatList(keyTypePairs, ", ", ",", PADDING | PUSH_SCOPE | (isMultiLine(context) ? MULTILINE : NONE)) +
-           "}";
+    return "{" + formatList(keyTypePairs, ", ", ",", PaddingNL | PaddingSP | PushScope) + "}";
 }
 
 /*
@@ -1028,8 +1024,7 @@ tupleType
 */
 any Formatter::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
     const auto &typeExprs = context->typeExpr();
-    return "(" + formatList(typeExprs, ", ", ",", PADDING | PUSH_SCOPE | (isMultiLine(context) ? MULTILINE : NONE)) +
-           ")";
+    return "(" + formatList(typeExprs, ", ", ",", PaddingNL | PushScope) + ")";
 }
 
 /*

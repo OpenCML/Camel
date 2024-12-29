@@ -1,8 +1,17 @@
 import { dense, dropout, relu, softmax } from 'nn'
+import bb from 'bb'
+import 'cc'
+
+module nn
 
 with <prob: Float>
 macro func dropout(x: Tensor<Float>): Tensor<Float> {
     return x.map((x: Float) => x * (rand() >= prob))
+}
+
+export let w1 = {
+    shape: [784, 512],
+    initializer: 'random'
 }
 
 var w1: Tensor = random([784, 512])
@@ -18,6 +27,27 @@ func forward(x: Tensor) {
     let layer1 = dense<w1, b1>..relu..dropout
     let layer2 = dense<w2, b2>..relu..dropout
     let layer3 = dense<w3, b3>..softmax
+    sync {
+        return x->layer1->layer2->layer3
+    }
+    var r = try {
+        sync { return x->layer1->layer2->layer3 }
+    } catch e: Error {
+        return a
+    }
+    catch e: Error {
+        return a
+    } 
+    catch e: Error {
+        return a
+    }
+    finally {
+        return a
+    }
+    var x: Tensor = match x {
+        case x => x
+        case _ => sync{throw Error('Invalid input')}
+    }
     return x->layer1->layer2->layer3
 }
 
