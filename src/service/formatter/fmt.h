@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Dec. 29, 2024
+ * Updated: Dec. 30, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,7 +55,7 @@ class Formatter : public OpenCMLVisitor {
         }
     }
 
-    std::string formatStringLiteral(const std::string &input);
+    std::string formatStringLiteral(const std::string &input, bool multiLine);
 
     void insertComment(antlr4::Token *comment, std::string &result);
 
@@ -106,7 +106,7 @@ class Formatter : public OpenCMLVisitor {
     };
 
     template <typename T>
-    std::string formatList(const std::vector<T *> &list,
+    std::string formatList(const std::vector<T *> &list, const antlr4::ParserRuleContext *context,
                            const std::string iComma, // inline comma
                            const std::string nComma, // new line comma
                            int flags = 0,            // combined flags
@@ -121,26 +121,30 @@ class Formatter : public OpenCMLVisitor {
         bool pushScope = flags & PushScope;
         bool pLeftOnly = flags & PLeftOnly;
         bool pRightOnly = flags & PRightOnly;
-        return formatList(list, iComma, nComma, tComma, paddingSP, paddingNL, pLeftOnly, pRightOnly, multiLine,
-                          inOneLine, pushScope, maxSkips);
-    }
 
-    template <typename T>
-    std::string formatList(const std::vector<T *> &list,
-                           const std::string iComma, // inline comma
-                           const std::string nComma, // new line comma
-                           bool tComma,              // trailing comma
-                           bool paddingSP,           // padding spaces
-                           bool paddingNL,           // padding new lines
-                           bool pLeftOnly,           // padding on left only
-                           bool pRightOnly,          // padding on right only
-                           bool multiLine,           // force multi-line
-                           bool inOneLine,           // force in one line
-                           bool pushScope,           // push indent
-                           int maxSkips              // maximum number of line skips
-    ) {
         std::string result;
         if (list.empty()) {
+            // TODO: handle empty list to proc comments
+            // here temporarily ignores the ctrl flags
+            const size_t firstTokIdx = context->getStart()->getTokenIndex();
+            const size_t lastTokIdx = context->getStop()->getTokenIndex();
+            bool foundComment = false;
+            if (pushScope) {
+                pushIndent();
+            }
+            for (size_t i = firstTokIdx + 1; i < lastTokIdx; i++) {
+                if (tokens[i]->getChannel() > 1) {
+                    result += lineEnd();
+                    insertComment(tokens[i], result);
+                    foundComment = true;
+                }
+            }
+            if (pushScope) {
+                popIndent();
+            }
+            if (foundComment) {
+                result += lineEnd();
+            }
             return result;
         }
 

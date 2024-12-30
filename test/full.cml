@@ -1,6 +1,9 @@
-@{ x: 3, y: 1, style: 'bold', color: 'red' }
+func main() {
+    @{ x: 3, y: 1, style: 'bold', color: 'red' }
 '''
 Impact of System Noise and Nonlinearities on a 16-QAM Signal in a Radio-over-Fiber Transmission
+hahah
+bab
 ''';
 
 '''
@@ -12,6 +15,7 @@ a(b, d(f)->e(g));
 let a = d + (a + b) * c / 2;
 
 (() => a + b)();
+}
 
 /*
 * This PSL module will be imported by interpreter automatically,
@@ -38,14 +42,16 @@ inner func analyze(data: Any) {
     // inner func
 };
 
-ident[1]->fn;
+func test() {
+    ident[1]->fn;
 nf->ident[1];
 nf->ident[1]->fn;
 ident[1][id]->fn;
 a->b->c;
+}
 
-use { Const, Ground, Sub } from 'phot/units';
-use { Rx_El_mQAM_BER, Tx_El_mQAM } from 'phot/tr';
+import { Const, Ground, Sub } from 'phot/units';
+import { Rx_El_mQAM_BER, Tx_El_mQAM } from 'phot/tr';
 
 type ElSignal = {
     power: Number,
@@ -59,7 +65,7 @@ type Point = {
 };
 
 let photodiodeSetting = {
-    temperature: 300`K`
+    temperature: 300
 };
 
 let Power = {
@@ -74,7 +80,7 @@ let a = a;
 func PowerControlEl(input: ElSignal): ElSignal {
     'Power control'@[6, 0];
     let [dcOutput, powerOutput] = input->PowerMeterEl;
-    dcOutput->Ground<e, 5`v`>;
+    dcOutput->Ground<e, 5>;
     return input->ParameterController<
         [powerInput, powerOutput]->Sub
     >@[2, 2]->AmpSysEl;
@@ -107,7 +113,7 @@ func placeComponents(
         let laser = LaserCW@[pos['x'], pos['y']];
         let laserRect = laser['meta']['rect'];
         // create instance of Analyzer and place it
-        let analyzer = Analyzer@[pos['x'] + dist['x'] + laserRect['width'], pos['y']];
+        let analyzer = Analyzer@[pos["x"] + dist['x'] + laserRect['width'], pos['y']];
         // connect laser to analyzer;
         laser()->analyzer;
         // move to next position

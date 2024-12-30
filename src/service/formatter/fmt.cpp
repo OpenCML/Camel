@@ -19,12 +19,47 @@
 
 #include "fmt.h"
 #include <algorithm>
+#include <regex>
 
 using namespace std;
 
-string Formatter::formatStringLiteral(const string &input) {
+inline std::string trim(const std::string &str) {
+    size_t first = str.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    size_t last = str.find_last_not_of(" \t\r\n");
+    return str.substr(first, last - first + 1);
+}
+
+inline std::vector<std::string> regex_split(const std::string &input, const std::string &pattern) {
+    std::regex re(pattern);
+    std::sregex_token_iterator begin(input.begin(), input.end(), re, -1);
+    std::sregex_token_iterator end;
+    return {begin, end};
+}
+
+string Formatter::formatStringLiteral(const string &input, bool multiLine = false) {
     char quoteChar = (quotePrefer == QuotePreference::Single) ? '\'' : '"';
-    const string slicedStr = input.substr(1, input.size() - 2);
+    const string slicedStr = multiLine ? input.substr(3, input.size() - 6) : input.substr(1, input.size() - 2);
+
+    string procStr;
+
+    if (multiLine) {
+        string trimmedStr = trim(slicedStr);
+        vector<string> lines;
+        for (const string &line : regex_split(trimmedStr, "\\r?\\n\\s*")) {
+            lines.push_back(trim(line));
+        }
+        for (size_t i = 0; i < lines.size(); i++) {
+            procStr += lines[i];
+            if (i != lines.size() - 1) {
+                procStr += lineEnd();
+            }
+        }
+    } else {
+        procStr = slicedStr;
+    }
 
     bool hasSingleQuote = (slicedStr.find('\'') != string::npos);
     bool hasDoubleQuote = (slicedStr.find('"') != string::npos);
@@ -36,16 +71,21 @@ string Formatter::formatStringLiteral(const string &input) {
     } else {
         // escape all quotes
         string escapedStr;
-        for (const char &c : slicedStr) {
+        for (const char &c : procStr) {
             if (c == quoteChar) {
                 escapedStr += '\\';
             }
             escapedStr += c;
         }
-        return quoteChar + escapedStr + quoteChar;
+        procStr = escapedStr;
     }
 
-    return quoteChar + slicedStr + quoteChar;
+    if (multiLine) {
+        string multiQuote = string(3, quoteChar);
+        return multiQuote + lineEnd() + procStr + lineEnd() + multiQuote;
+    } else {
+        return quoteChar + procStr + quoteChar;
+    }
 }
 
 inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
@@ -100,10 +140,10 @@ any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
         }
         headStr += lineEnd();
     }
-    headStr +=
-        formatList(head, "; ", (this->preferSemis ? ";" : ""), TrailingC | Multiline | PaddingNL | PRightOnly, 1);
+    headStr += formatList(head, context, "; ", (this->preferSemis ? ";" : ""),
+                          TrailingC | Multiline | PaddingNL | PRightOnly, 1);
     string tailStr =
-        formatList(tail, "; ", (this->preferSemis ? ";" : ""), TrailingC | Multiline | PaddingNL | PRightOnly);
+        formatList(tail, context, "; ", (this->preferSemis ? ";" : ""), TrailingC | Multiline | PaddingNL | PRightOnly);
     return headStr + (head.empty() || tail.empty() ? "" : lineEnd()) + tailStr;
 }
 
@@ -139,7 +179,7 @@ any Formatter::visitStmt(OpenCMLParser::StmtContext *context) { return visit(con
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    return formatList(context->stmt(), "", "", PaddingNL | PushScope | Multiline);
+    return formatList(context->stmt(), context, "", "", PaddingNL | PushScope | Multiline);
 }
 
 /*
@@ -193,7 +233,23 @@ any Formatter::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
     if (stmtList) {
         return result + "{" + any_cast<string>(visitStmtList(stmtList)) + "}";
     } else {
-        return result + "{}";
+        result += "{";
+        const size_t firstTokIdx = context->getStart()->getTokenIndex();
+        const size_t lastTokIdx = context->getStop()->getTokenIndex();
+        bool foundComment = false;
+        pushIndent();
+        for (size_t i = firstTokIdx + 1; i < lastTokIdx; i++) {
+            if (tokens[i]->getChannel() > 1) {
+                result += lineEnd();
+                insertComment(tokens[i], result);
+                foundComment = true;
+            }
+        }
+        popIndent();
+        if (foundComment) {
+            result += lineEnd();
+        }
+        return result + "}";
     }
 }
 
@@ -275,7 +331,11 @@ any Formatter::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
 bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
 */
 any Formatter::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
-    return "{" + (context->identList() ? any_cast<string>(visitIdentList(context->identList())) : "") + "}";
+    if (context->identList()) {
+        return "{ " + any_cast<string>(visitIdentList(context->identList())) + " }";
+    } else {
+        return "{}";
+    }
 }
 
 /*
@@ -463,35 +523,35 @@ any Formatter::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
 identList    : identDef (',' identDef)* ;
 */
 any Formatter::visitIdentList(OpenCMLParser::IdentListContext *context) {
-    return formatList(context->identDef(), ", ", ",", PaddingNL | PushScope);
+    return formatList(context->identDef(), context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 valueList    : dataExpr (',' dataExpr)* ;
 */
 any Formatter::visitValueList(OpenCMLParser::ValueListContext *context) {
-    return formatList(context->dataExpr(), ", ", ",", PaddingNL | PushScope);
+    return formatList(context->dataExpr(), context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 indexValues  : indexValue (',' indexValue)* ;
 */
 any Formatter::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
-    return formatList(context->indexValue(), ", ", ",", PaddingNL | PushScope);
+    return formatList(context->indexValue(), context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
 any Formatter::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
-    return formatList(context->keyValuePair(), ", ", ",", PaddingNL | PushScope);
+    return formatList(context->keyValuePair(), context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 any Formatter::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
-    return formatList(context->keyParamPair(), ", ", ",", PaddingNL | PushScope);
+    return formatList(context->keyParamPair(), context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
@@ -502,10 +562,10 @@ any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
     const auto &pairedValues = context->pairedValues();
     string result;
     if (indexValues) {
-        result += formatList(indexValues->indexValue(), ", ", ",", PaddingNL | PushScope);
+        result += formatList(indexValues->indexValue(), context, ", ", ",", PaddingNL | PushScope);
     }
     if (pairedValues) {
-        result += formatList(pairedValues->keyValuePair(), ", ", ",", PaddingNL | PushScope);
+        result += formatList(pairedValues->keyValuePair(), context, ", ", ",", PaddingNL | PushScope);
     }
     return result;
 }
@@ -515,9 +575,9 @@ memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
 any Formatter::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
     string result = "[" + any_cast<string>(visitDataExpr(context->dataExpr(0)));
-    if (context->children.size() > 2) {
+    if (context->children.size() > 3) {
         result += ": " + any_cast<string>(visitDataExpr(context->dataExpr(1)));
-        if (context->children.size() > 4) {
+        if (context->children.size() > 6) {
             result += ": " + any_cast<string>(visitDataExpr(context->dataExpr(2)));
         }
     }
@@ -624,7 +684,7 @@ matchCase
     ;
 */
 any Formatter::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
-    return "case " + formatList(context->pattern(), " | ", "") + " => " +
+    return "case " + formatList(context->pattern(), context, " | ", "") + " => " +
            any_cast<string>(visitBlockExpr(context->blockExpr()));
 }
 
@@ -659,11 +719,11 @@ any Formatter::visitStructExpr(OpenCMLParser::StructExprContext *context) {
         break;
     case 3: // MATCH identRef '{' matchCase+ '}'
         return "match " + any_cast<string>(visitIdentRef(context->identRef())) + " {" +
-               formatList(context->matchCase(), " ", "", PaddingNL | Multiline | PushScope) + "}";
+               formatList(context->matchCase(), context, " ", "", PaddingNL | Multiline | PushScope) + "}";
         break;
     case 4: // TRY stmtBlock (CATCH identDef ':' typeExpr stmtBlock)+ (FINALLY stmtBlock)?
         return "try " + any_cast<string>(visitStmtBlock(context->stmtBlock(0))) +
-               formatList(context->catchClause(), " ", "", PaddingSP | InOneLine) +
+               formatList(context->catchClause(), context, " ", "", PaddingSP | InOneLine) +
                (context->FINALLY() ? "finally " + any_cast<string>(visitStmtBlock(context->stmtBlock(1))) : "");
         break;
 
@@ -815,7 +875,7 @@ dictExpr
 any Formatter::visitDictExpr(OpenCMLParser::DictExprContext *context) {
     const auto &pairedValues = context->pairedValues();
     if (pairedValues) {
-        return "{" + any_cast<string>(visitPairedValues(pairedValues)) + "}";
+        return "{ " + any_cast<string>(visitPairedValues(pairedValues)) + " }";
     } else {
         return "{}";
     }
@@ -880,7 +940,18 @@ literal
     | NULL
     ;
 */
-any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) { return context->getText(); }
+any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) {
+    if (context->STRING()) {
+        return formatStringLiteral(context->STRING()->getText());
+    } else if (context->MULTI_STR()) {
+        return formatStringLiteral(context->MULTI_STR()->getText(), true);
+    } else if (context->FSTRING()) {
+        // TODO: format f-string
+        return context->getText();
+    } else {
+        return context->getText();
+    }
+}
 
 /*
 typeExpr
@@ -952,7 +1023,7 @@ any Formatter::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {
     const auto &children = context->children;
     if (children.size() > 2) {
         result += "<";
-        result += formatList(context->typeOrData(), ", ", ",", PushScope);
+        result += formatList(context->typeOrData(), context, ", ", ",", PushScope);
         result += ">";
     }
     return result;
@@ -1014,7 +1085,7 @@ dictType
 */
 any Formatter::visitDictType(OpenCMLParser::DictTypeContext *context) {
     const auto &keyTypePairs = context->keyTypePair();
-    return "{" + formatList(keyTypePairs, ", ", ",", PaddingNL | PaddingSP | PushScope) + "}";
+    return "{" + formatList(keyTypePairs, context, ", ", ",", PaddingNL | PaddingSP | PushScope) + "}";
 }
 
 /*
@@ -1024,7 +1095,7 @@ tupleType
 */
 any Formatter::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
     const auto &typeExprs = context->typeExpr();
-    return "(" + formatList(typeExprs, ", ", ",", PaddingNL | PushScope) + ")";
+    return "(" + formatList(typeExprs, context, ", ", ",", PaddingNL | PushScope) + ")";
 }
 
 /*
