@@ -124,6 +124,11 @@ class Formatter : public OpenCMLVisitor {
 
         std::string result;
         if (list.empty()) {
+            if (!context) {
+                // can pass a nullptr to avoid the comment processing
+                // this can be helpful when the list is not continuous
+                return result;
+            }
             // TODO: handle empty list to proc comments
             // here temporarily ignores the ctrl flags
             const size_t firstTokIdx = context->getStart()->getTokenIndex();
@@ -154,7 +159,12 @@ class Formatter : public OpenCMLVisitor {
 
             if (!reverse) { // forward lookup
                 predCmtStart++;
-                if (predCmtStart < tokens.size() && tokens[predCmtStart]->getText()[0] == iComma[0]) {
+                // TODO: handle the case when the there is a comma between the elements
+                // notice, iComma may be "", ", ", " | ", etc.
+                // so picking the first character of iComma is not always correct
+                // btw, consider the case when formatting lists like expr | expr | expr
+                if (!iComma.empty() && predCmtStart < tokens.size() &&
+                    tokens[predCmtStart]->getText()[0] == iComma[0]) {
                     // here we assumes that the the first character of the iComma
                     // will always be the comma itself (etc. ','), not a comma with a space (etc. ', '),
                     // ether only a space (etc. ' ')
@@ -172,7 +182,7 @@ class Formatter : public OpenCMLVisitor {
                     predCmtEnd = tokens.size();
                 }
             } else { // backward lookup
-                if (predCmtEnd > 1 && tokens[predCmtEnd - 1]->getText()[0] == iComma[0]) {
+                if (!iComma.empty() && predCmtEnd > 1 && tokens[predCmtEnd - 1]->getText()[0] == iComma[0]) {
                     predCmtEnd--;
                 }
                 predCmtStart = predCmtEnd;

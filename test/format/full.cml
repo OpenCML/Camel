@@ -51,7 +51,10 @@ a->b->c;
 }
 
 import { Const, Ground, Sub } from 'phot/units';
-import { Rx_El_mQAM_BER, Tx_El_mQAM } from 'phot/tr';
+import { 
+    Rx_El_mQAM_BER, 
+    Tx_El_mQAM 
+} from 'phot/tr';
 
 type ElSignal = {
     power: Number,
@@ -112,10 +115,17 @@ func placeComponents(
         // create instance of LaserCW and place it
         let laser = LaserCW@[pos['x'], pos['y']];
         let laserRect = laser['meta']['rect'];
+        sync {
+            // test if laser is placed correctly
+            assert(laser['meta']['rect']['x'] == pos['x']);
+            // ddd
+            assert(laser['meta']['rect']['y'] == pos['y']);
+        }
         // create instance of Analyzer and place it
         let analyzer = Analyzer@[pos["x"] + dist['x'] + laserRect['width'], pos['y']];
         // connect laser to analyzer;
         laser()->analyzer;
+        
         // move to next position
         pos['y'] += pos['y'] + dist['y'] + laserRect['height'];
     }

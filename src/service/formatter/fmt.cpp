@@ -138,9 +138,10 @@ any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
         if (this->preferSemis) {
             headStr += ";";
         }
-        headStr += lineEnd();
+        headStr += lineEnd(2);
     }
-    headStr += formatList(head, context, "; ", (this->preferSemis ? ";" : ""),
+    // pass nullptr to avoid auto comment processing for empty head
+    headStr += formatList(head, nullptr, "; ", (this->preferSemis ? ";" : ""),
                           TrailingC | Multiline | PaddingNL | PRightOnly, 1);
     string tailStr =
         formatList(tail, context, "; ", (this->preferSemis ? ";" : ""), TrailingC | Multiline | PaddingNL | PRightOnly);
@@ -179,7 +180,7 @@ any Formatter::visitStmt(OpenCMLParser::StmtContext *context) { return visit(con
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    return formatList(context->stmt(), context, "", "", PaddingNL | PushScope | Multiline);
+    return formatList(context->stmt(), context, "; ", "", PaddingNL | PushScope | Multiline);
 }
 
 /*
@@ -324,15 +325,17 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
 */
 any Formatter::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
-    return "(" + (context->identList() ? any_cast<string>(visitIdentList(context->identList())) : "") + ")";
+    const auto &identList = context->identList();
+    return "(" + (identList ? any_cast<string>(visitIdentList(identList)) : "") + ")";
 }
 
 /*
 bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
 */
 any Formatter::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
-    if (context->identList()) {
-        return "{ " + any_cast<string>(visitIdentList(context->identList())) + " }";
+    const auto &identList = context->identList();
+    if (identList) {
+        return "{" + formatList(identList->identDef(), identList, ", ", ",", PaddingSP | PaddingNL | PushScope) + "}";
     } else {
         return "{}";
     }
@@ -684,7 +687,7 @@ matchCase
     ;
 */
 any Formatter::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
-    return "case " + formatList(context->pattern(), context, " | ", "") + " => " +
+    return "case " + formatList(context->pattern(), context, " | ", " |") + " => " +
            any_cast<string>(visitBlockExpr(context->blockExpr()));
 }
 
@@ -875,7 +878,9 @@ dictExpr
 any Formatter::visitDictExpr(OpenCMLParser::DictExprContext *context) {
     const auto &pairedValues = context->pairedValues();
     if (pairedValues) {
-        return "{ " + any_cast<string>(visitPairedValues(pairedValues)) + " }";
+        return "{" +
+               formatList(pairedValues->keyValuePair(), pairedValues, ", ", ",", PaddingSP | PaddingNL | PushScope) +
+               "}";
     } else {
         return "{}";
     }

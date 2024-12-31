@@ -44,57 +44,7 @@ using namespace std;
 
 #define DEBUG_LEVEL -1
 
-std::vector<std::string> parseDebugArgs(const std::string &debugFilePath) {
-    std::vector<std::string> args;
-
-    try {
-        std::ifstream file(debugFilePath);
-        if (!file.is_open()) {
-            throw std::runtime_error("Failed to open debug.json");
-        }
-
-        nlohmann::json jsonData;
-        file >> jsonData;
-
-        if (!jsonData.contains("args") || !jsonData["args"].is_array()) {
-            throw std::runtime_error("Invalid debug.json format: 'args' not found or not an array");
-        }
-
-        for (const auto &arg : jsonData["args"]) {
-            if (arg.is_string()) {
-                std::string argStr = arg.get<std::string>();
-                args.push_back(argStr);
-            }
-        }
-    } catch (const std::exception &e) {
-        std::cerr << "Error parsing debug.json: " << e.what() << "\n";
-    }
-
-    return args;
-}
-
 int main(int argc, char *argv[]) {
-#ifndef NDEBUG
-    if (argc == 0) {
-        std::string debugFilePath = "./test/debug.json";
-        std::vector<std::string> args = parseDebugArgs(debugFilePath);
-
-        argc = static_cast<int>(args.size());
-        std::vector<std::unique_ptr<char[]>> argvBuffers;
-        std::vector<char *> newArgv;
-
-        for (const auto &arg : args) {
-            auto buffer = std::make_unique<char[]>(arg.size() + 1);
-            std::copy(arg.begin(), arg.end(), buffer.get());
-            buffer[arg.size()] = '\0';
-            newArgv.push_back(buffer.get());
-            argvBuffers.push_back(std::move(buffer));
-        }
-        newArgv.push_back(nullptr);
-        argv = newArgv.data();
-    }
-#endif
-
     if (!parseArgs(argc, argv))
         return 0;
 
