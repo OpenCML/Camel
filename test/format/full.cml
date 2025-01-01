@@ -57,7 +57,7 @@ import {
 } from 'phot/tr';
 
 type ElSignal = {
-    power: Number,
+    power: Number<a>,
     freq: Number,
     phase: Number
 };

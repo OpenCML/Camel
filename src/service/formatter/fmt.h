@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Dec. 30, 2024
+ * Updated: Jan. 02, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,7 +42,6 @@ class Formatter : public OpenCMLVisitor {
     const std::vector<antlr4::Token *> tokens;
 
     int indentLevel = 0;
-    std::unordered_set<size_t> insertedCommentIndices;
 
     void popIndent() {
         indentLevel--;
@@ -301,15 +300,8 @@ class Formatter : public OpenCMLVisitor {
                         result += lineEnd();
                     }
 
-                    // incase the comment is already inserted
-                    // for example, stmtList(exprList(exprList))
-                    if (insertedCommentIndices.find(j) == insertedCommentIndices.end()) {
-                        insertComment(comment, result);
-                        insertedCommentIndices.insert(j);
-                        lastStopLine = comment->getLine() + countLines(commentText);
-                    } else {
-                        lastStopLine = currLine;
-                    }
+                    insertComment(comment, result);
+                    lastStopLine = comment->getLine() + countLines(commentText);
                 }
 
                 cmtSkips = currLine - lastStopLine;
@@ -340,11 +332,7 @@ class Formatter : public OpenCMLVisitor {
                     result += lineEnd();
                 }
 
-                if (insertedCommentIndices.find(j) == insertedCommentIndices.end()) {
-                    insertComment(comment, result);
-                    insertedCommentIndices.insert(j);
-                }
-
+                insertComment(comment, result);
                 lastStopLine = comment->getLine() + countLines(commentText);
             }
 
