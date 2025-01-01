@@ -106,9 +106,13 @@ inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
 }
 
 void Formatter::insertComment(antlr4::Token *comment, string &result) {
+    size_t tokChannel = comment->getChannel();
+    if (tokChannel == 0 || tokChannel > 4) {
+        return;
+    }
     const auto &commentText = comment->getText();
     result += commentText;
-    if (comment->getChannel() == 4) {
+    if (tokChannel == 4) {
         // block comment
         result += " ";
     }
@@ -120,19 +124,47 @@ program : SEP? (decl SEP?)* EOF;
 any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
     OpenCMLParser::DeclContext *moduleDecl = nullptr;
     vector<OpenCMLParser::DeclContext *> head, tail;
-    for (const auto &child : context->decl()) {
+    vector<pair<OpenCMLParser::DeclContext *, size_t>> headWithIndex, tailWithIndex;
+    vector<pair<size_t, size_t>> declTokenRanges, headTokenRanges, tailTokenRanges;
+
+    size_t lastIndex = 0;
+    for (size_t i = 0; i < context->decl().size(); i++) {
+        auto child = context->decl(i);
         if (child->moduleDecl()) {
             moduleDecl = child;
         } else if (child->importDecl()) {
-            head.push_back(child);
+            headWithIndex.push_back({child, i});
         } else {
-            tail.push_back(child);
+            tailWithIndex.push_back({child, i});
         }
+        declTokenRanges.push_back({lastIndex, child->getStart()->getTokenIndex()});
+        lastIndex = child->getStop()->getTokenIndex() + 1;
     }
-    sort(head.begin(), head.end(), [](OpenCMLParser::DeclContext *a, OpenCMLParser::DeclContext *b) {
-        return a->importDecl()->STRING()->getText() < b->importDecl()->STRING()->getText();
-    });
-    string headStr;
+    // here we set the last index to the end - 1 of the token stream
+    // to exclude the EOF token
+    declTokenRanges.push_back({lastIndex, tokens.size() - 1});
+
+    sort(headWithIndex.begin(), headWithIndex.end(),
+         [](pair<OpenCMLParser::DeclContext *, size_t> a, pair<OpenCMLParser::DeclContext *, size_t> b) {
+             return a.first->importDecl()->STRING()->getText() < b.first->importDecl()->STRING()->getText();
+         });
+
+    if (!headWithIndex.empty()) {
+        for (const auto &pair : headWithIndex) {
+            head.push_back(pair.first);
+            headTokenRanges.push_back(declTokenRanges[pair.second + 1]);
+        }
+        headTokenRanges.push_back(declTokenRanges[headWithIndex[0].second]);
+    }
+    if (!tailWithIndex.empty()) {
+        for (const auto &pair : tailWithIndex) {
+            tail.push_back(pair.first);
+            tailTokenRanges.push_back(declTokenRanges[pair.second + 1]);
+        }
+        tailTokenRanges.push_back(declTokenRanges[tailWithIndex[0].second]);
+    }
+
+    string headStr, tailStr;
     if (moduleDecl) {
         headStr = any_cast<string>(visit(moduleDecl));
         if (this->preferSemis) {
@@ -142,9 +174,9 @@ any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
     }
     // pass nullptr to avoid auto comment processing for empty head
     headStr += formatList(head, nullptr, "; ", (this->preferSemis ? ";" : ""),
-                          TrailingC | Multiline | PaddingNL | PRightOnly, 1);
-    string tailStr =
-        formatList(tail, context, "; ", (this->preferSemis ? ";" : ""), TrailingC | Multiline | PaddingNL | PRightOnly);
+                          TrailingC | Multiline | PaddingNL | PRightOnly, 1, headTokenRanges);
+    tailStr = formatList(tail, context, "; ", (this->preferSemis ? ";" : ""),
+                         TrailingC | Multiline | PaddingNL | PRightOnly, 2, tailTokenRanges);
     return headStr + (head.empty() || tail.empty() ? "" : lineEnd()) + tailStr;
 }
 

@@ -110,8 +110,8 @@ class Formatter : public OpenCMLVisitor {
                            const std::string iComma, // inline comma
                            const std::string nComma, // new line comma
                            int flags = 0,            // combined flags
-                           int maxSkips = 2          // maximum number of line skips
-    ) {
+                           int maxSkips = 2,         // maximum number of line skips
+                           std::vector<std::pair<size_t, size_t>> tokenRanges = {}) {
         // Parse flags
         bool tComma = flags & TrailingC;
         bool paddingSP = flags & PaddingSP;
@@ -153,50 +153,83 @@ class Formatter : public OpenCMLVisitor {
             return result;
         }
 
-        // given a start index, find the range of comments in the token stream
-        const auto findCmtRange = [&](size_t start, bool reverse = false) -> std::pair<size_t, size_t> {
-            size_t predCmtStart = start, predCmtEnd = start;
+        // given a token index range, find the range of comments in the token stream
+        const auto findCmtRange = [&](size_t index, bool reverse = false) -> std::pair<size_t, size_t> {
+            assert(!(reverse && index != 0)); // reverse lookup should always start from the first element
+            size_t start = 0, end = tokens.size() - 1;
+            if (!tokenRanges.empty()) {
+                // the last pair of the tokenRanges is the range of the reverse lookup
+                assert(tokenRanges.size() == list.size() + 1);
+                if (!reverse) {
+                    start = tokenRanges[index].first;
+                    end = tokenRanges[index].second;
+                } else {
+                    start = tokenRanges[list.size()].first;
+                    end = tokenRanges[list.size()].second;
+                }
+            } else {
+                if (!reverse) {
+                    start = list[index]->getStop()->getTokenIndex();
+                    if (index == list.size() - 1) {
+                        end = context->getStop()->getTokenIndex() + 1;
+                    } else {
+                        end = list[index + 1]->getStart()->getTokenIndex();
+                    }
+                } else {
+                    start = context->getStart()->getTokenIndex();
+                    if (start > 0) {
+                        start--;
+                    }
+                    end = list[0]->getStart()->getTokenIndex();
+                }
+                assert(start <= end);
+            }
 
+            size_t predCmtStart = start, predCmtEnd = end;
             if (!reverse) { // forward lookup
-                predCmtStart++;
-                // TODO: handle the case when the there is a comma between the elements
-                // notice, iComma may be "", ", ", " | ", etc.
-                // so picking the first character of iComma is not always correct
-                // btw, consider the case when formatting lists like expr | expr | expr
-                if (!iComma.empty() && predCmtStart < tokens.size() &&
-                    tokens[predCmtStart]->getText()[0] == iComma[0]) {
-                    // here we assumes that the the first character of the iComma
-                    // will always be the comma itself (etc. ','), not a comma with a space (etc. ', '),
-                    // ether only a space (etc. ' ')
-                    predCmtStart++;
+                size_t j;
+                for (j = start; j < end; j++) {
+                    // find the first comment token
+                    if (tokens[j]->getChannel() > 1) {
+                        predCmtStart = j;
+                        break;
+                    }
+                }
+                if (j == end) {
+                    return std::make_pair(start, start);
                 }
                 predCmtEnd = predCmtStart;
-                size_t j;
-                for (j = predCmtStart; j < tokens.size(); j++) {
-                    if (tokens[j]->getChannel() <= 1) {
+                for (j = predCmtStart; j < end; j++) {
+                    // find until the first non-comment token
+                    if (tokens[j]->getChannel() == 1) {
                         predCmtEnd = j;
                         break;
                     }
                 }
-                if (j == tokens.size() - 1 && tokens[tokens.size() - 1]->getChannel() > 1) {
-                    predCmtEnd = tokens.size();
+                if (j == end) {
+                    predCmtEnd = end;
                 }
             } else { // backward lookup
-                if (!iComma.empty() && predCmtEnd > 1 && tokens[predCmtEnd - 1]->getText()[0] == iComma[0]) {
-                    predCmtEnd--;
+                for (size_t j = end - 1; j >= start; j--) {
+                    // find the first comment token
+                    if (tokens[j]->getChannel() > 1) {
+                        predCmtEnd = j + 1;
+                        break;
+                    }
+                    if (j == start) {
+                        return std::make_pair(end, end);
+                    }
                 }
                 predCmtStart = predCmtEnd;
-                if (predCmtEnd > 0) {
-                    size_t j;
-                    for (j = predCmtEnd - 1; j != 0; j--) {
-                        if (tokens[j]->getChannel() > 1) {
-                            predCmtStart = j;
-                        } else {
-                            break;
-                        }
+                for (size_t j = predCmtEnd - 1; j >= start; j--) {
+                    // find until the first non-comment token
+                    if (tokens[j]->getChannel() == 1) {
+                        predCmtStart = j + 1;
+                        break;
                     }
-                    if (j == 0 && tokens[0]->getChannel() > 1) {
-                        predCmtStart = 0;
+                    if (j == start) {
+                        predCmtStart = start;
+                        break;
                     }
                 }
             }
@@ -255,8 +288,8 @@ class Formatter : public OpenCMLVisitor {
 
             size_t lastStopLine = list[i]->getStop()->getLine();
 
-            if (i == 0) {
-                auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStart()->getTokenIndex(), true);
+            if (i == 0 && list[0]->getStart()->getTokenIndex() > 0) {
+                auto [predCmtStart, predCmtEnd] = findCmtRange(0, true);
                 int cmtSkips = 0;
                 for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                     const auto &comment = tokens[j];
@@ -292,7 +325,7 @@ class Formatter : public OpenCMLVisitor {
             }
 
             lastStopLine = list[i]->getStop()->getLine();
-            auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStop()->getTokenIndex(), false);
+            auto [predCmtStart, predCmtEnd] = findCmtRange(i, false);
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                 const auto &comment = tokens[j];
                 const auto &commentText = comment->getText();
