@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Jan. 02, 2025
+ * Updated: Jan. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -382,6 +382,10 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
 
+    std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
+
+    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context);
+
     std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
@@ -441,8 +445,6 @@ class Formatter : public OpenCMLVisitor {
     std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context);
 
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
-
-    std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
     std::any visitDataExpr(OpenCMLParser::DataExprContext *context);
 

@@ -51,25 +51,25 @@ public:
 
   enum {
     RuleProgram = 0, RuleDecl = 1, RuleStmt = 2, RuleStmtList = 3, RuleModuleDecl = 4, 
-    RuleImportDecl = 5, RuleExportDecl = 6, RuleStmtBlock = 7, RuleLambdaExpr = 8, 
-    RuleFuncDecl = 9, RuleParentIdents = 10, RuleBracedIdents = 11, RuleBracketIdents = 12, 
-    RuleCarrier = 13, RuleLetDecl = 14, RuleUseDecl = 15, RuleRetStmt = 16, 
-    RuleTypeDecl = 17, RuleEnumDecl = 18, RuleExprStmt = 19, RuleAnnotation = 20, 
-    RuleAnnotations = 21, RuleModifiers = 22, RuleIndexValue = 23, RuleKeyTypePair = 24, 
-    RuleKeyValuePair = 25, RuleKeyParamPair = 26, RuleIdentList = 27, RuleValueList = 28, 
-    RuleIndexValues = 29, RulePairedValues = 30, RulePairedParams = 31, 
-    RuleArgumentList = 32, RuleMemberAccess = 33, RuleParentParams = 34, 
-    RuleParentArgues = 35, RuleAngledParams = 36, RuleAngledValues = 37, 
-    RuleBlockExpr = 38, RuleDataExpr = 39, RulePattern = 40, RuleMatchCase = 41, 
-    RuleCatchClause = 42, RuleStructExpr = 43, RuleLogicalOrExpr = 44, RuleLogicalAndExpr = 45, 
-    RuleEqualityExpr = 46, RuleRelationalExpr = 47, RuleAdditiveExpr = 48, 
-    RuleMultiplicativeExpr = 49, RuleNullableExpr = 50, RuleUnaryExpr = 51, 
-    RuleLinkExpr = 52, RuleBindExpr = 53, RuleWithExpr = 54, RuleAnnoExpr = 55, 
-    RuleDictExpr = 56, RuleListExpr = 57, RulePrimaryData = 58, RuleLiteral = 59, 
-    RuleTypeExpr = 60, RuleUnionType = 61, RuleUnionUnit = 62, RuleListType = 63, 
-    RuleTypeOrData = 64, RuleArgsType = 65, RulePrimaryType = 66, RuleDictExprType = 67, 
-    RuleDictType = 68, RuleTupleType = 69, RuleLambdaType = 70, RuleIdentDef = 71, 
-    RuleIdentRef = 72
+    RuleImportDecl = 5, RuleExportDecl = 6, RuleStmtBlock = 7, RuleBlockExpr = 8, 
+    RuleBlockStmt = 9, RuleLambdaExpr = 10, RuleFuncDecl = 11, RuleParentIdents = 12, 
+    RuleBracedIdents = 13, RuleBracketIdents = 14, RuleCarrier = 15, RuleLetDecl = 16, 
+    RuleUseDecl = 17, RuleRetStmt = 18, RuleTypeDecl = 19, RuleEnumDecl = 20, 
+    RuleExprStmt = 21, RuleAnnotation = 22, RuleAnnotations = 23, RuleModifiers = 24, 
+    RuleIndexValue = 25, RuleKeyTypePair = 26, RuleKeyValuePair = 27, RuleKeyParamPair = 28, 
+    RuleIdentList = 29, RuleValueList = 30, RuleIndexValues = 31, RulePairedValues = 32, 
+    RulePairedParams = 33, RuleArgumentList = 34, RuleMemberAccess = 35, 
+    RuleParentParams = 36, RuleParentArgues = 37, RuleAngledParams = 38, 
+    RuleAngledValues = 39, RuleDataExpr = 40, RulePattern = 41, RuleMatchCase = 42, 
+    RuleCatchClause = 43, RuleStructExpr = 44, RuleLogicalOrExpr = 45, RuleLogicalAndExpr = 46, 
+    RuleEqualityExpr = 47, RuleRelationalExpr = 48, RuleAdditiveExpr = 49, 
+    RuleMultiplicativeExpr = 50, RuleNullableExpr = 51, RuleUnaryExpr = 52, 
+    RuleLinkExpr = 53, RuleBindExpr = 54, RuleWithExpr = 55, RuleAnnoExpr = 56, 
+    RuleDictExpr = 57, RuleListExpr = 58, RulePrimaryData = 59, RuleLiteral = 60, 
+    RuleTypeExpr = 61, RuleUnionType = 62, RuleUnionUnit = 63, RuleListType = 64, 
+    RuleTypeOrData = 65, RuleArgsType = 66, RulePrimaryType = 67, RuleDictExprType = 68, 
+    RuleDictType = 69, RuleTupleType = 70, RuleLambdaType = 71, RuleIdentDef = 72, 
+    RuleIdentRef = 73
   };
 
   explicit OpenCMLParser(antlr4::TokenStream *input);
@@ -108,6 +108,8 @@ public:
   class ImportDeclContext;
   class ExportDeclContext;
   class StmtBlockContext;
+  class BlockExprContext;
+  class BlockStmtContext;
   class LambdaExprContext;
   class FuncDeclContext;
   class ParentIdentsContext;
@@ -138,7 +140,6 @@ public:
   class ParentArguesContext;
   class AngledParamsContext;
   class AngledValuesContext;
-  class BlockExprContext;
   class DataExprContext;
   class PatternContext;
   class MatchCaseContext;
@@ -222,7 +223,7 @@ public:
     EnumDeclContext *enumDecl();
     RetStmtContext *retStmt();
     ExprStmtContext *exprStmt();
-    StmtBlockContext *stmtBlock();
+    BlockStmtContext *blockStmt();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -307,6 +308,34 @@ public:
   };
 
   StmtBlockContext* stmtBlock();
+
+  class  BlockExprContext : public antlr4::RuleContextWithAltNum {
+  public:
+    BlockExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    StmtBlockContext *stmtBlock();
+    DataExprContext *dataExpr();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  BlockExprContext* blockExpr();
+
+  class  BlockStmtContext : public antlr4::RuleContextWithAltNum {
+  public:
+    BlockStmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    StmtBlockContext *stmtBlock();
+    antlr4::tree::TerminalNode *WAIT();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  BlockStmtContext* blockStmt();
 
   class  LambdaExprContext : public antlr4::RuleContextWithAltNum {
   public:
@@ -756,20 +785,6 @@ public:
   };
 
   AngledValuesContext* angledValues();
-
-  class  BlockExprContext : public antlr4::RuleContextWithAltNum {
-  public:
-    BlockExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
-    virtual size_t getRuleIndex() const override;
-    StmtBlockContext *stmtBlock();
-    DataExprContext *dataExpr();
-
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
-   
-  };
-
-  BlockExprContext* blockExpr();
 
   class  DataExprContext : public antlr4::RuleContextWithAltNum {
   public:

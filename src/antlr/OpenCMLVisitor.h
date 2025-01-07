@@ -53,6 +53,10 @@ public:
 
     virtual std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context) = 0;
 
+    virtual std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context) = 0;
+
+    virtual std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context) = 0;
+
     virtual std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) = 0;
 
     virtual std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) = 0;
@@ -112,8 +116,6 @@ public:
     virtual std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) = 0;
 
     virtual std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) = 0;
-
-    virtual std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context) = 0;
 
     virtual std::any visitDataExpr(OpenCMLParser::DataExprContext *context) = 0;
 

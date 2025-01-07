@@ -53,7 +53,7 @@ stmt
     | enumDecl
     | retStmt
     | exprStmt
-    | stmtBlock
+    | blockStmt
     ;
 
 stmtList : stmt (SEP? stmt)* SEP? ;
@@ -63,6 +63,8 @@ importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
 
 stmtBlock  : SYNC? '{' stmtList? '}' ;
+blockExpr  : stmtBlock | dataExpr ;
+blockStmt  : WAIT? stmtBlock ;
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 funcDecl   : annotations? (WITH angledParams)? EXPORT? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
@@ -101,8 +103,6 @@ parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
 parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
-
-blockExpr : stmtBlock | dataExpr ;
 
 dataExpr
     : WAIT? structExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') structExpr)?

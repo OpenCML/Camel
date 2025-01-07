@@ -45,18 +45,18 @@ TRUE        : 'true';
 FALSE       : 'false';
 
 INNER_ATOM_TYPE
-    : 'Int'
-    | 'Int32'
-    | 'Int64'
-    | 'Real'
-    | 'Float'
-    | 'Double'
-    | 'Number'
-    | 'String'
-    | 'Bool'
-    | 'Char'
-    | 'Any'
-    | 'Void'
+    : 'int'
+    | 'i32'
+    | 'i64'
+    | 'float'
+    | 'f32'
+    | 'f64'
+    | 'string'
+    | 'bool'
+    | 'char'
+    | 'any'
+    | 'void'
+    | 'functor'
     ;
 
 BLANK

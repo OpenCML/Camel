@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Dec. 28, 2024
+ * Updated: Jan. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,10 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context) { return dumpCST(context, "ExportDecl"); };
 
     std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context) { return dumpCST(context, "StmtBlock"); };
+
+    std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return dumpCST(context, "BlockExpr"); };
+
+    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context) { return dumpCST(context, "BlockStmt"); };
 
     std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return dumpCST(context, "LambdaExpr"); };
 
@@ -105,8 +109,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) { return dumpCST(context, "AngledParams"); };
 
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return dumpCST(context, "AngledValues"); };
-
-    std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return dumpCST(context, "BlockExpr"); };
 
     std::any visitDataExpr(OpenCMLParser::DataExprContext *context) { return dumpCST(context, "DataExpr"); };
 

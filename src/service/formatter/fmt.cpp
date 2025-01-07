@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Jan. 02, 2025
+ * Updated: Jan. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -203,7 +203,7 @@ stmt
     | enumDecl
     | retStmt
     | exprStmt
-    | stmtBlock
+    | blockStmt
     ;
 */
 any Formatter::visitStmt(OpenCMLParser::StmtContext *context) { return visit(context->children[0]); }
@@ -284,6 +284,22 @@ any Formatter::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
         }
         return result + "}";
     }
+}
+
+/*
+blockExpr : stmtBlock | dataExpr ;
+*/
+any Formatter::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
+    return context->stmtBlock() ? any_cast<string>(visitStmtBlock(context->stmtBlock()))
+                                : any_cast<string>(visitDataExpr(context->dataExpr()));
+}
+
+/*
+blockStmt  : WAIT? stmtBlock ;
+*/
+any Formatter::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
+    return context->WAIT() ? "wait " + any_cast<string>(visitStmtBlock(context->stmtBlock()))
+                           : any_cast<string>(visitStmtBlock(context->stmtBlock()));
 }
 
 /*
@@ -645,14 +661,6 @@ angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 */
 any Formatter::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
     return "<" + (context->argumentList() ? any_cast<string>(visitArgumentList(context->argumentList())) : "") + ">";
-}
-
-/*
-blockExpr : stmtBlock | dataExpr ;
-*/
-any Formatter::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
-    return context->stmtBlock() ? any_cast<string>(visitStmtBlock(context->stmtBlock()))
-                                : any_cast<string>(visitDataExpr(context->dataExpr()));
 }
 
 /*

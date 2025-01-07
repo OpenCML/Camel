@@ -65,6 +65,14 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitBlockExpr(OpenCMLParser::BlockExprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -182,10 +190,6 @@ public:
   }
 
   virtual std::any visitAngledValues(OpenCMLParser::AngledValuesContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitBlockExpr(OpenCMLParser::BlockExprContext *ctx) override {
     return visitChildren(ctx);
   }
 

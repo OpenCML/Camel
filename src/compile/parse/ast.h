@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Dec. 28, 2024
+ * Updated: Jan. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -172,6 +172,10 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
 
+    std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
+
+    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context);
+
     std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
@@ -231,8 +235,6 @@ class Constructor : public OpenCMLVisitor {
     std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context);
 
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
-
-    std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
     std::any visitDataExpr(OpenCMLParser::DataExprContext *context);
 

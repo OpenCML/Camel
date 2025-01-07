@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Dec. 28, 2024
+ * Updated: Jan. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -262,11 +262,12 @@ any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return nullptr
 stmt
     : letDecl
     | useDecl
-    | retStmt
+    | funcDecl
     | typeDecl
     | enumDecl
+    | retStmt
     | exprStmt
-    | stmtBlock
+    | blockStmt
     ;
 */
 any Constructor::visitStmt(OpenCMLParser::StmtContext *context) { return nullptr; }
@@ -295,6 +296,16 @@ any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) { re
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
 any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) { return nullptr; }
+
+/*
+blockExpr : stmtBlock | dataExpr ;
+*/
+any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return nullptr; }
+
+/*
+blockStmt  : WAIT? stmtBlock ;
+*/
+any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) { return nullptr; }
 
 /*
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
@@ -445,11 +456,6 @@ any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) 
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 */
 any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return nullptr; }
-
-/*
-blockExpr : stmtBlock | dataExpr ;
-*/
-any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return nullptr; }
 
 /*
 dataExpr
