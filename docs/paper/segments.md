@@ -1,0 +1,1 @@
+While Python has become the *lingua franca* of AI research, its architectural limitations increasingly undermine production-grade AI development. This section deconstructs four systemic flaws that render Python suboptimal for next-generation AI systems.
