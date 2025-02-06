@@ -108,7 +108,7 @@ function getConanStoragePath(dependencies) {
 
 // 复制到vendor目录
 function copyToVendor(depMap) {
-    logStep('Copying dependencies\' src to vendor directory...')
+    logStep("Copying dependencies' src to vendor directory...")
 
     ensureDirSync('./vendor')
     depMap.forEach((paths, pkgName) => {
@@ -141,7 +141,9 @@ function updateCppProperties(depMap) {
         config.configurations.forEach((cfg) => {
             cfg.includePath = cfg.includePath || []
             depMap.forEach((_, pkgName) => {
-                const newPath = path.join('${workspaceFolder}', 'vendor', pkgName).replace(/\\/g, '/')
+                const newPath = path
+                    .join('${workspaceFolder}', 'vendor', pkgName)
+                    .replace(/\\/g, '/')
                 if (!cfg.includePath.includes(newPath)) {
                     cfg.includePath.push(newPath)
                 }
@@ -179,24 +181,25 @@ function renameAntlr4Libs(depMap) {
 }
 
 async function main() {
+    const arg = process.argv[2]
+
     try {
         // 1. 获取依赖项
         const dependencies = getDependencies()
-
         // 2. 获取存储路径
         const storagePath = getConanStoragePath(dependencies)
-
         // 3. 构建依赖映射
         const depMap = await buildDependencyMap(storagePath)
 
-        // 4. 复制到vendor目录
-        copyToVendor(depMap)
-
-        // 5. 更新C++配置
-        updateCppProperties(depMap)
-
-        // 6. 处理ANTLR4库
-        renameAntlr4Libs(depMap)
+        if (arg === 'vsc') {
+            // 4. 复制到vendor目录
+            copyToVendor(depMap)
+            // 5. 更新C++配置
+            updateCppProperties(depMap)
+        } else if (arg === 'link') {
+            // 6. 处理ANTLR4库
+            renameAntlr4Libs(depMap)
+        }
 
         logDone('All operations completed successfully!')
     } catch (e) {

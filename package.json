@@ -1,28 +1,30 @@
 {
-  "name": "camel-scripts",
-  "private": true,
-  "version": "0.0.11",
-  "type": "module",
-  "pre-commit": [
-    "upd"
-  ],
-  "scripts": {
-    "upd": "node ./scripts/update.js",
-    "cnt": "tokei --exclude src/antlr --sort lines",
-    "init": "node ./scripts/init.js",
-    "fix": "node ./scripts/fix.js",
-    "check": "node ./scripts/check.js",
-    "build": "node ./scripts/build.js",
-    "debug": "node ./scripts/debug.js",
-    "clean": "node ./scripts/clean.js",
-    "setver": "node ./scripts/setver.js",
-    "antlr:gen": "node ./scripts/antlr-gen.js",
-    "pypi:rollup": "python3 -m twine upload dist/*",
-    "pypi:upload": "python3 -m twine upload dist/*",
-    "gource": "gource -c 4 --frameless -f --logo ./logo.png --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
-  },
-  "dependencies": {
-    "fs-extra": "^11.3.0",
-    "sqlite3": "^5.1.7"
-  }
+    "name": "camel-scripts",
+    "private": true,
+    "version": "0.0.11",
+    "type": "module",
+    "pre-commit": [
+        "upd"
+    ],
+    "scripts": {
+        "upd": "node ./scripts/update.js",
+        "cnt": "tokei --exclude src/antlr --sort lines",
+        "init": "node ./scripts/install.js && node ./scripts/psrgen.js",
+        "install": "node ./scripts/install.js",
+        "psrgen": "node ./scripts/psrgen.js",
+        "check": "node ./scripts/check.js",
+        "build": "node ./scripts/build.js",
+        "debug": "node ./scripts/debug.js",
+        "clean": "node ./scripts/clean.js",
+        "setver": "node ./scripts/setver.js",
+        "fix:vsc": "node ./scripts/fix.js vsc",
+        "fix:link": "node ./scripts/fix.js link",
+        "pypi:rollup": "python3 -m twine upload dist/*",
+        "pypi:upload": "python3 -m twine upload dist/*",
+        "gource": "gource -c 4 --frameless -f --logo ./logo.png --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
+    },
+    "dependencies": {
+        "fs-extra": "^11.3.0",
+        "sqlite3": "^5.1.7"
+    }
 }

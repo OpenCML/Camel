@@ -3,17 +3,18 @@
 # Camel 项目开发环境配置指南
 
 ## 项目简介
-Camel 是一个基于现代 C++ 技术栈构建的软件开发项目，结合 Python 和 Node.js 工具链实现跨平台开发。本指南将帮助您快速搭建完整的开发环境。
+Camel 是一个基于现代 C++ 技术栈构建的AI编程语言，其前端基于Antlr4实现（需要Java），并结合 Python 和 Node.js 工具链实现跨平台开发。本指南将帮助您快速搭建完整的开发环境。
 
 ## 技术栈要求
-| 组件          | 最低版本   | 推荐版本   | 验证命令         |
-|---------------|------------|------------|------------------|
-| Python        | 3.9        | 3.11       | `python --version` |
-| Node.js       | 18         | 20 LTS     | `node -v`         |
-| Clang         | 15         | 17         | `clang --version` |
-| CMake         | 3.20       | 3.28       | `cmake --version` |
-| Conan         | 2.0        | 2.1        | `conan --version` |
-| Visual Studio | 2019       | 2022       | -                |
+| 组件          | 最低版本 | 推荐版本 | 验证命令           |
+| ------------- | -------- | -------- | ------------------ |
+| Python        | 3.9      | 3.11     | `python --version` |
+| Node.js       | 18       | 20 LTS   | `node -v`          |
+| Java          | 1.8      | 21       | `java -version`    |
+| Clang         | 15       | 17       | `clang --version`  |
+| CMake         | 3.20     | 3.28     | `cmake --version`  |
+| Conan         | 2.0      | 2.1      | `conan --version`  |
+| Visual Studio | 2019     | 2022     | -                  |
 
 > Visual Studio 仅在 Windows 平台下需要安装，安装时可以同步安装 Clang 组件。
 
@@ -21,15 +22,22 @@ Camel 是一个基于现代 C++ 技术栈构建的软件开发项目，结合 Py
 
 ### 1. 基础工具链安装
 #### 1.1 脚本语言环境
-```bash
-# 验证Python环境
-python -m ensurepip --upgrade
+**安装Python**
 
-# 设置Node.js镜像源（国内用户建议）
-npm config set registry https://registry.npmmirror.com
-# 安装Node.js依赖
-npm install --force --legacy-peer-deps
-```
+1. 访问 [Python官网](https://www.python.org/downloads/) 下载并安装Python。
+2. 在安装过程中勾选 **Add Python to PATH**。
+3. 安装后，打开命令行输入 `python --version` 验证安装。
+
+**安装Node.js**
+
+1. 访问 [Node.js官网](https://nodejs.org/en/) 下载并安装Node.js。
+2. 安装后，打开命令行输入 `node --version` 和 `npm --version` 验证安装。
+
+**安装Java**
+
+1. 访问 [Oracle官网下载Java](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) 或 [AdoptOpenJDK](https://adoptopenjdk.net/)。
+2. 安装Java并设置环境变量。
+3. 安装后，打开命令行输入 `java -version` 验证安装。
 
 #### 1.2 C++ 开发工具链
 - **Windows 平台**
@@ -88,6 +96,12 @@ tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022
 ```bash
 # 执行以下命令一键安装（仅需执行一次）
 npm run init
+
+# 如果Conan依赖有更新，可以执行以下命令安装
+npm run install
+
+# 如果Antlr4语法定义有更新，可以执行以下命令重新生成parser
+npm run psrgen
 ```
 
 ### 4. 构建系统配置
@@ -104,11 +118,11 @@ npm run clean
 ```
 
 #### 4.2 多平台编译选项
-| 参数               | Windows               | Linux/macOS       |
-|--------------------|-----------------------|-------------------|
-| 生成器             | Visual Studio 17 2022 | Ninja             |
-| 编译并行数         | /MP                  | -j8               |
-| 运行时库           | MD                   | libstdc++         |
+| 参数       | Windows               | Linux/macOS |
+| ---------- | --------------------- | ----------- |
+| 生成器     | Visual Studio 17 2022 | Ninja       |
+| 编译并行数 | /MP                   | -j8         |
+| 运行时库   | MD                    | libstdc++   |
 
 ## 其他说明
 
@@ -116,13 +130,13 @@ npm run clean
 #### 1.1 VSCode 头文件检测
 在项目根目录执行命令：
 ```bash
-npm run fix
+npm run fix:vsc
 ```
 
 #### 1.2 ANTLR4 运行时链接错误
 在项目根目录执行命令：
 ```bash
-npm run fix
+npm run fix:link
 ```
 
 ### 2. VSCode 推荐配置
