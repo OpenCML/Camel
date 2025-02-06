@@ -1,5 +1,7 @@
 # Camel: A Next-Generation Language for AI and High-Performance Computing
 
+[中文简体](README.cn.md) | English
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
 
@@ -111,7 +113,7 @@ camel hello.cml
 
 ## 📚 Learn More
 
-- [Build Yourself](docs/init.md) - Environment setup and installation guide
+- [Build Yourself](docs/setup.en.md) - Environment setup and installation guide
 - [WIP] [Documentation](https://docs.opencml.com/) - Language specs and API reference
 - [WIP] [Examples](examples/) - From MNIST training to distributed pipelines
 - [WIP] [Whitepaper](https://arxiv.org/abs/xxxx.xxxx) - Deep dive into the compiler architecture

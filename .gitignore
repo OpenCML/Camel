@@ -4,16 +4,17 @@
 .VSCodeCounter/
 **/.cache/
 
-# .todolist
-# .opencmlrc
+.todolist
+.opencmlrc
 
-antlr/.antlr/
+cmake-build-debug/
 node_modules/
+antlr/.antlr/
+src/antlr/
 vendor/
 build/
 dist/
 out/
-cmake-build-debug/
 
 *.cmo
 camel.exe

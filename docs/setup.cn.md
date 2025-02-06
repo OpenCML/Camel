@@ -2,6 +2,8 @@
 
 # Camel 项目开发环境配置指南
 
+[English](setup.en.md) | 中文简体
+
 ## 项目简介
 Camel 是一个基于现代 C++ 技术栈构建的AI编程语言，其前端基于Antlr4实现（需要Java），并结合 Python 和 Node.js 工具链实现跨平台开发。本指南将帮助您快速搭建完整的开发环境。
 
@@ -10,7 +12,7 @@ Camel 是一个基于现代 C++ 技术栈构建的AI编程语言，其前端基�
 | ------------- | -------- | -------- | ------------------ |
 | Python        | 3.9      | 3.11     | `python --version` |
 | Node.js       | 18       | 20 LTS   | `node -v`          |
-| Java          | 1.8      | 21       | `java -version`    |
+| Java          | 11       | 21       | `java -version`    |
 | Clang         | 15       | 17       | `clang --version`  |
 | CMake         | 3.20     | 3.28     | `cmake --version`  |
 | Conan         | 2.0      | 2.1      | `conan --version`  |
@@ -192,7 +194,7 @@ npm run fix:link
       "request": "launch",
       "program": "${workspaceFolder}/build/Debug/camel.exe",
       "symbolSearchPath": "${workspaceFolder}/build/Debug",
-      "args": ["--format", "D:\\Projects\\Camel\\test\\format\\format.cml"],
+      "args": ["--format", ".\\test\\format\\format.cml"],
       "console": "externalTerminal",
       "logging": {
         "moduleLoad": false,
