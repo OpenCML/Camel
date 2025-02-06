@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Feb. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -108,7 +108,11 @@ bool parseArgs(int argc, char *argv[]) {
     }
 
     if (showVersion) {
-        cout << "Camel version " << CAMEL_VERSION << endl;
+#ifdef NDEBUG
+        cout << "Camel v" << CAMEL_VERSION << endl;
+#else
+        cout << "Camel (DEBUG) v" << CAMEL_VERSION << endl;
+#endif
         return false;
     }
 

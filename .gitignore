@@ -1,14 +1,21 @@
 .idea/
 .vs/
 .vscode/
-.VSCodeCounter
+.VSCodeCounter/
+**/.cache/
 
-antlr/.antlr
+# .todolist
+# .opencmlrc
+
+antlr/.antlr/
+node_modules/
+vendor/
+build/
+dist/
+out/
+cmake-build-debug/
+
+*.cmo
+camel.exe
 result.json
 CMakeUserPresets.json
-cmake-build-debug/
-vendor/
-**/.cache/
-*.cmo
-build/
-out/

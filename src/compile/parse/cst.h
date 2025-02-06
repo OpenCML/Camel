@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Jan. 07, 2025
+ * Updated: Feb. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include <string>
 
 #include "antlr/OpenCMLVisitor.h"
-#include "antlr4-runtime.h"
+#include "antlr4-runtime/antlr4-runtime.h"
 
 class CSTDumpVisitor : public OpenCMLVisitor {
     int depth = 0;

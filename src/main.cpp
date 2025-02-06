@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Dec. 31, 2024
+ * Updated: Feb. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 
 #include "antlr/OpenCMLLexer.h"
 #include "antlr/OpenCMLParser.h"
-#include "antlr4-runtime.h"
+#include "antlr4-runtime/antlr4-runtime.h"
 
 #include "codegen/girdump/graphviz.h"
 #include "common/error/error.h"

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Jan. 07, 2025
+ * Updated: Feb. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 #include <string>
 
 #include "antlr/OpenCMLVisitor.h"
-#include "antlr4-runtime.h"
+#include "antlr4-runtime/antlr4-runtime.h"
 #include "common/ast.h"
 #include "common/error/build.h"
 #include "common/scope.h"

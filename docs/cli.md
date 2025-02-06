@@ -13,7 +13,6 @@
 - --repeat：重复执行若干次
 - --include：指定当前脚本模块查找的根目录，可多选，按顺序查找，默认为target所在目录
 - --stdlib：指定标准库路径（默认路径在当前目录下/stdlib文件夹）
-- --optimize/-O：优化等级
 
 format：自动格式化，后跟目录或cml源文件
 
@@ -66,7 +65,7 @@ debug：步进调试执行
 - --include：指定当前脚本模块查找的根目录，可多选，按顺序查找，默认为target所在目录
 - --stdlib：指定标准库路径（默认路径在当前目录下/stdlib文件夹）
 
-pkg：包管理器
+camel pkg：包管理器
 
 - list
 - init
