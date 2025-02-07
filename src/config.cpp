@@ -109,9 +109,9 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showVersion) {
 #ifdef NDEBUG
-        cout << "Camel v" << CAMEL_VERSION << endl;
+        cout << "Camel v" << VERSION << endl;
 #else
-        cout << "Camel (DEBUG) v" << CAMEL_VERSION << endl;
+        cout << "Camel (DEBUG) v" << VERSION << endl;
 #endif
         return false;
     }
