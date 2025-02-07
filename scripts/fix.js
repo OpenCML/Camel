@@ -35,7 +35,7 @@ function getDependencies() {
     }
 }
 
-async function buildDependencyMap(storagePath) {
+async function buildDependencyMap(storagePath, dependencies) {
     logStep('Querying Conan database...')
 
     return new Promise((resolve, reject) => {
@@ -50,10 +50,11 @@ async function buildDependencyMap(storagePath) {
             }
 
             rows.forEach((row) => {
-                const [pkgName] = row.reference.split('/')
-                const fullPath = path.join(storagePath, row.path)
-
-                depMap.set(pkgName, [...(depMap.get(pkgName) || []), fullPath])
+                if (dependencies.some((dep) => row.reference.includes(dep))) {
+                    const [pkgName] = row.reference.split('/')
+                    const fullPath = path.join(storagePath, row.path)
+                    depMap.set(pkgName, [...(depMap.get(pkgName) || []), fullPath])
+                }
             })
 
             db.close()
@@ -140,14 +141,23 @@ function updateCppProperties(depMap) {
 
         config.configurations.forEach((cfg) => {
             cfg.includePath = cfg.includePath || []
+            const newPaths = []
+
+            // 额外添加 ${workspaceFolder}/src, ${workspaceFolder}/third_party
+            newPaths.push(path.join('${workspaceFolder}', 'src'))
+            newPaths.push(path.join('${workspaceFolder}', 'third_party'))
+
             depMap.forEach((_, pkgName) => {
-                const newPath = path
-                    .join('${workspaceFolder}', 'vendor', pkgName)
-                    .replace(/\\/g, '/')
-                if (!cfg.includePath.includes(newPath)) {
-                    cfg.includePath.push(newPath)
-                }
+                newPaths.push(path.join('${workspaceFolder}', 'vendor', pkgName))
             })
+
+            newPaths
+                .map((p) => p.replace(/\\/g, '/'))
+                .forEach((p) => {
+                    if (!cfg.includePath.includes(p)) {
+                        cfg.includePath.push(p)
+                    }
+                })
         })
 
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
@@ -189,7 +199,7 @@ async function main() {
         // 2. 获取存储路径
         const storagePath = getConanStoragePath(dependencies)
         // 3. 构建依赖映射
-        const depMap = await buildDependencyMap(storagePath)
+        const depMap = await buildDependencyMap(storagePath, dependencies)
 
         if (arg === 'vsc') {
             // 4. 复制到vendor目录

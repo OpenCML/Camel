@@ -8,7 +8,7 @@
     ],
     "scripts": {
         "upd": "node ./scripts/update.js",
-        "cnt": "tokei --sort lines",
+        "cnt": "tokei --exclude thirdparty --sort lines",
         "init": "node ./scripts/psrgen.js && node ./scripts/install.js",
         "install": "node ./scripts/install.js",
         "psrgen": "node ./scripts/psrgen.js",

@@ -214,6 +214,7 @@ npm run fix:link
       "name": "Win32",
       "includePath": [
         "${workspaceFolder}/src",
+        "${workspaceFolder}/third_party",
       ],
       "defines": [],
       "cStandard": "c11",

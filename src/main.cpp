@@ -127,8 +127,8 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        format = true;
-        if (format && !hasParseError) {
+        formatCode = true;
+        if (formatCode && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
             const string formattedCode = any_cast<string>(formatter.visit(tree));
             os << formattedCode;

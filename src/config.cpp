@@ -19,7 +19,7 @@
 
 #include <iostream>
 
-#include "clipp.h"
+#include "clipp/clipp.h"
 #include "config.h"
 
 using namespace clipp;
@@ -35,7 +35,7 @@ bool verbose = false;
 bool noCache = false;
 bool syntaxOnly = false;
 bool semanticOnly = false;
-bool dumpCST = false, dumpAST = false, dumpGIR = false, dumpONNX = false, dumpTokens = false, format = false;
+bool dumpCST = false, dumpAST = false, dumpGIR = false, dumpONNX = false, dumpTokens = false, formatCode = false;
 unsigned int repeat = 1;
 unsigned int maxThreads = 1;
 unsigned int serverPort = 0;
@@ -92,7 +92,7 @@ bool parseArgs(int argc, char *argv[]) {
           option("-A", "--dump-ast").set(dumpAST).doc("dump abstract syntax tree"),
           option("-G", "--dump-gir").set(dumpGIR).doc("dump graph intermediate representation"),
           option("-X", "--dump-onnx").set(dumpGIR).doc("dump ONNX model"),
-          option("-F", "--format").set(format).doc("format the code"),
+          option("-F", "--format").set(formatCode).doc("format the code"),
           option("-R", "--print-args").set(printArgs).doc("print arguments"), opt_value("target file", targetFile)));
 
     if (!parse(argc, argv, cli)) {
