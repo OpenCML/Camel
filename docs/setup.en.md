@@ -216,7 +216,7 @@ npm run fix:link
       ],
       "defines": [],
       "cStandard": "c11",
-      "cppStandard": "c++17",
+      "cppStandard": "c++20",
       "browse": {
         "path": ["${workspaceFolder}"],
         "limitSymbolsToIncludedHeaders": true,

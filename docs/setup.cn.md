@@ -13,7 +13,7 @@ Camel 是一个基于现代 C++ 技术栈构建的AI编程语言，其前端基�
 | Python        | 3.9      | 3.11     | `python --version` |
 | Node.js       | 18       | 20 LTS   | `node -v`          |
 | Java          | 11       | 21       | `java -version`    |
-| Clang         | 15       | 17       | `clang --version`  |
+| Clang         | 17       | 20       | `clang --version`  |
 | CMake         | 3.20     | 3.28     | `cmake --version`  |
 | Conan         | 2.0      | 2.1      | `conan --version`  |
 | Visual Studio | 2019     | 2022     | -                  |
@@ -218,7 +218,7 @@ npm run fix:link
       ],
       "defines": [],
       "cStandard": "c11",
-      "cppStandard": "c++17",
+      "cppStandard": "c++20",
       "browse": {
         "path": ["${workspaceFolder}"],
         "limitSymbolsToIncludedHeaders": true,
