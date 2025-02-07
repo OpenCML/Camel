@@ -141,6 +141,7 @@ function updateCppProperties(depMap) {
 
         config.configurations.forEach((cfg) => {
             cfg.includePath = cfg.includePath || []
+            cfg.cppStandard = 'c++20'
             const newPaths = []
 
             // 额外添加 ${workspaceFolder}/src, ${workspaceFolder}/third_party

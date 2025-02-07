@@ -21,7 +21,7 @@
         "fix:link": "node ./scripts/fix.js link",
         "pypi:rollup": "python3 -m twine upload dist/*",
         "pypi:upload": "python3 -m twine upload dist/*",
-        "gource": "gource -c 4 --frameless -f --logo ./logo.png --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
+        "gource": "gource -c 4 --frameless -f --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
     },
     "dependencies": {
         "fs-extra": "^11.3.0",
