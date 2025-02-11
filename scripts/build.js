@@ -1,7 +1,7 @@
 import path from 'path'
 import { runCommand, copyFile, BASEDIR } from './common.js'
 
-function main() {
+export default function main() {
     process.chdir(BASEDIR)
     process.chdir(path.join(BASEDIR, 'build'))
 

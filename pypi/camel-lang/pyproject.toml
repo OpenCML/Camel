@@ -9,7 +9,6 @@ description = "Camel: A Next-Generation Language for AI and High-Performance Com
 keywords = ["language", "camel", "ai", "dsl", "graph", "opencml"]
 authors = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
 maintainers = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
-license = "MIT"
 readme = "README.md"
 classifiers = [
     "Development Status :: 1 - Planning",
@@ -24,6 +23,9 @@ classifiers = [
     "Topic :: Software Development :: Interpreters",
 ]
 
+[project.license]
+file = "LICENSE"
+
 [project.urls]
 Homepage = "https://www.opencml.com"
 Documentation = "https://docs.opencml.com"
@@ -31,10 +33,10 @@ Repository = "https://github.com/OpenCML/Camel"
 Issues = "https://github.com/OpenCML/Camel/issues"
 
 [project.scripts]
-camel = "camel-lang.cli:main"
+camel = "camel.cli:main"
 
 [tool.setuptools]
 include-package-data = true
 
-[tool.setuptools.packages.find]
-where = ["camel-lang"]
+[tool.setuptools.package-data]
+camel = ["bin/*"]

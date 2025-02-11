@@ -6,7 +6,7 @@ from pathlib import Path
 def get_binary_path():
     system = platform.system().lower()
     bin_name = "camel.exe" if system == "windows" else "camel"
-    install_dir = Path(os.path.dirname(__file__)).parent.parent.parent / "bin"
+    install_dir = Path(os.path.dirname(__file__)) / "bin"
     return install_dir / bin_name
 
 def main():

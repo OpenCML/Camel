@@ -25,6 +25,12 @@ pyprojectContent = pyprojectContent.replace(/version = ".*"/, `version = "${ver}
 fs.writeFileSync('pypi/camel-lang/pyproject.toml', pyprojectContent)
 logDone('Updated pypi/camel-lang/pyproject.toml')
 
+// update version in pypi/camel-lang/src/camel/__init__.py
+let initContent = fs.readFileSync('pypi/camel-lang/src/camel/__init__.py', 'utf8')
+initContent = initContent.replace(/__version__ = '.*'/, `__version__ = '${ver}'`)
+fs.writeFileSync('pypi/camel-lang/src/camel/__init__.py', initContent)
+logDone('Updated pypi/camel-lang/src/camel/__init__.py')
+
 // check if changes.log exists and starts with the version like "[ver]"
 const changesLog = fs.readFileSync('changes.log', 'utf8')
 const changesLogLines = changesLog.split('\n')

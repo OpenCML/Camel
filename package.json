@@ -19,8 +19,8 @@
         "setver": "node ./scripts/setver.js",
         "fix:vsc": "node ./scripts/fix.js vsc",
         "fix:link": "node ./scripts/fix.js link",
-        "pypi:rollup": "python3 -m twine upload dist/*",
-        "pypi:upload": "python3 -m twine upload dist/*",
+        "pypi:rollup": "node ./scripts/pypi_rollup.js",
+        "pypi:upload": "python3 -m twine upload dist/pypi/*",
         "gource": "gource -c 4 --frameless -f --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
     },
     "dependencies": {

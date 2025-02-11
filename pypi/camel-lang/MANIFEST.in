@@ -1,2 +1,1 @@
-recursive-include bin *
-recursive-include stdlib **
+recursive-include src/camel/bin **
