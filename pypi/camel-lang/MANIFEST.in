@@ -1,1 +1,1 @@
-recursive-include src/camel/bin **
+recursive-include src/camel/.cmlenv **
