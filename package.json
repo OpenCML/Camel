@@ -20,7 +20,9 @@
         "fix:vsc": "node ./scripts/fix.js vsc",
         "fix:link": "node ./scripts/fix.js link",
         "pypi:rollup": "node ./scripts/pypi_rollup.js",
-        "pypi:upload": "python3 -m twine upload dist/pypi/*",
+        "pypi:upload": "python -m twine upload --repository testpypi dist/pypi/*",
+        "pypi:upload:release": "python -m twine upload --repository pypi dist/pypi/*",
+        "pypi:install": "pip install --index-url https://test.pypi.org/simple/ camel-lang",
         "gource": "gource -c 4 --frameless -f --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
     },
     "dependencies": {

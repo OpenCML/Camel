@@ -46,8 +46,8 @@ func forward(x: Tensor) {
 ```camel
 // Compile-time graph optimization
 inner macro func apply_gradients(g: functor): functor {
-  // inner implemented macro functor that auto
-  // adds the back-propagation part of the given graph
+    // inner implemented macro functor that auto
+    // adds the back-propagation part of the given graph
 }
 // usage
 let train = apply_gradients(forward<w, b>..loss)
@@ -58,11 +58,11 @@ let train = apply_gradients(forward<w, b>..loss)
 ```camel
 with <var w: Tensor, var b: Tensor, lr: float>
 sync func train(x: Tensor, y: Tensor): Tensor {
-	let y_hat = forward<w, b>(x)
-	let pl_py = y_hat - y
-	wait b = b - lr * pl_py
-	wait w = w - lr * pl_py * x
-	return loss(y_hat, y)
+    let y_hat = forward<w, b>(x)
+    let pl_py = y_hat - y
+    wait b = b - lr * pl_py
+    wait w = w - lr * pl_py * x
+    return loss(y_hat, y)
 }
 ```
 
@@ -81,7 +81,7 @@ pip install camel-lang
 ```camel
 // hello.cml
 func main() {
-  print(`Hello, ${os::user()}!`)
+    print(`Hello, ${os::user()}!`)
 }
 ```
 

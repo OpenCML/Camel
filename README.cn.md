@@ -46,7 +46,7 @@ func forward(x: Tensor) {
 ```camel
 // 编译时图优化
 inner macro func apply_gradients(g: functor): functor {
-  // 内部实现的宏，自动添加给定图的反向传播部分
+    // 内部实现的宏，自动添加给定图的反向传播部分
 }
 // 用法
 let train = apply_gradients(forward<w, b>..loss)
@@ -57,11 +57,11 @@ let train = apply_gradients(forward<w, b>..loss)
 ```camel
 with <var w: Tensor, var b: Tensor, lr: float>
 sync func train(x: Tensor, y: Tensor): Tensor {
-	let y_hat = forward<w, b>(x)
-	let pl_py = y_hat - y
-	wait b = b - lr * pl_py
-	wait w = w - lr * pl_py * x
-	return loss(y_hat, y)
+    let y_hat = forward<w, b>(x)
+    let pl_py = y_hat - y
+    wait b = b - lr * pl_py
+    wait w = w - lr * pl_py * x
+    return loss(y_hat, y)
 }
 ```
 
@@ -80,7 +80,7 @@ pip install camel-lang
 ```camel
 // hello.cml
 func main() {
-  print(`Hello, ${os::user()}!`)
+    print(`Hello, ${os::user()}!`)
 }
 ```
 
