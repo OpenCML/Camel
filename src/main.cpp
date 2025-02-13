@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 22, 2024
+ * Updated: Feb. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,9 +21,11 @@
 #include <iomanip>
 #include <iostream>
 
+#include "nlohmann/json.hpp"
+
 #include "antlr/OpenCMLLexer.h"
 #include "antlr/OpenCMLParser.h"
-#include "antlr4-runtime.h"
+#include "antlr4-runtime/antlr4-runtime.h"
 
 #include "codegen/girdump/graphviz.h"
 #include "common/error/error.h"
@@ -111,7 +113,6 @@ int main(int argc, char *argv[]) {
             }
 
             hasParseError = listener->hasErrors();
-
         } catch (exception &e) {
             error << "Parse failed" << endl;
             return 1;
@@ -126,13 +127,20 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        if (format && !hasParseError) {
+        formatCode = true;
+        if (formatCode && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
-
             const string formattedCode = any_cast<string>(formatter.visit(tree));
-
             os << formattedCode;
             return 0;
+            // try {
+            //     const string formattedCode = any_cast<string>(formatter.visit(tree));
+            //     os << formattedCode;
+            //     return 0;
+            // } catch (exception &e) {
+            //     error << "Format failed: " << e.what() << endl;
+            //     return 1;
+            // }
         }
 
         if (dumpCST) {
@@ -141,7 +149,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        if (!hasParseError) {
+        if ((dumpAST || dumpGIR) && !hasParseError) {
             initTypes();
             ast::node_ptr_t ast = nullptr;
             auto visitor = ast::Constructor();

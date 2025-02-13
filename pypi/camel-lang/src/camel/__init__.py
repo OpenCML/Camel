@@ -1,0 +1,5 @@
+__version__ = '0.0.11'
+__author__ = 'Zhenjie Wei'
+__author_email__ = 'Kogler_S@outlook.com'
+__description__ = 'Camel: A Next-Generation Language for AI and High-Performance Computing'
+__url__ = 'https://github.com/OpenCML/Camel'

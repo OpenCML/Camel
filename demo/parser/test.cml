@@ -1,0 +1,30 @@
+[x for x in list if x]
+[a, b, ...[]]
+d[::]
+{
+    a:b,
+    v:n,
+    ...{},
+    c:s
+}
+`1 + 2i`
+
+let a = if b > c then b else sync {}
+export let v = match b {
+    case 1 => n
+}
+
+use nn::nn
+
+enum c = {
+    a,
+    b
+}
+
+type c = typeof v
+
+export sync func haha(b: typeas T) sync {
+    sync {
+        a->uu::baba->b..c::c
+    }
+}

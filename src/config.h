@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Feb. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#define CAMEL_VERSION "0.0.11"
+#define VERSION "0.0.11"
 
 #include <string>
 
@@ -38,7 +38,7 @@ extern bool noCache;
 extern bool syntaxOnly;
 extern bool semanticOnly;
 
-extern bool dumpCST, dumpAST, dumpGIR, dumpONNX, dumpTokens, format;
+extern bool dumpCST, dumpAST, dumpGIR, dumpONNX, dumpTokens, formatCode;
 
 extern unsigned int repeat;
 

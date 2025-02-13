@@ -1,1 +1,0 @@
-tokei --exclude src/antlr

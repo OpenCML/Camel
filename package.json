@@ -1,17 +1,30 @@
 {
-  "name": "camel-scripts",
-  "private": true,
-  "version": "0.0.11",
-  "type": "module",
-  "pre-commit": [
-    "upd"
-  ],
-  "scripts": {
-    "upd": "node ./scripts/update.js",
-    "cnt": "tokei --sort lines",
-    "gource": "gource -c 4 --frameless -f --logo ./logo.png --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
-  },
-  "dependencies": {
-    "camel-scripts": "file:"
-  }
+    "name": "camel-scripts",
+    "private": true,
+    "version": "0.0.11",
+    "type": "module",
+    "pre-commit": [
+        "upd"
+    ],
+    "scripts": {
+        "upd": "node ./scripts/update.js",
+        "cnt": "tokei --exclude thirdparty --sort lines",
+        "init": "node ./scripts/psrgen.js && node ./scripts/install.js",
+        "install": "node ./scripts/install.js",
+        "psrgen": "node ./scripts/psrgen.js",
+        "check": "node ./scripts/check.js",
+        "build": "node ./scripts/build.js",
+        "debug": "node ./scripts/debug.js",
+        "clean": "node ./scripts/clean.js",
+        "setver": "node ./scripts/setver.js",
+        "fix:vsc": "node ./scripts/fix.js vsc",
+        "fix:link": "node ./scripts/fix.js link",
+        "pypi:rollup": "node ./scripts/pypi_rollup.js",
+        "pypi:upload": "python3 -m twine upload dist/pypi/*",
+        "gource": "gource -c 4 --frameless -f --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
+    },
+    "dependencies": {
+        "fs-extra": "^11.3.0",
+        "sqlite3": "^5.1.7"
+    }
 }
