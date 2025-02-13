@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Dec. 12, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,19 @@
 
 using namespace std;
 using namespace gir;
+
+string GraphVizPass::pointerToIdent(const void *ptr) {
+    uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
+    if (!showRawPtr) {
+        if (ptrsMap_.find(ptrVal) == ptrsMap_.end()) {
+            ptrsMap_[ptrVal] = ptrCnt++;
+        }
+        ptrVal = ptrsMap_[ptrVal];
+    }
+    stringstream ss;
+    ss << "P" << hex << uppercase << setw(6) << setfill('0') << ptrVal << dec << nouppercase;
+    return ss.str();
+}
 
 void GraphVizPass::pushIndent() {
     baseIndent_ += indent_;
@@ -37,13 +50,7 @@ void GraphVizPass::reset() {}
 
 void GraphVizPass::reset(context_ptr_t &context) { context_ = context; }
 
-inline string pointerToIdent(const void *ptr) {
-    stringstream ss;
-    ss << "P" << hex << uppercase << setw(8) << setfill('0') << reinterpret_cast<uintptr_t>(ptr) << dec << nouppercase;
-    return ss.str();
-}
-
-std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
+any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     string funcId = pointerToIdent(graph.get());
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
@@ -53,22 +60,21 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
     if (depth_ == 0) {
         res += "digraph GraphIR {\r\n";
     } else {
-        func_ptr_t func = graph->func();
-        func_type_ptr_t type = func->funcType();
+        func_type_ptr_t type = graph->funcType();
         for (const auto &[idx, _, isVar] : graph->ports()) {
-            portsNameMap[idx] = make_pair(type->nameAt(idx), isVar);
+            portsNameMap[idx] = make_pair(type->argNameAt(idx), isVar);
         }
         res += "subgraph cluster_" + funcId + " {\r\n";
-        string funcName = type->name().empty() ? lambdaFuncIdents_[func] : type->name();
+        string funcName = type->name().empty() ? lambdaFuncIdents_[type] : type->name();
         res += baseIndent_ + indent_ + "label=\"" + funcName + "\";\r\n";
     }
 
     size_t lambdaFuncCnt = 0;
     for (auto &subGraph : graph->subGraphs()) {
         pushIndent();
-        func_ptr_t func = subGraph->func();
-        if (func->name().empty()) {
-            lambdaFuncIdents_[func] = "__lambda_" + to_string(lambdaFuncCnt++) + "__";
+        func_type_ptr_t type = subGraph->funcType();
+        if (type->name().empty()) {
+            lambdaFuncIdents_[type] = "__lambda_" + to_string(lambdaFuncCnt++) + "__";
         }
         res += any_cast<string>(apply(subGraph));
         popIndent();
@@ -101,7 +107,7 @@ std::any GraphVizPass::apply(gir::graph_ptr_t &graph) {
         case NodeType::FUNCTOR: {
             func_ptr_t func = func_node_ptr_cast(node)->func();
             func_type_ptr_t type = func->funcType();
-            label = type->name().empty() ? lambdaFuncIdents_[func] : type->name();
+            label = type->name().empty() ? lambdaFuncIdents_[type] : type->name();
             shape = "parallelogram";
             break;
         }

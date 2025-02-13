@@ -1,8 +1,8 @@
 with <src: Int[]>
-inner func map(in: (a: Int) => Int): Int[] {
+func map(f: (a: Int) => Int): Int[] {
     return [f(src[0]), f(src[1])]
 }
 
-inner func f(sig: Int[]): Void {
+func fool(sig: Int[]): Any {
     return sig.map((x: Int): Int => x + 1)
 }

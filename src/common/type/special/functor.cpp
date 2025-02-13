@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Dec. 12, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,8 @@ FunctorModifier str2modifier(const string &str) {
         return FunctorModifier::SHARED;
     } else if (str == "sync") {
         return FunctorModifier::SYNC;
+    } else if (str == "macro") {
+        return FunctorModifier::MACRO;
     } else {
         throw runtime_error("Unknown modifier: " + str);
     }
@@ -52,6 +54,8 @@ string modifier2str(FunctorModifier modifier) {
         return "shared";
     case FunctorModifier::SYNC:
         return "sync";
+    case FunctorModifier::MACRO:
+        return "macro";
     default:
         throw runtime_error("Unknown modifier: " + to_string(static_cast<int>(modifier)));
     }
@@ -62,7 +66,7 @@ FunctorType::FunctorType(const std::string &&name, const shared_ptr<ParamsType> 
     : SpecialType(TypeCode::FUNCTOR), name_(std::move(name)), withType_(withType), linkType_(paramsType),
       returnType_(returnType) {}
 
-const std::string &FunctorType::nameAt(size_t idx) const {
+const std::string &FunctorType::argNameAt(size_t idx) const {
     if (idx < withType_->size())
         return std::get<0>(withType_->elementAt(idx));
     else

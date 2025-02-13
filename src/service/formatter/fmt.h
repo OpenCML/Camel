@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Feb. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 #include <unordered_set>
 
 #include "antlr/OpenCMLVisitor.h"
-#include "antlr4-runtime.h"
+#include "antlr4-runtime/antlr4-runtime.h"
 
 class Formatter : public OpenCMLVisitor {
   private:
@@ -36,14 +36,12 @@ class Formatter : public OpenCMLVisitor {
     std::string newline = "\r\n";
     bool preferSemis = false;
     QuotePreference quotePrefer = QuotePreference::Single;
-    CommentPreference cmtPrefer = CommentPreference::Slash;
 
     std::string currentIndent = "";
 
     const std::vector<antlr4::Token *> tokens;
 
-    int indentLevel = -1;
-    std::unordered_set<size_t> insertedCommentIndices;
+    int indentLevel = 0;
 
     void popIndent() {
         indentLevel--;
@@ -56,71 +54,181 @@ class Formatter : public OpenCMLVisitor {
         }
     }
 
-    std::string formatStringLiteral(const std::string &input);
+    std::string formatStringLiteral(const std::string &input, bool multiLine);
 
     void insertComment(antlr4::Token *comment, std::string &result);
 
-    inline std::string lineEnd() { return newline + currentIndent; }
+    inline std::string lineEnd(int repeat = 1) {
+        if (repeat <= 0) {
+            return "";
+        }
+        std::string result;
+        for (int i = 0; i < repeat; ++i) {
+            result += newline;
+        }
+        return result + currentIndent;
+    }
 
     inline size_t countLines(const std::string &input) { return std::count(input.begin(), input.end(), '\n'); }
 
-    inline std::string slash2hash(const std::string &input) { return std::regex_replace(input, std::regex("//"), "#"); }
+    template <typename T>
+    std::string formatBiOpsList(const std::vector<T *> &list,
+                                std::vector<antlr4::tree::ParseTree *> &children, // children of the context
+                                bool padding = true                               // padding spaces
+    ) {
+        // expr (op expr)*
+        std::string result = std::any_cast<std::string>(visit(list[0]));
+        if (list.size() == 1) {
+            return result;
+        }
+        if (padding) {
+            for (size_t i = 1; i < list.size(); i++) {
+                result += " " + children[i * 2 - 1]->getText() + " " + std::any_cast<std::string>(visit(list[i]));
+            }
+        } else {
+            for (size_t i = 1; i < list.size(); i++) {
+                result += children[i * 2 - 1]->getText() + std::any_cast<std::string>(visit(list[i]));
+            }
+        }
+        return result;
+    }
 
-    inline std::string hash2slash(const std::string &input) { return std::regex_replace(input, std::regex("#"), "//"); }
+    enum FormatListFlags {
+        PaddingSP = 1 << 0,  // Padding with spaces
+        PaddingNL = 1 << 1,  // Padding with new lines
+        Multiline = 1 << 2,  // Force multi-line formatting
+        InOneLine = 1 << 3,  // Force in one line
+        PushScope = 1 << 4,  // Push indent for multi-line
+        TrailingC = 1 << 5,  // Include trailing comma
+        PLeftOnly = 1 << 6,  // Padding on left only
+        PRightOnly = 1 << 7, // Padding on right only
+    };
 
     template <typename T>
-    std::string formatList(const std::vector<T *> &list,
-                           const std::string &&iComma, // inline comma
-                           const std::string &&nComma, // new line comma
-                           bool tComma = false,        // trailing comma
-                           bool padding = true,        // padding spaces
-                           bool multiLine = false,     // force multi-line
-                           int maxSkips = 2            // maximum number of line skips
-    ) {
+    std::string formatList(const std::vector<T *> &list, const antlr4::ParserRuleContext *context,
+                           const std::string iComma, // inline comma
+                           const std::string nComma, // new line comma
+                           int flags = 0,            // combined flags
+                           int maxSkips = 2,         // maximum number of line skips
+                           std::vector<std::pair<size_t, size_t>> tokenRanges = {}) {
+        // Parse flags
+        bool tComma = flags & TrailingC;
+        bool paddingSP = flags & PaddingSP;
+        bool paddingNL = flags & PaddingNL;
+        bool multiLine = flags & Multiline;
+        bool inOneLine = flags & InOneLine;
+        bool pushScope = flags & PushScope;
+        bool pLeftOnly = flags & PLeftOnly;
+        bool pRightOnly = flags & PRightOnly;
+
         std::string result;
         if (list.empty()) {
+            if (!context) {
+                // can pass a nullptr to avoid the comment processing
+                // this can be helpful when the list is not continuous
+                return result;
+            }
+            // TODO: handle empty list to proc comments
+            // here temporarily ignores the ctrl flags
+            const size_t firstTokIdx = context->getStart()->getTokenIndex();
+            const size_t lastTokIdx = context->getStop()->getTokenIndex();
+            bool foundComment = false;
+            if (pushScope) {
+                pushIndent();
+            }
+            for (size_t i = firstTokIdx + 1; i < lastTokIdx; i++) {
+                if (tokens[i]->getChannel() > 1) {
+                    result += lineEnd();
+                    insertComment(tokens[i], result);
+                    foundComment = true;
+                }
+            }
+            if (pushScope) {
+                popIndent();
+            }
+            if (foundComment) {
+                result += lineEnd();
+            }
             return result;
         }
 
-        // given a start index, find the range of comments in the token stream
-        const auto findCmtRange = [&](size_t start, bool reverse = false) -> std::pair<size_t, size_t> {
-            size_t predCmtStart = start, predCmtEnd = start;
+        // given a token index range, find the range of comments in the token stream
+        const auto findCmtRange = [&](size_t index, bool reverse = false) -> std::pair<size_t, size_t> {
+            assert(!(reverse && index != 0)); // reverse lookup should always start from the first element
+            size_t start = 0, end = tokens.size() - 1;
+            if (!tokenRanges.empty()) {
+                // the last pair of the tokenRanges is the range of the reverse lookup
+                assert(tokenRanges.size() == list.size() + 1);
+                if (!reverse) {
+                    start = tokenRanges[index].first;
+                    end = tokenRanges[index].second;
+                } else {
+                    start = tokenRanges[list.size()].first;
+                    end = tokenRanges[list.size()].second;
+                }
+            } else {
+                if (!reverse) {
+                    start = list[index]->getStop()->getTokenIndex();
+                    if (index == list.size() - 1) {
+                        end = context->getStop()->getTokenIndex() + 1;
+                    } else {
+                        end = list[index + 1]->getStart()->getTokenIndex();
+                    }
+                } else {
+                    start = context->getStart()->getTokenIndex();
+                    if (start > 0) {
+                        start--;
+                    }
+                    end = list[0]->getStart()->getTokenIndex();
+                }
+                assert(start <= end);
+            }
 
+            size_t predCmtStart = start, predCmtEnd = end;
             if (!reverse) { // forward lookup
-                predCmtStart++;
-                if (predCmtStart < tokens.size() && tokens[predCmtStart]->getText()[0] == iComma[0]) {
-                    // here we assumes that the the first character of the iComma
-                    // will always be the comma itself (etc. ','), not a comma with a space (etc. ', '),
-                    // ether only a space (etc. ' ')
-                    predCmtStart++;
+                size_t j;
+                for (j = start; j < end; j++) {
+                    // find the first comment token
+                    if (tokens[j]->getChannel() > 1) {
+                        predCmtStart = j;
+                        break;
+                    }
+                }
+                if (j == end) {
+                    return std::make_pair(start, start);
                 }
                 predCmtEnd = predCmtStart;
-                size_t j;
-                for (j = predCmtStart; j < tokens.size(); j++) {
-                    if (tokens[j]->getChannel() <= 1) {
+                for (j = predCmtStart; j < end; j++) {
+                    // find until the first non-comment token
+                    if (tokens[j]->getChannel() == 1) {
                         predCmtEnd = j;
                         break;
                     }
                 }
-                if (j == tokens.size() - 1 && tokens[tokens.size() - 1]->getChannel() > 1) {
-                    predCmtEnd = tokens.size();
+                if (j == end) {
+                    predCmtEnd = end;
                 }
             } else { // backward lookup
-                if (predCmtEnd > 1 && tokens[predCmtEnd - 1]->getText()[0] == iComma[0]) {
-                    predCmtEnd--;
+                for (size_t j = end - 1; j >= start; j--) {
+                    // find the first comment token
+                    if (tokens[j]->getChannel() > 1) {
+                        predCmtEnd = j + 1;
+                        break;
+                    }
+                    if (j == start) {
+                        return std::make_pair(end, end);
+                    }
                 }
                 predCmtStart = predCmtEnd;
-                if (predCmtEnd > 0) {
-                    size_t j;
-                    for (j = predCmtEnd - 1; j != 0; j--) {
-                        if (tokens[j]->getChannel() > 1) {
-                            predCmtStart = j;
-                        } else {
-                            break;
-                        }
+                for (size_t j = predCmtEnd - 1; j >= start; j--) {
+                    // find until the first non-comment token
+                    if (tokens[j]->getChannel() == 1) {
+                        predCmtStart = j + 1;
+                        break;
                     }
-                    if (j == 0 && tokens[0]->getChannel() > 1) {
-                        predCmtStart = 0;
+                    if (j == start) {
+                        predCmtStart = start;
+                        break;
                     }
                 }
             }
@@ -128,7 +236,7 @@ class Formatter : public OpenCMLVisitor {
             return std::make_pair(predCmtStart, predCmtEnd);
         };
 
-        if (!multiLine) {
+        if (!multiLine && !inOneLine) {
             // the elements are on one line if and only if
             // all elements' last token is on the same line
             // with the first token of the next element
@@ -146,10 +254,14 @@ class Formatter : public OpenCMLVisitor {
             }
         }
 
-        if (multiLine) {
-            pushIndent();
-            result += lineEnd();
-        } else if (padding) {
+        if (paddingNL && multiLine) {
+            if (pushScope) {
+                pushIndent();
+            }
+            if (!pRightOnly) {
+                result += lineEnd();
+            }
+        } else if (paddingSP && !pRightOnly) {
             result += " ";
         }
 
@@ -175,8 +287,8 @@ class Formatter : public OpenCMLVisitor {
 
             size_t lastStopLine = list[i]->getStop()->getLine();
 
-            if (i == 0) {
-                auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStart()->getTokenIndex(), true);
+            if (i == 0 && list[0]->getStart()->getTokenIndex() > 0) {
+                auto [predCmtStart, predCmtEnd] = findCmtRange(0, true);
                 int cmtSkips = 0;
                 for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                     const auto &comment = tokens[j];
@@ -188,15 +300,8 @@ class Formatter : public OpenCMLVisitor {
                         result += lineEnd();
                     }
 
-                    // incase the comment is already inserted
-                    // for example, stmtList(exprList(exprList))
-                    if (insertedCommentIndices.find(j) == insertedCommentIndices.end()) {
-                        insertComment(comment, result);
-                        insertedCommentIndices.insert(j);
-                        lastStopLine = comment->getLine() + countLines(commentText);
-                    } else {
-                        lastStopLine = currLine;
-                    }
+                    insertComment(comment, result);
+                    lastStopLine = comment->getLine() + countLines(commentText);
                 }
 
                 cmtSkips = currLine - lastStopLine;
@@ -212,7 +317,7 @@ class Formatter : public OpenCMLVisitor {
             }
 
             lastStopLine = list[i]->getStop()->getLine();
-            auto [predCmtStart, predCmtEnd] = findCmtRange(list[i]->getStop()->getTokenIndex(), false);
+            auto [predCmtStart, predCmtEnd] = findCmtRange(i, false);
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                 const auto &comment = tokens[j];
                 const auto &commentText = comment->getText();
@@ -227,11 +332,7 @@ class Formatter : public OpenCMLVisitor {
                     result += lineEnd();
                 }
 
-                if (insertedCommentIndices.find(j) == insertedCommentIndices.end()) {
-                    insertComment(comment, result);
-                    insertedCommentIndices.insert(j);
-                }
-
+                insertComment(comment, result);
                 lastStopLine = comment->getLine() + countLines(commentText);
             }
 
@@ -248,73 +349,74 @@ class Formatter : public OpenCMLVisitor {
             lastLine = list[i]->getStop()->getLine() + countLines(list[i]->getStop()->getText());
         }
 
-        if (multiLine) {
-            popIndent();
-            result += lineEnd();
-        } else if (padding && !tComma) {
+        if (paddingNL && multiLine) {
+            if (pushScope) {
+                popIndent();
+            }
+            if (!pLeftOnly) {
+                result += lineEnd();
+            }
+        } else if (paddingSP && !tComma && !pLeftOnly) {
             result += " ";
         }
 
         return result;
     }
 
-    std::any visitStmtList(OpenCMLParser::StmtListContext *context, bool padding, bool forceMultiLine,
-                           bool trailingComma);
-    std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context, bool multiLine);
-    std::any visitTypeList(OpenCMLParser::TypeListContext *context, bool trailingComma, bool padding,
-                           bool forceMultiLine);
-    std::any visitIdentList(OpenCMLParser::IdentListContext *context, bool trailingComma, bool padding,
-                            bool forceMultiLine);
-    std::any visitValueList(OpenCMLParser::ValueListContext *context, bool trailingComma, bool padding,
-                            bool forceMultiLine);
-    std::any visitPairedTypes(OpenCMLParser::PairedTypesContext *context, bool trailingComma, bool padding,
-                              bool forceMultiLine);
-    std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context, bool trailingComma, bool padding,
-                               bool forceMultiLine);
-    std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context, bool trailingComma, bool padding,
-                               bool forceMultiLine);
-    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context, bool trailingComma, bool padding,
-                               bool forceMultiLine);
-    std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context, bool trailingComma, bool padding,
-                               bool forceMultiLine);
-
   public:
     Formatter(const std::vector<antlr4::Token *> tokens) : tokens(tokens) {}
 
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
 
-    std::any visitStmtList(OpenCMLParser::StmtListContext *context) {
-        return visitStmtList(context, true, false, true);
-    }
+    std::any visitDecl(OpenCMLParser::DeclContext *context);
+
     std::any visitStmt(OpenCMLParser::StmtContext *context);
 
-    std::any visitLetStmt(OpenCMLParser::LetStmtContext *context);
+    std::any visitStmtList(OpenCMLParser::StmtListContext *context);
 
-    std::any visitUseStmt(OpenCMLParser::UseStmtContext *context);
+    std::any visitModuleDecl(OpenCMLParser::ModuleDeclContext *context);
 
-    std::any visitTypeStmt(OpenCMLParser::TypeStmtContext *context);
+    std::any visitImportDecl(OpenCMLParser::ImportDeclContext *context);
 
-    std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context);
+    std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context);
 
-    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
+    std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
 
-    std::any visitWithDef(OpenCMLParser::WithDefContext *context);
+    std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
-    std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
-
-    std::any visitFuncDef(OpenCMLParser::FuncDefContext *context);
-
-    std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
+    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context);
 
     std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
 
+    std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
+
+    std::any visitParentIdents(OpenCMLParser::ParentIdentsContext *context);
+
+    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
+
+    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context);
+
     std::any visitCarrier(OpenCMLParser::CarrierContext *context);
+
+    std::any visitLetDecl(OpenCMLParser::LetDeclContext *context);
+
+    std::any visitUseDecl(OpenCMLParser::UseDeclContext *context);
+
+    std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
+
+    std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context);
+
+    std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context);
+
+    std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context);
 
     std::any visitAnnotation(OpenCMLParser::AnnotationContext *context);
 
-    std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context) { return visitAnnotations(context, false); }
+    std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context);
 
     std::any visitModifiers(OpenCMLParser::ModifiersContext *context);
+
+    std::any visitIndexValue(OpenCMLParser::IndexValueContext *context);
 
     std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context);
 
@@ -322,55 +424,17 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context);
 
-    std::any visitIndexKTPair(OpenCMLParser::IndexKTPairContext *context);
+    std::any visitIdentList(OpenCMLParser::IdentListContext *context);
 
-    std::any visitIndexKVPair(OpenCMLParser::IndexKVPairContext *context);
+    std::any visitValueList(OpenCMLParser::ValueListContext *context);
 
-    std::any visitTypeList(OpenCMLParser::TypeListContext *context) {
-        return visitTypeList(context, false, true, false);
-    }
+    std::any visitIndexValues(OpenCMLParser::IndexValuesContext *context);
 
-    std::any visitIdentList(OpenCMLParser::IdentListContext *context) {
-        return visitIdentList(context, false, true, false);
-    }
+    std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context);
 
-    std::any visitValueList(OpenCMLParser::ValueListContext *context) {
-        return visitValueList(context, false, true, false);
-    }
+    std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context);
 
-    std::any visitPairedTypes(OpenCMLParser::PairedTypesContext *context) {
-        return visitPairedTypes(context, false, true, false);
-    }
-
-    std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
-        return visitPairedValues(context, false, true, false);
-    }
-
-    std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
-        return visitPairedParams(context, false, true, false);
-    }
-
-    std::any visitIndexKVPairs(OpenCMLParser::IndexKVPairsContext *context) {
-        return visitIndexKVPairs(context, false, true, false);
-    }
-
-    std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
-        return visitArgumentList(context, false, true, false);
-    }
-
-    std::any visitBracedPairedValues(OpenCMLParser::BracedPairedValuesContext *context);
-
-    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context);
-
-    std::any visitBracedStmts(OpenCMLParser::BracedStmtsContext *context);
-
-    std::any visitBracedValues(OpenCMLParser::BracedValuesContext *context);
-
-    std::any visitBracedIndexKVPairs(OpenCMLParser::BracedIndexKVPairsContext *context);
-
-    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context);
-
-    std::any visitBracketValues(OpenCMLParser::BracketValuesContext *context);
+    std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context);
 
     std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
 
@@ -378,15 +442,19 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context);
 
-    std::any visitParentValues(OpenCMLParser::ParentValuesContext *context);
-
     std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context);
 
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
 
-    std::any visitEntityExpr(OpenCMLParser::EntityExprContext *context);
+    std::any visitDataExpr(OpenCMLParser::DataExprContext *context);
 
-    std::any visitTernaryExpr(OpenCMLParser::TernaryExprContext *context);
+    std::any visitPattern(OpenCMLParser::PatternContext *context);
+
+    std::any visitMatchCase(OpenCMLParser::MatchCaseContext *context);
+
+    std::any visitCatchClause(OpenCMLParser::CatchClauseContext *context);
+
+    std::any visitStructExpr(OpenCMLParser::StructExprContext *context);
 
     std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context);
 
@@ -400,31 +468,49 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context);
 
+    std::any visitNullableExpr(OpenCMLParser::NullableExprContext *context);
+
     std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context);
 
     std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context);
 
+    std::any visitBindExpr(OpenCMLParser::BindExprContext *context);
+
     std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
 
-    std::any visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context);
+    std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 
-    std::any visitPrimaryExpr(OpenCMLParser::PrimaryExprContext *context);
+    std::any visitDictExpr(OpenCMLParser::DictExprContext *context);
+
+    std::any visitListExpr(OpenCMLParser::ListExprContext *context);
+
+    std::any visitPrimaryData(OpenCMLParser::PrimaryDataContext *context);
 
     std::any visitLiteral(OpenCMLParser::LiteralContext *context);
 
     std::any visitTypeExpr(OpenCMLParser::TypeExprContext *context);
 
-    std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context);
+    std::any visitUnionType(OpenCMLParser::UnionTypeContext *context);
 
-    std::any visitAtomType(OpenCMLParser::AtomTypeContext *context);
+    std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context);
 
-    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
+    std::any visitListType(OpenCMLParser::ListTypeContext *context);
+
+    std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context);
+
+    std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context);
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context);
 
-    std::any visitStructType(OpenCMLParser::StructTypeContext *context);
+    std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context);
 
-    std::any visitSpecialType(OpenCMLParser::SpecialTypeContext *context);
+    std::any visitDictType(OpenCMLParser::DictTypeContext *context);
+
+    std::any visitTupleType(OpenCMLParser::TupleTypeContext *context);
+
+    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
+
+    std::any visitIdentDef(OpenCMLParser::IdentDefContext *context);
 
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context);
 };

@@ -33,40 +33,40 @@ inner func save(entity: Any) {
 };
 
 with <stream: String = 'stdout'>
-inner static func print(data: Any) {
+inner shared func print(data: Any) {
     // inner func
 };
 
 with <diagram: Functor = eye>
-inner static func analyze(data: Any) {
+inner shared func analyze(data: Any) {
     // inner func
 };
 
-inner static func help() {
+inner shared func help() {
     // inner func
 };
 
-inner static func version() {
+inner shared func version() {
     // inner func
 };
 
-inner static func about() {
+inner shared func about() {
     // inner func
 };
 
-inner static func exit() {
+inner shared func exit() {
     // inner func
 };
 
-inner static func map() {
+inner shared func map() {
     // inner func
 };
 
-inner static func reduce() {
+inner shared func reduce() {
     // inner func
 };
 
-inner static func ifexpr(
+inner shared func ifexpr(
     condition: Bool,
     trueValue: Any,
     falseValue: Any
@@ -81,21 +81,21 @@ inner func exec(block: Functor): Void {
 };
 
 with <after: Functor>
-inner static func skip(entity: Any): Void {
+inner shared func skip(entity: Any): Void {
     // skip an entity in an entity chain
 };
 
 let else = skip;
 
-static func if(condition: Bool) {
+shared func if(condition: Bool) {
     return ifexpr(condition, exec, skip<skip>)
 };
 
-static func while(condition: Functor) {
+shared func while(condition: Functor) {
     return test<condition: condition>
 };
 
-static func for(
+shared func for(
     capture: Any,
     condition: Functor,
     update: Functor

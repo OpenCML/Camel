@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 28, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Feb. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <antlr4-runtime.h>
+#include <antlr4-runtime/antlr4-runtime.h>
 #include <exception>
 #include <string>
 

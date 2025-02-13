@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 18, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Feb. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
         }
     }
 
-    auto getHead = [=](bool last) -> string {
+    auto getHead = [this](bool last) -> string {
         int i = 0;
         string ret = "";
         while (i < depth - 1) {

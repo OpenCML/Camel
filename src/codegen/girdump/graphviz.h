@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Dec. 12, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,11 @@
 
 class GraphVizPass : public GraphPass {
     context_ptr_t context_;
-    std::unordered_map<func_ptr_t, std::string> lambdaFuncIdents_;
+
+    uintptr_t ptrCnt = 0;
+    bool showRawPtr = false;
+    std::unordered_map<uintptr_t, uintptr_t> ptrsMap_;
+    std::unordered_map<func_type_ptr_t, std::string> lambdaFuncIdents_;
 
     size_t depth_ = 0;
     std::string baseIndent_;
@@ -32,6 +36,8 @@ class GraphVizPass : public GraphPass {
 
     void pushIndent();
     void popIndent();
+
+    std::string pointerToIdent(const void *ptr);
 
   public:
     GraphVizPass(const context_ptr_t &context) : context_(context) {};

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Dec. 12, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@ enum class FunctorModifier {
     ATOMIC = 0b00000100,
     SHARED = 0b00001000,
     SYNC = 0b00010000,
+    MACRO = 0b00100000,
 };
 
 FunctorModifier str2modifier(const std::string &str);
@@ -48,7 +49,7 @@ class FunctorType : public SpecialType {
                 const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
 
     const std::string &name() const { return name_; }
-    const std::string &nameAt(size_t idx) const;
+    const std::string &argNameAt(size_t idx) const;
 
     void addModifier(FunctorModifier modifier);
     void setModifiers(const std::unordered_set<FunctorModifier> &modifiers);
@@ -60,6 +61,7 @@ class FunctorType : public SpecialType {
     bool atomic() const { return modifiers_.find(FunctorModifier::ATOMIC) != modifiers_.end(); }
     bool inner() const { return modifiers_.find(FunctorModifier::INNER) != modifiers_.end(); }
     bool outer() const { return modifiers_.find(FunctorModifier::OUTER) != modifiers_.end(); }
+    bool macro() const { return modifiers_.find(FunctorModifier::MACRO) != modifiers_.end(); }
 
     bool addIdent(const std::string &ident, bool isVar);
     bool hasSideEffect() const;

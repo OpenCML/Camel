@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "camel-lang"
+version = "0.0.11"
+description = "Camel: A Next-Generation Language for AI and High-Performance Computing"
+keywords = ["language", "camel", "ai", "dsl", "graph", "opencml"]
+authors = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
+maintainers = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
+readme = "README.md"
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Other",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Human Machine Interfaces",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Software Development :: Interpreters",
+]
+
+[project.license]
+file = "LICENSE"
+
+[project.urls]
+Homepage = "https://www.opencml.com"
+Documentation = "https://docs.opencml.com"
+Repository = "https://github.com/OpenCML/Camel"
+Issues = "https://github.com/OpenCML/Camel/issues"
+
+[project.scripts]
+camel = "camel.cli:camel"
+cpm = "camel.cli:cpm"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+camel = [".cmlenv/*"]

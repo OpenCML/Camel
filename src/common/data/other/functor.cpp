@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Dec. 12, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,7 +53,7 @@ data_ptr_t FunctorData::convert(type_ptr_t target, bool inplace) {
 data_ptr_t FunctorData::clone(bool deep) const {
     auto newGraph = make_shared<Graph>(*thisGraph_);
     func_ptr_t func = std::make_shared<FunctorData>(type_, newGraph, baseGraph_);
-    newGraph->setFunc(func);
+    newGraph->setFuncType(func->funcType());
     return func;
 }
 

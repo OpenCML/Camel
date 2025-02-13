@@ -1,9 +1,64 @@
-### FUNC
 
-The keyword 'func' is used to define a functor.
-The concept of 'functor' is similar to C++ Functor,
-which has few relationship with Haskell Functor.
-You can simply think of it as a function with its own entity(or data),
-or an entity with its own functional behavior.
-In PSL, a functor can be treated as an entity,
-so it can be passed as a parameter to other functors.
+
+`let`
+
+
+
+`use`
+
+
+
+`module`
+
+
+
+`export`
+
+- 用于控制模块外可见性
+
+`func`
+
+
+
+`with`
+
+
+
+`typeof`
+
+
+
+`typeas`
+
+- 用于参数泛型设计
+
+```
+copy(src: typeas T): T {}
+```
+
+
+
+
+
+`as`
+
+- 当参数泛型推断失败时
+
+```
+func([] as Array<Int>)
+```
+
+
+
+`is`
+
+
+
+`sync`
+
+
+
+`wait`
+
+
+
