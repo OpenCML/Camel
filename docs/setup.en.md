@@ -11,9 +11,9 @@ Camel is an AI programming language built on a modern C++ technology stack. Its 
 | Python         | 3.9             | 3.11                | `python --version`   |
 | Node.js        | 18              | 20 LTS              | `node -v`            |
 | Java           | 11              | 21                  | `java -version`      |
-| Clang          | 15              | 17                  | `clang --version`    |
+| Clang          | 19              | 20                  | `clang --version`    |
 | CMake          | 3.20            | 3.28                | `cmake --version`    |
-| Conan          | 2.0             | 2.1                 | `conan --version`    |
+| Conan          | 2.10            | 2.12                | `conan --version`    |
 | Visual Studio  | 2019            | 2022                | -                    |
 
 > Visual Studio is only required on Windows platforms. When installing, you can also install the Clang component simultaneously.
@@ -83,8 +83,8 @@ Edit `~/.conan2/profiles/default`:
 os=Windows
 arch=x86_64
 compiler=clang
-compiler.version=17
-compiler.cppstd=20
+compiler.version=19
+compiler.cppstd=23
 build_type=Release
 
 [conf]
@@ -216,7 +216,7 @@ npm run fix:link
       ],
       "defines": [],
       "cStandard": "c11",
-      "cppStandard": "c++20",
+      "cppStandard": "c++23",
       "browse": {
         "path": ["${workspaceFolder}"],
         "limitSymbolsToIncludedHeaders": true,

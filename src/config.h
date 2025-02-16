@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#define VERSION "0.0.11"
+#define VERSION "0.0.12"
 
 #include <string>
 
