@@ -96,7 +96,7 @@ template <typename T> class PrimaryData : public Data {
                     case TypeCode::DOUBLE:
                         return std::make_shared<PrimaryData<double>>(static_cast<double>(b));
                     case TypeCode::STRING:
-                        return std::make_shared<StringData>(b ? "true" : "false");
+                        return std::dynamic_pointer_cast<Data>(std::make_shared<StringData>(b ? "true" : "false"));
                     case TypeCode::CHAR:
                         return std::make_shared<PrimaryData<char>>(static_cast<char>(b));
 
@@ -115,7 +115,7 @@ template <typename T> class PrimaryData : public Data {
                     case TypeCode::DOUBLE:
                         return std::make_shared<PrimaryData<double>>(static_cast<double>(c));
                     case TypeCode::STRING:
-                        return std::make_shared<StringData>(std::string(1, c));
+                        return std::dynamic_pointer_cast<Data>(std::make_shared<StringData>(std::string(1, c)));
                     case TypeCode::BOOL:
                         return std::make_shared<PrimaryData<bool>>(c != 0);
 

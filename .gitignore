@@ -7,6 +7,7 @@
 
 .todolist
 .opencmlrc
+.pypirc
 
 cmake-build-debug/
 node_modules/
