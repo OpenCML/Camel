@@ -5,6 +5,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
 
+<p align="center">
+  <img src='https://www.github.com/OpenCML/Camel/raw/main/assets/logo-text.png' width=800>
+</p>
+
 Camel is a **graph-based**, **multi-stage**, and **type-driven** domain-specific language (DSL) designed to bridge the gap between AI research and production deployment. It combines the elegance of **functional programming** with the expressiveness of **declarative programming**. It provides **born-async semantics** and highly **customizable graph manipulations**, enabling developers to write **high-level code** that compiles to **near-native performance**.
 
 ## 🚀 Why Camel?
@@ -46,8 +50,8 @@ func forward(x: Tensor) {
 ```camel
 // Compile-time graph optimization
 inner macro func apply_gradients(g: functor): functor {
-  // inner implemented macro functor that auto
-  // adds the back-propagation part of the given graph
+    // inner implemented macro functor that auto
+    // adds the back-propagation part of the given graph
 }
 // usage
 let train = apply_gradients(forward<w, b>..loss)
@@ -58,11 +62,11 @@ let train = apply_gradients(forward<w, b>..loss)
 ```camel
 with <var w: Tensor, var b: Tensor, lr: float>
 sync func train(x: Tensor, y: Tensor): Tensor {
-	let y_hat = forward<w, b>(x)
-	let pl_py = y_hat - y
-	wait b = b - lr * pl_py
-	wait w = w - lr * pl_py * x
-	return loss(y_hat, y)
+    let y_hat = forward<w, b>(x)
+    let pl_py = y_hat - y
+    wait b = b - lr * pl_py
+    wait w = w - lr * pl_py * x
+    return loss(y_hat, y)
 }
 ```
 
@@ -81,7 +85,7 @@ pip install camel-lang
 ```camel
 // hello.cml
 func main() {
-  print(`Hello, ${os::user()}!`)
+    print(`Hello, ${os::user()}!`)
 }
 ```
 

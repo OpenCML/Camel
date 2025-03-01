@@ -5,6 +5,10 @@
 [![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
 
+<p align="center">
+  <img src='https://www.github.com/OpenCML/Camel/raw/main/assets/logo-text.png' width=800>
+</p>
+
 Camel是一个基于图的、多阶段的、类型驱动的特定领域语言（DSL），旨在弥合AI研究与生产部署之间的差距。它结合了函数式编程的优雅和声明式编程的表达力。它提供了天生的异步语义和高度可定制的图操作，使开发者能够编写高级代码，该代码编译后具有接近原生的性能。
 
 ## 🚀 为什么选择Camel？
@@ -46,7 +50,7 @@ func forward(x: Tensor) {
 ```camel
 // 编译时图优化
 inner macro func apply_gradients(g: functor): functor {
-  // 内部实现的宏，自动添加给定图的反向传播部分
+    // 内部实现的宏，自动添加给定图的反向传播部分
 }
 // 用法
 let train = apply_gradients(forward<w, b>..loss)
@@ -57,11 +61,11 @@ let train = apply_gradients(forward<w, b>..loss)
 ```camel
 with <var w: Tensor, var b: Tensor, lr: float>
 sync func train(x: Tensor, y: Tensor): Tensor {
-	let y_hat = forward<w, b>(x)
-	let pl_py = y_hat - y
-	wait b = b - lr * pl_py
-	wait w = w - lr * pl_py * x
-	return loss(y_hat, y)
+    let y_hat = forward<w, b>(x)
+    let pl_py = y_hat - y
+    wait b = b - lr * pl_py
+    wait w = w - lr * pl_py * x
+    return loss(y_hat, y)
 }
 ```
 
@@ -80,7 +84,7 @@ pip install camel-lang
 ```camel
 // hello.cml
 func main() {
-  print(`Hello, ${os::user()}!`)
+    print(`Hello, ${os::user()}!`)
 }
 ```
 
