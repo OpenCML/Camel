@@ -18,7 +18,6 @@ file(GLOB_RECURSE SRC_FILES
 	"${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
 
-find_package(antlr4-runtime CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
@@ -30,26 +29,19 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
-if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE
-        /utf-8
-        /EHsc
-        # 4003:宏定义参数不足 4005:宏重定义 4819:文件名中有非ASCII字符
-        /wd4003 /wd4005 /wd4819
-        $<$<CONFIG:Release>:/O2 /Ot>
-        $<$<CONFIG:Debug>:/Od>
-    )
-    target_compile_definitions(${PROJECT_NAME} PRIVATE 
-        _CRT_SECURE_NO_WARNINGS
-        NOMINMAX  # 禁用Windows.h的min/max宏
-    )
-else()
-    target_compile_options(${PROJECT_NAME} PRIVATE
-        $<$<CONFIG:Release>:-O3 -flto>
-        $<$<CONFIG:Debug>:-O0 -g3>
-        -Wall -Wextra -Wpedantic
-    )
+if (NOT ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))
+    message(FATAL_ERROR "This project requires Clang as the C++ compiler. Current compiler is ${CMAKE_CXX_COMPILER_ID}.")
 endif()
+
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<CONFIG:Release>:-O3 -flto>
+    $<$<CONFIG:Debug>:-O0 -g3>
+    -Wall -Wextra -Wpedantic
+    -Wno-language-extension-token
+    -fcolor-diagnostics
+)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE ANTLR4CPP_STATIC)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${PROJECT_SOURCE_DIR}/include
@@ -57,9 +49,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/third_party
+    ${PROJECT_SOURCE_DIR}/third_party/antlr4-runtime
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    $<IF:$<TARGET_EXISTS:antlr4_shared>,antlr4_shared,antlr4_static>
     nlohmann_json::nlohmann_json
 )
