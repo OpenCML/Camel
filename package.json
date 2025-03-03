@@ -8,7 +8,7 @@
     ],
     "scripts": {
         "upd": "node ./scripts/update.js",
-        "cnt": "tokei --exclude thirdparty --sort lines",
+        "cnt": "tokei --exclude third_party --sort lines",
         "init": "node ./scripts/psrgen.js && node ./scripts/install.js",
         "install": "node ./scripts/install.js",
         "psrgen": "node ./scripts/psrgen.js",
@@ -18,7 +18,6 @@
         "clean": "node ./scripts/clean.js",
         "setver": "node ./scripts/setver.js",
         "fix:vsc": "node ./scripts/fix.js vsc",
-        "fix:link": "node ./scripts/fix.js link",
         "pypi:rollup": "node ./scripts/pypi_rollup.js",
         "pypi:upload": "python -m twine upload --repository testpypi dist/pypi/*",
         "pypi:upload:release": "python -m twine upload --repository pypi dist/pypi/*",

@@ -2,82 +2,163 @@
 
 [中文简体](setup.cn.md) | English
 
-## Project Introduction
-Camel is an AI programming language built on a modern C++ technology stack. Its frontend is based on Antlr4 (which requires Java), and it integrates Python and Node.js toolchains for cross-platform development. This guide will help you quickly set up a complete development environment.
+## 1. Project Overview
 
-## Technology Stack Requirements
-| Component      | Minimum Version | Recommended Version | Verification Command |
-| -------------- | --------------- | ------------------- | -------------------- |
-| Python         | 3.9             | 3.11                | `python --version`   |
-| Node.js        | 18              | 20 LTS              | `node -v`            |
-| Java           | 11              | 21                  | `java -version`      |
-| Clang          | 19              | 20                  | `clang --version`    |
-| CMake          | 3.20            | 3.28                | `cmake --version`    |
-| Conan          | 2.10            | 2.12                | `conan --version`    |
-| Visual Studio  | 2019            | 2022                | -                    |
+Camel is an AI programming language built with a modern C++ technology stack. Its frontend is implemented using Antlr4 (requires a Java runtime) and integrates Python and Node.js toolchains for cross-platform development. This guide is designed to help developers quickly set up the development environment for the Camel project.
 
-> Visual Studio is only required on Windows platforms. When installing, you can also install the Clang component simultaneously.
+---
 
-## Environment Setup Process
+## 2. Technical Requirements
 
-### 1. Basic Toolchain Installation
-#### 1.1 Scripting Language Environment
-**Installing Python**
+The following table lists the required components and their version specifications for the Camel project:
 
-1. Visit the [Python official website](https://www.python.org/downloads/) to download and install Python.
-2. During the installation, ensure to check **Add Python to PATH**.
-3. After installation, open the command line and enter `python --version` to verify the installation.
+| Component | Minimum Version | Recommended Version | Verification Command    |
+| --------- | --------------- | ------------------- | ----------------------- |
+| Python    | 3.9             | 3.11               | `python --version`      |
+| Node.js   | 18              | 20 LTS             | `node -v`               |
+| Java      | 11              | 21                 | `java -version`         |
+| Clang     | 19              | 20                 | `clang --version`       |
+| CMake     | 3.20            | 3.28               | `cmake --version`       |
+| Conan     | 2.10            | 2.12               | `conan --version`       |
+| Ninja     | 1.11            | 1.11               | `ninja --version`       |
 
-**Installing Node.js**
+Ensure that the above components are properly installed and configured before proceeding with development.
 
-1. Visit the [Node.js official website](https://nodejs.org/en/) to download and install Node.js.
-2. After installation, open the command line and enter `node --version` and `npm --version` to verify the installation.
+---
 
-**Installing Java**
+## 3. Environment Setup
 
-1. Download Java from [Oracle's official website](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) or [AdoptOpenJDK](https://adoptopenjdk.net/).
-2. Install Java and set up the environment variables.
-3. After installation, open the command line and enter `java -version` to verify the installation.
+The following steps outline the setup process for the development environment, covering Windows, macOS, and Linux platforms.
 
-#### 1.2 C++ Development Toolchain
-- **Windows Platform**
-  1. Install [Visual Studio 2022](https://visualstudio.microsoft.com/)
-  2. Select components:
-     - C++ Desktop Development Workload
-     - Windows 10/11 SDK
-     - Clang Compiler (recommended v17)
-     - CMake Integration Support
+---
 
-- **Linux/macOS Platform**
-  ```bash
-  # Ubuntu/Debian
-  sudo apt install clang-17 cmake ninja-build
+### 3.1 Installing Script Language Environments
 
-  # macOS (Homebrew)
-  brew install llvm@17 cmake ninja
-  ```
+#### 3.1.1 Installing Python
 
-#### 1.3 CMake Environment Verification
+1. Visit the [Python official website](https://www.python.org/downloads/) to download and install the version suitable for your operating system.
+2. During installation, check the **Add Python to PATH** option.
+3. Open a terminal and run the following command to verify the installation:
+   ```bash
+   python --version
+   ```
+
+#### 3.1.2 Installing Node.js
+
+1. Visit the [Node.js official website](https://nodejs.org/en/) to download the latest or LTS version.
+2. After installation, verify it in the terminal:
+   ```bash
+   node --version
+   npm --version
+   ```
+
+#### 3.1.3 Installing Java
+
+1. Download and install Java from the [Oracle official website](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) or [AdoptOpenJDK](https://adoptopenjdk.net/).
+2. Configure the `JAVA_HOME` and `PATH` environment variables.
+3. Open a terminal and confirm the installation:
+   ```bash
+   java -version
+   ```
+
+---
+
+### 3.2 C++ Development Toolchain
+
+#### 3.2.1 Clang
+
+1. **Installation Methods**:
+   - **Windows**: Download from the [LLVM official download page](https://releases.llvm.org/download.html) or [GitHub Releases](https://github.com/llvm/llvm-project/releases).
+   - **macOS**: Install via Xcode command line tools:
+     ```bash
+     xcode-select --install
+     ```
+     Or use Homebrew:
+     ```bash
+     brew install llvm
+     ```
+   - **Linux**: Install via package manager, e.g.:
+     ```bash
+     # Ubuntu/Debian:
+     sudo apt update && sudo apt install clang
+     ```
+     For newer versions, refer to the [LLVM official documentation](https://apt.llvm.org/) to add the official repository and install.
+2. **Verify Installation**:
+   ```bash
+   clang --version
+   ```
+
+---
+
+#### 3.2.2 CMake
+
+1. **Installation Methods**:
+   - Download the installer or archive from the [CMake official download page](https://cmake.org/download/).
+   - Alternatively, use a package manager:
+     ```bash
+     # macOS:
+     brew install cmake
+
+     # Ubuntu/Debian:
+     sudo apt install cmake
+     ```
+
+2. **Verify Installation**:
+   ```bash
+   cmake --version
+   ```
+
+---
+
+#### 3.2.3 Conan
+
+1. **Installation**:
+   - Ensure Python is installed, then use pip to install Conan:
+     ```bash
+     pip install conan
+     ```
+
+2. **Verify Installation**:
+   ```bash
+   conan --version
+   ```
+
+---
+
+#### 3.2.4 Ninja
+
+1. **Installation Methods**:
+   - Download the executable from the [Ninja official GitHub](https://github.com/ninja-build/ninja/releases).
+   - Or install via a package manager:
+     ```bash
+     # macOS:
+     brew install ninja
+
+     # Ubuntu/Debian:
+     sudo apt install ninja-build
+     ```
+   - Alternatively, install via pip:
+     ```bash
+     pip install ninja
+     ```
+
+2. **Verify Installation**:
+   ```bash
+   ninja --version
+   ```
+
+---
+
+### 3.3 Package Management Configuration
+
+#### 3.3.1 Conan Initialization
 ```bash
-cmake -B build -S . -G "Visual Studio 17 2022"  # Windows
-cmake -B build -S . -G "Ninja"                 # Unix-like
-```
-
-### 2. Package Management Tool Configuration
-#### 2.1 Installing and Configuring Conan
-```bash
-pip install --upgrade conan==2.1.0
-
-# Initialize configuration
 conan profile detect --force
-conan config set general.revisions_enabled=1
-
-# Users in China may consider setting a mirror source
-conan remote add conan-center https://mirrors.aliyun.com/conan-center
 ```
 
-#### 2.2 Custom Build Configuration
-Edit `~/.conan2/profiles/default`:
+#### 3.3.2 Custom Build Configuration
+
+Edit the `~/.conan2/profiles/default` file with the following configuration:
 ```ini
 [settings]
 os=Windows
@@ -88,147 +169,111 @@ compiler.cppstd=23
 build_type=Release
 
 [conf]
-tools.build:jobs=8  # Adjust according to CPU core count
-tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022
+tools.build:jobs=20
+tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
 ```
 
-### 3. Project Dependency Installation
-```bash
-# Execute the following command to install dependencies (only needed once)
-npm run init
+---
 
-# If Conan dependencies are updated, you can run the following command to install
-npm run install
+### 3.4 Installing Project Dependencies
 
-# If the Antlr4 grammar definitions are updated, you can run the following command to regenerate the parser
-npm run psrgen
-```
+Run the following commands to install project dependencies:
 
-### 4. Build System Configuration
-#### 4.1 Build Targets
-```bash
-# Release build
-npm run build
+1. Initialize dependencies (only needed once):
+   ```bash
+   npm run init
+   ```
 
-# Debug build (supports breakpoint debugging)
-npm run debug
+2. Update Conan dependencies:
+   ```bash
+   npm run install
+   ```
 
-# Clean build artifacts
-npm run clean
-```
+3. If Antlr4 grammar definitions are updated, regenerate the parser:
+   ```bash
+   npm run psrgen
+   ```
 
-#### 4.2 Multi-Platform Compilation Options
-| Parameter    | Windows               | Linux/macOS |
-| ------------ | --------------------- | ----------- |
-| Generator    | Visual Studio 17 2022 | Ninja       |
-| Compilation Parallelism | /MP                   | -j8         |
-| Runtime Library | MD                    | libstdc++   |
+---
 
-## Additional Information
+### 3.5 Building Targets
 
-### 1. Common Issue Solutions
-#### 1.1 VSCode Header File Detection
-Execute the following command in the project root directory:
-```bash
-npm run fix:vsc
-```
+1. Build the Release version:
+   ```bash
+   npm run build
+   ```
 
-#### 1.2 ANTLR4 Runtime Linking Error
-Execute the following command in the project root directory:
-```bash
-npm run fix:link
-```
+2. Build the Debug version (for breakpoint debugging):
+   ```bash
+   npm run debug
+   ```
 
-### 2. Recommended VSCode Configuration
+3. Clean build artifacts:
+   ```bash
+   npm run clean
+   ```
 
-#### 2.1 Basic Configuration
+---
+
+## 4. Recommended VSCode Configuration
+
+### 4.1 Basic Configuration
+
+Create a `.vscode/settings.json` file:
 ```json
-// .vscode/settings.json
 {
     "files.associations": {
-        ".opencmlrc": "json",
+        ".opencmlrc": "json"
     },
-    "cSpell.words": [
-        "antlr",
-        "clipp",
-        "DREF",
-        "FSTRING",
-        "hashable",
-        "IDCL",
-        "Idents",
-        "ifexpr",
-        "MEBA",
-        "MEMA",
-        "NREF",
-        "ODCL",
-        "ONNX",
-        "opers",
-        "reparent",
-        "RETN",
-        "Stmts",
-        "typeas",
-        "UNPK",
-        "VARI",
-        "wptr",
-        "Zhenjie",
-        "opencml",
-        "opencmlrc"
-    ],
-    "editor.indentSize": "tabSize",
-    "editor.tabSize": 4,
+    "editor.tabSize": 4
 }
 ```
 
-#### 2.2 Debug Configuration
+### 4.2 Debug Configuration
+
+Create a `.vscode/launch.json` file:
 ```json
-// .vscode/launch.json
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "C++ Debug (Windows)",
-      "cwd": "${workspaceFolder}",
+      "name": "C++ Debug",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/Debug/camel.exe",
-      "symbolSearchPath": "${workspaceFolder}/build/Debug",
-      "args": ["--format", ".\\test\\format\\format.cml"],
-      "console": "externalTerminal",
-      "logging": {
-        "moduleLoad": false,
-        "trace": true
-      },
+      "args": ["--format", "./test/format/format.cml"],
+      "console": "externalTerminal"
     }
   ]
 }
 ```
 
-#### 2.3 Hint Configuration
+### 4.3 Include Path Configuration
+
+Create a `.vscode/c_cpp_properties.json` file:
 ```json
-// .vscode/c_cpp_properties.json
 {
   "configurations": [
     {
-      "name": "Win32",
       "includePath": [
         "${workspaceFolder}/src",
-        "${workspaceFolder}/third_party",
+        "${workspaceFolder}/vendor",
+        "${workspaceFolder}/third_party"
       ],
-      "defines": [],
-      "cStandard": "c11",
-      "cppStandard": "c++23",
-      "browse": {
-        "path": ["${workspaceFolder}"],
-        "limitSymbolsToIncludedHeaders": true,
-        "databaseFilename": ""
-      }
+      "cppStandard": "c++23"
     }
-  ],
-  "version": 4
+  ]
 }
 ```
 
-## Reference Resources
+---
+
+## 5. Reference Resources
+
 1. [CMake Official Documentation](https://cmake.org/documentation/)
-2. [Best Practices for Conan 2.0](https://docs.conan.io/2/tutorial/consuming_packages.html)
+2. [Conan 2.0 Best Practices](https://docs.conan.io/2/)
 3. [LLVM Clang Toolchain Guide](https://clang.llvm.org/docs/UsersManual.html)
+4. [Node.js Official Documentation](https://nodejs.org/en/docs/)
+5. [Python Official Documentation](https://docs.python.org/3/)
+6. [Ninja Build System](https://ninja-build.org/manual.html)
+7. [Antlr4 Official Documentation](https://www.antlr.org/)

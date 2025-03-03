@@ -14,4 +14,5 @@ import { removeDir, logStep, logDone, BASEDIR } from './common.js'
     // removeDir(path.join(PYPI_BASE, 'stdlib'))
     // removeDir(path.join(PYPI_BASE, 'src', 'camel_lang.egg-info'))
     // logDone('Cleaned build directory')
+    // conan remove *
 })()

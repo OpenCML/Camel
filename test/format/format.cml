@@ -6,7 +6,7 @@ module nn
 
 with <prob: Float>
 macro func dropout(x: Tensor<Float>): Tensor<Float> {
-    return x.map((x: Float) => x * (rand() >= prob))
+    return x.map((x: Float) => x*(rand() >= prob))
 }
 
 export let w1 = {
