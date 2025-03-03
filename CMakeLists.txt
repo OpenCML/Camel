@@ -18,6 +18,7 @@ file(GLOB_RECURSE SRC_FILES
 	"${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
 
+find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
@@ -53,5 +54,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    gtest::gtest
     nlohmann_json::nlohmann_json
 )

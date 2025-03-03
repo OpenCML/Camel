@@ -132,7 +132,9 @@ We welcome contributions! Check out our:
 
 ## 📜 License
 
-Camel is open-source under the [MIT License](LICENSE). 
+Code written by this project’s contributors is licensed under the [MIT License](LICENSE).
+
+Third-party code from antlr4 is licensed under the BSD-3-Clause License.
 
 ---
 
