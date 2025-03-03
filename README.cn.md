@@ -131,7 +131,9 @@ camel hello.cml
 
 ## 📜 许可证
 
-Camel是在[MIT许可证](LICENSE)下的开源软件。
+本项目贡献者编写的代码根据 [MIT 许可证](LICENSE) 授权。
+
+来自 antlr4 的第三方代码根据 BSD-3-Clause 许可证授权。
 
 ---
 

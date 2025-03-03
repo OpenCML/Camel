@@ -1,85 +1,164 @@
-
-
 # Camel 项目开发环境配置指南
 
 [English](setup.en.md) | 中文简体
 
-## 项目简介
-Camel 是一个基于现代 C++ 技术栈构建的AI编程语言，其前端基于Antlr4实现（需要Java），并结合 Python 和 Node.js 工具链实现跨平台开发。本指南将帮助您快速搭建完整的开发环境。
+## 1. 项目简介
 
-## 技术栈要求
-| 组件          | 最低版本 | 推荐版本 | 验证命令           |
-| ------------- | -------- | -------- | ------------------ |
-| Python        | 3.9      | 3.11     | `python --version` |
-| Node.js       | 18       | 20 LTS   | `node -v`          |
-| Java          | 11       | 21       | `java -version`    |
-| Clang         | 19       | 20       | `clang --version`  |
-| CMake         | 3.20     | 3.28     | `cmake --version`  |
-| Conan         | 2.10      | 2.12     | `conan --version`  |
-| Visual Studio | 2019     | 2022     | -                  |
+Camel 是一个采用现代 C++ 技术栈构建的 AI 编程语言，前端基于 Antlr4 实现（需要 Java 环境支持），并整合了 Python 和 Node.js 工具链以实现跨平台开发。本指南旨在帮助开发者快速搭建 Camel 项目的开发环境。
 
-> Visual Studio 仅在 Windows 平台下需要安装，安装时可以同步安装 Clang 组件。
+---
 
-## 环境配置流程
+## 2. 技术栈要求
 
-### 1. 基础工具链安装
-#### 1.1 脚本语言环境
-**安装Python**
+以下是 Camel 项目所需的技术栈及版本要求：
 
-1. 访问 [Python官网](https://www.python.org/downloads/) 下载并安装Python。
-2. 在安装过程中勾选 **Add Python to PATH**。
-3. 安装后，打开命令行输入 `python --version` 验证安装。
+| 组件    | 最低版本 | 推荐版本 | 验证命令           |
+| ------- | -------- | -------- | ------------------ |
+| Python  | 3.9      | 3.11     | `python --version` |
+| Node.js | 18       | 20 LTS   | `node -v`          |
+| Java    | 11       | 21       | `java -version`    |
+| Clang   | 19       | 20       | `clang --version`  |
+| CMake   | 3.20     | 3.28     | `cmake --version`  |
+| Conan   | 2.10     | 2.12     | `conan --version`  |
+| Ninja   | 1.11     | 1.11     | `ninja --version`  |
 
-**安装Node.js**
+确保以上组件安装并配置正确后方可开展项目开发。
 
-1. 访问 [Node.js官网](https://nodejs.org/en/) 下载并安装Node.js。
-2. 安装后，打开命令行输入 `node --version` 和 `npm --version` 验证安装。
+---
 
-**安装Java**
+## 3. 环境配置
 
-1. 访问 [Oracle官网下载Java](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) 或 [AdoptOpenJDK](https://adoptopenjdk.net/)。
-2. 安装Java并设置环境变量。
-3. 安装后，打开命令行输入 `java -version` 验证安装。
+以下为开发环境的配置步骤，覆盖 Windows、macOS 和 Linux 平台的具体操作。
 
-#### 1.2 C++ 开发工具链
-- **Windows 平台**
-  1. 安装 [Visual Studio 2022](https://visualstudio.microsoft.com/)
-  2. 选择组件：
-     - C++ 桌面开发工作负载
-     - Windows 10/11 SDK
-     - Clang 编译器（推荐 v17）
-     - Cmake 集成支持
+---
 
-- **Linux/macOS 平台**
-  ```bash
-  # Ubuntu/Debian
-  sudo apt install clang-17 cmake ninja-build
+### 3.1 脚本语言环境安装
 
-  # macOS (Homebrew)
-  brew install llvm@17 cmake ninja
-  ```
+#### 3.1.1 安装 Python
 
-#### 1.3 CMake 环境验证
+1. 前往 [Python 官网](https://www.python.org/downloads/) 下载并安装适合您操作系统的版本。
+2. 安装时勾选 **Add Python to PATH** 选项。
+3. 打开终端，执行以下命令验证安装是否成功：
+   ```bash
+   python --version
+   ```
+
+#### 3.1.2 安装 Node.js
+
+1. 访问 [Node.js 官网](https://nodejs.org/en/) 下载最新版或 LTS 版本。
+2. 安装完成后，在终端中运行以下命令验证安装：
+   ```bash
+   node --version
+   npm --version
+   ```
+
+#### 3.1.3 安装 Java
+
+1. 可从 [Oracle 官网](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) 或 [AdoptOpenJDK](https://adoptopenjdk.net/) 下载并安装 Java。
+2. 配置 `JAVA_HOME` 和 `PATH` 环境变量。
+3. 打开终端，运行以下命令确认安装：
+   ```bash
+   java -version
+   ```
+
+---
+
+### 3.2 C++ 开发工具链
+
+#### 3.2.1 Clang
+
+1. **安装方法**：
+   - **Windows**：从 [LLVM 官方下载页面](https://releases.llvm.org/download.html) 或 [GitHub Release](https://github.com/llvm/llvm-project/releases) 获取安装程序。
+   - **macOS**：安装 Xcode 命令行工具：
+     ```bash
+     xcode-select --install
+     ```
+     或使用 Homebrew：
+     ```bash
+     brew install llvm
+     ```
+   - **Linux**：通过包管理器安装，例如：
+     ```bash
+     # Ubuntu/Debian:
+     sudo apt update && sudo apt install clang
+     ```
+     若需要更高版本，可参考 [LLVM 官方文档](https://apt.llvm.org/) 添加官方仓库并安装。
+2. **验证安装**：
+   ```bash
+   clang --version
+   ```
+
+---
+
+#### 3.2.2 CMake
+
+1. **安装方法**：
+   - 从 [CMake 官方下载页面](https://cmake.org/download/) 获取适合系统的安装程序或压缩包。
+   - 也可以使用系统包管理器安装：
+     ```bash
+     # macOS:
+     brew install cmake
+
+     # Ubuntu/Debian:
+     sudo apt install cmake
+     ```
+
+2. **验证安装**：
+   ```bash
+   cmake --version
+   ```
+
+---
+
+#### 3.2.3 Conan
+
+1. **安装方法**：
+   - 确保已安装 Python，然后使用 pip 安装 Conan：
+     ```bash
+     pip install conan
+     ```
+
+2. **验证安装**：
+   ```bash
+   conan --version
+   ```
+
+---
+
+#### 3.2.4 Ninja
+
+1. **安装方法**：
+   - 从 [Ninja 官方 GitHub](https://github.com/ninja-build/ninja/releases) 下载可执行文件。
+   - 或通过包管理器安装：
+     ```bash
+     # macOS:
+     brew install ninja
+
+     # Ubuntu/Debian:
+     sudo apt install ninja-build
+     ```
+   - 或通过 pip 安装：
+     ```bash
+     pip install ninja
+     ```
+
+2. **验证安装**：
+   ```bash
+   ninja --version
+   ```
+
+---
+
+### 3.3 包管理工具配置
+
+#### 3.3.1 Conan 初始化配置
 ```bash
-cmake -B build -S . -G "Visual Studio 17 2022"  # Windows
-cmake -B build -S . -G "Ninja"                 # Unix-like
-```
-
-### 2. 包管理工具配置
-#### 2.1 Conan 安装与配置
-```bash
-pip install --upgrade conan==2.1.0
-
-# 初始化配置
 conan profile detect --force
-conan config set general.revisions_enabled=1
-
-# 国内用户可以考虑设置镜像源
-conan remote add conan-center https://mirrors.aliyun.com/conan-center
 ```
 
-#### 2.2 自定义构建配置
-编辑 `~/.conan2/profiles/default`：
+#### 3.3.2 自定义构建配置
+
+编辑 `~/.conan2/profiles/default` 文件，配置如下：
 ```ini
 [settings]
 os=Windows
@@ -90,147 +169,111 @@ compiler.cppstd=23
 build_type=Release
 
 [conf]
-tools.build:jobs=8  # 根据CPU核心数调整
-tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022
+tools.build:jobs=20
+tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
 ```
 
-### 3. 项目依赖安装
-```bash
-# 执行以下命令一键安装（仅需执行一次）
-npm run init
+---
 
-# 如果Conan依赖有更新，可以执行以下命令安装
-npm run install
+### 3.4 项目依赖安装
 
-# 如果Antlr4语法定义有更新，可以执行以下命令重新生成parser
-npm run psrgen
-```
+执行以下命令完成依赖安装：
 
-### 4. 构建系统配置
-#### 4.1 构建目标
-```bash
-# Release构建
-npm run build
+1. 初始化依赖（仅需执行一次）：
+   ```bash
+   npm run init
+   ```
 
-# Debug构建（支持断点调试）
-npm run debug
+2. 更新 Conan 依赖：
+   ```bash
+   npm run install
+   ```
 
-# 清理构建产物
-npm run clean
-```
+3. 若 Antlr4 语法定义有变更，重新生成解析器：
+   ```bash
+   npm run psrgen
+   ```
 
-#### 4.2 多平台编译选项
-| 参数       | Windows               | Linux/macOS |
-| ---------- | --------------------- | ----------- |
-| 生成器     | Visual Studio 17 2022 | Ninja       |
-| 编译并行数 | /MP                   | -j8         |
-| 运行时库   | MD                    | libstdc++   |
+---
 
-## 其他说明
+### 3.5 编译目标构建
 
-### 1. 常见问题解决方案
-#### 1.1 VSCode 头文件检测
-在项目根目录执行命令：
-```bash
-npm run fix:vsc
-```
+1. 构建 Release 版本：
+   ```bash
+   npm run build
+   ```
 
-#### 1.2 ANTLR4 运行时链接错误
-在项目根目录执行命令：
-```bash
-npm run fix:link
-```
+2. 构建 Debug 版本（支持断点调试）：
+   ```bash
+   npm run debug
+   ```
 
-### 2. VSCode 推荐配置
+3. 清理构建产物：
+   ```bash
+   npm run clean
+   ```
 
-#### 2.1 基础配置
+---
+
+## 4. VSCode 配置推荐
+
+### 4.1 基础配置
+
+创建 `.vscode/settings.json` 文件：
 ```json
-// .vscode/settings.json
 {
     "files.associations": {
-        ".opencmlrc": "json",
+        ".opencmlrc": "json"
     },
-    "cSpell.words": [
-        "antlr",
-        "clipp",
-        "DREF",
-        "FSTRING",
-        "hashable",
-        "IDCL",
-        "Idents",
-        "ifexpr",
-        "MEBA",
-        "MEMA",
-        "NREF",
-        "ODCL",
-        "ONNX",
-        "opers",
-        "reparent",
-        "RETN",
-        "Stmts",
-        "typeas",
-        "UNPK",
-        "VARI",
-        "wptr",
-        "Zhenjie",
-        "opencml",
-        "opencmlrc"
-    ],
-    "editor.indentSize": "tabSize",
-    "editor.tabSize": 4,
+    "editor.tabSize": 4
 }
 ```
 
-#### 2.2 调试配置
+### 4.2 调试配置
+
+创建 `.vscode/launch.json` 文件：
 ```json
-// .vscode/launch.json
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "C++ Debug (Windows)",
-      "cwd": "${workspaceFolder}",
+      "name": "C++ Debug",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/Debug/camel.exe",
-      "symbolSearchPath": "${workspaceFolder}/build/Debug",
-      "args": ["--format", ".\\test\\format\\format.cml"],
-      "console": "externalTerminal",
-      "logging": {
-        "moduleLoad": false,
-        "trace": true
-      },
+      "args": ["--format", "./test/format/format.cml"],
+      "console": "externalTerminal"
     }
   ]
 }
 ```
 
-#### 2.3 提示配置
+### 4.3 头文件提示配置
+
+创建 `.vscode/c_cpp_properties.json` 文件：
 ```json
-// .vscode/c_cpp_properties.json
 {
   "configurations": [
     {
-      "name": "Win32",
       "includePath": [
         "${workspaceFolder}/src",
-        "${workspaceFolder}/third_party",
+        "${workspaceFolder}/vendor",
+        "${workspaceFolder}/third_party"
       ],
-      "defines": [],
-      "cStandard": "c11",
-      "cppStandard": "c++23",
-      "browse": {
-        "path": ["${workspaceFolder}"],
-        "limitSymbolsToIncludedHeaders": true,
-        "databaseFilename": ""
-      }
+      "cppStandard": "c++23"
     }
-  ],
-  "version": 4
+  ]
 }
 ```
 
-## 参考资源
+---
+
+## 5. 参考资源
+
 1. [CMake 官方文档](https://cmake.org/documentation/)
-2. [Conan 2.0 最佳实践](https://docs.conan.io/2/tutorial/consuming_packages.html)
-3. [LLVM Clang 工具链指南](https://clang.llvm.org/docs/UsersManual.html)
+2. [Conan 2.0 最佳实践](https://docs.conan.io/2/)
+3. [LLVM Clang 工具链指南](https://clang.llvm.org/docs/UsersManual.html) 
+4. [Node.js 官方文档](https://nodejs.org/en/docs/)
+5. [Python 官方文档](https://docs.python.org/3/)
+6. [Ninja 构建系统](https://ninja-build.org/manual.html)
+7. [Antlr4 官方文档](https://www.antlr.org/)

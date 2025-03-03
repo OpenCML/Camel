@@ -1,5 +1,5 @@
 [requires]
-antlr4-cppruntime/4.13.1
+gtest/1.15.0
 nlohmann_json/3.11.3
 
 [generators]

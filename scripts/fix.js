@@ -146,6 +146,7 @@ function updateCppProperties(depMap) {
 
             // 额外添加 ${workspaceFolder}/src, ${workspaceFolder}/third_party
             newPaths.push(path.join('${workspaceFolder}', 'src'))
+            newPaths.push(path.join('${workspaceFolder}', 'vendor'))
             newPaths.push(path.join('${workspaceFolder}', 'third_party'))
 
             depMap.forEach((_, pkgName) => {
@@ -168,29 +169,6 @@ function updateCppProperties(depMap) {
     }
 }
 
-// 重命名ANTLR4库文件
-function renameAntlr4Libs(depMap) {
-    logStep('Renaming ANTLR4 static libraries...')
-
-    const antlrPaths = depMap.get('antlr4-cppruntime') || []
-    antlrPaths.forEach((pkgPath) => {
-        const libPath = path.join(pkgPath, 'p', 'lib', 'antlr4-runtime-static.lib')
-        const newPath = path.join(path.dirname(libPath), 'antlr4-runtime.lib')
-
-        if (fs.existsSync(newPath)) {
-            logDone(`Library name already fixed at ${pkgPath}`)
-            return
-        }
-
-        try {
-            fs.renameSync(libPath, newPath)
-            logDone(`Renamed library at ${libPath}`)
-        } catch (e) {
-            logWarn(`Failed to rename ${libPath}: ${e.message}`)
-        }
-    })
-}
-
 async function main() {
     const arg = process.argv[2]
 
@@ -207,9 +185,8 @@ async function main() {
             copyToVendor(depMap)
             // 5. 更新C++配置
             updateCppProperties(depMap)
-        } else if (arg === 'link') {
-            // 6. 处理ANTLR4库
-            renameAntlr4Libs(depMap)
+        } else {
+            logWarn('No operation specified. Use "vsc" to update VSCode settings.')
         }
 
         logDone('All operations completed successfully!')

@@ -6,7 +6,7 @@ export default function main() {
     process.chdir(path.join(BASEDIR, 'build'))
 
     runCommand(
-        'cmake .. -G "Visual Studio 17" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake'
+        'cmake .. -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake'
     )
     runCommand('cmake --build . --config Release')
 
