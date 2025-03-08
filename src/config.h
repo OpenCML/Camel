@@ -23,21 +23,7 @@
 
 // enum class mode {run, dump, help};
 enum class Command { help, format, check, inspect, build, serve, debug }; // Modes of operation
-extern std::string targetFile;
-extern std::string outputFile;
 
-extern std::string errorFormat;
-
-extern std::vector<std::string> scriptsDirs;
-
-extern bool profile;
-extern bool noCache;
-
-extern bool semanticOnly;
-
-extern unsigned int repeat;
-
-extern unsigned int maxThreads;
 
 bool parseArgs(int argc, char *argv[]);
 
@@ -46,16 +32,17 @@ std::string quotePrefer = "single"; // Quote preference (default to single quote
 std::string configFile = "";        // Configuration file path
 bool useTabs = false;               // Whether to use tabs for indentation
 bool inplace = false;               // Whether to modify the input file in place
-bool ignore = false;                // Whether to ignore the definition file
+bool ignoreDefiFile = false;                // Whether to ignore the definition file
+bool formatCode = false;
 unsigned int tabSize = 4;           // Indentation size in spaces
 unsigned int maxWidth = 80;         // Max line width
 }; // namespace Format
 namespace Check {
 bool lexical = false;          // Whether to check lexical errors
 bool syntaxOnly = false;       // Whether to check syntax only
-bool ignore = false;           // Whether to ignore the definition file
-string outputFormat = "json";  // Output format (default to JSON)
-string configFilePath = "";    // Configuration file path
+bool ignoreDefiFile = false;           // Whether to ignore the definition file
+std::string outputFormat = "json";  // Output format (default to JSON)
+std::string configFilePath = "";    // Configuration file path
 unsigned int maxWaring = 1000; // Max warnings
 } // namespace Check
 namespace Inspect {
@@ -79,3 +66,20 @@ unsigned int serverPort;                   // Server port
 namespace Debug {
 std::string variable = "";                     // Whether to optimize the code
 } // namespace Debug
+extern std::string targetFile;
+extern std::string outputFile;
+
+extern std::string errorFormat;
+
+extern std::vector<std::string> scriptsDirs;
+
+extern bool profile;
+extern bool noCache;
+
+extern bool semanticOnly;
+
+extern unsigned int repeat;
+
+extern bool Inspect::dumpCST, Inspect::dumpAST, Inspect::dumpGCT, Inspect::dumpGIR, Inspect::dumpONNX;
+
+extern unsigned int maxThreads;

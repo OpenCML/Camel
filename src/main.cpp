@@ -41,7 +41,7 @@
 
 using namespace antlr4;
 using namespace std;
-
+using namespace Inspect;
 #define DEBUG_LEVEL -1
 
 int main(int argc, char *argv[]) {
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
             }
             return 0;
         }
-
+        using Format::formatCode;
         formatCode = true;
         if (formatCode && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
