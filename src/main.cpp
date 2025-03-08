@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 08, 2025
+ * Updated: Mar. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,10 +41,12 @@
 
 using namespace antlr4;
 using namespace std;
-using namespace Inspect;
+using namespace CmdLineArgs::Inspect;
+
 #define DEBUG_LEVEL -1
 
 int main(int argc, char *argv[]) {
+
     if (!parseArgs(argc, argv))
         return 0;
 
@@ -126,8 +128,7 @@ int main(int argc, char *argv[]) {
             }
             return 0;
         }
-        using Format::formatCode;
-        formatCode = true;
+        using CmdLineArgs::Format::formatCode;
         if (formatCode && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
             const string formattedCode = any_cast<string>(formatter.visit(tree));
