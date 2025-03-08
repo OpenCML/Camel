@@ -22,27 +22,63 @@
 #include <string>
 
 // enum class mode {run, dump, help};
-
+enum class Command { help, format, check, inspect, build, serve, debug }; // Modes of operation
 extern std::string targetFile;
 extern std::string outputFile;
 
 extern std::string errorFormat;
 
-extern std::vector<std::string> includeDirs;
 extern std::vector<std::string> scriptsDirs;
 
 extern bool profile;
-extern bool verbose;
 extern bool noCache;
 
-extern bool syntaxOnly;
 extern bool semanticOnly;
-
-extern bool dumpCST, dumpAST, dumpGIR, dumpONNX, dumpTokens, formatCode;
 
 extern unsigned int repeat;
 
 extern unsigned int maxThreads;
-extern unsigned int serverPort;
 
 bool parseArgs(int argc, char *argv[]);
+
+namespace Format {
+std::string quotePrefer = "single"; // Quote preference (default to single quotes)
+std::string configFile = "";        // Configuration file path
+bool useTabs = false;               // Whether to use tabs for indentation
+bool inplace = false;               // Whether to modify the input file in place
+bool ignore = false;                // Whether to ignore the definition file
+unsigned int tabSize = 4;           // Indentation size in spaces
+unsigned int maxWidth = 80;         // Max line width
+}; // namespace Format
+namespace Check {
+bool lexical = false;          // Whether to check lexical errors
+bool syntaxOnly = false;       // Whether to check syntax only
+bool ignore = false;           // Whether to ignore the definition file
+string outputFormat = "json";  // Output format (default to JSON)
+string configFilePath = "";    // Configuration file path
+unsigned int maxWaring = 1000; // Max warnings
+} // namespace Check
+namespace Inspect {
+bool dumpTokens = false; // Whether to dump tokens
+bool dumpCST = false;    // Whether to dump CST
+bool dumpAST = false;    // Whether to dump AST
+bool dumpGCT = false;    // Whether to dump GCT
+bool dumpGIR = false;    // Whether to dump GIR
+bool dumpONNX = false;   // Whether to dump ONNX
+int passUntil = -1;      // Pass until the given pass
+} // namespace Inspect
+namespace Build {
+bool optimize = false;                     // Whether to optimize the code
+bool rollup = false;                       // Whether to rollup the code
+bool verbose = false;                      // Whether to show verbose information
+std::string warningSwitch = "on";          // Warning switch (default to on)
+std::string outputDir = "";                // Output directory
+std::string serverHost = "";               // Server host
+std::string stdLibPath = "./stdlib";       // Standard library path
+std::vector<std::string> includeDirs = {}; // Include directories
+unsigned int serverPort;                   // Server port
+} // namespace Build
+namespace Debug {
+std::string stdLibPath = "./stdlib";       // Standard library path
+std::vector<std::string> includeDirs = {}; // Include directories
+} // namespace Debug
