@@ -31,8 +31,11 @@ using namespace Build;   // Build at command-line parameters
 using namespace Debug;   // Debug at command-line parameters
 string targetFile = "";
 string outputFile = "";
-std::string errorFormat = "text";
-vector<string> scriptsDirs = {};
+string package = "";
+string schedular = "";
+string errorFormat = "text";
+string stdLibPath = "./stdlib";
+vector<string> includeDirs = {}; // Include directories
 bool profile = false;
 bool noCache = false;
 bool semanticOnly = false;
@@ -44,7 +47,7 @@ void _printArgs() {
     cout << "Output file: " << outputFile << endl;
     cout << "Error format: " << errorFormat << endl;
     cout << "Include dirs: ";
-    for (auto &dir : Build::includeDirs) {
+    for (auto &dir : includeDirs) {
         cout << dir << " ";
     }
     cout << endl;
@@ -72,24 +75,26 @@ bool parseArgs(int argc, char *argv[]) {
     bool printArgs = false;
     bool showCopyRightInfo = false;   // Copyright information
     Command selected = Command::help; // Selected mode(default to help)
-    auto format = (command("format").set(selected, Command::format).doc("format the code"),
-                   value("input", targetFile).doc("input file"),
-                   (option("-t", "--tab-size") & integer("tabsize", tabSize)).doc("indentation size in spaces"),
-                   option("-u", "--use-tabs").set(useTabs).doc("use tabs instead of spaces for indentation"),
-                   (option("-q", "--quote-prefer") & value(quotePrefer)).doc("quote preference: single or double"),
-                   (option("-m", "--max-width") & integer("max width", maxWidth)).doc("max line width"),
-                   (option("-c", "--config") & value(configFile)).doc("config file path"),
-                   option("--ignore").set(Format::ignore).doc("ignore the definition file"),
-                   option("-i", "--inplace").set(inplace).doc("modify the input file in place"));
-    auto check = (command("check").set(selected, Command::check).doc("check the code"),
-                  value("input", targetFile).doc("input file"),
-                  option("-I", "--lexical-only").set(lexical).doc("indentation size in spaces"),
-                  option("--syntax-only").set(syntaxOnly).doc("syntax only"),
-                  (option("-O", "--output-format") & value(outputFormat)).doc("output format: text or json"),
-                  (option("-N", "--max-warning") & integer("max warnings", maxWaring)).doc("max warnings"),
-                  (option("-c", "--config") & value("config file path", configFilePath)).doc("config file path"),
-                  option("-e", "--ignore").set(Check::ignore).doc("ignore the definition file"),
-                  option("-o", "--output") & value("output file", outputFile = "console").doc("output file"));
+    auto format = 
+        (command("format").set(selected, Command::format).doc("format the code"),
+        value("input", targetFile).doc("input file"),
+        (option("-t", "--tab-size") & integer("tabsize", tabSize)).doc("indentation size in spaces"),
+        option("-u", "--use-tabs").set(useTabs).doc("use tabs instead of spaces for indentation"),
+        (option("-q", "--quote-prefer") & value(quotePrefer)).doc("quote preference: single or double"),
+        (option("-m", "--max-width") & integer("max width", maxWidth)).doc("max line width"),
+        (option("-c", "--config") & value(configFile)).doc("config file path"),
+        option("--ignore").set(Format::ignore).doc("ignore the definition file"),
+        option("-i", "--inplace").set(inplace).doc("modify the input file in place"));
+    auto check = 
+        (command("check").set(selected, Command::check).doc("check the code"),
+         value("input", targetFile).doc("input file"),
+         option("-I", "--lexical-only").set(lexical).doc("indentation size in spaces"),
+         option("--syntax-only").set(syntaxOnly).doc("syntax only"),
+         (option("-O", "--output-format") & value(outputFormat)).doc("output format: text or json"),
+         (option("-N", "--max-warning") & integer("max warnings", maxWaring)).doc("max warnings"),
+         (option("-c", "--config") & value("config file path", configFilePath)).doc("config file path"),
+         option("-e", "--ignore").set(Check::ignore).doc("ignore the definition file"),
+         option("-o", "--output") & value("output file", outputFile = "console").doc("output file"));
     auto inspect =
         (command("inspect").set(selected, Command::inspect).doc("inspect the code"),
          value("input", targetFile).doc("input file"), option("-tT", "--tokens").set(dumpTokens).doc("dump tokens"),
@@ -107,8 +112,8 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-W", "--warning") & value("warning switch", warningSwitch)).doc("warning switch"),
          (option("--output") & (rollup ? value("output dirctary", outputDir) : value("output file", outputFile)))
              .doc("output file or directory"),
-         option("--include") & values("include dir", Build::includeDirs).doc("add include directory"),
-         (option("--stdlib") & value("stdlib dir", Build::stdLibPath)).doc("add stdlib path(default: ./stdlib)"));
+         option("--include") & values("include dir", includeDirs).doc("add include directory"),
+         (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"));
     auto serve =
         (command("serve").set(selected, Command::serve).doc(" the code"), value("input", targetFile).doc("input file"),
          (option("--host") & value("host", serverHost)).doc("host"),
@@ -116,24 +121,24 @@ bool parseArgs(int argc, char *argv[]) {
     auto debug =
         (command("debug").set(selected, Command::debug).doc("debug the code"),
          value("input", targetFile).doc("input file"),
-         option("--include") & values("include dir", Debug::includeDirs).doc("add include directory"),
-         (option("--stdlib") & value("stdlib dir", Debug::stdLibPath)).doc("add stdlib path(default: ./stdlib)"));
+         (option("--variable") & value("variable", variable)).doc("variable"), /*not finished yet*/
+         option("--print").doc("print degug information"),                     /*not finished yet*/
+         option("--include") & values("include dir", includeDirs).doc("add include directory"),
+         (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"));
     auto cli =
-        (format | check | inspect | build |
+        (format | check | inspect | build | debug |
          (option("-h", "--help").set(showHelp).doc("show this help message"),
-          option("-v", "--version").set(showVersion).doc("show version"),
-          option("-a", "--about").set(showCopyRightInfo).doc("show copyright and related information")) |
-         ((option("-o", "--output") & value("output file", outputFile)).doc("output file"),
-          (option("-r", "--repeat") & integer("repeat", repeat)).doc("repeat times"),
-          (option("-t", "--threads") & integer("max threads", maxThreads)).doc("max threads"),
-          (option("-p", "--port") & integer("server port", serverPort)).doc("server port"),
-          option("-g", "--verbose").set(verbose).doc("show verbose information"),
-          option("-n", "--no-cache").set(noCache).doc("do not use cache"),
-          option("--semantic-only").set(semanticOnly).doc("semantic only"),
-          (option("-e", "--error-format") & value("error format", errorFormat)).doc("error format"),
-          option("-P", "--profile").set(profile).doc("profile the perf"),
-          (option("-S", "--scripts") & values("extern scripts dir", scriptsDirs)).doc("add scripts directory"),
-          option("-R", "--print-args").set(printArgs).doc("print arguments"), opt_value("target file", targetFile)));
+         option("-v", "--version").set(showVersion).doc("show version"),
+         option("-a", "--about").set(showCopyRightInfo).doc("show copyright and related information"),
+         (option("--doc") & value("package name", package)).doc("show document of the package")) |
+         option("--profile").set(profile).doc("profile the perf"),
+         (option("--scheduler") & value("schedular type",schedular)).doc("scheduler type"),
+         (option("-t", "--threads") & integer("max threads", maxThreads)).doc("max threads"),
+         option("-n", "--no-cache").set(noCache).doc("do not use cache"),
+         (option("-r", "--repeat") & integer("repeat times", repeat)).doc("repeat times"),
+         (option("--include") & values("include dir",includeDirs)).doc("add include directory"),
+         (option("--stdlib") & value("stdlib dir",stdLibPath)).doc("add stdlib path(default:./stdlib)")
+        );
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;

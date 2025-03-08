@@ -74,11 +74,8 @@ bool verbose = false;                      // Whether to show verbose informatio
 std::string warningSwitch = "on";          // Warning switch (default to on)
 std::string outputDir = "";                // Output directory
 std::string serverHost = "";               // Server host
-std::string stdLibPath = "./stdlib";       // Standard library path
-std::vector<std::string> includeDirs = {}; // Include directories
 unsigned int serverPort;                   // Server port
 } // namespace Build
 namespace Debug {
-std::string stdLibPath = "./stdlib";       // Standard library path
-std::vector<std::string> includeDirs = {}; // Include directories
+std::string variable = "";                     // Whether to optimize the code
 } // namespace Debug
