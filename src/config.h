@@ -13,36 +13,83 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 01, 2025
+ * Updated: Mar. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
+
+#ifndef CONFIG_H
+#define CONFIG_H
+#endif
 
 #define VERSION "0.0.12"
 
 #include <string>
 
 // enum class mode {run, dump, help};
+enum class Command { HELP, FORMAT, CHECK, INSPECT, BUILD, SERVE, DEBUG }; // Modes of operation
+
+bool parseArgs(int argc, char *argv[]);
+
+namespace CmdLineArgs::Format {
+extern std::string quotePrefer; // Quote preference (default to single quotes)
+extern std::string configFile;        // Configuration file path
+extern bool useTabs;               // Whether to use tabs for indentation
+extern bool inplace;               // Whether to modify the input file in place
+extern bool ignoreDefiFile;        // Whether to ignore the definition file
+extern bool formatCode;
+extern unsigned int tabSize;   // Indentation size in spaces
+extern unsigned int maxWidth; // Max line width
+}; // namespace CmdLineArgs::Format
+
+namespace CmdLineArgs::Check {
+extern bool lexical;              // Whether to check lexical errors
+extern bool syntaxOnly;           // Whether to check syntax only
+extern bool ignoreDefiFile;       // Whether to ignore the definition file
+extern std::string outputFormat; // Output format (default to JSON)
+extern std::string configFilePath;   // Configuration file path
+extern unsigned int maxWaring;     // Max warnings
+} // namespace CmdLineArgs::Check
+
+namespace CmdLineArgs::Inspect {
+extern bool dumpTokens; // Whether to dump tokens
+extern bool dumpCST;    // Whether to dump CST
+extern bool dumpAST ;    // Whether to dump AST
+extern bool dumpGCT ;    // Whether to dump GCT
+extern bool dumpGIR;    // Whether to dump GIR
+extern bool dumpONNX;   // Whether to dump ONNX
+extern int passUntil;             // Pass until the given pass
+} // namespace CmdLineArgs::Inspect
+
+namespace CmdLineArgs::Build {
+extern bool optimize;            // Whether to optimize the code
+extern bool rollup;              // Whether to rollup the code
+extern bool verbose;             // Whether to show verbose information
+extern std::string warningSwitch; // Warning switch (default to on)
+extern std::string outputDir;       // Output directory
+} // namespace CmdLineArgs::Build
+
+namespace CmdLineArgs::Serve {
+extern std::string serverHost; // Server host
+extern unsigned int serverPort;     // Server port
+} // namespace CmdLineArgs::Serve
+
+namespace CmdLineArgs::Debug {
+extern std::string variable; // Whether to optimize the code
+} // namespace CmdLineArgs::Debug
 
 extern std::string targetFile;
 extern std::string outputFile;
 
 extern std::string errorFormat;
 
-extern std::vector<std::string> includeDirs;
 extern std::vector<std::string> scriptsDirs;
 
 extern bool profile;
-extern bool verbose;
+
 extern bool noCache;
 
-extern bool syntaxOnly;
 extern bool semanticOnly;
-
-extern bool dumpCST, dumpAST, dumpGIR, dumpONNX, dumpTokens, formatCode;
 
 extern unsigned int repeat;
 
 extern unsigned int maxThreads;
-extern unsigned int serverPort;
-
-bool parseArgs(int argc, char *argv[]);
