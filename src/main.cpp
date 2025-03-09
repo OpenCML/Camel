@@ -127,20 +127,17 @@ int main(int argc, char *argv[]) {
                    << setw(3) << left << token->getCharPositionInLine() << "] (" << token->getChannel()
                    << ") : " << token->getText() << endl;
             }
-            return 0;
         }
-        using CmdLineArgs::Format::formatCode;
-        if (formatCode && !hasParseError) {
+
+        if (CmdLineArgs::Format::formatCode && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
             const string formattedCode = any_cast<string>(formatter.visit(tree));
             os << formattedCode;
-            return 0;
         }
 
         if (dumpCST) {
             auto visitor = CSTDumpVisitor();
             visitor.visit(tree);
-            return 0;
         }
 
         if ((dumpAST || dumpGIR) && !hasParseError) {
@@ -185,7 +182,6 @@ int main(int argc, char *argv[]) {
 
             if (dumpAST) {
                 ast->print();
-                return 0;
             }
 
             if (dumpGIR) {
@@ -201,7 +197,6 @@ int main(int argc, char *argv[]) {
                 GraphVizPass pass(ctx);
                 auto res = pass.apply(ctx->rootGraph());
                 os << any_cast<string>(res);
-                return 0;
             }
         }
 
