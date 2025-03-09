@@ -30,7 +30,7 @@ const parseGitLog = (logOutput) => {
     return { totalInsertions, totalDeletions }
 }
 
-exec('git log --numstat -1', (error, stdout, stderr) => {
+exec('git show --numstat -1', (error, stdout, stderr) => {
     if (error) {
         console.error(`Error executing git log: ${error.message}`)
         return
