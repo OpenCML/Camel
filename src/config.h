@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 08, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,11 +25,22 @@
 
 #include <string>
 
-// enum class mode {run, dump, help};
-enum class Command { HELP, FORMAT, CHECK, INSPECT, BUILD, SERVE, DEBUG }; // Modes of operation
+enum class Command { RUN, INFO, FORMAT, CHECK, INSPECT, BUILD, SERVE, DEBUG }; // Modes of operation
 
 bool parseArgs(int argc, char *argv[]);
+
 namespace CmdLineArgs {
+extern std::string targetFile;
+extern std::string outputFile;
+extern std::string errorFormat;
+extern std::vector<std::string> scriptsDirs;
+
+extern bool profile;
+extern bool noCache;
+extern bool semanticOnly;
+extern unsigned int repeat;
+extern unsigned int maxThreads;
+
 namespace Format {
 extern std::string quotePrefer; // Quote preference (default to single quotes)
 extern std::string configFile;  // Configuration file path
@@ -76,20 +87,3 @@ namespace Debug {
 extern std::string variable; // Whether to optimize the code
 } // namespace Debug
 } // namespace CmdLineArgs
-
-extern std::string targetFile;
-extern std::string outputFile;
-
-extern std::string errorFormat;
-
-extern std::vector<std::string> scriptsDirs;
-
-extern bool profile;
-
-extern bool noCache;
-
-extern bool semanticOnly;
-
-extern unsigned int repeat;
-
-extern unsigned int maxThreads;

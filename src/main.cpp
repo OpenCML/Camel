@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 08, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,12 +41,13 @@
 
 using namespace antlr4;
 using namespace std;
+
+using namespace CmdLineArgs;
 using namespace CmdLineArgs::Inspect;
 
 #define DEBUG_LEVEL -1
 
 int main(int argc, char *argv[]) {
-
     if (!parseArgs(argc, argv))
         return 0;
 

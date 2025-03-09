@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 08, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 #include <iostream>
@@ -25,6 +25,23 @@ using namespace clipp;
 using namespace std;
 
 namespace CmdLineArgs {
+string targetFile = "";
+string outputFile = "";
+string package = "";
+string schedular = "";
+string errorFormat = "text";
+string stdLibPath = "./stdlib";
+vector<string> includeDirs = {}; // Include directories
+vector<string> targetFiles = {};
+
+bool profile = false;
+bool noCache = false;
+bool semanticOnly = false;
+bool setThreads = false;
+bool setRepeat = false;
+bool setStdLibPath = false;
+unsigned int repeat = 1;
+unsigned int maxThreads = 1;
 
 namespace Format {
 string quotePrefer = "";     // Quote preference (default to single quotes)
@@ -71,7 +88,6 @@ unsigned int serverPort; // Server port
 namespace Debug {
 string variable = ""; // Whether to optimize the code
 } // namespace Debug
-
 } // namespace CmdLineArgs
 
 using namespace CmdLineArgs;
@@ -81,23 +97,6 @@ using namespace CmdLineArgs::Inspect;
 using namespace CmdLineArgs::Build;
 using namespace CmdLineArgs::Debug;
 using namespace CmdLineArgs::Serve;
-
-string targetFile = "";
-string outputFile = "";
-string package = "";
-string schedular = "";
-string errorFormat = "text";
-string stdLibPath = "./stdlib";
-vector<string> includeDirs = {}; // Include directories
-vector<string> targetFiles = {};
-bool profile = false;
-bool noCache = false;
-bool semanticOnly = false;
-bool setThreads = false;
-bool setRepeat = false;
-bool setStdLibPath = false;
-unsigned int repeat = 1;
-unsigned int maxThreads = 1;
 
 void _printFormatArgs() {
     cout << "Format args: " << endl;
@@ -187,9 +186,10 @@ void _printHelpArgs() {
     }
     cout << "\tstd-lib-path:" << stdLibPath << endl;
 }
-void cli_test(auto selected) {
+
+void printCliArgs(Command selected) {
     switch (selected) {
-    case Command::HELP:
+    case Command::INFO:
         _printHelpArgs();
         break;
     case Command::FORMAT:
@@ -215,13 +215,32 @@ void cli_test(auto selected) {
         break;
     }
 }
+
 bool parseArgs(int argc, char *argv[]) {
     bool showHelp = false;    // Help information
     bool showVersion = false; // Version information
     bool showDocs = false;
-    bool printArgs = false;
-    bool showCopyRightInfo = false;   // Copyright information
-    Command selected = Command::HELP; // Selected mode(default to help)
+    bool showCopyRightInfo = false; // Copyright information
+
+    Command selected = Command::RUN;
+
+    auto run = (option("-P", "--profile").set(profile).doc("profile the perf"),
+                (option("-S", "--scheduler") & value("schedular type", schedular)).doc("scheduler type"),
+                (option("-t", "--threads").set(setThreads) & integer("max threads", maxThreads)).doc("max threads"),
+                option("-n", "--no-cache").set(noCache).doc("do not use cache"),
+                (option("-r", "--repeat").set(setRepeat) & integer("repeat times", repeat)).doc("repeat times"),
+                (option("-I", "--include") & values("include dir", includeDirs)).doc("add include directory"),
+                (option("-L", "--stdlib").set(setStdLibPath) & value("stdlib path", stdLibPath))
+                    .doc("add stdlib path(default:./stdlib)"),
+                values("input", targetFiles).doc("input file"));
+
+    auto info = (option("-h", "--help").set(showHelp).set(selected, Command::INFO).doc("show this help message"),
+                 option("-v", "--version").set(showVersion).set(selected, Command::INFO).doc("show version"),
+                 option("-a", "--about")
+                     .set(showCopyRightInfo)
+                     .set(selected, Command::INFO)
+                     .doc("show copyright and related information"));
+
     auto format = (command("format").set(formatCode).set(selected, Command::FORMAT).doc("format the code"),
                    (option("-t", "--tab-size") & integer("tabsize", tabSize)).doc("indentation size in spaces"),
                    option("-u", "--use-tabs").set(useTabs).doc("use tabs instead of spaces for indentation"),
@@ -235,8 +254,8 @@ bool parseArgs(int argc, char *argv[]) {
 
     auto check =
         (command("check").set(selected, Command::CHECK).doc("check the code"),
-         option("-I", "--lexical-only").set(lexical).doc("indentation size in spaces"),
-         option("--syntax-only").set(syntaxOnly).doc("syntax only"),
+         option("-i", "--lexical-only").set(lexical).doc("indentation size in spaces"),
+         option("-s", "--syntax-only").set(syntaxOnly).doc("syntax only"),
          (option("-O", "--output-format") & value("output format", outputFormat)).doc("output format: text or json"),
          (option("-N", "--max-warning") & integer("max warnings", maxWaring)).doc("max warnings"),
          (option("-c", "--config") & value("config file path", configFilePath)).doc("config file path"),
@@ -246,11 +265,13 @@ bool parseArgs(int argc, char *argv[]) {
 
     auto inspect =
         (command("inspect").set(selected, Command::INSPECT).doc("inspect the code"),
-         option("-t", "-T", "--tokens").set(dumpTokens).doc("dump tokens"),
-         option("-s", "-S", "--cst", "--syntax-tree").set(dumpCST).doc("dump concrete syntax tree"),
-         option("-a", "-A", "--ast", "--abstract-tree").set(dumpAST).doc("dump abstract syntax tree"),
-         option("-c", "-C", "--gct", "--graph-tree").set(dumpGCT).doc("dump graph constraction tree"),
-         option("-g", "-G", "--gir", "--graph").set(dumpGIR).doc("dump graph intermediate representation"),
+         option("-t", "-T", "--tok", "--token-stream").set(dumpTokens).doc("dump tokens"),
+         option("-s", "-S", "--cst", "--concrete-syntax-tree").set(dumpCST).doc("dump concrete syntax tree"),
+         option("-a", "-A", "--ast", "--abstract-syntax-tree").set(dumpAST).doc("dump abstract syntax tree"),
+         option("-c", "-C", "--gct", "--graph-construct-tree").set(dumpGCT).doc("dump graph constraction tree"),
+         option("-g", "-G", "--gir", "--graph-intermediate-representation")
+             .set(dumpGIR)
+             .doc("dump graph intermediate representation"),
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)).doc("pass until the given pass"),
          values("input", targetFiles).doc("input file"));
 
@@ -265,6 +286,7 @@ bool parseArgs(int argc, char *argv[]) {
          option("--include") & values("include dir", includeDirs).doc("add include directory"),
          (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
          values("input", targetFiles).doc("input file"));
+
     auto serve =
         (command("serve").set(selected, Command::SERVE).doc("serve the code"),
          (option("--host") & value("host", serverHost)).doc("host"),
@@ -272,25 +294,12 @@ bool parseArgs(int argc, char *argv[]) {
 
     auto debug = (command("debug").set(selected, Command::DEBUG).doc("debug the code"),
                   (option("--variable") & value("variable", variable)).doc("variable"), /*not finished yet*/
-                  option("--print").doc("print degug information"),                     /*not finished yet*/
+                  option("--print").doc("print debug information"),                     /*not finished yet*/
                   option("--include") & values("include dir", includeDirs).doc("add include directory"),
                   (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
                   values("input", targetFiles).doc("input file"));
 
-    auto cli =
-        (format | check | inspect | build | debug | serve |
-             (option("-h", "--help").set(showHelp).doc("show this help message"),
-              option("-v", "--version").set(showVersion).doc("show version"),
-              option("-a", "--about").set(showCopyRightInfo).doc("show copyright and related information"),
-              (option("--doc").set(showDocs) & value("package name", package)).doc("show document of the package")) |
-             option("--profile").set(profile).doc("profile the perf"),
-         (option("--scheduler") & value("schedular type", schedular)).doc("scheduler type"),
-         (option("-t", "--threads").set(setThreads) & integer("max threads", maxThreads)).doc("max threads"),
-         option("-n", "--no-cache").set(noCache).doc("do not use cache"),
-         (option("-r", "--repeat").set(setRepeat) & integer("repeat times", repeat)).doc("repeat times"),
-         (option("--include") & values("include dir", includeDirs)).doc("add include directory"),
-         (option("--stdlib").set(setStdLibPath) & value("stdlib path", stdLibPath))
-             .doc("add stdlib path(default:./stdlib)"));
+    auto cli = run | info | format | check | inspect | build | debug | serve;
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;
@@ -299,84 +308,39 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-    if (targetFiles.empty() && selected != Command::HELP && selected != Command::SERVE) {
-        cout << "Please input a target file" << endl;
-        return false;
-    }
-    if (!targetFiles.empty()) {
-        targetFile = targetFiles[0];
-    }
-
 #ifndef NDEBUG
-    cli_test(selected);
+    printCliArgs(selected);
 #endif
-    switch (selected) {
-    case Command::HELP:
-        break;
-    case Command::FORMAT:
-        break;
-    case Command::CHECK:
-        break;
-    case Command::INSPECT:
-        break;
-    case Command::BUILD:
-        break;
-    case Command::DEBUG:
-        break;
-    case Command::SERVE:
-        break;
-    default:
-        break;
-    }
+
     if (showHelp) {
         cout << make_man_page(cli, "camel");
-        return false;
     }
+
     if (showVersion) {
 #ifdef NDEBUG
         cout << "Camel v" << VERSION << endl;
 #else
         cout << "Camel (DEBUG) v" << VERSION << endl;
 #endif
-        return false;
     }
+
     if (showCopyRightInfo) {
         cout << "Camel v" << VERSION << endl;
         cout << "Copyright (c) 2024 Beijing Jiaotong University" << endl;
         cout << "Camel is licensed under the MIT license." << endl;
-        return false;
     }
+
     if (showDocs) {
         cout << "Not implemented yet" << endl;
+    }
+
+    if (selected == Command::INFO || selected == Command::SERVE) {
         return false;
     }
-    if (profile) {
-        cout << "Profiling is not implemented yet" << endl;
-        return false;
+
+    if (!targetFiles.empty()) {
+        targetFile = targetFiles[0];
     }
-    if (schedular != "") {
-        cout << "Successfully set schedular!" << endl;
-        return false;
-    }
-    if (setThreads) {
-        cout << "Successfully set max threads!" << endl;
-        return false;
-    }
-    if (setRepeat) {
-        cout << "Successfully set repeat!" << endl;
-        return false;
-    }
-    if (noCache) {
-        cout << "Successfully set noCache!" << endl;
-        return false;
-    }
-    if (!includeDirs.empty()) {
-        cout << "Successfully set include directories!" << endl;
-        return false;
-    }
-    if (setStdLibPath) {
-        cout << "Successfully set standard library path!" << endl;
-        return false;
-    }
+
     return true;
 }
