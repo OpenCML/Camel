@@ -16,7 +16,9 @@
         "build": "node ./scripts/build.js",
         "debug": "node ./scripts/debug.js",
         "clean": "node ./scripts/clean.js",
+        "format": "node ./scripts/format.js",
         "setver": "node ./scripts/setver.js",
+        "gitcnt": "node ./scripts/gitcnt.js",
         "fix:vsc": "node ./scripts/fix.js vsc",
         "pypi:rollup": "node ./scripts/pypi_rollup.js",
         "pypi:upload": "python -m twine upload --repository testpypi dist/pypi/*",
@@ -24,8 +26,9 @@
         "pypi:install": "pip install --index-url https://test.pypi.org/simple/ camel-lang",
         "gource": "gource -c 4 --frameless -f --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
     },
-    "dependencies": {
+    "devDependencies": {
         "fs-extra": "^11.3.0",
+        "ora": "^8.2.0",
         "sqlite3": "^5.1.7"
     }
 }

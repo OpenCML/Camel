@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Jan. 07, 2025
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -604,9 +604,8 @@ primaryData
     | literal
     | listExpr
     | dictExpr
-    | '(' dataExpr ')'        // if there is only one data, it will be recognized as a primary expression rather than a tuple
-    | '(' valueList? ','? ')' // for tuple
-    | lambdaExpr
+    | '(' dataExpr ')'        // if there is only one data, it will be recognized as a primary expression rather than a
+tuple | '(' valueList? ','? ')' // for tuple | lambdaExpr
     ;
 */
 any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) { return nullptr; }
@@ -654,9 +653,7 @@ any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) { return
 /*
 typeOrData : typeExpr | primaryData ;
 */
-any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) {
-    return visit(context->children[0]);
-}
+any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return visit(context->children[0]); }
 
 /*
 argsType

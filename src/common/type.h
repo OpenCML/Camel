@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "type/type.h"
 #include "type/init.h"
 #include "type/primary.h"
 #include "type/special/functor.h"
@@ -33,3 +32,4 @@
 #include "type/struct/tuple.h"
 #include "type/struct/union.h"
 #include "type/struct/vector.h"
+#include "type/type.h"

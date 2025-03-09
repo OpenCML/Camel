@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Feb. 06, 2025
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -244,7 +244,7 @@ class Formatter : public OpenCMLVisitor {
             // the list may still be formatted in multiple lines
             // if the elements are not in one line already
             auto lastEleLine = list[0]->getStop()->getLine();
-            for (int i = 1; i < list.size(); i++) {
+            for (size_t i = 1; i < list.size(); i++) {
                 const auto &currEleLine = list[i]->getStart()->getLine();
                 if (currEleLine > lastEleLine) {
                     multiLine = true;

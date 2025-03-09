@@ -1,5 +1,5 @@
 import path from 'path'
-import { runCommand, copyFile, BASEDIR } from './common.js'
+import { runCommand, copyFile, BASEDIR, logDone } from './common.js'
 
 export default function main() {
     process.chdir(BASEDIR)
@@ -12,6 +12,8 @@ export default function main() {
 
     const debugDir = path.join(BASEDIR, 'build', 'Release')
     copyFile(path.join(debugDir, 'camel.exe'), path.join(BASEDIR, 'camel.exe'))
+
+    logDone('Release build completed')
 }
 
 main()
