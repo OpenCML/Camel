@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,9 +30,7 @@ size_t ArrayType::size() const { return size_; }
 
 type_ptr_t ArrayType::elementType() const { return elementType_; }
 
-string ArrayType::toString() const {
-    return "Array<" + elementType_->toString() + ", " + to_string(size_) + ">";
-}
+string ArrayType::toString() const { return "Array<" + elementType_->toString() + ", " + to_string(size_) + ">"; }
 
 bool ArrayType::operator==(const Type &other) const {
     if (other.code() != TypeCode::ARRAY) {

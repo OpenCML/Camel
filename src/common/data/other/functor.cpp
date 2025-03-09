@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Dec. 12, 2024
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,9 +40,7 @@ std::string FunctorData::name() const {
     return func->name();
 }
 
-func_type_ptr_t FunctorData::funcType() const {
-    return dynamic_pointer_cast<FunctorType>(type_);
-}
+func_type_ptr_t FunctorData::funcType() const { return dynamic_pointer_cast<FunctorType>(type_); }
 
 bool FunctorData::equals(const data_ptr_t &other) const { return true; }
 
