@@ -224,80 +224,80 @@ bool parseArgs(int argc, char *argv[]) {
 
     Command selected = Command::RUN;
 
-    auto run = (option("-P", "--profile").set(profile).doc("profile the perf"),
-                (option("-S", "--scheduler") & value("schedular type", schedular)).doc("scheduler type"),
-                (option("-t", "--threads").set(setThreads) & integer("max threads", maxThreads)).doc("max threads"),
-                option("-n", "--no-cache").set(noCache).doc("do not use cache"),
-                (option("-r", "--repeat").set(setRepeat) & integer("repeat times", repeat)).doc("repeat times"),
-                (option("-I", "--include") & values("include dir", includeDirs)).doc("add include directory"),
-                (option("-L", "--stdlib").set(setStdLibPath) & value("stdlib path", stdLibPath))
-                    .doc("add stdlib path(default:./stdlib)"),
-                values("input", targetFiles).doc("input file"));
+    auto run = (option("-P", "--profile").set(profile) % "profile the perf",
+                (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
+                (option("-t", "--threads").set(setThreads) & integer("max threads", maxThreads)) % "max threads",
+                option("-n", "--no-cache").set(noCache) % "do not use cache",
+                (option("-r", "--repeat").set(setRepeat) & integer("repeat times", repeat)) % "repeat times",
+                (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
+                (option("-L", "--stdlib").set(setStdLibPath) & value("stdlib path", stdLibPath)) % "add stdlib path",
+                values("input", targetFiles) % "input file");
 
-    auto info = (option("-h", "--help").set(showHelp).set(selected, Command::INFO).doc("show this help message"),
-                 option("-v", "--version").set(showVersion).set(selected, Command::INFO).doc("show version"),
-                 option("-a", "--about")
-                     .set(showCopyRightInfo)
-                     .set(selected, Command::INFO)
-                     .doc("show copyright and related information"));
+    auto info = (option("-h", "--help").set(showHelp).set(selected, Command::INFO) % "show this help message",
+                 option("-v", "--version").set(showVersion).set(selected, Command::INFO) % "show version",
+                 option("-a", "--about").set(showCopyRightInfo).set(selected, Command::INFO) %
+                     "show copyright and related information");
 
-    auto format = (command("format").set(formatCode).set(selected, Command::FORMAT).doc("format the code"),
-                   (option("-t", "--tab-size") & integer("tabsize", tabSize)).doc("indentation size in spaces"),
-                   option("-u", "--use-tabs").set(useTabs).doc("use tabs instead of spaces for indentation"),
-                   (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single"))
-                       .doc("quote preference: single or double"),
-                   (option("-m", "--max-width") & integer("max width", maxWidth)).doc("max line width"),
-                   (option("-c", "--config") & value("config file path", configFile)).doc("config file path"),
-                   option("--ignore").set(Format::ignoreDefiFile).doc("ignore the definition file"),
-                   option("-i", "--inplace").set(inplace).doc("modify the input file in place"),
-                   values("input", targetFiles).doc("input file"));
+    auto format = (command("format").set(formatCode).set(selected, Command::FORMAT) % "format the code",
+                   (option("-t", "--tab-size") & integer("tabsize", tabSize)) % "indentation size in spaces",
+                   option("-u", "--use-tabs").set(useTabs) % "use tabs instead of spaces for indentation",
+                   (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single")) %
+                       "quote preference: single or double",
+                   (option("-m", "--max-width") & integer("max width", maxWidth)) % "max line width",
+                   (option("-c", "--config") & value("config file path", configFile)) % "config file path",
+                   option("--ignore").set(Format::ignoreDefiFile) % "ignore the definition file",
+                   option("-i", "--inplace").set(inplace) % "modify the input file in place",
+                   values("input", targetFiles) % "input file");
 
     auto check =
-        (command("check").set(selected, Command::CHECK).doc("check the code"),
-         option("-i", "--lexical-only").set(lexical).doc("indentation size in spaces"),
-         option("-s", "--syntax-only").set(syntaxOnly).doc("syntax only"),
-         (option("-O", "--output-format") & value("output format", outputFormat)).doc("output format: text or json"),
-         (option("-N", "--max-warning") & integer("max warnings", maxWaring)).doc("max warnings"),
-         (option("-c", "--config") & value("config file path", configFilePath)).doc("config file path"),
-         option("-e", "--ignore").set(Check::ignoreDefiFile).doc("ignore the definition file"),
-         option("-o", "--output") & value("output file", outputFile = "console").doc("output file"),
-         values("input", targetFiles).doc("input file"));
+        (command("check").set(selected, Command::CHECK) % "check the code",
+         option("-i", "--lexical-only").set(lexical) % "indentation size in spaces",
+         option("-s", "--syntax-only").set(syntaxOnly) % "syntax only",
+         (option("-O", "--output-format") & value("output format", outputFormat)) % "output format: text or json",
+         (option("-N", "--max-warning") & integer("max warnings", maxWaring)) % "max warnings",
+         (option("-c", "--config") & value("config file path", configFilePath)) % "config file path",
+         option("-e", "--ignore").set(Check::ignoreDefiFile) % "ignore the definition file",
+         option("-o", "--output") & value("output file", outputFile = "console") % "output file",
+         values("input", targetFiles) % "input file");
 
     auto inspect =
-        (command("inspect").set(selected, Command::INSPECT).doc("inspect the code"),
-         option("-t", "-T", "--tok", "--token-stream").set(dumpTokens).doc("dump tokens"),
-         option("-s", "-S", "--cst", "--concrete-syntax-tree").set(dumpCST).doc("dump concrete syntax tree"),
-         option("-a", "-A", "--ast", "--abstract-syntax-tree").set(dumpAST).doc("dump abstract syntax tree"),
-         option("-c", "-C", "--gct", "--graph-construct-tree").set(dumpGCT).doc("dump graph constraction tree"),
-         option("-g", "-G", "--gir", "--graph-intermediate-representation")
-             .set(dumpGIR)
-             .doc("dump graph intermediate representation"),
-         (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)).doc("pass until the given pass"),
-         values("input", targetFiles).doc("input file"));
+        (command("inspect").set(selected, Command::INSPECT) % "inspect the code",
+         joinable(option("-t", "-T").set(dumpTokens) % "dump tokens",
+                  option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
+                  option("-a", "-A").set(dumpAST) % "dump abstract syntax tree",
+                  option("-c", "-C").set(dumpGCT) % "dump graph construct tree",
+                  option("-g", "-G").set(dumpGIR) % "dump graph intermediate representation"),
+         option("--tok", "--token-stream").set(dumpTokens) % "dump tokens",
+         option("--cst", "--concrete-syntax-tree").set(dumpCST) % "dump concrete syntax tree",
+         option("--ast", "--abstract-syntax-tree").set(dumpAST) % "dump abstract syntax tree",
+         option("--gct", "--graph-construct-tree").set(dumpGCT) % "dump graph construct tree",
+         option("--gir", "--graph-intermediate-representation").set(dumpGIR) % "dump graph intermediate representation",
+         (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) % "pass until the given pass",
+         values("input", targetFiles) % "input file");
 
     auto build =
-        (command("build").set(selected, Command::BUILD).doc("build the code"),
-         option("-o", "-O", "--optimize").set(optimize).doc("optimize the code"),
-         option("-r", "-R", "-rollup").set(rollup).doc("rollup the code"),
-         option("-g", "--verbose").set(verbose).doc("show verbose information"),
-         (option("-W", "--warning") & value("warning switch", warningSwitch)).doc("warning switch"),
-         (option("--output") & (rollup ? value("output dirctary", outputDir) : value("output file", outputFile)))
-             .doc("output file or directory"),
-         option("--include") & values("include dir", includeDirs).doc("add include directory"),
-         (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
-         values("input", targetFiles).doc("input file"));
+        (command("build").set(selected, Command::BUILD) % "build the code",
+         option("-o", "-O", "--optimize").set(optimize) % "optimize the code",
+         option("-r", "-R", "-rollup").set(rollup) % "rollup the code",
+         option("-g", "--verbose").set(verbose) % "show verbose information",
+         (option("-W", "--warning") & value("warning switch", warningSwitch)) % "warning switch",
+         (option("--output") & (rollup ? value("output dirctary", outputDir) : value("output file", outputFile))) %
+             "output file or directory",
+         option("--include") & values("include dir", includeDirs) % "add include directory",
+         (option("--stdlib") & value("stdlib dir", stdLibPath)) % "add stdlib path",
+         values("input", targetFiles) % "input file");
 
     auto serve =
-        (command("serve").set(selected, Command::SERVE).doc("serve the code"),
-         (option("--host") & value("host", serverHost)).doc("host"),
-         (option("--port") & integer("port", serverPort)).doc("port"), values("input", targetFiles).doc("input file"));
+        (command("serve").set(selected, Command::SERVE) % "serve the code",
+         (option("--host") & value("host", serverHost)) % "host",
+         (option("--port") & integer("port", serverPort)) % "port", values("input", targetFiles) % "input file");
 
-    auto debug = (command("debug").set(selected, Command::DEBUG).doc("debug the code"),
-                  (option("--variable") & value("variable", variable)).doc("variable"), /*not finished yet*/
-                  option("--print").doc("print debug information"),                     /*not finished yet*/
-                  option("--include") & values("include dir", includeDirs).doc("add include directory"),
-                  (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
-                  values("input", targetFiles).doc("input file"));
+    auto debug = (command("debug").set(selected, Command::DEBUG) % "debug the code",
+                  (option("--variable") & value("variable", variable)) % "variable", /*not finished yet*/
+                  option("--print") % "print debug information",                     /*not finished yet*/
+                  option("--include") & values("include dir", includeDirs) % "add include directory",
+                  (option("--stdlib") & value("stdlib dir", stdLibPath)) % "add stdlib path",
+                  values("input", targetFiles) % "input file");
 
     auto cli = run | info | format | check | inspect | build | debug | serve;
 
