@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 18, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,7 @@ any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
     auto getHead = [this](bool last) -> string {
         size_t i = 0;
         string ret = "";
-        while (i < depth - 1) {
+        while (depth > 0 && i < depth - 1) {
             if (visible[i])
                 ret += "|  ";
             else
