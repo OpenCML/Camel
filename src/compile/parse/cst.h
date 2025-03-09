@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Feb. 06, 2025
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 #include "antlr4-runtime/antlr4-runtime.h"
 
 class CSTDumpVisitor : public OpenCMLVisitor {
-    int depth = 0;
+    size_t depth = 0;
     std::vector<bool> visible;
 
     std::any dumpCST(antlr4::tree::ParseTree *context, std::string nodeName);

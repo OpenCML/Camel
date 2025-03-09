@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 project(camel)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -35,11 +37,16 @@ if (NOT ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))
 endif()
 
 target_compile_options(${PROJECT_NAME} PRIVATE
-    $<$<CONFIG:Release>:-O3 -flto>
-    $<$<CONFIG:Debug>:-O0 -g3>
+    $<$<CONFIG:Release>:-O3>
+    $<$<CONFIG:Release>:-flto>
+    $<$<CONFIG:Debug>:-O0>
+    $<$<CONFIG:Debug>:-g3>
     -Wall -Wextra -Wpedantic
-    -Wno-language-extension-token
+    -Wno-unused-parameter
+    -Wno-language-extension-token # for antlr4-runtime
+    -Wno-dollar-in-identifier-extension # for antlr4-runtime
     -fcolor-diagnostics
+    -fansi-escape-codes # windows only
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ANTLR4CPP_STATIC)

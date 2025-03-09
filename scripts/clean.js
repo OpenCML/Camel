@@ -1,7 +1,8 @@
 import path from 'path'
-import { removeDir, logStep, logDone, BASEDIR } from './common.js'
+import { removeDir, logStep, logDone, logWarn, BASEDIR } from './common.js'
 
 ;(async () => {
+    logWarn('This script is not yet implemented')
     // logStep('Cleaning build directory...')
     // removeDir(path.join(BASEDIR, 'build'))
     // logDone('Cleaned build directory')

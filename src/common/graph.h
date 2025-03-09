@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Dec. 12, 2024
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,7 +126,7 @@ class Node : public std::enable_shared_from_this<Node> {
     static void link(node_ptr_t &from, node_ptr_t &to, int index = -1) {
         if (index >= 0) {
             from->outputs().push_back(to);
-            if (index > to->inputs().size()) {
+            if (static_cast<std::size_t>(index) > to->inputs().size()) {
                 // this can only happen when the link target is a variable
                 // etc. port, variable
                 to->inputs().resize(index + 1);

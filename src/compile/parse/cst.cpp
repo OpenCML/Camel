@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 18, 2024
- * Updated: Feb. 08, 2025
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
     }
 
     auto getHead = [this](bool last) -> string {
-        int i = 0;
+        size_t i = 0;
         string ret = "";
         while (i < depth - 1) {
             if (visible[i])
@@ -65,7 +65,7 @@ any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
     cout << endl;
 
     if (depth > 0)
-        for (int i = depth; i < visible.size(); i++)
+        for (size_t i = depth; i < visible.size(); i++)
             visible[i] = true;
 
     depth++;
