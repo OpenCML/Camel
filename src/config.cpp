@@ -27,11 +27,11 @@ using namespace std;
 namespace CmdLineArgs {
 
 namespace Format {
-string quotePrefer = "single"; // Quote preference (default to single quotes)
-string configFile = "";        // Configuration file path
-bool useTabs = false;          // Whether to use tabs for indentation
-bool inplace = false;          // Whether to modify the input file in place
-bool ignoreDefiFile = false;   // Whether to ignore the definition file
+string quotePrefer = "";     // Quote preference (default to single quotes)
+string configFile = "";      // Configuration file path
+bool useTabs = false;        // Whether to use tabs for indentation
+bool inplace = false;        // Whether to modify the input file in place
+bool ignoreDefiFile = false; // Whether to ignore the definition file
 bool formatCode = false;
 unsigned int tabSize = 4;   // Indentation size in spaces
 unsigned int maxWidth = 80; // Max line width
@@ -52,7 +52,6 @@ bool dumpCST = false;    // Whether to dump CST
 bool dumpAST = false;    // Whether to dump AST
 bool dumpGCT = false;    // Whether to dump GCT
 bool dumpGIR = false;    // Whether to dump GIR
-bool dumpONNX = false;   // Whether to dump ONNX
 int passUntil = -1;      // Pass until the given pass
 } // namespace Inspect
 
@@ -83,7 +82,6 @@ using namespace CmdLineArgs::Build;
 using namespace CmdLineArgs::Debug;
 using namespace CmdLineArgs::Serve;
 
-
 string targetFile = "";
 string outputFile = "";
 string package = "";
@@ -95,11 +93,15 @@ vector<string> targetFiles = {};
 bool profile = false;
 bool noCache = false;
 bool semanticOnly = false;
+bool setThreads = false;
+bool setRepeat = false;
+bool setStdLibPath = false;
 unsigned int repeat = 1;
 unsigned int maxThreads = 1;
 
 void _printFormatArgs() {
     cout << "Format args: " << endl;
+    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\ttab-size:" << tabSize << endl;
     cout << "\tuse-tabs:" << useTabs << endl;
     cout << "\tquote-prefer:" << quotePrefer << endl;
@@ -112,6 +114,7 @@ void _printFormatArgs() {
 
 void _printCheckArgs() {
     cout << "Check args: " << endl;
+    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\tlexical-only:" << lexical << endl;
     cout << "\tsyntax-only:" << syntaxOnly << endl;
     cout << "\toutput-format:" << outputFormat << endl;
@@ -122,31 +125,41 @@ void _printCheckArgs() {
 
 void _printInspectArgs() {
     cout << "Inspect args: " << endl;
+    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\tdump-tokens:" << dumpTokens << endl;
     cout << "\tdump-cst:" << dumpCST << endl;
     cout << "\tdump-ast:" << dumpAST << endl;
     cout << "\tdump-gct:" << dumpGCT << endl;
     cout << "\tdump-gir:" << dumpGIR << endl;
-    cout << "\tdump-onnx:" << dumpONNX << endl;
     cout << "\tpass-until:" << passUntil << endl;
 }
 
 void _printBuildArgs() {
     cout << "Build args: " << endl;
+    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\toptimize:" << optimize << endl;
     cout << "\trollup:" << rollup << endl;
     cout << "\tverbose:" << verbose << endl;
     cout << "\twarning-switch:" << warningSwitch << endl;
     cout << "\toutput-dir:" << outputDir << endl;
     cout << "\tstd-lib-path:" << stdLibPath << endl;
+    if (!includeDirs.empty()) {
+        cout << "\tinclude-dir:" << endl;
+        for (auto &dir : includeDirs) {
+            cout << dir << endl;
+        }
+    }
 }
 
 void _printDebugArgs() {
     cout << "Debug args: " << endl;
+    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\tvariable:" << variable << endl;
-    cout << "\tincludeDir:" << endl;
-    for (auto &dir : includeDirs) {
-        cout << dir << endl;
+    if (!includeDirs.empty()) {
+        cout << "\tincludeDir:" << endl;
+        for (auto &dir : includeDirs) {
+            cout << dir << endl;
+        }
     }
     cout << "\tstd-lib-path:" << stdLibPath << endl;
 }
@@ -159,123 +172,22 @@ void _printServeArgs() {
 
 void _printHelpArgs() {
     cout << "Help args: " << endl;
+    cout << "\tpackage:" << package << endl;
     cout << "\tprofile:" << profile << endl;
+    cout << "\tscheduler:" << schedular << endl;
+    cout << "\tmax-threads:" << maxThreads << endl;
     cout << "\tno-cache:" << noCache << endl;
     cout << "\tsemantic-only:" << semanticOnly << endl;
     cout << "\trepeat:" << repeat << endl;
-    cout << "\tincludeDir:" << endl;
-    for (auto &dir : includeDirs) {
-        cout << dir << endl;
+    if (!includeDirs.empty()) {
+        cout << "\tincludeDir:" << endl;
+        for (auto &dir : includeDirs) {
+            cout << dir << endl;
+        }
     }
     cout << "\tstd-lib-path:" << stdLibPath << endl;
 }
-
-void _printArgs() {
-    cout << "Target file: " << targetFile << endl;
-    cout << "Output file: " << outputFile << endl;
-    cout << "Error format: " << errorFormat << endl;
-    cout << "Include dirs: ";
-    for (auto &dir : includeDirs) {
-        cout << dir << " ";
-    }
-    cout << endl;
-    cout << "Scripts dirs: ";
-    /*for (auto &dir : scriptsDirs) {
-        cout << dir << " ";
-    }*/
-    cout << endl;
-    cout << "Verbose: " << verbose << endl;
-    cout << "No cache: " << noCache << endl;
-    cout << "Syntax only: " << syntaxOnly << endl;
-    cout << "Semantic only: " << semanticOnly << endl;
-    cout << "Dump CST: " << dumpCST << endl;
-    cout << "Dump AST: " << dumpAST << endl;
-    cout << "Dump GIR: " << dumpGIR << endl;
-    cout << "Profile: " << profile << endl;
-    cout << "Repeat: " << repeat << endl;
-    cout << "Max threads: " << maxThreads << endl;
-    cout << "Server port: " << serverPort << endl;
-}
-
-bool parseArgs(int argc, char *argv[]) {
-    bool showHelp = false;    // Help information
-    bool showVersion = false; // Version information
-    bool showDocs = false;
-    bool printArgs = false;
-    bool showCopyRightInfo = false;   // Copyright information
-    Command selected = Command::HELP; // Selected mode(default to help)
-    auto format = (command("format").set(formatCode).set(selected, Command::FORMAT).doc("format the code"),
-                   (option("-t", "--tab-size") & integer("tabsize", tabSize)).doc("indentation size in spaces"),
-                   option("-u", "--use-tabs").set(useTabs).doc("use tabs instead of spaces for indentation"),
-                   (option("-q", "--quote-prefer") & value(quotePrefer)).doc("quote preference: single or double"),
-                   (option("-m", "--max-width") & integer("max width", maxWidth)).doc("max line width"),
-                   (option("-c", "--config") & value(configFile)).doc("config file path"),
-                   option("--ignore").set(Format::ignoreDefiFile).doc("ignore the definition file"),
-                   option("-i", "--inplace").set(inplace).doc("modify the input file in place"),
-                   values("input", targetFiles).doc("input file"));
-    auto check = (command("check").set(selected, Command::CHECK).doc("check the code"),
-                  option("-I", "--lexical-only").set(lexical).doc("indentation size in spaces"),
-                  option("--syntax-only").set(syntaxOnly).doc("syntax only"),
-                  (option("-O", "--output-format") & value(outputFormat)).doc("output format: text or json"),
-                  (option("-N", "--max-warning") & integer("max warnings", maxWaring)).doc("max warnings"),
-                  (option("-c", "--config") & value("config file path", configFilePath)).doc("config file path"),
-                  option("-e", "--ignore").set(Check::ignoreDefiFile).doc("ignore the definition file"),
-                  option("-o", "--output") & value("output file", outputFile = "console").doc("output file"),
-                  values("input", targetFiles).doc("input file"));
-
-    auto inspect =
-        (command("inspect").set(selected, Command::INSPECT).doc("inspect the code"),
-         option("-tT", "--tokens").set(dumpTokens).doc("dump tokens"),
-         option("-s", "-S", "--cst", "--syntax-tree").set(dumpCST).doc("dump concrete syntax tree"),
-         option("-a", "-A", "--ast", "--abstract-tree").set(dumpAST).doc("dump abstract syntax tree"),
-         option("-c", "-C", "--gct", "--graph-tree").set(dumpGCT).doc("dump graph constraction tree"),
-         option("-g", "-G", "--gir", "--graph").set(dumpGIR).doc("dump graph intermediate representation"),
-         (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)).doc("pass until the given pass"),
-         values("input", targetFiles).doc("input file"));
-
-    auto build =
-        (command("build").set(selected, Command::BUILD).doc("build the code"),
-         option("-o", "-O", "--optimize").set(optimize).doc("optimize the code"),
-         option("-r", "-R", "-rollup").set(rollup).doc("rollup the code"),
-         option("-g", "--verbose").set(verbose).doc("show verbose information"),
-         (option("-W", "--warning") & value("warning switch", warningSwitch)).doc("warning switch"),
-         (option("--output") & (rollup ? value("output dirctary", outputDir) : value("output file", outputFile)))
-             .doc("output file or directory"),
-         option("--include") & values("include dir", includeDirs).doc("add include directory"),
-         (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
-         values("input", targetFiles).doc("input file"));
-    auto serve =
-        (command("serve").set(selected, Command::SERVE).doc("serve the code"),
-         (option("--host") & value("host", serverHost)).doc("host"),
-         (option("--port") & integer("port", serverPort)).doc("port"), value("input", targetFile).doc("input file"));
-
-    auto debug = (command("debug").set(selected, Command::DEBUG).doc("debug the code"),
-                  (option("--variable") & value("variable", variable)).doc("variable"), /*not finished yet*/
-                  option("--print").doc("print degug information"),                     /*not finished yet*/
-                  option("--include") & values("include dir", includeDirs).doc("add include directory"),
-                  (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
-                  values("input", targetFiles).doc("input file"));
-    targetFile = targetFiles[0];
-
-    auto cli =
-        (format | check | inspect | build | debug |
-             (option("-h", "--help").set(showHelp).doc("show this help message"),
-              option("-v", "--version").set(showVersion).doc("show version"),
-              option("-a", "--about").set(showCopyRightInfo).doc("show copyright and related information"),
-              (option("--doc").set(showDocs) & value("package name", package)).doc("show document of the package")) |
-             option("--profile").set(profile).doc("profile the perf"),
-         (option("--scheduler") & value("schedular type", schedular)).doc("scheduler type"),
-         (option("-t", "--threads") & integer("max threads", maxThreads)).doc("max threads"),
-         option("-n", "--no-cache").set(noCache).doc("do not use cache"),
-         (option("-r", "--repeat") & integer("repeat times", repeat)).doc("repeat times"),
-         (option("--include") & values("include dir", includeDirs)).doc("add include directory"),
-         (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default:./stdlib)"));
-    if (!parse(argc, argv, cli)) {
-        cout << "Usage: " << endl;
-        cout << "\tcamel [options] <target file> \n";
-        cout << usage_lines(cli, "camel") << endl;
-        return false;
-    }
+void cli_test(auto selected) {
     switch (selected) {
     case Command::HELP:
         _printHelpArgs();
@@ -302,6 +214,120 @@ bool parseArgs(int argc, char *argv[]) {
         cout << "Unknown command" << endl;
         break;
     }
+}
+bool parseArgs(int argc, char *argv[]) {
+    bool showHelp = false;    // Help information
+    bool showVersion = false; // Version information
+    bool showDocs = false;
+    bool printArgs = false;
+    bool showCopyRightInfo = false;   // Copyright information
+    Command selected = Command::HELP; // Selected mode(default to help)
+    auto format = (command("format").set(formatCode).set(selected, Command::FORMAT).doc("format the code"),
+                   (option("-t", "--tab-size") & integer("tabsize", tabSize)).doc("indentation size in spaces"),
+                   option("-u", "--use-tabs").set(useTabs).doc("use tabs instead of spaces for indentation"),
+                   (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single"))
+                       .doc("quote preference: single or double"),
+                   (option("-m", "--max-width") & integer("max width", maxWidth)).doc("max line width"),
+                   (option("-c", "--config") & value("config file path", configFile)).doc("config file path"),
+                   option("--ignore").set(Format::ignoreDefiFile).doc("ignore the definition file"),
+                   option("-i", "--inplace").set(inplace).doc("modify the input file in place"),
+                   values("input", targetFiles).doc("input file"));
+
+    auto check =
+        (command("check").set(selected, Command::CHECK).doc("check the code"),
+         option("-I", "--lexical-only").set(lexical).doc("indentation size in spaces"),
+         option("--syntax-only").set(syntaxOnly).doc("syntax only"),
+         (option("-O", "--output-format") & value("output format", outputFormat)).doc("output format: text or json"),
+         (option("-N", "--max-warning") & integer("max warnings", maxWaring)).doc("max warnings"),
+         (option("-c", "--config") & value("config file path", configFilePath)).doc("config file path"),
+         option("-e", "--ignore").set(Check::ignoreDefiFile).doc("ignore the definition file"),
+         option("-o", "--output") & value("output file", outputFile = "console").doc("output file"),
+         values("input", targetFiles).doc("input file"));
+
+    auto inspect =
+        (command("inspect").set(selected, Command::INSPECT).doc("inspect the code"),
+         option("-t", "-T", "--tokens").set(dumpTokens).doc("dump tokens"),
+         option("-s", "-S", "--cst", "--syntax-tree").set(dumpCST).doc("dump concrete syntax tree"),
+         option("-a", "-A", "--ast", "--abstract-tree").set(dumpAST).doc("dump abstract syntax tree"),
+         option("-c", "-C", "--gct", "--graph-tree").set(dumpGCT).doc("dump graph constraction tree"),
+         option("-g", "-G", "--gir", "--graph").set(dumpGIR).doc("dump graph intermediate representation"),
+         (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)).doc("pass until the given pass"),
+         values("input", targetFiles).doc("input file"));
+
+    auto build =
+        (command("build").set(selected, Command::BUILD).doc("build the code"),
+         option("-o", "-O", "--optimize").set(optimize).doc("optimize the code"),
+         option("-r", "-R", "-rollup").set(rollup).doc("rollup the code"),
+         option("-g", "--verbose").set(verbose).doc("show verbose information"),
+         (option("-W", "--warning") & value("warning switch", warningSwitch)).doc("warning switch"),
+         (option("--output") & (rollup ? value("output dirctary", outputDir) : value("output file", outputFile)))
+             .doc("output file or directory"),
+         option("--include") & values("include dir", includeDirs).doc("add include directory"),
+         (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
+         values("input", targetFiles).doc("input file"));
+    auto serve =
+        (command("serve").set(selected, Command::SERVE).doc("serve the code"),
+         (option("--host") & value("host", serverHost)).doc("host"),
+         (option("--port") & integer("port", serverPort)).doc("port"), values("input", targetFiles).doc("input file"));
+
+    auto debug = (command("debug").set(selected, Command::DEBUG).doc("debug the code"),
+                  (option("--variable") & value("variable", variable)).doc("variable"), /*not finished yet*/
+                  option("--print").doc("print degug information"),                     /*not finished yet*/
+                  option("--include") & values("include dir", includeDirs).doc("add include directory"),
+                  (option("--stdlib") & value("stdlib dir", stdLibPath)).doc("add stdlib path(default: ./stdlib)"),
+                  values("input", targetFiles).doc("input file"));
+
+    auto cli =
+        (format | check | inspect | build | debug | serve |
+             (option("-h", "--help").set(showHelp).doc("show this help message"),
+              option("-v", "--version").set(showVersion).doc("show version"),
+              option("-a", "--about").set(showCopyRightInfo).doc("show copyright and related information"),
+              (option("--doc").set(showDocs) & value("package name", package)).doc("show document of the package")) |
+             option("--profile").set(profile).doc("profile the perf"),
+         (option("--scheduler") & value("schedular type", schedular)).doc("scheduler type"),
+         (option("-t", "--threads").set(setThreads) & integer("max threads", maxThreads)).doc("max threads"),
+         option("-n", "--no-cache").set(noCache).doc("do not use cache"),
+         (option("-r", "--repeat").set(setRepeat) & integer("repeat times", repeat)).doc("repeat times"),
+         (option("--include") & values("include dir", includeDirs)).doc("add include directory"),
+         (option("--stdlib").set(setStdLibPath) & value("stdlib path", stdLibPath))
+             .doc("add stdlib path(default:./stdlib)"));
+
+    if (!parse(argc, argv, cli)) {
+        cout << "Usage: " << endl;
+        cout << "\tcamel [options] <target file> \n";
+        cout << usage_lines(cli, "camel") << endl;
+        return false;
+    }
+
+    if (targetFiles.empty() && selected != Command::HELP && selected != Command::SERVE) {
+        cout << "Please input a target file" << endl;
+        return false;
+    }
+    if (!targetFiles.empty()) {
+        targetFile = targetFiles[0];
+    }
+
+#ifndef NDEBUG
+    cli_test(selected);
+#endif
+    switch (selected) {
+    case Command::HELP:
+        break;
+    case Command::FORMAT:
+        break;
+    case Command::CHECK:
+        break;
+    case Command::INSPECT:
+        break;
+    case Command::BUILD:
+        break;
+    case Command::DEBUG:
+        break;
+    case Command::SERVE:
+        break;
+    default:
+        break;
+    }
     if (showHelp) {
         cout << make_man_page(cli, "camel");
         return false;
@@ -314,16 +340,43 @@ bool parseArgs(int argc, char *argv[]) {
 #endif
         return false;
     }
-    if (printArgs) {
-        _printArgs();
+    if (showCopyRightInfo) {
+        cout << "Camel v" << VERSION << endl;
+        cout << "Copyright (c) 2024 Beijing Jiaotong University" << endl;
+        cout << "Camel is licensed under the MIT license." << endl;
+        return false;
     }
-
+    if (showDocs) {
+        cout << "Not implemented yet" << endl;
+        return false;
+    }
+    if (profile) {
+        cout << "Profiling is not implemented yet" << endl;
+        return false;
+    }
+    if (schedular != "") {
+        cout << "Successfully set schedular!" << endl;
+        return false;
+    }
+    if (setThreads) {
+        cout << "Successfully set max threads!" << endl;
+        return false;
+    }
+    if (setRepeat) {
+        cout << "Successfully set repeat!" << endl;
+        return false;
+    }
+    if (noCache) {
+        cout << "Successfully set noCache!" << endl;
+        return false;
+    }
+    if (!includeDirs.empty()) {
+        cout << "Successfully set include directories!" << endl;
+        return false;
+    }
+    if (setStdLibPath) {
+        cout << "Successfully set standard library path!" << endl;
+        return false;
+    }
     return true;
 }
-
-#ifdef DEBUGING
-int main(int argc, char *argv[]) {
-    parseArgs(argc, argv);
-    return 0;
-}
-#endif

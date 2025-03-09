@@ -29,53 +29,53 @@
 enum class Command { HELP, FORMAT, CHECK, INSPECT, BUILD, SERVE, DEBUG }; // Modes of operation
 
 bool parseArgs(int argc, char *argv[]);
-
-namespace CmdLineArgs::Format {
+namespace CmdLineArgs {
+namespace Format {
 extern std::string quotePrefer; // Quote preference (default to single quotes)
-extern std::string configFile;        // Configuration file path
-extern bool useTabs;               // Whether to use tabs for indentation
-extern bool inplace;               // Whether to modify the input file in place
-extern bool ignoreDefiFile;        // Whether to ignore the definition file
+extern std::string configFile;  // Configuration file path
+extern bool useTabs;            // Whether to use tabs for indentation
+extern bool inplace;            // Whether to modify the input file in place
+extern bool ignoreDefiFile;     // Whether to ignore the definition file
 extern bool formatCode;
-extern unsigned int tabSize;   // Indentation size in spaces
+extern unsigned int tabSize;  // Indentation size in spaces
 extern unsigned int maxWidth; // Max line width
-}; // namespace CmdLineArgs::Format
+}; // namespace Format
 
-namespace CmdLineArgs::Check {
-extern bool lexical;              // Whether to check lexical errors
-extern bool syntaxOnly;           // Whether to check syntax only
-extern bool ignoreDefiFile;       // Whether to ignore the definition file
-extern std::string outputFormat; // Output format (default to JSON)
-extern std::string configFilePath;   // Configuration file path
+namespace Check {
+extern bool lexical;               // Whether to check lexical errors
+extern bool syntaxOnly;            // Whether to check syntax only
+extern bool ignoreDefiFile;        // Whether to ignore the definition file
+extern std::string outputFormat;   // Output format (default to JSON)
+extern std::string configFilePath; // Configuration file path
 extern unsigned int maxWaring;     // Max warnings
-} // namespace CmdLineArgs::Check
+} // namespace Check
 
-namespace CmdLineArgs::Inspect {
+namespace Inspect {
 extern bool dumpTokens; // Whether to dump tokens
 extern bool dumpCST;    // Whether to dump CST
-extern bool dumpAST ;    // Whether to dump AST
-extern bool dumpGCT ;    // Whether to dump GCT
+extern bool dumpAST;    // Whether to dump AST
+extern bool dumpGCT;    // Whether to dump GCT
 extern bool dumpGIR;    // Whether to dump GIR
-extern bool dumpONNX;   // Whether to dump ONNX
-extern int passUntil;             // Pass until the given pass
-} // namespace CmdLineArgs::Inspect
+extern int passUntil;   // Pass until the given pass
+} // namespace Inspect
 
-namespace CmdLineArgs::Build {
-extern bool optimize;            // Whether to optimize the code
-extern bool rollup;              // Whether to rollup the code
-extern bool verbose;             // Whether to show verbose information
+namespace Build {
+extern bool optimize;             // Whether to optimize the code
+extern bool rollup;               // Whether to rollup the code
+extern bool verbose;              // Whether to show verbose information
 extern std::string warningSwitch; // Warning switch (default to on)
-extern std::string outputDir;       // Output directory
-} // namespace CmdLineArgs::Build
+extern std::string outputDir;     // Output directory
+} // namespace Build
 
-namespace CmdLineArgs::Serve {
-extern std::string serverHost; // Server host
-extern unsigned int serverPort;     // Server port
-} // namespace CmdLineArgs::Serve
+namespace Serve {
+extern std::string serverHost;  // Server host
+extern unsigned int serverPort; // Server port
+} // namespace Serve
 
-namespace CmdLineArgs::Debug {
+namespace Debug {
 extern std::string variable; // Whether to optimize the code
-} // namespace CmdLineArgs::Debug
+} // namespace Debug
+} // namespace CmdLineArgs
 
 extern std::string targetFile;
 extern std::string outputFile;
