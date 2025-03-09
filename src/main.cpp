@@ -135,14 +135,6 @@ int main(int argc, char *argv[]) {
             const string formattedCode = any_cast<string>(formatter.visit(tree));
             os << formattedCode;
             return 0;
-            // try {
-            //     const string formattedCode = any_cast<string>(formatter.visit(tree));
-            //     os << formattedCode;
-            //     return 0;
-            // } catch (exception &e) {
-            //     error << "Format failed: " << e.what() << endl;
-            //     return 1;
-            // }
         }
 
         if (dumpCST) {
