@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Mar. 03, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,17 +27,15 @@
 
 namespace GraphIR {
 
-namespace ast = AbstractSyntaxTree;
-
 using void_ptr_t = void *;
 
 class Constructor {
   public:
     Constructor(context_ptr_t &context) : context_(context) {}
 
-    graph_ptr_t construct(ast::node_ptr_t &ast) {
+    graph_ptr_t construct(AST::node_ptr_t &ast) {
         visit(ast);
-        return context_->currGraph();
+        return context_->rootGraph();
     }
 
   private:
@@ -48,21 +46,21 @@ class Constructor {
     void delCachedFunc(func_type_ptr_t key) { funcCache_.erase(key); }
     func_ptr_t getCachedFunc(func_type_ptr_t key) { return funcCache_[key]; }
 
-    std::any visit(const ast::node_ptr_t &ast);
+    std::any visit(const AST::node_ptr_t &ast);
 
-    node_ptr_t visitDataNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitVariNode(const ast::node_ptr_t &ast);
-    type_ptr_t visitTypeNode(const ast::node_ptr_t &ast);
-    func_ptr_t visitDeclNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitFuncNode(const ast::node_ptr_t &ast);
-    void_ptr_t visitNRefNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitDRefNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitWaitNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitAnnoNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitLinkNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitWithNode(const ast::node_ptr_t &ast);
-    void_ptr_t visitRetnNode(const ast::node_ptr_t &ast);
-    node_ptr_t visitExecNode(const ast::node_ptr_t &ast);
-    void_ptr_t visitFromNode(const ast::node_ptr_t &ast);
+    node_ptr_t visitDataNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitVariNode(const AST::node_ptr_t &ast);
+    type_ptr_t visitTypeNode(const AST::node_ptr_t &ast);
+    func_ptr_t visitDeclNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitFuncNode(const AST::node_ptr_t &ast);
+    void_ptr_t visitNRefNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitDRefNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitWaitNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitAnnoNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitLinkNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitWithNode(const AST::node_ptr_t &ast);
+    void_ptr_t visitRetnNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitExecNode(const AST::node_ptr_t &ast);
+    void_ptr_t visitFromNode(const AST::node_ptr_t &ast);
 };
 } // namespace GraphIR

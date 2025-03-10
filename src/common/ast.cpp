@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 #include "utils/log.h"
 
 using namespace std;
-using namespace ast;
+using namespace AST;
 
 const string Load::typeStr() const {
     switch (type_) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 12, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,9 +21,9 @@
 #include "utils/log.h"
 
 using namespace std;
-using namespace gir;
+using namespace GIR;
 
-string GraphVizPass::pointerToIdent(const void *ptr) {
+string GraphVizDumpPass::pointerToIdent(const void *ptr) {
     uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
     if (!showRawPtr) {
         if (ptrsMap_.find(ptrVal) == ptrsMap_.end()) {
@@ -36,21 +36,21 @@ string GraphVizPass::pointerToIdent(const void *ptr) {
     return ss.str();
 }
 
-void GraphVizPass::pushIndent() {
+void GraphVizDumpPass::pushIndent() {
     baseIndent_ += indent_;
     depth_++;
 }
 
-void GraphVizPass::popIndent() {
+void GraphVizDumpPass::popIndent() {
     baseIndent_ = baseIndent_.substr(0, baseIndent_.size() - indent_.size());
     depth_--;
 }
 
-void GraphVizPass::reset() {}
+void GraphVizDumpPass::reset() {}
 
-void GraphVizPass::reset(context_ptr_t &context) { context_ = context; }
+void GraphVizDumpPass::reset(context_ptr_t &context) { context_ = context; }
 
-any GraphVizPass::apply(gir::graph_ptr_t &graph) {
+any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     string funcId = pointerToIdent(graph.get());
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;

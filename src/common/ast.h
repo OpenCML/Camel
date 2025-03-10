@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -246,4 +246,4 @@ inline std::shared_ptr<FromLoad> from_load_ptr_cast(const load_ptr_t &ptr) {
 
 } // namespace AbstractSyntaxTree
 
-namespace ast = AbstractSyntaxTree;
+namespace AST = AbstractSyntaxTree;

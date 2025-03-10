@@ -55,14 +55,14 @@ any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
         return ret;
     };
 
-    cout << getHead(isLast);
-    cout << nodeName;
+    os << getHead(isLast);
+    os << nodeName;
     if (children.size() == 0) {
         string raw = context->getText();
         string text = regex_replace(raw, regex(R"(\n)"), "\\n");
-        cout << " " << text;
+        os << " " << text;
     }
-    cout << endl;
+    os << endl;
 
     if (depth > 0)
         for (size_t i = depth; i < visible.size(); i++)

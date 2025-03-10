@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 #define DEBUG_LEVEL 0
 
 using namespace std;
-using namespace ast;
+using namespace AST;
 
 template <typename LoadType, typename... Args> node_ptr_t createNode(Args &&...args) {
     return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));

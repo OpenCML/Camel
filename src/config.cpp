@@ -25,7 +25,6 @@ using namespace clipp;
 using namespace std;
 
 namespace CmdLineArgs {
-string targetFile = "";
 string outputFile = "";
 string package = "";
 string schedular = "";
@@ -100,7 +99,6 @@ using namespace CmdLineArgs::Serve;
 
 void _printFormatArgs() {
     cout << "Format args: " << endl;
-    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\ttab-size:" << tabSize << endl;
     cout << "\tuse-tabs:" << useTabs << endl;
     cout << "\tquote-prefer:" << quotePrefer << endl;
@@ -109,33 +107,45 @@ void _printFormatArgs() {
     cout << "\tignore:" << Format::ignoreDefiFile << endl;
     cout << "\tinplace:" << inplace << endl;
     cout << "\tformat-code:" << formatCode << endl;
+    cout << "\ttarget-file:";
+    for (auto &file : targetFiles) {
+        cout << file << " ";
+    }
+    cout << endl;
 }
 
 void _printCheckArgs() {
     cout << "Check args: " << endl;
-    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\tlexical-only:" << lexical << endl;
     cout << "\tsyntax-only:" << syntaxOnly << endl;
     cout << "\toutput-format:" << outputFormat << endl;
     cout << "\tmax-warning:" << maxWaring << endl;
     cout << "\tconfig-file:" << configFile << endl;
     cout << "\tignore:" << Check::ignoreDefiFile << endl;
+    cout << "\ttarget-file:";
+    for (auto &file : targetFiles) {
+        cout << file << " ";
+    }
+    cout << endl;
 }
 
 void _printInspectArgs() {
     cout << "Inspect args: " << endl;
-    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\tdump-tokens:" << dumpTokens << endl;
     cout << "\tdump-cst:" << dumpCST << endl;
     cout << "\tdump-ast:" << dumpAST << endl;
     cout << "\tdump-gct:" << dumpGCT << endl;
     cout << "\tdump-gir:" << dumpGIR << endl;
     cout << "\tpass-until:" << passUntil << endl;
+    cout << "\ttarget-file:";
+    for (auto &file : targetFiles) {
+        cout << file << " ";
+    }
+    cout << endl;
 }
 
 void _printBuildArgs() {
     cout << "Build args: " << endl;
-    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\toptimize:" << optimize << endl;
     cout << "\trollup:" << rollup << endl;
     cout << "\tverbose:" << verbose << endl;
@@ -148,11 +158,15 @@ void _printBuildArgs() {
             cout << dir << endl;
         }
     }
+    cout << "\ttarget-file:";
+    for (auto &file : targetFiles) {
+        cout << file << " ";
+    }
+    cout << endl;
 }
 
 void _printDebugArgs() {
     cout << "Debug args: " << endl;
-    cout << "\ttarget-file:" << targetFile << endl;
     cout << "\tvariable:" << variable << endl;
     if (!includeDirs.empty()) {
         cout << "\tincludeDir:" << endl;
@@ -161,6 +175,11 @@ void _printDebugArgs() {
         }
     }
     cout << "\tstd-lib-path:" << stdLibPath << endl;
+    cout << "\ttarget-file:";
+    for (auto &file : targetFiles) {
+        cout << file << " ";
+    }
+    cout << endl;
 }
 
 void _printServeArgs() {
@@ -336,10 +355,6 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (selected == Command::INFO || selected == Command::SERVE) {
         return false;
-    }
-
-    if (!targetFiles.empty()) {
-        targetFile = targetFiles[0];
     }
 
     return true;

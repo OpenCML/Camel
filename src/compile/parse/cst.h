@@ -26,7 +26,11 @@
 
 class CSTDumpVisitor : public OpenCMLVisitor {
     size_t depth = 0;
+    std::ostream &os = std::cout;
     std::vector<bool> visible;
+
+  public:
+    CSTDumpVisitor(std::ostream &os) : os(os) {}
 
     std::any dumpCST(antlr4::tree::ParseTree *context, std::string nodeName);
 
