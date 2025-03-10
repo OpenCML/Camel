@@ -19,11 +19,11 @@
 
 #include <iterator>
 
-#include "ast.h"
+#include "gct.h"
 #include "utils/log.h"
 
 using namespace std;
-using namespace AST;
+using namespace GCT;
 
 const string Load::typeStr() const {
     switch (type_) {

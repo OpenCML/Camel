@@ -19,14 +19,14 @@
 
 #include "antlr/OpenCMLLexer.h"
 
-#include "ast.h"
 #include "common/token.h"
+#include "gct.h"
 #include "utils/log.h"
 
 #define DEBUG_LEVEL 0
 
 using namespace std;
-using namespace AST;
+using namespace GCT;
 
 template <typename LoadType, typename... Args> node_ptr_t createNode(Args &&...args) {
     return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
@@ -36,7 +36,7 @@ template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&
     return createNode<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 }
 
-namespace AbstractSyntaxTree::InnerFuncDRefNodes {
+namespace GraphConstructTree::InnerFuncDRefNodes {
 node_ptr_t __copy__ = nullptr;
 node_ptr_t __cast__ = nullptr;
 node_ptr_t __type__ = nullptr;
@@ -191,7 +191,7 @@ void init() {
     opNodesMap["~"] = __rev__;
 }
 
-} // namespace AbstractSyntaxTree::InnerFuncDRefNodes
+} // namespace GraphConstructTree::InnerFuncDRefNodes
 
 inline node_ptr_t reparent(node_ptr_t &node, node_ptr_t &parent) {
     *parent << node;

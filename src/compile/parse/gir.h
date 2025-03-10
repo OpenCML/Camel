@@ -20,10 +20,10 @@
 #include <fstream>
 #include <iostream>
 
-#include "ast.h"
-#include "common/ast.h"
 #include "common/context.h"
+#include "common/gct.h"
 #include "common/graph.h"
+#include "gct.h"
 
 namespace GraphIR {
 
@@ -33,7 +33,7 @@ class Constructor {
   public:
     Constructor(context_ptr_t &context) : context_(context) {}
 
-    graph_ptr_t construct(AST::node_ptr_t &ast) {
+    graph_ptr_t construct(GCT::node_ptr_t &ast) {
         visit(ast);
         return context_->rootGraph();
     }
@@ -46,21 +46,21 @@ class Constructor {
     void delCachedFunc(func_type_ptr_t key) { funcCache_.erase(key); }
     func_ptr_t getCachedFunc(func_type_ptr_t key) { return funcCache_[key]; }
 
-    std::any visit(const AST::node_ptr_t &ast);
+    std::any visit(const GCT::node_ptr_t &ast);
 
-    node_ptr_t visitDataNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitVariNode(const AST::node_ptr_t &ast);
-    type_ptr_t visitTypeNode(const AST::node_ptr_t &ast);
-    func_ptr_t visitDeclNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitFuncNode(const AST::node_ptr_t &ast);
-    void_ptr_t visitNRefNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitDRefNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitWaitNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitAnnoNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitLinkNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitWithNode(const AST::node_ptr_t &ast);
-    void_ptr_t visitRetnNode(const AST::node_ptr_t &ast);
-    node_ptr_t visitExecNode(const AST::node_ptr_t &ast);
-    void_ptr_t visitFromNode(const AST::node_ptr_t &ast);
+    node_ptr_t visitDataNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitVariNode(const GCT::node_ptr_t &ast);
+    type_ptr_t visitTypeNode(const GCT::node_ptr_t &ast);
+    func_ptr_t visitDeclNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitFuncNode(const GCT::node_ptr_t &ast);
+    void_ptr_t visitNRefNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitDRefNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitWaitNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitAnnoNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitLinkNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitWithNode(const GCT::node_ptr_t &ast);
+    void_ptr_t visitRetnNode(const GCT::node_ptr_t &ast);
+    node_ptr_t visitExecNode(const GCT::node_ptr_t &ast);
+    void_ptr_t visitFromNode(const GCT::node_ptr_t &ast);
 };
 } // namespace GraphIR

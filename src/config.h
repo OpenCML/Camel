@@ -30,6 +30,8 @@ enum class Command { RUN, INFO, FORMAT, CHECK, INSPECT, BUILD, SERVE, DEBUG }; /
 bool parseArgs(int argc, char *argv[]);
 
 namespace CmdLineArgs {
+extern Command selectedCommand;
+
 extern std::string outputFile;
 extern std::string errorFormat;
 extern std::vector<std::string> scriptsDirs;

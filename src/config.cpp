@@ -25,6 +25,8 @@ using namespace clipp;
 using namespace std;
 
 namespace CmdLineArgs {
+Command selectedCommand = Command::RUN;
+
 string outputFile = "";
 string package = "";
 string schedular = "";
@@ -241,7 +243,7 @@ bool parseArgs(int argc, char *argv[]) {
     bool showDocs = false;
     bool showCopyRightInfo = false; // Copyright information
 
-    Command selected = Command::RUN;
+    Command selectedCommand = Command::RUN;
 
     auto run = (option("-P", "--profile").set(profile) % "profile the perf",
                 (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
@@ -252,12 +254,12 @@ bool parseArgs(int argc, char *argv[]) {
                 (option("-L", "--stdlib").set(setStdLibPath) & value("stdlib path", stdLibPath)) % "add stdlib path",
                 values("input", targetFiles) % "input file");
 
-    auto info = (option("-h", "--help").set(showHelp).set(selected, Command::INFO) % "show this help message",
-                 option("-v", "--version").set(showVersion).set(selected, Command::INFO) % "show version",
-                 option("-a", "--about").set(showCopyRightInfo).set(selected, Command::INFO) %
+    auto info = (option("-h", "--help").set(showHelp).set(selectedCommand, Command::INFO) % "show this help message",
+                 option("-v", "--version").set(showVersion).set(selectedCommand, Command::INFO) % "show version",
+                 option("-a", "--about").set(showCopyRightInfo).set(selectedCommand, Command::INFO) %
                      "show copyright and related information");
 
-    auto format = (command("format").set(formatCode).set(selected, Command::FORMAT) % "format the code",
+    auto format = (command("format").set(formatCode).set(selectedCommand, Command::FORMAT) % "format the code",
                    (option("-t", "--tab-size") & integer("tabsize", tabSize)) % "indentation size in spaces",
                    option("-u", "--use-tabs").set(useTabs) % "use tabs instead of spaces for indentation",
                    (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single")) %
@@ -269,7 +271,7 @@ bool parseArgs(int argc, char *argv[]) {
                    values("input", targetFiles) % "input file");
 
     auto check =
-        (command("check").set(selected, Command::CHECK) % "check the code",
+        (command("check").set(selectedCommand, Command::CHECK) % "check the code",
          option("-i", "--lexical-only").set(lexical) % "indentation size in spaces",
          option("-s", "--syntax-only").set(syntaxOnly) % "syntax only",
          (option("-O", "--output-format") & value("output format", outputFormat)) % "output format: text or json",
@@ -280,7 +282,7 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto inspect =
-        (command("inspect").set(selected, Command::INSPECT) % "inspect the code",
+        (command("inspect").set(selectedCommand, Command::INSPECT) % "inspect the code",
          joinable(option("-t", "-T").set(dumpTokens) % "dump tokens",
                   option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
                   option("-a", "-A").set(dumpAST) % "dump abstract syntax tree",
@@ -295,7 +297,7 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto build =
-        (command("build").set(selected, Command::BUILD) % "build the code",
+        (command("build").set(selectedCommand, Command::BUILD) % "build the code",
          option("-o", "-O", "--optimize").set(optimize) % "optimize the code",
          option("-r", "-R", "-rollup").set(rollup) % "rollup the code",
          option("-g", "--verbose").set(verbose) % "show verbose information",
@@ -307,11 +309,11 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto serve =
-        (command("serve").set(selected, Command::SERVE) % "serve the code",
+        (command("serve").set(selectedCommand, Command::SERVE) % "serve the code",
          (option("--host") & value("host", serverHost)) % "host",
          (option("--port") & integer("port", serverPort)) % "port", values("input", targetFiles) % "input file");
 
-    auto debug = (command("debug").set(selected, Command::DEBUG) % "debug the code",
+    auto debug = (command("debug").set(selectedCommand, Command::DEBUG) % "debug the code",
                   (option("--variable") & value("variable", variable)) % "variable", /*not finished yet*/
                   option("--print") % "print debug information",                     /*not finished yet*/
                   option("--include") & values("include dir", includeDirs) % "add include directory",
@@ -328,7 +330,7 @@ bool parseArgs(int argc, char *argv[]) {
     }
 
 #ifndef NDEBUG
-    printCliArgs(selected);
+    printCliArgs(selectedCommand);
 #endif
 
     if (showHelp) {
@@ -353,7 +355,7 @@ bool parseArgs(int argc, char *argv[]) {
         cout << "Not implemented yet" << endl;
     }
 
-    if (selected == Command::INFO || selected == Command::SERVE) {
+    if (selectedCommand == Command::INFO || selectedCommand == Command::SERVE) {
         return false;
     }
 

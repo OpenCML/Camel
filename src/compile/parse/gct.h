@@ -26,12 +26,61 @@
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
-#include "common/ast.h"
 #include "common/error/build.h"
+#include "common/gct.h"
 #include "common/scope.h"
 #include "common/tree.h"
 
-namespace AbstractSyntaxTree {
+namespace GraphConstructTree {
+
+namespace InnerFuncDRefNodes {
+extern node_ptr_t __copy__;
+extern node_ptr_t __cast__;
+extern node_ptr_t __type__;
+extern node_ptr_t __index__;
+
+extern node_ptr_t __as__;
+extern node_ptr_t __is__;
+
+extern node_ptr_t __add__;
+extern node_ptr_t __sub__;
+extern node_ptr_t __mul__;
+extern node_ptr_t __div__;
+extern node_ptr_t __mod__;
+extern node_ptr_t __pow__;
+extern node_ptr_t __inter__;
+extern node_ptr_t __union__;
+
+extern node_ptr_t __assn__;
+extern node_ptr_t __assn_add__;
+extern node_ptr_t __assn_sub__;
+extern node_ptr_t __assn_mul__;
+extern node_ptr_t __assn_div__;
+extern node_ptr_t __assn_mod__;
+extern node_ptr_t __assn_pow__;
+extern node_ptr_t __assn_inter__;
+extern node_ptr_t __assn_union__;
+
+extern node_ptr_t __lt__;
+extern node_ptr_t __gt__;
+extern node_ptr_t __le__;
+extern node_ptr_t __ge__;
+extern node_ptr_t __eq__;
+extern node_ptr_t __ne__;
+extern node_ptr_t __and__;
+extern node_ptr_t __or__;
+
+extern node_ptr_t __not__;
+extern node_ptr_t __neg__;
+extern node_ptr_t __rev__;
+
+extern node_ptr_t __ifexpr__;
+
+extern std::unordered_map<std::string, node_ptr_t> nodesMap;
+extern std::unordered_map<std::string, node_ptr_t> opNodesMap;
+
+void init();
+} // namespace InnerFuncDRefNodes
 
 class Node : public AbstractTreeNode<load_ptr_t> {
   public:
@@ -50,7 +99,10 @@ class Node : public AbstractTreeNode<load_ptr_t> {
 
 class Constructor : public OpenCMLVisitor {
   public:
-    Constructor() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(); };
+    Constructor() {
+        typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>();
+        InnerFuncDRefNodes::init();
+    };
     virtual ~Constructor() = default;
 
     node_ptr_t construct(antlr4::tree::ParseTree *tree) {
@@ -71,6 +123,38 @@ class Constructor : public OpenCMLVisitor {
     std::queue<BuildWarning> warnQueue_;
 
     void reportWarning(const std::string &msg, antlr4::Token *token) { warnQueue_.emplace(msg, token); }
+
+    void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
+    void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
+
+    data_ptr_t extractStaticData(const node_ptr_t &node);
+    std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
+    std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
+    std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
+
+    template <typename Ctx, typename Val> node_ptr_t visitBinaryOpList(Ctx *context, std::vector<Val *> dataVec) {
+        node_ptr_t lhsNode = std::any_cast<node_ptr_t>(visit(dataVec[0]));
+
+        for (size_t i = 1; i < dataVec.size(); i++) {
+            node_ptr_t execNode = createNode<ExecLoad>();
+            node_ptr_t rhsNode = std::any_cast<node_ptr_t>(visit(dataVec[i]));
+
+            std::string op = context->children[i * 2 - 1]->getText();
+            node_ptr_t funcNode = InnerFuncDRefNodes::opNodesMap[op];
+
+            auto [lhsData, lhsDangling] = extractData(lhsNode, execNode);
+            auto [rhsData, rhsDangling] = extractData(rhsNode, execNode);
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{lhsData, rhsData});
+
+            if (lhsDangling || rhsDangling) {
+                dataNode = reparent(dataNode, execNode);
+            }
+
+            lhsNode = linkFunc(dataNode, funcNode);
+        }
+
+        return lhsNode;
+    }
 
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
 
@@ -220,4 +304,4 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context);
 };
-} // namespace AbstractSyntaxTree
+} // namespace GraphConstructTree

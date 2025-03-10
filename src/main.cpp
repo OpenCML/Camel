@@ -31,8 +31,8 @@
 #include "common/error/error.h"
 #include "common/error/json.h"
 #include "common/type.h"
-#include "compile/parse/ast.h"
 #include "compile/parse/cst.h"
+#include "compile/parse/gct.h"
 #include "compile/parse/gir.h"
 #include "config.h"
 #include "operators/init.h"
@@ -41,6 +41,7 @@
 
 using namespace antlr4;
 using namespace std;
+
 using namespace CLI;
 
 #define DEBUG_LEVEL -1
@@ -147,12 +148,12 @@ int main(int argc, char *argv[]) {
             cstDumpVisitor.visit(tree);
         }
 
-        if ((Inspect::dumpAST || Inspect::dumpGIR) && !hasParseError) {
+        if (selectedCommand == Command::INSPECT && !hasParseError) {
             initTypes();
-            AST::node_ptr_t ast = nullptr;
-            auto astConstructor = AST::Constructor();
+            GCT::node_ptr_t gct = nullptr;
+            auto astConstructor = GCT::Constructor();
             try {
-                ast = astConstructor.construct(tree);
+                gct = astConstructor.construct(tree);
                 auto &warns = astConstructor.warns();
                 while (!warns.empty()) {
                     const auto &warning = warns.front();
@@ -173,7 +174,7 @@ int main(int argc, char *argv[]) {
                 }
             } catch (exception &e) {
                 if (errorFormat != "json") {
-                    error << "AST construction failed: " << e.what() << endl;
+                    error << "GCT construction failed: " << e.what() << endl;
                     return 1;
                 } else {
                     os << "{"
@@ -181,14 +182,19 @@ int main(int argc, char *argv[]) {
                        << "\"filename\": \"" << targetFile << "\", "
                        << "\"line\": 0, "
                        << "\"column\": 0, "
-                       << "\"message\": \"AST construction failed: " << e.what() << "\""
+                       << "\"message\": \"GCT construction failed: " << e.what() << "\""
                        << "}" << endl;
                     return 0;
                 }
             }
 
-            if (Inspect::dumpAST && ast) {
-                ast->print(os);
+            if (Inspect::dumpAST && gct) {
+                // currently we do not have AST, print GCT instead
+                gct->print(os);
+            }
+
+            if (Inspect::dumpGCT && gct) {
+                gct->print(os);
             }
 
             GIR::graph_ptr_t gir = nullptr;
@@ -198,7 +204,7 @@ int main(int argc, char *argv[]) {
                 initOperators();
                 auto girConstructor = GIR::Constructor(ctx);
                 try {
-                    gir = girConstructor.construct(ast);
+                    gir = girConstructor.construct(gct);
                 } catch (exception &e) {
                     error << "GIR construction failed: " << e.what() << endl;
                     return 1;
