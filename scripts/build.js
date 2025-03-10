@@ -5,8 +5,13 @@ export default function main() {
     process.chdir(BASEDIR)
     process.chdir(path.join(BASEDIR, 'build'))
 
+    const BUILD_TIMESTAMP = new Date()
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .replace(/[T]/g, '_')
+        .slice(2, 16)
     runCommand(
-        'cmake .. -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake'
+        `cmake .. -G "Ninja Multi-Config" -DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake`
     )
     runCommand('cmake --build . --config Release')
 

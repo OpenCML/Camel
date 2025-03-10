@@ -347,6 +347,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showCopyRightInfo) {
         cout << "Camel v" << VERSION << endl;
+        cout << "Build: " << BUILD_TIMESTAMP << endl;
         cout << "Copyright (c) 2024 Beijing Jiaotong University" << endl;
         cout << "Camel is licensed under the MIT license." << endl;
     }
