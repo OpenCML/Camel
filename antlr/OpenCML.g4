@@ -3,7 +3,7 @@ import OpenCMLLex;
 
 @header {
 /**
- * Copyright (c) 2024 Beijing Jiaotong University
+ * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You can use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024 Beijing Jiaotong University
+ * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You can use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:
@@ -347,7 +347,8 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showCopyRightInfo) {
         cout << "Camel v" << VERSION << endl;
-        cout << "Copyright (c) 2024 Beijing Jiaotong University" << endl;
+        cout << "Build at " << BUILD_TIMESTAMP << endl;
+        cout << "Copyright (c) 2024 the OpenCML Organization." << endl;
         cout << "Camel is licensed under the MIT license." << endl;
     }
 

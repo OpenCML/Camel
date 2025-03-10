@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024 Beijing Jiaotong University
+ * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You can use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:
@@ -21,7 +21,10 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.0.12"
+#define VERSION "0.0.13"
+#ifndef BUILD_TIMESTAMP
+#define BUILD_TIMESTAMP "%y%m%d_%H%M%S"
+#endif
 
 #include <string>
 

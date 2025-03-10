@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.25)
 project(camel)
 
+if(NOT DEFINED BUILD_TIMESTAMP)
+    string(TIMESTAMP BUILD_TIMESTAMP "%y%m%d_%H%M%S")
+endif()
+
+add_compile_definitions(BUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
