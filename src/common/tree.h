@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -180,5 +180,5 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
         return;
     }
 
-    void print() { this->dumpTree(std::cout); }
+    void print(std::ostream &os = std::cout) { this->dumpTree(os); }
 };

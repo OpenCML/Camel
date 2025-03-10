@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Dec. 12, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,9 +21,9 @@
 #include "utils/log.h"
 
 using namespace std;
-using namespace gir;
+using namespace GIR;
 
-ostream &gir::operator<<(ostream &os, NodeType type) {
+ostream &GIR::operator<<(ostream &os, NodeType type) {
     switch (type) {
     case NodeType::GRAPH:
         os << "GRAPH";
@@ -47,7 +47,7 @@ ostream &gir::operator<<(ostream &os, NodeType type) {
     return os;
 }
 
-ostream &gir::operator<<(ostream &os, DataTypeEnum type) {
+ostream &GIR::operator<<(ostream &os, DataTypeEnum type) {
     switch (type) {
     case DataTypeEnum::SHARED_CONSTANT:
         os << "SHARED_CONSTANT";
@@ -91,13 +91,13 @@ void Node::makeVariable(bool shared) {
 Graph
 */
 
-gir::Graph::Graph()
+GIR::Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
       ports_(make_shared<vector<tuple<size_t, size_t, bool>>>()), subGraphs_(),
       sharedConstants_(make_shared<data_vec_t>()), sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
       rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
-gir::Graph::Graph(Graph &other)
+GIR::Graph::Graph(Graph &other)
     : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(other.subGraphs_),
       sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
       runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
@@ -110,7 +110,7 @@ gir::Graph::Graph(Graph &other)
     }
 }
 
-graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
+graph_ptr_t GIR::Graph::create(graph_ptr_t graph) {
     const auto res = make_shared<Graph>();
     res->graph_ = graph;
     if (graph) {
@@ -119,18 +119,18 @@ graph_ptr_t gir::Graph::create(graph_ptr_t graph) {
     return res;
 }
 
-void gir::Graph::setFuncType(const func_type_ptr_t &type) { funcType_ = type; }
+void GIR::Graph::setFuncType(const func_type_ptr_t &type) { funcType_ = type; }
 
-func_type_ptr_t gir::Graph::funcType() const {
+func_type_ptr_t GIR::Graph::funcType() const {
     if (funcType_ == nullptr) {
         throw runtime_error("This graph has not been set to a functor.");
     }
     return funcType_;
 }
 
-void gir::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
+void GIR::Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
 
-node_ptr_t gir::Graph::addPort(bool isVar) {
+node_ptr_t GIR::Graph::addPort(bool isVar) {
     node_ptr_t node = DataNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);
     if (isVar) {
         node->makeVariable();
@@ -140,14 +140,14 @@ node_ptr_t gir::Graph::addPort(bool isVar) {
     return node;
 }
 
-void gir::Graph::addSubGraph(const graph_ptr_t &graph) {
+void GIR::Graph::addSubGraph(const graph_ptr_t &graph) {
     // here we assume that the subgraph is a new blank graph
     subGraphs_.push_back(graph);
 }
 
-void gir::Graph::setOutput(const node_ptr_t &node) { output_ = node; }
+void GIR::Graph::setOutput(const node_ptr_t &node) { output_ = node; }
 
-size_t gir::Graph::makeVariable(size_t index, bool shared) {
+size_t GIR::Graph::makeVariable(size_t index, bool shared) {
     if (shared) {
         cml_assert(!dataType_.shared, "Cannot make a shared variable from a runtime constant.");
         sharedVariables_->push_back(sharedConstants_->at(index));
@@ -160,7 +160,7 @@ size_t gir::Graph::makeVariable(size_t index, bool shared) {
     }
 }
 
-size_t gir::Graph::addConstant(const data_ptr_t &data, bool shared) {
+size_t GIR::Graph::addConstant(const data_ptr_t &data, bool shared) {
     if (shared) {
         sharedConstants_->push_back(data);
         return sharedConstants_->size() - 1;
@@ -170,7 +170,7 @@ size_t gir::Graph::addConstant(const data_ptr_t &data, bool shared) {
     }
 }
 
-data_ptr_t gir::Graph::getConstant(size_t index, bool shared) {
+data_ptr_t GIR::Graph::getConstant(size_t index, bool shared) {
     if (shared) {
         cml_assert(index < sharedConstants_->size(), "Constant index out of range.");
         return sharedConstants_->at(index);
@@ -180,7 +180,7 @@ data_ptr_t gir::Graph::getConstant(size_t index, bool shared) {
     }
 }
 
-data_ptr_t gir::Graph::getVariable(size_t index, bool shared) {
+data_ptr_t GIR::Graph::getVariable(size_t index, bool shared) {
     if (shared) {
         cml_assert(index < sharedVariables_->size(), "Variable index out of range.");
         return sharedVariables_->at(index);
@@ -204,7 +204,7 @@ data_ptr_t gir::Graph::getVariable(size_t index, bool shared) {
     }
 }
 
-void gir::Graph::setConstant(size_t index, const data_ptr_t &data, bool shared) {
+void GIR::Graph::setConstant(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
         cml_assert(index < sharedConstants_->size(), "Constant index out of range.");
         sharedConstants_->at(index) = data;
@@ -214,7 +214,7 @@ void gir::Graph::setConstant(size_t index, const data_ptr_t &data, bool shared) 
     }
 }
 
-void gir::Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) {
+void GIR::Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
         cml_assert(index < sharedVariables_->size(), "Variable index out of range.");
         sharedVariables_->at(index) = data;
@@ -224,7 +224,7 @@ void gir::Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) 
     }
 }
 
-void gir::Graph::fulfill(const data_vec_t &dataList) {
+void GIR::Graph::fulfill(const data_vec_t &dataList) {
     cml_assert(dataList.size() == ports_->size(), "Data list size does not match ports size.");
     for (size_t i = 0; i < dataList.size(); i++) {
         const auto &data = dataList[i];
@@ -237,7 +237,7 @@ void gir::Graph::fulfill(const data_vec_t &dataList) {
     }
 }
 
-data_ptr_t gir::Graph::eval() { return nullptr; }
+data_ptr_t GIR::Graph::eval() { return nullptr; }
 
 /*
 DataNode

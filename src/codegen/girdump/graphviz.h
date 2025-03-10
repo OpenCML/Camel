@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 12, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "common/context.h"
 #include "common/pass.h"
 
-class GraphVizPass : public GraphPass {
+class GraphVizDumpPass : public GraphIRPass {
     context_ptr_t context_;
 
     uintptr_t ptrCnt = 0;
@@ -40,10 +40,10 @@ class GraphVizPass : public GraphPass {
     std::string pointerToIdent(const void *ptr);
 
   public:
-    GraphVizPass(const context_ptr_t &context) : context_(context) {};
-    virtual ~GraphVizPass() = default;
+    GraphVizDumpPass(const context_ptr_t &context) : context_(context) {};
+    virtual ~GraphVizDumpPass() = default;
 
     void reset() override;
     void reset(context_ptr_t &context);
-    std::any apply(gir::graph_ptr_t &graph) override;
+    std::any apply(GIR::graph_ptr_t &graph) override;
 };
