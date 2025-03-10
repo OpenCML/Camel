@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 08, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,11 +98,11 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
             ;
     }
 
-    template <typename func_t> void traverse(func_t f, int &level, int &index) {
+    template <typename func_t> void traverse(func_t f, size_t &level, size_t &index) {
         tree_node_t<load_t> &self = *this;
         f(self);
         level++;
-        int tmpIdx = index++;
+        size_t tmpIdx = index++;
         index = 0;
         foreach ([&](tree_node_t<load_t> &ref) {
             ref.traverse(f, level, index);
@@ -119,10 +119,10 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
         f(*this);
     }
 
-    template <typename func_t> void postorder(func_t f, int &level, int &index) {
+    template <typename func_t> void postorder(func_t f, size_t &level, size_t &index) {
         tree_node_t<load_t> &self = *this;
         level++;
-        int tmpIdx = index++;
+        size_t tmpIdx = index++;
         index = 0;
         foreach ([&](tree_node_t<load_t> &ref) {
             ref.postorder(f, level, index);
@@ -136,8 +136,8 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
 
     void dumpTree(std::ostream &os) {
         std::vector<bool> visible;
-        int depth = 0;
-        int index = 0;
+        size_t depth = 0;
+        size_t index = 0;
         traverse(
             [&](tree_node_t<load_t> &node) {
                 bool isLast = false;
@@ -152,7 +152,7 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
                     }
                 }
                 auto getHead = [&]() -> std::string {
-                    int i = 0;
+                    size_t i = 0;
                     std::string ret;
                     while (i < depth - 1) {
                         if (visible[i])
@@ -173,12 +173,12 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
                 os << node.toString();
                 os << std::endl;
                 if (depth > 0)
-                    for (int i = depth; i < visible.size(); i++)
+                    for (size_t i = depth; i < visible.size(); i++)
                         visible[i] = true;
             },
             depth, index);
         return;
     }
 
-    void print() { this->dumpTree(std::cout); }
+    void print(std::ostream &os = std::cout) { this->dumpTree(os); }
 };

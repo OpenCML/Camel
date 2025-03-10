@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,26 +26,26 @@
 #include "operator.h"
 #include "scope.h"
 
-using node_scope_t = Scope<std::string, gir::node_ptr_t>;
-using node_scope_ptr_t = scope_ptr_t<std::string, gir::node_ptr_t>;
+using node_scope_t = Scope<std::string, GIR::node_ptr_t>;
+using node_scope_ptr_t = scope_ptr_t<std::string, GIR::node_ptr_t>;
 using func_scope_t = Scope<std::string, std::shared_ptr<func_vec_t>>;
 using func_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<func_vec_t>>;
 using operator_scope_t = Scope<std::string, std::shared_ptr<oper_vec_t>>;
 using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<oper_vec_t>>;
 
 class Context {
-    gir::graph_ptr_t rootGraph_;
-    gir::graph_ptr_t currGraph_;
+    GIR::graph_ptr_t rootGraph_;
+    GIR::graph_ptr_t currGraph_;
     node_scope_ptr_t nodeScope_;
     func_scope_ptr_t funcScope_;
     operator_scope_ptr_t opScope_;
 
     std::unordered_map<func_type_ptr_t,
-                       std::tuple<node_scope_ptr_t, func_scope_ptr_t, operator_scope_ptr_t, gir::graph_ptr_t>>
+                       std::tuple<node_scope_ptr_t, func_scope_ptr_t, operator_scope_ptr_t, GIR::graph_ptr_t>>
         funcCache_;
 
     // only generated when getNodeIdent() is called to save memory
-    std::unordered_map<gir::node_ptr_t, std::string> nodeIdentsMap_;
+    std::unordered_map<GIR::node_ptr_t, std::string> nodeIdentsMap_;
     void generateNodeIdentsMap();
 
   public:
@@ -56,19 +56,19 @@ class Context {
     func_scope_t &funcScope() { return *funcScope_; }
     operator_scope_t &opScope() { return *opScope_; }
 
-    gir::graph_ptr_t &rootGraph() { return rootGraph_; }
-    gir::graph_ptr_t &currGraph() { return currGraph_; }
+    GIR::graph_ptr_t &rootGraph() { return rootGraph_; }
+    GIR::graph_ptr_t &currGraph() { return currGraph_; }
 
-    std::optional<std::string> getNodeIdent(const gir::node_ptr_t &node);
+    std::optional<std::string> getNodeIdent(const GIR::node_ptr_t &node);
 
     void pushScope(func_type_ptr_t key);
     void popScope(func_type_ptr_t key = nullptr);
 
     bool cached(func_type_ptr_t key) { return funcCache_.find(key) != funcCache_.end(); }
 
-    std::optional<gir::node_ptr_t> nodeAt(const std::string &name);
+    std::optional<GIR::node_ptr_t> nodeAt(const std::string &name);
 
-    bool insertNode(const std::string &name, const gir::node_ptr_t &node);
+    bool insertNode(const std::string &name, const GIR::node_ptr_t &node);
     bool insertFunc(const std::string &name, func_ptr_t func);
     bool insertOperator(const std::string &name, const oper_ptr_t &op);
 };

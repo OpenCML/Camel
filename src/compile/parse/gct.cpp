@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Dec. 28, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@
 //     return createNode<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 // }
 
-// namespace AbstractSyntaxTree::InnerFuncDRefNodes {
+// namespace GraphConstructTree::InnerFuncDRefNodes {
 // node_ptr_t __copy__ = nullptr;
 // node_ptr_t __cast__ = nullptr;
 // node_ptr_t __type__ = nullptr;
@@ -191,7 +191,7 @@
 //     opNodesMap["~"] = __rev__;
 // }
 
-// } // namespace AbstractSyntaxTree::InnerFuncDRefNodes
+// } // namespace GraphConstructTree::InnerFuncDRefNodes
 
 // inline node_ptr_t reparent(node_ptr_t &node, node_ptr_t &parent) {
 //     *parent << node;
@@ -540,8 +540,8 @@
 
 //     const auto &withDef = context->withDef();
 //     if (withDef) {
-//         const auto &pairedParams = any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitWithDef(withDef));
-//         for (const auto &[name, type, data, isVar] : pairedParams) {
+//         const auto &pairedParams = any_cast<vector<tuple<string, type_ptr_t, data_ptr_t,
+//         bool>>>(visitWithDef(withDef)); for (const auto &[name, type, data, isVar] : pairedParams) {
 //             withType->add(name, type, data);
 //             bool success = funcType->addIdent(name, isVar);
 //             if (!success) {
@@ -629,7 +629,8 @@
 
 //     if (context->angledParams()) {
 //         const auto &withParams =
-//             any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitAngledParams(context->angledParams()));
+//             any_cast<vector<tuple<string, type_ptr_t, data_ptr_t,
+//             bool>>>(visitAngledParams(context->angledParams()));
 //         for (const auto &[name, type, data, isVar] : withParams) {
 //             withType->add(name, type, data);
 //             bool success = funcType->addIdent(name, isVar);
@@ -762,9 +763,8 @@
 // */
 // any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
 //     enter("KeyValuePair");
-//     any res = make_pair(context->identRef()->getText(), any_cast<node_ptr_t>(visitEntityExpr(context->entityExpr())));
-//     leave("KeyValuePair");
-//     return res;
+//     any res = make_pair(context->identRef()->getText(),
+//     any_cast<node_ptr_t>(visitEntityExpr(context->entityExpr()))); leave("KeyValuePair"); return res;
 // };
 
 // /*
@@ -1414,7 +1414,8 @@
 //     | literal
 //     | bracketValues         // for list
 //     | bracedPairedValues    // for dict
-//     | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than a
+//     | '(' entityExpr ')'    // if there is only one entity, it will be recognized as a primary expression rather than
+//     a
 // tuple | parentValues          // for tuple
 //     \\ for vector | array | tensor | set | map
 //     | '<' typeExpr (',' (typeExpr | INTEGER | '[' INTEGER (',' INTEGER)* ']'))? '>' (bracketValues | bracedValues |
@@ -1432,11 +1433,10 @@
 //         res = visitLiteral(context->literal());
 //     } break;
 //     case 3: { // bracketValues (for list)
-//         const vector<node_ptr_t> &dataVec = any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
-//         const auto &listData = make_shared<ListData>();
-//         bool dangling = false;
-//         node_ptr_t execNode = createNode<ExecLoad>();
-//         for (const auto &node : dataVec) {
+//         const vector<node_ptr_t> &dataVec =
+//         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues())); const auto &listData =
+//         make_shared<ListData>(); bool dangling = false; node_ptr_t execNode = createNode<ExecLoad>(); for (const auto
+//         &node : dataVec) {
 //             auto [data, _] = extractData(node, execNode, dangling);
 //             listData->emplace(data);
 //         }
@@ -1570,7 +1570,8 @@
 //                 const vector<node_ptr_t> &dataVec =
 //                     any_cast<vector<node_ptr_t>>(visitBracedValues(context->bracedValues()));
 //                 if (dataVec.size() > 0) {
-//                     throw BuildException("Map literal dataVec must be in the form of { [K]: V }", context->getStart());
+//                     throw BuildException("Map literal dataVec must be in the form of { [K]: V }",
+//                     context->getStart());
 //                 }
 //                 const auto &mapData = make_shared<MapData>(type1, type2);
 //                 res = createNode<DataLoad>(mapData);
@@ -1582,7 +1583,8 @@
 //             const type_ptr_t &type1 = any_cast<type_ptr_t>(visitTypeExpr(typeExprs[0]));
 //             const type_ptr_t &type2 = any_cast<type_ptr_t>(visitTypeExpr(typeExprs[1]));
 //             const vector<pair<node_ptr_t, node_ptr_t>> &dataVec =
-//                 any_cast<vector<pair<node_ptr_t, node_ptr_t>>>(visitBracedIndexKVPairs(context->bracedIndexKVPairs()));
+//                 any_cast<vector<pair<node_ptr_t,
+//                 node_ptr_t>>>(visitBracedIndexKVPairs(context->bracedIndexKVPairs()));
 //             auto mapPtr = make_shared<MapData>(type1, type2);
 //             bool dangling = false;
 //             node_ptr_t execNode = createNode<ExecLoad>();
@@ -1808,7 +1810,8 @@
 
 //     if (context->angledParams()) {
 //         const auto &withParams =
-//             any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitAngledParams(context->angledParams()));
+//             any_cast<vector<tuple<string, type_ptr_t, data_ptr_t,
+//             bool>>>(visitAngledParams(context->angledParams()));
 //         for (const auto &[name, type, data, isVar] : withParams) {
 //             withType->add(name, type, data);
 //             bool success = funcType->addIdent(name, isVar);

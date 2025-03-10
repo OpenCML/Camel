@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 using namespace std;
 
 Context::Context()
-    : rootGraph_(gir::Graph::create()), nodeScope_(node_scope_t::create()), funcScope_(func_scope_t::create()),
+    : rootGraph_(GIR::Graph::create()), nodeScope_(node_scope_t::create()), funcScope_(func_scope_t::create()),
       opScope_(operator_scope_t::create(globalOperators)) {
     currGraph_ = rootGraph_;
     funcCache_[nullptr] = {nodeScope_, funcScope_, opScope_, currGraph_};
@@ -46,7 +46,7 @@ void Context::generateNodeIdentsMap() {
     }
 }
 
-std::optional<std::string> Context::getNodeIdent(const gir::node_ptr_t &node) {
+std::optional<std::string> Context::getNodeIdent(const GIR::node_ptr_t &node) {
     if (nodeIdentsMap_.empty()) {
         generateNodeIdentsMap();
     }
@@ -67,7 +67,7 @@ void Context::pushScope(func_type_ptr_t key) {
         nodeScope_ = nodeScope_->push();
         funcScope_ = funcScope_->push();
         opScope_ = opScope_->push();
-        currGraph_ = gir::Graph::create(currGraph_);
+        currGraph_ = GIR::Graph::create(currGraph_);
         funcCache_[key] = std::make_tuple(nodeScope_, funcScope_, opScope_, currGraph_);
     }
 }
@@ -82,7 +82,7 @@ void Context::popScope(func_type_ptr_t key) {
     }
 }
 
-std::optional<gir::node_ptr_t> Context::nodeAt(const std::string &name) {
+std::optional<GIR::node_ptr_t> Context::nodeAt(const std::string &name) {
     auto opNode = nodeScope_->at(name);
     if (opNode.has_value()) {
         return opNode.value();
@@ -90,16 +90,16 @@ std::optional<gir::node_ptr_t> Context::nodeAt(const std::string &name) {
     auto opFunc = funcScope_->at(name);
     if (opFunc.has_value()) {
         func_vec_t &funcs = *opFunc.value();
-        return gir::SelectNode::create(currGraph_, funcs);
+        return GIR::SelectNode::create(currGraph_, funcs);
     }
     auto opOp = opScope_->at(name);
     if (opOp.has_value()) {
-        return gir::SelectNode::create(currGraph_, *opOp.value());
+        return GIR::SelectNode::create(currGraph_, *opOp.value());
     }
     return std::nullopt;
 }
 
-bool Context::insertNode(const std::string &name, const gir::node_ptr_t &node) {
+bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
     if (nodeScope_->has(name, false)) {
         return false;
     }

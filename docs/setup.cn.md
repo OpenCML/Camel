@@ -237,12 +237,18 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "C++ Debug",
+      "name": "C++ Debug (Windows)",
+      "cwd": "${workspaceFolder}",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/Debug/camel.exe",
-      "args": ["--format", "./test/format/format.cml"],
-      "console": "externalTerminal"
+      "symbolSearchPath": "${workspaceFolder}/build/Debug",
+      "args": ["inspect", "--cst", "D:\\Projects\\Camel\\test\\format\\format.cml"],
+      "console": "externalTerminal",
+      "logging": {
+        "moduleLoad": false,
+        "trace": true
+      },
     }
   ]
 }

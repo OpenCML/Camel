@@ -7,7 +7,6 @@ atomic func add(sig1: Signal, sig2: Signal): Signal {
 inner func print(any: Any): Void {
     // print the signal
 }
-
 with <src: Signal>
 inner func map(f: (a: Int) => Int): Signal {
     return [f(src[0]), f(src[1])] // f is data
@@ -23,6 +22,13 @@ inner func comp2(signal: Signal): Signal {
 
 inner func comp3(signal: Signal): Signal {
     return signal.map((x: Int) => x * 3)
+}
+
+inner func compsss():
+{
+    int i=0
+    while i<1000000000 {i++
+    }
 }
 
 inner func analyzer1(signal: Signal): Void {

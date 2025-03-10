@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,7 +53,7 @@ class Data : public std::enable_shared_from_this<Data> {
     void setVariable();
 
     virtual std::vector<std::string> refs() const;
-    virtual bool resolved() const;      // check if all data references are resolved
+    virtual bool resolved() const;                    // check if all data references are resolved
     virtual void resolve(const data_vec_t &dataList); // resolve data references by dataList
 
     virtual bool equals(const data_ptr_t &other) const;

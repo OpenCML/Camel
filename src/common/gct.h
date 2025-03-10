@@ -22,7 +22,7 @@
 #include "data.h"
 #include "entity.h"
 
-namespace AbstractSyntaxTree {
+namespace GraphConstructTree {
 
 class Node;
 using node_ptr_t = std::shared_ptr<Node>;
@@ -244,6 +244,6 @@ inline std::shared_ptr<FromLoad> from_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<FromLoad>(ptr);
 }
 
-} // namespace AbstractSyntaxTree
+} // namespace GraphConstructTree
 
-namespace AST = AbstractSyntaxTree;
+namespace GCT = GraphConstructTree;

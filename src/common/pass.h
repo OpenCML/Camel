@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,11 +21,11 @@
 
 #include "graph.h"
 
-class GraphPass {
+class GraphIRPass {
   public:
-    GraphPass() = default;
-    virtual ~GraphPass() = default;
+    GraphIRPass() = default;
+    virtual ~GraphIRPass() = default;
 
     virtual void reset() = 0;
-    virtual std::any apply(gir::graph_ptr_t &graph) = 0;
+    virtual std::any apply(GIR::graph_ptr_t &graph) = 0;
 };

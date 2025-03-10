@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 08, 2025
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,8 +31,8 @@
 #include "common/error/error.h"
 #include "common/error/json.h"
 #include "common/type.h"
-#include "compile/parse/ast.h"
 #include "compile/parse/cst.h"
+#include "compile/parse/gct.h"
 #include "compile/parse/gir.h"
 #include "config.h"
 #include "operators/init.h"
@@ -41,6 +41,8 @@
 
 using namespace antlr4;
 using namespace std;
+
+using namespace CLI;
 
 #define DEBUG_LEVEL -1
 
@@ -60,8 +62,10 @@ int main(int argc, char *argv[]) {
         }
 
         ANTLRInputStream input;
+        string targetFile = "stdin";
 
-        if (targetFile != "") {
+        if (!targetFiles.empty()) {
+            targetFile = targetFiles[0];
             auto src = ifstream();
             src.open(targetFile);
             if (!src.is_open()) {
@@ -75,6 +79,21 @@ int main(int argc, char *argv[]) {
 
         OpenCMLLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
+
+        if (Inspect::dumpTokens) {
+            while (true) {
+                Token *token = tokens.LT(1);
+                if (token->getType() == Token::EOF) {
+                    break;
+                }
+                os << setw(4) << right << token->getTokenIndex() << " [" << setw(3) << right << token->getLine() << ":"
+                   << setw(3) << left << token->getCharPositionInLine() << "] (" << token->getChannel()
+                   << ") : " << token->getText() << endl;
+                tokens.consume();
+            }
+            tokens.reset();
+        }
+
         OpenCMLParser parser(&tokens);
         auto interpreter = parser.getInterpreter<atn::ParserATNSimulator>();
         tree::ParseTree *tree = nullptr;
@@ -118,44 +137,24 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        if (dumpTokens) {
-            for (auto &token : tokens.getTokens()) {
-                os << setw(4) << right << token->getTokenIndex() << " [" << setw(3) << right << token->getLine() << ":"
-                   << setw(3) << left << token->getCharPositionInLine() << "] (" << token->getChannel()
-                   << ") : " << token->getText() << endl;
-            }
-            return 0;
-        }
-
-        formatCode = true;
-        if (formatCode && !hasParseError) {
+        if (Format::formatCode && !hasParseError) {
             auto formatter = Formatter(tokens.getTokens());
             const string formattedCode = any_cast<string>(formatter.visit(tree));
             os << formattedCode;
-            return 0;
-            // try {
-            //     const string formattedCode = any_cast<string>(formatter.visit(tree));
-            //     os << formattedCode;
-            //     return 0;
-            // } catch (exception &e) {
-            //     error << "Format failed: " << e.what() << endl;
-            //     return 1;
-            // }
         }
 
-        if (dumpCST) {
-            auto visitor = CSTDumpVisitor();
-            visitor.visit(tree);
-            return 0;
+        if (Inspect::dumpCST) {
+            auto cstDumpVisitor = CSTDumpVisitor(os);
+            cstDumpVisitor.visit(tree);
         }
 
-        if ((dumpAST || dumpGIR) && !hasParseError) {
+        if (selectedCommand == Command::INSPECT && !hasParseError) {
             initTypes();
-            ast::node_ptr_t ast = nullptr;
-            auto visitor = ast::Constructor();
+            GCT::node_ptr_t gct = nullptr;
+            auto astConstructor = GCT::Constructor();
             try {
-                ast = visitor.construct(tree);
-                auto &warns = visitor.warns();
+                gct = astConstructor.construct(tree);
+                auto &warns = astConstructor.warns();
                 while (!warns.empty()) {
                     const auto &warning = warns.front();
                     if (errorFormat != "json") {
@@ -175,7 +174,7 @@ int main(int argc, char *argv[]) {
                 }
             } catch (exception &e) {
                 if (errorFormat != "json") {
-                    error << "AST construction failed: " << e.what() << endl;
+                    error << "GCT construction failed: " << e.what() << endl;
                     return 1;
                 } else {
                     os << "{"
@@ -183,31 +182,39 @@ int main(int argc, char *argv[]) {
                        << "\"filename\": \"" << targetFile << "\", "
                        << "\"line\": 0, "
                        << "\"column\": 0, "
-                       << "\"message\": \"AST construction failed: " << e.what() << "\""
+                       << "\"message\": \"GCT construction failed: " << e.what() << "\""
                        << "}" << endl;
                     return 0;
                 }
             }
 
-            if (dumpAST) {
-                ast->print();
-                return 0;
+            if (Inspect::dumpAST && gct) {
+                // currently we do not have AST, print GCT instead
+                gct->print(os);
             }
 
-            if (dumpGIR) {
+            if (Inspect::dumpGCT && gct) {
+                gct->print(os);
+            }
+
+            GIR::graph_ptr_t gir = nullptr;
+            context_ptr_t ctx = make_shared<Context>();
+
+            if (Inspect::dumpGIR) {
                 initOperators();
-                auto ctx = make_shared<Context>();
-                auto visitor = gir::Constructor(ctx);
+                auto girConstructor = GIR::Constructor(ctx);
                 try {
-                    auto graph = visitor.construct(ast);
+                    gir = girConstructor.construct(gct);
                 } catch (exception &e) {
                     error << "GIR construction failed: " << e.what() << endl;
                     return 1;
                 }
-                GraphVizPass pass(ctx);
-                auto res = pass.apply(ctx->rootGraph());
+            }
+
+            if (Inspect::dumpGIR && gir) {
+                GraphVizDumpPass pass(ctx);
+                auto res = pass.apply(gir);
                 os << any_cast<string>(res);
-                return 0;
             }
         }
 

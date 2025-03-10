@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Jan. 07, 2025
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -488,7 +488,7 @@ any Formatter::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
     string result;
     const bool multiLine = isMultiLine(context);
     const auto &annotations = context->annotation();
-    for (int i = 0; i < annotations.size(); i++) {
+    for (size_t i = 0; i < annotations.size(); i++) {
         if (i > 0 && multiLine) {
             result += lineEnd();
         }
@@ -898,7 +898,7 @@ annoExpr
 */
 any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
     string result = any_cast<string>(visitPrimaryData(context->primaryData()));
-    for (int i = 1; i < context->children.size(); i++) {
+    for (size_t i = 1; i < context->children.size(); i++) {
         const auto &token = context->children[i];
         if (antlr4::tree::TerminalNode::is(token)) {
             antlr4::tree::TerminalNode *terminalNode = dynamic_cast<antlr4::tree::TerminalNode *>(token);

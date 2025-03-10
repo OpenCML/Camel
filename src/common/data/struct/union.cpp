@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 07, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Mar. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,10 +54,6 @@ data_ptr_t UnionData::convert(type_ptr_t target, bool inplace) {
     throw std::runtime_error("UnionData::convert() not implemented");
 }
 
-data_ptr_t UnionData::clone(bool deep) const {
-    return std::make_shared<UnionData>(type_, data_->clone(deep));
-}
+data_ptr_t UnionData::clone(bool deep) const { return std::make_shared<UnionData>(type_, data_->clone(deep)); }
 
-const std::string UnionData::toString() const {
-    return data_->toString();
-}
+const std::string UnionData::toString() const { return data_->toString(); }
