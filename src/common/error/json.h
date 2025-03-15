@@ -25,12 +25,13 @@ class JSONErrorListener : public CamelErrorListener {
     std::string escapeString(const std::string &input) {
         std::string result;
         for (char c : input) {
-            if (c == '"') {
-                result += "\\\"";
-            } else if (c == '\n') {
-                result += "\\n";
-            } else {
-                result += c;
+            switch (c) {
+                case '\\': result += "\\\\"; break;
+                case '\"': result += "\\\""; break;
+                case '\n': result += "\\n"; break;
+                case '\r': result += "\\r"; break;
+                case '\t': result += "\\t"; break;
+                default: result += c; break;
             }
         }
         return result;

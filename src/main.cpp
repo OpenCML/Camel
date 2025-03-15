@@ -106,14 +106,15 @@ int main(int argc, char *argv[]) {
         } catch (ParseCancellationException &e) {
             debug(1) << "Parse failed, retrying with LL mode" << endl;
 
+            using CmdLineArgs::Check::outputFormat;
             CamelErrorListener *listener = nullptr;
 
-            if (errorFormat == "text") {
+            if (outputFormat == "text") {
                 listener = new CamelErrorListener(targetFile, os);
-            } else if (errorFormat == "json") {
+            } else if (outputFormat == "json") {
                 listener = new JSONErrorListener(targetFile, os);
             } else {
-                error << "Unknown error format: " << errorFormat << endl;
+                error << "Unknown error format: " << outputFormat << endl;
                 return 1;
             }
 
@@ -152,12 +153,13 @@ int main(int argc, char *argv[]) {
             initTypes();
             GCT::node_ptr_t gct = nullptr;
             auto astConstructor = GCT::Constructor();
+            using CmdLineArgs::Check::outputFormat;
             try {
                 gct = astConstructor.construct(tree);
                 auto &warns = astConstructor.warns();
                 while (!warns.empty()) {
                     const auto &warning = warns.front();
-                    if (errorFormat != "json") {
+                    if (outputFormat != "json") {
                         error << warning.what() << endl;
                     } else {
                         os << warning.json() << endl;
@@ -165,7 +167,7 @@ int main(int argc, char *argv[]) {
                     warns.pop();
                 }
             } catch (BuildException &e) {
-                if (errorFormat != "json") {
+                if (outputFormat != "json") {
                     error << e.what() << endl;
                     return 1;
                 } else {
@@ -173,7 +175,7 @@ int main(int argc, char *argv[]) {
                     return 0;
                 }
             } catch (exception &e) {
-                if (errorFormat != "json") {
+                if (outputFormat != "json") {
                     error << "GCT construction failed: " << e.what() << endl;
                     return 1;
                 } else {
