@@ -1,5 +1,5 @@
 import path from 'path'
-import { runCommand, copyFile, BASEDIR, logDone } from './common.js'
+import { runCommand, copyFile, BASEDIR, logDone, logStep } from './common.js'
 
 function main() {
     process.chdir(BASEDIR)
@@ -10,6 +10,7 @@ function main() {
         .replace(/[-:]/g, '')
         .replace(/[T]/g, '_')
         .slice(2, 16)
+    logStep('Building Debug...')
     runCommand(
         `cmake .. -G "Ninja Multi-Config" -DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake`
     )

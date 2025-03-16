@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Mar. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 #include <iostream>
@@ -27,22 +27,21 @@ using namespace std;
 namespace CmdLineArgs {
 Command selectedCommand = Command::RUN;
 
+namespace Run {
 string outputFile = "";
 string package = "";
 string schedular = "";
 string errorFormat = "text";
-string stdLibPath = "./stdlib";
+string stdLibPath = "";          // "" means use the default path
 vector<string> includeDirs = {}; // Include directories
 vector<string> targetFiles = {};
 
 bool profile = false;
 bool noCache = false;
 bool semanticOnly = false;
-bool setThreads = false;
-bool setRepeat = false;
-bool setStdLibPath = false;
 unsigned int repeat = 1;
-unsigned int maxThreads = 1;
+int maxThreads = -1; // -1 means use the maximum number of threads
+} // namespace Run
 
 namespace Format {
 string quotePrefer = "";     // Quote preference (default to single quotes)
@@ -92,6 +91,7 @@ string variable = ""; // Whether to optimize the code
 } // namespace CmdLineArgs
 
 using namespace CmdLineArgs;
+using namespace CmdLineArgs::Run;
 using namespace CmdLineArgs::Format;
 using namespace CmdLineArgs::Check;
 using namespace CmdLineArgs::Inspect;
@@ -247,11 +247,12 @@ bool parseArgs(int argc, char *argv[]) {
 
     auto run = (option("-P", "--profile").set(profile) % "profile the perf",
                 (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
-                (option("-t", "--threads").set(setThreads) & integer("max threads", maxThreads)) % "max threads",
+                (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
                 option("-n", "--no-cache").set(noCache) % "do not use cache",
-                (option("-r", "--repeat").set(setRepeat) & integer("repeat times", repeat)) % "repeat times",
+                (option("-r", "--repeat") & integer("repeat times", repeat)) % "repeat times",
                 (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
-                (option("-L", "--stdlib").set(setStdLibPath) & value("stdlib path", stdLibPath)) % "add stdlib path",
+                (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
+                (option("-E", "--error-format") & value("error format", errorFormat)) % "error format: text or json",
                 values("input", targetFiles) % "input file");
 
     auto info = (option("-h", "--help").set(showHelp).set(selectedCommand, Command::INFO) % "show this help message",
@@ -278,7 +279,7 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-N", "--max-warning") & integer("max warnings", maxWaring)) % "max warnings",
          (option("-c", "--config") & value("config file path", configFilePath)) % "config file path",
          option("-e", "--ignore").set(Check::ignoreDefiFile) % "ignore the definition file",
-         option("-o", "--output") & value("output file", outputFile = "console") % "output file",
+         option("-o", "--output") & value("output file", outputFile = "stdout") % "output file",
          values("input", targetFiles) % "input file");
 
     auto inspect =
@@ -346,7 +347,11 @@ bool parseArgs(int argc, char *argv[]) {
     }
 
     if (showCopyRightInfo) {
+#ifdef NDEBUG
         cout << "Camel v" << VERSION << endl;
+#else
+        cout << "Camel (DEBUG) v" << VERSION << endl;
+#endif
         cout << "Build at " << BUILD_TIMESTAMP << endl;
         cout << "Copyright (c) 2024 the OpenCML Organization." << endl;
         cout << "Camel is licensed under the MIT license." << endl;

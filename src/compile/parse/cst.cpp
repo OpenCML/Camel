@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 18, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Mar. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 using namespace std;
 
-any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
+any CSTDumpVisitor::dumpNode(antlr4::tree::ParseTree *context, string nodeName) {
     bool isLast = false;
     auto children = context->children;
 
@@ -77,7 +77,7 @@ any CSTDumpVisitor::dumpCST(antlr4::tree::ParseTree *context, string nodeName) {
             any childResult = context->children[i]->accept(this);
             result = aggregateResult(std::move(result), std::move(childResult));
         } else {
-            dumpCST(context->children[i], "");
+            dumpNode(context->children[i], "");
         }
     }
 
