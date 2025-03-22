@@ -22,9 +22,6 @@
 #endif
 
 #define VERSION "0.0.13"
-#ifndef BUILD_TIMESTAMP
-#define BUILD_TIMESTAMP "%y%m%d_%H%M%S"
-#endif
 
 #include <string>
 
