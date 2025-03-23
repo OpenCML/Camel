@@ -34,6 +34,7 @@ bool isAdjacent() {
 
 program : SEP? (decl SEP?)* EOF;
 
+//declaration statement
 decl
     : moduleDecl
     | importDecl
@@ -45,6 +46,7 @@ decl
     | enumDecl
     ;
 
+//executable statement
 stmt
     : letDecl
     | useDecl
@@ -55,7 +57,6 @@ stmt
     | exprStmt
     | blockStmt
     ;
-
 stmtList : stmt (SEP? stmt)* SEP? ;
 
 moduleDecl : MODULE identDef ;
@@ -68,9 +69,9 @@ blockStmt  : WAIT? stmtBlock ;
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 funcDecl   : annotations? (WITH angledParams)? EXPORT? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
-parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
-bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
-bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
+parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking ()
+bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking {}
+bracketIdents : '[' identList? ','? ']' ;    // for list unpacking []
 carrier       : identDef | parentIdents | bracedIdents | bracketIdents ;
 
 letDecl    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
