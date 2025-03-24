@@ -246,7 +246,19 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
 /*
 program : SEP? ((decl | stmt) SEP?)* EOF;
 */
-any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) { return nullptr; }
+any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
+    enter("Program"); // Debug hook: Track AST construction entry
+
+    // Process statements if present; otherwise create empty executable node
+    if (context->stmtList()) {
+        root_ = any_cast<node_ptr_t>(visitStmtList(context->stmtList()));
+    } else {
+        root_ = createNode<ExecLoad>(); // Default node for empty programs
+    }
+
+    leave("Program");
+    return root_;
+}
 
 /*
 decl
@@ -256,7 +268,13 @@ decl
     | funcDecl
     ;
 */
-any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return nullptr; }
+any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {
+    // enter("Decl");
+
+    // switch (context->getAltNumber())
+
+    // leave("Decl");
+}
 
 /*
 stmt
@@ -270,12 +288,102 @@ stmt
     | blockStmt
     ;
 */
-any Constructor::visitStmt(OpenCMLParser::StmtContext *context) { return nullptr; }
+any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
+    enter("Stmt");
+    any res;
+
+    switch (context->getAltNumber()) {
+    case 1: // letDecl
+        res = visitLetDecl(context->letDecl());
+        break;
+    case 2: // useDecl
+        res = visitUseDecl(context->useDecl());
+        break;
+    case 3: // funcDecl
+        res = visitFuncDecl(context->funcDecl());
+        break;
+    case 4: // typeDecl
+        res = visitTypeDecl(context->typeDecl());
+        break;
+    case 5: // enumDecl
+        res = visitEnumDecl(context->enumDecl());
+        break;
+    case 6: // retStmt
+        res = visitRetStmt(context->retStmt());
+        break;
+    case 7: // exprStmt
+        res = visitExprStmt(context->exprStmt());
+        break;
+    case 8: // blockStmt
+        res = visitBlockExpr(context->blockStmt());
+        break;
+    default: // Grammar error protection
+        throw runtime_error("Unknown statement type");
+    }
+
+    leave("Stmt");
+    return res;
+}
 
 /*
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
-any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) { return nullptr; }
+any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
+    // Debug hooks and scope initialization
+    enter("StmtList");
+    pushScope(); // Isolate local declarations (e.g., function parameters)
+
+    // Create a root execution node to hold ordered statements
+    node_ptr_t execNode = createNode<ExecLoad>();
+
+    // Classify statements into four categories
+    vector<OpenCMLParser::UseDeclContext *> froms;    // Import declarations
+    vector<OpenCMLParser::TypeDeclContext *> types;   // Type declarations
+    vector<OpenCMLParser::FuncDeclContext *> decls;   // Function signatures
+    vector<OpenCMLParser::StmtContext *> stmts;       // General statements
+
+    // 1. Classify each statement into the appropriate category. Sequence: Decl > Type > Def > 
+    for (const auto &stmt : context->stmt()) {
+        if (stmt->useDecl()) { // Case 1: Import declaration
+            froms.push_back(stmt->useDecl());
+        } else if (stmt->typeDecl()) { // Case 2: Type declaration
+            types.push_back(stmt->typeDecl());
+        } else if (stmt->funcDef()) {                      // Case 3: Function definition
+            decls.push_back(stmt->funcDef()->funcDecl()); // Extract declaration, put it into decls
+            stmts.push_back(stmt);                         // Retain full stmt for body processing, put it into stmts
+        } else {                                      // Case 4: General statement
+            stmts.push_back(stmt);
+        }
+    }
+
+    // 2. Process statements in priority order
+    // 2.1 Handle imports first (may affect type resolution)
+    for (const auto &stmt : froms) {
+        *execNode << any_cast<node_ptr_t>(visitUseDecl(stmt));
+    }
+
+    // 2.2 Process type declarations (prerequisite for functions)
+    for (const auto &stmt : types) {
+        *execNode << any_cast<node_ptr_t>(visitTypeDecl(stmt));
+    }
+
+    // 2.3 Register function signatures (before their bodies are processed)
+    for (const auto &decl : decls) {
+        func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
+        node_ptr_t declNode = createNode<DeclLoad>(funcType); // Create declaration node
+        *execNode << declNode;                                 // Attach to execution block
+    }
+
+    // 2.4 Process general statements and function bodies
+    for (const auto &stmt : stmts) {
+        *execNode << any_cast<node_ptr_t>(visitStmt(stmt));
+    }
+
+    // Cleanup: Exit scope and return the constructed node
+    popScope(); // End of local scope
+    leave("StmtList");
+    return execNode;
+}
 
 /*
 moduleDecl : MODULE identDef ;
