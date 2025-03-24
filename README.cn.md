@@ -72,6 +72,9 @@ sync func train(x: Tensor, y: Tensor): Tensor {
 
 ## ⚙️ 入门
 
+> [!WARNING]
+> Camel 目前正处于开发阶段。它只支持一些基本命令，特性不稳定，可能会经常更改，文档也有待完善。
+
 ### 安装
 
 ```bash

@@ -231,9 +231,12 @@ any Formatter::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     const auto &identDef = context->identDef();
     const auto &bracedIdents = context->bracedIdents();
     if (context->FROM()) {
-        result +=
-            (identDef ? any_cast<string>(visitIdentDef(identDef)) : any_cast<string>(visitBracedIdents(bracedIdents))) +
-            " from " + formatStringLiteral(path);
+        if (identDef) {
+            result += any_cast<string>(visitIdentDef(identDef));
+        } else {
+            result += any_cast<string>(visitBracedIdents(bracedIdents));
+        }
+        result += " from " + formatStringLiteral(path);
     } else {
         result += formatStringLiteral(path);
     }
@@ -385,7 +388,7 @@ any Formatter::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
     if (identList) {
         return "{" + formatList(identList->identDef(), identList, ", ", ",", PaddingSP | PaddingNL | PushScope) + "}";
     } else {
-        return "{}";
+        return string("{}");
     }
 }
 
@@ -922,7 +925,7 @@ any Formatter::visitDictExpr(OpenCMLParser::DictExprContext *context) {
                formatList(pairedValues->keyValuePair(), pairedValues, ", ", ",", PaddingSP | PaddingNL | PushScope) +
                "}";
     } else {
-        return "{}";
+        return string("{}");
     }
 }
 
@@ -934,7 +937,7 @@ listExpr
 any Formatter::visitListExpr(OpenCMLParser::ListExprContext *context) {
     const auto &children = context->children;
     if (children.size() == 2) {
-        return "[]";
+        return string("[]");
     } else {
         const auto &indexValues = context->indexValues();
         if (indexValues) {
