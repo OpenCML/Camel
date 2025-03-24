@@ -244,16 +244,21 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
 }
 
 /*
-program : SEP? ((decl | stmt) SEP?)* EOF;
+program : SEP? (decl SEP?)* EOF;
 */
 any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
-    enter("Program"); // Debug hook: Track AST construction entry
+    enter("Program");
 
-    // Process statements if present; otherwise create empty executable node
-    if (context->stmtList()) {
-        root_ = any_cast<node_ptr_t>(visitStmtList(context->stmtList()));
-    } else {
-        root_ = createNode<ExecLoad>(); // Default node for empty programs
+    root_ = createNode<ExecLoad>();
+
+    const auto &decls = context->decl();
+
+    if (decls.size() == 1)
+        root_ = any_cast<node_ptr_t>(visitDecl(decls[0]));
+    else {
+        for (const auto &decl : decls) {
+            *root_ << any_cast<node_ptr_t>(visitDecl(decl));
+        }
     }
 
     leave("Program");
@@ -268,13 +273,7 @@ decl
     | funcDecl
     ;
 */
-any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {
-    // enter("Decl");
-
-    // switch (context->getAltNumber())
-
-    // leave("Decl");
-}
+any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return nullptr; }
 
 /*
 stmt
@@ -315,7 +314,7 @@ any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
         res = visitExprStmt(context->exprStmt());
         break;
     case 8: // blockStmt
-        res = visitBlockExpr(context->blockStmt());
+        res = visitBlockStmt(context->blockStmt());
         break;
     default: // Grammar error protection
         throw runtime_error("Unknown statement type");
@@ -329,29 +328,26 @@ any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    // Debug hooks and scope initialization
     enter("StmtList");
-    pushScope(); // Isolate local declarations (e.g., function parameters)
+    pushScope();
 
-    // Create a root execution node to hold ordered statements
     node_ptr_t execNode = createNode<ExecLoad>();
 
-    // Classify statements into four categories
-    vector<OpenCMLParser::UseDeclContext *> froms;    // Import declarations
-    vector<OpenCMLParser::TypeDeclContext *> types;   // Type declarations
-    vector<OpenCMLParser::FuncDeclContext *> decls;   // Function signatures
-    vector<OpenCMLParser::StmtContext *> stmts;       // General statements
+    vector<OpenCMLParser::UseDeclContext *> froms;
+    vector<OpenCMLParser::TypeDeclContext *> types;
+    vector<OpenCMLParser::FuncDeclContext *> decls;
+    vector<OpenCMLParser::StmtContext *> stmts;
 
-    // 1. Classify each statement into the appropriate category. Sequence: Decl > Type > Def > 
+    // 1. Classify each statement into the appropriate category. Sequence: Decl > Type > Def >
     for (const auto &stmt : context->stmt()) {
-        if (stmt->useDecl()) { // Case 1: Import declaration
+        if (stmt->useDecl()) {
             froms.push_back(stmt->useDecl());
-        } else if (stmt->typeDecl()) { // Case 2: Type declaration
+        } else if (stmt->typeDecl()) {
             types.push_back(stmt->typeDecl());
-        } else if (stmt->funcDef()) {                      // Case 3: Function definition
-            decls.push_back(stmt->funcDef()->funcDecl()); // Extract declaration, put it into decls
-            stmts.push_back(stmt);                         // Retain full stmt for body processing, put it into stmts
-        } else {                                      // Case 4: General statement
+        } else if (stmt->funcDecl()) {
+            decls.push_back(stmt->funcDecl());
+            stmts.push_back(stmt);
+        } else {
             stmts.push_back(stmt);
         }
     }
@@ -371,7 +367,7 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     for (const auto &decl : decls) {
         func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
         node_ptr_t declNode = createNode<DeclLoad>(funcType); // Create declaration node
-        *execNode << declNode;                                 // Attach to execution block
+        *execNode << declNode;                                // Attach to execution block
     }
 
     // 2.4 Process general statements and function bodies
@@ -379,8 +375,7 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
         *execNode << any_cast<node_ptr_t>(visitStmt(stmt));
     }
 
-    // Cleanup: Exit scope and return the constructed node
-    popScope(); // End of local scope
+    popScope();
     leave("StmtList");
     return execNode;
 }
