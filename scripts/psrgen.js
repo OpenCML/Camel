@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { logStep, logDone, logFail, runCommand } from './common.js'
+import { generateCSTDumpVisitor } from './gen_cst_dump.js'
 
 const searchDir = './src/antlr'
 
@@ -57,6 +58,12 @@ function generateAntlrParser() {
     // in all generated files in ./src/antlr
     walkDirAndReplace(searchDir)
     logDone('Redirected includes')
+
+    logStep('Modifying CSTDumpVisitor.h...')
+    const headerContent = fs.readFileSync('./src/antlr/OpenCMLVisitor.h', 'utf-8')
+    const visitorContent = generateCSTDumpVisitor(headerContent)
+    fs.writeFileSync('./src/compile/parse/cst.h', visitorContent)
+    logDone('Modified CSTDumpVisitor.h')
 }
 
 generateAntlrParser()
