@@ -19,20 +19,25 @@ function formatDate(date) {
         .padStart(2, '0')}, ${date.getFullYear()}`
 }
 
-export function generateCSTDumpVisitor(headerContent) {
-    // 正则表达式匹配所有virtual visit函数声明
+export function extractDecls(headerContent) {
     const funcPattern = /virtual std::any visit(\w+?)\(OpenCMLParser::(\w+Context) \*context\) = 0;/g;
     
-    // 提取所有匹配的函数并生成代码
-    const visitFunctions = [];
+    const decls = [];
     let match;
     
     while ((match = funcPattern.exec(headerContent)) !== null) {
         const funcName = match[1];      // 例如：Program
         const contextType = match[2];   // 例如：ProgramContext
-        const code = `    std::any visit${funcName}(OpenCMLParser::${contextType} *context) { return dumpNode(context, "${funcName}"); };`;
-        visitFunctions.push(code);
+        decls.push({ funcName, contextType });
     }
+
+    return decls;
+}
+
+export function generateCSTDumpVisitor(headerContent, decls) {
+    const visitFunctions = decls.map(({ funcName, contextType }) => {
+        return `    std::any visit${funcName}(OpenCMLParser::${contextType} *context) { return dumpNode(context, "${funcName}"); };`;
+    });
 
     // 组装完整的类定义
     return `/**
@@ -76,7 +81,20 @@ ${visitFunctions.join('\n\n')}
 `;
 }
 
-// 示例用法：
-// const fs = require('fs');
-// const headerContent = fs.readFileSync('OpenCMLVisitor.h', 'utf-8');
-// console.log(generateCSTDumpVisitor(headerContent));
+export function transformFormatterCode(originalCode, decls) {
+    const visitDecls = decls.map(({ funcName, contextType }) => {
+        return `    std::any visit${funcName}(OpenCMLParser::${contextType} *context);`;
+    });
+
+    const segIndex = originalCode.indexOf('public:');
+    const header = originalCode.substring(0, segIndex);
+
+    const tail = `public:
+    Formatter(const std::vector<antlr4::Token *> tokens) : tokens(tokens) {}
+
+${visitDecls.join('\n\n')}
+};
+`;
+
+    return header + tail;
+}
