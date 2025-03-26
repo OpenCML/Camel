@@ -72,6 +72,8 @@ class Constructor : public OpenCMLVisitor {
 
     void reportWarning(const std::string &msg, antlr4::Token *token) { warnQueue_.emplace(msg, token); }
 
+    // Auto-generated visitor methods
+
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
 
     std::any visitDecl(OpenCMLParser::DeclContext *context);
@@ -90,7 +92,7 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
-    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context);
+    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
 
     std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
 
@@ -114,11 +116,11 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context);
 
-    std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context);
-
     std::any visitAnnotation(OpenCMLParser::AnnotationContext *context);
 
     std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context);
+
+    std::any visitImplMark(OpenCMLParser::ImplMarkContext *context);
 
     std::any visitModifiers(OpenCMLParser::ModifiersContext *context);
 
@@ -129,6 +131,8 @@ class Constructor : public OpenCMLVisitor {
     std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context);
 
     std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context);
+
+    std::any visitDataList(OpenCMLParser::DataListContext *context);
 
     std::any visitIdentList(OpenCMLParser::IdentListContext *context);
 
@@ -152,7 +156,7 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
 
-    std::any visitDataExpr(OpenCMLParser::DataExprContext *context);
+    std::any visitWaitExpr(OpenCMLParser::WaitExprContext *context);
 
     std::any visitPattern(OpenCMLParser::PatternContext *context);
 
@@ -160,7 +164,11 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitCatchClause(OpenCMLParser::CatchClauseContext *context);
 
-    std::any visitStructExpr(OpenCMLParser::StructExprContext *context);
+    std::any visitCtrlExpr(OpenCMLParser::CtrlExprContext *context);
+
+    std::any visitDataExpr(OpenCMLParser::DataExprContext *context);
+
+    std::any visitAssignExpr(OpenCMLParser::AssignExprContext *context);
 
     std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context);
 
@@ -212,6 +220,8 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitDictType(OpenCMLParser::DictTypeContext *context);
 
+    std::any visitTypeList(OpenCMLParser::TypeListContext *context);
+
     std::any visitTupleType(OpenCMLParser::TupleTypeContext *context);
 
     std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
@@ -219,5 +229,7 @@ class Constructor : public OpenCMLVisitor {
     std::any visitIdentDef(OpenCMLParser::IdentDefContext *context);
 
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context);
+
+    // End of auto-generated visitor methods
 };
 } // namespace AbstractSyntaxTree

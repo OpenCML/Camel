@@ -128,6 +128,12 @@ function generateParserCode() {
     fs.writeFileSync('./src/service/formatter/fmt.h', geneCode)
     logDone('Modified Formatter header')
 
+    logStep('Modifying AST Constructor header code...')
+    srcCode = fs.readFileSync('./src/compile/parse/ast.h', 'utf-8')
+    geneCode = transformHeaderCode(srcCode, rules)
+    fs.writeFileSync('./src/compile/parse/ast.h', geneCode)
+    logDone('Modified AST Constructor header')
+
     logStep('Modifying GCT Constructor header code...')
     srcCode = fs.readFileSync('./src/compile/parse/gct.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
