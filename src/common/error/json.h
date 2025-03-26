@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024 Beijing Jiaotong University
+ * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You can use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:
@@ -25,12 +25,13 @@ class JSONErrorListener : public CamelErrorListener {
     std::string escapeString(const std::string &input) {
         std::string result;
         for (char c : input) {
-            if (c == '"') {
-                result += "\\\"";
-            } else if (c == '\n') {
-                result += "\\n";
-            } else {
-                result += c;
+            switch (c) {
+                case '\\': result += "\\\\"; break;
+                case '\"': result += "\\\""; break;
+                case '\n': result += "\\n"; break;
+                case '\r': result += "\\r"; break;
+                case '\t': result += "\\t"; break;
+                default: result += c; break;
             }
         }
         return result;

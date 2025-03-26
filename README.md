@@ -1,4 +1,4 @@
-# Camel: A Next-Generation Language for AI and High-Performance Computing
+# Camel: A Graph-Native Programming Language for Unified AI Development
 
 [中文简体](README.cn.md) | English
 
@@ -72,6 +72,9 @@ sync func train(x: Tensor, y: Tensor): Tensor {
 
 
 ## ⚙️ Getting Started
+
+> [!WARNING]
+> Camel is now WIP. It only supports some basic commands, the features are unstable and may change frequently, the documentation is also not complete.
 
 ### Installation
 

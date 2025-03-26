@@ -1,4 +1,4 @@
-# Camel：面向AI时代的下一代编程语言
+# Camel：一种用于统一 AI 开发的图原生编程语言
 
 [English](README.md) | 中文简体
 
@@ -71,6 +71,9 @@ sync func train(x: Tensor, y: Tensor): Tensor {
 
 
 ## ⚙️ 入门
+
+> [!WARNING]
+> Camel 目前正处于开发阶段。它只支持一些基本命令，特性不稳定，可能会经常更改，文档也有待完善。
 
 ### 安装
 

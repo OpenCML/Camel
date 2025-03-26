@@ -1,7 +1,7 @@
 {
     "name": "camel-scripts",
     "private": true,
-    "version": "0.0.12",
+    "version": "0.0.13",
     "type": "module",
     "pre-commit": [
         "upd"
@@ -12,6 +12,7 @@
         "init": "node ./scripts/psrgen.js && node ./scripts/install.js",
         "install": "node ./scripts/install.js",
         "psrgen": "node ./scripts/psrgen.js",
+        "codegen": "node ./scripts/codegen.js",
         "check": "node ./scripts/check.js",
         "build": "node ./scripts/build.js",
         "debug": "node ./scripts/debug.js",

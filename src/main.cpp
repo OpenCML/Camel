@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024 Beijing Jiaotong University
+ * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You can use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:
@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 10, 2025
+ * Updated: Mar. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 #include "common/error/error.h"
 #include "common/error/json.h"
 #include "common/type.h"
+#include "compile/parse/ast.h"
 #include "compile/parse/cst.h"
 #include "compile/parse/gct.h"
 #include "compile/parse/gir.h"
@@ -46,179 +47,233 @@ using namespace CLI;
 
 #define DEBUG_LEVEL -1
 
+string targetFile = "";
+
+void dumpTokens(CommonTokenStream &tokens) {
+    while (true) {
+        Token *token = tokens.LT(1);
+        if (token->getType() == Token::EOF) {
+            break;
+        }
+        cout << setw(4) << right << token->getTokenIndex() << " [" << setw(3) << right << token->getLine() << ":"
+             << setw(3) << left << token->getCharPositionInLine() << "] (" << token->getChannel()
+             << ") : " << token->getText() << endl;
+        tokens.consume();
+    }
+    tokens.reset();
+}
+
+bool buildCST(tree::ParseTree *&cst, OpenCMLParser &parser, ostream &os, string errorFormat) {
+    auto interpreter = parser.getInterpreter<atn::ParserATNSimulator>();
+    parser.removeErrorListeners();
+
+    try {
+        interpreter->setPredictionMode(atn::PredictionMode::SLL);
+        parser.setErrorHandler(make_shared<BailErrorStrategy>());
+        cst = parser.program();
+    } catch (ParseCancellationException &e) {
+        debug(1) << "Parse failed, retrying with LL mode." << endl;
+
+        CamelErrorListener *listener = nullptr;
+
+        if (errorFormat == "text") {
+            listener = new CamelErrorListener("stdin", os);
+        } else if (errorFormat == "json") {
+            listener = new JSONErrorListener("stdin", os);
+        } else {
+            error << "Unknown error format: " << errorFormat << endl;
+            return false;
+        }
+
+        parser.addErrorListener(listener);
+
+        parser.reset();
+        interpreter->setPredictionMode(atn::PredictionMode::LL);
+        parser.setErrorHandler(make_shared<DefaultErrorStrategy>());
+
+        try {
+            cst = parser.program();
+        } catch (exception &e) {
+            debug(1) << "Parse failed. " << e.what() << endl;
+            return false;
+        }
+
+        if (listener->hasErrors()) {
+            return false;
+        }
+    } catch (exception &e) {
+        debug(1) << "Parse failed. " << e.what() << endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool buildAST(tree::ParseTree *&ast, tree::ParseTree *cst, ostream &os, string errorFormat) {
+    // TODO: build AST
+    ast = cst;
+    return true;
+}
+
+bool buildGCT(GCT::node_ptr_t &gct, tree::ParseTree *ast, ostream &os, string errorFormat) {
+    return false; // TODO: build GCT
+    initTypes();
+    auto constructor = GCT::Constructor();
+    try {
+        gct = constructor.construct(ast);
+        auto &warns = constructor.warns();
+        if (selectedCommand == Command::CHECK) {
+            while (!warns.empty()) {
+                const auto &warning = warns.front();
+                if (errorFormat != "json") {
+                    error << warning.what() << endl;
+                } else {
+                    os << warning.json() << endl;
+                }
+                warns.pop();
+            }
+        }
+    } catch (BuildException &e) {
+        if (errorFormat != "json") {
+            error << e.what() << endl;
+            return false;
+        } else {
+            os << e.json() << endl;
+            return false;
+        }
+    } catch (exception &e) {
+        if (errorFormat != "json") {
+            error << "GCT construction failed: " << e.what() << endl;
+            return false;
+        } else {
+            os << "{"
+               << "\"type\": \"error\", "
+               << "\"filename\": \"" << targetFile << "\", "
+               << "\"line\": 0, "
+               << "\"column\": 0, "
+               << "\"message\": \"GCT construction failed: " << e.what() << "\""
+               << "}" << endl;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool buildGIR(GIR::graph_ptr_t &gir, GCT::node_ptr_t &gct, context_ptr_t &ctx, ostream &os, string errorFormat) {
+    initOperators();
+    auto constructor = GIR::Constructor(ctx);
+    try {
+        gir = constructor.construct(gct);
+    } catch (exception &e) {
+        if (errorFormat != "json") {
+            error << "GIR construction failed: " << e.what() << endl;
+            return false;
+        } else {
+            os << "{"
+               << "\"type\": \"error\", "
+               << "\"filename\": \"" << targetFile << "\", "
+               << "\"line\": 0, "
+               << "\"column\": 0, "
+               << "\"message\": \"GIR construction failed: " << e.what() << "\""
+               << "}" << endl;
+            return false;
+        }
+    }
+    return true;
+}
+
 int main(int argc, char *argv[]) {
     if (!parseArgs(argc, argv))
         return 0;
 
     ostream &os = cout;
 
+    string errorFormat = Run::errorFormat;
+    if (selectedCommand == Command::CHECK) {
+        errorFormat = Check::outputFormat;
+    }
+
+    ANTLRInputStream input;
+
+    if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
+        input = ANTLRInputStream(cin);
+        targetFile = "stdin"; // for error reporting
+    } else {
+        targetFile = Run::targetFiles[0];
+        auto src = ifstream();
+        src.open(targetFile);
+        if (!src.is_open()) {
+            error << "Error opening file " << targetFile << endl;
+            return 1;
+        }
+        input = ANTLRInputStream(src);
+    }
+
     chrono::high_resolution_clock::time_point startTime, endTime;
 
-    while (repeat--) {
-        bool hasParseError = false;
-
-        if (profile) {
+    while (Run::repeat--) {
+        if (Run::profile) {
             startTime = chrono::high_resolution_clock::now();
-        }
-
-        ANTLRInputStream input;
-        string targetFile = "stdin";
-
-        if (!targetFiles.empty()) {
-            targetFile = targetFiles[0];
-            auto src = ifstream();
-            src.open(targetFile);
-            if (!src.is_open()) {
-                error << "Error opening file " << targetFile << endl;
-                return 1;
-            }
-            input = ANTLRInputStream(src);
-        } else {
-            input = ANTLRInputStream(cin);
         }
 
         OpenCMLLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
+        OpenCMLParser parser(&tokens);
 
         if (Inspect::dumpTokens) {
-            while (true) {
-                Token *token = tokens.LT(1);
-                if (token->getType() == Token::EOF) {
-                    break;
-                }
-                os << setw(4) << right << token->getTokenIndex() << " [" << setw(3) << right << token->getLine() << ":"
-                   << setw(3) << left << token->getCharPositionInLine() << "] (" << token->getChannel()
-                   << ") : " << token->getText() << endl;
-                tokens.consume();
-            }
-            tokens.reset();
+            dumpTokens(tokens);
         }
 
-        OpenCMLParser parser(&tokens);
-        auto interpreter = parser.getInterpreter<atn::ParserATNSimulator>();
-        tree::ParseTree *tree = nullptr;
-        parser.removeErrorListeners();
+        tree::ParseTree *cst = nullptr;
+        tree::ParseTree *ast = nullptr;
+        // AST::node_ptr_t ast = nullptr;
+        GCT::node_ptr_t gct = nullptr;
+        GIR::graph_ptr_t gir = nullptr;
+        context_ptr_t ctx = make_shared<Context>();
 
-        try {
-            interpreter->setPredictionMode(atn::PredictionMode::SLL);
-            parser.setErrorHandler(make_shared<BailErrorStrategy>());
-            tree = parser.program();
-        } catch (ParseCancellationException &e) {
-            debug(1) << "Parse failed, retrying with LL mode" << endl;
-
-            CamelErrorListener *listener = nullptr;
-
-            if (errorFormat == "text") {
-                listener = new CamelErrorListener(targetFile, os);
-            } else if (errorFormat == "json") {
-                listener = new JSONErrorListener(targetFile, os);
-            } else {
-                error << "Unknown error format: " << errorFormat << endl;
-                return 1;
-            }
-
-            parser.addErrorListener(listener);
-
-            parser.reset();
-            tokens.reset();
-            interpreter->setPredictionMode(atn::PredictionMode::LL);
-            parser.setErrorHandler(make_shared<DefaultErrorStrategy>());
-
-            try {
-                tree = parser.program();
-            } catch (exception &e) {
-                error << "Parse failed" << endl;
-                return 1;
-            }
-
-            hasParseError = listener->hasErrors();
-        } catch (exception &e) {
-            error << "Parse failed" << endl;
-            return 1;
+        if (!buildCST(cst, parser, os, errorFormat)) {
+            return selectedCommand == Command::CHECK ? 0 : 2;
         }
-
-        if (Format::formatCode && !hasParseError) {
-            auto formatter = Formatter(tokens.getTokens());
-            const string formattedCode = any_cast<string>(formatter.visit(tree));
-            os << formattedCode;
-        }
-
+        assert(cst != nullptr);
         if (Inspect::dumpCST) {
-            auto cstDumpVisitor = CSTDumpVisitor(os);
-            cstDumpVisitor.visit(tree);
+            auto visitor = CSTDumpVisitor(os);
+            visitor.visit(cst);
+        }
+        if (Format::formatCode) {
+            auto formatter = Formatter(tokens.getTokens());
+            const string formattedCode = any_cast<string>(formatter.visit(cst));
+            os << formattedCode;
+            return 0;
         }
 
-        if (selectedCommand == Command::INSPECT && !hasParseError) {
-            initTypes();
-            GCT::node_ptr_t gct = nullptr;
-            auto astConstructor = GCT::Constructor();
-            try {
-                gct = astConstructor.construct(tree);
-                auto &warns = astConstructor.warns();
-                while (!warns.empty()) {
-                    const auto &warning = warns.front();
-                    if (errorFormat != "json") {
-                        error << warning.what() << endl;
-                    } else {
-                        os << warning.json() << endl;
-                    }
-                    warns.pop();
-                }
-            } catch (BuildException &e) {
-                if (errorFormat != "json") {
-                    error << e.what() << endl;
-                    return 1;
-                } else {
-                    os << e.json() << endl;
-                    return 0;
-                }
-            } catch (exception &e) {
-                if (errorFormat != "json") {
-                    error << "GCT construction failed: " << e.what() << endl;
-                    return 1;
-                } else {
-                    os << "{"
-                       << "\"type\": \"error\", "
-                       << "\"filename\": \"" << targetFile << "\", "
-                       << "\"line\": 0, "
-                       << "\"column\": 0, "
-                       << "\"message\": \"GCT construction failed: " << e.what() << "\""
-                       << "}" << endl;
-                    return 0;
-                }
-            }
+        if (!buildAST(ast, cst, os, errorFormat)) {
+            return selectedCommand == Command::CHECK ? 0 : 3;
+        }
+        assert(ast != nullptr);
 
-            if (Inspect::dumpAST && gct) {
-                // currently we do not have AST, print GCT instead
-                gct->print(os);
-            }
-
-            if (Inspect::dumpGCT && gct) {
-                gct->print(os);
-            }
-
-            GIR::graph_ptr_t gir = nullptr;
-            context_ptr_t ctx = make_shared<Context>();
-
-            if (Inspect::dumpGIR) {
-                initOperators();
-                auto girConstructor = GIR::Constructor(ctx);
-                try {
-                    gir = girConstructor.construct(gct);
-                } catch (exception &e) {
-                    error << "GIR construction failed: " << e.what() << endl;
-                    return 1;
-                }
-            }
-
-            if (Inspect::dumpGIR && gir) {
-                GraphVizDumpPass pass(ctx);
-                auto res = pass.apply(gir);
-                os << any_cast<string>(res);
-            }
+        if (!buildGCT(gct, ast, os, errorFormat)) {
+            return selectedCommand == Command::CHECK ? 0 : 4;
+        }
+        assert(gct != nullptr);
+        if (Inspect::dumpAST && gct) {
+            // currently we do not have AST, print GCT instead
+            gct->print(os);
+        }
+        if (Inspect::dumpGCT && gct) {
+            gct->print(os);
         }
 
-        if (profile) {
+        if (!buildGIR(gir, gct, ctx, os, errorFormat)) {
+            return selectedCommand == Command::CHECK ? 0 : 5;
+        }
+        assert(gir != nullptr);
+        if (Inspect::dumpGIR) {
+            GraphVizDumpPass pass(ctx);
+            auto res = pass.apply(gir);
+            os << any_cast<string>(res);
+        }
+
+        if (Run::profile) {
             endTime = chrono::high_resolution_clock::now();
             auto duration = chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
             info << "Time used " << duration << " us" << endl;

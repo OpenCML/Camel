@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024 Beijing Jiaotong University
+ * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You can use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:
@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Mar. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.0.12"
+#define VERSION "0.0.13"
 
 #include <string>
 
@@ -32,6 +32,7 @@ bool parseArgs(int argc, char *argv[]);
 namespace CmdLineArgs {
 extern Command selectedCommand;
 
+namespace Run {
 extern std::string outputFile;
 extern std::string errorFormat;
 extern std::vector<std::string> scriptsDirs;
@@ -41,7 +42,8 @@ extern bool profile;
 extern bool noCache;
 extern bool semanticOnly;
 extern unsigned int repeat;
-extern unsigned int maxThreads;
+extern int maxThreads;
+} // namespace Run
 
 namespace Format {
 extern std::string quotePrefer; // Quote preference (default to single quotes)

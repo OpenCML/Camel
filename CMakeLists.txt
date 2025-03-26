@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.25)
 project(camel)
 
+if(NOT DEFINED BUILD_TIMESTAMP)
+    string(TIMESTAMP BUILD_TIMESTAMP "%y%m%d_%H%M%S")
+endif()
+
+set_source_files_properties("${PROJECT_SOURCE_DIR}/src/config.cpp" PROPERTIES COMPILE_DEFINITIONS BUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)

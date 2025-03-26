@@ -1,0 +1,18 @@
+module utils
+
+with <var self: Tensor[]>
+export inner func fill(f: (x: Tensor) => Tensor): Tensor[] {
+    // return self.fill(x)
+}
+
+with <model: Model, epochs: int, batch_size: int>
+sync func run(input: Tensor) {
+    let batches = input.batch(batch_size)
+    return wait batches.map(sync (batch: Tensor, index: int) => sync {
+        let loss = model(batch)
+        if index % 100 == 0 then {
+            print('Epoch: ', index, 'Loss: ', loss)
+        }
+        return loss
+    })
+}
