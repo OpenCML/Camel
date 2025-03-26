@@ -366,6 +366,8 @@ class Formatter : public OpenCMLVisitor {
   public:
     Formatter(const std::vector<antlr4::Token *> tokens) : tokens(tokens) {}
 
+    // Auto-generated visitor methods
+
     std::any visitProgram(OpenCMLParser::ProgramContext *context);
 
     std::any visitDecl(OpenCMLParser::DeclContext *context);
@@ -521,4 +523,6 @@ class Formatter : public OpenCMLVisitor {
     std::any visitIdentDef(OpenCMLParser::IdentDefContext *context);
 
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context);
+
+    // End of auto-generated visitor methods
 };

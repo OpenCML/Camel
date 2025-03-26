@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { logStep, logDone, logFail, runCommand } from './common.js'
-import { parseGrammarRules, generateCSTDumpVisitor, transformFormatterCode, generateFormatterCpp } from './codegen.js'
+import { parseGrammarRules, generateCSTDumpVisitor, transformHeaderCode, generateTmpCppCode } from './codegen.js'
 
 const searchDir = './src/antlr'
 
@@ -70,17 +70,29 @@ function generateAntlrParser() {
     // fs.writeFileSync('./src/compile/parse/cst.h', visitorContent)
     // logDone('Modified CSTDumpVisitor.h')
 
-    // logStep('Transforming formatter header code...')
-    // const formatterContent = fs.readFileSync('./src/service/formatter/fmt.h', 'utf-8')
-    // const transformedFormatterContent = transformFormatterCode(formatterContent, rules)
-    // fs.writeFileSync('./src/service/formatter/fmt.h', transformedFormatterContent)
-    // logDone('Transformed formatter code')
+    logStep('Transforming Formatter header code...')
+    const formatterContent = fs.readFileSync('./src/service/formatter/fmt.h', 'utf-8')
+    const transformedFormatterContent = transformHeaderCode(formatterContent, rules)
+    fs.writeFileSync('./src/service/formatter/fmt.h', transformedFormatterContent)
+    logDone('Transformed Formatter header')
 
-    logStep('Generating formatter cpp code...')
-    const formatterCode = fs.readFileSync('./src/service/formatter/fmt.cpp', 'utf-8')
-    const code = generateFormatterCpp(formatterCode, rules)
-    fs.writeFileSync('./src/service/formatter/fmt.tmp.cpp', code)
-    logDone('Generated functions')
+    logStep('Transforming GCT Constructor header code...')
+    const gctContent = fs.readFileSync('./src/compile/parse/gct.h', 'utf-8')
+    const transformedGCTContent = transformHeaderCode(gctContent, rules)
+    fs.writeFileSync('./src/compile/parse/gct.h', transformedGCTContent)
+    logDone('Transformed GCT Constructor header')
+
+    logStep('Generating Formatter cpp code...')
+    let srcCode = fs.readFileSync('./src/service/formatter/fmt.cpp', 'utf-8')
+    let geneCode = generateTmpCppCode(srcCode, rules, 'Formatter')
+    fs.writeFileSync('./src/service/formatter/fmt.tmp.cpp', geneCode)
+    logDone('Generated Formatter code')
+
+    logStep('Generating GCT Constructor cpp code...')
+    srcCode = fs.readFileSync('./src/compile/parse/gct-new.cpp', 'utf-8')
+    geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
+    fs.writeFileSync('./src/compile/parse/gct.tmp.cpp', geneCode)
+    logDone('Generated GCT Constructor code')
 }
 
 generateAntlrParser()

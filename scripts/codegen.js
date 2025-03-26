@@ -1,3 +1,5 @@
+import { logFail } from './common.js'
+
 function formatDate(date) {
     const months = [
         'Jan.',
@@ -84,36 +86,34 @@ ${visitFunctions.join('\n\n')}
 `
 }
 
-export function transformFormatterCode(originalCode, rules) {
+export function transformHeaderCode(code, rules) {
     const visitDecls = Array.from(rules.keys()).map((ruleName) => {
         ruleName = ruleName.charAt(0).toUpperCase() + ruleName.slice(1)
         return `    std::any visit${ruleName}(OpenCMLParser::${ruleName}Context *context);`
     })
 
-    const segIndex = originalCode.indexOf('public:')
-    const header = originalCode.substring(0, segIndex)
+    const startIndex = code.indexOf('// Auto-generated visitor methods')
+    const endIndex = code.indexOf('// End of auto-generated visitor methods', startIndex)
+    const header = code.substring(0, startIndex)
+    const tail = code.substring(endIndex)
 
-    const tail = `public:
-    Formatter(const std::vector<antlr4::Token *> tokens) : tokens(tokens) {}
-
-${visitDecls.join('\n\n')}
-};
-`
-
-    return header + tail
+    const body = `// Auto-generated visitor methods\n\n${visitDecls.join('\n\n')}\n\n    `
+    return header + body + tail
 }
 
-export function generateFormatterCpp(code, rules) {
+export function generateTmpCppCode(code, rules, className = 'Formatter') {
     const funcMap = new Map()
-    const funcRegex = /\/\*[^\*][\s\S]*?\*\/\s*any Formatter::visit(\w+)\(/gs
+    const funcRegex = /\/\*[^\*][\s\S]*?\*\/\s*any \w+::visit(\w+)\(/gs
     const funcInfos = []
 
     let match
     while ((match = funcRegex.exec(code)) !== null) {
-        const funcName = match[1]
-        const startIndex = match.index + match[0].length
+        const [funcDecl, funcName] = match
+        const startIndex = match.index + funcDecl.length
+        const commentEnd = funcDecl.indexOf(`any ${className}::`)
         funcInfos.push({
             name: funcName,
+            oldRule: funcDecl.slice(0, commentEnd),
             declStart: match.index,
             bodyStart: code.indexOf('{', startIndex),
             bodyEnd: null
@@ -131,26 +131,38 @@ export function generateFormatterCpp(code, rules) {
         if (func.bodyStart !== null && func.bodyEnd !== null) {
             let bodyContent = code
                 .slice(func.bodyStart, func.bodyEnd)
-                .replace(/^\s+/, '') // 清理起始空白
-                .replace(/\s+$/, '') // 清理结尾空白
+                .replace(/^\s+/, '')
+                .replace(/\s+$/, '')
 
-            funcMap.set(func.name, bodyContent)
+            funcMap.set(func.name, [func.oldRule, bodyContent])
         }
     })
 
-    const newDecls = Array.from(rules.entries()).map(([rule, text]) => {
-        const funcName = rule.charAt(0).toUpperCase() + rule.slice(1)
-        const bodyContent = funcMap.get(funcName, '{\r\n    // TODO\r\n}')
-        return `/*\r\n${text}\r\n*/\nstd::any Formatter::visit${funcName}(OpenCMLParser::${funcName}Context *context) ${bodyContent}`
+    const TODO = '// TODO: '
+
+    const newDecls = Array.from(rules.entries()).map(([ruleName, ruleText]) => {
+        const funcName = ruleName.charAt(0).toUpperCase() + ruleName.slice(1)
+        const [oldRule, bodyContent] = funcMap.get(funcName) || ['', '{}']
+        const newRule = `/*\r\n${ruleText}\r\n*/\n`
+        return (
+            (newRule.trim() !== oldRule.trim()
+                ? TODO + (oldRule.length ? 'MODIFIED' : 'NEW RULE') + '\n' + oldRule
+                : '') +
+            newRule +
+            `any ${className}::visit${funcName}(OpenCMLParser::${funcName}Context *context) ` +
+            bodyContent
+        )
     })
+
+    if (newDecls.length === 0) {
+        logFail('No new declarations generated')
+        return code
+    }
 
     const declStart = funcInfos[0].declStart
     const declEnd = funcInfos[funcInfos.length - 1].bodyEnd
     const head = code.slice(0, declStart)
     const tail = code.slice(declEnd)
 
-    return `${head}
-${newDecls.join('\n\n')}
-${tail}
-    `
+    return `${head}${newDecls.join('\n\n')}${tail}`
 }
