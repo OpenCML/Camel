@@ -1,7 +1,9 @@
-import opt from 'opt'
-import { dense, dropout, relu, softmax } from 'nn'
+module main
 
-inner type Tensor = 'nn::Tensor'
+import { dense, dropout, relu, softmax } from 'nn'
+import opt from 'opt'
+
+inner type Tensor = 'std::Tensor'
 
 type Model = (x: Tensor) => Tensor
 

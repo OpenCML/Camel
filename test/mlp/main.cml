@@ -1,8 +1,8 @@
 module main
 
-import opt from 'opt'
-import { dense, relu, softmax, cross_entropy, Tensor, Model } from 'nn'
 import { MLP } from 'mlp'
+import { dense, relu, softmax, cross_entropy, Tensor, Model } from 'nn'
+import opt from 'opt'
 import { fill, run } from 'utils'
 
 func main(): int sync {

@@ -177,7 +177,13 @@ any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
                           TrailingC | Multiline | PaddingNL | PRightOnly, 1, headTokenRanges);
     tailStr = formatList(tail, context, "; ", (this->preferSemis ? ";" : ""),
                          TrailingC | Multiline | PaddingNL | PRightOnly, 2, tailTokenRanges);
-    return headStr + (head.empty() || tail.empty() ? "" : lineEnd()) + tailStr;
+    string result = headStr + (head.empty() || tail.empty() ? "" : lineEnd()) + tailStr;
+
+    // remove tailing spaces in empty lines
+    std::regex emptyLineRegex("^\\s*$");
+    result = std::regex_replace(result, emptyLineRegex, "");
+
+    return result;
 }
 
 /*
@@ -458,9 +464,11 @@ any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     if (implMark) {
         result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
-    result += "type " + any_cast<string>(visitIdentDef(context->identDef()));
+    result += "type " + any_cast<string>(visitIdentDef(context->identDef())) + " = ";
     if (context->typeExpr()) {
-        result += " = " + any_cast<string>(visitTypeExpr(context->typeExpr()));
+        result += any_cast<string>(visitTypeExpr(context->typeExpr()));
+    } else {
+        result += formatStringLiteral(context->STRING()->getText());
     }
     return result;
 }
