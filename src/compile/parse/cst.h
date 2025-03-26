@@ -34,6 +34,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any dumpNode(antlr4::tree::ParseTree *context, std::string nodeName);
 
+    // Auto-generated visitor methods
+
     std::any visitProgram(OpenCMLParser::ProgramContext *context) { return dumpNode(context, "Program"); };
 
     std::any visitDecl(OpenCMLParser::DeclContext *context) { return dumpNode(context, "Decl"); };
@@ -189,4 +191,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitIdentDef(OpenCMLParser::IdentDefContext *context) { return dumpNode(context, "IdentDef"); };
 
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) { return dumpNode(context, "IdentRef"); };
+
+    // End of auto-generated visitor methods
 };

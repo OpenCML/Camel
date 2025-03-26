@@ -1,26 +1,5 @@
 import { logFail } from './common.js'
 
-function formatDate(date) {
-    const months = [
-        'Jan.',
-        'Feb.',
-        'Mar.',
-        'Apr.',
-        'May.',
-        'Jun.',
-        'Jul.',
-        'Aug.',
-        'Sep.',
-        'Oct.',
-        'Nov.',
-        'Dec.'
-    ]
-    return `${months[date.getMonth()]} ${date
-        .getDate()
-        .toString()
-        .padStart(2, '0')}, ${date.getFullYear()}`
-}
-
 export function parseGrammarRules(grammarText) {
     const ruleMap = new Map()
     const rulePattern = /([a-zA-Z_]+)(\s*:\s*(?:.(?!\s*;))*.?\s*;)/gs
@@ -38,58 +17,18 @@ export function parseGrammarRules(grammarText) {
     return ruleMap
 }
 
-export function generateCSTDumpVisitor(rules) {
-    const visitFunctions = Array.from(rules.keys()).map((ruleName) => {
-        ruleName = ruleName.charAt(0).toUpperCase() + ruleName.slice(1)
-        return `    std::any visit${ruleName}(OpenCMLParser::${ruleName}Context *context) { return dumpNode(context, "${ruleName}"); };`
-    })
-
-    // 组装完整的类定义
-    return `/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Mar. 17, 2024
- * Updated: ${formatDate(new Date())}
- * Supported by: National Key Research and Development Program of China
- */
-
-#include <iostream>
-#include <regex>
-#include <string>
-
-#include "antlr/OpenCMLVisitor.h"
-#include "antlr4-runtime/antlr4-runtime.h"
-
-class CSTDumpVisitor : public OpenCMLVisitor {
-    size_t depth = 0;
-    std::ostream &os = std::cout;
-    std::vector<bool> visible;
-
-  public:
-    CSTDumpVisitor(std::ostream &os) : os(os) {}
-
-    std::any dumpNode(antlr4::tree::ParseTree *context, std::string nodeName);
-
-${visitFunctions.join('\n\n')}
-};
-`
+function geneDeclByRuleName(ruleName) {
+    return `    std::any visit${ruleName}(OpenCMLParser::${ruleName}Context *context);`
 }
 
-export function transformHeaderCode(code, rules) {
+function geneCSTDumperDeclByRuleName(ruleName) {
+    return `    std::any visit${ruleName}(OpenCMLParser::${ruleName}Context *context) { return dumpNode(context, "${ruleName}"); };`
+}
+
+function transformHeaderCode(code, rules, generator = geneDeclByRuleName) {
     const visitDecls = Array.from(rules.keys()).map((ruleName) => {
         ruleName = ruleName.charAt(0).toUpperCase() + ruleName.slice(1)
-        return `    std::any visit${ruleName}(OpenCMLParser::${ruleName}Context *context);`
+        return generator(ruleName)
     })
 
     const startIndex = code.indexOf('// Auto-generated visitor methods')
@@ -101,7 +40,7 @@ export function transformHeaderCode(code, rules) {
     return header + body + tail
 }
 
-export function generateTmpCppCode(code, rules, className = 'Formatter') {
+function generateTmpCppCode(code, rules, className = 'Formatter') {
     const funcMap = new Map()
     const funcRegex = /\/\*[^\*][\s\S]*?\*\/\s*any \w+::visit(\w+)\(/gs
     const funcInfos = []
@@ -166,3 +105,45 @@ export function generateTmpCppCode(code, rules, className = 'Formatter') {
 
     return `${head}${newDecls.join('\n\n')}${tail}`
 }
+
+function generateParserCode() {
+    logStep('Parsing grammar rules...')
+    const grammarContent = fs.readFileSync('./antlr/OpenCML.g4', 'utf-8')
+    const rules = parseGrammarRules(grammarContent)
+    logDone('Parsed grammar rules')
+
+    let srcCode = ''
+    let geneCode = ''
+
+    logStep('Modifying CSTDumpVisitor.h...')
+    srcCode = fs.readFileSync('./src/compile/parse/cst.h', 'utf-8')
+    geneCode = transformHeaderCode(srcCode, rules, geneCSTDumperDeclByRuleName)
+    fs.writeFileSync('./src/compile/parse/cst.h', geneCode)
+    logDone('Modified CSTDumpVisitor.h')
+
+    logStep('Modifying Formatter header code...')
+    srcCode = fs.readFileSync('./src/service/formatter/fmt.h', 'utf-8')
+    geneCode = transformHeaderCode(srcCode, rules)
+    fs.writeFileSync('./src/service/formatter/fmt.h', geneCode)
+    logDone('Modified Formatter header')
+
+    logStep('Modifying GCT Constructor header code...')
+    srcCode = fs.readFileSync('./src/compile/parse/gct.h', 'utf-8')
+    geneCode = transformHeaderCode(srcCode, rules)
+    fs.writeFileSync('./src/compile/parse/gct.h', geneCode)
+    logDone('Modified GCT Constructor header')
+
+    logStep('Generating Formatter cpp code...')
+    srcCode = fs.readFileSync('./src/service/formatter/fmt.cpp', 'utf-8')
+    geneCode = generateTmpCppCode(srcCode, rules, 'Formatter')
+    fs.writeFileSync('./src/service/formatter/fmt.tmp.cpp', geneCode)
+    logDone('Generated Formatter code')
+
+    logStep('Generating GCT Constructor cpp code...')
+    srcCode = fs.readFileSync('./src/compile/parse/gct-new.cpp', 'utf-8')
+    geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
+    fs.writeFileSync('./src/compile/parse/gct.tmp.cpp', geneCode)
+    logDone('Generated GCT Constructor code')
+}
+
+generateParserCode()
