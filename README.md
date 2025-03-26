@@ -1,4 +1,4 @@
-# Camel: A Next-Generation Language for AI and High-Performance Computing
+# Camel: A Graph-Native Programming Language for Unified AI Development
 
 [中文简体](README.cn.md) | English
 

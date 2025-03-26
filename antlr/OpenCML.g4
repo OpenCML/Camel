@@ -201,7 +201,7 @@ primaryData
     | literal
     | listExpr
     | dictExpr
-    | '(' waitExpr ')'        // if there is only one data, it will be recognized as a primary expression rather than a tuple
+    | '(' waitExpr ')'
     | '(' valueList? ','? ')' // for tuple
     | lambdaExpr
     ;
