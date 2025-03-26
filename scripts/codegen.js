@@ -1,4 +1,5 @@
-import { logFail } from './common.js'
+import fs from 'fs'
+import { logStep, logDone, logFail } from './common.js'
 
 export function parseGrammarRules(grammarText) {
     const ruleMap = new Map()
