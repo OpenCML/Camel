@@ -1,4 +1,4 @@
-# Camel：面向AI时代的下一代编程语言
+# Camel：一种用于统一 AI 开发的图原生编程语言
 
 [English](README.md) | 中文简体
 

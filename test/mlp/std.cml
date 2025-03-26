@@ -1,0 +1,16 @@
+module std
+
+with <xs: typeas T[]>
+export inner func map(f: (x: T) => typeas U): U[] {
+    // return xs.map(f)
+}
+
+with <self: typeas T[]>
+export inner func tail(): T[] {
+    // return self.slice(1)
+}
+
+with <self: typeas T[]>
+export inner func head(): T[] {
+    // return self.slice(1)
+}

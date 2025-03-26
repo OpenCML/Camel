@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 17, 2025
+ * Updated: Mar. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any dumpNode(antlr4::tree::ParseTree *context, std::string nodeName);
 
+    // Auto-generated visitor methods
+
     std::any visitProgram(OpenCMLParser::ProgramContext *context) { return dumpNode(context, "Program"); };
 
     std::any visitDecl(OpenCMLParser::DeclContext *context) { return dumpNode(context, "Decl"); };
@@ -52,23 +54,17 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return dumpNode(context, "BlockExpr"); };
 
-    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context) { return dumpNode(context, "BlockStmt"); };
+    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context) { return dumpNode(context, "WaitStmt"); };
 
     std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return dumpNode(context, "LambdaExpr"); };
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) { return dumpNode(context, "FuncDecl"); };
 
-    std::any visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
-        return dumpNode(context, "ParentIdents");
-    };
+    std::any visitParentIdents(OpenCMLParser::ParentIdentsContext *context) { return dumpNode(context, "ParentIdents"); };
 
-    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
-        return dumpNode(context, "BracedIdents");
-    };
+    std::any visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) { return dumpNode(context, "BracedIdents"); };
 
-    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
-        return dumpNode(context, "BracketIdents");
-    };
+    std::any visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) { return dumpNode(context, "BracketIdents"); };
 
     std::any visitCarrier(OpenCMLParser::CarrierContext *context) { return dumpNode(context, "Carrier"); };
 
@@ -82,11 +78,11 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return dumpNode(context, "EnumDecl"); };
 
-    std::any visitExprStmt(OpenCMLParser::ExprStmtContext *context) { return dumpNode(context, "ExprStmt"); };
-
     std::any visitAnnotation(OpenCMLParser::AnnotationContext *context) { return dumpNode(context, "Annotation"); };
 
     std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context) { return dumpNode(context, "Annotations"); };
+
+    std::any visitImplMark(OpenCMLParser::ImplMarkContext *context) { return dumpNode(context, "ImplMark"); };
 
     std::any visitModifiers(OpenCMLParser::ModifiersContext *context) { return dumpNode(context, "Modifiers"); };
 
@@ -94,13 +90,11 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) { return dumpNode(context, "KeyTypePair"); };
 
-    std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
-        return dumpNode(context, "KeyValuePair");
-    };
+    std::any visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) { return dumpNode(context, "KeyValuePair"); };
 
-    std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
-        return dumpNode(context, "KeyParamPair");
-    };
+    std::any visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return dumpNode(context, "KeyParamPair"); };
+
+    std::any visitDataList(OpenCMLParser::DataListContext *context) { return dumpNode(context, "DataList"); };
 
     std::any visitIdentList(OpenCMLParser::IdentListContext *context) { return dumpNode(context, "IdentList"); };
 
@@ -108,39 +102,23 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitIndexValues(OpenCMLParser::IndexValuesContext *context) { return dumpNode(context, "IndexValues"); };
 
-    std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
-        return dumpNode(context, "PairedValues");
-    };
+    std::any visitPairedValues(OpenCMLParser::PairedValuesContext *context) { return dumpNode(context, "PairedValues"); };
 
-    std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
-        return dumpNode(context, "PairedParams");
-    };
+    std::any visitPairedParams(OpenCMLParser::PairedParamsContext *context) { return dumpNode(context, "PairedParams"); };
 
-    std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
-        return dumpNode(context, "ArgumentList");
-    };
+    std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return dumpNode(context, "ArgumentList"); };
 
-    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
-        return dumpNode(context, "MemberAccess");
-    };
+    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) { return dumpNode(context, "MemberAccess"); };
 
-    std::any visitParentParams(OpenCMLParser::ParentParamsContext *context) {
-        return dumpNode(context, "ParentParams");
-    };
+    std::any visitParentParams(OpenCMLParser::ParentParamsContext *context) { return dumpNode(context, "ParentParams"); };
 
-    std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
-        return dumpNode(context, "ParentArgues");
-    };
+    std::any visitParentArgues(OpenCMLParser::ParentArguesContext *context) { return dumpNode(context, "ParentArgues"); };
 
-    std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
-        return dumpNode(context, "AngledParams");
-    };
+    std::any visitAngledParams(OpenCMLParser::AngledParamsContext *context) { return dumpNode(context, "AngledParams"); };
 
-    std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
-        return dumpNode(context, "AngledValues");
-    };
+    std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return dumpNode(context, "AngledValues"); };
 
-    std::any visitDataExpr(OpenCMLParser::DataExprContext *context) { return dumpNode(context, "DataExpr"); };
+    std::any visitWaitExpr(OpenCMLParser::WaitExprContext *context) { return dumpNode(context, "WaitExpr"); };
 
     std::any visitPattern(OpenCMLParser::PatternContext *context) { return dumpNode(context, "Pattern"); };
 
@@ -148,35 +126,25 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitCatchClause(OpenCMLParser::CatchClauseContext *context) { return dumpNode(context, "CatchClause"); };
 
-    std::any visitStructExpr(OpenCMLParser::StructExprContext *context) { return dumpNode(context, "StructExpr"); };
+    std::any visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) { return dumpNode(context, "CtrlExpr"); };
 
-    std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
-        return dumpNode(context, "LogicalOrExpr");
-    };
+    std::any visitDataExpr(OpenCMLParser::DataExprContext *context) { return dumpNode(context, "DataExpr"); };
 
-    std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {
-        return dumpNode(context, "LogicalAndExpr");
-    };
+    std::any visitAssignExpr(OpenCMLParser::AssignExprContext *context) { return dumpNode(context, "AssignExpr"); };
 
-    std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
-        return dumpNode(context, "EqualityExpr");
-    };
+    std::any visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) { return dumpNode(context, "LogicalOrExpr"); };
 
-    std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {
-        return dumpNode(context, "RelationalExpr");
-    };
+    std::any visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) { return dumpNode(context, "LogicalAndExpr"); };
 
-    std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
-        return dumpNode(context, "AdditiveExpr");
-    };
+    std::any visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) { return dumpNode(context, "EqualityExpr"); };
 
-    std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {
-        return dumpNode(context, "MultiplicativeExpr");
-    };
+    std::any visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) { return dumpNode(context, "RelationalExpr"); };
 
-    std::any visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
-        return dumpNode(context, "NullableExpr");
-    };
+    std::any visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) { return dumpNode(context, "AdditiveExpr"); };
+
+    std::any visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) { return dumpNode(context, "MultiplicativeExpr"); };
+
+    std::any visitNullableExpr(OpenCMLParser::NullableExprContext *context) { return dumpNode(context, "NullableExpr"); };
 
     std::any visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) { return dumpNode(context, "UnaryExpr"); };
 
@@ -210,11 +178,11 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return dumpNode(context, "PrimaryType"); };
 
-    std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context) {
-        return dumpNode(context, "DictExprType");
-    };
+    std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context) { return dumpNode(context, "DictExprType"); };
 
     std::any visitDictType(OpenCMLParser::DictTypeContext *context) { return dumpNode(context, "DictType"); };
+
+    std::any visitTypeList(OpenCMLParser::TypeListContext *context) { return dumpNode(context, "TypeList"); };
 
     std::any visitTupleType(OpenCMLParser::TupleTypeContext *context) { return dumpNode(context, "TupleType"); };
 
@@ -223,4 +191,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitIdentDef(OpenCMLParser::IdentDefContext *context) { return dumpNode(context, "IdentDef"); };
 
     std::any visitIdentRef(OpenCMLParser::IdentRefContext *context) { return dumpNode(context, "IdentRef"); };
+
+    // End of auto-generated visitor methods
 };
