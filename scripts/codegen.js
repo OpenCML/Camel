@@ -19,25 +19,28 @@ function formatDate(date) {
         .padStart(2, '0')}, ${date.getFullYear()}`
 }
 
-export function extractDecls(headerContent) {
-    const funcPattern = /virtual std::any visit(\w+?)\(OpenCMLParser::(\w+Context) \*context\) = 0;/g;
-    
-    const decls = [];
-    let match;
-    
-    while ((match = funcPattern.exec(headerContent)) !== null) {
-        const funcName = match[1];      // 例如：Program
-        const contextType = match[2];   // 例如：ProgramContext
-        decls.push({ funcName, contextType });
+export function parseGrammarRules(grammarText) {
+    const ruleMap = new Map()
+    const rulePattern = /([a-zA-Z_]+)(\s*:\s*(?:.(?!\s*;))*.?\s*;)/gs
+
+    const segIndex = grammarText.indexOf('program')
+    grammarText = grammarText.substring(segIndex)
+
+    let match
+    while ((match = rulePattern.exec(grammarText)) !== null) {
+        const ruleName = match[1]
+        let ruleBody = ruleName + match[2]
+        ruleMap.set(ruleName, ruleBody)
     }
 
-    return decls;
+    return ruleMap
 }
 
-export function generateCSTDumpVisitor(headerContent, decls) {
-    const visitFunctions = decls.map(({ funcName, contextType }) => {
-        return `    std::any visit${funcName}(OpenCMLParser::${contextType} *context) { return dumpNode(context, "${funcName}"); };`;
-    });
+export function generateCSTDumpVisitor(rules) {
+    const visitFunctions = Array.from(rules.keys()).map((ruleName) => {
+        ruleName = ruleName.charAt(0).toUpperCase() + ruleName.slice(1)
+        return `    std::any visit${ruleName}(OpenCMLParser::${ruleName}Context *context) { return dumpNode(context, "${ruleName}"); };`
+    })
 
     // 组装完整的类定义
     return `/**
@@ -78,23 +81,76 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
 ${visitFunctions.join('\n\n')}
 };
-`;
+`
 }
 
-export function transformFormatterCode(originalCode, decls) {
-    const visitDecls = decls.map(({ funcName, contextType }) => {
-        return `    std::any visit${funcName}(OpenCMLParser::${contextType} *context);`;
-    });
+export function transformFormatterCode(originalCode, rules) {
+    const visitDecls = Array.from(rules.keys()).map((ruleName) => {
+        ruleName = ruleName.charAt(0).toUpperCase() + ruleName.slice(1)
+        return `    std::any visit${ruleName}(OpenCMLParser::${ruleName}Context *context);`
+    })
 
-    const segIndex = originalCode.indexOf('public:');
-    const header = originalCode.substring(0, segIndex);
+    const segIndex = originalCode.indexOf('public:')
+    const header = originalCode.substring(0, segIndex)
 
     const tail = `public:
     Formatter(const std::vector<antlr4::Token *> tokens) : tokens(tokens) {}
 
 ${visitDecls.join('\n\n')}
 };
-`;
+`
 
-    return header + tail;
+    return header + tail
+}
+
+export function generateFormatterCpp(code, rules) {
+    const funcMap = new Map()
+    const funcRegex = /\/\*[^\*][\s\S]*?\*\/\s*any Formatter::visit(\w+)\(/gs
+    const funcInfos = []
+
+    let match
+    while ((match = funcRegex.exec(code)) !== null) {
+        const funcName = match[1]
+        const startIndex = match.index + match[0].length
+        funcInfos.push({
+            name: funcName,
+            declStart: match.index,
+            bodyStart: code.indexOf('{', startIndex),
+            bodyEnd: null
+        })
+    }
+
+    funcInfos.forEach((func, index) => {
+        const nextFuncStart =
+            index < funcInfos.length - 1 ? funcInfos[index + 1].declStart : code.length
+        const bodyEnd = code.lastIndexOf('}', nextFuncStart)
+        func.bodyEnd = Math.min(bodyEnd + 1, code.length)
+    })
+
+    funcInfos.forEach((func) => {
+        if (func.bodyStart !== null && func.bodyEnd !== null) {
+            let bodyContent = code
+                .slice(func.bodyStart, func.bodyEnd)
+                .replace(/^\s+/, '') // 清理起始空白
+                .replace(/\s+$/, '') // 清理结尾空白
+
+            funcMap.set(func.name, bodyContent)
+        }
+    })
+
+    const newDecls = Array.from(rules.entries()).map(([rule, text]) => {
+        const funcName = rule.charAt(0).toUpperCase() + rule.slice(1)
+        const bodyContent = funcMap.get(funcName, '{\r\n    // TODO\r\n}')
+        return `/*\r\n${text}\r\n*/\nstd::any Formatter::visit${funcName}(OpenCMLParser::${funcName}Context *context) ${bodyContent}`
+    })
+
+    const declStart = funcInfos[0].declStart
+    const declEnd = funcInfos[funcInfos.length - 1].bodyEnd
+    const head = code.slice(0, declStart)
+    const tail = code.slice(declEnd)
+
+    return `${head}
+${newDecls.join('\n\n')}
+${tail}
+    `
 }
