@@ -67,7 +67,7 @@ stmtBlock  : SYNC? '{' stmtList? '}' ;
 blockExpr  : stmtBlock | waitExpr ;
 waitStmt   : WAIT (stmtBlock | dataList) ;
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
-funcDecl   : annotations? (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
 bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
@@ -80,15 +80,13 @@ retStmt    : (RETURN | RAISE | THROW) valueList ;
 typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
 enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
 
-annotation  : '@' primaryData ;
-annotations : annotation+ ;
 implMark    : INNER | OUTER ;
 modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
 
 indexValue   : '...'? waitExpr ;
 keyTypePair  : identDef ':' typeExpr ;
 keyValuePair : identDef ':' waitExpr | '...' waitExpr ;
-keyParamPair : VAR? identDef annotation? ':' typeExpr ('=' waitExpr)? ;
+keyParamPair : VAR? identDef ':' typeExpr ('=' waitExpr)? ;
 
 dataList     : dataExpr (',' dataExpr)* ;
 identList    : identDef (',' identDef)* ;
@@ -136,7 +134,7 @@ dataExpr
     ;
 
 assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') logicalOrExpr)?
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
     ;
 
 logicalOrExpr
@@ -160,7 +158,7 @@ additiveExpr
     ;
 
 multiplicativeExpr
-    : nullableExpr (('^' | '*' | '/' | '%') nullableExpr)*
+    : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
     ;
 
 nullableExpr
@@ -185,7 +183,7 @@ withExpr
     ;
 
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!') | annotation)*
+    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
     ;
 
 dictExpr

@@ -342,12 +342,10 @@ any Formatter::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
 }
 
 /*
-funcDecl   : annotations? (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)?
-stmtBlock ;
+funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     string result;
-    const auto &annotations = context->annotations();
     const auto &angledParams = context->angledParams();
     const auto &implMark = context->implMark();
     const auto &modifiers = context->modifiers();
@@ -355,10 +353,6 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     const auto &parentParams = context->parentParams();
     const auto &typeExpr = context->typeExpr();
     const auto &stmtBlock = context->stmtBlock();
-
-    if (annotations) {
-        result += any_cast<string>(visitAnnotations(annotations)) + lineEnd();
-    }
 
     if (angledParams) {
         result += "with " + any_cast<string>(visitAngledParams(angledParams)) + lineEnd();
@@ -486,29 +480,6 @@ any Formatter::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) {
 }
 
 /*
-annotation  : '@' primaryData ;
-*/
-any Formatter::visitAnnotation(OpenCMLParser::AnnotationContext *context) {
-    return "@" + any_cast<string>(visitPrimaryData(context->primaryData()));
-}
-
-/*
-annotations : annotation+ ;
-*/
-any Formatter::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
-    string result;
-    const bool multiLine = isMultiLine(context);
-    const auto &annotations = context->annotation();
-    for (size_t i = 0; i < annotations.size(); i++) {
-        if (i > 0 && multiLine) {
-            result += lineEnd();
-        }
-        result += any_cast<string>(visitAnnotation(annotations[i]));
-    }
-    return result;
-}
-
-/*
 implMark    : INNER | OUTER ;
 */
 any Formatter::visitImplMark(OpenCMLParser::ImplMarkContext *context) { return context->getText(); }
@@ -561,17 +532,13 @@ any Formatter::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
 }
 
 /*
-keyParamPair : VAR? identDef annotation? ':' typeExpr ('=' waitExpr)? ;
+keyParamPair : VAR? identDef ':' typeExpr ('=' waitExpr)? ;
 */
 any Formatter::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
     string result = context->VAR() ? "var " : "";
     result += any_cast<string>(visitIdentDef(context->identDef()));
-    const auto &annotation = context->annotation();
     const auto &typeExpr = context->typeExpr();
     const auto &waitExpr = context->waitExpr();
-    if (annotation) {
-        result += any_cast<string>(visitAnnotation(annotation));
-    }
     result += ": " + any_cast<string>(visitTypeExpr(typeExpr));
     if (waitExpr) {
         result += " = " + any_cast<string>(visitWaitExpr(waitExpr));
@@ -789,7 +756,7 @@ any Formatter::visitDataExpr(OpenCMLParser::DataExprContext *context) { return v
 
 /*
 assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') logicalOrExpr)?
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
     ;
 */
 any Formatter::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
@@ -848,7 +815,7 @@ any Formatter::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
 
 /*
 multiplicativeExpr
-    : nullableExpr (('^' | '*' | '/' | '%') nullableExpr)*
+    : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
     ;
 */
 any Formatter::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {
@@ -919,18 +886,18 @@ any Formatter::visitWithExpr(OpenCMLParser::WithExprContext *context) {
 
 /*
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!') | annotation)*
+    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
     ;
 */
 any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
     string result = any_cast<string>(visitPrimaryData(context->primaryData()));
     for (size_t i = 1; i < context->children.size(); i++) {
-        const auto &token = context->children[i];
-        if (antlr4::tree::TerminalNode::is(token)) {
-            antlr4::tree::TerminalNode *terminalNode = dynamic_cast<antlr4::tree::TerminalNode *>(token);
+        const auto &child = context->children[i];
+        if (antlr4::tree::TerminalNode::is(child)) {
+            antlr4::tree::TerminalNode *terminalNode = dynamic_cast<antlr4::tree::TerminalNode *>(child);
             result += terminalNode->getText();
         } else {
-            result += any_cast<string>(visit(token));
+            result += any_cast<string>(visit(child));
         }
     }
     return result;

@@ -78,10 +78,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return dumpNode(context, "EnumDecl"); };
 
-    std::any visitAnnotation(OpenCMLParser::AnnotationContext *context) { return dumpNode(context, "Annotation"); };
-
-    std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context) { return dumpNode(context, "Annotations"); };
-
     std::any visitImplMark(OpenCMLParser::ImplMarkContext *context) { return dumpNode(context, "ImplMark"); };
 
     std::any visitModifiers(OpenCMLParser::ModifiersContext *context) { return dumpNode(context, "Modifiers"); };

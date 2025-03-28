@@ -410,10 +410,6 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context);
 
-    std::any visitAnnotation(OpenCMLParser::AnnotationContext *context);
-
-    std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context);
-
     std::any visitImplMark(OpenCMLParser::ImplMarkContext *context);
 
     std::any visitModifiers(OpenCMLParser::ModifiersContext *context);
