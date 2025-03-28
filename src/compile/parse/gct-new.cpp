@@ -424,8 +424,7 @@ lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExp
 any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return nullptr; }
 
 /*
-funcDecl   : annotations? (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)?
-stmtBlock ;
+funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) { return nullptr; }
 
@@ -475,16 +474,6 @@ enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
 any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return nullptr; }
 
 /*
-annotation  : '@' primaryData ;
-*/
-any Constructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) { return nullptr; }
-
-/*
-annotations : annotation+ ;
-*/
-any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) { return nullptr; }
-
-/*
 implMark    : INNER | OUTER ;
 */
 any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) { return nullptr; }
@@ -510,7 +499,7 @@ keyValuePair : identDef ':' waitExpr | '...' waitExpr ;
 any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) { return nullptr; }
 
 /*
-keyParamPair : VAR? identDef annotation? ':' typeExpr ('=' waitExpr)? ;
+keyParamPair : VAR? identDef ':' typeExpr ('=' waitExpr)? ;
 */
 any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return nullptr; }
 
@@ -623,7 +612,7 @@ any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) { return
 
 /*
 assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') logicalOrExpr)?
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
     ;
 */
 any Constructor::visitAssignExpr(OpenCMLParser::AssignExprContext *context) { return nullptr; }
@@ -665,7 +654,7 @@ any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) 
 
 /*
 multiplicativeExpr
-    : nullableExpr (('^' | '*' | '/' | '%') nullableExpr)*
+    : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
     ;
 */
 any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) { return nullptr; }
@@ -708,7 +697,7 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) { return
 
 /*
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!') | annotation)*
+    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
     ;
 */
 any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }
@@ -733,8 +722,9 @@ primaryData
     | literal
     | listExpr
     | dictExpr
-    | '(' waitExpr ')'        // if there is only one data, it will be recognized as a primary expression rather than a
-tuple | '(' valueList? ','? ')' // for tuple | lambdaExpr
+    | '(' waitExpr ')'
+    | '(' valueList? ','? ')' // for tuple
+    | lambdaExpr
     ;
 */
 any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) { return nullptr; }
