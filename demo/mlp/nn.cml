@@ -5,8 +5,8 @@ export outer type Tensor = 'nn::Tensor'
 export type Model = (x: Tensor) => Tensor
 
 with <weights: Tensor, biases: Tensor>
-export inner func linear(x: Tensor): Tensor {
-    // return 'std::linear'
+func linear(x: Tensor): Tensor {
+    return weights * x + biases
 }
 
 with <activation: Model, weights: Tensor, biases: Tensor>
