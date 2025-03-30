@@ -116,6 +116,7 @@ bool buildAST(tree::ParseTree *&ast, tree::ParseTree *cst, ostream &os, string e
 }
 
 bool buildGCT(GCT::node_ptr_t &gct, tree::ParseTree *ast, ostream &os, string errorFormat) {
+    return false; // TODO: build GCT
     initTypes();
     auto constructor = GCT::Constructor();
     try {
@@ -231,7 +232,7 @@ int main(int argc, char *argv[]) {
         context_ptr_t ctx = make_shared<Context>();
 
         if (!buildCST(cst, parser, os, errorFormat)) {
-            return 1;
+            return selectedCommand == Command::CHECK ? 0 : 2;
         }
         assert(cst != nullptr);
         if (Inspect::dumpCST) {
@@ -242,16 +243,16 @@ int main(int argc, char *argv[]) {
             auto formatter = Formatter(tokens.getTokens());
             const string formattedCode = any_cast<string>(formatter.visit(cst));
             os << formattedCode;
+            return 0;
         }
 
         if (!buildAST(ast, cst, os, errorFormat)) {
-            return 1;
+            return selectedCommand == Command::CHECK ? 0 : 3;
         }
         assert(ast != nullptr);
-        return 0;
 
         if (!buildGCT(gct, ast, os, errorFormat)) {
-            return 1;
+            return selectedCommand == Command::CHECK ? 0 : 4;
         }
         assert(gct != nullptr);
         if (Inspect::dumpAST && gct) {
@@ -263,7 +264,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (!buildGIR(gir, gct, ctx, os, errorFormat)) {
-            return 1;
+            return selectedCommand == Command::CHECK ? 0 : 5;
         }
         assert(gir != nullptr);
         if (Inspect::dumpGIR) {

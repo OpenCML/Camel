@@ -244,16 +244,37 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
 }
 
 /*
-program : SEP? ((decl | stmt) SEP?)* EOF;
+program : SEP? (decl SEP?)* EOF;
 */
-any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) { return nullptr; }
+any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
+    enter("Program");
+
+    root_ = createNode<ExecLoad>();
+
+    const auto &decls = context->decl();
+
+    if (decls.size() == 1)
+        root_ = any_cast<node_ptr_t>(visitDecl(decls[0]));
+    else {
+        for (const auto &decl : decls) {
+            *root_ << any_cast<node_ptr_t>(visitDecl(decl));
+        }
+    }
+
+    leave("Program");
+    return root_;
+}
 
 /*
 decl
     : moduleDecl
     | importDecl
     | exportDecl
+    | letDecl
+    | useDecl
     | funcDecl
+    | typeDecl
+    | enumDecl
     ;
 */
 any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return nullptr; }
@@ -266,16 +287,106 @@ stmt
     | typeDecl
     | enumDecl
     | retStmt
-    | exprStmt
-    | blockStmt
+    | waitStmt
+    | dataExpr
+    | stmtBlock
     ;
 */
-any Constructor::visitStmt(OpenCMLParser::StmtContext *context) { return nullptr; }
+any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
+    enter("Stmt");
+    any res;
+
+    switch (context->getAltNumber()) {
+    case 1: // letDecl
+        res = visitLetDecl(context->letDecl());
+        break;
+    case 2: // useDecl
+        res = visitUseDecl(context->useDecl());
+        break;
+    case 3: // funcDecl
+        res = visitFuncDecl(context->funcDecl());
+        break;
+    case 4: // typeDecl
+        res = visitTypeDecl(context->typeDecl());
+        break;
+    case 5: // enumDecl
+        res = visitEnumDecl(context->enumDecl());
+        break;
+    case 6: // retStmt
+        res = visitRetStmt(context->retStmt());
+        break;
+    case 7: // waitStmt
+        res = visitWaitStmt(context->waitStmt());
+        break;
+    case 8: // dataExpr
+        res = visitDataExpr(context->dataExpr());
+        break;
+    case 9: // stmtBlock
+        res = visitStmtBlock(context->stmtBlock());
+        break;
+    default: // Grammar error protection
+        throw runtime_error("Unknown statement type");
+    }
+
+    leave("Stmt");
+    return res;
+}
 
 /*
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
-any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) { return nullptr; }
+any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
+    enter("StmtList");
+    pushScope();
+
+    node_ptr_t execNode = createNode<ExecLoad>();
+
+    vector<OpenCMLParser::UseDeclContext *> froms;
+    vector<OpenCMLParser::TypeDeclContext *> types;
+    vector<OpenCMLParser::FuncDeclContext *> decls;
+    vector<OpenCMLParser::StmtContext *> stmts;
+
+    // 1. Classify each statement into the appropriate category. Sequence: Decl > Type > Def >
+    for (const auto &stmt : context->stmt()) {
+        if (stmt->useDecl()) {
+            froms.push_back(stmt->useDecl());
+        } else if (stmt->typeDecl()) {
+            types.push_back(stmt->typeDecl());
+        } else if (stmt->funcDecl()) {
+            decls.push_back(stmt->funcDecl());
+            stmts.push_back(stmt);
+        } else {
+            stmts.push_back(stmt);
+        }
+    }
+
+    // 2. Process statements in priority order
+    // 2.1 Handle imports first (may affect type resolution)
+    for (const auto &stmt : froms) {
+        *execNode << any_cast<node_ptr_t>(visitUseDecl(stmt));
+    }
+
+    // 2.2 Process type declarations (prerequisite for functions)
+    for (const auto &stmt : types) {
+        *execNode << any_cast<node_ptr_t>(visitTypeDecl(stmt));
+    }
+
+    // 2.3 Register function signatures (before their bodies are processed)
+    for (const auto &decl : decls) {
+        func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
+        node_ptr_t declNode = createNode<DeclLoad>(funcType); // Create declaration node
+        *execNode << declNode;                                // Attach to execution block
+    }
+
+    // 2.4 Process general statements and function bodies
+    for (const auto &stmt : stmts) {
+        *execNode << any_cast<node_ptr_t>(visitStmt(stmt));
+    }
+
+    popScope();
+    leave("StmtList");
+    return execNode;
+}
 
 /*
 moduleDecl : MODULE identDef ;
@@ -298,14 +409,14 @@ stmtBlock  : SYNC? '{' stmtList? '}' ;
 any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) { return nullptr; }
 
 /*
-blockExpr : stmtBlock | dataExpr ;
+blockExpr  : stmtBlock | waitExpr ;
 */
 any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return nullptr; }
 
 /*
-blockStmt  : WAIT? stmtBlock ;
+waitStmt   : WAIT (stmtBlock | dataList) ;
 */
-any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) { return nullptr; }
+any Constructor::visitWaitStmt(OpenCMLParser::WaitStmtContext *context) { return nullptr; }
 
 /*
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
@@ -313,32 +424,32 @@ lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExp
 any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return nullptr; }
 
 /*
-funcDecl   : annotations? (WITH angledParams)? EXPORT? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) { return nullptr; }
 
 /*
-parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
+parentIdents  : '(' identList? ','? ')' ;
 */
 any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) { return nullptr; }
 
 /*
-bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
+bracedIdents  : '{' identList? ','? '}' ;
 */
 any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) { return nullptr; }
 
 /*
-bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
+bracketIdents : '[' identList? ','? ']' ;
 */
 any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) { return nullptr; }
 
 /*
-carrier    : identDef | bracedIdents | bracketIdents ;
+carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 */
 any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) { return nullptr; }
 
 /*
-letDecl    : (LET | VAR) carrier (':' typeExpr)? '=' dataExpr ;
+letDecl    : (LET | VAR) carrier (':' typeList)? '=' valueList ;
 */
 any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) { return nullptr; }
 
@@ -348,12 +459,12 @@ useDecl    : USE (identDef '=')? identRef ;
 any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) { return nullptr; }
 
 /*
-retStmt    : (RETURN | RAISE | THROW) dataExpr ;
+retStmt    : (RETURN | RAISE | THROW) valueList ;
 */
 any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) { return nullptr; }
 
 /*
-typeDecl   : TYPE identDef '=' typeExpr ;
+typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
 */
 any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) { return nullptr; }
 
@@ -363,27 +474,17 @@ enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
 any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return nullptr; }
 
 /*
-exprStmt   : annotations? dataExpr ;
+implMark    : INNER | OUTER ;
 */
-any Constructor::visitExprStmt(OpenCMLParser::ExprStmtContext *context) { return nullptr; }
+any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) { return nullptr; }
 
 /*
-annotation  : '@' primaryData ;
-*/
-any Constructor::visitAnnotation(OpenCMLParser::AnnotationContext *context) { return nullptr; }
-
-/*
-annotations : annotation+ ;
-*/
-any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) { return nullptr; }
-
-/*
-modifiers   : (INNER | OUTER | ATOMIC | SHARED | SYNC | MACRO)+ ;
+modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
 */
 any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) { return nullptr; }
 
 /*
-indexValue   : dataExpr | '...' dataExpr ;
+indexValue   : '...'? waitExpr ;
 */
 any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) { return nullptr; }
 
@@ -393,14 +494,19 @@ keyTypePair  : identDef ':' typeExpr ;
 any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) { return nullptr; }
 
 /*
-keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
+keyValuePair : identDef ':' waitExpr | '...' waitExpr ;
 */
 any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) { return nullptr; }
 
 /*
-keyParamPair : VAR? identDef annotation? ':' (typeExpr | TYPEAS identDef) ('=' dataExpr)? ;
+keyParamPair : VAR? identDef ':' typeExpr ('=' waitExpr)? ;
 */
 any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return nullptr; }
+
+/*
+dataList     : dataExpr (',' dataExpr)* ;
+*/
+any Constructor::visitDataList(OpenCMLParser::DataListContext *context) { return nullptr; }
 
 /*
 identList    : identDef (',' identDef)* ;
@@ -408,7 +514,7 @@ identList    : identDef (',' identDef)* ;
 any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) { return nullptr; }
 
 /*
-valueList    : dataExpr (',' dataExpr)* ;
+valueList    : waitExpr (',' waitExpr)* ;
 */
 any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) { return nullptr; }
 
@@ -433,36 +539,34 @@ argumentList : indexValues (',' pairedValues)? | pairedValues ;
 any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return nullptr; }
 
 /*
-memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+memberAccess : '[' waitExpr (':' waitExpr (':' waitExpr)?)? ']' ;
 */
 any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) { return nullptr; }
 
 /*
-parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
+parentParams : '(' pairedParams? ','? ')' ;
 */
 any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) { return nullptr; }
 
 /*
-parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
+parentArgues : '(' argumentList? ','? ')' ;
 */
 any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) { return nullptr; }
 
 /*
-angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
+angledParams : '<' pairedParams? ','? '>' ;
 */
 any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) { return nullptr; }
 
 /*
-angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
+angledValues : '<' argumentList? ','? '>' ;
 */
 any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return nullptr; }
 
 /*
-dataExpr
-    : WAIT? structExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') structExpr)?
-    ;
+waitExpr : WAIT? dataExpr ;
 */
-any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) { return nullptr; }
+any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) { return nullptr; }
 
 /*
 pattern
@@ -490,14 +594,28 @@ catchClause
 any Constructor::visitCatchClause(OpenCMLParser::CatchClauseContext *context) { return nullptr; }
 
 /*
-structExpr
-    : logicalOrExpr
-    | IF logicalOrExpr THEN blockExpr ELSE blockExpr
+ctrlExpr
+    : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     | MATCH identRef '{' matchCase+ '}'
     | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 */
-any Constructor::visitStructExpr(OpenCMLParser::StructExprContext *context) { return nullptr; }
+any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) { return nullptr; }
+
+/*
+dataExpr
+    : assignExpr
+    | ctrlExpr
+    ;
+*/
+any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) { return nullptr; }
+
+/*
+assignExpr
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
+    ;
+*/
+any Constructor::visitAssignExpr(OpenCMLParser::AssignExprContext *context) { return nullptr; }
 
 /*
 logicalOrExpr
@@ -536,14 +654,14 @@ any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) 
 
 /*
 multiplicativeExpr
-    : nullableExpr (('^' | '*' | '/' | '%') nullableExpr)*
+    : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
     ;
 */
 any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) { return nullptr; }
 
 /*
 nullableExpr
-    : unaryExpr (('??' | '!!') dataExpr)?
+    : unaryExpr (('??' | '!!') waitExpr)?
     ;
 */
 any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) { return nullptr; }
@@ -579,7 +697,7 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) { return
 
 /*
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!') | annotation)*
+    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
     ;
 */
 any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }
@@ -593,7 +711,7 @@ any Constructor::visitDictExpr(OpenCMLParser::DictExprContext *context) { return
 
 /*
 listExpr
-    : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
+    : '[' ((indexValues ','?) | waitExpr FOR identRef IN waitExpr (IF waitExpr)?)? ']'
     ;
 */
 any Constructor::visitListExpr(OpenCMLParser::ListExprContext *context) { return nullptr; }
@@ -604,8 +722,9 @@ primaryData
     | literal
     | listExpr
     | dictExpr
-    | '(' dataExpr ')'        // if there is only one data, it will be recognized as a primary expression rather than a
-tuple | '(' valueList? ','? ')' // for tuple | lambdaExpr
+    | '(' waitExpr ')'
+    | '(' valueList? ','? ')' // for tuple
+    | lambdaExpr
     ;
 */
 any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) { return nullptr; }
@@ -670,7 +789,8 @@ primaryType
     | '(' typeExpr ')'
     | tupleType
     | lambdaType
-    | TYPEOF dataExpr
+    | TYPEOF waitExpr
+    | TYPEAS identDef
     ;
 */
 any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return nullptr; }
@@ -690,8 +810,15 @@ dictType
 any Constructor::visitDictType(OpenCMLParser::DictTypeContext *context) { return nullptr; }
 
 /*
+typeList
+    : typeExpr (',' typeExpr)*
+    ;
+*/
+any Constructor::visitTypeList(OpenCMLParser::TypeListContext *context) { return nullptr; }
+
+/*
 tupleType
-    : '(' (typeExpr (',' typeExpr)*)? ','? ')'
+    : '(' typeList? ','? ')'
     ;
 */
 any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) { return nullptr; }

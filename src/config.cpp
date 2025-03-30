@@ -16,10 +16,15 @@
  * Updated: Mar. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
+
 #include <iostream>
 
 #include "clipp/clipp.h"
 #include "config.h"
+
+#ifndef BUILD_TIMESTAMP
+#define BUILD_TIMESTAMP "%y%m%d_%H%M%S"
+#endif
 
 using namespace clipp;
 using namespace std;
@@ -242,8 +247,6 @@ bool parseArgs(int argc, char *argv[]) {
     bool showVersion = false; // Version information
     bool showDocs = false;
     bool showCopyRightInfo = false; // Copyright information
-
-    Command selectedCommand = Command::RUN;
 
     auto run = (option("-P", "--profile").set(profile) % "profile the perf",
                 (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",

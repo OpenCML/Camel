@@ -1,0 +1,17 @@
+module mlp
+
+import { dense, Tensor } from 'nn'
+
+with <var weights: Tensor[], var biases: Tensor[]>
+macro sync func MLP(input: int, configs: (int, Model?)[]): Model {
+    return if configs.len() == 0 then {
+        return (x: Tensor) => x
+    } else {
+        let output, act = configs.head()
+        wait weights.push(Tensor::new([input, output]))
+        wait biases.push(Tensor::new([output]))
+        let layer = dense<act ?? relu, weights, biases>
+        let rest = wait MLP<weights, biases>(output, configs.tail())
+        return layer..rest
+    }
+}
