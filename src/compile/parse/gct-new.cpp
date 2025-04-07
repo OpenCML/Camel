@@ -277,7 +277,43 @@ decl
     | enumDecl
     ;
 */
-any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return nullptr; }
+any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {
+    // 需要返回根节点
+    enter("Decl");
+    any res;
+
+    switch (context->getAltNumber()) {
+    case 1: // module
+        res = visitModuleDecl(context->moduleDecl());
+        break;
+    case 2: // import
+        res = visitImportDecl(context->importDecl());
+        break;
+    case 3: // export
+        res = visitExportDecl(context->exportDecl());
+        break;
+    case 4: // let
+        res = visitLetDecl(context->letDecl());
+        break;
+    case 5: // use
+        res = visitUseDecl(context->useDecl());
+        break;
+    case 6: // func
+        res = visitUseDecl(context->useDecl());
+        break;
+    case 7: // type
+        res = visitTypeDecl(context->typeDecl());
+        break;
+    case 8: // enum
+        res = visitEnumDecl(context->enumDecl());
+        break;
+    default: // Grammar error
+        throw runtime_error("Unknown statement type");
+    }
+
+    leave("Decl");
+    return res;
+}
 
 /*
 stmt
