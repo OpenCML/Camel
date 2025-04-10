@@ -277,43 +277,7 @@ decl
     | enumDecl
     ;
 */
-any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {
-    // 需要返回根节点
-    enter("Decl");
-    any res;
-
-    switch (context->getAltNumber()) {
-    case 1: // module
-        res = visitModuleDecl(context->moduleDecl());
-        break;
-    case 2: // import
-        res = visitImportDecl(context->importDecl());
-        break;
-    case 3: // export
-        res = visitExportDecl(context->exportDecl());
-        break;
-    case 4: // let
-        res = visitLetDecl(context->letDecl());
-        break;
-    case 5: // use
-        res = visitUseDecl(context->useDecl());
-        break;
-    case 6: // func
-        res = visitUseDecl(context->useDecl());
-        break;
-    case 7: // type
-        res = visitTypeDecl(context->typeDecl());
-        break;
-    case 8: // enum
-        res = visitEnumDecl(context->enumDecl());
-        break;
-    default: // Grammar error
-        throw runtime_error("Unknown statement type");
-    }
-
-    leave("Decl");
-    return res;
-}
+any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return visit(context->children[0]); }
 
 /*
 stmt
@@ -462,7 +426,75 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { re
 /*
 funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
-any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) { return nullptr; }
+any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
+    enter("FuncDecl");
+
+    if (funcDecls_.find(context) != funcDecls_.end()) { // hit memory
+        leave("FuncDecl");
+        return funcDecls_[context];
+    }
+
+    // TODO: Implement annotations
+
+    //const string ident = any_cast<string>(visitIdentRef(context->identRef()));
+    const string ident = any_cast<string>(visitIdentDef(context->identDef())); // 尝试更改的
+
+    shared_ptr<FunctorType> funcType = nullptr;
+    const auto withType = make_shared<ParamsType>();
+    const auto paramsType = make_shared<ParamsType>();
+
+    const auto &typeExpr = context->typeExpr();
+    if (typeExpr) {
+        const auto returnType = any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
+        funcType = make_shared<FunctorType>(std::move(ident), withType, paramsType, returnType);
+    } else {
+        // if no return type is specified, the default return type is void
+        funcType = make_shared<FunctorType>(std::move(ident), withType, paramsType, voidTypePtr);
+    }
+
+    // WARN
+    const auto &angledParams = context->angledParams();
+    if (angledParams) {
+        const auto &pairedParams =
+            any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitAngledParams(context->angledParams()));
+        for (const auto &[name, type, data, isVar] : pairedParams) {
+            withType->add(name, type, data);
+            bool success = funcType->addIdent(name, isVar);
+            if (!success) {
+                const auto &token = context->getStart();
+                throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
+            }
+        }
+    }
+
+    const auto &params =
+        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitParentParams(context->parentParams()));
+    for (const auto &[name, type, data, isVar] : params) {
+        paramsType->add(name, type, data);
+        bool success = funcType->addIdent(name, isVar);
+        if (!success) {
+            const auto &token = context->getStart();
+            throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
+        }
+    }
+
+    const auto &modifiers = context->modifiers();
+    if (modifiers) {
+        const auto &modSet = any_cast<unordered_set<FunctorModifier>>(visitModifiers(modifiers));
+        funcType->setModifiers(modSet);
+        try {
+            funcType->checkModifiers();
+        } catch (const exception &e) {
+            const auto &token = modifiers->getStart();
+            throw BuildException(e.what(), token);
+        }
+    }
+
+    // note: this node may be shared
+    funcDecls_[context] = funcType;
+    leave("FuncDecl");
+    return funcType;
+}
 
 /*
 parentIdents  : '(' identList? ','? ')' ;
