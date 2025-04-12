@@ -105,14 +105,12 @@ bool buildCST(tree::ParseTree *&cst, OpenCMLParser &parser, ostream &os, string 
         debug(1) << "Parse failed. " << e.what() << endl;
         return false;
     }
-
     return true;
 }
 
 bool buildAST(tree::ParseTree *&ast, tree::ParseTree *cst, ostream &os, string errorFormat) {
-    // TODO: build AST
-    ast = cst;
-    return true;
+    //TODO: build AST
+    return false;
 }
 
 bool buildGCT(GCT::node_ptr_t &gct, tree::ParseTree *ast, ostream &os, string errorFormat) {

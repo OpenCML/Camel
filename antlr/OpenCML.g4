@@ -70,17 +70,10 @@ waitStmt   : WAIT (stmtBlock | dataList) ;
 lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
-<<<<<<< HEAD
-parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking ()
-bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking {}
-bracketIdents : '[' identList? ','? ']' ;    // for list unpacking []
-carrier       : identDef | parentIdents | bracedIdents | bracketIdents ;
-=======
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
 bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
 bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
->>>>>>> origin/develop
 
 letDecl    : (LET | VAR) carrier (':' typeList)? '=' valueList ;
 useDecl    : USE (identDef '=')? identRef ;
