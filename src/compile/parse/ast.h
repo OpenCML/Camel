@@ -59,7 +59,7 @@ class Constructor : public OpenCMLVisitor {
         visit(tree);
         return root_;
     }
-
+    
     std::queue<BuildWarning> &warns() { return warnQueue_; }
 
   private:

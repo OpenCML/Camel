@@ -34,6 +34,7 @@ bool isAdjacent() {
 
 program : SEP? (decl SEP?)* EOF;
 
+//declaration statement
 decl
     : moduleDecl
     | importDecl
@@ -45,6 +46,7 @@ decl
     | enumDecl
     ;
 
+//executable statement
 stmt
     : letDecl
     | useDecl
@@ -56,7 +58,6 @@ stmt
     | dataExpr
     | stmtBlock
     ;
-
 stmtList : stmt (SEP? stmt)* SEP? ;
 
 moduleDecl : MODULE identDef ;
