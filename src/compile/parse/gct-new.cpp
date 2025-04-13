@@ -436,8 +436,7 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 
     // TODO: Implement annotations
 
-    //const string ident = any_cast<string>(visitIdentRef(context->identRef()));
-    const string ident = any_cast<string>(visitIdentDef(context->identDef())); // 尝试更改的
+    const string ident = any_cast<string>(visitIdentDef(context->identDef()));
 
     shared_ptr<FunctorType> funcType = nullptr;
     const auto withType = make_shared<ParamsType>();
@@ -452,7 +451,6 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         funcType = make_shared<FunctorType>(std::move(ident), withType, paramsType, voidTypePtr);
     }
 
-    // WARN
     const auto &angledParams = context->angledParams();
     if (angledParams) {
         const auto &pairedParams =
@@ -499,27 +497,209 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 /*
 parentIdents  : '(' identList? ','? ')' ;
 */
-any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) { return nullptr; }
+any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
+    enter("ParentIndents");
+    any res;
+    const auto &identList = context->identList();
+    if (identList) {
+        res = visitIdentList(identList);
+    } else {
+        res = vector<string>();
+    }
+    leave("ParentIndents");
+    return res;
+}
 
 /*
 bracedIdents  : '{' identList? ','? '}' ;
 */
-any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) { return nullptr; }
+any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
+    enter("BracedIdents");
+    any res;
+    const auto &identList = context->identList();
+    if (identList) {
+        res = visitIdentList(identList);
+    } else {
+        res = vector<string>();
+    }
+    leave("BracedIdents");
+    return res;
+}
 
 /*
 bracketIdents : '[' identList? ','? ']' ;
 */
-any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) { return nullptr; }
+any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
+    enter("BracketIdents");
+    any res;
+    const auto &identList = context->identList();
+    if (identList) {
+        res = visitIdentList(identList);
+    } else {
+        res = vector<string>();
+    }
+    leave("BracketIdents");
+    return res;
+}
 
 /*
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 */
-any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) { return nullptr; }
+any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
+    enter("Carrier");
+    const size_t alt = context->getAltNumber();
+    any res;
+    switch (alt) {
+    case 1: // identList
+        res = make_pair(alt, visitIdentList(context->identList()));
+        break;
+    case 2: // parentIdents
+        res = make_pair(alt, visitParentIdents(context->parentIdents()));
+        break;
+    case 3: // bracedIdents
+        res = make_pair(alt, visitBracedIdents(context->bracedIdents()));
+        break;
+    case 4: // bracketIdents
+        res = make_pair(alt, visitBracketIdents(context->bracketIdents()));
+        break;
+
+    default:
+        throw runtime_error("Unknown carrier type");
+    }
+    leave("Carrier");
+    return res;
+}
 
 /*
 letDecl    : (LET | VAR) carrier (':' typeList)? '=' valueList ;
 */
-any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) { return nullptr; }
+any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
+    enter("LetDecl");
+    const auto &[carrierType, carrier] = any_cast<pair<size_t, any>>(visitCarrier(context->carrier()));
+    const auto &typeExpr = context->typeList();
+    type_ptr_t type = nullptr;
+    if (typeExpr) {
+        type = any_cast<type_ptr_t>(visitTypeList(typeExpr));
+    }
+
+    bool dangling = false;
+    node_ptr_t exprNode = createNode<node_ptr_t>();
+    node_ptr_t execNode = createNode<ExecLoad>();
+    auto [exprValue, _] = extractData(exprNode, execNode, dangling);
+
+    node_ptr_t resultNode = nullptr;
+
+    switch (carrierType) {
+    case 1: // identList
+    {
+        const string &ident = any_cast<string>(carrier);
+        node_ptr_t nRefNode = createNode<NRefLoad>(ident);
+        node_ptr_t baseNode = nullptr;
+
+        if (type) {
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<NullData>()});
+
+            if (dangling) {
+                dataNode = reparent(dataNode, execNode);
+            }
+
+            baseNode = linkFunc(dataNode, InnerFuncDRefNodes::__cast__);
+        } else {
+            baseNode = exprNode;
+        }
+
+        *nRefNode << baseNode;
+        resultNode = nRefNode;
+    } break;
+
+    case 2: // parentIdents
+    {
+        if (type) {
+            const auto &token = context->getStart();
+            throw BuildException("Type cannot be specified for multiple identifiers", token);
+        }
+
+        const vector<string> &idents = any_cast<vector<string>>(carrier);
+        if (idents.size() == 0) {
+            const auto &token = context->getStart();
+            throw BuildException("Identifier extraction list must not be empty", token);
+        }
+
+        for (size_t i = 0; i < idents.size(); i++) {
+            const string &ident = idents[i];
+            node_ptr_t nRefNode = createNode<NRefLoad>(ident);
+            node_ptr_t dataNode =
+                createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
+            *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
+            *execNode << nRefNode;
+        }
+
+        resultNode = execNode;
+    } break;
+
+    case 3: // bracedIdents
+    {
+        if (type) {
+            const auto &token = context->getStart();
+            throw BuildException("Type cannot be specified for multiple identifiers", token);
+        }
+
+        const vector<string> &idents = any_cast<vector<string>>(carrier);
+        if (idents.size() == 0) {
+            const auto &token = context->getStart();
+            throw BuildException("Identifier extraction list must not be empty", token);
+        }
+
+        for (size_t i = 0; i < idents.size(); i++) {
+            const string &ident = idents[i];
+            node_ptr_t nRefNode = createNode<NRefLoad>(ident);
+            node_ptr_t dataNode =
+                createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
+            *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
+            *execNode << nRefNode;
+        }
+
+        resultNode = execNode;
+    } break;
+
+    case 4: // bracketIdents
+    {
+        if (type) {
+            const auto &token = context->getStart();
+            throw BuildException("Type cannot be specified for multiple identifiers", token);
+        }
+
+        const vector<string> &idents = any_cast<vector<string>>(carrier);
+        if (idents.size() == 0) {
+            const auto &token = context->getStart();
+            throw BuildException("Identifier extraction list must not be empty", token);
+        }
+
+        for (size_t i = 0; i < idents.size(); i++) {
+            const string &ident = idents[i];
+            node_ptr_t nRefNode = createNode<NRefLoad>(ident);
+            node_ptr_t dataNode = 
+                createDataNode<TupleData>(data_list_t{exprValue, make_shared<StringData>(ident)});
+            *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
+            *execNode << nRefNode;
+        }
+
+        resultNode = execNode;
+    } break;
+
+    default:
+        throw runtime_error("Unknown carrier type");
+    }
+
+    if (context->VAR()) {
+        node_ptr_t variNode = createNode<VariLoad>();
+        *variNode << resultNode;
+        resultNode = variNode;
+    }
+
+    leave("LetDecl");
+    return resultNode;
+}
 
 /*
 useDecl    : USE (identDef '=')? identRef ;
