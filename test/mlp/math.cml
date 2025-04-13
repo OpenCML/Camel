@@ -1,5 +1,0 @@
-module math
-
-export inner func log(x: Tensor, y: Tensor): Tensor {
-    // return 'std::dropout'
-}
