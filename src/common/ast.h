@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Apr. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -147,7 +147,9 @@ class Decl : public Load {
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<Decl> decl_load_ptr_cast(const load_ptr_t &ptr) { return std::dynamic_pointer_cast<Decl>(ptr); }
+inline std::shared_ptr<Decl> decl_load_ptr_cast(const load_ptr_t &ptr) { 
+  return std::dynamic_pointer_cast<Decl>(ptr); 
+}
 
 class StmtList : public Load {
   public:
@@ -194,11 +196,13 @@ class ImportDecl : public Load {
 inline std::shared_ptr<ImportDecl> import_decl_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<ImportDecl>(ptr);
 }
+
 class ExportDecl : public Load {
   public:
     ExportDecl() : Load(NodeType::ExportDecl) {}
     // const std::string toString() const override;
 };
+
 inline std::shared_ptr<ExportDecl> export_decl_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<ExportDecl>(ptr);
 }
@@ -259,6 +263,7 @@ class UseDecl : public Load {
     const std::string ident() const { return identRef_; }
     const std::string toString() const override;
 };
+
 inline std::shared_ptr<UseDecl> use_decl_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<UseDecl>(ptr);
 }
@@ -662,6 +667,7 @@ class NullableExpr : public Load {
   private:
     NullableOp op_;
 };
+
 inline std::shared_ptr<NullableExpr> nullable_expr_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<NullableExpr>(ptr);
 }

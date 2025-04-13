@@ -1,3 +1,22 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Mar. 26, 2024
+ * Updated: Apr. 12, 2025
+ * Supported by: National Key Research and Development Program of China
+ */
+
 #include "antlr/OpenCMLLexer.h"
 
 #include "ast.h"
@@ -34,6 +53,7 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
     leave("Program");
     return root_;
 }
+
 /*
 decl
     : moduleDecl
@@ -46,7 +66,6 @@ decl
     | enumDecl
     ;
 */
-
 any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {
     enter("Decl");
     any res;
@@ -81,6 +100,7 @@ any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {
     throw runtime_error("Unknown declaration type");
     leave("Decl");
 }
+
 /*
 stmt
     : letDecl
@@ -147,8 +167,9 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     return stmtListNode;
 }
 
-// moduleDecl : MODULE identDef ;
-
+/*
+moduleDecl : MODULE identDef ;
+*/
 any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
     enter("ModuleDecl");
     std::string name;
@@ -160,7 +181,9 @@ any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
     return moduleNode;
 }
 
-// importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
+/*
+importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
+*/
 any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     enter("ImportDecl");
     std::string from;
@@ -179,6 +202,7 @@ any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     leave("ImportDecl");
     return importNode;
 }
+
 /*
 exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
 */
@@ -208,6 +232,7 @@ any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
     leave("StmtBlock");
     return blockNode;
 }
+
 /*
 blockExpr  : stmtBlock | waitExpr ;
 */
@@ -222,6 +247,7 @@ any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
     leave("BlockExpr");
     return res;
 }
+
 /*
 waitStmt   : WAIT (stmtBlock | dataList) ;
 */
@@ -263,6 +289,7 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     leave("LambdaExpr");
     return lambdaNode;
 }
+
 /*
 funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
@@ -319,6 +346,7 @@ any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) 
     leave("ParentIdents");
     return res;
 }
+
 /*
 bracedIdents  : '{' identList? ','? '}' ;
 */
@@ -344,6 +372,7 @@ any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
     leave("Carrier");
     return res;
 }
+
 /*
 letDecl    : (LET | VAR) carrier (':' typeList)? '=' valueList ;
 */
@@ -368,6 +397,7 @@ any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
     leave("LetDecl");
     return letNode;
 }
+
 /*
 useDecl    : USE (identDef '=')? identRef ;
 */
@@ -467,6 +497,7 @@ any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) {
     leave("ImplMark");
     return implNode;
 }
+
 /*
 modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
 */
@@ -631,6 +662,7 @@ any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) 
     leave("PairedValues");
     return pairedValuesNode;
 }
+
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
@@ -643,6 +675,7 @@ any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) 
     leave("PairedParams");
     return pairedParamsNode;
 }
+
 /*
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
@@ -688,6 +721,7 @@ any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) 
     leave("ParentParams");
     return res;
 }
+
 /*
 parentArgues : '(' argumentList? ','? ')' ;
 */
@@ -796,6 +830,7 @@ any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     leave("MatchCase");
     return nullptr;
 }
+
 /*
 catchClause
     : CATCH identDef ':' typeExpr stmtBlock
@@ -1068,6 +1103,7 @@ any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContex
     leave("MultiplicativeExpr");
     return lhsNode;
 };
+
 /*
 nullableExpr
     : unaryExpr (('??' | '!!') waitExpr)?
@@ -1094,6 +1130,7 @@ any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) 
     leave("NullableExpr");
     return res;
 }
+
 /*
 unaryExpr
     : linkExpr ((AS | IS) typeExpr)?
@@ -1282,9 +1319,8 @@ any Constructor::visitListExpr(OpenCMLParser::ListExprContext *context) {
         *listNode << any_cast<node_ptr_t>(
             visitIndexValues(context->indexValues())); // get the index values of the list expr node
     } else {
-        for(auto &waitExpr: context->waitExpr()) { // list expr with wait expr
-            *listNode << any_cast<node_ptr_t>(
-                visitWaitExpr(waitExpr)); // get the wait expr of the list expr node
+        for (auto &waitExpr : context->waitExpr()) {                    // list expr with wait expr
+            *listNode << any_cast<node_ptr_t>(visitWaitExpr(waitExpr)); // get the wait expr of the list expr node
         }
         if (context->identRef()) { // list expr with ident ref
             *listNode << any_cast<node_ptr_t>(
@@ -1353,7 +1389,7 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     enter("Literal");
     node_ptr_t res;
     if (context->INTEGER()) {                                          // literal with integer
-        res = createNode<Literal>(Literal::LiteralType::INTERGER);      // create the integer literal node
+        res = createNode<Literal>(Literal::LiteralType::INTERGER);     // create the integer literal node
     } else if (context->REAL()) {                                      // literal with real
         res = createNode<Literal>(Literal::LiteralType::REAL);         // create the real literal node
     } else if (context->STRING()) {                                    // literal with string
@@ -1366,7 +1402,7 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
         res = createNode<Literal>(Literal::LiteralType::TRUE);         // create the true literal node
     } else if (context->FALSE()) {                                     // literal with false
         res = createNode<Literal>(Literal::LiteralType::FALSE);        // create the false literal node
-    } else if (context->NULL_()) {                                      // literal with null
+    } else if (context->NULL_()) {                                     // literal with null
         res = createNode<Literal>(Literal::LiteralType::NULL_LITERAL); // create the null literal node
     }
     leave("Literal");
@@ -1548,7 +1584,7 @@ any Constructor::visitDictExprType(OpenCMLParser::DictExprTypeContext *context) 
         }
         node_ptr_t rhsNode =
             any_cast<node_ptr_t>(visitDictType(context->dictType(i))); // get the dict type of the dict expr type node;
-        node_ptr_t dictExprTypeNode = createNode<DictExprType>(op); // create the dict expr type node;
+        node_ptr_t dictExprTypeNode = createNode<DictExprType>(op);    // create the dict expr type node;
         *dictExprTypeNode << lhsNode << rhsNode;
         lhsNode = dictExprTypeNode;
     }
@@ -1563,7 +1599,8 @@ typeList
 */
 any Constructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
     enter("TypeList");
-    node_ptr_t res = any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr(0))); // get the type expr of the type list node;
+    node_ptr_t res =
+        any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr(0))); // get the type expr of the type list node;
     if (context->children.size() > 1) {
         node_ptr_t typeListNode = createNode<TypeList>(); // create the type list node;
         *typeListNode << res;                             // add the type expr to the type list node;
@@ -1599,7 +1636,7 @@ lambdaType
 any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     enter("LambdaType");
     node_ptr_t res;
-    if (context->modifiers()) {                              // lambda type with modifiers
+    if (context->modifiers()) {                                     // lambda type with modifiers
         std::string strModifiers = context->modifiers()->getText(); // get the modifiers of the lambda type node;
         LambdaType::LambdaTypeModifiers modifier;
         if (strModifiers == "ATOMIC") { // lambda type with mutable modifier
@@ -1636,7 +1673,7 @@ identDef : IDENTIFIER ;
 any Constructor::visitIdentDef(OpenCMLParser::IdentDefContext *context) {
     enter("IdentDef");
     std::string ident = context->IDENTIFIER()->getText(); // get the identifier of the ident def node;
-    node_ptr_t res = createNode<IdentDef>(ident);                    // create the ident def node;
+    node_ptr_t res = createNode<IdentDef>(ident);         // create the ident def node;
     leave("IdentDef");
     return res;
 }
@@ -1652,7 +1689,7 @@ any Constructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {
         belongsTo.push_back(context->children[i]->getText());
     }
     ident = context->children[context->children.size() - 1]->getText(); // get the identifier of the ident ref node;
-    node_ptr_t res = createNode<IdentRef>(ident,belongsTo);                       // create the ident ref node;
+    node_ptr_t res = createNode<IdentRef>(ident, belongsTo);            // create the ident ref node;
     leave("IdentRef");
     return res;
 }
