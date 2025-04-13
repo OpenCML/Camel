@@ -583,7 +583,7 @@ any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
     }
 
     bool dangling = false;
-    node_ptr_t exprNode = createNode<node_ptr_t>();
+    node_ptr_t exprNode = any_cast<node_ptr_t>(visitValueList(context->valueList()));
     node_ptr_t execNode = createNode<ExecLoad>();
     auto [exprValue, _] = extractData(exprNode, execNode, dangling);
 
@@ -678,8 +678,7 @@ any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
         for (size_t i = 0; i < idents.size(); i++) {
             const string &ident = idents[i];
             node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode = 
-                createDataNode<TupleData>(data_list_t{exprValue, make_shared<StringData>(ident)});
+            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<StringData>(ident)});
             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
             *execNode << nRefNode;
         }
