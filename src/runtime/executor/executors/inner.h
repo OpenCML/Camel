@@ -17,18 +17,19 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "innerExecutor.h"
+#include "../executor.h"
 
-void InnerExecutor::registerFunc(std::string name, funcType func) {
-    funcMap[name] = func;
-}
+#pragma once
 
-InnerExecutor::InnerExecutor() {
-}
-
-Status InnerExecutor::execute(std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs, data_ptr_t &ret) {
-    if (funcMap.find(uri) == funcMap.end()) {
-        return {RetCode::invalidURI, "Invalid operator: " + uri};
-    }
-    return funcMap[uri](withArgs, normArgs, ret);
-}
+class InnerExecutor : public BaseExecutor {
+  private:
+    using funcType = std::function<Status(std::vector<data_ptr_t>, std::vector<data_ptr_t>, data_ptr_t &)>;
+    std::unordered_map<std::string, funcType> funcMap;
+    void registerFunc(std::string name, funcType func);
+    // functions define here, static
+  public:
+    Status execute(std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
+                   data_ptr_t &ret) override;
+    InnerExecutor();
+    ~InnerExecutor() = default;
+};
