@@ -312,4 +312,12 @@ class Constructor : public OpenCMLVisitor {
 
     // End of auto-generated visitor methods
 };
+
+template <typename LoadType, typename... Args> node_ptr_t createNode(Args &&...args) {
+    return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
+}
+
+template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&...args) {
+    return createNode<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
+}
 } // namespace GraphConstructTree

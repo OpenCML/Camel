@@ -1,0 +1,26 @@
+/*
+ * Modifiers, WithParams, Function Calls, Function Composition, Member Access
+ */
+
+type Model = (x: int) => int
+
+func add_one(x: int): int {
+    return x + 1
+}
+
+func double(x: int): int {
+    return x * 2
+}
+
+with <arr: int[]>
+inner macro func map(x: Model): int[] {
+    // for i in 0..arr.len() {
+    //     arr[i] = x(arr[i])
+    // }
+}
+
+func main(): int {
+    let arr = [1, 2, 3, 4]
+    let composed: Model = add_one..double
+    return arr.map(composed)[0]
+}

@@ -1,0 +1,9 @@
+/*
+ * Module declaration, Entry function, Minimal function structure
+ */
+
+module main
+
+func main(): int {
+    return 0
+}

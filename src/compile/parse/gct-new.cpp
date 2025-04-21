@@ -28,14 +28,6 @@
 using namespace std;
 using namespace GCT;
 
-template <typename LoadType, typename... Args> node_ptr_t createNode(Args &&...args) {
-    return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
-}
-
-template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&...args) {
-    return createNode<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
-}
-
 namespace GraphConstructTree::InnerFuncDRefNodes {
 node_ptr_t __copy__ = nullptr;
 node_ptr_t __cast__ = nullptr;
