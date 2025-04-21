@@ -128,23 +128,29 @@ function generateParserCode() {
     fs.writeFileSync('./src/service/formatter/fmt.h', geneCode)
     logDone('Modified Formatter header')
 
+    logStep('Generating Formatter cpp code...')
+    srcCode = fs.readFileSync('./src/service/formatter/fmt.cpp', 'utf-8')
+    geneCode = generateTmpCppCode(srcCode, rules, 'Formatter')
+    fs.writeFileSync('./src/service/formatter/fmt.tmp.cpp', geneCode)
+    logDone('Generated Formatter code')
+
     logStep('Modifying AST Constructor header code...')
     srcCode = fs.readFileSync('./src/compile/parse/ast.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
     fs.writeFileSync('./src/compile/parse/ast.h', geneCode)
     logDone('Modified AST Constructor header')
 
+    logStep('Generating AST Constructor cpp code...')
+    srcCode = fs.readFileSync('./src/compile/parse/ast.cpp', 'utf-8')
+    geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
+    fs.writeFileSync('./src/compile/parse/ast.tmp.cpp', geneCode)
+    logDone('Generated AST Constructor code')
+
     logStep('Modifying GCT Constructor header code...')
     srcCode = fs.readFileSync('./src/compile/parse/gct.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
     fs.writeFileSync('./src/compile/parse/gct.h', geneCode)
     logDone('Modified GCT Constructor header')
-
-    logStep('Generating Formatter cpp code...')
-    srcCode = fs.readFileSync('./src/service/formatter/fmt.cpp', 'utf-8')
-    geneCode = generateTmpCppCode(srcCode, rules, 'Formatter')
-    fs.writeFileSync('./src/service/formatter/fmt.tmp.cpp', geneCode)
-    logDone('Generated Formatter code')
 
     logStep('Generating GCT Constructor cpp code...')
     srcCode = fs.readFileSync('./src/compile/parse/gct-new.cpp', 'utf-8')
