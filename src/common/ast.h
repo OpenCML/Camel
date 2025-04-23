@@ -42,9 +42,6 @@ enum class NodeType {
     TypeDecl,
     EnumDecl,
 
-    ImplMark,
-    Modifiers,
-
     Stmt,
     StmtList,
     StmtBlock,
@@ -89,6 +86,7 @@ enum class NodeType {
     WithExpr,
     AnnoExpr,
     DictExpr,
+    DictType,
     ListExpr,
     Literal,
     TypeExpr,
@@ -119,9 +117,8 @@ class Load {
         tokenEnd_ = end;
         // TODO: add token range check
     }
-    void printCode(const std::string &code) {
-        // TODO: add code print function
-    }
+    const std::string geneCode() const;
+    // TODO: add code print function
 
     NodeType type() const { return type_; }
     std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
@@ -147,9 +144,7 @@ class Decl : public Load {
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<Decl> decl_load_ptr_cast(const load_ptr_t &ptr) { 
-  return std::dynamic_pointer_cast<Decl>(ptr); 
-}
+inline std::shared_ptr<Decl> decl_load_ptr_cast(const load_ptr_t &ptr) { return std::dynamic_pointer_cast<Decl>(ptr); }
 
 class StmtList : public Load {
   public:
@@ -184,12 +179,13 @@ inline std::shared_ptr<ModuleDecl> module_decl_load_ptr_cast(const load_ptr_t &p
 }
 
 class ImportDecl : public Load {
-    std::string from_;
-    std::string ident_;
+    std::string path_;
+    std::vector<std::string> idents_;
+
   public:
-    ImportDecl(const std::string &from, const std::string &ident)
-        : Load(NodeType::ImportDecl), from_(from), ident_(ident) {}
-    const std::string ident() const { return ident_; }
+    ImportDecl(const std::string &path, const std::vector<std::string> &idents)
+        : Load(NodeType::ImportDecl), path_(path), idents_(idents) {}
+    const std::vector<std::string> idents() const { return idents_; }
     const std::string toString() const override;
 };
 
@@ -198,9 +194,11 @@ inline std::shared_ptr<ImportDecl> import_decl_load_ptr_cast(const load_ptr_t &p
 }
 
 class ExportDecl : public Load {
+    std::vector<std::string> idents_;
+
   public:
-    ExportDecl() : Load(NodeType::ExportDecl) {}
-    // const std::string toString() const override;
+    ExportDecl(const std::vector<std::string> &idents) : Load(NodeType::ExportDecl), idents_(idents) {}
+    const std::string toString() const override;
 };
 
 inline std::shared_ptr<ExportDecl> export_decl_load_ptr_cast(const load_ptr_t &ptr) {
@@ -208,13 +206,15 @@ inline std::shared_ptr<ExportDecl> export_decl_load_ptr_cast(const load_ptr_t &p
 }
 
 class LambdaExpr : public Load {
-    std::string modifiers_;
-    std::string type_;
-
   public:
-    LambdaExpr(const std::string &modifiers, const std::string type)
-        : Load(NodeType::LambdaExpr), modifiers_(modifiers), type_(type) {}
+    enum class Modifier { ATOMIC, SHARED, SYNC, MACRO };
+    LambdaExpr(const std::string type, const std::vector<Modifier> &modifiers)
+        : Load(NodeType::LambdaExpr), type_(type), modifiers_(modifiers) {}
     const std::string toString() const override;
+
+  private:
+    std::string type_;
+    std::vector<Modifier> modifiers_;
 };
 
 inline std::shared_ptr<LambdaExpr> lambda_expr_load_ptr_cast(const load_ptr_t &ptr) {
@@ -222,19 +222,21 @@ inline std::shared_ptr<LambdaExpr> lambda_expr_load_ptr_cast(const load_ptr_t &p
 }
 
 class FuncDecl : public Load {
-    std::string implMark_;
-    std::string modifier_;
-    std::string name_;
-    std::string type_;
-
   public:
-    FuncDecl(const std::string &implMark, const std::string &modifier, const std::string &name, const std::string &type)
-        : Load(NodeType::FuncDecl), implMark_(implMark), modifier_(modifier), name_(name), type_(type) {}
+    enum class Modifier { ATOMIC, SHARED, SYNC, MACRO };
+    FuncDecl(const std::string &implMark, const std::vector<Modifier> &modifiers, const std::string &name,
+             const std::string &type)
+        : Load(NodeType::FuncDecl), implMark_(implMark), modifiers_(modifiers), name_(name), type_(type) {}
     const std::string implMark() const { return implMark_; }
-    const std::string modifier() const { return modifier_; }
     const std::string name() const { return name_; }
     const std::string type() const { return type_; }
     const std::string toString() const override;
+
+  private:
+    std::string implMark_; // INNNER or OUTER
+    std::vector<Modifier> modifiers_;
+    std::string name_; // func name
+    std::string type_; // func type
 };
 
 inline std::shared_ptr<FuncDecl> func_decl_load_ptr_cast(const load_ptr_t &ptr) {
@@ -313,30 +315,6 @@ inline std::shared_ptr<EnumDecl> enum_decl_load_ptr_cast(const load_ptr_t &ptr) 
     return std::dynamic_pointer_cast<EnumDecl>(ptr);
 }
 
-class ImplMark : public Load {
-    std::string implMark_; // INNNER or OUTER
-  public:
-    ImplMark(const std::string &implMark) : Load(NodeType::ImplMark), implMark_(implMark) {}
-    const std::string implMark() const { return implMark_; }
-    const std::string toString() const override;
-};
-
-inline std::shared_ptr<ImplMark> impl_mark_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ImplMark>(ptr);
-}
-
-class Modifiers : public Load {
-    std::vector<std::string> modifiers_; // INNNER or OUTER
-  public:
-    Modifiers(const std::vector<std::string> &modifiers) : Load(NodeType::Modifiers), modifiers_(modifiers) {}
-    const std::vector<std::string> modifiers() const { return modifiers_; }
-    const std::string toString() const override;
-};
-
-inline std::shared_ptr<Modifiers> modifiers_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<Modifiers>(ptr);
-};
-
 class KeyTypePair : public Load {
     std::string ident_;
     std::string type_;
@@ -372,7 +350,7 @@ class KeyParamPair : public Load {
     std::string type_;
 
   public:
-    KeyParamPair(bool isVar,const std::string &ident, const std::string &type)
+    KeyParamPair(bool isVar, const std::string &ident, const std::string &type)
         : Load(NodeType::KeyParamPair), isVar_(isVar), ident_(ident), type_(type) {}
     const std::string ident() const { return ident_; }
     const std::string type() const { return type_; }
@@ -400,7 +378,6 @@ inline std::shared_ptr<IdentList> ident_list_load_ptr_cast(const load_ptr_t &ptr
 class DataList : public Load {
   public:
     DataList() : Load(NodeType::DataList) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<DataList> data_list_load_ptr_cast(const load_ptr_t &ptr) {
@@ -410,7 +387,6 @@ inline std::shared_ptr<DataList> data_list_load_ptr_cast(const load_ptr_t &ptr) 
 class ValueList : public Load {
   public:
     ValueList() : Load(NodeType::ValueList) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<ValueList> value_list_load_ptr_cast(const load_ptr_t &ptr) {
@@ -420,7 +396,6 @@ inline std::shared_ptr<ValueList> value_list_load_ptr_cast(const load_ptr_t &ptr
 class IndexValues : public Load {
   public:
     IndexValues() : Load(NodeType::IndexValues) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<IndexValues> index_values_load_ptr_cast(const load_ptr_t &ptr) {
@@ -430,7 +405,6 @@ inline std::shared_ptr<IndexValues> index_values_load_ptr_cast(const load_ptr_t 
 class PairedValues : public Load {
   public:
     PairedValues() : Load(NodeType::PairedValues) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<PairedValues> paired_values_load_ptr_cast(const load_ptr_t &ptr) {
@@ -440,7 +414,6 @@ inline std::shared_ptr<PairedValues> paired_values_load_ptr_cast(const load_ptr_
 class PairedParams : public Load {
   public:
     PairedParams() : Load(NodeType::PairedParams) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<PairedParams> paired_params_load_ptr_cast(const load_ptr_t &ptr) {
@@ -450,7 +423,6 @@ inline std::shared_ptr<PairedParams> paired_params_load_ptr_cast(const load_ptr_
 class ArgumentList : public Load {
   public:
     ArgumentList() : Load(NodeType::ArgumentList) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<ArgumentList> argument_list_load_ptr_cast(const load_ptr_t &ptr) {
@@ -460,7 +432,6 @@ inline std::shared_ptr<ArgumentList> argument_list_load_ptr_cast(const load_ptr_
 class MemberAccess : public Load {
   public:
     MemberAccess() : Load(NodeType::MemberAccess) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<MemberAccess> member_access_load_ptr_cast(const load_ptr_t &ptr) {
@@ -482,7 +453,6 @@ inline std::shared_ptr<WaitExpr> wait_expr_load_ptr_cast(const load_ptr_t &ptr) 
 class Wildcard : public Load {
   public:
     Wildcard() : Load(NodeType::Wildcard) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<Wildcard> wildcard_load_ptr_cast(const load_ptr_t &ptr) {
@@ -492,7 +462,6 @@ inline std::shared_ptr<Wildcard> wildcard_load_ptr_cast(const load_ptr_t &ptr) {
 class MatchCase : public Load {
   public:
     MatchCase() : Load(NodeType::MatchCase) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<MatchCase> match_case_load_ptr_cast(const load_ptr_t &ptr) {
@@ -502,7 +471,6 @@ inline std::shared_ptr<MatchCase> match_case_load_ptr_cast(const load_ptr_t &ptr
 class IfLoad : public Load {
   public:
     IfLoad() : Load(NodeType::IfLoad) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<IfLoad> if_load_load_ptr_cast(const load_ptr_t &ptr) {
@@ -530,7 +498,6 @@ class AssignExpr : public Load {
     enum class AssignOp {
         ASSIGN,
         ADD_ASSIGN,
-        SUB_ASSIGN,
         MINUS_ASSIGN,
         MUL_ASSIGN,
         DIV_ASSIGN,
@@ -556,7 +523,6 @@ inline std::shared_ptr<AssignExpr> assign_expr_load_ptr_cast(const load_ptr_t &p
 class LogicalOrExpr : public Load {
   public:
     LogicalOrExpr() : Load(NodeType::LogicalOrExpr) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<LogicalOrExpr> logical_or_expr_load_ptr_cast(const load_ptr_t &ptr) {
@@ -566,7 +532,6 @@ inline std::shared_ptr<LogicalOrExpr> logical_or_expr_load_ptr_cast(const load_p
 class LogicalAndExpr : public Load {
   public:
     LogicalAndExpr() : Load(NodeType::LogicalAndExpr) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<LogicalAndExpr> logical_and_expr_load_ptr_cast(const load_ptr_t &ptr) {
@@ -618,7 +583,7 @@ class AdditiveExpr : public Load {
   public:
     enum class AdditiveOp {
         ADD,
-        SUB,
+        MINUS,
         INVALID // for error handling
     };
     AdditiveExpr(AdditiveOp op) : Load(NodeType::AdditiveExpr), op_(op) {}
@@ -682,11 +647,18 @@ class UnaryExpr : public Load {
         IS,
         INVALID // for error handling
     };
-    UnaryExpr(UnaryOp op) : Load(NodeType::UnaryExpr), op_(op) {}
+    enum class TypeOp {
+        IS,
+        AS,
+        INVALID // for error handling
+    };
+    UnaryExpr(UnaryOp unaryOp, TypeOp typeOp) 
+        : Load(NodeType::UnaryExpr), unaryOp_(unaryOp), typeOp_(typeOp) {}
     const std::string toString() const override;
 
   private:
-    UnaryOp op_;
+    UnaryOp unaryOp_;
+    TypeOp typeOp_;
 };
 
 inline std::shared_ptr<UnaryExpr> unary_expr_load_ptr_cast(const load_ptr_t &ptr) {
@@ -763,17 +735,20 @@ inline std::shared_ptr<AnnoExpr> anno_expr_load_ptr_cast(const load_ptr_t &ptr) 
 class DictExpr : public Load {
   public:
     DictExpr() : Load(NodeType::DictExpr) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<DictExpr> dict_expr_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<DictExpr>(ptr);
 }
 
+class DictType : public Load{
+  public:
+    DictType() : Load(NodeType::DictType) {}
+};
+
 class ListExpr : public Load {
   public:
     ListExpr() : Load(NodeType::ListExpr) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<ListExpr> list_expr_load_ptr_cast(const load_ptr_t &ptr) {
@@ -782,7 +757,7 @@ inline std::shared_ptr<ListExpr> list_expr_load_ptr_cast(const load_ptr_t &ptr) 
 
 class Literal : public Load {
   public:
-    enum class LiteralType { INTERGER, REAL, STRING, MULTI_STR, FSTRING, TRUE, FALSE, NULL_LITERAL };
+    enum class LiteralType { INTERGER, REAL, STRING, MULTI_STR, FSTRING, TRUE, FALSE, NULL_LITERAL, INVALID };
     Literal(LiteralType type) : Load(NodeType::Literal), type_(type) {}
     const std::string toString() const override;
 
@@ -797,7 +772,6 @@ inline std::shared_ptr<Literal> literal_load_ptr_cast(const load_ptr_t &ptr) {
 class TypeExpr : public Load {
   public:
     TypeExpr() : Load(NodeType::TypeExpr) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<TypeExpr> type_expr_load_ptr_cast(const load_ptr_t &ptr) {
@@ -807,7 +781,7 @@ inline std::shared_ptr<TypeExpr> type_expr_load_ptr_cast(const load_ptr_t &ptr) 
 class UnionType : public Load {
   public:
     UnionType() : Load(NodeType::UnionType) {}
-    //const std::string toString() const override;
+    // const std::string toString() const override;
 };
 
 inline std::shared_ptr<UnionType> union_type_load_ptr_cast(const load_ptr_t &ptr) {
@@ -826,38 +800,38 @@ inline std::shared_ptr<UnionUnit> union_unit_load_ptr_cast(const load_ptr_t &ptr
     return std::dynamic_pointer_cast<UnionUnit>(ptr);
 }
 
-class ListType : public Load {
+class ListType_ : public Load {
     int dimonsion_;
+
   public:
-    ListType(int dimonsion) : Load(NodeType::ListType), dimonsion_(dimonsion) {}
-    //const std::string toString() const override;
+    ListType_(int dimonsion) : Load(NodeType::ListType), dimonsion_(dimonsion) {}
+    const std::string toString() const override;
 };
 
-inline std::shared_ptr<ListType> list_type_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ListType>(ptr);
+inline std::shared_ptr<ListType_> list_type_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<ListType_>(ptr);
 }
 
 class ArgsType : public Load {
   public:
     ArgsType() : Load(NodeType::ArgsType) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<ArgsType> args_type_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<ArgsType>(ptr);
 }
 
-class PrimaryType : public Load {
+class PrimaryType_ : public Load {
     std::string type_;
     std::string ident_;
 
   public:
-    PrimaryType(std::string type, std::string ident) : Load(NodeType::PrimaryType), type_(type), ident_(ident) {}
-    //const std::string toString() const override;
+    PrimaryType_(std::string type, std::string ident) : Load(NodeType::PrimaryType), type_(type), ident_(ident) {}
+    const std::string toString() const override;
 };
 
-inline std::shared_ptr<PrimaryType> primary_type_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<PrimaryType>(ptr);
+inline std::shared_ptr<PrimaryType_> primary_type_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<PrimaryType_>(ptr);
 }
 
 class DictExprType : public Load {
@@ -881,7 +855,6 @@ inline std::shared_ptr<DictExprType> dict_expr_type_load_ptr_cast(const load_ptr
 class TypeList : public Load {
   public:
     TypeList() : Load(NodeType::TypeList) {}
-    const std::string toString() const override;
 };
 
 inline std::shared_ptr<TypeList> type_list_load_ptr_cast(const load_ptr_t &ptr) {
@@ -890,42 +863,16 @@ inline std::shared_ptr<TypeList> type_list_load_ptr_cast(const load_ptr_t &ptr) 
 
 class LambdaType : public Load {
   public:
-    enum class LambdaTypeModifiers { ATOMIC, HARED, SYNC, MACRO, INVALID };
-    LambdaType(LambdaTypeModifiers modifier) : Load(NodeType::LambdaType), modifier_(modifier) {}
+    enum class LambdaTypeModifiers { ATOMIC, SHARED, SYNC, MACRO, INVALID };
+    LambdaType(std::vector<LambdaTypeModifiers> modifiers) : Load(NodeType::LambdaType), modifiers_(modifiers) {}
     const std::string toString() const override;
 
   private:
-    LambdaTypeModifiers modifier_;
+    std::vector<LambdaTypeModifiers> modifiers_;
 };
 
 inline std::shared_ptr<LambdaType> lambda_type_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<LambdaType>(ptr);
-}
-
-class IdentDef : public Load {
-    std::string ident_;
-
-  public:
-    IdentDef(std::string ident) : Load(NodeType::IdentDef), ident_(ident) {}
-    const std::string toString() const override;
-};
-
-inline std::shared_ptr<IdentDef> ident_def_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<IdentDef>(ptr);
-}
-
-class IdentRef : public Load {
-    std::string ident_;
-    std::vector<std::string> belongsTo_;
-
-  public:
-    IdentRef(std::string ident, std::vector<std::string> belongsTo)
-        : Load(NodeType::IdentRef), ident_(ident), belongsTo_(belongsTo) {}
-    const std::string toString() const override;
-};
-
-inline std::shared_ptr<IdentRef> ident_ref_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<IdentRef>(ptr);
 }
 
 } // namespace AbstractSyntaxTree
