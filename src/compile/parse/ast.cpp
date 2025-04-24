@@ -119,35 +119,35 @@ any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
     node_ptr_t res;
 
     switch (context->getAltNumber()) {
-        case 1: // letDecl
-            res = any_cast<node_ptr_t>(visitLetDecl(context->letDecl()));
-            break;
-        case 2: // useDecl
-            res = any_cast<node_ptr_t>(visitUseDecl(context->useDecl()));
-            break;
-        case 3: // funcDecl
-            res = any_cast<node_ptr_t>(visitFuncDecl(context->funcDecl()));
-            break;
-        case 4: // typeDecl
-            res = any_cast<node_ptr_t>(visitTypeDecl(context->typeDecl()));
-            break;
-        case 5: // enumDecl
-            res = any_cast<node_ptr_t>(visitEnumDecl(context->enumDecl()));
-            break;
-        case 6: // retStmt
-            res = any_cast<node_ptr_t>(visitRetStmt(context->retStmt()));
-            break;
-        case 7: // waitStmt
-            res = any_cast<node_ptr_t>(visitWaitStmt(context->waitStmt()));
-            break;
-        case 8: // dataExpr
-            res = any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
-            break;
-        case 9: // stmtBlock
-            res = any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
-            break;
-        default: // Grammar error protection
-            throw runtime_error("Unknown statement type");
+    case 1: // letDecl
+        res = any_cast<node_ptr_t>(visitLetDecl(context->letDecl()));
+        break;
+    case 2: // useDecl
+        res = any_cast<node_ptr_t>(visitUseDecl(context->useDecl()));
+        break;
+    case 3: // funcDecl
+        res = any_cast<node_ptr_t>(visitFuncDecl(context->funcDecl()));
+        break;
+    case 4: // typeDecl
+        res = any_cast<node_ptr_t>(visitTypeDecl(context->typeDecl()));
+        break;
+    case 5: // enumDecl
+        res = any_cast<node_ptr_t>(visitEnumDecl(context->enumDecl()));
+        break;
+    case 6: // retStmt
+        res = any_cast<node_ptr_t>(visitRetStmt(context->retStmt()));
+        break;
+    case 7: // waitStmt
+        res = any_cast<node_ptr_t>(visitWaitStmt(context->waitStmt()));
+        break;
+    case 8: // dataExpr
+        res = any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
+        break;
+    case 9: // stmtBlock
+        res = any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
+        break;
+    default: // Grammar error protection
+        throw runtime_error("Unknown statement type");
     }
 
     leave("Stmt");
@@ -160,7 +160,7 @@ stmtList : stmt (SEP? stmt)* SEP? ;
 any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     enter("StmtList");
     node_ptr_t stmtListNode = createNode<StmtList>();
-    if(context->stmt().size() > 0)
+    if (context->stmt().size() > 0)
         for (auto &stmt : context->stmt()) {
             *stmtListNode << any_cast<node_ptr_t>(visitStmt(stmt));
         }
@@ -343,7 +343,8 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     }
     if (context->parentParams()) { // func decl with parent params
         node_ptr_t parentParamsNode = any_cast<node_ptr_t>(visitParentParams(context->parentParams()));
-        if(parentParamsNode) *funcNode << parentParamsNode;
+        if (parentParamsNode)
+            *funcNode << parentParamsNode;
     }
     if (context->typeExpr()) { // func decl with type expr
         *funcNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
@@ -551,7 +552,7 @@ indexValue   : '...'? waitExpr ;
 any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
     enter("IndexValue");
     node_ptr_t res = nullptr;
-    if(context->waitExpr())
+    if (context->waitExpr())
         res = any_cast<node_ptr_t>(visitWaitExpr(context->waitExpr()));
     leave("IndexValue");
     return res;
@@ -650,7 +651,7 @@ valueList    : waitExpr (',' waitExpr)* ;
 any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) {
     enter("ValueList");
     node_ptr_t valueListNode = createNode<ValueList>();
-    if(context->waitExpr().size() > 0)
+    if (context->waitExpr().size() > 0)
         for (const auto &value : context->waitExpr()) { // value list with wait expr
             *valueListNode << any_cast<node_ptr_t>(visitWaitExpr(value));
         }
@@ -677,7 +678,7 @@ pairedValues : keyValuePair (',' keyValuePair)* ;
 any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
     enter("PairedValues");
     node_ptr_t pairedValuesNode = createNode<PairedValues>();
-    if(context->keyValuePair().size() > 0)
+    if (context->keyValuePair().size() > 0)
         for (const auto &keyValuePair : context->keyValuePair()) { // paired values with paired value
             *pairedValuesNode << any_cast<node_ptr_t>(visitKeyValuePair(keyValuePair));
         }
@@ -755,7 +756,7 @@ parentArgues : '(' argumentList? ','? ')' ;
 any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
     enter("ParentArgues");
     node_ptr_t res = nullptr;
-    if(context->argumentList())
+    if (context->argumentList())
         res = any_cast<node_ptr_t>(visitArgumentList(context->argumentList()));
     leave("ParentArgues");
     return res;
@@ -767,7 +768,7 @@ angledParams : '<' pairedParams? ','? '>' ;
 any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
     enter("AngledParams");
     node_ptr_t res = nullptr;
-    if(context->pairedParams())
+    if (context->pairedParams())
         res = any_cast<node_ptr_t>(visitPairedParams(context->pairedParams()));
     leave("AngledParams");
     return res;
@@ -779,7 +780,7 @@ angledValues : '<' argumentList? ','? '>' ;
 any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
     enter("AngledValues");
     node_ptr_t res = nullptr;
-    if(context->argumentList())
+    if (context->argumentList())
         res = any_cast<node_ptr_t>(visitArgumentList(context->argumentList()));
     leave("AngledValues");
     return res;
@@ -1068,8 +1069,8 @@ any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *conte
         *relationalNode << lhsNode << rhsNode; // add the left hand side and right hand side to the relational expr node
         lhsNode = relationalNode;              // update the left hand side to the relational expr node
     }
-    return lhsNode;
     leave("RelationalExpr");
+    return lhsNode;
 }
 
 /*
@@ -1097,8 +1098,8 @@ any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) 
         *additiveNode << lhsNode << rhsNode; // add the left hand side and right hand side to the additive expr node
         lhsNode = additiveNode;              // update the left hand side to the additive expr node
     }
-    return lhsNode;
     leave("AdditiveExpr");
+    return lhsNode;
 }
 
 /*
@@ -1418,32 +1419,52 @@ literal
     ;
 */
 any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
-    enter("Literal");
-    node_ptr_t res = nullptr;
-    Literal::LiteralType type;
-    if (context->INTEGER()) {                      // literal with integer
-        type = Literal::LiteralType::INTERGER;     // create the integer literal node
-    } else if (context->REAL()) {                  // literal with real
-        type = Literal::LiteralType::REAL;         // create the real literal node
-    } else if (context->STRING()) {                // literal with string
-        type = Literal::LiteralType::STRING;       // create the string literal node
-    } else if (context->MULTI_STR()) {             // literal with multi string
-        type = Literal::LiteralType::MULTI_STR;    // create the multi string literal node
-    } else if (context->FSTRING()) {               // literal with fstring
-        type = Literal::LiteralType::FSTRING;      // create the fstring literal node
-    } else if (context->TRUE()) {                  // literal with true
-        type = Literal::LiteralType::TRUE;         // create the true literal node
-    } else if (context->FALSE()) {                 // literal with false
-        type = Literal::LiteralType::FALSE;        // create the false literal node
-    } else if (context->NULL_()) {                 // literal with null
-        type = Literal::LiteralType::NULL_LITERAL; // create the null literal node
-    } else {                                       // invalid literal type
-        type = Literal::LiteralType::INVALID;      // create the invalid literal node
+    enter("Literal: " + to_string(context->getAltNumber()));
+    data_ptr_t data = nullptr;
+
+    switch (context->getAltNumber()) {
+    case 1: // INTEGER UNIT?
+        data = dynamic_pointer_cast<Data>(
+            make_shared<PrimaryData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
+        break;
+    case 2: // REAL UNIT?
+        data = dynamic_pointer_cast<Data>(
+            make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
+        break;
+    case 3: // STRING
+    {
+        const auto &text = context->STRING()->getText();
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2)));
+    } break;
+    case 4: // MULTI_STR
+    {
+        const auto &text = context->MULTI_STR()->getText();
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6)));
+    } break;
+    case 5: // FSTRING
+    {
+        // TODO: Implement FSTRING
+        const auto &text = context->FSTRING()->getText();
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3)));
+    } break;
+    case 6: // TRUE
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true));
+        break;
+    case 7: // FALSE
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false));
+        break;
+    case 8: // NULL
+        data = dynamic_pointer_cast<Data>(make_shared<NullData>());
+        break;
+
+    default:
+        break;
     }
-    res = createNode<Literal>(type);
+
+    any res = createNode<Literal>(data);
     leave("Literal");
     return res;
-}
+};
 
 /*
 typeExpr

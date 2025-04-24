@@ -216,7 +216,7 @@ const string FuncDecl::toString() const {
     stringstream ss;
     ss << "FuncDecl ";
     if (!implMark_.empty())
-        ss << "\nimplmark: " << implMark_;
+        ss << "\nimplMark: " << implMark_;
     if (!modifiers_.empty()) {
         ss << "\nmodifiers: ";
         for (auto modifier : modifiers_) {
@@ -543,9 +543,9 @@ const string AnnoExpr::toString() const {
 
 const string Literal::toString() const {
     stringstream ss;
-    ss << "Literal ";
-    if (type_ != LiteralType::INVALID) {
-    }
+    ss << "Literal: ";
+    ss << data_->toString();
+    return ss.str();
 }
 
 const string UnionUnit::toString() const {

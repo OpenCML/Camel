@@ -757,12 +757,11 @@ inline std::shared_ptr<ListExpr> list_expr_load_ptr_cast(const load_ptr_t &ptr) 
 
 class Literal : public Load {
   public:
-    enum class LiteralType { INTERGER, REAL, STRING, MULTI_STR, FSTRING, TRUE, FALSE, NULL_LITERAL, INVALID };
-    Literal(LiteralType type) : Load(NodeType::Literal), type_(type) {}
+    Literal(data_ptr_t data) : Load(NodeType::Literal), data_(data) {}
     const std::string toString() const override;
 
   private:
-    LiteralType type_;
+    data_ptr_t data_;
 };
 
 inline std::shared_ptr<Literal> literal_load_ptr_cast(const load_ptr_t &ptr) {

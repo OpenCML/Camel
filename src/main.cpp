@@ -272,15 +272,14 @@ int main(int argc, char *argv[]) {
             return selectedCommand == Command::CHECK ? 0 : 3;
         }
         assert(ast != nullptr);
+        if (Inspect::dumpAST && ast) {
+            ast->print(os);
+        }
 
         if (!buildGCT(gct, ast, os, errorFormat)) {
             return selectedCommand == Command::CHECK ? 0 : 4;
         }
         assert(gct != nullptr);
-        if (Inspect::dumpAST && ast) {
-            // currently we do not have AST, print GCT instead
-            ast->print(os);
-        }
         if (Inspect::dumpGCT && gct) {
             gct->print(os);
         }
