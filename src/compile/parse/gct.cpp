@@ -1641,7 +1641,7 @@
 //         break;
 //     case 3: // STRING
 //     {
-//         const auto &text = context->STRING()->getText();
+//         const auto &text = conFtext->STRING()->getText();
 //         data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2)));
 //     } break;
 //     case 4: // MULTI_STR
@@ -2103,6 +2103,8 @@
 // */
 // any Constructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {
 //     enter("IdentRef");
+
+
 //     any res = context->IDENTIFIER()->getText();
 //     leave("IdentRef");
 //     return res;

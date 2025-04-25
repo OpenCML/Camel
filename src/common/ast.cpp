@@ -673,3 +673,29 @@ const string LambdaType::toString() const {
     }
     return ss.str();
 }
+
+const string IdentDef::toString() const {
+    stringstream ss;
+    ss << "IdentDef ";
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+    }
+    return ss.str();
+}
+
+const string IdentRef::toString() const {
+    stringstream ss;
+    ss << "IdentRef ";
+    if (!belongsTo_.empty()) {
+        ss << "belongsTo: ";
+        for(auto belong : belongsTo_) {
+            ss << belong << " "; 
+        }
+    }
+    if (!ident_.empty()) {
+        if(!belongsTo_.empty())
+            ss << ",";
+        ss << "ident: " << ident_;
+    } 
+    return ss.str();
+}

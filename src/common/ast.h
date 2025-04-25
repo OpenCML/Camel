@@ -167,7 +167,6 @@ inline std::shared_ptr<StmtBlock> stmt_block_load_ptr_cast(const load_ptr_t &ptr
 
 class ModuleDecl : public Load {
     std::string ident_;
-
   public:
     ModuleDecl(const std::string &ident) : Load(NodeType::ModuleDecl), ident_(ident) {}
     const std::string ident() const { return ident_; }
@@ -871,6 +870,31 @@ class LambdaType : public Load {
 
 inline std::shared_ptr<LambdaType> lambda_type_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<LambdaType>(ptr);
+}
+
+class IdentRef : public Load {
+    std::string ident_;
+    std::vector<std::string> belongsTo_;
+
+  public:
+    IdentRef(std::string ident,std::vector<std::string>belongsTo) : Load(NodeType::IdentRef), ident_(ident),belongsTo_(belongsTo) {}
+    const std::string toString() const override;
+};
+
+inline std::shared_ptr<IdentRef> ident_ref_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<IdentRef>(ptr);
+}
+
+class IdentDef : public Load {
+    std::string ident_;
+
+  public:
+    IdentDef(std::string ident) : Load(NodeType::IdentDef), ident_(ident) {}
+    const std::string toString() const override;
+};
+
+inline std::shared_ptr<IdentDef> ident_def_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<IdentDef>(ptr);
 }
 
 } // namespace AbstractSyntaxTree
