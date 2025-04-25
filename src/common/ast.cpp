@@ -49,6 +49,8 @@ const string Load::typeStr() const {
         return "EnumDecl";
     case NodeType::Stmt:
         return "Stmt";
+    case NodeType::StmtList:
+        return "StmtList";
     case NodeType::StmtBlock:
         return "StmtBlock";
     case NodeType::RetStmt:
@@ -79,6 +81,8 @@ const string Load::typeStr() const {
         return "MemberAccess";
     case NodeType::DataExpr:
         return "DataExpr";
+    case NodeType::IdentList:
+        return "IdentList";
     case NodeType::DataList:
         return "DataList";
     case NodeType::CtrlExpr:
@@ -93,6 +97,8 @@ const string Load::typeStr() const {
         return "WaitExpr";
     case NodeType::Wildcard:
         return "Wildcard";
+    case NodeType::MatchCase:
+        return "MatchCase";
     case NodeType::AssignExpr:
         return "AssignExpr";
     case NodeType::LogicalOrExpr:
@@ -123,6 +129,8 @@ const string Load::typeStr() const {
         return "DictExpr";
     case NodeType::DictType:
         return "DictType";
+    case NodeType::ListExpr:
+        return "ListExpr";
     case NodeType::Literal:
         return "Literal";
     case NodeType::TypeExpr:
@@ -172,8 +180,7 @@ const string ImportDecl::toString() const {
                 ss << ident << " ";
             }
         }
-        ss << endl;
-        ss << "path: " << path_;
+        ss << ",path: " << path_;
     }
     return ss.str();
 }
@@ -182,7 +189,7 @@ const string ExportDecl::toString() const {
     stringstream ss;
     ss << "ExportDecl ";
     if (!idents_.empty()) {
-        ss << "\nidents: ";
+        ss << "idents: ";
         for (auto ident : idents_) {
             ss << ident << " ";
         }
@@ -194,7 +201,7 @@ const string LambdaExpr::toString() const {
     stringstream ss;
     ss << "LambdaExpr ";
     if (!modifiers_.empty()) {
-        ss << "\nmodifiers: ";
+        ss << "modifiers: ";
         for (auto modifier : modifiers_) {
             if (modifier == Modifier::ATOMIC)
                 ss << "ATOMIC ";
@@ -205,9 +212,12 @@ const string LambdaExpr::toString() const {
             else if (modifier == Modifier::MACRO)
                 ss << "MACRO ";
         }
+        if (!type_.empty()) {
+            ss << ",";
+        }
     }
     if (!type_.empty()) {
-        ss << "\ntype: " << type_;
+        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -215,28 +225,48 @@ const string LambdaExpr::toString() const {
 const string FuncDecl::toString() const {
     stringstream ss;
     ss << "FuncDecl ";
-    if (!implMark_.empty())
-        ss << "\nimplMark: " << implMark_;
+    if (!implMark_.empty()) {
+        ss << "implMark: " << implMark_;
+    }
     if (!modifiers_.empty()) {
-        ss << "\nmodifiers: ";
-        for (auto modifier : modifiers_) {
-            if (modifier == Modifier::ATOMIC)
-                ss << "ATOMIC ";
-            else if (modifier == Modifier::SHARED)
-                ss << "SHARED ";
-            else if (modifier == Modifier::SYNC)
-                ss << "SYNC ";
-            else if (modifier == Modifier::MACRO)
-                ss << "MACRO ";
+        if (!implMark_.empty()) {
+            ss << ", ";
+            ss << "modifiers: ";
+            for (auto modifier : modifiers_) {
+                switch (modifier) {
+                case Modifier::ATOMIC:
+                    ss << "ATOMIC ";
+                    break;
+                case Modifier::SHARED:
+                    ss << "SHARED ";
+                    break;
+                case Modifier::SYNC:
+                    ss << "SYNC ";
+                    break;
+                case Modifier::MACRO:
+                    ss << "MACRO ";
+                    break;
+                default:
+                    ss << "Unknow";
+                    break;
+                }
+            }
         }
     }
+    bool hasPrev = (!modifiers_.empty() || !implMark_.empty());
+    if (hasPrev && !name_.empty()) {
+        ss << ", ";
+    }
     if (!name_.empty()) {
-        ss << "\nname: " << name_;
+        ss << "name: " << name_;
+        hasPrev = true;
+    }
+    if (hasPrev && !type_.empty()) {
+        ss << ", ";
     }
     if (!type_.empty()) {
-        ss << "\ntype: " << type_;
+        ss << "type: " << type_;
     }
-
     return ss.str();
 }
 
@@ -244,7 +274,7 @@ const string LetDecl::toString() const {
     stringstream ss;
     ss << "LetDecl ";
     if (!modifier_.empty()) {
-        ss << "\nmodifier: " << modifier_;
+        ss << "modifier: " << modifier_;
     }
     return ss.str();
 }
@@ -253,10 +283,13 @@ const string UseDecl::toString() const {
     stringstream ss;
     ss << "UseDecl ";
     if (!identDef_.empty()) {
-        ss << "\nidentDef: " << identDef_;
+        ss << "identDef: " << identDef_;
+        if (!identRef_.empty()) {
+            ss << ",";
+        }
     }
     if (!identRef_.empty()) {
-        ss << "\nidentRef: " << identRef_;
+        ss << "identRef: " << identRef_;
     }
     return ss.str();
 }
@@ -265,7 +298,7 @@ const string RetStmt::toString() const {
     stringstream ss;
     ss << "RetStmt ";
     if (!modifier_.empty()) {
-        ss << "\nmodifier: " << modifier_;
+        ss << "modifier: " << modifier_;
     }
     return ss.str();
 }
@@ -273,15 +306,21 @@ const string RetStmt::toString() const {
 const string TypeDecl::toString() const {
     stringstream ss;
     ss << "TypeDecl ";
-    if (!implMark_.empty()) {
-        ss << "\nimplMark: " << implMark_;
-    }
-    if (!ident_.empty()) {
-        ss << "\nident: " << ident_;
-    }
-    if (!type_.empty()) {
-        ss << "\ntype: " << type_;
-    }
+
+    auto appendWithComma = [&ss](const string &prefix, const string &value) {
+        if (!value.empty()) {
+            if (!prefix.empty())
+                ss << ", ";
+            ss << prefix << value;
+            return true;
+        }
+        return false;
+    };
+
+    bool hasPrev = appendWithComma("implMark: ", implMark_);
+    hasPrev = appendWithComma("ident: ", ident_) || hasPrev;
+    appendWithComma("type: ", type_);
+
     return ss.str();
 }
 
@@ -289,10 +328,13 @@ const string EnumDecl::toString() const {
     stringstream ss;
     ss << "EnumDecl ";
     if (!name_.empty()) {
-        ss << "\nname: " << name_;
+        ss << "name: " << name_;
+        if (!type_.empty()) {
+            ss << ",";
+        }
     }
     if (!type_.empty()) {
-        ss << "\ntype: " << type_;
+        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -301,10 +343,13 @@ const string KeyTypePair::toString() const {
     stringstream ss;
     ss << "KeyTypePair ";
     if (!ident_.empty()) {
-        ss << "\nident: " << ident_;
+        ss << "ident: " << ident_;
+        if (!type_.empty()) {
+            ss << ",";
+        }
     }
     if (!type_.empty()) {
-        ss << "\ntype: " << type_;
+        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -313,7 +358,7 @@ const string KeyValuePair::toString() const {
     stringstream ss;
     ss << "KeyValuePair ";
     if (!ident_.empty()) {
-        ss << "\nident: " << ident_;
+        ss << "ident: " << ident_;
     }
     return ss.str();
 }
@@ -321,15 +366,24 @@ const string KeyValuePair::toString() const {
 const string KeyParamPair::toString() const {
     stringstream ss;
     ss << "KeyParamPair ";
+
+    auto appendWithComma = [&ss](const string &prefix, const string &value) {
+        if (!value.empty()) {
+            if (!prefix.empty())
+                ss << ", ";
+            ss << prefix << value;
+            return true;
+        }
+        return false;
+    };
+
     if (isVar_) {
-        ss << "\nVar: ";
+        ss << "Var: ";
     }
-    if (!ident_.empty()) {
-        ss << "\nident: " << ident_;
-    }
-    if (!type_.empty()) {
-        ss << "\ntype: " << type_;
-    }
+
+    bool hasPrev = appendWithComma("ident: ", ident_);
+    appendWithComma("type: ", type_);
+
     return ss.str();
 }
 
@@ -337,7 +391,7 @@ const string IdentList::toString() const {
     stringstream ss;
     ss << "IdentList ";
     if (!idents_.empty()) {
-        ss << "\nidents: ";
+        ss << "idents: ";
         for (auto ident : idents_) {
             ss << ident << " ";
         }
@@ -347,8 +401,8 @@ const string IdentList::toString() const {
 const string WaitExpr::toString() const {
     stringstream ss;
     ss << "WaitExpr ";
-    if (!isWait_) {
-        ss << "\nWait";
+    if (isWait_) {
+        ss << "Wait";
     }
     return ss.str();
 }
@@ -356,10 +410,13 @@ const string CatchClause::toString() const {
     stringstream ss;
     ss << "CatchClause ";
     if (!ident_.empty()) {
-        ss << "\nident: " << ident_;
+        ss << "ident: " << ident_;
+        if (!type_.empty()) {
+            ss << ",";
+        }
     }
     if (!type_.empty()) {
-        ss << "\ntype: " << type_;
+        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -543,8 +600,14 @@ const string AnnoExpr::toString() const {
 
 const string Literal::toString() const {
     stringstream ss;
-    ss << "Literal: ";
-    ss << data_->toString();
+    ss << "Literal: " << pointerToHex(data_.get()) << ", ";
+    const auto &type = data_->type();
+    if (type) {
+        ss << type->toString();
+    } else {
+        ss << "NULL";
+    }
+    ss << ", " << data_->toString();
     return ss.str();
 }
 
@@ -552,7 +615,7 @@ const string UnionUnit::toString() const {
     stringstream ss;
     ss << "UnionUnit ";
     if (!ident_.empty()) {
-        ss << "\nident: " << ident_;
+        ss << "ident: " << ident_;
     }
     return ss.str();
 }
@@ -560,7 +623,7 @@ const string UnionUnit::toString() const {
 const string ListType_::toString() const {
     stringstream ss;
     ss << "ListType ";
-    ss << "\ndimonsion: " << dimonsion_;
+    ss << "dimension: " << dimension_;
     return ss.str();
 }
 
@@ -568,10 +631,13 @@ const string PrimaryType_::toString() const {
     stringstream ss;
     ss << "PrimaryType ";
     if (!type_.empty()) {
-        ss << "\ntype: " << type_;
+        ss << "type: " << type_;
+        if (!ident_.empty()) {
+            ss << ",";
+        }
     }
     if (!ident_.empty()) {
-        ss << "\nident: " << ident_;
+        ss << "ident: " << ident_;
     }
     return ss.str();
 }

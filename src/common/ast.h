@@ -759,7 +759,6 @@ class Literal : public Load {
   public:
     Literal(data_ptr_t data) : Load(NodeType::Literal), data_(data) {}
     const std::string toString() const override;
-
   private:
     data_ptr_t data_;
 };
@@ -800,10 +799,10 @@ inline std::shared_ptr<UnionUnit> union_unit_load_ptr_cast(const load_ptr_t &ptr
 }
 
 class ListType_ : public Load {
-    int dimonsion_;
+    int dimension_;
 
   public:
-    ListType_(int dimonsion) : Load(NodeType::ListType), dimonsion_(dimonsion) {}
+    ListType_(int dimension) : Load(NodeType::ListType), dimension_(dimension) {}
     const std::string toString() const override;
 };
 

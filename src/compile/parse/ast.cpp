@@ -260,9 +260,9 @@ waitStmt   : WAIT (stmtBlock | dataList) ;
 any Constructor::visitWaitStmt(OpenCMLParser::WaitStmtContext *context) {
     enter("WaitStmt");
     node_ptr_t res = nullptr;
-    if (context->stmtBlock()) { // wait stmt with stmt block
+    if (context->stmtBlock()) {
         res = any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
-    } else if (context->dataList()) { // wait stmt with data list
+    } else if (context->dataList()) { 
         res = any_cast<node_ptr_t>(visitDataList(context->dataList()));
     }
     leave("WaitStmt");
@@ -277,28 +277,28 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     std::vector<LambdaExpr::Modifier> modifiers;
     std::string type;
     auto modifier = context->modifiers();
-    if (modifier) {                          // lambda expr with modifiers
-        if (modifier->ATOMIC().size() > 0) { // lambda expr with atomic modifier
+    if (modifier) {
+        if (modifier->ATOMIC().size() > 0) { 
             modifiers.push_back(LambdaExpr::Modifier::ATOMIC);
-        } else if (modifier->SHARED().size() > 0) { // lambda expr with shared modifier
+        } else if (modifier->SHARED().size() > 0) { 
             modifiers.push_back(LambdaExpr::Modifier::SHARED);
-        } else if (modifier->SYNC().size() > 0) { // lambda expr with sync modifier
+        } else if (modifier->SYNC().size() > 0) { 
             modifiers.push_back(LambdaExpr::Modifier::SYNC);
-        } else if (modifier->MACRO().size() > 0) { // lambda expr with macro modifier
+        } else if (modifier->MACRO().size() > 0) { 
             modifiers.push_back(LambdaExpr::Modifier::MACRO);
         }
     }
-    if (context->typeExpr()) { // lambda expr with type expr
+    if (context->typeExpr()) { 
         type = context->typeExpr()->getText();
     }
     node_ptr_t lambdaNode = createNode<LambdaExpr>(type, modifiers);
-    if (context->angledParams()) { // lambda expr with angled params
+    if (context->angledParams()) { 
         *lambdaNode << any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
     }
-    if (context->parentParams()) { // lambda expr with parent params
+    if (context->parentParams()) { 
         *lambdaNode << any_cast<node_ptr_t>(visitParentParams(context->parentParams()));
     }
-    if (context->blockExpr()) { // lambda expr with block expr
+    if (context->blockExpr()) { 
         *lambdaNode << any_cast<node_ptr_t>(visitBlockExpr(context->blockExpr()));
     }
     leave("LambdaExpr");
@@ -316,18 +316,18 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     std::vector<FuncDecl::Modifier> modifiers;
     std::string identDef;
     std::string type;
-    if (context->implMark()) { // func decl with implmark
+    if (context->implMark()) {
         implMark = context->implMark()->getText();
     }
     auto modifier = context->modifiers();
-    if (modifier) {                          // lambda expr with modifiers
-        if (modifier->ATOMIC().size() > 0) { // lambda expr with atomic modifier
+    if (modifier) {                          
+        if (modifier->ATOMIC().size() > 0) { 
             modifiers.push_back(FuncDecl::Modifier::ATOMIC);
-        } else if (modifier->SHARED().size() > 0) { // lambda expr with shared modifier
+        } else if (modifier->SHARED().size() > 0) {
             modifiers.push_back(FuncDecl::Modifier::SHARED);
-        } else if (modifier->SYNC().size() > 0) { // lambda expr with sync modifier
+        } else if (modifier->SYNC().size() > 0) {
             modifiers.push_back(FuncDecl::Modifier::SYNC);
-        } else if (modifier->MACRO().size() > 0) { // lambda expr with macro modifier
+        } else if (modifier->MACRO().size() > 0) {
             modifiers.push_back(FuncDecl::Modifier::MACRO);
         }
     }
@@ -345,9 +345,6 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         node_ptr_t parentParamsNode = any_cast<node_ptr_t>(visitParentParams(context->parentParams()));
         if (parentParamsNode)
             *funcNode << parentParamsNode;
-    }
-    if (context->typeExpr()) { // func decl with type expr
-        *funcNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
     if (context->stmtBlock()) { // func decl with stmt block
         *funcNode << any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
@@ -1307,7 +1304,7 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
     enter("AnnoExpr");
     node_ptr_t lhsNode =
         any_cast<node_ptr_t>(visitPrimaryData(context->primaryData())); // get the left hand side of the anno expr
-    for (size_t i = 0; i < context->children.size(); i++) {             // anno expr with anno expr
+    for (size_t i = 1; i < context->children.size(); i++) {             // anno expr with anno expr
         if (context->children[i]->getText() == "!") {                   // anno expr with exclamation mark
             node_ptr_t annoExprNode = createNode<AnnoExpr>(true);
             *annoExprNode << lhsNode;
@@ -1347,25 +1344,25 @@ listExpr
 */
 any Constructor::visitListExpr(OpenCMLParser::ListExprContext *context) {
     enter("ListExpr");
-    node_ptr_t listNode = createNode<ListExpr>(); // create the list expr node
-    if (context->indexValues()) {                 // list expr with index values
+    node_ptr_t listNode = createNode<ListExpr>(); 
+    if (context->indexValues()) {                
         *listNode << any_cast<node_ptr_t>(
-            visitIndexValues(context->indexValues())); // get the index values of the list expr node
+            visitIndexValues(context->indexValues())); 
     } else {
-        for (auto &waitExpr : context->waitExpr()) {                    // list expr with wait expr
-            *listNode << any_cast<node_ptr_t>(visitWaitExpr(waitExpr)); // get the wait expr of the list expr node
+        for (auto &waitExpr : context->waitExpr()) {                    
+            *listNode << any_cast<node_ptr_t>(visitWaitExpr(waitExpr)); 
         }
-        if (context->identRef()) { // list expr with ident ref
+        if (context->identRef()) { 
             *listNode << any_cast<node_ptr_t>(
-                visitIdentRef(context->identRef())); // get the ident ref of the list expr node
+                visitIdentRef(context->identRef())); 
         }
-        if (context->waitExpr(1)) { // list expr with wait expr
+        if (context->waitExpr(1)) { 
             *listNode << any_cast<node_ptr_t>(
-                visitWaitExpr(context->waitExpr(1))); // get the wait expr of the list expr node
+                visitWaitExpr(context->waitExpr(1))); 
         }
-        if (context->waitExpr(2)) { // list expr with wait expr
+        if (context->waitExpr(2)) { 
             *listNode << any_cast<node_ptr_t>(
-                visitWaitExpr(context->waitExpr(2))); // get the wait expr of the list expr node
+                visitWaitExpr(context->waitExpr(2))); 
         }
     }
     leave("ListExpr");
@@ -1421,13 +1418,12 @@ literal
 any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     enter("Literal: " + to_string(context->getAltNumber()));
     data_ptr_t data = nullptr;
-
     switch (context->getAltNumber()) {
     case 1: // INTEGER UNIT?
         data = dynamic_pointer_cast<Data>(
             make_shared<PrimaryData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
         break;
-    case 2: // REAL UNIT?
+    case 2: // REAL UNIT
         data = dynamic_pointer_cast<Data>(
             make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
         break;
@@ -1435,18 +1431,21 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     {
         const auto &text = context->STRING()->getText();
         data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2)));
-    } break;
+        break;
+    } 
     case 4: // MULTI_STR
     {
         const auto &text = context->MULTI_STR()->getText();
         data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6)));
-    } break;
+        break;
+    } 
     case 5: // FSTRING
     {
         // TODO: Implement FSTRING
         const auto &text = context->FSTRING()->getText();
         data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3)));
-    } break;
+        break;
+    }
     case 6: // TRUE
         data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true));
         break;
@@ -1456,10 +1455,13 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     case 8: // NULL
         data = dynamic_pointer_cast<Data>(make_shared<NullData>());
         break;
-
-    default:
+    default: // INVALID
         break;
     }
+
+    /*if (data && !data->type()) {
+        throw runtime_error("Literal type is null");
+    }*/
 
     any res = createNode<Literal>(data);
     leave("Literal");
@@ -1530,12 +1532,12 @@ listType
 */
 any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {
     enter("ListType");
-    node_ptr_t argsType =
-        any_cast<node_ptr_t>(visitArgsType(context->argsType())); // get the args type of the list type node;
-    node_ptr_t listTypeNode = createNode<ListType_>(context->children.size()); // create the list type node;
-    *listTypeNode << argsType; // add the args type to the list type node;
+    node_ptr_t res = nullptr;
+    if (context->argsType()) {                                          // list type with empty args type;
+        res = any_cast<node_ptr_t>(visitArgsType(context->argsType())); // get the args type of the list type node;
+    }
     leave("ListType");
-    return listTypeNode;
+    return res;
 }
 
 /*
