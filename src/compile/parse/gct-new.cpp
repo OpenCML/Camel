@@ -583,7 +583,7 @@ any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
     }
 
     bool dangling = false;
-    node_ptr_t exprNode = createNode<node_ptr_t>();
+    node_ptr_t exprNode = any_cast<node_ptr_t>(visitValueList(context->valueList()));
     node_ptr_t execNode = createNode<ExecLoad>();
     auto [exprValue, _] = extractData(exprNode, execNode, dangling);
 
