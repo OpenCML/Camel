@@ -211,12 +211,12 @@ exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
 any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     enter("ExportDecl");
     node_ptr_t res = nullptr;
-    std::vector<std::string> idents;
     if (context->letDecl()) {
         res = any_cast<node_ptr_t>(visitLetDecl(context->letDecl()));
     } else if (context->typeDecl()) {
         res = any_cast<node_ptr_t>(visitTypeDecl(context->typeDecl()));
     } else if (context->bracedIdents()) {
+        std::vector<std::string> idents;
         for (auto &ident : context->bracedIdents()->identList()->identDef()) {
             idents.push_back(ident->getText());
         }
@@ -275,7 +275,6 @@ lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExp
 any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
     enter("LambdaExpr");
     std::vector<LambdaExpr::Modifier> modifiers;
-    std::string type;
     auto modifier = context->modifiers();
     if (modifier) {
         if (modifier->ATOMIC().size() > 0) {
@@ -288,10 +287,11 @@ any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) {
             modifiers.push_back(LambdaExpr::Modifier::MACRO);
         }
     }
+
+    node_ptr_t lambdaNode = createNode<LambdaExpr>(modifiers);
     if (context->typeExpr()) {
-        type = context->typeExpr()->getText();
+        *lambdaNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
-    node_ptr_t lambdaNode = createNode<LambdaExpr>(type, modifiers);
     if (context->angledParams()) {
         *lambdaNode << any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
     }
@@ -315,7 +315,6 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     std::string implMark;
     std::vector<FuncDecl::Modifier> modifiers;
     std::string identDef;
-    std::string type;
     if (context->implMark()) {
         implMark = context->implMark()->getText();
     }
@@ -334,10 +333,10 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     if (context->identDef()) {
         identDef = context->identDef()->getText();
     }
+    node_ptr_t funcNode = createNode<FuncDecl>(implMark, modifiers, identDef);
     if (context->typeExpr()) {
-        type = context->typeExpr()->getText();
+        *funcNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
-    node_ptr_t funcNode = createNode<FuncDecl>(implMark, modifiers, identDef, type);
     if (context->angledParams()) {
         *funcNode << any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
     }
@@ -487,17 +486,16 @@ any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     enter("TypeDecl");
     std::string implMark;
     std::string identDef;
-    std::string type;
     if (context->implMark()) {
         implMark = context->implMark()->getText();
     }
     if (context->identDef()) {
         identDef = context->identDef()->getText();
     }
+    node_ptr_t typeNode = createNode<TypeDecl>(implMark, identDef);
     if (context->typeExpr()) {
-        type = context->typeExpr()->getText();
+        *typeNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
-    node_ptr_t typeNode = createNode<TypeDecl>(implMark, identDef, type);
     leave("TypeDecl");
     return typeNode;
 }
@@ -508,14 +506,13 @@ enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
 any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) {
     enter("EnumDecl");
     std::string identDef;
-    std::string type;
     if (context->identDef()) {
         identDef = context->identDef()->getText();
     }
+    node_ptr_t enumNode = createNode<EnumDecl>(identDef);
     if (context->typeExpr()) {
-        type = context->typeExpr()->getText();
+        *enumNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
-    node_ptr_t enumNode = createNode<EnumDecl>(identDef, type);
     if (context->pairedValues()) {
         *enumNode << any_cast<node_ptr_t>(visitPairedValues(context->pairedValues()));
     }
@@ -561,14 +558,13 @@ keyTypePair  : identDef ':' typeExpr ;
 any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
     enter("KeyTypePair");
     std::string ident;
-    std::string type;
     if (context->identDef()) {
         ident = context->identDef()->getText();
     }
+    node_ptr_t keyTypeNode = createNode<KeyTypePair>(ident);
     if (context->typeExpr()) {
-        type = context->typeExpr()->getText();
+        *keyTypeNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
-    node_ptr_t keyTypeNode = createNode<KeyTypePair>(ident, type);
     leave("KeyTypePair");
     return keyTypeNode;
 }
@@ -597,17 +593,16 @@ any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) 
     enter("KeyParamPair");
     bool isVar = false;
     std::string ident;
-    std::string type;
     if (context->VAR()) {
         isVar = true;
     }
     if (context->identDef()) {
         ident = context->identDef()->getText();
     }
+    node_ptr_t keyParamPairNode = createNode<KeyParamPair>(isVar, ident);
     if (context->typeExpr()) {
-        type = context->typeExpr()->getText();
+        *keyParamPairNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
-    node_ptr_t keyParamPairNode = createNode<KeyParamPair>(isVar, ident, type);
     if (context->waitExpr()) {
         *keyParamPairNode << any_cast<node_ptr_t>(visitWaitExpr(context->waitExpr()));
     }
@@ -648,10 +643,11 @@ valueList    : waitExpr (',' waitExpr)* ;
 any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) {
     enter("ValueList");
     node_ptr_t valueListNode = createNode<ValueList>();
-    if (context->waitExpr().size() > 0)
+    if (context->waitExpr().size() > 0) {
         for (const auto &value : context->waitExpr()) {
             *valueListNode << any_cast<node_ptr_t>(visitWaitExpr(value));
         }
+    }
     leave("ValueList");
     return valueListNode;
 }
@@ -928,7 +924,7 @@ any Constructor::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
     AssignExpr::AssignOp op;
     node_ptr_t lhsNode = any_cast<node_ptr_t>(
         visitLogicalOrExpr(context->logicalOrExpr(0))); // get the left hand side of the assign expr
-    for (size_t i = 1; i < context->children.size(); i++) {
+    for (size_t i = 1; i < context->logicalOrExpr().size(); i++) {
         strOp = context->children[i * 2 - 1]->getText();
         if (strOp == "=") {
             op = AssignExpr::AssignOp::ASSIGN;
@@ -972,7 +968,7 @@ any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context
     enter("LogicalOrExpr");
     node_ptr_t lhsNode = any_cast<node_ptr_t>(
         visitLogicalAndExpr(context->logicalAndExpr(0))); // get the left hand side of the logical or expr
-    for (size_t i = 1; i < context->children.size(); ++i) {
+    for (size_t i = 1; i < context->logicalAndExpr().size(); ++i) {
         node_ptr_t rhsNode = any_cast<node_ptr_t>(
             visitLogicalAndExpr(context->logicalAndExpr(i))); // get the right hand side of the logical or expr
         node_ptr_t logicalOrNode = createNode<LogicalOrExpr>();
@@ -992,10 +988,11 @@ any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *conte
     enter("LogicalAndExpr");
     node_ptr_t lhsNode = any_cast<node_ptr_t>(
         visitEqualityExpr(context->equalityExpr(0))); // get the left hand side of the logical and expr
-    for (size_t i = 1; i < context->children.size(); ++i) {
+    for (size_t i = 1; i < context->equalityExpr().size(); ++i) {
         node_ptr_t rhsNode = any_cast<node_ptr_t>(
             visitEqualityExpr(context->equalityExpr(i))); // get the right hand side of the logical and expr
         node_ptr_t logicalAndNode = createNode<LogicalAndExpr>();
+        *logicalAndNode << lhsNode << rhsNode;
         lhsNode = logicalAndNode;
     }
     leave("LogicalAndExpr");
@@ -1012,7 +1009,7 @@ any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) 
     EqualityExpr::EqualityOp op;
     node_ptr_t lhsNode = any_cast<node_ptr_t>(
         visitRelationalExpr(context->relationalExpr(0))); // get the left hand side of the equality expr
-    for (size_t i = 1; i < context->children.size(); ++i) {
+    for (size_t i = 1; i < context->relationalExpr().size(); ++i) {
         std::string strOp = context->children[i * 2 - 1]->getText();
         if (strOp == "===") {
             op = EqualityExpr::EqualityOp::STRICT_EQUAL;
@@ -1045,7 +1042,7 @@ any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *conte
     enter("RelationalExpr");
     RelationalExpr::RelationalOp op;
     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitAdditiveExpr(context->additiveExpr(0)));
-    for (size_t i = 1; i < context->children.size(); ++i) {
+    for (size_t i = 1; i < context->additiveExpr().size(); ++i) {
         std::string strOp = context->children[i * 2 - 1]->getText();
         if (strOp == "<") {
             op = RelationalExpr::RelationalOp::LESS;
@@ -1076,7 +1073,7 @@ any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) 
     enter("AdditiveExpr");
     AdditiveExpr::AdditiveOp op;
     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitMultiplicativeExpr(context->multiplicativeExpr(0)));
-    for (size_t i = 1; i < context->children.size(); i++) {
+    for (size_t i = 1; i < context->multiplicativeExpr().size(); i++) {
         std::string strOp = context->children[i * 2 - 1]->getText();
         if (strOp == "+") {
             op = AdditiveExpr::AdditiveOp::ADD;
@@ -1603,15 +1600,11 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
         res = any_cast<node_ptr_t>(visitTupleType(context->tupleType()));
     } else if (context->lambdaType()) {
         res = any_cast<node_ptr_t>(visitLambdaType(context->lambdaType()));
-    } else if (context->TYPEOF()) {
-        std::string type = context->TYPEOF()->getText();
-        res = createNode<PrimaryType_>(type, "");
-        node_ptr_t waitNode = any_cast<node_ptr_t>(visitWaitExpr(context->waitExpr()));
-        *res << waitNode;
-    } else if (context->TYPEAS()) {
-        std::string type = context->TYPEAS()->getText();
+    } else if (context->waitExpr()) {
+        res = any_cast<node_ptr_t>(visitWaitExpr(context->waitExpr()));
+    } else if (context->identDef()) {
         std::string ident = context->identDef()->getText();
-        res = createNode<PrimaryType_>(type, ident);
+        res = createNode<PrimaryType_>("", ident);
     }
     leave("PrimaryType");
     return res;
@@ -1705,8 +1698,8 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     enter("LambdaType");
     node_ptr_t res = nullptr;
     auto modifier = context->modifiers();
+    std::vector<LambdaType::LambdaTypeModifiers> lambdaModifiers;
     if (context->modifiers()) {
-        std::vector<LambdaType::LambdaTypeModifiers> lambdaModifiers;
         if (modifier->ATOMIC().size() > 0) {
             lambdaModifiers.push_back(LambdaType::LambdaTypeModifiers::ATOMIC);
         } else if (modifier->SHARED().size() > 0) {
@@ -1718,8 +1711,8 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
         } else {
             lambdaModifiers.push_back(LambdaType::LambdaTypeModifiers::INVALID);
         }
-        res = createNode<LambdaType>(lambdaModifiers);
     }
+    res = createNode<LambdaType>(lambdaModifiers);
     if (context->angledParams()) {
         *res << any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
     }

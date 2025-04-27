@@ -212,12 +212,6 @@ const string LambdaExpr::toString() const {
             else if (modifier == Modifier::MACRO)
                 ss << "MACRO ";
         }
-        if (!type_.empty()) {
-            ss << ",";
-        }
-    }
-    if (!type_.empty()) {
-        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -230,7 +224,7 @@ const string FuncDecl::toString() const {
     }
     if (!modifiers_.empty()) {
         if (!implMark_.empty()) {
-            ss << ", ";
+            ss << ",";
             ss << "modifiers: ";
             for (auto modifier : modifiers_) {
                 switch (modifier) {
@@ -254,18 +248,12 @@ const string FuncDecl::toString() const {
         }
     }
     bool hasPrev = (!modifiers_.empty() || !implMark_.empty());
-    if (hasPrev && !name_.empty()) {
-        ss << ", ";
+    if (hasPrev && !ident_.empty()) {
+        ss << ",";
     }
-    if (!name_.empty()) {
-        ss << "name: " << name_;
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
         hasPrev = true;
-    }
-    if (hasPrev && !type_.empty()) {
-        ss << ", ";
-    }
-    if (!type_.empty()) {
-        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -306,21 +294,15 @@ const string RetStmt::toString() const {
 const string TypeDecl::toString() const {
     stringstream ss;
     ss << "TypeDecl ";
-
-    auto appendWithComma = [&ss](const string &prefix, const string &value) {
-        if (!value.empty()) {
-            if (!prefix.empty())
-                ss << ", ";
-            ss << prefix << value;
-            return true;
+    if (!implMark_.empty()) {
+        ss << "implMark: " << implMark_;
+        if (!ident_.empty()) {
+            ss << ",";
         }
-        return false;
-    };
-
-    bool hasPrev = appendWithComma("implMark: ", implMark_);
-    hasPrev = appendWithComma("ident: ", ident_) || hasPrev;
-    appendWithComma("type: ", type_);
-
+    }
+    if(!ident_.empty()) {
+        ss << "ident: " << ident_; 
+    }
     return ss.str();
 }
 
@@ -329,12 +311,6 @@ const string EnumDecl::toString() const {
     ss << "EnumDecl ";
     if (!name_.empty()) {
         ss << "name: " << name_;
-        if (!type_.empty()) {
-            ss << ",";
-        }
-    }
-    if (!type_.empty()) {
-        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -344,12 +320,6 @@ const string KeyTypePair::toString() const {
     ss << "KeyTypePair ";
     if (!ident_.empty()) {
         ss << "ident: " << ident_;
-        if (!type_.empty()) {
-            ss << ",";
-        }
-    }
-    if (!type_.empty()) {
-        ss << "type: " << type_;
     }
     return ss.str();
 }
@@ -366,24 +336,16 @@ const string KeyValuePair::toString() const {
 const string KeyParamPair::toString() const {
     stringstream ss;
     ss << "KeyParamPair ";
-
-    auto appendWithComma = [&ss](const string &prefix, const string &value) {
-        if (!value.empty()) {
-            if (!prefix.empty())
-                ss << ", ";
-            ss << prefix << value;
-            return true;
+    if(isVar_)
+    {
+        ss << "var";
+        if(!ident_.empty()) {
+            ss << " ";
         }
-        return false;
-    };
-
-    if (isVar_) {
-        ss << "Var: ";
     }
-
-    bool hasPrev = appendWithComma("ident: ", ident_);
-    appendWithComma("type: ", type_);
-
+    if(!ident_.empty()) {
+        ss << "ident: " << ident_;
+    }
     return ss.str();
 }
 
@@ -630,14 +592,14 @@ const string ListType_::toString() const {
 const string PrimaryType_::toString() const {
     stringstream ss;
     ss << "PrimaryType ";
-    if (!type_.empty()) {
-        ss << "type: " << type_;
-        if (!ident_.empty()) {
-            ss << ",";
-        }
-    }
     if (!ident_.empty()) {
         ss << "ident: " << ident_;
+        if(!type_.empty()) {
+            ss << ","; 
+        }
+    }
+    if(!type_.empty()) {
+        ss << "type: " << type_;
     }
     return ss.str();
 }
