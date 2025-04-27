@@ -108,11 +108,14 @@ class Type {
     Type(TypeCode type);
     virtual ~Type() = default;
 
+    enum ImplMark {INNER, OUTER, GRAPH};
+
     const TypeCode &code() const;
 
     bool primary() const;
     bool structured() const;
     bool special() const;
+    ImplMark implMark() const;
 
     virtual std::string toString() const;
 
