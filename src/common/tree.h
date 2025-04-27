@@ -140,41 +140,45 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
         size_t index = 0;
         traverse(
             [&](tree_node_t<load_t> &node) {
-                bool isLast = false;
-                if (visible.size() <= depth)
-                    visible.push_back(true);
-                if (depth > 0) {
-                    if (node.parent_ == nullptr) {
-                        warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
-                    } else if (index == node.parent_->size() - 1) {
-                        isLast = true;
-                        visible[depth - 1] = false;
-                    }
-                }
-                auto getHead = [&]() -> std::string {
-                    size_t i = 0;
-                    std::string ret;
-                    while (i < depth - 1) {
-                        if (visible[i])
-                            ret += "|  ";
-                        else
-                            ret += "   ";
-                        i++;
-                    }
+                try {
+                    bool isLast = false;
+                    if (visible.size() <= depth)
+                        visible.push_back(true);
                     if (depth > 0) {
-                        if (isLast)
-                            ret += "\\-";
-                        else
-                            ret += "|-";
+                        if (node.parent_ == nullptr) {
+                            warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
+                        } else if (index == node.parent_->size() - 1) {
+                            isLast = true;
+                            visible.at(depth - 1) = false;
+                        }
                     }
-                    return ret;
-                };
-                os << getHead();
-                os << node.toString();
-                os << std::endl;
-                if (depth > 0)
-                    for (size_t i = depth; i < visible.size(); i++)
-                        visible[i] = true;
+                    auto getHead = [&]() -> std::string {
+                        size_t i = 0;
+                        std::string ret;
+                        while (depth > 0 && i < depth - 1) {
+                            if (visible.at(i))
+                                ret += "|  ";
+                            else
+                                ret += "   ";
+                            i++;
+                        }
+                        if (depth > 0) {
+                            if (isLast)
+                                ret += "\\-";
+                            else
+                                ret += "|-";
+                        }
+                        return ret;
+                    };
+                    os << getHead();
+                    os << node.toString();
+                    os << std::endl;
+                    if (depth > 0)
+                        for (size_t i = depth; i < visible.size(); i++)
+                            visible.at(i) = true;
+                } catch (const std::exception &e) {
+                    os << "ERROR: " << e.what() << std::endl;
+                }
             },
             depth, index);
         return;

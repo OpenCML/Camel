@@ -1,1 +1,39 @@
+module cnn
+
+type WinConf = {
+    strides: int,
+    padding: string
+}
+
+type ConvConf = {
+    filters: int,
+    kernel_size: int
+} & WinConf
+
+type PoolConf = {
+    pool_size: int,
+} & WinConf
+
+with <kernel: Tensor, stride: siz, padding: string>
+inner func conv2d(x: Tensor): Tensor {}
+
+with <var weights: Tensor[], conf: ConvConf>
+macro sync func Conv2D(x: Tensor): Tensor {
+    let {filters, kernel_size} = conf
+    wait weights.push(Tensor::new([filters, kernel_size, kernel_size]))
+    return (x: Tensor) => weights.map((kernel: Tensor, index: int) => {
+        return x->kernel.conv2d<strides: conf::strides, padding: conf::padding>
+    })->stack<1>
+}
+
 with <>
+func CNN(input: Tensor): Tensor {
+    return input->conv2d<filters: 32, kernel_size: 3, strides: 1, padding: 'same'>->relu
+        ->max_pool2d<pool_size: 2, strides: 2, padding: 'same'>->dropout<rate: 0.25>
+        ->conv2d<filters: 64, kernel_size: 3, strides: 1, padding: 'same'>->relu
+        ->max_pool2d<pool_size: 2, strides: 2, padding: 'same'>->dropout<rate: 0.25>
+        ->conv2d<filters: 128, kernel_size: 3, strides: 1, padding: 'same'>->relu
+        ->max_pool2d<pool_size: 2, strides: 2, padding: 'same'>->dropout<rate: 0.25>
+        ->flatten->dense<units: 512, activation: relu>->dropout<rate: 0.5>
+        ->dense<units: 10, activation: softmax>
+}

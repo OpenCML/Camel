@@ -43,7 +43,7 @@ template <typename T> class PrimaryData : public Data {
         } else if constexpr (std::is_same_v<T, bool>) {
             type_ = boolTypePtr;
         } else if constexpr (std::is_same_v<T, char>) {
-            type_ = boolTypePtr;
+            type_ = charTypePtr;
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }

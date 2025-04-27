@@ -1,0 +1,16 @@
+/*
+ * Null Safety Handling
+ */
+
+module test_null_safety
+
+func safe_add(a: int?, b: int?): int {
+    return (a ?? 0) + (b ?? 0)
+}
+ 
+func main(): int {
+    let x: int? = null
+    let y: int? = 5
+    return safe_add(x, y)
+}
+ 

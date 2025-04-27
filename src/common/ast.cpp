@@ -47,12 +47,10 @@ const string Load::typeStr() const {
         return "TypeDecl";
     case NodeType::EnumDecl:
         return "EnumDecl";
-    case NodeType::ImplMark:
-        return "ImplMark";
-    case NodeType::Modifiers:
-        return "Modifiers";
     case NodeType::Stmt:
         return "Stmt";
+    case NodeType::StmtList:
+        return "StmtList";
     case NodeType::StmtBlock:
         return "StmtBlock";
     case NodeType::RetStmt:
@@ -83,6 +81,8 @@ const string Load::typeStr() const {
         return "MemberAccess";
     case NodeType::DataExpr:
         return "DataExpr";
+    case NodeType::IdentList:
+        return "IdentList";
     case NodeType::DataList:
         return "DataList";
     case NodeType::CtrlExpr:
@@ -97,6 +97,8 @@ const string Load::typeStr() const {
         return "WaitExpr";
     case NodeType::Wildcard:
         return "Wildcard";
+    case NodeType::MatchCase:
+        return "MatchCase";
     case NodeType::AssignExpr:
         return "AssignExpr";
     case NodeType::LogicalOrExpr:
@@ -125,6 +127,10 @@ const string Load::typeStr() const {
         return "AnnoExpr";
     case NodeType::DictExpr:
         return "DictExpr";
+    case NodeType::DictType:
+        return "DictType";
+    case NodeType::ListExpr:
+        return "ListExpr";
     case NodeType::Literal:
         return "Literal";
     case NodeType::TypeExpr:
@@ -156,116 +162,502 @@ const string Load::typeStr() const {
 
 const string ModuleDecl::toString() const {
     stringstream ss;
-    ss << "module " << ident_;
+    ss << "ModuleDecl " << "ident: " << ident_;
     return ss.str();
 }
 
 const string ImportDecl::toString() const {
     stringstream ss;
-    ss << "import ";
-    if (!ident_.empty()) {
-        ss << ident_;
-    }
-    if (!from_.empty()) {
-        ss << " from " << from_;
+    ss << "ImportDecl ";
+    if (idents_.empty()) {
+        ss << "path: " << path_;
+    } else {
+        if (idents_.size() == 1) {
+            ss << "ident: " << idents_[0];
+        } else {
+            ss << "idents: ";
+            for (auto ident : idents_) {
+                ss << ident << " ";
+            }
+        }
+        ss << ",path: " << path_;
     }
     return ss.str();
 }
 
-const string LambdaExpr::toString() const { return "lambda expr"; }
+const string ExportDecl::toString() const {
+    stringstream ss;
+    ss << "ExportDecl ";
+    if (!idents_.empty()) {
+        ss << "idents: ";
+        for (auto ident : idents_) {
+            ss << ident << " ";
+        }
+    }
+    return ss.str();
+}
 
-const string FuncDecl::toString() const { return "func decl"; }
+const string LambdaExpr::toString() const {
+    stringstream ss;
+    ss << "LambdaExpr ";
+    if (!modifiers_.empty()) {
+        ss << "modifiers: ";
+        for (auto modifier : modifiers_) {
+            if (modifier == Modifier::ATOMIC)
+                ss << "ATOMIC ";
+            else if (modifier == Modifier::SHARED)
+                ss << "SHARED ";
+            else if (modifier == Modifier::SYNC)
+                ss << "SYNC ";
+            else if (modifier == Modifier::MACRO)
+                ss << "MACRO ";
+        }
+    }
+    return ss.str();
+}
 
-const string LetDecl::toString() const { return "let decl"; }
+const string FuncDecl::toString() const {
+    stringstream ss;
+    ss << "FuncDecl ";
+    if (!implMark_.empty()) {
+        ss << "implMark: " << implMark_;
+    }
+    if (!modifiers_.empty()) {
+        if (!implMark_.empty()) {
+            ss << ",";
+            ss << "modifiers: ";
+            for (auto modifier : modifiers_) {
+                switch (modifier) {
+                case Modifier::ATOMIC:
+                    ss << "ATOMIC ";
+                    break;
+                case Modifier::SHARED:
+                    ss << "SHARED ";
+                    break;
+                case Modifier::SYNC:
+                    ss << "SYNC ";
+                    break;
+                case Modifier::MACRO:
+                    ss << "MACRO ";
+                    break;
+                default:
+                    ss << "Unknow";
+                    break;
+                }
+            }
+        }
+    }
+    bool hasPrev = (!modifiers_.empty() || !implMark_.empty());
+    if (hasPrev && !ident_.empty()) {
+        ss << ",";
+    }
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+        hasPrev = true;
+    }
+    return ss.str();
+}
 
-const string UseDecl::toString() const { return "use decl"; }
+const string LetDecl::toString() const {
+    stringstream ss;
+    ss << "LetDecl ";
+    if (!modifier_.empty()) {
+        ss << "modifier: " << modifier_;
+    }
+    return ss.str();
+}
 
-const string RetStmt::toString() const { return "ret stmt"; }
+const string UseDecl::toString() const {
+    stringstream ss;
+    ss << "UseDecl ";
+    if (!identDef_.empty()) {
+        ss << "identDef: " << identDef_;
+        if (!identRef_.empty()) {
+            ss << ",";
+        }
+    }
+    if (!identRef_.empty()) {
+        ss << "identRef: " << identRef_;
+    }
+    return ss.str();
+}
 
-const string TypeDecl::toString() const { return "type decl"; }
+const string RetStmt::toString() const {
+    stringstream ss;
+    ss << "RetStmt ";
+    if (!modifier_.empty()) {
+        ss << "modifier: " << modifier_;
+    }
+    return ss.str();
+}
 
-const string EnumDecl::toString() const { return "enum decl"; }
+const string TypeDecl::toString() const {
+    stringstream ss;
+    ss << "TypeDecl ";
+    if (!implMark_.empty()) {
+        ss << "implMark: " << implMark_;
+        if (!ident_.empty()) {
+            ss << ",";
+        }
+    }
+    if(!ident_.empty()) {
+        ss << "ident: " << ident_; 
+    }
+    return ss.str();
+}
 
-const string ImplMark::toString() const { return "impl mark"; }
+const string EnumDecl::toString() const {
+    stringstream ss;
+    ss << "EnumDecl ";
+    if (!name_.empty()) {
+        ss << "name: " << name_;
+    }
+    return ss.str();
+}
 
-const string Modifiers::toString() const { return "modifiers"; }
+const string KeyTypePair::toString() const {
+    stringstream ss;
+    ss << "KeyTypePair ";
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+    }
+    return ss.str();
+}
 
-const string KeyTypePair::toString() const { return "key type pair"; }
+const string KeyValuePair::toString() const {
+    stringstream ss;
+    ss << "KeyValuePair ";
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+    }
+    return ss.str();
+}
 
-const string KeyValuePair::toString() const { return "key value pair"; }
+const string KeyParamPair::toString() const {
+    stringstream ss;
+    ss << "KeyParamPair ";
+    if(isVar_)
+    {
+        ss << "var";
+        if(!ident_.empty()) {
+            ss << " ";
+        }
+    }
+    if(!ident_.empty()) {
+        ss << "ident: " << ident_;
+    }
+    return ss.str();
+}
 
-const string KeyParamPair::toString() const { return "key param pair"; }
+const string IdentList::toString() const {
+    stringstream ss;
+    ss << "IdentList ";
+    if (!idents_.empty()) {
+        ss << "idents: ";
+        for (auto ident : idents_) {
+            ss << ident << " ";
+        }
+    }
+    return ss.str();
+}
+const string WaitExpr::toString() const {
+    stringstream ss;
+    ss << "WaitExpr ";
+    if (isWait_) {
+        ss << "Wait";
+    }
+    return ss.str();
+}
+const string CatchClause::toString() const {
+    stringstream ss;
+    ss << "CatchClause ";
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+        if (!type_.empty()) {
+            ss << ",";
+        }
+    }
+    if (!type_.empty()) {
+        ss << "type: " << type_;
+    }
+    return ss.str();
+}
 
-const string IdentList::toString() const { return "ident def list"; }
+const string AssignExpr::toString() const {
+    stringstream ss;
+    ss << "AssignExpr ";
+    if (op_ != AssignOp::INVALID) {
+        if (op_ == AssignOp::ASSIGN) {
+            ss << "=";
+        } else if (op_ == AssignOp::ADD_ASSIGN) {
+            ss << "+=";
+        } else if (op_ == AssignOp::MINUS_ASSIGN) {
+            ss << "-=";
+        } else if (op_ == AssignOp::MUL_ASSIGN) {
+            ss << "*=";
+        } else if (op_ == AssignOp::DIV_ASSIGN) {
+            ss << "/=";
+        } else if (op_ == AssignOp::MOD_ASSIGN) {
+            ss << "%=";
+        } else if (op_ == AssignOp::POW_ASSIGN) {
+            ss << "^=";
+        } else if (op_ == AssignOp::MATRIX_MUL_ASSIGN) {
+            ss << "@=";
+        } else if (op_ == AssignOp::AND_ASSIGN) {
+            ss << "&=";
+        } else if (op_ == AssignOp::OR_ASSIGN) {
+            ss << "|=";
+        }
+    }
+    return ss.str();
+}
+const string EqualityExpr::toString() const {
+    stringstream ss;
+    ss << "EqualityExpr ";
+    if (op_ != EqualityOp::INVALID) {
+        if (op_ == EqualityOp::STRICT_EQUAL) {
+            ss << "===";
+        } else if (op_ == EqualityOp::NOT_STRICT_EQUAL) {
+            ss << "!==";
+        } else if (op_ == EqualityOp::EQUAL) {
+            ss << "==";
+        } else if (op_ == EqualityOp::NOT_EQUAL) {
+            ss << "!=";
+        }
+    }
+    return ss.str();
+}
 
-const string DataList::toString() const { return "data list"; }
+const string RelationalExpr::toString() const {
+    stringstream ss;
+    ss << "RelationalExpr ";
+    if (op_ != RelationalOp::INVALID) {
+        if (op_ == RelationalOp::LESS) {
+            ss << "<";
+        } else if (op_ == RelationalOp::LESS_EQUAL) {
+            ss << "<=";
+        } else if (op_ == RelationalOp::GREATER) {
+            ss << ">";
+        } else if (op_ == RelationalOp::GREATER_EQUAL) {
+            ss << ">=";
+        }
+    }
+    return ss.str();
+}
 
-const string ValueList::toString() const { return "value list"; }
+const string AdditiveExpr::toString() const {
+    stringstream ss;
+    ss << "AdditiveExpr ";
+    if (op_ != AdditiveOp::INVALID) {
+        if (op_ == AdditiveOp::ADD) {
+            ss << "+";
+        } else if (op_ == AdditiveOp::MINUS) {
+            ss << "-";
+        }
+    }
+    return ss.str();
+}
 
-const string IndexValues::toString() const { return "index values"; }
+const string MultiplicativeExpr::toString() const {
+    stringstream ss;
+    ss << "MultiplicativeExpr ";
+    if (op_ != MultiplicativeOp::INVALID) {
+        if (op_ == MultiplicativeOp::MUL) {
+            ss << "*";
+        } else if (op_ == MultiplicativeOp::DIV) {
+            ss << "/";
+        } else if (op_ == MultiplicativeOp::POW) {
+            ss << "^";
+        } else if (op_ == MultiplicativeOp::MOD) {
+            ss << "%";
+        } else if (op_ == MultiplicativeOp::MATRIX_MUL) {
+            ss << "@";
+        }
+    }
+    return ss.str();
+}
 
-const string PairedValues::toString() const { return "paired values"; }
+const string NullableExpr::toString() const {
+    stringstream ss;
+    ss << "NullableExpr ";
+    if (op_ != NullableOp::INVALID) {
+        if (op_ == NullableOp::QUESTION_QUESTION) {
+            ss << "??";
+        } else if (op_ == NullableOp::NOT_NOT) {
+            ss << "!!";
+        }
+    }
+    return ss.str();
+}
 
-const string PairedParams::toString() const { return "paired params"; }
+const string UnaryExpr::toString() const {
+    stringstream ss;
+    ss << "UnaryExpr ";
+    if (unaryOp_ != UnaryOp::INVALID) {
+        if (unaryOp_ == UnaryOp::NOT) {
+            ss << "!";
+        } else if (unaryOp_ == UnaryOp::LINK) {
+            ss << "-";
+        } else if (unaryOp_ == UnaryOp::BIT_NOT) {
+            ss << "~";
+        }
+    }
+    if (typeOp_ != TypeOp::INVALID) {
+        if (typeOp_ == TypeOp::AS) {
+            ss << "as";
+        } else if (typeOp_ == TypeOp::IS) {
+            ss << "is";
+        }
+    }
+    return ss.str();
+}
 
-const string ArgumentList::toString() const { return "argument list"; }
+const string LinkExpr::toString() const {
+    stringstream ss;
+    ss << "LinkExpr ";
+    if (op_ != LinkOp::INVALID) {
+        if (op_ == LinkOp::ARROW) {
+            ss << "->";
+        } else if (op_ == LinkOp::QUESTION_ARROW) {
+            ss << "?->";
+        }
+    }
+    return ss.str();
+}
 
-const string MemberAccess::toString() const { return "member access"; }
+const string BindExpr::toString() const {
+    stringstream ss;
+    ss << "BindExpr ";
+    if (op_ != BindOp::INVALID) {
+        if (op_ == BindOp::DOUBLE_DOT) {
+            ss << "::";
+        } else if (op_ == BindOp::QUESTION_DOUBLE_DOT) {
+            ss << "?::";
+        }
+    }
+    return ss.str();
+}
 
-const string WaitExpr::toString() const { return "wait expr"; }
+const string WithExpr::toString() const {
+    stringstream ss;
+    ss << "WithExpr ";
+    if (op_ != WithOp::INVALID) {
+        if (op_ == WithOp::DOT) {
+            ss << ".";
+        } else if (op_ == WithOp::QUESTION_DOT) {
+            ss << "?.";
+        }
+    }
+    return ss.str();
+}
 
-const string Wildcard::toString() const { return "wildcard"; }
+const string AnnoExpr::toString() const {
+    stringstream ss;
+    ss << "AnnoExpr ";
+    if (isAssert_) {
+        ss << "assert";
+    }
+    return ss.str();
+}
 
-const string MatchCase::toString() const { return "match case"; }
+const string Literal::toString() const {
+    stringstream ss;
+    ss << "Literal: " << pointerToHex(data_.get()) << ", ";
+    const auto &type = data_->type();
+    if (type) {
+        ss << type->toString();
+    } else {
+        ss << "NULL";
+    }
+    ss << ", " << data_->toString();
+    return ss.str();
+}
 
-const string IfLoad::toString() const { return "if load"; }
+const string UnionUnit::toString() const {
+    stringstream ss;
+    ss << "UnionUnit ";
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+    }
+    return ss.str();
+}
 
-const string CatchClause::toString() const { return "catch clause"; }
+const string ListType_::toString() const {
+    stringstream ss;
+    ss << "ListType ";
+    ss << "dimension: " << dimension_;
+    return ss.str();
+}
 
-const string AssignExpr::toString() const { return "assign expr"; }
+const string PrimaryType_::toString() const {
+    stringstream ss;
+    ss << "PrimaryType ";
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+        if(!type_.empty()) {
+            ss << ","; 
+        }
+    }
+    if(!type_.empty()) {
+        ss << "type: " << type_;
+    }
+    return ss.str();
+}
 
-const string LogicalOrExpr::toString() const { return "logical or expr"; }
+const string DictExprType::toString() const {
+    stringstream ss;
+    ss << "DictExprType ";
+    if (op_ != DictExprTypeOp::INVALID) {
+        if (op_ == DictExprTypeOp::AMPERSAND) {
+            ss << "&";
+        } else if (op_ == DictExprTypeOp::CARET) {
+            ss << "^";
+        }
+    }
+    return ss.str();
+}
 
-const string LogicalAndExpr::toString() const { return "logical and expr"; }
+const string LambdaType::toString() const {
+    stringstream ss;
+    ss << "LambdaType ";
+    if (!modifiers_.empty()) {
+        for (auto modifier : modifiers_) {
+            if (modifier == LambdaTypeModifiers::ATOMIC) {
+                ss << "ATOMIC ";
+            } else if (modifier == LambdaTypeModifiers::SHARED) {
+                ss << "SHARED ";
+            } else if (modifier == LambdaTypeModifiers::SYNC) {
+                ss << "SYNC ";
+            } else if (modifier == LambdaTypeModifiers::MACRO) {
+                ss << "MACRO ";
+            }
+        }
+    }
+    return ss.str();
+}
 
-const string EqualityExpr::toString() const { return "equality expr"; }
+const string IdentDef::toString() const {
+    stringstream ss;
+    ss << "IdentDef ";
+    if (!ident_.empty()) {
+        ss << "ident: " << ident_;
+    }
+    return ss.str();
+}
 
-const string RelationalExpr::toString() const { return "relational expr"; }
-
-const string AdditiveExpr::toString() const { return "additive expr"; }
-
-const string MultiplicativeExpr::toString() const { return "multiplicative expr"; }
-
-const string NullableExpr::toString() const { return "nullable expr"; }
-
-const string UnaryExpr::toString() const { return "unary expr"; }
-
-const string LinkExpr::toString() const { return "link expr"; }
-
-const string BindExpr::toString() const { return "bind expr"; }
-
-const string WithExpr::toString() const { return "with expr"; }
-
-const string AnnoExpr::toString() const { return "anno expr"; }
-
-const string DictExpr::toString() const { return "dict expr"; }
-
-const string ListExpr::toString() const { return "list expr"; }
-
-const string Literal::toString() const { return "literal"; }
-
-const string TypeExpr::toString() const { return "type expr"; }
-
-const string UnionUnit::toString() const { return "union type"; }
-
-const string ArgsType::toString() const { return "args type"; }
-
-const string DictExprType::toString() const { return "dict expr type"; }
-
-const string TypeList::toString() const { return "type list"; }
-
-const string LambdaType::toString() const { return "lambda type"; }
-
-const string IdentDef::toString() const { return "ident def"; }
-
-const string IdentRef::toString() const { return "ident ref"; }
+const string IdentRef::toString() const {
+    stringstream ss;
+    ss << "IdentRef ";
+    if (!belongsTo_.empty()) {
+        ss << "belongsTo: ";
+        for(auto belong : belongsTo_) {
+            ss << belong << " "; 
+        }
+    }
+    if (!ident_.empty()) {
+        if(!belongsTo_.empty())
+            ss << ",";
+        ss << "ident: " << ident_;
+    } 
+    return ss.str();
+}
