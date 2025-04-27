@@ -695,17 +695,67 @@ any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
 /*
 useDecl    : USE (identDef '=')? identRef ;
 */
-any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) { return nullptr; }
+any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
+    enter("UseDecl");
+    string path = "";
+
+    vector<string> idents;
+    idents.push_back(any_cast<string>(visitIdentRef(context->identRef())));
+
+    if (context->identDef()) {
+        path = any_cast<string>(visitIdentDef(context->identDef()));
+    }
+
+    node_ptr_t result = createNode<FromLoad>(path, idents);
+
+    leave("UseDecl");
+    return result;
+}
 
 /*
 retStmt    : (RETURN | RAISE | THROW) valueList ;
 */
-any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) { return nullptr; }
+any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
+    enter("RetStmt");
+    node_ptr_t resNode;
+
+    if (context->RETURN()) {
+        resNode = createNode<RetnLoad>();
+    } else if (context->RAISE()) {
+        resNode = createNode<RaseLoad>();
+    } else if (context->THROW()) {
+        resNode = createNode<ThrwLoad>();
+    } else {
+        throw runtime_error("Unknown return type");
+    }
+
+    *resNode << any_cast<node_ptr_t>(context->valueList());
+
+    leave("RetStmt");
+    return resNode;
+}
 
 /*
 typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
 */
-any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) { return nullptr; }
+any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
+    enter("TypeDecl");
+
+    const string &ident = any_cast<string>(visitIdentDef(context->identDef()));
+
+    type_ptr_t type;
+
+    if (context->typeExpr()) {
+        type = any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
+    } else {
+        type = any_cast<type_ptr_t>(context->STRING());
+    }
+
+    typeScope_->insert(ident, type);
+    node_ptr_t result = createNode<TypeLoad>(type);
+    leave("TypeDecl");
+    return result;
+}
 
 /*
 enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
@@ -715,7 +765,22 @@ any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return
 /*
 implMark    : INNER | OUTER ;
 */
-any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) { return nullptr; }
+any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) {
+    enter("ImplMark");
+
+    Type::ImplMark result;
+    if (context->INNER()) {
+        result = Type::ImplMark::INNER;
+    } else if (context->OUTER()) {
+        result = Type::ImplMark::OUTER;
+    } else {
+        result = Type::ImplMark::GRAPH;
+    }
+
+    leave("ImplMark");
+
+    return result;
+}
 
 /*
 modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
@@ -750,12 +815,28 @@ any Constructor::visitDataList(OpenCMLParser::DataListContext *context) { return
 /*
 identList    : identDef (',' identDef)* ;
 */
-any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) { return nullptr; }
+any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {
+    enter("IdentList");
+    vector<string> identList;
+    for (const auto &ident : context->identDef()) {
+        identList.push_back(ident->getText());
+    }
+    leave("IdentList");
+    return identList;
+}
 
 /*
 valueList    : waitExpr (',' waitExpr)* ;
 */
-any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) { return nullptr; }
+any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) {
+    enter("ValueList");
+    vector<node_ptr_t> valueList;
+    for (const auto &data : context->waitExpr()) {
+        valueList.push_back(any_cast<node_ptr_t>(visitWaitExpr(data)));
+    }
+    leave("ValueList");
+    return valueList;
+}
 
 /*
 indexValues  : indexValue (',' indexValue)* ;
@@ -932,7 +1013,25 @@ withExpr
     : annoExpr (('.' | '?.') annoExpr)*
     ;
 */
-any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) { return nullptr; }
+any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
+    // TODO: ?.
+    enter("WithExpr");
+    const auto &annotatedExprs = context->annoExpr();
+    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitAnnoExpr(annotatedExprs[0]));
+
+    for (size_t i = 1; i < annotatedExprs.size(); ++i) {
+        node_ptr_t execNode = createNode<ExecLoad>();
+        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitAnnoExpr(annotatedExprs[i]));
+
+        node_ptr_t withNode = createNode<WithLoad>();
+        *withNode << lhsNode << rhsNode;
+
+        lhsNode = withNode;
+    }
+
+    leave("WithExpr");
+    return lhsNode;
+}
 
 /*
 annoExpr
@@ -980,7 +1079,53 @@ literal
     | NULL
     ;
 */
-any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) { return nullptr; }
+any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
+    enter("Literal: " + to_string(context->getAltNumber()));
+    data_ptr_t data = nullptr;
+
+    switch (context->getAltNumber()) {
+    case 1: // INTEGER
+        data = dynamic_pointer_cast<Data>(
+            make_shared<PrimaryData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
+        break;
+    case 2: // REAL
+        data = dynamic_pointer_cast<Data>(
+            make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
+        break;
+    case 3: // STRING
+    {
+        const auto &text = context->STRING()->getText();
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2)));
+    } break;
+    case 4: // MULTI_STR
+    {
+        const auto &text = context->MULTI_STR()->getText();
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6)));
+    } break;
+    case 5: // FSTRING
+    {
+        // TODO: Implement FSTRING
+        const auto &text = context->FSTRING()->getText();
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3)));
+    } break;
+    case 6: // TRUE
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true));
+        break;
+    case 7: // FALSE
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false));
+        break;
+    case 8: // NULL
+        data = dynamic_pointer_cast<Data>(make_shared<NullData>());
+        break;
+
+    default:
+        break;
+    }
+
+    any res = createNode<DataLoad>(data);
+    leave("Literal");
+    return res;
+}
 
 /*
 typeExpr
@@ -1053,7 +1198,15 @@ typeList
     : typeExpr (',' typeExpr)*
     ;
 */
-any Constructor::visitTypeList(OpenCMLParser::TypeListContext *context) { return nullptr; }
+any Constructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
+    enter("TypeList");
+    vector<type_ptr_t> typeList;
+    for (const auto &type : context->typeExpr()) {
+        typeList.push_back(any_cast<type_ptr_t>(visitTypeExpr(type)));
+    }
+    leave("TypeList");
+    return typeList;
+}
 
 /*
 tupleType
