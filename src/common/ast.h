@@ -91,6 +91,7 @@ enum class NodeType {
     Literal,
     TypeExpr,
     UnionType,
+    InterType,
     UnionUnit,
     ListType,
     ArgsType,
@@ -771,6 +772,23 @@ inline std::shared_ptr<UnionType> union_type_load_ptr_cast(const load_ptr_t &ptr
     return std::dynamic_pointer_cast<UnionType>(ptr);
 }
 
+class InterType : public Load {
+  public:
+    enum class InterOp {
+        AND,
+        XOR,
+        INVALID // for error handling
+    };
+    InterType(InterOp op) : Load(NodeType::InterType), op_(op) {}
+    // const std::string toString() const override;
+  private:
+    InterOp op_;
+};
+
+inline std::shared_ptr<InterType> inter_type_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<InterType>(ptr);
+}
+
 class UnionUnit : public Load {
     std::string ident_;
 
@@ -807,8 +825,10 @@ inline std::shared_ptr<ArgsType> args_type_load_ptr_cast(const load_ptr_t &ptr) 
 class PrimaryType_ : public Load {
     std::string type_;
     std::string ident_;
+
   public:
-    PrimaryType_(const std::string type,const std::string ident) : Load(NodeType::PrimaryType), type_(type), ident_(ident) {}
+    PrimaryType_(const std::string type, const std::string ident)
+        : Load(NodeType::PrimaryType), type_(type), ident_(ident) {}
     const std::string toString() const override;
 };
 

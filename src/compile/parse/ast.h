@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 10, 2025
+ * Updated: May. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -202,7 +202,9 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitUnionType(OpenCMLParser::UnionTypeContext *context);
 
-    std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context);
+    std::any visitInterType(OpenCMLParser::InterTypeContext *context);
+
+    std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *context);
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context);
 
@@ -211,8 +213,6 @@ class Constructor : public OpenCMLVisitor {
     std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context);
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context);
-
-    std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context);
 
     std::any visitDictType(OpenCMLParser::DictTypeContext *context);
 

@@ -221,10 +221,14 @@ typeExpr
     ;
 
 unionType
-    : unionUnit ('|' unionUnit)*
+    : interType ('|' interType)*
     ;
 
-unionUnit : (identDef OF)? listType ;
+interType
+    : typeUnit (('&' | '^') typeUnit)*
+    ;
+
+typeUnit : (identDef OF)? listType ;
 
 listType
     : argsType ('[' ']')*
@@ -238,17 +242,13 @@ argsType
 
 primaryType
     : INNER_ATOM_TYPE
-    | dictExprType
+    | dictType
     | identRef
     | '(' typeExpr ')'
     | tupleType
     | lambdaType
     | TYPEOF waitExpr
     | TYPEAS identDef
-    ;
-
-dictExprType
-    : dictType (('&' | '^') dictType)*
     ;
 
 dictType
