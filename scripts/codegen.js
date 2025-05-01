@@ -153,7 +153,7 @@ function generateParserCode() {
     logDone('Modified GCT Constructor header')
 
     logStep('Generating GCT Constructor cpp code...')
-    srcCode = fs.readFileSync('./src/compile/parse/gct-new.cpp', 'utf-8')
+    srcCode = fs.readFileSync('./src/compile/parse/gct.cpp', 'utf-8')
     geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
     fs.writeFileSync('./src/compile/parse/gct.tmp.cpp', geneCode)
     logDone('Generated GCT Constructor code')

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Apr. 12, 2025
+ * Updated: May. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -195,8 +195,8 @@ any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     node_ptr_t bracedIdents;
     if (context->identDef()) {
         idents.push_back(context->identDef()->getText());
-    } else if (context->bracedIdents()) {                                      // import decl with idents and from
-        for (auto &ident : context->bracedIdents()->identList()->identDef()) { // import decl with idents and from
+    } else if (context->bracedIdents()) {
+        for (auto &ident : context->bracedIdents()->identList()->identDef()) {
             idents.push_back(ident->getText());
         }
     }
@@ -1126,7 +1126,7 @@ any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContex
     }
     leave("MultiplicativeExpr");
     return lhsNode;
-};
+}
 
 /*
 nullableExpr
@@ -1415,6 +1415,7 @@ any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
     leave("PrimaryData");
     return res;
 }
+
 /*
 literal
     : INTEGER
@@ -1481,14 +1482,14 @@ any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
 
 /*
 unionType
-    : unionUnit ('|' unionUnit)*
+    : interType ('|' interType)*
     ;
 */
 any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
     enter("UnionType");
-    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitUnionUnit(context->unionUnit(0)));
-    for (size_t i = 1; i < context->unionUnit().size(); ++i) {
-        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitUnionUnit(context->unionUnit(i)));
+    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitInterType(context->interType(0)));
+    for (size_t i = 1; i < context->interType().size(); ++i) {
+        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitInterType(context->interType(i)));
         node_ptr_t unionTypeNode = createNode<UnionType>();
         *unionTypeNode << lhsNode << rhsNode;
         lhsNode = unionTypeNode;
@@ -1498,18 +1499,44 @@ any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
 }
 
 /*
-unionUnit : (identDef OF)? listType ;
+interType
+    : typeUnit (('&' | '^') typeUnit)*
+    ;
 */
-any Constructor::visitUnionUnit(OpenCMLParser::UnionUnitContext *context) {
-    enter("UnionUnit");
-    node_ptr_t res = any_cast<node_ptr_t>(visitListType(context->listType()));
-    if (context->identDef()) {
-        std::string identdef = context->identDef()->getText();
-        node_ptr_t unionUnitNode = createNode<UnionUnit>(identdef);
-        *unionUnitNode << res;
-        res = unionUnitNode;
+any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {
+    enter("InterType");
+    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitTypeUnit(context->typeUnit(0)));
+    for (size_t i = 1; i < context->typeUnit().size(); ++i) {
+        std::string strOp = context->children[i * 2 - 1]->getText();
+        InterType::InterOp op;
+        if (strOp == "&") {
+            op = InterType::InterOp::AND;
+        } else if (strOp == "^") {
+            op = InterType::InterOp::XOR;
+        } else {
+            op = InterType::InterOp::INVALID;
+        }
+        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitTypeUnit(context->typeUnit(i)));
+        node_ptr_t interTypeNode = createNode<InterType>(op);
+        *interTypeNode << lhsNode << rhsNode;
+        lhsNode = interTypeNode;
     }
-    leave("UnionUnit");
+    leave("InterType");
+    return lhsNode;
+}
+
+/*
+typeUnit : (identDef OF)? listType ;
+*/
+any Constructor::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
+    enter("TypeUnit");
+    node_ptr_t res = nullptr;
+    if (context->identDef()) {
+        throw std::runtime_error("visitTypeUnit: identDef is not implemented yet");
+    } else if (context->listType()) {
+        res = any_cast<node_ptr_t>(visitListType(context->listType()));
+    }
+    leave("TypeUnit");
     return res;
 }
 
@@ -1564,7 +1591,7 @@ any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {
 /*
 primaryType
     : INNER_ATOM_TYPE
-    | dictExprType
+    | dictType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -1579,8 +1606,8 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     if (context->INNER_ATOM_TYPE()) {
         std::string type = context->INNER_ATOM_TYPE()->getText();
         res = createNode<PrimaryType_>(type, "");
-    } else if (context->dictExprType()) {
-        res = any_cast<node_ptr_t>(visitDictExprType(context->dictExprType()));
+    } else if (context->dictType()) {
+        res = any_cast<node_ptr_t>(visitDictType(context->dictType()));
     } else if (context->identRef()) {
         res = any_cast<node_ptr_t>(visitIdentRef(context->identRef()));
     } else if (context->typeExpr()) {
@@ -1597,33 +1624,6 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     }
     leave("PrimaryType");
     return res;
-}
-
-/*
-dictExprType
-    : dictType (('&' | '^') dictType)*
-    ;
-*/
-any Constructor::visitDictExprType(OpenCMLParser::DictExprTypeContext *context) {
-    enter("DictExprType");
-    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitDictType(context->dictType(0)));
-    DictExprType::DictExprTypeOp op;
-    for (size_t i = 1; i < context->dictType().size(); ++i) {
-        std::string strOp = context->children[i * 2 - 1]->getText();
-        if (strOp == "&") {
-            op = DictExprType::DictExprTypeOp::AMPERSAND;
-        } else if (strOp == "^") {
-            op = DictExprType::DictExprTypeOp::CARET;
-        } else {
-            op = DictExprType::DictExprTypeOp::INVALID;
-        }
-        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitDictType(context->dictType(i)));
-        node_ptr_t dictExprTypeNode = createNode<DictExprType>(op);
-        *dictExprTypeNode << lhsNode << rhsNode;
-        lhsNode = dictExprTypeNode;
-    }
-    leave("DictExprType");
-    return lhsNode;
 }
 
 /*
