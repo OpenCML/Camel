@@ -155,6 +155,10 @@ const string Load::typeStr() const {
         return "IdentDef";
     case NodeType::IdentRef:
         return "IdentRef";
+    case NodeType::ParentArgues:
+        return "ParentArgues";
+    case NodeType::ParentParams:
+        return "ParentParams";
     default:
         return "Unknown";
     }
@@ -360,6 +364,21 @@ const string IdentList::toString() const {
     }
     return ss.str();
 }
+
+const string ParentArgues::toString() const {
+    stringstream ss;
+    ss << "ParentArgues ";
+    ss << "()";
+    return ss.str();
+}
+
+const string ParentParams::toString() const {
+    stringstream ss;
+    ss << "ParentParams ";
+    ss << "()"; 
+    return ss.str();
+}
+
 const string WaitExpr::toString() const {
     stringstream ss;
     ss << "WaitExpr ";
