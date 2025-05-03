@@ -215,6 +215,24 @@ inline std::shared_ptr<RetnLoad> retn_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<RetnLoad>(ptr);
 }
 
+class RaseLoad : public Load {
+  public:
+    RaseLoad() : Load(NodeType::RETN) {}
+};
+
+inline std::shared_ptr<RaseLoad> rase_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<RaseLoad>(ptr);
+}
+
+class ThrwLoad : public Load {
+  public:
+    ThrwLoad() : Load(NodeType::RETN) {}
+};
+
+inline std::shared_ptr<ThrwLoad> thrw_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<ThrwLoad>(ptr);
+}
+
 class ExecLoad : public Load {
   public:
     ExecLoad() : Load(NodeType::EXEC) {}
