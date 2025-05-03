@@ -738,6 +738,8 @@ any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) 
     const auto &pairedParams = context->pairedParams();
     if (pairedParams) {
         res = any_cast<node_ptr_t>(visitPairedParams(pairedParams));
+    } else {
+        res = createNode<ParentParams>();
     }
     leave("ParentParams");
     return res;
@@ -751,6 +753,8 @@ any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) 
     node_ptr_t res = nullptr;
     if (context->argumentList())
         res = any_cast<node_ptr_t>(visitArgumentList(context->argumentList()));
+    else
+        res = createNode<ParentArgues>();
     leave("ParentArgues");
     return res;
 }
@@ -1271,6 +1275,9 @@ withExpr
 */
 any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     enter("WithExpr");
+    if (context->children.size() == 1) { // no with expr, return the anno expr
+        return any_cast<node_ptr_t>(visitAnnoExpr(context->annoExpr(0)));
+    }
     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitAnnoExpr(context->annoExpr(0)));
     WithExpr::WithOp op;
     for (size_t i = 1; i < context->annoExpr().size(); i++) {
@@ -1305,24 +1312,27 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
             node_ptr_t annoExprNode = createNode<AnnoExpr>(true);
             *annoExprNode << lhsNode;
             lhsNode = annoExprNode;
-        } else if (dynamic_cast<OpenCMLParser::MemberAccessContext *>(child)) {
-            node_ptr_t res =
-                any_cast<node_ptr_t>(visitMemberAccess(dynamic_cast<OpenCMLParser::MemberAccessContext *>(child)));
-            node_ptr_t annoExprNode = createNode<AnnoExpr>(false);
-            *annoExprNode << lhsNode << res;
-            lhsNode = annoExprNode;
-        } else if (dynamic_cast<OpenCMLParser::ParentArguesContext *>(child)) {
-            node_ptr_t res =
-                any_cast<node_ptr_t>(visitParentArgues(dynamic_cast<OpenCMLParser::ParentArguesContext *>(child)));
-            node_ptr_t annoExprNode = createNode<AnnoExpr>(false);
-            *annoExprNode << lhsNode << res;
-            lhsNode = annoExprNode;
-        } else if (dynamic_cast<OpenCMLParser::AngledValuesContext *>(child)) {
-            node_ptr_t res =
-                any_cast<node_ptr_t>(visitAngledValues(dynamic_cast<OpenCMLParser::AngledValuesContext *>(child)));
-            node_ptr_t annoExprNode = createNode<AnnoExpr>(false);
-            *annoExprNode << lhsNode << res;
-            lhsNode = annoExprNode;
+        } else if (!context->memberAccess().empty()) {
+            for (auto &memberAccess : context->memberAccess()) {
+                node_ptr_t res = any_cast<node_ptr_t>(visitMemberAccess(memberAccess));
+                node_ptr_t annoExprNode = createNode<AnnoExpr>(false);
+                *annoExprNode << lhsNode << res;
+                lhsNode = annoExprNode;
+            }
+        } else if (!context->parentArgues().empty()) {
+            for (auto &parentArgue : context->parentArgues()) {
+                node_ptr_t res = any_cast<node_ptr_t>(visitParentArgues(parentArgue));
+                node_ptr_t annoExprNode = createNode<AnnoExpr>(false);
+                *annoExprNode << lhsNode << res;
+                lhsNode = annoExprNode;
+            }
+        } else if (!context->angledValues().empty()) {
+            for (auto &angledValue : context->angledValues()) {
+                node_ptr_t res = any_cast<node_ptr_t>(visitAngledValues(angledValue));
+                node_ptr_t annoExprNode = createNode<AnnoExpr>(false);
+                *annoExprNode << lhsNode << res;
+                lhsNode = annoExprNode;
+            }
         }
     }
     leave("AnnoExpr");
@@ -1420,55 +1430,34 @@ literal
 any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     enter("Literal: " + to_string(context->getAltNumber()));
     data_ptr_t data = nullptr;
-    switch (context->getAltNumber()) {
-    case 1: // INTEGER UNIT?
+    if (context->INTEGER()) {
         data = dynamic_pointer_cast<Data>(
             make_shared<PrimaryData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
-        break;
-    case 2: // REAL UNIT
+    } else if (context->REAL()) {
         data = dynamic_pointer_cast<Data>(
             make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
-        break;
-    case 3: // STRING
-    {
+    } else if(context->STRING()) {
         const auto &text = context->STRING()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2)));
-        break;
-    }
-    case 4: // MULTI_STR
-    {
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2))); 
+    } else if(context->MULTI_STR()) {
         const auto &text = context->MULTI_STR()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6)));
-        break;
-    }
-    case 5: // FSTRING
-    {
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6))); 
+    } else if(context->FSTRING()) {
         // TODO: Implement FSTRING
         const auto &text = context->FSTRING()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3)));
-        break;
-    }
-    case 6: // TRUE
-        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true));
-        break;
-    case 7: // FALSE
-        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false));
-        break;
-    case 8: // NULL
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3))); 
+    } else if(context->TRUE()) {
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true)); 
+    } else if(context->FALSE()) {
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false)); 
+    } else if(context->NULL_()) {
         data = dynamic_pointer_cast<Data>(make_shared<NullData>());
-        break;
-    default: // INVALID
-        break;
     }
-
-    /*if (data && !data->type()) {
-        throw runtime_error("Literal type is null");
-    }*/
-
-    any res = createNode<Literal>(data);
-    leave("Literal");
-    return res;
-};
+any res = createNode<Literal>(data);
+leave("Literal");
+return res;
+}
+;
 
 /*
 typeExpr

@@ -60,6 +60,8 @@ enum class NodeType {
     PairedParams,
     ArgumentList,
     MemberAccess,
+    ParentArgues,
+    ParentParams,
 
     DataExpr,
     IdentList,
@@ -412,6 +414,26 @@ class ArgumentList : public Load {
 
 inline std::shared_ptr<ArgumentList> argument_list_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<ArgumentList>(ptr);
+}
+
+class ParentArgues : public Load {
+  public:
+    ParentArgues() : Load(NodeType::ParentArgues) {} 
+    const std::string toString() const override;
+  };
+
+inline std::shared_ptr<ParentArgues> parent_argues_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<ParentArgues>(ptr); 
+}
+
+class ParentParams : public Load {
+  public:
+    ParentParams() : Load(NodeType::ParentParams) {} 
+    const std::string toString() const override;
+};
+
+inline std::shared_ptr<ParentParams> parent_params_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<ParentParams>(ptr); 
 }
 
 class MemberAccess : public Load {
