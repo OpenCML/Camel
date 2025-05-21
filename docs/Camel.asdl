@@ -1,0 +1,20 @@
+-- Camel's Abstract Syntax Tree Description Language
+-- This file describes the structure of Camel's abstract syntax tree (AST).
+
+// * => List
+// ? => Optional
+
+Root() : Decl* ;
+
+Decl := FuncDecl | DataDecl | TypeDecl ;
+
+DataDecl(bool mutable) : Carrier, Type? type, Expr value;
+
+Carrier(string[] ids, enum typ) ;
+
+FuncDecl(string id, Modifier[] modifiers) :
+    : Param* withParams, Param* normParams, Type? retType, Block body ;
+
+FuncType() : Param* withParams, Param* normParams, Type? retType ;
+
+Param(string id, bool isVar) : Type? type, Expr? default ;

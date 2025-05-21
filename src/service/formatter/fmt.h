@@ -22,7 +22,7 @@
 #include <string>
 #include <unordered_set>
 
-#include "antlr/OpenCMLVisitor.h"
+#include "parse/antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
 
 class Formatter : public OpenCMLVisitor {

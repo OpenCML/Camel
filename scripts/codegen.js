@@ -116,11 +116,11 @@ function generateParserCode() {
     let srcCode = ''
     let geneCode = ''
 
-    logStep('Modifying CSTDumpVisitor.h...')
-    srcCode = fs.readFileSync('./src/compile/parse/cst.h', 'utf-8')
+    logStep('Modifying CSTDumpVisitor...')
+    srcCode = fs.readFileSync('./src/parse/cst-dump.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules, geneCSTDumperDeclByRuleName)
-    fs.writeFileSync('./src/compile/parse/cst.h', geneCode)
-    logDone('Modified CSTDumpVisitor.h')
+    fs.writeFileSync('./src/parse/cst-dump.h', geneCode)
+    logDone('Modified CSTDumpVisitor')
 
     logStep('Modifying Formatter header code...')
     srcCode = fs.readFileSync('./src/service/formatter/fmt.h', 'utf-8')
@@ -135,27 +135,27 @@ function generateParserCode() {
     logDone('Generated Formatter code')
 
     logStep('Modifying AST Constructor header code...')
-    srcCode = fs.readFileSync('./src/compile/parse/ast.h', 'utf-8')
+    srcCode = fs.readFileSync('./src/parse/ast.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
-    fs.writeFileSync('./src/compile/parse/ast.h', geneCode)
+    fs.writeFileSync('./src/parse/ast.h', geneCode)
     logDone('Modified AST Constructor header')
 
     logStep('Generating AST Constructor cpp code...')
-    srcCode = fs.readFileSync('./src/compile/parse/ast.cpp', 'utf-8')
+    srcCode = fs.readFileSync('./src/parse/ast.cpp', 'utf-8')
     geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
-    fs.writeFileSync('./src/compile/parse/ast.tmp.cpp', geneCode)
+    fs.writeFileSync('./src/parse/ast.tmp.cpp', geneCode)
     logDone('Generated AST Constructor code')
 
     logStep('Modifying GCT Constructor header code...')
-    srcCode = fs.readFileSync('./src/compile/parse/gct.h', 'utf-8')
+    srcCode = fs.readFileSync('./src/compile/gct.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
-    fs.writeFileSync('./src/compile/parse/gct.h', geneCode)
+    fs.writeFileSync('./src/compile/gct.h', geneCode)
     logDone('Modified GCT Constructor header')
 
     logStep('Generating GCT Constructor cpp code...')
-    srcCode = fs.readFileSync('./src/compile/parse/gct.cpp', 'utf-8')
+    srcCode = fs.readFileSync('./src/compile/gct.cpp', 'utf-8')
     geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
-    fs.writeFileSync('./src/compile/parse/gct.tmp.cpp', geneCode)
+    fs.writeFileSync('./src/compile/gct.tmp.cpp', geneCode)
     logDone('Generated GCT Constructor code')
 }
 

@@ -24,7 +24,7 @@
 #include <regex>
 #include <string>
 
-#include "antlr/OpenCMLVisitor.h"
+#include "parse/antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "common/error/build.h"
 #include "common/gct.h"

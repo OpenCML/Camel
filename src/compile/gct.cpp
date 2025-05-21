@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "antlr/OpenCMLLexer.h"
+#include "parse/antlr/OpenCMLLexer.h"
 
 #include "common/token.h"
 #include "gct.h"

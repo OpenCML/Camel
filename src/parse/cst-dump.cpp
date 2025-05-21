@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "cst.h"
+#include "cst-dump.h"
 
 using namespace std;
 
