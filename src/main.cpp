@@ -23,20 +23,20 @@
 
 #include "nlohmann/json.hpp"
 
-#include "antlr/OpenCMLLexer.h"
-#include "antlr/OpenCMLParser.h"
+#include "parse/antlr/OpenCMLLexer.h"
+#include "parse/antlr/OpenCMLParser.h"
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "codegen/girdump/graphviz.h"
+#include "builtin/passes/girdump/graphviz.h"
 #include "common/error/error.h"
 #include "common/error/json.h"
 #include "common/type.h"
-#include "compile/parse/ast.h"
-#include "compile/parse/cst.h"
-#include "compile/parse/gct.h"
-#include "compile/parse/gir.h"
+#include "parse/ast.h"
+#include "parse/cst-dump.h"
+#include "compile/gct.h"
+#include "compile/gir.h"
 #include "config.h"
-#include "operators/init.h"
+#include "builtin/operators/init.h"
 #include "service/formatter/fmt.h"
 #include "utils/log.h"
 

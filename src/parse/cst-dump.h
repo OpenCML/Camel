@@ -164,7 +164,9 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitUnionType(OpenCMLParser::UnionTypeContext *context) { return dumpNode(context, "UnionType"); };
 
-    std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context) { return dumpNode(context, "UnionUnit"); };
+    std::any visitInterType(OpenCMLParser::InterTypeContext *context) { return dumpNode(context, "InterType"); };
+
+    std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *context) { return dumpNode(context, "TypeUnit"); };
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context) { return dumpNode(context, "ListType"); };
 
@@ -173,8 +175,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context) { return dumpNode(context, "ArgsType"); };
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return dumpNode(context, "PrimaryType"); };
-
-    std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context) { return dumpNode(context, "DictExprType"); };
 
     std::any visitDictType(OpenCMLParser::DictTypeContext *context) { return dumpNode(context, "DictType"); };
 

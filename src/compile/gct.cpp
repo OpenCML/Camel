@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "antlr/OpenCMLLexer.h"
+#include "parse/antlr/OpenCMLLexer.h"
 
 #include "common/token.h"
 #include "gct.h"
@@ -1136,15 +1136,22 @@ any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) { return
 
 /*
 unionType
-    : unionUnit ('|' unionUnit)*
+    : interType ('|' interType)*
     ;
 */
 any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) { return nullptr; }
 
 /*
-unionUnit : (identDef OF)? listType ;
+interType
+    : typeUnit (('&' | '^') typeUnit)*
+    ;
 */
-any Constructor::visitUnionUnit(OpenCMLParser::UnionUnitContext *context) { return nullptr; }
+any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {}
+
+/*
+typeUnit : (identDef OF)? listType ;
+*/
+any Constructor::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {}
 
 /*
 listType
@@ -1168,7 +1175,7 @@ any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) { return
 /*
 primaryType
     : INNER_ATOM_TYPE
-    | dictExprType
+    | dictType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -1178,13 +1185,6 @@ primaryType
     ;
 */
 any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return nullptr; }
-
-/*
-dictExprType
-    : dictType (('&' | '^') dictType)*
-    ;
-*/
-any Constructor::visitDictExprType(OpenCMLParser::DictExprTypeContext *context) { return nullptr; }
 
 /*
 dictType

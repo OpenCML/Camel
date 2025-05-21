@@ -12,6 +12,7 @@ TYPE        : 'type';
 ENUM        : 'enum';
 WITH        : 'with';
 WAIT        : 'wait';
+KEYOF       : 'keyof';
 RETURN      : 'return';
 MODULE      : 'module';
 IMPORT      : 'import';

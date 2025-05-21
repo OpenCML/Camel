@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Mar. 26, 2025
+ * Updated: May. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1011,21 +1011,30 @@ any Formatter::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
 
 /*
 unionType
-    : unionUnit ('|' unionUnit)*
+    : interType ('|' interType)*
     ;
 */
 any Formatter::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
-    return formatBiOpsList(context->unionUnit(), context->children, true);
+    return formatBiOpsList(context->interType(), context->children, true);
 }
 
 /*
-unionUnit : (identDef OF)? listType ;
+interType
+    : typeUnit (('&' | '^') typeUnit)*
+    ;
 */
-any Formatter::visitUnionUnit(OpenCMLParser::UnionUnitContext *context) {
+any Formatter::visitInterType(OpenCMLParser::InterTypeContext *context) {
+    return formatBiOpsList(context->typeUnit(), context->children, true);
+}
+
+/*
+typeUnit : (identDef OF)? listType ;
+*/
+any Formatter::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
     string result;
-    if (context->identDef()) {
-        result += any_cast<string>(visitIdentDef(context->identDef()));
-        result += " of ";
+    const auto &identDef = context->identDef();
+    if (identDef) {
+        result += any_cast<string>(visitIdentDef(identDef)) + " of ";
     }
     result += any_cast<string>(visitListType(context->listType()));
     return result;
@@ -1070,7 +1079,7 @@ any Formatter::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {
 /*
 primaryType
     : INNER_ATOM_TYPE
-    | dictExprType
+    | dictType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -1085,7 +1094,7 @@ any Formatter::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
         return context->INNER_ATOM_TYPE()->getText();
         break;
     case 2: // dictExprType
-        return any_cast<string>(visitDictExprType(context->dictExprType()));
+        return any_cast<string>(visitDictType(context->dictType()));
         break;
     case 3: // identRef
         return any_cast<string>(visitIdentRef(context->identRef()));
@@ -1109,15 +1118,6 @@ any Formatter::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     default:
         throw std::runtime_error("Invalid primaryType context");
     }
-}
-
-/*
-dictExprType
-    : dictType (('&' | '^') dictType)*
-    ;
-*/
-any Formatter::visitDictExprType(OpenCMLParser::DictExprTypeContext *context) {
-    return formatBiOpsList(context->dictType(), context->children, true);
 }
 
 /*
