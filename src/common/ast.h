@@ -885,18 +885,18 @@ inline std::shared_ptr<TypeList> type_list_load_ptr_cast(const load_ptr_t &ptr) 
     return std::dynamic_pointer_cast<TypeList>(ptr);
 }
 
-class LambdaType : public Load {
+class FuncType : public Load {
   public:
     enum class LambdaTypeModifiers { ATOMIC, SHARED, SYNC, MACRO, INVALID };
-    LambdaType(std::vector<LambdaTypeModifiers> modifiers) : Load(NodeType::LambdaType), modifiers_(modifiers) {}
+    FuncType(std::vector<LambdaTypeModifiers> modifiers) : Load(NodeType::LambdaType), modifiers_(modifiers) {}
     const std::string toString() const override;
 
   private:
     std::vector<LambdaTypeModifiers> modifiers_;
 };
 
-inline std::shared_ptr<LambdaType> lambda_type_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<LambdaType>(ptr);
+inline std::shared_ptr<FuncType> lambda_type_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<FuncType>(ptr);
 }
 
 class IdentRef : public Load {

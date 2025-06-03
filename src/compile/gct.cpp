@@ -1143,10 +1143,31 @@ any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) { retu
 
 /*
 interType
-    : typeUnit (('&' | '^') typeUnit)*
+    : diffType ('&' diffType)*
     ;
 */
 any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {}
+
+/*
+diffType
+    : keyUnionDiffType ('\\' keyUnionDiffType)*
+    ;
+*/
+any Constructor::visitDiffType(OpenCMLParser::DiffTypeContext *context) {}
+
+/*
+keyUnionDiffType
+    : keyInterType (('+' | '-') keyInterType)*
+    ;
+*/
+any Constructor::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context) {}
+
+/*
+keyInterType
+    : typeUnit ('^' typeUnit)*
+    ;
+*/
+any Constructor::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {}
 
 /*
 typeUnit : (identDef OF)? listType ;
@@ -1155,7 +1176,7 @@ any Constructor::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {}
 
 /*
 listType
-    : argsType ('[' ']')*
+    : specializedType ('[' ']')*
     ;
 */
 any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) { return nullptr; }
@@ -1166,11 +1187,11 @@ typeOrData : typeExpr | primaryData ;
 any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return visit(context->children[0]); }
 
 /*
-argsType
+specializedType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 */
-any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) { return nullptr; }
+any Constructor::visitSpecializedType(OpenCMLParser::SpecializedTypeContext *context) {}
 
 /*
 primaryType
@@ -1179,7 +1200,7 @@ primaryType
     | identRef
     | '(' typeExpr ')'
     | tupleType
-    | lambdaType
+    | funcType
     | TYPEOF waitExpr
     | TYPEAS identDef
     ;
@@ -1216,11 +1237,11 @@ tupleType
 any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) { return nullptr; }
 
 /*
-lambdaType
+funcType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
-any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) { return nullptr; }
+any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {}
 
 /*
 identDef : IDENTIFIER ;

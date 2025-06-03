@@ -166,13 +166,19 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitInterType(OpenCMLParser::InterTypeContext *context) { return dumpNode(context, "InterType"); };
 
+    std::any visitDiffType(OpenCMLParser::DiffTypeContext *context) { return dumpNode(context, "DiffType"); };
+
+    std::any visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context) { return dumpNode(context, "KeyUnionDiffType"); };
+
+    std::any visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) { return dumpNode(context, "KeyInterType"); };
+
     std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *context) { return dumpNode(context, "TypeUnit"); };
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context) { return dumpNode(context, "ListType"); };
 
     std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return dumpNode(context, "TypeOrData"); };
 
-    std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context) { return dumpNode(context, "ArgsType"); };
+    std::any visitSpecializedType(OpenCMLParser::SpecializedTypeContext *context) { return dumpNode(context, "SpecializedType"); };
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return dumpNode(context, "PrimaryType"); };
 
@@ -182,7 +188,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitTupleType(OpenCMLParser::TupleTypeContext *context) { return dumpNode(context, "TupleType"); };
 
-    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context) { return dumpNode(context, "LambdaType"); };
+    std::any visitFuncType(OpenCMLParser::FuncTypeContext *context) { return dumpNode(context, "FuncType"); };
 
     std::any visitIdentDef(OpenCMLParser::IdentDefContext *context) { return dumpNode(context, "IdentDef"); };
 

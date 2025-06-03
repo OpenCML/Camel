@@ -1437,28 +1437,27 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     } else if (context->REAL()) {
         data = dynamic_pointer_cast<Data>(
             make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
-    } else if(context->STRING()) {
+    } else if (context->STRING()) {
         const auto &text = context->STRING()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2))); 
-    } else if(context->MULTI_STR()) {
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2)));
+    } else if (context->MULTI_STR()) {
         const auto &text = context->MULTI_STR()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6))); 
-    } else if(context->FSTRING()) {
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6)));
+    } else if (context->FSTRING()) {
         // TODO: Implement FSTRING
         const auto &text = context->FSTRING()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3))); 
-    } else if(context->TRUE()) {
-        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true)); 
-    } else if(context->FALSE()) {
-        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false)); 
-    } else if(context->NULL_()) {
+        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3)));
+    } else if (context->TRUE()) {
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true));
+    } else if (context->FALSE()) {
+        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false));
+    } else if (context->NULL_()) {
         data = dynamic_pointer_cast<Data>(make_shared<NullData>());
     }
-any res = createNode<Literal>(data);
-leave("Literal");
-return res;
+    any res = createNode<Literal>(data);
+    leave("Literal");
+    return res;
 }
-;
 
 /*
 typeExpr
@@ -1498,32 +1497,63 @@ any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
     return lhsNode;
 }
 
+// TODO: MODIFIED
 /*
 interType
     : typeUnit (('&' | '^') typeUnit)*
     ;
 */
+/*
+interType
+    : diffType ('&' diffType)*
+    ;
+*/
 any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {
     enter("InterType");
-    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitTypeUnit(context->typeUnit(0)));
-    for (size_t i = 1; i < context->typeUnit().size(); ++i) {
-        std::string strOp = context->children[i * 2 - 1]->getText();
-        InterType::InterOp op;
-        if (strOp == "&") {
-            op = InterType::InterOp::AND;
-        } else if (strOp == "^") {
-            op = InterType::InterOp::XOR;
-        } else {
-            op = InterType::InterOp::INVALID;
-        }
-        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitTypeUnit(context->typeUnit(i)));
-        node_ptr_t interTypeNode = createNode<InterType>(op);
-        *interTypeNode << lhsNode << rhsNode;
-        lhsNode = interTypeNode;
-    }
+    node_ptr_t lhsNode = nullptr;
+    // node_ptr_t lhsNode = any_cast<node_ptr_t>(visitTypeUnit(context->typeUnit(0)));
+    // for (size_t i = 1; i < context->typeUnit().size(); ++i) {
+    //     std::string strOp = context->children[i * 2 - 1]->getText();
+    //     InterType::InterOp op;
+    //     if (strOp == "&") {
+    //         op = InterType::InterOp::AND;
+    //     } else if (strOp == "^") {
+    //         op = InterType::InterOp::XOR;
+    //     } else {
+    //         op = InterType::InterOp::INVALID;
+    //     }
+    //     node_ptr_t rhsNode = any_cast<node_ptr_t>(visitTypeUnit(context->typeUnit(i)));
+    //     node_ptr_t interTypeNode = createNode<InterType>(op);
+    //     *interTypeNode << lhsNode << rhsNode;
+    //     lhsNode = interTypeNode;
+    // }
     leave("InterType");
     return lhsNode;
 }
+
+// TODO: NEW RULE
+/*
+diffType
+    : keyUnionDiffType ('\\' keyUnionDiffType)*
+    ;
+*/
+any Constructor::visitDiffType(OpenCMLParser::DiffTypeContext *context) {}
+
+// TODO: NEW RULE
+/*
+keyUnionDiffType
+    : keyInterType (('+' | '-') keyInterType)*
+    ;
+*/
+any Constructor::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context) {}
+
+// TODO: NEW RULE
+/*
+keyInterType
+    : typeUnit ('^' typeUnit)*
+    ;
+*/
+any Constructor::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {}
 
 /*
 typeUnit : (identDef OF)? listType ;
@@ -1540,17 +1570,23 @@ any Constructor::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
     return res;
 }
 
+// TODO: MODIFIED
 /*
 listType
     : argsType ('[' ']')*
     ;
 */
+/*
+listType
+    : specializedType ('[' ']')*
+    ;
+*/
 any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {
     enter("ListType");
     node_ptr_t res = nullptr;
-    if (context->argsType()) {
-        res = any_cast<node_ptr_t>(visitArgsType(context->argsType()));
-    }
+    // if (context->argsType()) {
+    //     res = any_cast<node_ptr_t>(visitArgsType(context->argsType()));
+    // }
     leave("ListType");
     return res;
 }
@@ -1570,23 +1606,13 @@ any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) {
     return res;
 }
 
+// TODO: NEW RULE
 /*
-argsType
+specializedType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 */
-any Constructor::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {
-    enter("ArgsType");
-    node_ptr_t argsTypeNode = createNode<ArgsType>();
-    node_ptr_t primaryTypeNode = any_cast<node_ptr_t>(visitPrimaryType(context->primaryType()));
-    *argsTypeNode << primaryTypeNode;
-    for (auto &typeOrData : context->typeOrData()) {
-        node_ptr_t typeOrDataNode = any_cast<node_ptr_t>(visitTypeOrData(typeOrData));
-        *argsTypeNode << typeOrDataNode;
-    }
-    leave("ArgsType");
-    return argsTypeNode;
-}
+any Constructor::visitSpecializedType(OpenCMLParser::SpecializedTypeContext *context) {}
 
 /*
 primaryType
@@ -1595,7 +1621,7 @@ primaryType
     | identRef
     | '(' typeExpr ')'
     | tupleType
-    | lambdaType
+    | funcType
     | TYPEOF waitExpr
     | TYPEAS identDef
     ;
@@ -1614,8 +1640,8 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
         res = any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     } else if (context->tupleType()) {
         res = any_cast<node_ptr_t>(visitTupleType(context->tupleType()));
-    } else if (context->lambdaType()) {
-        res = any_cast<node_ptr_t>(visitLambdaType(context->lambdaType()));
+    } else if (context->funcType()) {
+        res = any_cast<node_ptr_t>(visitFuncType(context->funcType()));
     } else if (context->waitExpr()) {
         res = any_cast<node_ptr_t>(visitWaitExpr(context->waitExpr()));
     } else if (context->identDef()) {
@@ -1679,29 +1705,29 @@ any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
 }
 
 /*
-lambdaType
+funcType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
-any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
-    enter("LambdaType");
+any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
+    enter("FuncType");
     node_ptr_t res = nullptr;
     auto modifier = context->modifiers();
-    std::vector<LambdaType::LambdaTypeModifiers> lambdaModifiers;
+    std::vector<FuncType::LambdaTypeModifiers> lambdaModifiers;
     if (context->modifiers()) {
         if (modifier->ATOMIC().size() > 0) {
-            lambdaModifiers.push_back(LambdaType::LambdaTypeModifiers::ATOMIC);
+            lambdaModifiers.push_back(FuncType::LambdaTypeModifiers::ATOMIC);
         } else if (modifier->SHARED().size() > 0) {
-            lambdaModifiers.push_back(LambdaType::LambdaTypeModifiers::SHARED);
+            lambdaModifiers.push_back(FuncType::LambdaTypeModifiers::SHARED);
         } else if (modifier->SYNC().size() > 0) {
-            lambdaModifiers.push_back(LambdaType::LambdaTypeModifiers::SYNC);
+            lambdaModifiers.push_back(FuncType::LambdaTypeModifiers::SYNC);
         } else if (modifier->MACRO().size() > 0) {
-            lambdaModifiers.push_back(LambdaType::LambdaTypeModifiers::MACRO);
+            lambdaModifiers.push_back(FuncType::LambdaTypeModifiers::MACRO);
         } else {
-            lambdaModifiers.push_back(LambdaType::LambdaTypeModifiers::INVALID);
+            lambdaModifiers.push_back(FuncType::LambdaTypeModifiers::INVALID);
         }
     }
-    res = createNode<LambdaType>(lambdaModifiers);
+    res = createNode<FuncType>(lambdaModifiers);
     if (context->angledParams()) {
         *res << any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
     }
@@ -1711,7 +1737,7 @@ any Constructor::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
     if (context->typeExpr()) {
         *res << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
-    leave("LambdaType");
+    leave("FuncType");
     return res;
 }
 

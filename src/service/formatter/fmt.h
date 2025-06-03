@@ -498,13 +498,19 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitInterType(OpenCMLParser::InterTypeContext *context);
 
+    std::any visitDiffType(OpenCMLParser::DiffTypeContext *context);
+
+    std::any visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context);
+
+    std::any visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context);
+
     std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *context);
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context);
 
     std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context);
 
-    std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context);
+    std::any visitSpecializedType(OpenCMLParser::SpecializedTypeContext *context);
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context);
 
@@ -514,7 +520,7 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitTupleType(OpenCMLParser::TupleTypeContext *context);
 
-    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
+    std::any visitFuncType(OpenCMLParser::FuncTypeContext *context);
 
     std::any visitIdentDef(OpenCMLParser::IdentDefContext *context);
 

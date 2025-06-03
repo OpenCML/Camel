@@ -636,7 +636,7 @@ const string DictExprType::toString() const {
     return ss.str();
 }
 
-const string LambdaType::toString() const {
+const string FuncType::toString() const {
     stringstream ss;
     ss << "LambdaType ";
     if (!modifiers_.empty()) {

@@ -1020,10 +1020,37 @@ any Formatter::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
 
 /*
 interType
-    : typeUnit (('&' | '^') typeUnit)*
+    : diffType ('&' diffType)*
     ;
 */
 any Formatter::visitInterType(OpenCMLParser::InterTypeContext *context) {
+    return formatBiOpsList(context->diffType(), context->children, true);
+}
+
+/*
+diffType
+    : keyUnionDiffType ('\\' keyUnionDiffType)*
+    ;
+*/
+any Formatter::visitDiffType(OpenCMLParser::DiffTypeContext *context) {
+    return formatBiOpsList(context->keyUnionDiffType(), context->children, true);
+}
+
+/*
+keyUnionDiffType
+    : keyInterType (('+' | '-') keyInterType)*
+    ;
+*/
+any Formatter::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context) {
+    return formatBiOpsList(context->keyInterType(), context->children, true);
+}
+
+/*
+keyInterType
+    : typeUnit ('^' typeUnit)*
+    ;
+*/
+any Formatter::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {
     return formatBiOpsList(context->typeUnit(), context->children, true);
 }
 
@@ -1042,11 +1069,11 @@ any Formatter::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
 
 /*
 listType
-    : argsType ('[' ']')*
+    : specializedType ('[' ']')*
     ;
 */
 any Formatter::visitListType(OpenCMLParser::ListTypeContext *context) {
-    string result = any_cast<string>(visitArgsType(context->argsType()));
+    string result = any_cast<string>(visitSpecializedType(context->specializedType()));
     const size_t size = (context->children.size() - 1) / 2;
     for (size_t i = 0; i < size; i++) {
         result += "[]";
@@ -1060,11 +1087,11 @@ typeOrData : typeExpr | primaryData ;
 any Formatter::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return visit(context->children[0]); }
 
 /*
-argsType
+specializedType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 */
-any Formatter::visitArgsType(OpenCMLParser::ArgsTypeContext *context) {
+any Formatter::visitSpecializedType(OpenCMLParser::SpecializedTypeContext *context) {
     string result;
     result += any_cast<string>(visitPrimaryType(context->primaryType()));
     const auto &children = context->children;
@@ -1083,7 +1110,7 @@ primaryType
     | identRef
     | '(' typeExpr ')'
     | tupleType
-    | lambdaType
+    | funcType
     | TYPEOF waitExpr
     | TYPEAS identDef
     ;
@@ -1106,7 +1133,7 @@ any Formatter::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
         return any_cast<string>(visitTupleType(context->tupleType()));
         break;
     case 6: // lambdaType
-        return any_cast<string>(visitLambdaType(context->lambdaType()));
+        return any_cast<string>(visitFuncType(context->funcType()));
         break;
     case 7: // TYPEOF waitExpr
         return "typeof " + any_cast<string>(visitWaitExpr(context->waitExpr()));
@@ -1149,11 +1176,11 @@ any Formatter::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
 }
 
 /*
-lambdaType
+funcType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
-any Formatter::visitLambdaType(OpenCMLParser::LambdaTypeContext *context) {
+any Formatter::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
     string result;
     const auto &modifiers = context->modifiers();
     const auto &angledParams = context->angledParams();

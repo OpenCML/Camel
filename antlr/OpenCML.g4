@@ -225,18 +225,30 @@ unionType
     ;
 
 interType
-    : typeUnit (('&' | '^') typeUnit)*
+    : diffType ('&' diffType)*
+    ;
+
+diffType
+    : keyUnionDiffType ('\\' keyUnionDiffType)*
+    ;
+
+keyUnionDiffType
+    : keyInterType (('+' | '-') keyInterType)*
+    ;
+
+keyInterType
+    : typeUnit ('^' typeUnit)*
     ;
 
 typeUnit : (identDef OF)? listType ;
 
 listType
-    : argsType ('[' ']')*
+    : specializedType ('[' ']')*
     ;
 
 typeOrData : typeExpr | primaryData ;
 
-argsType
+specializedType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 
@@ -246,7 +258,7 @@ primaryType
     | identRef
     | '(' typeExpr ')'
     | tupleType
-    | lambdaType
+    | funcType
     | TYPEOF waitExpr
     | TYPEAS identDef
     ;
@@ -263,7 +275,7 @@ tupleType
     : '(' typeList? ','? ')'
     ;
 
-lambdaType
+funcType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 

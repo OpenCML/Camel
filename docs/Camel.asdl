@@ -1,20 +1,81 @@
 -- Camel's Abstract Syntax Tree Description Language
 -- This file describes the structure of Camel's abstract syntax tree (AST).
 
-// * => List
+// * => Repeated
 // ? => Optional
+
+enum Modifier {
+    Public,
+    Private,
+    Protected,
+    Static,
+    Final,
+    Abstract
+}
+
+enum ImplMark {
+    Inner,
+    Outer,
+    Graph
+}
+
+enum CarrierType {
+    Dict,
+    List,
+    Tuple,
+    Default
+}
 
 Root() : Decl* ;
 
 Decl := FuncDecl | DataDecl | TypeDecl ;
+// | UseDecl | ImportDecl | ExportDecl | ModuleDecl ;
+DataDecl(bool isVar) : Carrier, Type? type, Expr value;
 
-DataDecl(bool mutable) : Carrier, Type? type, Expr value;
+ModuleDecl(Ref ref) ;
 
-Carrier(string[] ids, enum typ) ;
+ImportDecl(string path, Ref[] imports, Ref as) ;
 
-FuncDecl(string id, Modifier[] modifiers) :
-    : Param* withParams, Param* normParams, Type? retType, Block body ;
+TypeDecl(Ref ref, ImplMark impl, string uri) : TypeExpr? type ;
 
-FuncType() : Param* withParams, Param* normParams, Type? retType ;
+Carrier(Ref[] refs, CarrierType type) ;
 
-Param(string id, bool isVar) : Type? type, Expr? default ;
+UseDecl(Ref ref, Ref alias) ;
+
+FuncDecl(Ref ref)
+    : FuncType funcType, Param* withParams, Param* normParams, Block body ;
+
+FuncType(Modifier[] modifiers, ImplMark impl, string uri)
+    : ParamType* withParams, ParamType* normParams, Type? retType ;
+
+Param(Ref ref, bool isVar) : Type? type, Expr? default ;
+
+Stmt := ExprStmt | IfStmt | WhileStmt | ForStmt | ReturnStmt | Block ;
+
+enum TypeExprCode {
+    Union,
+    Inter,
+    List
+}
+
+enum PrimaryTypeCode {
+    InnerAtom,
+    Reference,
+    Func,
+    Dict,
+    Tuple,
+    Nested,
+    TypeOf,
+    TypeAs
+}
+
+TypeExpr(TypeExprCode code) : Type type ;
+
+PrimaryType(PrimaryTypeCode code, Ref ref) : (TypeExpr | DictType | TupleType | FuncType | WaitExpr)? node ;
+
+DictType : KeyTypePair* pairs ;
+TupleType : Type* types ;
+
+SpecializedType() : PrimaryType type, (Type | Data)* args ;
+
+ListType : Type type ;
