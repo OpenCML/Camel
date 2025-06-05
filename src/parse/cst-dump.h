@@ -50,13 +50,13 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context) { return dumpNode(context, "ExportDecl"); };
 
+    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context) { return dumpNode(context, "BlockStmt"); };
+
     std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context) { return dumpNode(context, "StmtBlock"); };
 
     std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return dumpNode(context, "BlockExpr"); };
 
-    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context) { return dumpNode(context, "WaitStmt"); };
-
-    std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return dumpNode(context, "LambdaExpr"); };
+    std::any visitFuncData(OpenCMLParser::FuncDataContext *context) { return dumpNode(context, "FuncData"); };
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) { return dumpNode(context, "FuncDecl"); };
 
@@ -68,15 +68,13 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitCarrier(OpenCMLParser::CarrierContext *context) { return dumpNode(context, "Carrier"); };
 
-    std::any visitLetDecl(OpenCMLParser::LetDeclContext *context) { return dumpNode(context, "LetDecl"); };
+    std::any visitDataDecl(OpenCMLParser::DataDeclContext *context) { return dumpNode(context, "DataDecl"); };
+
+    std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context) { return dumpNode(context, "TypeDecl"); };
 
     std::any visitUseDecl(OpenCMLParser::UseDeclContext *context) { return dumpNode(context, "UseDecl"); };
 
     std::any visitRetStmt(OpenCMLParser::RetStmtContext *context) { return dumpNode(context, "RetStmt"); };
-
-    std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context) { return dumpNode(context, "TypeDecl"); };
-
-    std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return dumpNode(context, "EnumDecl"); };
 
     std::any visitImplMark(OpenCMLParser::ImplMarkContext *context) { return dumpNode(context, "ImplMark"); };
 
@@ -93,8 +91,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitDataList(OpenCMLParser::DataListContext *context) { return dumpNode(context, "DataList"); };
 
     std::any visitIdentList(OpenCMLParser::IdentListContext *context) { return dumpNode(context, "IdentList"); };
-
-    std::any visitValueList(OpenCMLParser::ValueListContext *context) { return dumpNode(context, "ValueList"); };
 
     std::any visitIndexValues(OpenCMLParser::IndexValuesContext *context) { return dumpNode(context, "IndexValues"); };
 
@@ -114,8 +110,6 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return dumpNode(context, "AngledValues"); };
 
-    std::any visitWaitExpr(OpenCMLParser::WaitExprContext *context) { return dumpNode(context, "WaitExpr"); };
-
     std::any visitPattern(OpenCMLParser::PatternContext *context) { return dumpNode(context, "Pattern"); };
 
     std::any visitMatchCase(OpenCMLParser::MatchCaseContext *context) { return dumpNode(context, "MatchCase"); };
@@ -125,6 +119,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     std::any visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) { return dumpNode(context, "CtrlExpr"); };
 
     std::any visitDataExpr(OpenCMLParser::DataExprContext *context) { return dumpNode(context, "DataExpr"); };
+
+    std::any visitWaitExpr(OpenCMLParser::WaitExprContext *context) { return dumpNode(context, "WaitExpr"); };
 
     std::any visitAssignExpr(OpenCMLParser::AssignExprContext *context) { return dumpNode(context, "AssignExpr"); };
 
@@ -152,9 +148,11 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return dumpNode(context, "AnnoExpr"); };
 
-    std::any visitDictExpr(OpenCMLParser::DictExprContext *context) { return dumpNode(context, "DictExpr"); };
+    std::any visitDictData(OpenCMLParser::DictDataContext *context) { return dumpNode(context, "DictData"); };
 
-    std::any visitListExpr(OpenCMLParser::ListExprContext *context) { return dumpNode(context, "ListExpr"); };
+    std::any visitListData(OpenCMLParser::ListDataContext *context) { return dumpNode(context, "ListData"); };
+
+    std::any visitTupleData(OpenCMLParser::TupleDataContext *context) { return dumpNode(context, "TupleData"); };
 
     std::any visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) { return dumpNode(context, "PrimaryData"); };
 
@@ -178,7 +176,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return dumpNode(context, "TypeOrData"); };
 
-    std::any visitSpecializedType(OpenCMLParser::SpecializedTypeContext *context) { return dumpNode(context, "SpecializedType"); };
+    std::any visitSpecType(OpenCMLParser::SpecTypeContext *context) { return dumpNode(context, "SpecType"); };
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return dumpNode(context, "PrimaryType"); };
 

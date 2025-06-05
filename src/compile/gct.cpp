@@ -262,64 +262,28 @@ decl
     : moduleDecl
     | importDecl
     | exportDecl
-    | letDecl
-    | useDecl
+    | dataDecl
     | funcDecl
     | typeDecl
-    | enumDecl
+    | useDecl
     ;
 */
 any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return visit(context->children[0]); }
 
 /*
 stmt
-    : letDecl
-    | useDecl
+    : dataDecl
     | funcDecl
     | typeDecl
-    | enumDecl
-    | retStmt
-    | waitStmt
     | dataExpr
-    | stmtBlock
+    | useDecl
+    | retStmt
+    | blockStmt
     ;
 */
 any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
     enter("Stmt");
-    any res;
-
-    switch (context->getAltNumber()) {
-    case 1: // letDecl
-        res = visitLetDecl(context->letDecl());
-        break;
-    case 2: // useDecl
-        res = visitUseDecl(context->useDecl());
-        break;
-    case 3: // funcDecl
-        res = visitFuncDecl(context->funcDecl());
-        break;
-    case 4: // typeDecl
-        res = visitTypeDecl(context->typeDecl());
-        break;
-    case 5: // enumDecl
-        res = visitEnumDecl(context->enumDecl());
-        break;
-    case 6: // retStmt
-        res = visitRetStmt(context->retStmt());
-        break;
-    case 7: // waitStmt
-        res = visitWaitStmt(context->waitStmt());
-        break;
-    case 8: // dataExpr
-        res = visitDataExpr(context->dataExpr());
-        break;
-    case 9: // stmtBlock
-        res = visitStmtBlock(context->stmtBlock());
-        break;
-    default: // Grammar error protection
-        throw runtime_error("Unknown statement type");
-    }
-
+    any res = visit(context->children[0]);
     leave("Stmt");
     return res;
 }
@@ -391,9 +355,14 @@ importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) { return nullptr; }
 
 /*
-exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
+exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 */
 any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) { return nullptr; }
+
+/*
+blockStmt  : WAIT? stmtBlock ;
+*/
+any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) { return nullptr; }
 
 /*
 stmtBlock  : SYNC? '{' stmtList? '}' ;
@@ -401,22 +370,20 @@ stmtBlock  : SYNC? '{' stmtList? '}' ;
 any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) { return nullptr; }
 
 /*
-blockExpr  : stmtBlock | waitExpr ;
+blockExpr  : stmtBlock | dataExpr ;
 */
 any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return nullptr; }
 
 /*
-waitStmt   : WAIT (stmtBlock | dataList) ;
+funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 */
-any Constructor::visitWaitStmt(OpenCMLParser::WaitStmtContext *context) { return nullptr; }
+any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {}
 
 /*
-lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
-*/
-any Constructor::visitLambdaExpr(OpenCMLParser::LambdaExprContext *context) { return nullptr; }
-
-/*
-funcDecl   : (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+funcDecl   :
+        (WITH angledParams)?
+        EXPORT? implMark? modifiers?
+        FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     enter("FuncDecl");
@@ -563,177 +530,9 @@ any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
 }
 
 /*
-letDecl    : (LET | VAR) carrier (':' typeList)? '=' valueList ;
+dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 */
-any Constructor::visitLetDecl(OpenCMLParser::LetDeclContext *context) {
-    enter("LetDecl");
-    const auto &[carrierType, carrier] = any_cast<pair<size_t, any>>(visitCarrier(context->carrier()));
-    const auto &typeExpr = context->typeList();
-    type_ptr_t type = nullptr;
-    if (typeExpr) {
-        type = any_cast<type_ptr_t>(visitTypeList(typeExpr));
-    }
-
-    bool dangling = false;
-    node_ptr_t exprNode = any_cast<node_ptr_t>(visitValueList(context->valueList()));
-    node_ptr_t execNode = createNode<ExecLoad>();
-    auto [exprValue, _] = extractData(exprNode, execNode, dangling);
-
-    node_ptr_t resultNode = nullptr;
-
-    switch (carrierType) {
-    case 1: // identList
-    {
-        const string &ident = any_cast<string>(carrier);
-        node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-        node_ptr_t baseNode = nullptr;
-
-        if (type) {
-            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<NullData>()});
-
-            if (dangling) {
-                dataNode = reparent(dataNode, execNode);
-            }
-
-            baseNode = linkFunc(dataNode, InnerFuncDRefNodes::__cast__);
-        } else {
-            baseNode = exprNode;
-        }
-
-        *nRefNode << baseNode;
-        resultNode = nRefNode;
-    } break;
-
-    case 2: // parentIdents
-    {
-        if (type) {
-            const auto &token = context->getStart();
-            throw BuildException("Type cannot be specified for multiple identifiers", token);
-        }
-
-        const vector<string> &idents = any_cast<vector<string>>(carrier);
-        if (idents.size() == 0) {
-            const auto &token = context->getStart();
-            throw BuildException("Identifier extraction list must not be empty", token);
-        }
-
-        for (size_t i = 0; i < idents.size(); i++) {
-            const string &ident = idents[i];
-            node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode =
-                createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
-            *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
-            *execNode << nRefNode;
-        }
-
-        resultNode = execNode;
-    } break;
-
-    case 3: // bracedIdents
-    {
-        if (type) {
-            const auto &token = context->getStart();
-            throw BuildException("Type cannot be specified for multiple identifiers", token);
-        }
-
-        const vector<string> &idents = any_cast<vector<string>>(carrier);
-        if (idents.size() == 0) {
-            const auto &token = context->getStart();
-            throw BuildException("Identifier extraction list must not be empty", token);
-        }
-
-        for (size_t i = 0; i < idents.size(); i++) {
-            const string &ident = idents[i];
-            node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode =
-                createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
-            *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
-            *execNode << nRefNode;
-        }
-
-        resultNode = execNode;
-    } break;
-
-    case 4: // bracketIdents
-    {
-        if (type) {
-            const auto &token = context->getStart();
-            throw BuildException("Type cannot be specified for multiple identifiers", token);
-        }
-
-        const vector<string> &idents = any_cast<vector<string>>(carrier);
-        if (idents.size() == 0) {
-            const auto &token = context->getStart();
-            throw BuildException("Identifier extraction list must not be empty", token);
-        }
-
-        for (size_t i = 0; i < idents.size(); i++) {
-            const string &ident = idents[i];
-            node_ptr_t nRefNode = createNode<NRefLoad>(ident);
-            node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<StringData>(ident)});
-            *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
-            *execNode << nRefNode;
-        }
-
-        resultNode = execNode;
-    } break;
-
-    default:
-        throw runtime_error("Unknown carrier type");
-    }
-
-    if (context->VAR()) {
-        node_ptr_t variNode = createNode<VariLoad>();
-        *variNode << resultNode;
-        resultNode = variNode;
-    }
-
-    leave("LetDecl");
-    return resultNode;
-}
-
-/*
-useDecl    : USE (identDef '=')? identRef ;
-*/
-any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
-    enter("UseDecl");
-    string path = "";
-
-    vector<string> idents;
-    idents.push_back(any_cast<string>(visitIdentRef(context->identRef())));
-
-    if (context->identDef()) {
-        path = any_cast<string>(visitIdentDef(context->identDef()));
-    }
-
-    node_ptr_t result = createNode<FromLoad>(path, idents);
-
-    leave("UseDecl");
-    return result;
-}
-
-/*
-retStmt    : (RETURN | RAISE | THROW) valueList ;
-*/
-any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
-    enter("RetStmt");
-    node_ptr_t resNode;
-
-    if (context->RETURN()) {
-        resNode = createNode<RetnLoad>();
-    } else if (context->RAISE()) {
-        resNode = createNode<RaseLoad>();
-    } else if (context->THROW()) {
-        resNode = createNode<ThrwLoad>();
-    } else {
-        throw runtime_error("Unknown return type");
-    }
-
-    *resNode << any_cast<node_ptr_t>(context->valueList());
-
-    leave("RetStmt");
-    return resNode;
-}
+any Constructor::visitDataDecl(OpenCMLParser::DataDeclContext *context) {}
 
 /*
 typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
@@ -758,9 +557,48 @@ any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
 }
 
 /*
-enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
+useDecl    : USE (identDef '=')? identRef ;
 */
-any Constructor::visitEnumDecl(OpenCMLParser::EnumDeclContext *context) { return nullptr; }
+any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
+    enter("UseDecl");
+    string path = "";
+
+    vector<string> idents;
+    idents.push_back(any_cast<string>(visitIdentRef(context->identRef())));
+
+    if (context->identDef()) {
+        path = any_cast<string>(visitIdentDef(context->identDef()));
+    }
+
+    node_ptr_t result = createNode<FromLoad>(path, idents);
+
+    leave("UseDecl");
+    return result;
+}
+
+/*
+retStmt    : (RETURN | RAISE | THROW) dataList ;
+*/
+any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
+    enter("RetStmt");
+    node_ptr_t resNode;
+
+    if (context->RETURN()) {
+        resNode = createNode<RetnLoad>();
+    } else if (context->RAISE()) {
+        resNode = createNode<RaseLoad>();
+    } else if (context->THROW()) {
+        resNode = createNode<ThrwLoad>();
+    } else {
+        throw runtime_error("Unknown return type");
+    }
+
+    // TODO: ??
+    *resNode << any_cast<node_ptr_t>(context->dataList());
+
+    leave("RetStmt");
+    return resNode;
+}
 
 /*
 implMark    : INNER | OUTER ;
@@ -788,7 +626,7 @@ modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
 any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) { return nullptr; }
 
 /*
-indexValue   : '...'? waitExpr ;
+indexValue   : '...'? dataExpr ;
 */
 any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) { return nullptr; }
 
@@ -798,12 +636,12 @@ keyTypePair  : identDef ':' typeExpr ;
 any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) { return nullptr; }
 
 /*
-keyValuePair : identDef ':' waitExpr | '...' waitExpr ;
+keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
 any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) { return nullptr; }
 
 /*
-keyParamPair : VAR? identDef ':' typeExpr ('=' waitExpr)? ;
+keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
 */
 any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return nullptr; }
 
@@ -823,19 +661,6 @@ any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {
     }
     leave("IdentList");
     return identList;
-}
-
-/*
-valueList    : waitExpr (',' waitExpr)* ;
-*/
-any Constructor::visitValueList(OpenCMLParser::ValueListContext *context) {
-    enter("ValueList");
-    vector<node_ptr_t> valueList;
-    for (const auto &data : context->waitExpr()) {
-        valueList.push_back(any_cast<node_ptr_t>(visitWaitExpr(data)));
-    }
-    leave("ValueList");
-    return valueList;
 }
 
 /*
@@ -859,7 +684,7 @@ argumentList : indexValues (',' pairedValues)? | pairedValues ;
 any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return nullptr; }
 
 /*
-memberAccess : '[' waitExpr (':' waitExpr (':' waitExpr)?)? ']' ;
+memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
 any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) { return nullptr; }
 
@@ -884,15 +709,10 @@ angledValues : '<' argumentList? ','? '>' ;
 any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return nullptr; }
 
 /*
-waitExpr : WAIT? dataExpr ;
-*/
-any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) { return nullptr; }
-
-/*
 pattern
     : identRef
     | literal
-    | '(' (valueList | identList)? ','? ')'
+    | '(' (dataList | identList)? ','? ')'
     | '{' (pairedValues | identList)? ','? '}'
     | '_' // wildcard
     ;
@@ -924,11 +744,16 @@ any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) { return
 
 /*
 dataExpr
-    : assignExpr
+    : waitExpr
     | ctrlExpr
     ;
 */
 any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) { return nullptr; }
+
+/*
+waitExpr : WAIT? assignExpr ;
+*/
+any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) { return nullptr; }
 
 /*
 assignExpr
@@ -981,7 +806,7 @@ any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContex
 
 /*
 nullableExpr
-    : unaryExpr (('??' | '!!') waitExpr)?
+    : unaryExpr (('??' | '!!') dataExpr)?
     ;
 */
 any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) { return nullptr; }
@@ -1041,28 +866,35 @@ annoExpr
 any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }
 
 /*
-dictExpr
+dictData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
     ;
 */
-any Constructor::visitDictExpr(OpenCMLParser::DictExprContext *context) { return nullptr; }
+any Constructor::visitDictData(OpenCMLParser::DictDataContext *context) {}
 
 /*
-listExpr
-    : '[' ((indexValues ','?) | waitExpr FOR identRef IN waitExpr (IF waitExpr)?)? ']'
+listData
+    : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 */
-any Constructor::visitListExpr(OpenCMLParser::ListExprContext *context) { return nullptr; }
+any Constructor::visitListData(OpenCMLParser::ListDataContext *context) {}
+
+/*
+tupleData
+    : '(' dataList? ','? ')'
+    ;
+*/
+any Constructor::visitTupleData(OpenCMLParser::TupleDataContext *context) {}
 
 /*
 primaryData
     : identRef
     | literal
-    | listExpr
-    | dictExpr
-    | '(' waitExpr ')'
-    | '(' valueList? ','? ')' // for tuple
-    | lambdaExpr
+    | listData
+    | dictData
+    | '(' dataExpr ')'
+    | tupleData
+    | funcData
     ;
 */
 any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) { return nullptr; }
@@ -1176,22 +1008,22 @@ any Constructor::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {}
 
 /*
 listType
-    : specializedType ('[' ']')*
+    : specType ('[' ']')*
     ;
 */
 any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) { return nullptr; }
 
 /*
-typeOrData : typeExpr | primaryData ;
+typeOrData : typeExpr | CONST dataExpr ;
 */
 any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return visit(context->children[0]); }
 
 /*
-specializedType
+specType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 */
-any Constructor::visitSpecializedType(OpenCMLParser::SpecializedTypeContext *context) {}
+any Constructor::visitSpecType(OpenCMLParser::SpecTypeContext *context) {}
 
 /*
 primaryType
@@ -1201,7 +1033,7 @@ primaryType
     | '(' typeExpr ')'
     | tupleType
     | funcType
-    | TYPEOF waitExpr
+    | TYPEOF dataExpr
     | TYPEAS identDef
     ;
 */

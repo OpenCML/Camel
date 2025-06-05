@@ -4,6 +4,156 @@
 // * => Repeated
 // ? => Optional
 
+enum ImplMark {
+    Inner,
+    Outer,
+    Graph
+}
+
+Program() : Decl* ;
+
+DeclType {
+    Module,
+    Import,
+    Export,
+    Data,
+    Func,
+    Type,
+    Use
+}
+
+Decl := ModuleDecl | ImportDecl | ExportDecl | DataDecl | FuncDecl | TypeDecl | UseDecl ;
+
+ModuleDecl(Ref ref) ;
+ImportDecl(string path, Ref[] refs, Ref as) ;
+ExportDecl(Ref[] refs) ;
+DataDecl(bool isVar) : Carrier, Type? type, Expr value;
+FuncDecl(Ref ref) : FuncData ;
+TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
+UseDecl(Ref ref, Ref alias) ;
+
+enum CarrierType {
+    Dict,
+    List,
+    Tuple,
+    Default
+}
+
+Carrier(Ref[] refs, CarrierType type) ;
+
+StmtType {
+    Data,
+    Func,
+    Type,
+    Expr,
+    Use,
+    Return
+}
+
+Stmt := DataDecl | FuncDecl | TypeDecl | DataExpr | UseDecl | ReturnStmt ;
+
+StmtBlock(bool sync) : Stmt* stmts ;
+
+enum RetType {
+    Return,
+    Raise,
+    Throw,
+    Yield,
+}
+
+ReturnStmt(RetType type) : Data* data ;
+
+enum DataOp {
+    Assign,
+    AssignAdd,
+    AssignSub,
+    AssignMul,
+    AssignDiv,
+    AssignMod,
+    AssignMat,
+    AssignExp,
+    AssignAnd,
+    AssignOr,
+    Or,
+    And,
+    Eq,
+    Neq,
+    StrictEq,
+    StrictNeq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Mat,
+    Exp,
+    NullThen,
+    ErrorThen,
+    Call,
+    With,
+    Bind
+}
+
+DataExpr(DataOp op) := Data lhs, Data rhs ;
+
+enum DataType {
+    DataExpr,
+    IfExpr,
+    MatchExpr,
+    TryExpr,
+    UnaryExpr,
+    Literal,
+    List,
+    Dict,
+    Tuple,
+    Index,
+    Func,
+    Ref
+}
+
+Data(DataType type, bool notNull, bool waited)
+    := DataExpr| IfExpr | MatchExpr | TryExpr | UnaryExpr | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
+
+IfExpr() : Data cond, FuncData then, FuncData? else ;
+
+Literal(Value value) ;
+DataRef(Ref ref) ;
+ListData() : Data* data ;
+DictData() : KeyDataPair* pairs ;
+TupleData() : Data* data ;
+IndexData() : Data data, Data* indices ;
+FuncData(Ref ref)
+    : FuncType funcType, Param* withParams, Param* normParams, Block body ;
+RefData(Ref ref) ;
+
+enum TypeOp {
+    Union,
+    Inter,
+    Diff,
+    KeyUnion,
+    KeyInter,
+    KeyDiff,
+}
+
+TypeExpr(TypeOp op) := Type lhs, Type rhs ;
+
+enum TypeType {
+    Expr,
+    List,
+    Dict,
+    Tuple,
+    Func,
+    Spec,
+    Unit,
+    Infer,
+    Data,
+    Ref
+}
+
 enum Modifier {
     Public,
     Private,
@@ -13,69 +163,18 @@ enum Modifier {
     Abstract
 }
 
-enum ImplMark {
-    Inner,
-    Outer,
-    Graph
-}
+ParamDecl(Ref ref, bool isVar) : Type type, Data? default ;
+paramData(Ref ref) : Data data ;
 
-enum CarrierType {
-    Dict,
-    List,
-    Tuple,
-    Default
-}
+Type(TypeType type) := TypeExpr | ListType | DictType | TupleType | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 
-Root() : Decl* ;
-
-Decl := FuncDecl | DataDecl | TypeDecl ;
-// | UseDecl | ImportDecl | ExportDecl | ModuleDecl ;
-DataDecl(bool isVar) : Carrier, Type? type, Expr value;
-
-ModuleDecl(Ref ref) ;
-
-ImportDecl(string path, Ref[] imports, Ref as) ;
-
-TypeDecl(Ref ref, ImplMark impl, string uri) : TypeExpr? type ;
-
-Carrier(Ref[] refs, CarrierType type) ;
-
-UseDecl(Ref ref, Ref alias) ;
-
-FuncDecl(Ref ref)
-    : FuncType funcType, Param* withParams, Param* normParams, Block body ;
-
+ListType(siz dim) : Type type ;
+DictType() : KeyTypePair* pairs ;
+TupleType() : Type* types ;
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
     : ParamType* withParams, ParamType* normParams, Type? retType ;
-
-Param(Ref ref, bool isVar) : Type? type, Expr? default ;
-
-Stmt := ExprStmt | IfStmt | WhileStmt | ForStmt | ReturnStmt | Block ;
-
-enum TypeExprCode {
-    Union,
-    Inter,
-    List
-}
-
-enum PrimaryTypeCode {
-    InnerAtom,
-    Reference,
-    Func,
-    Dict,
-    Tuple,
-    Nested,
-    TypeOf,
-    TypeAs
-}
-
-TypeExpr(TypeExprCode code) : Type type ;
-
-PrimaryType(PrimaryTypeCode code, Ref ref) : (TypeExpr | DictType | TupleType | FuncType | WaitExpr)? node ;
-
-DictType : KeyTypePair* pairs ;
-TupleType : Type* types ;
-
-SpecializedType() : PrimaryType type, (Type | Data)* args ;
-
-ListType : Type type ;
+SpecType() : Type type, (Type | Data)* args ;
+UnitType(Ref ref) : Type type ;
+InferType(Ref ref) ;
+DataType() : WaitExpr data ;
+RefType(Ref ref) ;
