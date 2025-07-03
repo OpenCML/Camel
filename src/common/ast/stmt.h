@@ -23,7 +23,7 @@
 
 namespace AbstractSyntaxTree {
 
-enum class StmtType { Module, Import, Export, Name, Data, Type, Func, Expr, Exit, Block };
+enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block };
 
 enum class ExitType { Yield, Raise, Return, Throw };
 
@@ -33,36 +33,6 @@ class StmtLoad : public Load {
 
   private:
     StmtType StmtType_;
-};
-
-class ModuleDeclLoad : public StmtLoad {
-  public:
-    ModuleDeclLoad(const Ref ref) : StmtLoad(StmtType::Module), ref_(ref) {}
-    const std::string toString() const override { return "ModuleDecl: " + ref_.toString(); }
-
-  private:
-    Ref ref_;
-};
-
-class ImportDeclLoad : public StmtLoad {
-  public:
-    ImportDeclLoad(std::string path, std::vector<Ref> refs, Ref as)
-        : StmtLoad(StmtType::Import), path_(path), refs_(refs), as_(as) {}
-    const std::string toString() const override;
-
-  private:
-    std::string path_;
-    std::vector<Ref> refs_;
-    Ref as_;
-};
-
-class ExportDeclLoad : public StmtLoad {
-  public:
-    ExportDeclLoad(std::vector<Ref> refs) : StmtLoad(StmtType::Export), refs_(refs) {}
-    const std::string toString() const override;
-
-  private:
-    std::vector<Ref> refs_;
 };
 
 class DataDeclLoad : public StmtLoad {
@@ -76,42 +46,42 @@ class DataDeclLoad : public StmtLoad {
 
 class FuncDeclLoad : public StmtLoad {
   public:
-    FuncDeclLoad(Ref ref) : StmtLoad(StmtType::Func), ref_(ref) {}
+    FuncDeclLoad(Reference ref) : StmtLoad(StmtType::Func), ref_(ref) {}
     const std::string toString() const override { return "FuncDecl: " + ref_.toString(); }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 class TypeDeclLoad : public StmtLoad {
   public:
-    TypeDeclLoad(Ref ref, std::string uri, ImplMark impl = ImplMark::Graph)
+    TypeDeclLoad(Reference ref, std::string uri, ImplMark impl = ImplMark::Graph)
         : StmtLoad(StmtType::Type), ref_(ref), uri_(uri), implMark_(impl) {}
     const std::string toString() const override;
 
   private:
-    Ref ref_;
+    Reference ref_;
     std::string uri_;
     ImplMark implMark_;
 };
 
 class NameDeclLoad : public StmtLoad {
   public:
-    NameDeclLoad(Ref ref, Ref alias) : StmtLoad(StmtType::Name), ref_(ref), alias_(alias) {}
+    NameDeclLoad(Reference ref, Reference alias) : StmtLoad(StmtType::Name), ref_(ref), alias_(alias) {}
     const std::string toString() const override { return "NameDecl: " + ref_.toString() + " as " + alias_.toString(); }
 
   private:
-    Ref ref_;
-    Ref alias_;
+    Reference ref_;
+    Reference alias_;
 };
 
 class DataDeclLoad : public StmtLoad {
   public:
-    DataDeclLoad(Ref ref) : StmtLoad(StmtType::Data), ref_(ref) {}
+    DataDeclLoad(Reference ref) : StmtLoad(StmtType::Data), ref_(ref) {}
     const std::string toString() const override { return "DataStmt: " + ref_.toString(); }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 class DataExprLoad : public StmtLoad {

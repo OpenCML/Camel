@@ -27,7 +27,7 @@ const std::string ImportDeclLoad::toString() const {
     if (!refs_.empty()) {
         result += " refs: " + join(refs_, std::string(", "));
     }
-    if (!as_.name().empty()) {
+    if (!as_.ident().empty()) {
         result += " as: " + as_.toString();
     }
     return result;

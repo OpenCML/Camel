@@ -106,38 +106,38 @@ class SpecTypeLoad : public TypeLoad {
 
 class UnitTypeLoad : public TypeLoad {
   public:
-    UnitTypeLoad(Ref ref) : TypeLoad(TypeType::Unit), ref_(ref) {}
+    UnitTypeLoad(Reference ref) : TypeLoad(TypeType::Unit), ref_(ref) {}
     const std::string toString() const override { return "UnitType"; }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 class InferTypeLoad : public TypeLoad {
   public:
-    InferTypeLoad(Ref ref) : TypeLoad(TypeType::Infer), ref_(ref) {}
+    InferTypeLoad(Reference ref) : TypeLoad(TypeType::Infer), ref_(ref) {}
     const std::string toString() const override { return "InferType"; }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 class DataTypeLoad : public TypeLoad {
   public:
-    DataTypeLoad(Ref ref) : TypeLoad(TypeType::Data), ref_(ref) {}
+    DataTypeLoad(Reference ref) : TypeLoad(TypeType::Data), ref_(ref) {}
     const std::string toString() const override { return "DataType: " + ref_.toString(); }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 class RefTypeLoad : public TypeLoad {
   public:
-    RefTypeLoad(Ref ref) : TypeLoad(TypeType::Ref), ref_(ref) {}
+    RefTypeLoad(Reference ref) : TypeLoad(TypeType::Ref), ref_(ref) {}
     const std::string toString() const override { return "RefType: " + ref_.toString(); }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 } // namespace AbstractSyntaxTree

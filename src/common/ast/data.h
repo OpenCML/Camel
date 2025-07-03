@@ -132,20 +132,20 @@ class IndexDataLoad : public DataLoad {
 
 class FuncDataLoad : public DataLoad {
   public:
-    FuncDataLoad(const Ref &ref) : DataLoad(DataType::Func), ref_(ref) {}
+    FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
     const std::string toString() const override { return "FuncData: " + ref_.toString(); }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 class RefDataLoad : public DataLoad {
   public:
-    RefDataLoad(const Ref &ref) : DataLoad(DataType::Ref), ref_(ref) {}
+    RefDataLoad(const Reference &ref) : DataLoad(DataType::Ref), ref_(ref) {}
     const std::string toString() const override { return "RefData: " + ref_.toString(); }
 
   private:
-    Ref ref_;
+    Reference ref_;
 };
 
 } // namespace AbstractSyntaxTree

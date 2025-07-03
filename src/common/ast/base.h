@@ -70,8 +70,12 @@ class Literal {
 
 enum class LoadType {
     Root,
-    Stmt,
 
+    Module,
+    Import,
+    Export,
+
+    Stmt,
     Data,
     Type,
 
@@ -93,14 +97,52 @@ inline std::shared_ptr<RootLoad> root_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<RootLoad>(ptr);
 }
 
+class ModuleDeclLoad : public Load {
+  public:
+    ModuleDeclLoad(const Reference ref) : Load(LoadType::Module), ref_(ref) {}
+    const std::string toString() const override { return "ModuleDecl: " + ref_.toString(); }
+
+  private:
+    Reference ref_;
+};
+
+class ImportDeclLoad : public Load {
+  public:
+    ImportDeclLoad(std::string path, std::vector<Reference> refs, Reference as)
+        : Load(LoadType::Import), path_(path), refs_(refs), as_(as) {}
+    const std::string toString() const override;
+
+  private:
+    std::string path_;
+    std::vector<Reference> refs_;
+    Reference as_;
+};
+
+class ExportDeclLoad : public Load {
+  public:
+    ExportDeclLoad(std::vector<Reference> refs) : Load(LoadType::Export), refs_(refs) {}
+    const std::string toString() const override;
+
+  private:
+    std::vector<Reference> refs_;
+};
+
 class RepeatedLoad : public Load {
   public:
-    RepeatedLoad() : Load(LoadType::Repeated) {}
+    RepeatedLoad(const std::string &nodeName) : Load(LoadType::Repeated), nodeName_(nodeName) {}
+    const std::string toString() const override { return nodeName_ + "*"; }
+
+  private:
+    std::string nodeName_;
 };
 
 class OptionalLoad : public Load {
   public:
-    OptionalLoad() : Load(LoadType::Optional) {}
+    OptionalLoad(const std::string &nodeName) : Load(LoadType::Optional), nodeName_(nodeName) {}
+    const std::string toString() const override { return nodeName_ + "?"; }
+
+  private:
+    std::string nodeName_;
 };
 
 } // namespace AbstractSyntaxTree

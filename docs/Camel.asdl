@@ -10,12 +10,9 @@ enum ImplMark {
     Graph
 }
 
-Program() : Stmt* ;
+Root() : ModuleDecl module, ImportDecl import, ExportDecl export, Stmt* ;
 
 StmtType {
-    Module,
-    Import,
-    Export,
     Name,
     Data,
     Type,
@@ -25,8 +22,7 @@ StmtType {
     Block,
 }
 
-Stmt := ModuleDecl | ImportDecl | ExportDecl
-    | NameDecl | DataDecl | TypeDecl | FuncDecl | DataExpr | ExitStmt | StmtBlock ;
+Stmt := NameDecl | DataDecl | TypeDecl | FuncDecl | DataExpr | ExitStmt | StmtBlock ;
 
 ModuleDecl(Ref ref) ;
 ImportDecl(string path, Ref[] refs, Ref as) ;

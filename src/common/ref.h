@@ -22,16 +22,34 @@
 #include <string>
 #include <vector>
 
-class Ref {
+class Reference {
   public:
-    Ref(const std::string &name) : name_(name) {}
-    const std::string &name() const { return name_; }
+    Reference() {}
+    Reference(const std::string &str) { set(str); }
+
+    const std::string &ident() const { return ident_; }
     const std::vector<std::string> &scope() const { return scope_; }
-    void addScope(const std::string &scope) {
-        if (scope_.empty() || scope_ != std::vector<std::string>{scope}) {
-            scope_.push_back(scope);
+
+    void setIdent(const std::string &ident) { ident_ = ident; }
+    void addScope(const std::string &scope) { scope_.push_back(scope); }
+    void clearScope() { scope_.clear(); }
+
+    void set(const std::string &str) {
+        scope_.clear();
+        size_t pos = 0;
+        size_t nextPos = 0;
+        while ((nextPos = str.find("::", pos)) != std::string::npos) {
+            scope_.push_back(str.substr(pos, nextPos - pos));
+            pos = nextPos + 2; // Skip over "::"
+        }
+        if (pos < str.size()) {
+            ident_ = str.substr(pos);
+        } else {
+            throw std::invalid_argument("Invalid reference name: " + str);
         }
     }
+
+    bool isNull() const { return ident_.empty(); }
 
     const std::string toString() const {
         std::string result;
@@ -40,7 +58,7 @@ class Ref {
                 result += s + "::";
             }
         }
-        result += name_;
+        result += ident_;
         return result;
     }
 
@@ -48,5 +66,5 @@ class Ref {
 
   private:
     std::vector<std::string> scope_;
-    std::string name_;
+    std::string ident_;
 };

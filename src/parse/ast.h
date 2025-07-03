@@ -26,7 +26,7 @@
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
-#include "common/ast.h"
+#include "common/ast/ast.h"
 #include "common/error/build.h"
 #include "common/scope.h"
 #include "common/tree.h"
@@ -50,23 +50,20 @@ class Node : public AbstractTreeNode<load_ptr_t> {
 
 class Constructor : public OpenCMLVisitor {
   public:
-    Constructor() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(); };
+    Constructor() {};
     virtual ~Constructor() = default;
 
     node_ptr_t construct(antlr4::tree::ParseTree *tree) {
-        typeScope_->clear();
         root_ = nullptr;
         visit(tree);
         return root_;
     }
-    
+
     std::queue<BuildWarning> &warns() { return warnQueue_; }
 
   private:
     node_ptr_t root_;
     size_t indentIndex_ = 0;
-    scope_ptr_t<std::string, type_ptr_t> typeScope_;
-    std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
     std::queue<BuildWarning> warnQueue_;
 
