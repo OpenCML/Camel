@@ -38,7 +38,7 @@ class Node : public AbstractTreeNode<load_ptr_t> {
     Node(load_ptr_t load) : AbstractTreeNode(load) {}
     virtual ~Node() = default;
 
-    NodeType type() const { return load_->type(); }
+    LoadType type() const { return load_->type(); }
     std::string toString() const { return load_->toString(); }
 
     Node &operator<<(const node_ptr_t &node) {

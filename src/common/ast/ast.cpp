@@ -27,137 +27,137 @@ using namespace AST;
 
 const string Load::typeStr() const {
     switch (type_) {
-    case NodeType::Program:
+    case LoadType::Program:
         return "Program";
-    case NodeType::Decl:
+    case LoadType::Decl:
         return "Decl";
-    case NodeType::ModuleDecl:
+    case LoadType::ModuleDecl:
         return "ModuleDecl";
-    case NodeType::ImportDecl:
+    case LoadType::ImportDecl:
         return "ImportDecl";
-    case NodeType::ExportDecl:
+    case LoadType::ExportDecl:
         return "ExportDecl";
-    case NodeType::LetDecl:
+    case LoadType::LetDecl:
         return "LetDecl";
-    case NodeType::UseDecl:
+    case LoadType::UseDecl:
         return "UseDecl";
-    case NodeType::FuncDecl:
+    case LoadType::FuncDecl:
         return "FuncDecl";
-    case NodeType::TypeDecl:
+    case LoadType::TypeDecl:
         return "TypeDecl";
-    case NodeType::EnumDecl:
+    case LoadType::EnumDecl:
         return "EnumDecl";
-    case NodeType::Stmt:
+    case LoadType::Stmt:
         return "Stmt";
-    case NodeType::StmtList:
+    case LoadType::StmtList:
         return "StmtList";
-    case NodeType::StmtBlock:
+    case LoadType::StmtBlock:
         return "StmtBlock";
-    case NodeType::RetStmt:
+    case LoadType::RetStmt:
         return "RetStmt";
-    case NodeType::WaitStmt:
+    case LoadType::WaitStmt:
         return "WaitStmt";
-    case NodeType::LambdaExpr:
+    case LoadType::LambdaExpr:
         return "LambdaExpr";
-    case NodeType::KeyTypePair:
+    case LoadType::KeyTypePair:
         return "KeyTypePair";
-    case NodeType::KeyValuePair:
+    case LoadType::KeyValuePair:
         return "KeyValuePair";
-    case NodeType::KeyParamPair:
+    case LoadType::KeyParamPair:
         return "KeyParamPair";
-    case NodeType::IdentDefList:
+    case LoadType::IdentDefList:
         return "IdentDefList";
-    case NodeType::ValueList:
+    case LoadType::ValueList:
         return "ValueList";
-    case NodeType::IndexValues:
+    case LoadType::IndexValues:
         return "IndexValues";
-    case NodeType::PairedValues:
+    case LoadType::PairedValues:
         return "PairedValues";
-    case NodeType::PairedParams:
+    case LoadType::PairedParams:
         return "PairedParams";
-    case NodeType::ArgumentList:
+    case LoadType::ArgumentList:
         return "ArgumentList";
-    case NodeType::MemberAccess:
+    case LoadType::MemberAccess:
         return "MemberAccess";
-    case NodeType::DataExpr:
+    case LoadType::DataExpr:
         return "DataExpr";
-    case NodeType::IdentList:
+    case LoadType::IdentList:
         return "IdentList";
-    case NodeType::DataList:
+    case LoadType::DataList:
         return "DataList";
-    case NodeType::CtrlExpr:
+    case LoadType::CtrlExpr:
         return "CtrlExpr";
-    case NodeType::IfLoad:
+    case LoadType::IfLoad:
         return "IfLoad";
-    case NodeType::CatchClause:
+    case LoadType::CatchClause:
         return "CatchClause";
-    case NodeType::BlockExpr:
+    case LoadType::BlockExpr:
         return "BlockExpr";
-    case NodeType::WaitExpr:
+    case LoadType::WaitExpr:
         return "WaitExpr";
-    case NodeType::Wildcard:
+    case LoadType::Wildcard:
         return "Wildcard";
-    case NodeType::MatchCase:
+    case LoadType::MatchCase:
         return "MatchCase";
-    case NodeType::AssignExpr:
+    case LoadType::AssignExpr:
         return "AssignExpr";
-    case NodeType::LogicalOrExpr:
+    case LoadType::LogicalOrExpr:
         return "LogicalOrExpr";
-    case NodeType::LogicalAndExpr:
+    case LoadType::LogicalAndExpr:
         return "LogicalAndExpr";
-    case NodeType::EqualityExpr:
+    case LoadType::EqualityExpr:
         return "EqualityExpr";
-    case NodeType::RelationalExpr:
+    case LoadType::RelationalExpr:
         return "RelationalExpr";
-    case NodeType::AdditiveExpr:
+    case LoadType::AdditiveExpr:
         return "AdditiveExpr";
-    case NodeType::MultiplicativeExpr:
+    case LoadType::MultiplicativeExpr:
         return "MultiplicativeExpr";
-    case NodeType::NullableExpr:
+    case LoadType::NullableExpr:
         return "NullableExpr";
-    case NodeType::UnaryExpr:
+    case LoadType::UnaryExpr:
         return "UnaryExpr";
-    case NodeType::LinkExpr:
+    case LoadType::LinkExpr:
         return "LinkExpr";
-    case NodeType::BindExpr:
+    case LoadType::BindExpr:
         return "BindExpr";
-    case NodeType::WithExpr:
+    case LoadType::WithExpr:
         return "WithExpr";
-    case NodeType::AnnoExpr:
+    case LoadType::AnnoExpr:
         return "AnnoExpr";
-    case NodeType::DictExpr:
+    case LoadType::DictExpr:
         return "DictExpr";
-    case NodeType::DictType:
+    case LoadType::DictType:
         return "DictType";
-    case NodeType::ListExpr:
+    case LoadType::ListExpr:
         return "ListExpr";
-    case NodeType::Literal:
+    case LoadType::Literal:
         return "Literal";
-    case NodeType::TypeExpr:
+    case LoadType::TypeExpr:
         return "TypeExpr";
-    case NodeType::UnionType:
+    case LoadType::UnionType:
         return "UnionType";
-    case NodeType::UnionUnit:
+    case LoadType::UnionUnit:
         return "UnionUnit";
-    case NodeType::ListType:
+    case LoadType::ListType:
         return "ListType";
-    case NodeType::ArgsType:
+    case LoadType::ArgsType:
         return "ArgsType";
-    case NodeType::PrimaryType:
+    case LoadType::PrimaryType:
         return "PrimaryType";
-    case NodeType::DictExprType:
+    case LoadType::DictExprType:
         return "DictExprType";
-    case NodeType::TypeList:
+    case LoadType::TypeList:
         return "TypeList";
-    case NodeType::LambdaType:
+    case LoadType::LambdaType:
         return "LambdaType";
-    case NodeType::IdentDef:
+    case LoadType::IdentDef:
         return "IdentDef";
-    case NodeType::IdentRef:
+    case LoadType::IdentRef:
         return "IdentRef";
-    case NodeType::ParentArgues:
+    case LoadType::ParentArgues:
         return "ParentArgues";
-    case NodeType::ParentParams:
+    case LoadType::ParentParams:
         return "ParentParams";
     default:
         return "Unknown";

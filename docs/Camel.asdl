@@ -10,19 +10,23 @@ enum ImplMark {
     Graph
 }
 
-Program() : Decl* ;
+Program() : Stmt* ;
 
-DeclType {
+StmtType {
     Module,
     Import,
     Export,
+    Name,
     Data,
-    Func,
     Type,
-    Use
+    Func,
+    Expr,
+    Exit,
+    Block,
 }
 
-Decl := ModuleDecl | ImportDecl | ExportDecl | DataDecl | FuncDecl | TypeDecl | UseDecl ;
+Stmt := ModuleDecl | ImportDecl | ExportDecl
+    | NameDecl | DataDecl | TypeDecl | FuncDecl | DataExpr | ExitStmt | StmtBlock ;
 
 ModuleDecl(Ref ref) ;
 ImportDecl(string path, Ref[] refs, Ref as) ;
@@ -30,7 +34,7 @@ ExportDecl(Ref[] refs) ;
 DataDecl(bool isVar) : Carrier, Type? type, Expr value;
 FuncDecl(Ref ref) : FuncData ;
 TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
-UseDecl(Ref ref, Ref alias) ;
+NameDecl(Ref ref, Ref alias) ;
 
 enum CarrierType {
     Dict,
@@ -41,27 +45,16 @@ enum CarrierType {
 
 Carrier(Ref[] refs, CarrierType type) ;
 
-StmtType {
-    Data,
-    Func,
-    Type,
-    Expr,
-    Use,
-    Return
-}
-
-Stmt := DataDecl | FuncDecl | TypeDecl | DataExpr | UseDecl | ReturnStmt ;
-
 StmtBlock(bool sync) : Stmt* stmts ;
 
-enum RetType {
+enum ExitType {
     Return,
     Raise,
     Throw,
     Yield,
 }
 
-ReturnStmt(RetType type) : Data* data ;
+ExitStmt(ExitType type) : Data* data ;
 
 enum DataOp {
     Assign,
@@ -121,7 +114,6 @@ Data(DataType type, bool notNull, bool waited)
 IfExpr() : Data cond, FuncData then, FuncData? else ;
 
 Literal(Value value) ;
-DataRef(Ref ref) ;
 ListData() : Data* data ;
 DictData() : KeyDataPair* pairs ;
 TupleData() : Data* data ;
@@ -155,26 +147,26 @@ enum TypeType {
 }
 
 enum Modifier {
-    Public,
-    Private,
-    Protected,
-    Static,
-    Final,
-    Abstract
+    Atomic,
+    Shared,
+    Sync,
+    Macro
 }
 
 ParamDecl(Ref ref, bool isVar) : Type type, Data? default ;
 paramData(Ref ref) : Data data ;
 
-Type(TypeType type) := TypeExpr | ListType | DictType | TupleType | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+Type(TypeType type) := 
+    TypeExpr | ListType | DictType | TupleType
+    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 
 ListType(siz dim) : Type type ;
 DictType() : KeyTypePair* pairs ;
 TupleType() : Type* types ;
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
-    : ParamType* withParams, ParamType* normParams, Type? retType ;
+    : ParamType* withParams, ParamType* normParams, Type? ExitType ;
 SpecType() : Type type, (Type | Data)* args ;
 UnitType(Ref ref) : Type type ;
 InferType(Ref ref) ;
-DataType() : WaitExpr data ;
+DataType() : Data data ;
 RefType(Ref ref) ;
