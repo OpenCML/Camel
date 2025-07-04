@@ -38,7 +38,7 @@ program : SEP? (decl SEP?)* EOF;
 any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
     enter("Program");
 
-    root_ = createNode<RootLoad>();
+    root_ = createNode<ModuleLoad>();
 
     for (const auto &decl : context->decl()) {
         *root_ << any_cast<node_ptr_t>(visitDecl(decl));

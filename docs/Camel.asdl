@@ -10,7 +10,7 @@ enum ImplMark {
     Graph
 }
 
-Root() : ModuleDecl module, ImportDecl import, ExportDecl export, Stmt* ;
+Module(Ref ref) : ImportDecl import, ExportDecl export, Stmt* ;
 
 StmtType {
     Name,
@@ -24,7 +24,6 @@ StmtType {
 
 Stmt := NameDecl | DataDecl | TypeDecl | FuncDecl | DataExpr | ExitStmt | StmtBlock ;
 
-ModuleDecl(Ref ref) ;
 ImportDecl(string path, Ref[] refs, Ref as) ;
 ExportDecl(Ref[] refs) ;
 DataDecl(bool isVar) : Carrier, Type? type, Expr value;

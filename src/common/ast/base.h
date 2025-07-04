@@ -69,9 +69,8 @@ class Literal {
 };
 
 enum class LoadType {
-    Root,
-
     Module,
+
     Import,
     Export,
 
@@ -88,23 +87,18 @@ enum class LoadType {
     Optional,
 };
 
-class RootLoad : public Load {
+class ModuleLoad : public Load {
   public:
-    RootLoad() : Load(LoadType::Root) {}
-};
-
-inline std::shared_ptr<RootLoad> root_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<RootLoad>(ptr);
-}
-
-class ModuleDeclLoad : public Load {
-  public:
-    ModuleDeclLoad(const Reference ref) : Load(LoadType::Module), ref_(ref) {}
-    const std::string toString() const override { return "ModuleDecl: " + ref_.toString(); }
+    ModuleLoad(const Reference ref) : Load(LoadType::Module), ref_(ref) {}
+    const std::string toString() const override { return "Module: " + ref_.toString(); }
 
   private:
     Reference ref_;
 };
+
+inline std::shared_ptr<ModuleLoad> module_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<ModuleLoad>(ptr);
+}
 
 class ImportDeclLoad : public Load {
   public:
