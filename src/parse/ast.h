@@ -67,6 +67,10 @@ class Constructor : public OpenCMLVisitor {
 
     std::queue<BuildWarning> warnQueue_;
 
+    std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
+    std::shared_ptr<ImportLoad> import_ = std::make_shared<ImportLoad>();
+    std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
+
     void reportWarning(const std::string &msg, antlr4::Token *token) { warnQueue_.emplace(msg, token); }
 
     // Auto-generated visitor methods

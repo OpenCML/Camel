@@ -22,7 +22,7 @@
 
 namespace AbstractSyntaxTree {
 
-const std::string ImportDeclLoad::toString() const {
+const std::string ImportLoad::toString() const {
     std::string result = "ImportDecl: " + path_;
     if (!refs_.empty()) {
         result += " refs: " + join(refs_, std::string(", "));
@@ -33,7 +33,7 @@ const std::string ImportDeclLoad::toString() const {
     return result;
 }
 
-const std::string ExportDeclLoad::toString() const {
+const std::string ExportLoad::toString() const {
     std::string result = "ExportDecl: " + join(refs_, std::string(", "));
     return result;
 }

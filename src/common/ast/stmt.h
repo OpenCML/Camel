@@ -101,7 +101,9 @@ class ExitStmtLoad : public StmtLoad {
 
 class StmtBlockLoad : public StmtLoad {
   public:
-    StmtBlockLoad(bool sync) : StmtLoad(StmtType::Block), sync_(sync) {}
+    StmtBlockLoad(bool sync = false) : StmtLoad(StmtType::Block), sync_(sync) {}
+    void setSync(bool sync) { sync_ = sync; }
+    bool isSync() const { return sync_; }
 
   private:
     bool sync_ = false;

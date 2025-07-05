@@ -38,10 +38,13 @@ program : SEP? (decl SEP?)* EOF;
 any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
     enter("Program");
 
-    root_ = createNode<ModuleLoad>();
+    root_ = std::dynamic_pointer_cast<Node>(module_);
 
     for (const auto &decl : context->decl()) {
-        *root_ << any_cast<node_ptr_t>(visitDecl(decl));
+        node_ptr_t node = any_cast<node_ptr_t>(visitDecl(decl));
+        if (node) {
+            *root_ << node;
+        }
     }
 
     leave("Program");
@@ -105,9 +108,9 @@ moduleDecl : MODULE identDef ;
 any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
     enter("ModuleDecl");
     Reference ref(context->identDef()->getText());
-    node_ptr_t mod = createNode<ModuleDeclLoad>(ref);
+    module_->setRef(ref);
     leave("ModuleDecl");
-    return mod;
+    return nullptr;
 }
 
 /*
@@ -115,20 +118,18 @@ importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 */
 any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     enter("ImportDecl");
-    std::string path;
-    Reference as;
-    std::vector<Reference> refs;
     if (context->STRING()) {
-        path = context->STRING()->getText();
+        import_->setPath(context->STRING()->getText());
     }
     if (context->identDef()) {
-        as.set(context->identDef()->getText());
+        import_->setAs(Reference(context->identDef()->getText()));
     } else if (context->bracedIdents()) {
+        std::vector<Reference> refs;
         for (auto &ident : context->bracedIdents()->identList()->identDef()) {
             refs.emplace_back(ident->getText());
         }
+        import_->setRefs(refs);
     }
-    node_ptr_t importNode = createNode<ImportDeclLoad>(path, refs, as);
     leave("ImportDecl");
     return importNode;
 }
@@ -138,19 +139,16 @@ exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 */
 any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     enter("ExportDecl");
-    vector<Reference> refs;
     if (context->dataDecl()) {
         res = any_cast<node_ptr_t>(visitDataDecl(context->dataDecl()));
+        // TODO: 这里需要处理导出数据声明的情况
     } else if (context->typeDecl()) {
         res = any_cast<node_ptr_t>(visitTypeDecl(context->typeDecl()));
     } else if (context->bracedIdents()) {
-        std::vector<std::string> idents;
         for (auto &ident : context->bracedIdents()->identList()->identDef()) {
-            idents.push_back(ident->getText());
+            export_->addRef(Reference(ident->getText()));
         }
-        res = createNode<ExportDecl>(idents);
     }
-    node_ptr_t exportNode = createNode<ExportDeclLoad>();
     leave("ExportDecl");
     return res;
 }
@@ -170,9 +168,11 @@ stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
 any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
     enter("StmtBlock");
-    node_ptr_t blockNode = createNode<StmtBlock>();
     if (context->stmtList()) {
-        *blockNode << any_cast<node_ptr_t>(visitStmtList(context->stmtList()));
+        node_ptr_t blockNode = any_cast<node_ptr_t>(visitStmtList(context->stmtList()));
+        if (context->SYNC()) {
+            std::dynamic_pointer_cast<StmtBlockLoad>(blockNode)->setSync(true);
+        }
     }
     leave("StmtBlock");
     return blockNode;
@@ -187,7 +187,11 @@ any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
     if (context->stmtBlock()) {
         res = any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
     } else if (context->dataExpr()) {
-        res = any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
+        node_ptr_t expr = any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
+        node_ptr_t stmt = createNode<DataExprLoad>();
+        res = createNode<StmtBlockLoad>();
+        *stmt << expr;
+        *res << stmt;
     }
     leave("BlockExpr");
     return res;

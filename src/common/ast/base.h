@@ -89,8 +89,16 @@ enum class LoadType {
 
 class ModuleLoad : public Load {
   public:
-    ModuleLoad(const Reference ref) : Load(LoadType::Module), ref_(ref) {}
+    ModuleLoad() : Load(LoadType::Module) {}
     const std::string toString() const override { return "Module: " + ref_.toString(); }
+
+    void setRef(const Reference &ref) { ref_ = ref; }
+    const Reference &getRef() const {
+        if (ref_.isNull()) {
+            throw std::runtime_error("ModuleLoad: Reference is not set");
+        }
+        return ref_;
+    }
 
   private:
     Reference ref_;
@@ -100,11 +108,34 @@ inline std::shared_ptr<ModuleLoad> module_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<ModuleLoad>(ptr);
 }
 
-class ImportDeclLoad : public Load {
+class ImportLoad : public Load {
   public:
-    ImportDeclLoad(std::string path, std::vector<Reference> refs, Reference as)
-        : Load(LoadType::Import), path_(path), refs_(refs), as_(as) {}
+    ImportLoad() : Load(LoadType::Import) {}
     const std::string toString() const override;
+
+    void setPath(const std::string &path) { path_ = path; }
+    const std::string &getPath() const {
+        if (path_.empty()) {
+            throw std::runtime_error("ImportLoad: Path is not set");
+        }
+        return path_;
+    }
+
+    void setRefs(const std::vector<Reference> &refs) { refs_ = refs; }
+    std::vector<Reference> &getRefs() {
+        if (refs_.empty()) {
+            throw std::runtime_error("ImportLoad: References are not set");
+        }
+        return refs_;
+    }
+
+    void setAs(const Reference &as) { as_ = as; }
+    const Reference &getAs() const {
+        if (as_.isNull()) {
+            throw std::runtime_error("ImportLoad: 'as' Reference is not set");
+        }
+        return as_;
+    }
 
   private:
     std::string path_;
@@ -112,10 +143,25 @@ class ImportDeclLoad : public Load {
     Reference as_;
 };
 
-class ExportDeclLoad : public Load {
+class ExportLoad : public Load {
   public:
-    ExportDeclLoad(std::vector<Reference> refs) : Load(LoadType::Export), refs_(refs) {}
+    ExportLoad() : Load(LoadType::Export) {}
     const std::string toString() const override;
+
+    void setRefs(const std::vector<Reference> &refs) { refs_ = refs; }
+    std::vector<Reference> &getRefs() {
+        if (refs_.empty()) {
+            throw std::runtime_error("ExportLoad: References are not set");
+        }
+        return refs_;
+    }
+
+    void addRef(const Reference &ref) {
+        if (ref.isNull()) {
+            throw std::runtime_error("ExportLoad: Cannot add null Reference");
+        }
+        refs_.push_back(ref);
+    }
 
   private:
     std::vector<Reference> refs_;
