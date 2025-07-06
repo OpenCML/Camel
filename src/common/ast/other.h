@@ -27,17 +27,6 @@
 #include "common/ref.h"
 
 namespace AbstractSyntaxTree {
-enum class CarrierType { Dict, List, Tuple, Default };
-
-class CarrierLoad : public Load {
-  public:
-    CarrierLoad(CarrierType type, std::vector<Reference> refs) : Load(LoadType::Carrier), type_(type), refs_(refs) {}
-    const std::string toString() const override;
-
-  private:
-    CarrierType type_;
-    std::vector<Reference> refs_;
-};
 
 class ParamDeclLoad : public Load {
   public:

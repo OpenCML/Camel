@@ -38,6 +38,29 @@ const std::string ExportLoad::toString() const {
     return result;
 }
 
+const std::string DataDeclLoad::toString() const {
+    std::string result = isVar_ ? "DataDecl: VAR " : "DataDecl: LET ";
+    if (refs_.size() == 1) {
+        result += refs_[0].toString();
+    } else {
+        std::string refs = join(refs_, std::string(", "));
+        switch (type_) {
+        case UnpackType::Dict:
+            result += "{" + refs + "}";
+            break;
+        case UnpackType::List:
+            result += "[" + refs + "]";
+            break;
+        case UnpackType::Tuple:
+            result += "(" + refs + ")";
+            break;
+        default:
+            throw std::runtime_error("Unknown UnpackType in DataDeclLoad: " + std::to_string(static_cast<int>(type_)));
+        }
+    }
+    return result;
+}
+
 const std::string TypeDeclLoad::toString() const {
     std::string result = "TypeDecl: " + implMarkToString(implMark_) + ref_.toString();
     if (!uri_.empty()) {

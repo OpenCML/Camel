@@ -26,19 +26,16 @@ Stmt := NameDecl | DataDecl | TypeDecl | FuncDecl | DataExpr | ExitStmt | StmtBl
 
 ImportDecl(string path, Ref[] refs, Ref as) ;
 ExportDecl(Ref[] refs) ;
-DataDecl(bool isVar) : Carrier, Type? type, Expr value;
+DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
 FuncDecl(Ref ref) : FuncData ;
 TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
 NameDecl(Ref ref, Ref alias) ;
 
-enum CarrierType {
+enum UnpackType {
     Dict,
     List,
-    Tuple,
-    Default
+    Tuple
 }
-
-Carrier(Ref[] refs, CarrierType type) ;
 
 StmtBlock(bool sync) : Stmt* stmts ;
 

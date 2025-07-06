@@ -24,14 +24,14 @@ namespace AbstractSyntaxTree {
 const std::string CarrierLoad::toString() const {
     std::string refs = join(refs_, std::string(", "));
     switch (type_) {
-    case CarrierType::Dict:
+    case UnpackType::Dict:
         return "Carrier: {" + refs + "}";
-    case CarrierType::List:
+    case UnpackType::List:
         return "Carrier: [" + refs + "]";
-    case CarrierType::Tuple:
+    case UnpackType::Tuple:
         return "Carrier: (" + refs + ")";
     default:
-        throw std::runtime_error("Unknown CarrierType");
+        throw std::runtime_error("Unknown UnpackType");
     }
 }
 } // namespace AbstractSyntaxTree

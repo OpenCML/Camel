@@ -25,6 +25,8 @@ namespace AbstractSyntaxTree {
 
 enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block };
 
+enum class UnpackType { Dict, List, Tuple };
+
 enum class ExitType { Yield, Raise, Return, Throw };
 
 class StmtLoad : public Load {
@@ -37,11 +39,14 @@ class StmtLoad : public Load {
 
 class DataDeclLoad : public StmtLoad {
   public:
-    DataDeclLoad(bool isVar) : StmtLoad(StmtType::Data), isVar_(isVar) {}
-    const std::string toString() const override { return isVar_ ? "DataDecl: VAR" : "DataDecl: LET"; }
+    DataDeclLoad(bool isVar, UnpackType type, const std::vector<Reference> &refs)
+        : StmtLoad(StmtType::Data), isVar_(isVar), type_(type), refs_(refs) {}
+    const std::string toString() const override;
 
   private:
     bool isVar_;
+    UnpackType type_;
+    std::vector<Reference> refs_;
 };
 
 class FuncDeclLoad : public StmtLoad {
@@ -55,14 +60,14 @@ class FuncDeclLoad : public StmtLoad {
 
 class TypeDeclLoad : public StmtLoad {
   public:
-    TypeDeclLoad(Reference ref, std::string uri, ImplMark impl = ImplMark::Graph)
+    TypeDeclLoad(Reference ref, ImplMark impl = ImplMark::Graph, std::string uri)
         : StmtLoad(StmtType::Type), ref_(ref), uri_(uri), implMark_(impl) {}
     const std::string toString() const override;
 
   private:
     Reference ref_;
-    std::string uri_;
     ImplMark implMark_;
+    std::string uri_;
 };
 
 class NameDeclLoad : public StmtLoad {
@@ -73,15 +78,6 @@ class NameDeclLoad : public StmtLoad {
   private:
     Reference ref_;
     Reference alias_;
-};
-
-class DataDeclLoad : public StmtLoad {
-  public:
-    DataDeclLoad(Reference ref) : StmtLoad(StmtType::Data), ref_(ref) {}
-    const std::string toString() const override { return "DataStmt: " + ref_.toString(); }
-
-  private:
-    Reference ref_;
 };
 
 class DataExprLoad : public StmtLoad {

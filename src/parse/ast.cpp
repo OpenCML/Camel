@@ -269,6 +269,15 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     node_ptr_t funcTypeNode = createNode<FuncTypeLoad>();
     auto funcType = std::dynamic_pointer_cast<FuncTypeLoad>(funcTypeNode);
 
+    auto implMark = context->implMark();
+    if (implMark) {
+        if (implMark->getText() == "inner") {
+            funcType->setImplMark(ImplMark::Inner);
+        } else {
+            funcType->setImplMark(ImplMark::Outer);
+        }
+    }
+
     auto modifier = context->modifiers();
     if (modifier) {
         if (modifier->ATOMIC().size() > 0) {
@@ -302,62 +311,19 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     }
     *funcTypeNode << typeOptNode;
 
-    node_ptr_t blockNode = any_cast<node_ptr_t>(visitBlockExpr(context->blockExpr()));
+    Reference ref(context->identDef()->getText());
+    if (context->EXPORT()) {
+        export_->addRef(ref);
+    }
 
-    node_ptr_t funcNode = createNode<FuncDataLoad>();
+    node_ptr_t blockNode = any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
+
+    node_ptr_t funcNode = createNode<FuncDataLoad>(ref);
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 
-
-
-
-    std::vector<std::string> idents = {""};
-    node_ptr_t exportNode = createNode<ExportDecl>(idents);
-    std::string implMark;
-    std::vector<FuncDecl::Modifier> modifiers;
-    std::string identDef;
-    if (context->implMark()) {
-        implMark = context->implMark()->getText();
-    }
-    auto modifier = context->modifiers();
-    if (modifier) {
-        if (modifier->ATOMIC().size() > 0) {
-            modifiers.push_back(FuncDecl::Modifier::ATOMIC);
-        } else if (modifier->SHARED().size() > 0) {
-            modifiers.push_back(FuncDecl::Modifier::SHARED);
-        } else if (modifier->SYNC().size() > 0) {
-            modifiers.push_back(FuncDecl::Modifier::SYNC);
-        } else if (modifier->MACRO().size() > 0) {
-            modifiers.push_back(FuncDecl::Modifier::MACRO);
-        }
-    }
-    if (context->identDef()) {
-        identDef = context->identDef()->getText();
-    }
-    node_ptr_t funcNode = createNode<FuncDecl>(implMark, modifiers, identDef);
-    if (context->typeExpr()) {
-        *funcNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
-    }
-    if (context->angledParams()) {
-        *funcNode << any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
-    }
-    if (context->parentParams()) {
-        node_ptr_t parentParamsNode = any_cast<node_ptr_t>(visitParentParams(context->parentParams()));
-        if (parentParamsNode)
-            *funcNode << parentParamsNode;
-    }
-    if (context->stmtBlock()) {
-        *funcNode << any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
-    }
-    node_ptr_t res = nullptr;
-    if (context->EXPORT()) {
-        *exportNode << funcNode;
-        res = exportNode;
-    } else {
-        res = funcNode;
-    }
     leave("FuncDecl");
-    return res;
+    return funcNode;
 }
 
 /*
@@ -365,12 +331,12 @@ parentIdents  : '(' identList? ','? ')' ;
 */
 any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
     enter("ParentIdents");
-    node_ptr_t res = nullptr;
+    vector<Reference> refs;
     if (context->identList()) {
-        res = any_cast<node_ptr_t>(visitIdentList(context->identList()));
+        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
     }
     leave("ParentIdents");
-    return res;
+    return refs;
 }
 
 /*
@@ -378,12 +344,12 @@ bracedIdents  : '{' identList? ','? '}' ;
 */
 any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
     enter("BracedIdents");
-    node_ptr_t res = nullptr;
+    vector<Reference> refs;
     if (context->identList()) {
-        res = any_cast<node_ptr_t>(visitIdentList(context->identList()));
+        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
     }
     leave("BracedIdents");
-    return res;
+    return refs;
 }
 
 /*
@@ -391,12 +357,12 @@ bracketIdents : '[' identList? ','? ']' ;
 */
 any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
     enter("BracketIdents");
-    node_ptr_t res = nullptr;
+    vector<Reference> refs;
     if (context->identList()) {
-        res = any_cast<node_ptr_t>(visitIdentList(context->identList()));
+        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
     }
     leave("BracketIdents");
-    return res;
+    return refs;
 }
 
 /*
@@ -404,14 +370,21 @@ carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 */
 any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
     enter("Carrier");
-    node_ptr_t res = nullptr;
+    UnpackType type = UnpackType::Tuple;
+    vector<Reference> refs;
     if (context->identList()) {
-        res = any_cast<node_ptr_t>(visitIdentList(context->identList()));
+        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
     } else if (context->parentIdents()) {
-        res = any_cast<node_ptr_t>(visitParentIdents(context->parentIdents()));
+        refs = any_cast<vector<Reference>>(visitParentIdents(context->parentIdents()));
+    } else if (context->bracedIdents()) {
+        type = UnpackType::Dict;
+        refs = any_cast<vector<Reference>>(visitBracedIdents(context->bracedIdents()));
+    } else if (context->bracketIdents()) {
+        type = UnpackType::List;
+        refs = any_cast<vector<Reference>>(visitBracketIdents(context->bracketIdents()));
     }
     leave("Carrier");
-    return res;
+    return make_tuple(type, refs);
 }
 
 /*
@@ -419,24 +392,23 @@ dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 */
 any Constructor::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
     enter("DataDecl");
-    std::string type;
-    if (context->LET()) {
-        type = context->LET()->getText();
-    } else if (context->VAR()) {
-        type = context->VAR()->getText();
+    bool isVar = false;
+    if (context->VAR()) {
+        isVar = true;
     }
-    node_ptr_t letNode = createNode<LetDecl>(type);
-    if (context->carrier()) {
-        *letNode << any_cast<node_ptr_t>(visitCarrier(context->carrier()));
-    }
+    auto [type, refs] = any_cast<std::tuple<UnpackType, vector<Reference>>>(visitCarrier(context->carrier()));
+    node_ptr_t dataDeclNode = createNode<DataDeclLoad>(isVar, type, refs);
+
     if (context->typeList()) {
-        *letNode << any_cast<node_ptr_t>(visitTypeList(context->typeList()));
+        *dataDeclNode << any_cast<node_ptr_t>(visitTypeList(context->typeList()));
+    } else {
+        node_ptr_t typeListNode = createNode<RepeatedLoad>("Type");
+        *dataDeclNode << typeListNode;
     }
-    if (context->dataList()) {
-        *letNode << any_cast<node_ptr_t>(visitDataList(context->dataList()));
-    }
+
+    *dataDeclNode << any_cast<node_ptr_t>(visitDataList(context->dataList()));
     leave("DataDecl");
-    return letNode;
+    return dataDeclNode;
 }
 
 /*
@@ -444,20 +416,32 @@ typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
 */
 any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     enter("TypeDecl");
-    std::string implMark;
-    std::string identDef;
+    string uri;
+    ImplMark implMark = ImplMark::Graph;
+    Reference ref(context->identDef()->getText());
     if (context->implMark()) {
-        implMark = context->implMark()->getText();
+        if (context->implMark()->INNER()) {
+            implMark = ImplMark::Inner;
+        } else {
+            implMark = ImplMark::Outer;
+        }
     }
-    if (context->identDef()) {
-        identDef = context->identDef()->getText();
+    if (context->STRING()) {
+        uri = context->STRING()->getText();
+        // Remove quotes from the string
+        uri = uri.substr(1, uri.size() - 2);
     }
-    node_ptr_t typeNode = createNode<TypeDecl>(implMark, identDef);
+
+    node_ptr_t typeDeclNode = createNode<TypeDeclLoad>(ref, implMark, uri);
+
+    node_ptr_t typeOptNode = createNode<OptionalLoad>("Type");
     if (context->typeExpr()) {
-        *typeNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
+        *typeOptNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
+
+    *typeDeclNode << typeOptNode;
     leave("TypeDecl");
-    return typeNode;
+    return typeDeclNode;
 }
 
 /*
@@ -465,17 +449,14 @@ useDecl    : USE (identDef '=')? identRef ;
 */
 any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
     enter("UseDecl");
-    std::string identDef;
-    std::string identRef;
+    Reference ref;
     if (context->identDef()) {
-        identDef = context->identDef()->getText();
+        ref.set(context->identDef()->getText());
     }
-    if (context->identRef()) {
-        identRef = context->identRef()->getText();
-    }
-    node_ptr_t useNode = createNode<UseDecl>(identDef, identRef);
+    Reference alias(context->identRef()->getText());
+    node_ptr_t nameDeclNode = createNode<NameDeclLoad>(ref, alias);
     leave("UseDecl");
-    return useNode;
+    return nameDeclNode;
 }
 
 /*
@@ -483,22 +464,23 @@ retStmt    : (RETURN | RAISE | THROW) dataList ;
 */
 any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
     enter("RetStmt");
-    std::string modifier;
+    ExitType exitType;
     if (context->RETURN()) {
-        modifier = context->RETURN()->getText();
+        exitType = ExitType::Return;
+    } else if (context->RAISE()) {
+        exitType = ExitType::Raise;
+    } else if (context->THROW()) {
+        exitType = ExitType::Throw;
+    } else {
+        // If no return type is specified, default to Return
+        exitType = ExitType::Return;
     }
-    if (context->RAISE()) {
-        modifier = context->RAISE()->getText();
-    }
-    if (context->THROW()) {
-        modifier = context->THROW()->getText();
-    }
-    node_ptr_t retNode = createNode<RetStmt>(modifier);
+    node_ptr_t exitNode = createNode<ExitStmtLoad>(exitType);
     if (context->dataList()) {
-        *retNode << any_cast<node_ptr_t>(visitDataList(context->dataList()));
+        *exitNode << any_cast<node_ptr_t>(visitDataList(context->dataList()));
     }
     leave("RetStmt");
-    return retNode;
+    return exitNode;
 }
 
 /*
@@ -506,7 +488,7 @@ implMark    : INNER | OUTER ;
 */
 any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) {
     enter("ImplMark");
-    // DO NOTHING
+    // NOTHING TO DO
     leave("ImplMark");
     return nullptr;
 }
@@ -516,7 +498,7 @@ modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
 */
 any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
     enter("Modifiers");
-    // DO NOTHING
+    // NOTHING TO DO
     leave("Modifiers");
     return nullptr;
 }
@@ -526,9 +508,7 @@ indexValue   : '...'? dataExpr ;
 */
 any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
     enter("IndexValue");
-    node_ptr_t res = nullptr;
-    if (context->dataExpr())
-        res = any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
+    node_ptr_t res = any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
     leave("IndexValue");
     return res;
 }
