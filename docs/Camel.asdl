@@ -114,7 +114,7 @@ DictData() : KeyDataPair* pairs ;
 TupleData() : Data* data ;
 IndexData() : Data data, Data* indices ;
 FuncData(Ref ref)
-    : FuncType funcType, Param* withParams, Param* normParams, Block body ;
+    : FuncType funcType, Block body ;
 RefData(Ref ref) ;
 
 enum TypeOp {

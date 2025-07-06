@@ -131,7 +131,7 @@ any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
         import_->setRefs(refs);
     }
     leave("ImportDecl");
-    return importNode;
+    return nullptr;
 }
 
 /*
@@ -139,6 +139,7 @@ exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 */
 any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     enter("ExportDecl");
+    node_ptr_t res = nullptr;
     if (context->dataDecl()) {
         res = any_cast<node_ptr_t>(visitDataDecl(context->dataDecl()));
         // TODO: 这里需要处理导出数据声明的情况
@@ -159,6 +160,9 @@ blockStmt  : WAIT? stmtBlock ;
 any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
     enter("BlockStmt");
     node_ptr_t res = any_cast<node_ptr_t>(visitStmtBlock(context->stmtBlock()));
+    if (context->WAIT()) {
+        std::dynamic_pointer_cast<StmtBlockLoad>(res)->setWait(true);
+    }
     leave("BlockStmt");
     return res;
 }
@@ -168,11 +172,16 @@ stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
 any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
     enter("StmtBlock");
+    node_ptr_t blockNode = nullptr;
     if (context->stmtList()) {
-        node_ptr_t blockNode = any_cast<node_ptr_t>(visitStmtList(context->stmtList()));
+        blockNode = any_cast<node_ptr_t>(visitStmtList(context->stmtList()));
         if (context->SYNC()) {
+            // If SYNC is present, we treat this as a synchronous block statement.
             std::dynamic_pointer_cast<StmtBlockLoad>(blockNode)->setSync(true);
         }
+    } else {
+        // If no statements are present, we create an empty block.
+        blockNode = createNode<StmtBlockLoad>();
     }
     leave("StmtBlock");
     return blockNode;
@@ -202,33 +211,48 @@ funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExp
 */
 any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     enter("FuncData");
-    std::vector<LambdaExpr::Modifier> modifiers;
+    node_ptr_t funcTypeNode = createNode<FuncTypeLoad>();
+    auto funcType = std::dynamic_pointer_cast<FuncTypeLoad>(funcTypeNode);
+
     auto modifier = context->modifiers();
     if (modifier) {
         if (modifier->ATOMIC().size() > 0) {
-            modifiers.push_back(LambdaExpr::Modifier::ATOMIC);
-        } else if (modifier->SHARED().size() > 0) {
-            modifiers.push_back(LambdaExpr::Modifier::SHARED);
-        } else if (modifier->SYNC().size() > 0) {
-            modifiers.push_back(LambdaExpr::Modifier::SYNC);
-        } else if (modifier->MACRO().size() > 0) {
-            modifiers.push_back(LambdaExpr::Modifier::MACRO);
+            funcType->setAtomic(true);
+        }
+        if (modifier->SHARED().size() > 0) {
+            funcType->setShared(true);
+        }
+        if (modifier->SYNC().size() > 0) {
+            funcType->setSync(true);
+        }
+        if (modifier->MACRO().size() > 0) {
+            funcType->setMacro(true);
         }
     }
 
-    node_ptr_t funcNode = createNode<LambdaExpr>(modifiers);
-    if (context->typeExpr()) {
-        *funcNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
-    }
     if (context->angledParams()) {
-        *funcNode << any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
+        node_ptr_t withParams = any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
+        *funcTypeNode << withParams;
     }
+
     if (context->parentParams()) {
-        *funcNode << any_cast<node_ptr_t>(visitParentParams(context->parentParams()));
+        node_ptr_t normParams = any_cast<node_ptr_t>(visitParentParams(context->parentParams()));
+        *funcTypeNode << normParams;
     }
-    if (context->blockExpr()) {
-        *funcNode << any_cast<node_ptr_t>(visitBlockExpr(context->blockExpr()));
+
+    node_ptr_t typeOptNode = createNode<OptionalLoad>("Type");
+    if (context->typeExpr()) {
+        node_ptr_t typeNode = any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
+        *typeOptNode << typeNode;
     }
+    *funcTypeNode << typeOptNode;
+
+    node_ptr_t blockNode = any_cast<node_ptr_t>(visitBlockExpr(context->blockExpr()));
+
+    node_ptr_t funcNode = createNode<FuncDataLoad>();
+    *funcNode << funcTypeNode;
+    *funcNode << blockNode;
+
     leave("FuncData");
     return funcNode;
 }
@@ -241,6 +265,52 @@ funcDecl   :
 */
 any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     enter("FuncDecl");
+
+    node_ptr_t funcTypeNode = createNode<FuncTypeLoad>();
+    auto funcType = std::dynamic_pointer_cast<FuncTypeLoad>(funcTypeNode);
+
+    auto modifier = context->modifiers();
+    if (modifier) {
+        if (modifier->ATOMIC().size() > 0) {
+            funcType->setAtomic(true);
+        }
+        if (modifier->SHARED().size() > 0) {
+            funcType->setShared(true);
+        }
+        if (modifier->SYNC().size() > 0) {
+            funcType->setSync(true);
+        }
+        if (modifier->MACRO().size() > 0) {
+            funcType->setMacro(true);
+        }
+    }
+
+    if (context->angledParams()) {
+        node_ptr_t withParams = any_cast<node_ptr_t>(visitAngledParams(context->angledParams()));
+        *funcTypeNode << withParams;
+    }
+
+    if (context->parentParams()) {
+        node_ptr_t normParams = any_cast<node_ptr_t>(visitParentParams(context->parentParams()));
+        *funcTypeNode << normParams;
+    }
+
+    node_ptr_t typeOptNode = createNode<OptionalLoad>("Type");
+    if (context->typeExpr()) {
+        node_ptr_t typeNode = any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
+        *typeOptNode << typeNode;
+    }
+    *funcTypeNode << typeOptNode;
+
+    node_ptr_t blockNode = any_cast<node_ptr_t>(visitBlockExpr(context->blockExpr()));
+
+    node_ptr_t funcNode = createNode<FuncDataLoad>();
+    *funcNode << funcTypeNode;
+    *funcNode << blockNode;
+
+
+
+
     std::vector<std::string> idents = {""};
     node_ptr_t exportNode = createNode<ExportDecl>(idents);
     std::string implMark;

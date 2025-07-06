@@ -88,6 +88,11 @@ class FuncTypeLoad : public TypeLoad {
     void setShared(bool shared) { shared_ = shared; }
     void setSync(bool sync) { sync_ = sync; }
     void setMacro(bool macro) { macro_ = macro; }
+    bool isAtomic() const { return atomic_; }
+    bool isShared() const { return shared_; }
+    bool isSync() const { return sync_; }
+    bool isMacro() const { return macro_; }
+    void setImplMark(ImplMark implMark) { implMark_ = implMark; }
 
   private:
     bool atomic_ = false;

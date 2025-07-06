@@ -132,6 +132,7 @@ class IndexDataLoad : public DataLoad {
 
 class FuncDataLoad : public DataLoad {
   public:
+    FuncDataLoad() : DataLoad(DataType::Func) {} // anonymous function
     FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
     const std::string toString() const override { return "FuncData: " + ref_.toString(); }
 

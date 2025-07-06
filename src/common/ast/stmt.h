@@ -105,8 +105,16 @@ class StmtBlockLoad : public StmtLoad {
     void setSync(bool sync) { sync_ = sync; }
     bool isSync() const { return sync_; }
 
+    void setWait(bool wait) { wait_ = wait; }
+    bool isWait() const { return wait_; }
+
+    const std::string toString() const override {
+        return std::string("StmtBlock: ") + (sync_ ? "SYNC" : "") + (wait_ ? " WAIT" : "");
+    }
+
   private:
     bool sync_ = false;
+    bool wait_ = false;
 };
 
 } // namespace AbstractSyntaxTree
