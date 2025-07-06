@@ -59,7 +59,7 @@ const string Load::typeStr() const {
         return "WaitStmt";
     case LoadType::LambdaExpr:
         return "LambdaExpr";
-    case LoadType::KeyTypePair:
+    case LoadType::NamedType:
         return "KeyTypePair";
     case LoadType::KeyValuePair:
         return "KeyValuePair";

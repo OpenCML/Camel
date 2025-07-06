@@ -78,12 +78,13 @@ enum DataOp {
     Exp,
     NullThen,
     ErrorThen,
-    Call,
-    With,
-    Bind
+    Index, // Data obj, Data* indices
+    Call, // Data obj, Data* args, NamedData* kwargs
+    With, // Data obj, Data* args, NamedData* kwargs
+    Bind, // Data lhs, Data rhs
 }
 
-DataExpr(DataOp op) := Data lhs, Data rhs ;
+DataExpr(DataOp op) := Any... lhs, rhs... ;
 
 enum DataType {
     DataExpr,
@@ -95,7 +96,6 @@ enum DataType {
     List,
     Dict,
     Tuple,
-    Index,
     Func,
     Ref
 }
@@ -109,7 +109,6 @@ Literal(Value value) ;
 ListData() : Data* data ;
 DictData() : KeyDataPair* pairs ;
 TupleData() : Data* data ;
-IndexData() : Data data, Data* indices ;
 FuncData(Ref ref)
     : FuncType funcType, Block body ;
 RefData(Ref ref) ;
@@ -145,18 +144,19 @@ enum Modifier {
     Macro
 }
 
-ParamDecl(Ref ref, bool isVar) : Type type, Data? default ;
-paramData(Ref ref) : Data data ;
+NamedData(Ref ref) : Data data ;
+NamedType(Ref ref, bool isVar) : Type type ;
+NamedPair(Ref ref, bool isVar) : Type type, Data? data ;
 
 Type(TypeType type) := 
     TypeExpr | ListType | DictType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 
 ListType(siz dim) : Type type ;
-DictType() : KeyTypePair* pairs ;
+DictType() : NamedType* types ;
 TupleType() : Type* types ;
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
-    : ParamType* withParams, ParamType* normParams, Type? ExitType ;
+    : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 SpecType() : Type type, (Type | Data)* args ;
 UnitType(Ref ref) : Type type ;
 InferType(Ref ref) ;

@@ -40,7 +40,7 @@ class ParamDeclLoad : public Load {
 
 class ParamDataLoad : public Load {
   public:
-    ParamDataLoad(const Reference &ref) : Load(LoadType::ParamData), ref_(ref) {}
+    ParamDataLoad(const Reference &ref) : Load(LoadType::NamedData), ref_(ref) {}
     const std::string toString() const override { return "ParamData: " + ref_.toString(); }
 
   private:

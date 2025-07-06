@@ -518,16 +518,13 @@ keyTypePair  : identDef ':' typeExpr ;
 */
 any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
     enter("KeyTypePair");
-    std::string ident;
-    if (context->identDef()) {
-        ident = context->identDef()->getText();
-    }
-    node_ptr_t keyTypeNode = createNode<KeyTypePair>(ident);
+    Reference ref(context->identDef()->getText());
+    node_ptr_t namedTypeNode = createNode<NamedTypeLoad>(ref);
     if (context->typeExpr()) {
-        *keyTypeNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
+        *namedTypeNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
     }
     leave("KeyTypePair");
-    return keyTypeNode;
+    return namedTypeNode;
 }
 
 /*
@@ -535,16 +532,13 @@ keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
 any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
     enter("KeyValuePair");
-    std::string ident;
-    if (context->identDef()) {
-        ident = context->identDef()->getText();
-    }
-    node_ptr_t keyValuePairNode = createNode<KeyValuePair>(ident);
+    Reference ref(context->identDef()->getText());
+    node_ptr_t namedDataNode = createNode<NamedDataLoad>(ref);
     if (context->dataExpr()) {
-        *keyValuePairNode << any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
+        *namedDataNode << any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
     }
     leave("KeyValuePair");
-    return keyValuePairNode;
+    return namedDataNode;
 }
 
 /*
@@ -553,22 +547,19 @@ keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
 any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
     enter("KeyParamPair");
     bool isVar = false;
-    std::string ident;
     if (context->VAR()) {
         isVar = true;
     }
-    if (context->identDef()) {
-        ident = context->identDef()->getText();
-    }
-    node_ptr_t keyParamPairNode = createNode<KeyParamPair>(isVar, ident);
-    if (context->typeExpr()) {
-        *keyParamPairNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
-    }
+    Reference ref(context->identDef()->getText());
+    node_ptr_t namedPairNode = createNode<NamedPairLoad>(ref, isVar);
+    *namedPairNode << any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
+    node_ptr_t dataExprOptNode = createNode<OptionalLoad>("DataExpr");
     if (context->dataExpr()) {
-        *keyParamPairNode << any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
+        *dataExprOptNode << any_cast<node_ptr_t>(visitDataExpr(context->dataExpr()));
     }
+    *namedPairNode << dataExprOptNode;
     leave("KeyParamPair");
-    return keyParamPairNode;
+    return namedPairNode;
 }
 
 /*
@@ -576,12 +567,12 @@ dataList     : dataExpr (',' dataExpr)* ;
 */
 any Constructor::visitDataList(OpenCMLParser::DataListContext *context) {
     enter("DataList");
-    node_ptr_t dataListNode = createNode<DataList>();
+    node_ptr_t rep = createNode<RepeatedLoad>("Data");
     for (const auto &dataExpr : context->dataExpr()) {
-        *dataListNode << any_cast<node_ptr_t>(visitDataExpr(dataExpr));
+        *rep << any_cast<node_ptr_t>(visitDataExpr(dataExpr));
     }
     leave("DataList");
-    return dataListNode;
+    return rep;
 }
 
 /*
@@ -589,13 +580,12 @@ identList    : identDef (',' identDef)* ;
 */
 any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {
     enter("IdentList");
-    std::vector<std::string> idents;
+    std::vector<Reference> refs;
     for (const auto &identDef : context->identDef()) {
-        idents.push_back(identDef->getText());
+        refs.emplace_back(identDef->getText());
     }
-    node_ptr_t identListNode = createNode<IdentList>(idents);
     leave("IdentList");
-    return identListNode;
+    return refs;
 }
 
 /*
@@ -603,12 +593,12 @@ indexValues  : indexValue (',' indexValue)* ;
 */
 any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
     enter("IndexValues");
-    node_ptr_t indexValuesNode = createNode<IndexValues>();
+    node_ptr_t rep = createNode<RepeatedLoad>("Data");
     for (const auto &indexValue : context->indexValue()) {
-        *indexValuesNode << any_cast<node_ptr_t>(visitIndexValue(indexValue));
+        *rep << any_cast<node_ptr_t>(visitIndexValue(indexValue));
     }
     leave("IndexValues");
-    return indexValuesNode;
+    return rep;
 }
 
 /*
@@ -616,13 +606,12 @@ pairedValues : keyValuePair (',' keyValuePair)* ;
 */
 any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
     enter("PairedValues");
-    node_ptr_t pairedValuesNode = createNode<PairedValues>();
-    if (context->keyValuePair().size() > 0)
-        for (const auto &keyValuePair : context->keyValuePair()) {
-            *pairedValuesNode << any_cast<node_ptr_t>(visitKeyValuePair(keyValuePair));
-        }
+    node_ptr_t rep = createNode<RepeatedLoad>("NamedData");
+    for (const auto &keyValuePair : context->keyValuePair()) {
+        *rep << any_cast<node_ptr_t>(visitKeyValuePair(keyValuePair));
+    }
     leave("PairedValues");
-    return pairedValuesNode;
+    return rep;
 }
 
 /*
@@ -630,14 +619,12 @@ pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
     enter("PairedParams");
-    node_ptr_t pairedParamsNode = createNode<PairedParams>();
-    if (context->keyParamPair().size() > 0) {
-        for (const auto &keyParamPair : context->keyParamPair()) {
-            *pairedParamsNode << any_cast<node_ptr_t>(visitKeyParamPair(keyParamPair));
-        }
+    node_ptr_t rep = createNode<RepeatedLoad>("NamedPair");
+    for (const auto &keyParamPair : context->keyParamPair()) {
+        *rep << any_cast<node_ptr_t>(visitKeyParamPair(keyParamPair));
     }
     leave("PairedParams");
-    return pairedParamsNode;
+    return rep;
 }
 
 /*

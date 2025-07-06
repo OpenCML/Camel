@@ -78,10 +78,9 @@ enum class LoadType {
     Data,
     Type,
 
-    Carrier,
-    ParamDecl,
-    ParamData,
-    KeyTypePair,
+    NamedData,
+    NamedType,
+    NamedPair,
 
     Repeated,
     Optional,
@@ -165,6 +164,44 @@ class ExportLoad : public Load {
 
   private:
     std::vector<Reference> refs_;
+};
+
+class NamedDataLoad : public Load {
+  public:
+    NamedDataLoad(const Reference &ref) : Load(LoadType::NamedData), ref_(ref) {}
+    const std::string toString() const override { return "NamedData: " + ref_.toString(); }
+
+    const Reference &getRef() const { return ref_; }
+
+  private:
+    Reference ref_;
+};
+
+class NamedTypeLoad : public Load {
+  public:
+    NamedTypeLoad(const Reference &ref, bool isVar = false) : Load(LoadType::NamedType), ref_(ref), isVar_(isVar) {}
+    const std::string toString() const override {
+        return "NamedType: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
+    }
+
+    const Reference &getRef() const { return ref_; }
+
+  private:
+    Reference ref_;
+    bool isVar_;
+};
+
+class NamedPairLoad : public Load {
+  public:
+    NamedPairLoad(const Reference &ref, bool isVar = false) : Load(LoadType::NamedType), ref_(ref), isVar_(isVar) {}
+    const std::string toString() const override {
+        return "NamedPair: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
+    }
+    const Reference &getRef() const { return ref_; }
+
+  private:
+    Reference ref_;
+    bool isVar_;
 };
 
 class RepeatedLoad : public Load {
