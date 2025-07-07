@@ -55,9 +55,15 @@ enum class DataOp {
     Exp,
     NullThen,
     ErrorThen,
+    NotNullThen,
     Call,
     With,
-    Bind
+    Bind,
+    As,
+    Is,
+    Not,
+    Neg,
+    Inv
 };
 
 std::string dataOpToString(DataOp op);
@@ -89,6 +95,15 @@ class DataLoad : Load {
     DataType dataType_;
     bool notNull_;
     bool waited_;
+};
+
+class DataExprLoad : public DataLoad {
+  public:
+    DataExprLoad(DataOp op) : DataLoad(DataType::DataExpr), op_(op) {}
+    const std::string toString() const override { return "DataExpr: " + dataOpToString(op_); }
+
+  private:
+    DataOp op_;
 };
 
 class IfExprLoad : public DataLoad {

@@ -1051,41 +1051,43 @@ any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
     enter("UnaryExpr");
     node_ptr_t res = nullptr;
 
-    int num = context->getAltNumber();
-
-    switch (num) {
+    switch (context->getAltNumber()) {
     case 1: {
-        UnaryExpr::TypeOp op;
+        DataOp op;
         if (context->AS()) {
-            op = UnaryExpr::TypeOp::AS;
+            op = DataOp::As;
         } else if (context->IS()) {
-            op = UnaryExpr::TypeOp::IS;
+            op = DataOp::Is;
         } else {
-            op = UnaryExpr::TypeOp::INVALID;
+            throw std::runtime_error("Invalid unary operator: " + context->children[0]->getText());
         }
-        node_ptr_t linkNode = any_cast<node_ptr_t>(visitLinkExpr(context->linkExpr()));
-        res = createNode<UnaryExpr>(UnaryExpr::UnaryOp::INVALID, op);
-        *res << linkNode;
+        node_ptr_t dataNode = any_cast<node_ptr_t>(visitLinkExpr(context->linkExpr()));
+        node_ptr_t typeNode = any_cast<node_ptr_t>(visitTypeExpr(context->typeExpr()));
+        res = createNode<DataExprLoad>(op);
+        *res << dataNode << typeNode;
         break;
     }
     case 2: {
-        UnaryExpr::UnaryOp op;
+        DataOp op;
         string strOp = context->children[0]->getText();
         if (strOp == "!") {
-            op = UnaryExpr::UnaryOp::NOT;
+            op = DataOp::Not;
         } else if (strOp == "-") {
-            op = UnaryExpr::UnaryOp::LINK;
+            op = DataOp::Neg;
         } else if (strOp == "~") {
-            op = UnaryExpr::UnaryOp::BIT_NOT;
+            op = DataOp::Inv;
         } else {
-            op = UnaryExpr::UnaryOp::INVALID;
+            throw std::runtime_error("Invalid unary operator: " + strOp);
         }
-        node_ptr_t linkNode = any_cast<node_ptr_t>(visitLinkExpr(context->linkExpr()));
-        res = createNode<UnaryExpr>(op, UnaryExpr::TypeOp::INVALID);
-        *res << linkNode;
+        node_ptr_t dataNode = any_cast<node_ptr_t>(visitLinkExpr(context->linkExpr()));
+        res = createNode<DataExprLoad>(op);
+        *res << dataNode;
         break;
     }
+    default:
+        throw std::runtime_error("Invalid alternative number in UnaryExpr: " + std::to_string(context->getAltNumber()));
     }
+
     leave("UnaryExpr");
     return res;
 }
@@ -1098,20 +1100,17 @@ linkExpr
 any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
     enter("LinkExpr");
     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitBindExpr(context->bindExpr(0)));
-    LinkExpr::LinkOp op;
     for (size_t i = 1; i < context->bindExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
-        if (strOp == "->") {
-            op = LinkExpr::LinkOp::ARROW;
-        } else if (strOp == "?->") {
-            op = LinkExpr::LinkOp::QUESTION_ARROW;
-        } else {
-            op = LinkExpr::LinkOp::INVALID;
-        }
+        node_ptr_t dataNode = createNode<DataExprLoad>(DataOp::Call);
         node_ptr_t rhsNode = any_cast<node_ptr_t>(visitBindExpr(context->bindExpr(i)));
-        node_ptr_t linkNode = createNode<LinkExpr>(op);
-        *linkNode << lhsNode << rhsNode;
-        lhsNode = linkNode;
+        if (strOp == "?->") {
+            node_ptr_t notNullNode = createNode<DataExprLoad>(DataOp::NotNullThen);
+            *notNullNode << lhsNode;
+            lhsNode = notNullNode;
+        }
+        *dataNode << lhsNode << rhsNode;
+        lhsNode = dataNode;
     }
     leave("LinkExpr");
     return lhsNode;
@@ -1125,20 +1124,17 @@ bindExpr
 any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {
     enter("BindExpr");
     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitWithExpr(context->withExpr(0)));
-    BindExpr::BindOp op;
     for (size_t i = 1; i < context->withExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
-        if (strOp == "..") {
-            op = BindExpr::BindOp::DOUBLE_DOT;
-        } else if (strOp == "?..") {
-            op = BindExpr::BindOp::QUESTION_DOUBLE_DOT;
-        } else {
-            op = BindExpr::BindOp::INVALID;
-        }
+        node_ptr_t dataNode = createNode<DataExprLoad>(DataOp::Bind);
         node_ptr_t rhsNode = any_cast<node_ptr_t>(visitWithExpr(context->withExpr(i)));
-        node_ptr_t bindNode = createNode<BindExpr>(op);
-        *bindNode << lhsNode << rhsNode;
-        lhsNode = bindNode;
+        if (strOp == "?..") {
+            node_ptr_t notNullNode = createNode<DataExprLoad>(DataOp::NotNullThen);
+            *notNullNode << lhsNode;
+            lhsNode = notNullNode;
+        }
+        *dataNode << lhsNode << rhsNode;
+        lhsNode = dataNode;
     }
     leave("BindExpr");
     return lhsNode;
@@ -1151,24 +1147,18 @@ withExpr
 */
 any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     enter("WithExpr");
-    if (context->children.size() == 1) { // no with expr, return the anno expr
-        return any_cast<node_ptr_t>(visitAnnoExpr(context->annoExpr(0)));
-    }
     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitAnnoExpr(context->annoExpr(0)));
-    WithExpr::WithOp op;
     for (size_t i = 1; i < context->annoExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
-        if (strOp == ".") {
-            op = WithExpr::WithOp::DOT;
-        } else if (strOp == "?.") {
-            op = WithExpr::WithOp::QUESTION_DOT;
-        } else {
-            op = WithExpr::WithOp::INVALID;
-        }
+        node_ptr_t dataNode = createNode<DataExprLoad>(DataOp::With);
         node_ptr_t rhsNode = any_cast<node_ptr_t>(visitAnnoExpr(context->annoExpr(i)));
-        node_ptr_t withNode = createNode<WithExpr>(op);
-        *withNode << lhsNode << rhsNode;
-        lhsNode = withNode;
+        if (strOp == "?.") {
+            node_ptr_t notNullNode = createNode<DataExprLoad>(DataOp::NotNullThen);
+            *notNullNode << lhsNode;
+            lhsNode = notNullNode;
+        }
+        *dataNode << lhsNode << rhsNode;
+        lhsNode = dataNode;
     }
     leave("WithExpr");
     return lhsNode;

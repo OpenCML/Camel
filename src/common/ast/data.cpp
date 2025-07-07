@@ -84,12 +84,24 @@ std::string dataOpToString(DataOp op) {
         return "??";
     case DataOp::ErrorThen:
         return "!!";
+    case DataOp::NotNullThen:
+        return "?";
     case DataOp::Call:
         return "->";
     case DataOp::With:
         return ".";
     case DataOp::Bind:
         return "..";
+    case DataOp::As:
+        return "AS";
+    case DataOp::Is:
+        return "IS";
+    case DataOp::Not:
+        return "!";
+    case DataOp::Neg:
+        return "-";
+    case DataOp::Inv:
+        return "~";
     default:
         throw std::runtime_error("Unknown data operation");
     }

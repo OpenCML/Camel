@@ -78,10 +78,16 @@ enum DataOp {
     Exp,
     NullThen,
     ErrorThen,
+    NotNullThen,
     Index, // Data obj, Data* indices
     Call, // Data obj, Data* args, NamedData* kwargs
     With, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data lhs, Data rhs
+    As, // Data lhs, Type rhs
+    Is, // Data lhs, Type rhs
+    Not, // Data expr
+    Neg, // Data expr
+    Inv, // Data expr
 }
 
 DataExpr(DataOp op) := Any... lhs, rhs... ;
