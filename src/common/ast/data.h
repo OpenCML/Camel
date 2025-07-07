@@ -79,6 +79,12 @@ class DataLoad : Load {
         return result;
     }
 
+    void setNotNull(bool notNull) { notNull_ = notNull; }
+    void setWaited(bool waited) { waited_ = waited; }
+
+    bool isNotNull() const { return notNull_; }
+    bool isWaited() const { return waited_; }
+
   private:
     DataType dataType_;
     bool notNull_;

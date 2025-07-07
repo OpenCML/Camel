@@ -82,8 +82,11 @@ class NameDeclLoad : public StmtLoad {
 
 class DataExprLoad : public StmtLoad {
   public:
-    DataExprLoad() : StmtLoad(StmtType::Expr) {}
-    const std::string toString() const override { return "DataExpr"; }
+    DataExprLoad(DataOp op) : StmtLoad(StmtType::Expr), op_(op) {}
+    const std::string toString() const override { return "DataExpr: " + dataOpToString(op_); }
+
+  private:
+    DataOp op_;
 };
 
 class ExitStmtLoad : public StmtLoad {
