@@ -169,6 +169,7 @@ class ExportLoad : public Load {
         }
         return refs_;
     }
+    bool isEmpty() const { return refs_.empty(); }
 
     void addRef(const Reference &ref) {
         if (ref.isNull()) {

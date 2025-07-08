@@ -24,7 +24,7 @@
 #include "utils/log.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL 1
 
 using namespace std;
 using namespace AST;
@@ -47,19 +47,25 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
     enter("Program");
 
     root_ = std::make_shared<Node>(module_);
-    node_ptr_t importNode = std::make_shared<Node>(import_);
-    node_ptr_t exportNode = std::make_shared<Node>(export_);
-    *root_ << importNode << exportNode;
 
+    node_ptr_t stmts = createNodeBy<RepeatedLoad>("Stmts");
     for (const auto &decl : context->decl()) {
         any res = visitDecl(decl);
         if (res.has_value()) {
             node_ptr_t node = any2node(res);
             if (node) {
-                *root_ << node;
+                *stmts << node;
             }
         }
     }
+
+    for (auto &import_ : imports_) {
+        *root_ << std::make_shared<Node>(import_);
+    }
+    if (!export_->isEmpty()) {
+        *root_ << std::make_shared<Node>(export_);
+    }
+    *root_ << stmts;
 
     leave("Program");
     return root_;
@@ -139,6 +145,7 @@ importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 */
 any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     enter("ImportDecl");
+    auto import_ = std::make_shared<ImportLoad>();
     if (context->STRING()) {
         import_->setPath(context->STRING()->getText());
     }
@@ -151,6 +158,7 @@ any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
         }
         import_->setRefs(refs);
     }
+    imports_.push_back(import_);
     leave("ImportDecl");
     return std::any();
 }
