@@ -109,14 +109,14 @@ enum DataType {
 Data(DataType type, bool notNull, bool waited)
     := DataExpr| IfExpr | MatchExpr | TryExpr | UnaryExpr | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
 
-IfExpr() : Data cond, FuncData then, FuncData? else ;
+IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 
 Literal(Value value) ;
 ListData() : Data* data ;
 DictData() : KeyDataPair* pairs ;
 TupleData() : Data* data ;
 FuncData(Ref ref)
-    : FuncType funcType, Block body ;
+    : FuncType funcType, StmtBlock body ;
 RefData(Ref ref) ;
 
 enum TypeOp {

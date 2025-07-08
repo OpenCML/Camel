@@ -55,7 +55,7 @@ class TypeExprLoad : public TypeLoad {
 class ListTypeLoad : public TypeLoad {
   public:
     ListTypeLoad(size_t dims) : TypeLoad(TypeType::List), dims_(dims) {}
-    const std::string toString() const override { return "ListType"; }
+    const std::string toString() const override { return "ListType: [" + std::to_string(dims_) + "]"; }
 
     size_t dims() const { return dims_; }
 

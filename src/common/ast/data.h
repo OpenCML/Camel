@@ -110,7 +110,19 @@ class DataExprLoad : public DataLoad {
 class IfExprLoad : public DataLoad {
   public:
     IfExprLoad() : DataLoad(DataType::IfExpr) {}
-    const std::string toString() const override { return "IfExprLoad"; }
+    const std::string toString() const override { return "IfExpr"; }
+};
+
+class MatchExprLoad : public DataLoad {
+  public:
+    MatchExprLoad() : DataLoad(DataType::MatchExpr) {}
+    const std::string toString() const override { return "MatchExpr"; }
+};
+
+class TryExprLoad : public DataLoad {
+  public:
+    TryExprLoad() : DataLoad(DataType::TryExpr) {}
+    const std::string toString() const override { return "TryExpr"; }
 };
 
 class LiteralLoad : public DataLoad {

@@ -89,9 +89,9 @@ std::string dataOpToString(DataOp op) {
     case DataOp::Index:
         return "[]";
     case DataOp::Call:
-        return "->";
+        return "()";
     case DataOp::With:
-        return ".";
+        return "<>";
     case DataOp::Bind:
         return "..";
     case DataOp::As:

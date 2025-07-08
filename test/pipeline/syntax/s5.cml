@@ -20,4 +20,3 @@ func main(): int sync {
     print("after start")
     return fetch_data()
 }
- 

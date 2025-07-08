@@ -23,13 +23,16 @@
 namespace AbstractSyntaxTree {
 
 const std::string ImportLoad::toString() const {
-    std::string result = "ImportDecl: " + path_;
+    std::string result = "ImportDecl: ";
     if (!refs_.empty()) {
-        result += " refs: " + join(refs_, std::string(", "));
+        result += "{ " + join(refs_, std::string(", ")) + " }";
+    } else {
+        result += "*";
     }
     if (!as_.ident().empty()) {
-        result += " as: " + as_.toString();
+        result += " as " + as_.toString();
     }
+    result += " from " + path_;
     return result;
 }
 
@@ -39,7 +42,7 @@ const std::string ExportLoad::toString() const {
 }
 
 const std::string DataDeclLoad::toString() const {
-    std::string result = isVar_ ? "DataDecl: var " : "DataDecl: let ";
+    std::string result = isVar_ ? "DataDecl: var " : "DataDecl: ";
     if (refs_.size() == 1) {
         result += refs_[0].toString();
     } else {
@@ -62,7 +65,11 @@ const std::string DataDeclLoad::toString() const {
 }
 
 const std::string TypeDeclLoad::toString() const {
-    std::string result = "TypeDecl: " + implMarkToString(implMark_) + ref_.toString();
+    std::string result = "TypeDecl: ";
+    if (implMark_ != ImplMark::Graph) {
+        result += implMarkToString(implMark_) + " ";
+    }
+    result += ref_.toString();
     if (!uri_.empty()) {
         result += " [" + uri_ + "]";
     }

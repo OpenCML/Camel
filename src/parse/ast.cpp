@@ -47,6 +47,9 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
     enter("Program");
 
     root_ = std::make_shared<Node>(module_);
+    node_ptr_t importNode = std::make_shared<Node>(import_);
+    node_ptr_t exportNode = std::make_shared<Node>(export_);
+    *root_ << importNode << exportNode;
 
     for (const auto &decl : context->decl()) {
         any res = visitDecl(decl);
@@ -793,9 +796,27 @@ ctrlExpr
 */
 any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     enter("CtrlExpr");
-    throw std::runtime_error("visitCtrlExpr: not implemented yet");
+    node_ptr_t ctrlNode = nullptr;
+    switch (context->getAltNumber()) {
+    case 1: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
+    {
+        ctrlNode = createNodeBy<IfExprLoad>();
+        *ctrlNode << any2node(visitLogicalOrExpr(context->logicalOrExpr()));
+        *ctrlNode << any2node(visitBlockExpr(context->blockExpr(0)));
+        node_ptr_t elseBlockNode = createNodeBy<OptionalLoad>("StmtBlock");
+        *ctrlNode << elseBlockNode;
+        if (context->blockExpr(1)) {
+            *elseBlockNode << any2node(visitBlockExpr(context->blockExpr(1)));
+        } else {
+            *elseBlockNode << createNodeBy<StmtBlockLoad>();
+        }
+    } break;
+
+    default:
+        throw std::runtime_error("visitCtrlExpr: unsupported control expression type");
+    }
     leave("CtrlExpr");
-    return nullptr;
+    return ctrlNode;
 }
 
 /*
@@ -1232,11 +1253,11 @@ dictData
 */
 any Constructor::visitDictData(OpenCMLParser::DictDataContext *context) {
     enter("DictData");
-    node_ptr_t dataNode = nullptr;
+    node_ptr_t dataNode = createNodeBy<DictDataLoad>();
     if (context->pairedValues()) {
-        dataNode = any2node(visitPairedValues(context->pairedValues()));
+        *dataNode << any2node(visitPairedValues(context->pairedValues()));
     } else {
-        dataNode = createNodeBy<RepeatedLoad>("NamedData");
+        *dataNode << createNodeBy<RepeatedLoad>("NamedData");
     }
     leave("DictData");
     return dataNode;
@@ -1249,11 +1270,11 @@ listData
 */
 any Constructor::visitListData(OpenCMLParser::ListDataContext *context) {
     enter("ListData");
-    node_ptr_t dataNode = nullptr;
+    node_ptr_t dataNode = createNodeBy<ListDataLoad>();
     if (context->indexValues()) {
-        dataNode = any2node(visitIndexValues(context->indexValues()));
+        *dataNode << any2node(visitIndexValues(context->indexValues()));
     } else {
-        dataNode = createNodeBy<RepeatedLoad>("Data");
+        *dataNode << createNodeBy<RepeatedLoad>("Data");
         // TODO: Handle list comprehension
     }
     leave("ListData");
@@ -1267,11 +1288,11 @@ tupleData
 */
 any Constructor::visitTupleData(OpenCMLParser::TupleDataContext *context) {
     enter("TupleData");
-    node_ptr_t dataNode = nullptr;
+    node_ptr_t dataNode = createNodeBy<TupleDataLoad>();
     if (context->dataList()) {
-        dataNode = any2node(visitDataList(context->dataList()));
+        *dataNode << any2node(visitDataList(context->dataList()));
     } else {
-        dataNode = createNodeBy<RepeatedLoad>("Data");
+        *dataNode << createNodeBy<RepeatedLoad>("Data");
     }
     leave("TupleData");
     return dataNode;
