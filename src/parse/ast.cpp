@@ -1491,9 +1491,13 @@ listType
 */
 any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {
     enter("ListType");
-    size_t dims = (context->children.size() - 1) / 2;
-    node_ptr_t res = createNodeBy<ListTypeLoad>(dims);
-    *res << any2node(visitSpecType(context->specType()));
+    node_ptr_t res = any2node(visitSpecType(context->specType()));
+    if (context->children.size() > 1) {
+        size_t dims = (context->children.size() - 1) / 2;
+        node_ptr_t listTypeNode = createNodeBy<ListTypeLoad>(dims);
+        *listTypeNode << res;
+        res = listTypeNode;
+    }
     leave("ListType");
     return res;
 }

@@ -72,13 +72,13 @@ const std::string TypeDeclLoad::toString() const {
 const std::string ExitStmtLoad::toString() const {
     switch (type_) {
     case ExitType::Yield:
-        return "ExitStmt: YIELD";
+        return "ExitStmt: yield";
     case ExitType::Raise:
-        return "ExitStmt: RAISE";
+        return "ExitStmt: raise";
     case ExitType::Return:
-        return "ExitStmt: RETURN";
+        return "ExitStmt: return";
     case ExitType::Throw:
-        return "ExitStmt: THROW";
+        return "ExitStmt: throw";
     default:
         throw std::runtime_error("Unknown ExitType");
     }

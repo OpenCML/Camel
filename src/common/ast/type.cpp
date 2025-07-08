@@ -77,11 +77,25 @@ std::string typeOpToString(TypeOp op) {
 }
 
 const std::string FuncTypeLoad::toString() const {
-    std::string result = "FuncTypeLoad: " + typeTypeToString(TypeType::Func);
-    if (!uri_.empty()) {
-        result += " @ " + uri_;
+    std::string result = "FuncType: ";
+    if (implMark_ != ImplMark::Graph) {
+        result += implMarkToString(implMark_);
     }
-    result += " [" + implMarkToString(implMark_) + "]";
+    if (macro_) {
+        result += " macro";
+    }
+    if (atomic_) {
+        result += " atomic";
+    }
+    if (shared_) {
+        result += " shared";
+    }
+    if (sync_) {
+        result += " sync";
+    }
+    if (!uri_.empty()) {
+        result += " [" + uri_ + "]";
+    }
     return result;
 }
 

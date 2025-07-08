@@ -25,11 +25,11 @@ namespace AbstractSyntaxTree {
 std::string implMarkToString(ImplMark mark) {
     switch (mark) {
     case ImplMark::Inner:
-        return "INNER";
+        return "inner";
     case ImplMark::Outer:
-        return "OUTER";
+        return "outer";
     case ImplMark::Graph:
-        return "GRAPH";
+        return "graph";
     default:
         return "UNKNOWN";
     }
