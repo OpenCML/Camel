@@ -71,7 +71,7 @@ std::string dataOpToString(DataOp op);
 
 std::string dataTypeToString(DataType type);
 
-class DataLoad : Load {
+class DataLoad : public Load {
   public:
     DataLoad(DataType type, bool notNull = false, bool waited = false)
         : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}

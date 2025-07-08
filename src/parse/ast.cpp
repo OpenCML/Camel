@@ -24,13 +24,14 @@
 #include "utils/log.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL 1
 
 using namespace std;
 using namespace AST;
 
 template <typename LoadType, typename... Args> node_ptr_t createNodeBy(Args &&...args) {
-    return std::dynamic_pointer_cast<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
+    return std::make_shared<Node>(
+        std::dynamic_pointer_cast<Load>(std::make_shared<LoadType>(std::forward<Args>(args)...)));
 }
 
 template <typename LoadType> std::shared_ptr<LoadType> unwrapNodeAs(std::shared_ptr<Node> &node) {
@@ -48,9 +49,12 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
     root_ = std::make_shared<Node>(module_);
 
     for (const auto &decl : context->decl()) {
-        node_ptr_t node = any2node(visitDecl(decl));
-        if (node) {
-            *root_ << node;
+        any res = visitDecl(decl);
+        if (res.has_value()) {
+            node_ptr_t node = any2node(res);
+            if (node) {
+                *root_ << node;
+            }
         }
     }
 
@@ -124,7 +128,7 @@ any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
     Reference ref(context->identDef()->getText());
     module_->setRef(ref);
     leave("ModuleDecl");
-    return nullptr;
+    return std::any();
 }
 
 /*
@@ -145,7 +149,7 @@ any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
         import_->setRefs(refs);
     }
     leave("ImportDecl");
-    return nullptr;
+    return std::any();
 }
 
 /*
@@ -165,7 +169,11 @@ any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
         }
     }
     leave("ExportDecl");
-    return res;
+    if (res) {
+        return res;
+    } else {
+        return std::any();
+    }
 }
 
 /*
@@ -1066,18 +1074,22 @@ any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
 
     switch (context->getAltNumber()) {
     case 1: {
-        DataOp op;
-        if (context->AS()) {
-            op = DataOp::As;
-        } else if (context->IS()) {
-            op = DataOp::Is;
+        if (context->children.size() == 1) {
+            res = any2node(visitLinkExpr(context->linkExpr()));
         } else {
-            throw std::runtime_error("Invalid unary operator: " + context->children[0]->getText());
+            DataOp op;
+            if (context->AS()) {
+                op = DataOp::As;
+            } else if (context->IS()) {
+                op = DataOp::Is;
+            } else {
+                throw std::runtime_error("Invalid unary operator: " + context->children[0]->getText());
+            }
+            node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
+            node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
+            res = createNodeBy<DataExprLoad>(op);
+            *res << dataNode << typeNode;
         }
-        node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
-        node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
-        res = createNodeBy<DataExprLoad>(op);
-        *res << dataNode << typeNode;
         break;
     }
     case 2: {
