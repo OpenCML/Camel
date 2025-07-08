@@ -24,6 +24,8 @@ namespace AbstractSyntaxTree {
 
 std::string typeTypeToString(TypeType type) {
     switch (type) {
+    case TypeType::Null:
+        return "Null";
     case TypeType::Expr:
         return "Expr";
     case TypeType::List:

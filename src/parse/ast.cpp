@@ -24,7 +24,7 @@
 #include "utils/log.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 1
+#define DEBUG_LEVEL 0
 
 using namespace std;
 using namespace AST;
@@ -1341,43 +1341,23 @@ literal
 */
 any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     enter("Literal: " + to_string(context->getAltNumber()));
-    switch (context->getAltNumber()) {
-    case 1: { // INTEGER
-        leave("Literal");
-        return Literal(LiteralType::Integer, context->INTEGER()->getText());
+    LiteralType type;
+    if (context->INTEGER()) {
+        type = LiteralType::Integer;
+    } else if (context->REAL()) {
+        type = LiteralType::Real;
+    } else if (context->STRING() || context->MULTI_STR() || context->FSTRING()) {
+        type = LiteralType::String;
+    } else if (context->TRUE() || context->FALSE()) {
+        type = LiteralType::Boolean;
+    } else if (context->NULL_()) {
+        type = LiteralType::Null;
+    } else {
+        throw std::runtime_error("Unknown literal type in visitLiteral");
     }
-    case 2: { // REAL
-        leave("Literal");
-        return Literal(LiteralType::Real, context->REAL()->getText());
-    }
-    case 3: { // STRING
-        leave("Literal");
-        return Literal(LiteralType::String, context->STRING()->getText());
-    }
-    case 4: { // MULTI_STR
-        leave("Literal");
-        return Literal(LiteralType::String, context->MULTI_STR()->getText());
-    }
-    case 5: { // FSTRING
-        leave("Literal");
-        return Literal(LiteralType::String, context->FSTRING()->getText());
-    }
-    case 6: { // TRUE
-        leave("Literal");
-        return Literal(LiteralType::Boolean, "true");
-    }
-    case 7: { // FALSE
-        leave("Literal");
-        return Literal(LiteralType::Boolean, "false");
-    }
-    case 8: { // NULL
-        leave("Literal");
-        return Literal(LiteralType::Null, "null");
-    }
-
-    default:
-        throw std::runtime_error("Invalid literal type: " + std::to_string(context->getAltNumber()));
-    }
+    Literal literal(type, context->getText());
+    leave("Literal: " + to_string(context->getAltNumber()));
+    return literal;
 }
 
 /*
@@ -1388,10 +1368,16 @@ typeExpr
 any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
     enter("TypeExpr");
     node_ptr_t lhsNode = any2node(visitUnionType(context->unionType(0)));
-    if (context->unionType().size() > 1) {
-        node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(TypeOp::ErrorThen);
-        *typeExprNode << any2node(visitUnionType(context->unionType(1)));
-        lhsNode = typeExprNode;
+    if (context->children.size() > 1) {
+        if (context->unionType().size() > 1) {
+            node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(TypeOp::ErrorThen);
+            *typeExprNode << any2node(visitUnionType(context->unionType(1)));
+            lhsNode = typeExprNode;
+        } else {
+            node_ptr_t nullableTypeNode = createNodeBy<NullableTypeLoad>();
+            *nullableTypeNode << lhsNode;
+            lhsNode = nullableTypeNode;
+        }
     }
     leave("TypeExpr");
     return lhsNode;

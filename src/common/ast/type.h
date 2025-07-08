@@ -26,7 +26,7 @@
 
 namespace AbstractSyntaxTree {
 
-enum class TypeType { Expr, List, Dict, Tuple, Func, Spec, Unit, Infer, Data, Ref };
+enum class TypeType { Null, Expr, List, Dict, Tuple, Func, Spec, Unit, Infer, Data, Ref };
 
 enum class TypeOp { Union, Inter, Diff, KeyUnion, KeyInter, KeyDiff, ErrorThen, Specialize, TypeOf, TypeAs };
 
@@ -41,6 +41,12 @@ class TypeLoad : public Load {
 
   private:
     TypeType typeType_;
+};
+
+class NullableTypeLoad : public TypeLoad {
+  public:
+    NullableTypeLoad() : TypeLoad(TypeType::Null) {}
+    const std::string toString() const override { return "NullableType"; }
 };
 
 class TypeExprLoad : public TypeLoad {
