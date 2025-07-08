@@ -52,7 +52,7 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
 
     void setParent(tree_node_t<load_t> *parent) { parent_ = parent; }
 
-    static tree_node_ptr_t<load_t> createNode(load_t load) { return std::make_shared<tree_node_t<load_t>>(load); }
+    static tree_node_ptr_t<load_t> createNodeBy(load_t load) { return std::make_shared<tree_node_t<load_t>>(load); }
 
     size_t find(load_t load) const {
         auto it = find_if(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end(),

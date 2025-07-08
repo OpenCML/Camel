@@ -260,6 +260,9 @@ int main(int argc, char *argv[]) {
         if (Inspect::dumpCST) {
             auto visitor = CSTDumpVisitor(os);
             visitor.visit(cst);
+            if (!Inspect::dumpAST && !Inspect::dumpGCT && !Inspect::dumpGIR) {
+                return 0; // If only CST is requested, we can stop here
+            }
         }
         if (Format::formatCode) {
             auto formatter = Formatter(tokens.getTokens());
@@ -274,6 +277,9 @@ int main(int argc, char *argv[]) {
         assert(ast != nullptr);
         if (Inspect::dumpAST && ast) {
             ast->print(os);
+            if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
+                return 0; // If only AST is requested, we can stop here
+            }
         }
 
         if (!buildGCT(gct, ast, os, errorFormat)) {
@@ -282,6 +288,9 @@ int main(int argc, char *argv[]) {
         assert(gct != nullptr);
         if (Inspect::dumpGCT && gct) {
             gct->print(os);
+            if (!Inspect::dumpGIR) {
+                return 0; // If only GCT is requested, we can stop here
+            }
         }
 
         if (!buildGIR(gir, gct, ctx, os, errorFormat)) {

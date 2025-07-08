@@ -12,6 +12,7 @@ TYPE        : 'type';
 ENUM        : 'enum';
 WITH        : 'with';
 WAIT        : 'wait';
+CONST       : 'const';
 KEYOF       : 'keyof';
 RETURN      : 'return';
 MODULE      : 'module';
@@ -47,16 +48,13 @@ FALSE       : 'false';
 
 INNER_ATOM_TYPE
     : 'int'
-    | 'i32'
-    | 'i64'
     | 'float'
-    | 'f32'
-    | 'f64'
-    | 'string'
     | 'bool'
     | 'char'
+    | 'string'
     | 'any'
     | 'void'
+    | 'unit'
     | 'functor'
     ;
 

@@ -4,7 +4,7 @@
 
 module main
 
-func test(a: int, b: int): bool {
+export func test(a: int, b: int): bool {
     return ((a + b) * 3 > 10) && (a < b)
 }
 

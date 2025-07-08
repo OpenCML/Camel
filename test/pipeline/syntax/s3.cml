@@ -19,8 +19,10 @@ inner macro func map(x: Model): int[] {
     // }
 }
 
+export { add_one, double, map }
+
 func main(): int {
     let arr = [1, 2, 3, 4]
     let composed: Model = add_one..double
-    return arr.map(composed)[0]
+    return (arr.map(composed))[0]
 }
