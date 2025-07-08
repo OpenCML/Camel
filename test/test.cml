@@ -2,5 +2,5 @@
 // import opt from 'opt'
 
 func main() {
-    let train = ApplyGradients<opt::adam<lr: 0.1>>(forward)
+    ApplyGradients<opt::adam<lr: 0.1>>(forward)
 }

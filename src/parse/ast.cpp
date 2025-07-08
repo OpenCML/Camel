@@ -24,7 +24,7 @@
 #include "utils/log.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 1
+#define DEBUG_LEVEL 0
 
 using namespace std;
 using namespace AST;
@@ -665,7 +665,10 @@ argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
 any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
     enter("ArgumentList");
-    node_ptr_t dataList = any2node(visitIndexValues(context->indexValues()));
+    node_ptr_t dataList = createNodeBy<RepeatedLoad>("Data");
+    if (context->indexValues()) {
+        dataList = any2node(visitIndexValues(context->indexValues()));
+    }
     node_ptr_t namedDataList = createNodeBy<RepeatedLoad>("NamedData");
     if (context->pairedValues()) {
         namedDataList = any2node(visitPairedValues(context->pairedValues()));
