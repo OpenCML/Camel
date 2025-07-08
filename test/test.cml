@@ -1,8 +1,6 @@
-with <src: int[]>
-func map(f: (a: int) => int): int[] {
-    return [f(src[0]), f(src[1])]
-}
+// import { dense, dropout, relu, softmax } from 'nn'
+// import opt from 'opt'
 
-func fool(sig: int[]): Any {
-    return sig.map((x: int): int => x + 1)
+func main() {
+    ApplyGradients<opt::adam<lr: 0.1>>(forward)
 }
