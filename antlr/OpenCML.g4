@@ -175,15 +175,15 @@ linkExpr
     ;
 
 bindExpr
-    : withExpr (('..' | '?..') withExpr)*
-    ;
-
-withExpr
-    : annoExpr (('.' | '?.') annoExpr)*
+    : annoExpr (('..' | '?..') annoExpr)*
     ;
 
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    ;
+
+withExpr
+    : primaryData (('.' | '?.') primaryData)*
     ;
 
 dictData

@@ -1164,16 +1164,16 @@ any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
 
 /*
 bindExpr
-    : withExpr (('..' | '?..') withExpr)*
+    : annoExpr (('..' | '?..') annoExpr)*
     ;
 */
 any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {
     enter("BindExpr");
-    node_ptr_t lhsNode = any2node(visitWithExpr(context->withExpr(0)));
-    for (size_t i = 1; i < context->withExpr().size(); i++) {
+    node_ptr_t lhsNode = any2node(visitAnnoExpr(context->annoExpr(0)));
+    for (size_t i = 1; i < context->annoExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
         node_ptr_t dataNode = createNodeBy<DataExprLoad>(DataOp::Bind);
-        node_ptr_t rhsNode = any2node(visitWithExpr(context->withExpr(i)));
+        node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
         if (strOp == "?..") {
             node_ptr_t notNullNode = createNodeBy<DataExprLoad>(DataOp::NotNullThen);
             *notNullNode << lhsNode;
@@ -1187,37 +1187,13 @@ any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {
 }
 
 /*
-withExpr
-    : annoExpr (('.' | '?.') annoExpr)*
-    ;
-*/
-any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
-    enter("WithExpr");
-    node_ptr_t lhsNode = any2node(visitAnnoExpr(context->annoExpr(0)));
-    for (size_t i = 1; i < context->annoExpr().size(); i++) {
-        string strOp = context->children[i * 2 - 1]->getText();
-        node_ptr_t dataNode = createNodeBy<DataExprLoad>(DataOp::With);
-        node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
-        if (strOp == "?.") {
-            node_ptr_t notNullNode = createNodeBy<DataExprLoad>(DataOp::NotNullThen);
-            *notNullNode << lhsNode;
-            lhsNode = notNullNode;
-        }
-        *dataNode << lhsNode << rhsNode;
-        lhsNode = dataNode;
-    }
-    leave("WithExpr");
-    return lhsNode;
-}
-
-/*
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
     ;
 */
 any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
     enter("AnnoExpr");
-    node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData()));
+    node_ptr_t lhsNode = any2node(visitWithExpr(context->withExpr()));
     for (size_t i = 1; i < context->children.size(); i++) {
         auto child = context->children[i];
         if (antlr4::RuleContext::is(child)) {
@@ -1243,6 +1219,30 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
         }
     }
     leave("AnnoExpr");
+    return lhsNode;
+}
+
+/*
+withExpr
+    : primaryData (('.' | '?.') primaryData)*
+    ;
+*/
+any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
+    enter("WithExpr");
+    node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData(0)));
+    for (size_t i = 1; i < context->primaryData().size(); i++) {
+        string strOp = context->children[i * 2 - 1]->getText();
+        node_ptr_t dataNode = createNodeBy<DataExprLoad>(DataOp::With);
+        node_ptr_t rhsNode = any2node(visitPrimaryData(context->primaryData(i)));
+        if (strOp == "?.") {
+            node_ptr_t notNullNode = createNodeBy<DataExprLoad>(DataOp::NotNullThen);
+            *notNullNode << lhsNode;
+            lhsNode = notNullNode;
+        }
+        *dataNode << lhsNode << rhsNode;
+        lhsNode = dataNode;
+    }
+    leave("WithExpr");
     return lhsNode;
 }
 

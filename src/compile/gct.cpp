@@ -331,7 +331,7 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     for (const auto &decl : decls) {
         func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
         node_ptr_t declNode = createNodeBy<DeclLoad>(funcType); // Create declaration node
-        *execNode << declNode;                                // Attach to execution block
+        *execNode << declNode;                                  // Attach to execution block
     }
 
     // 2.4 Process general statements and function bodies
@@ -828,25 +828,32 @@ any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) { return
 
 /*
 bindExpr
-    : withExpr (('..' | '?..') withExpr)*
+    : annoExpr (('..' | '?..') annoExpr)*
     ;
 */
 any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) { return nullptr; }
 
 /*
+annoExpr
+    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    ;
+*/
+any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }
+
+/*
 withExpr
-    : annoExpr (('.' | '?.') annoExpr)*
+    : primaryData (('.' | '?.') primaryData)*
     ;
 */
 any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     // TODO: ?.
     enter("WithExpr");
-    const auto &annotatedExprs = context->annoExpr();
-    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitAnnoExpr(annotatedExprs[0]));
+    const auto &dataList = context->primaryData();
+    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitPrimaryData(dataList[0]));
 
-    for (size_t i = 1; i < annotatedExprs.size(); ++i) {
+    for (size_t i = 1; i < dataList.size(); ++i) {
         node_ptr_t execNode = createNodeBy<ExecLoad>();
-        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitAnnoExpr(annotatedExprs[i]));
+        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitPrimaryData(dataList[i]));
 
         node_ptr_t withNode = createNodeBy<WithLoad>();
         *withNode << lhsNode << rhsNode;
@@ -857,13 +864,6 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     leave("WithExpr");
     return lhsNode;
 }
-
-/*
-annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
-    ;
-*/
-any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }
 
 /*
 dictData

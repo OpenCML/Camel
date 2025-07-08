@@ -22,8 +22,8 @@
 #include <string>
 #include <unordered_set>
 
-#include "parse/antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
+#include "parse/antlr/OpenCMLVisitor.h"
 
 class Formatter : public OpenCMLVisitor {
   private:
@@ -476,9 +476,9 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitBindExpr(OpenCMLParser::BindExprContext *context);
 
-    std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
-
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
+
+    std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
 
     std::any visitDictData(OpenCMLParser::DictDataContext *context);
 

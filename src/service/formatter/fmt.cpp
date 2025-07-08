@@ -850,29 +850,20 @@ any Formatter::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
 
 /*
 bindExpr
-    : withExpr (('..' | '?..') withExpr)*
+    : annoExpr (('..' | '?..') annoExpr)*
     ;
 */
 any Formatter::visitBindExpr(OpenCMLParser::BindExprContext *context) {
-    return formatBiOpsList(context->withExpr(), context->children, false);
-}
-
-/*
-withExpr
-    : annoExpr (('.' | '?.') annoExpr)*
-    ;
-*/
-any Formatter::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     return formatBiOpsList(context->annoExpr(), context->children, false);
 }
 
 /*
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
     ;
 */
 any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
-    string result = any_cast<string>(visitPrimaryData(context->primaryData()));
+    string result = any_cast<string>(visitWithExpr(context->withExpr()));
     for (size_t i = 1; i < context->children.size(); i++) {
         const auto &child = context->children[i];
         if (antlr4::tree::TerminalNode::is(child)) {
@@ -883,6 +874,15 @@ any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
         }
     }
     return result;
+}
+
+/*
+withExpr
+    : primaryData (('.' | '?.') primaryData)*
+    ;
+*/
+any Formatter::visitWithExpr(OpenCMLParser::WithExprContext *context) {
+    return formatBiOpsList(context->primaryData(), context->children, false);
 }
 
 /*
