@@ -28,12 +28,12 @@
 // using namespace std;
 // using namespace ast;
 
-// template <typename LoadType, typename... Args> node_ptr_t createNode(Args &&...args) {
+// template <typename LoadType, typename... Args> node_ptr_t createNodeBy(Args &&...args) {
 //     return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
 // }
 
 // template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&...args) {
-//     return createNode<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
+//     return createNodeBy<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 // }
 
 // namespace GraphConstructTree::InnerFuncDRefNodes {
@@ -86,107 +86,107 @@
 //     if (__copy__)
 //         return;
 
-//     __copy__ = createNode<DRefLoad>("__copy__");
+//     __copy__ = createNodeBy<DRefLoad>("__copy__");
 //     nodesMap["__copy__"] = __copy__;
-//     __cast__ = createNode<DRefLoad>("__cast__");
+//     __cast__ = createNodeBy<DRefLoad>("__cast__");
 //     nodesMap["__cast__"] = __cast__;
-//     __type__ = createNode<DRefLoad>("__type__");
+//     __type__ = createNodeBy<DRefLoad>("__type__");
 //     nodesMap["__type__"] = __type__;
-//     __index__ = createNode<DRefLoad>("__index__");
+//     __index__ = createNodeBy<DRefLoad>("__index__");
 //     nodesMap["__index__"] = __index__;
 
-//     __as__ = createNode<DRefLoad>("__as__");
+//     __as__ = createNodeBy<DRefLoad>("__as__");
 //     nodesMap["__as__"] = __as__;
 //     opNodesMap["as"] = __as__;
-//     __is__ = createNode<DRefLoad>("__is__");
+//     __is__ = createNodeBy<DRefLoad>("__is__");
 //     nodesMap["__is__"] = __is__;
 //     opNodesMap["is"] = __is__;
 
-//     __add__ = createNode<DRefLoad>("__add__");
+//     __add__ = createNodeBy<DRefLoad>("__add__");
 //     nodesMap["__add__"] = __add__;
 //     opNodesMap["+"] = __add__;
-//     __sub__ = createNode<DRefLoad>("__sub__");
+//     __sub__ = createNodeBy<DRefLoad>("__sub__");
 //     nodesMap["__sub__"] = __sub__;
 //     opNodesMap["-"] = __sub__;
-//     __mul__ = createNode<DRefLoad>("__mul__");
+//     __mul__ = createNodeBy<DRefLoad>("__mul__");
 //     nodesMap["__mul__"] = __mul__;
 //     opNodesMap["*"] = __mul__;
-//     __div__ = createNode<DRefLoad>("__div__");
+//     __div__ = createNodeBy<DRefLoad>("__div__");
 //     nodesMap["__div__"] = __div__;
 //     opNodesMap["/"] = __div__;
-//     __mod__ = createNode<DRefLoad>("__mod__");
+//     __mod__ = createNodeBy<DRefLoad>("__mod__");
 //     nodesMap["__mod__"] = __mod__;
 //     opNodesMap["%"] = __mod__;
-//     __pow__ = createNode<DRefLoad>("__pow__");
+//     __pow__ = createNodeBy<DRefLoad>("__pow__");
 //     nodesMap["__pow__"] = __pow__;
 //     opNodesMap["^"] = __pow__;
-//     __inter__ = createNode<DRefLoad>("__inter__");
+//     __inter__ = createNodeBy<DRefLoad>("__inter__");
 //     nodesMap["__inter__"] = __inter__;
 //     opNodesMap["&"] = __inter__;
-//     __union__ = createNode<DRefLoad>("__union__");
+//     __union__ = createNodeBy<DRefLoad>("__union__");
 //     nodesMap["__union__"] = __union__;
 //     opNodesMap["|"] = __union__;
 
-//     __assn__ = createNode<DRefLoad>("__assn__");
+//     __assn__ = createNodeBy<DRefLoad>("__assn__");
 //     nodesMap["__assn__"] = __assn__;
 //     opNodesMap["="] = __assn__;
-//     __assn_add__ = createNode<DRefLoad>("__assn_add__");
+//     __assn_add__ = createNodeBy<DRefLoad>("__assn_add__");
 //     nodesMap["__assn_add__"] = __assn_add__;
 //     opNodesMap["+="] = __assn_add__;
-//     __assn_sub__ = createNode<DRefLoad>("__assn_sub__");
+//     __assn_sub__ = createNodeBy<DRefLoad>("__assn_sub__");
 //     nodesMap["__assn_sub__"] = __assn_sub__;
 //     opNodesMap["-="] = __assn_sub__;
-//     __assn_mul__ = createNode<DRefLoad>("__assn_mul__");
+//     __assn_mul__ = createNodeBy<DRefLoad>("__assn_mul__");
 //     nodesMap["__assn_mul__"] = __assn_mul__;
 //     opNodesMap["*="] = __assn_mul__;
-//     __assn_div__ = createNode<DRefLoad>("__assn_div__");
+//     __assn_div__ = createNodeBy<DRefLoad>("__assn_div__");
 //     nodesMap["__assn_div__"] = __assn_div__;
 //     opNodesMap["/="] = __assn_div__;
-//     __assn_mod__ = createNode<DRefLoad>("__assn_mod__");
+//     __assn_mod__ = createNodeBy<DRefLoad>("__assn_mod__");
 //     nodesMap["__assn_mod__"] = __assn_mod__;
 //     opNodesMap["%="] = __assn_mod__;
-//     __assn_pow__ = createNode<DRefLoad>("__assn_pow__");
+//     __assn_pow__ = createNodeBy<DRefLoad>("__assn_pow__");
 //     nodesMap["__assn_pow__"] = __assn_pow__;
 //     opNodesMap["^="] = __assn_pow__;
-//     __assn_inter__ = createNode<DRefLoad>("__assn_inter__");
+//     __assn_inter__ = createNodeBy<DRefLoad>("__assn_inter__");
 //     nodesMap["__assn_inter__"] = __assn_inter__;
 //     opNodesMap["&="] = __assn_inter__;
-//     __assn_union__ = createNode<DRefLoad>("__assn_union__");
+//     __assn_union__ = createNodeBy<DRefLoad>("__assn_union__");
 //     nodesMap["__assn_union__"] = __assn_union__;
 //     opNodesMap["|="] = __assn_union__;
 
-//     __lt__ = createNode<DRefLoad>("__lt__");
+//     __lt__ = createNodeBy<DRefLoad>("__lt__");
 //     nodesMap["__lt__"] = __lt__;
 //     opNodesMap["<"] = __lt__;
-//     __gt__ = createNode<DRefLoad>("__gt__");
+//     __gt__ = createNodeBy<DRefLoad>("__gt__");
 //     nodesMap["__gt__"] = __gt__;
 //     opNodesMap[">"] = __gt__;
-//     __le__ = createNode<DRefLoad>("__le__");
+//     __le__ = createNodeBy<DRefLoad>("__le__");
 //     nodesMap["__le__"] = __le__;
 //     opNodesMap["<="] = __le__;
-//     __ge__ = createNode<DRefLoad>("__ge__");
+//     __ge__ = createNodeBy<DRefLoad>("__ge__");
 //     nodesMap["__ge__"] = __ge__;
 //     opNodesMap[">="] = __ge__;
-//     __eq__ = createNode<DRefLoad>("__eq__");
+//     __eq__ = createNodeBy<DRefLoad>("__eq__");
 //     nodesMap["__eq__"] = __eq__;
 //     opNodesMap["=="] = __eq__;
-//     __ne__ = createNode<DRefLoad>("__ne__");
+//     __ne__ = createNodeBy<DRefLoad>("__ne__");
 //     nodesMap["__ne__"] = __ne__;
 //     opNodesMap["!="] = __ne__;
-//     __and__ = createNode<DRefLoad>("__and__");
+//     __and__ = createNodeBy<DRefLoad>("__and__");
 //     nodesMap["__and__"] = __and__;
 //     opNodesMap["&&"] = __and__;
-//     __or__ = createNode<DRefLoad>("__or__");
+//     __or__ = createNodeBy<DRefLoad>("__or__");
 //     nodesMap["__or__"] = __or__;
 //     opNodesMap["||"] = __or__;
 
-//     __not__ = createNode<DRefLoad>("__not__");
+//     __not__ = createNodeBy<DRefLoad>("__not__");
 //     nodesMap["__not__"] = __not__;
 //     opNodesMap["!"] = __not__;
-//     __neg__ = createNode<DRefLoad>("__neg__");
+//     __neg__ = createNodeBy<DRefLoad>("__neg__");
 //     nodesMap["__neg__"] = __neg__;
 //     opNodesMap["-"] = __neg__;
-//     __rev__ = createNode<DRefLoad>("__rev__");
+//     __rev__ = createNodeBy<DRefLoad>("__rev__");
 //     nodesMap["__rev__"] = __rev__;
 //     opNodesMap["~"] = __rev__;
 // }
@@ -199,7 +199,7 @@
 // }
 
 // inline node_ptr_t linkFunc(node_ptr_t &argsNode, node_ptr_t &funcNode) {
-//     node_ptr_t linkNode = createNode<LinkLoad>();
+//     node_ptr_t linkNode = createNodeBy<LinkLoad>();
 //     *linkNode << argsNode << funcNode;
 //     return linkNode;
 // }
@@ -218,7 +218,7 @@
 
 // pair<node_ptr_t, data_ptr_t> Constructor::makeRefData(const node_ptr_t &expr) {
 //     const string indent = to_string(indentIndex_++);
-//     node_ptr_t refNode = createNode<NRefLoad>(indent);
+//     node_ptr_t refNode = createNodeBy<NRefLoad>(indent);
 //     *refNode << expr;
 //     data_ptr_t data = make_shared<RefData>(indent);
 //     return make_pair(refNode, data);
@@ -251,7 +251,7 @@
 //     if (context->stmtList()) {
 //         root_ = any_cast<node_ptr_t>(visitStmtList(context->stmtList()));
 //     } else {
-//         root_ = createNode<ExecLoad>();
+//         root_ = createNodeBy<ExecLoad>();
 //     }
 //     leave("Program");
 //     return root_;
@@ -263,7 +263,7 @@
 // any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
 //     enter("StmtList");
 //     pushScope();
-//     node_ptr_t execNode = createNode<ExecLoad>();
+//     node_ptr_t execNode = createNodeBy<ExecLoad>();
 //     vector<OpenCMLParser::UseDeclContext *> froms;
 //     vector<OpenCMLParser::TypeDeclContext *> types;
 //     vector<OpenCMLParser::FuncDeclContext *> decls;
@@ -289,7 +289,7 @@
 //     }
 //     for (const auto &decl : decls) {
 //         func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
-//         node_ptr_t declNode = createNode<DeclLoad>(funcType);
+//         node_ptr_t declNode = createNodeBy<DeclLoad>(funcType);
 //         *execNode << declNode;
 //     }
 //     for (const auto &stmt : stmts) {
@@ -358,7 +358,7 @@
 
 //     bool dangling = false;
 //     node_ptr_t exprNode = any_cast<node_ptr_t>(visitEntityExpr(context->entityExpr()));
-//     node_ptr_t execNode = createNode<ExecLoad>();
+//     node_ptr_t execNode = createNodeBy<ExecLoad>();
 //     auto [exprValue, _] = extractData(exprNode, execNode, dangling);
 
 //     node_ptr_t resultNode = nullptr;
@@ -367,7 +367,7 @@
 //     case 1: // identRef
 //     {
 //         const string &ident = any_cast<string>(carrier);
-//         node_ptr_t nRefNode = createNode<NRefLoad>(ident);
+//         node_ptr_t nRefNode = createNodeBy<NRefLoad>(ident);
 //         node_ptr_t baseNode = nullptr;
 
 //         if (type) {
@@ -401,7 +401,7 @@
 
 //         for (size_t i = 0; i < idents.size(); i++) {
 //             const string &ident = idents[i];
-//             node_ptr_t nRefNode = createNode<NRefLoad>(ident);
+//             node_ptr_t nRefNode = createNodeBy<NRefLoad>(ident);
 //             node_ptr_t dataNode =
 //                 createDataNode<TupleData>(data_list_t{exprValue, make_shared<PrimaryData<int32_t>>(i)});
 //             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
@@ -426,7 +426,7 @@
 
 //         for (size_t i = 0; i < idents.size(); i++) {
 //             const string &ident = idents[i];
-//             node_ptr_t nRefNode = createNode<NRefLoad>(ident);
+//             node_ptr_t nRefNode = createNodeBy<NRefLoad>(ident);
 //             node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{exprValue, make_shared<StringData>(ident)});
 //             *nRefNode << linkFunc(dataNode, InnerFuncDRefNodes::__index__);
 //             *execNode << nRefNode;
@@ -440,7 +440,7 @@
 //     }
 
 //     if (context->VAR()) {
-//         node_ptr_t variNode = createNode<VariLoad>();
+//         node_ptr_t variNode = createNodeBy<VariLoad>();
 //         *variNode << resultNode;
 //         resultNode = variNode;
 //     }
@@ -463,7 +463,7 @@
 //         idents = any_cast<vector<string>>(visitBracedIdents(context->bracedIdents()));
 //     }
 
-//     node_ptr_t result = createNode<FromLoad>(path, idents);
+//     node_ptr_t result = createNodeBy<FromLoad>(path, idents);
 
 //     leave("UseDecl");
 //     return result;
@@ -477,7 +477,7 @@
 //     const string &ident = context->identRef()->getText();
 //     type_ptr_t type = any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
 //     typeScope_->insert(ident, type);
-//     node_ptr_t result = createNode<TypeLoad>(type);
+//     node_ptr_t result = createNodeBy<TypeLoad>(type);
 //     leave("TypeDecl");
 //     return result;
 // };
@@ -587,8 +587,8 @@
 //     enter("FuncDef");
 //     // TODO: Implement annotations
 //     func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(context->funcDecl()));
-//     node_ptr_t declNode = createNode<DeclLoad>(funcType);
-//     const auto funcNode = createNode<FuncLoad>(funcType);
+//     node_ptr_t declNode = createNodeBy<DeclLoad>(funcType);
+//     const auto funcNode = createNodeBy<FuncLoad>(funcType);
 //     *funcNode << declNode << any_cast<node_ptr_t>(visitBracedStmts(context->bracedStmts()));
 
 //     leave("FuncDef");
@@ -600,7 +600,7 @@
 // */
 // any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
 //     enter("RetStmt");
-//     node_ptr_t retNode = createNode<RetnLoad>();
+//     node_ptr_t retNode = createNodeBy<RetnLoad>();
 //     if (context->entityExpr()) {
 //         *retNode << any_cast<node_ptr_t>(visitEntityExpr(context->entityExpr()));
 //     }
@@ -657,8 +657,8 @@
 //         bodyNode = any_cast<node_ptr_t>(visitBracedStmts(stmts));
 //     } else {
 //         node_ptr_t exprNode = any_cast<node_ptr_t>(visitEntityExpr(context->entityExpr()));
-//         node_ptr_t returnNode = createNode<RetnLoad>();
-//         node_ptr_t execNode = createNode<ExecLoad>();
+//         node_ptr_t returnNode = createNodeBy<RetnLoad>();
+//         node_ptr_t execNode = createNodeBy<ExecLoad>();
 //         *returnNode << exprNode;
 //         *execNode << returnNode;
 //         bodyNode = execNode;
@@ -676,8 +676,8 @@
 //         }
 //     }
 
-//     const auto declNode = createNode<DeclLoad>(funcType);
-//     const auto funcNode = createNode<FuncLoad>(funcType);
+//     const auto declNode = createNodeBy<DeclLoad>(funcType);
+//     const auto funcNode = createNodeBy<FuncLoad>(funcType);
 
 //     *funcNode << declNode << bodyNode;
 
@@ -726,7 +726,7 @@
 // any Constructor::visitAnnotations(OpenCMLParser::AnnotationsContext *context) {
 //     enter("Annotations");
 //     // TODO: Implement visitAnnotations
-//     node_ptr_t execNode = createNode<ExecLoad>();
+//     node_ptr_t execNode = createNodeBy<ExecLoad>();
 //     for (const auto &annotation : context->annotation()) {
 //         *execNode << any_cast<node_ptr_t>(visitAnnotation(annotation));
 //     }
@@ -965,7 +965,7 @@
 //     if (context->stmtList()) {
 //         res = visitStmtList(context->stmtList());
 //     } else {
-//         res = createNode<ExecLoad>();
+//         res = createNodeBy<ExecLoad>();
 //     }
 //     leave("BracedStmts");
 //     return res;
@@ -1149,7 +1149,7 @@
 //     node_ptr_t result;
 
 //     if (context->children.size() > 1) {
-//         node_ptr_t execNode = createNode<ExecLoad>();
+//         node_ptr_t execNode = createNodeBy<ExecLoad>();
 //         node_ptr_t trueNode = any_cast<node_ptr_t>(visitTernaryExpr(context->ternaryExpr(0)));
 //         node_ptr_t falseNode = any_cast<node_ptr_t>(visitTernaryExpr(context->ternaryExpr(1)));
 
@@ -1259,7 +1259,7 @@
 //         return res;
 //     }
 
-//     node_ptr_t execNode = createNode<ExecLoad>();
+//     node_ptr_t execNode = createNodeBy<ExecLoad>();
 //     node_ptr_t linkNode = any_cast<node_ptr_t>(visitLinkExpr(context->linkExpr()));
 
 //     string op = context->children[0]->getText();
@@ -1288,10 +1288,10 @@
 //     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitWithExpr(withExprs[0]));
 
 //     for (size_t i = 1; i < withExprs.size(); ++i) {
-//         node_ptr_t execNode = createNode<ExecLoad>();
+//         node_ptr_t execNode = createNodeBy<ExecLoad>();
 //         node_ptr_t rhsNode = any_cast<node_ptr_t>(visitWithExpr(withExprs[i]));
 
-//         node_ptr_t linkNode = createNode<LinkLoad>();
+//         node_ptr_t linkNode = createNodeBy<LinkLoad>();
 //         *linkNode << lhsNode << rhsNode;
 
 //         lhsNode = linkNode;
@@ -1312,10 +1312,10 @@
 //     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitAnnotatedExpr(annotatedExprs[0]));
 
 //     for (size_t i = 1; i < annotatedExprs.size(); ++i) {
-//         node_ptr_t execNode = createNode<ExecLoad>();
+//         node_ptr_t execNode = createNodeBy<ExecLoad>();
 //         node_ptr_t rhsNode = any_cast<node_ptr_t>(visitAnnotatedExpr(annotatedExprs[i]));
 
-//         node_ptr_t withNode = createNode<WithLoad>();
+//         node_ptr_t withNode = createNodeBy<WithLoad>();
 //         *withNode << lhsNode << rhsNode;
 
 //         lhsNode = withNode;
@@ -1340,7 +1340,7 @@
 //         switch (op) {
 //         case '[': {
 //             node_ptr_t rhsNode = any_cast<node_ptr_t>(visit(child));
-//             node_ptr_t execNode = createNode<ExecLoad>();
+//             node_ptr_t execNode = createNodeBy<ExecLoad>();
 //             auto [resultData, resultDang] = extractData(lhsNode, execNode);
 //             auto [memberData, memberDang] = extractData(rhsNode, execNode);
 //             node_ptr_t dataNode = createDataNode<TupleData>(data_list_t{resultData, memberData});
@@ -1354,7 +1354,7 @@
 //             auto [rawIndexArgs, rawNamedArgs] =
 //                 any_cast<pair<vector<node_ptr_t>, map<string, node_ptr_t>>>(visit(child));
 //             auto paramsPtr = make_shared<ParamsData>();
-//             node_ptr_t execNode = createNode<ExecLoad>();
+//             node_ptr_t execNode = createNodeBy<ExecLoad>();
 //             bool dangling = false;
 //             for (const auto &arg : rawIndexArgs) {
 //                 auto [argData, _] = extractData(arg, execNode, dangling);
@@ -1364,8 +1364,8 @@
 //                 auto [argData, _] = extractData(arg, execNode, dangling);
 //                 paramsPtr->emplace(argData, name);
 //             }
-//             node_ptr_t dataNode = createNode<DataLoad>(paramsPtr);
-//             node_ptr_t linkNode = createNode<LinkLoad>();
+//             node_ptr_t dataNode = createNodeBy<DataLoad>(paramsPtr);
+//             node_ptr_t linkNode = createNodeBy<LinkLoad>();
 //             *linkNode << dataNode << lhsNode;
 //             if (dangling) {
 //                 lhsNode = reparent(linkNode, execNode);
@@ -1378,7 +1378,7 @@
 //             auto [rawIndexArgs, rawNamedArgs] =
 //                 any_cast<pair<vector<node_ptr_t>, map<string, node_ptr_t>>>(visit(child));
 //             auto paramsPtr = make_shared<ParamsData>();
-//             node_ptr_t execNode = createNode<ExecLoad>();
+//             node_ptr_t execNode = createNodeBy<ExecLoad>();
 //             bool dangling = false;
 //             for (const auto &arg : rawIndexArgs) {
 //                 auto [argData, _] = extractData(arg, execNode, dangling);
@@ -1388,8 +1388,8 @@
 //                 auto [argData, _] = extractData(arg, execNode, dangling);
 //                 paramsPtr->emplace(argData, name);
 //             }
-//             node_ptr_t dataNode = createNode<DataLoad>(paramsPtr);
-//             node_ptr_t withNode = createNode<WithLoad>();
+//             node_ptr_t dataNode = createNodeBy<DataLoad>(paramsPtr);
+//             node_ptr_t withNode = createNodeBy<WithLoad>();
 //             *withNode << dataNode << lhsNode;
 //             if (dangling) {
 //                 lhsNode = reparent(withNode, execNode);
@@ -1427,7 +1427,7 @@
 //     switch (context->getAltNumber()) {
 //     case 1: { // identRef
 //         const string &ident = any_cast<string>(visitIdentRef(context->identRef()));
-//         res = createNode<DRefLoad>(ident);
+//         res = createNodeBy<DRefLoad>(ident);
 //     } break;
 //     case 2: { // literal
 //         res = visitLiteral(context->literal());
@@ -1435,12 +1435,12 @@
 //     case 3: { // bracketValues (for list)
 //         const vector<node_ptr_t> &dataVec =
 //         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues())); const auto &listData =
-//         make_shared<ListData>(); bool dangling = false; node_ptr_t execNode = createNode<ExecLoad>(); for (const auto
+//         make_shared<ListData>(); bool dangling = false; node_ptr_t execNode = createNodeBy<ExecLoad>(); for (const auto
 //         &node : dataVec) {
 //             auto [data, _] = extractData(node, execNode, dangling);
 //             listData->emplace(data);
 //         }
-//         node_ptr_t dataNode = createNode<DataLoad>(listData);
+//         node_ptr_t dataNode = createNodeBy<DataLoad>(listData);
 //         if (dangling) {
 //             res = reparent(dataNode, execNode);
 //         } else {
@@ -1452,12 +1452,12 @@
 //             any_cast<map<string, node_ptr_t>>(visitBracedPairedValues(context->bracedPairedValues()));
 //         const auto &dictData = make_shared<DictData>();
 //         bool dangling = false;
-//         node_ptr_t execNode = createNode<ExecLoad>();
+//         node_ptr_t execNode = createNodeBy<ExecLoad>();
 //         for (const auto &[key, node] : dataVec) {
 //             auto [data, _] = extractData(node, execNode, dangling);
 //             dictData->emplace(key, data);
 //         }
-//         node_ptr_t dataNode = createNode<DataLoad>(dictData);
+//         node_ptr_t dataNode = createNodeBy<DataLoad>(dictData);
 //         if (dangling) {
 //             res = reparent(dataNode, execNode);
 //         } else {
@@ -1471,12 +1471,12 @@
 //         const vector<node_ptr_t> &dataVec = any_cast<vector<node_ptr_t>>(visitParentValues(context->parentValues()));
 //         auto tuplePtr = make_shared<TupleData>();
 //         bool dangling = false;
-//         node_ptr_t execNode = createNode<ExecLoad>();
+//         node_ptr_t execNode = createNodeBy<ExecLoad>();
 //         for (const auto &node : dataVec) {
 //             auto [data, _] = extractData(node, execNode, dangling);
 //             tuplePtr->emplace(data);
 //         }
-//         node_ptr_t dataNode = createNode<DataLoad>(tuplePtr);
+//         node_ptr_t dataNode = createNodeBy<DataLoad>(tuplePtr);
 //         if (dangling) {
 //             dataNode = reparent(dataNode, execNode);
 //         }
@@ -1497,12 +1497,12 @@
 //                         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
 //                     const auto &vectorPtr = make_shared<VectorData>(type);
 //                     bool dangling = false;
-//                     node_ptr_t execNode = createNode<ExecLoad>();
+//                     node_ptr_t execNode = createNodeBy<ExecLoad>();
 //                     for (const auto &node : dataVec) {
 //                         auto [data, _] = extractData(node, execNode, dangling);
 //                         vectorPtr->emplace(data);
 //                     }
-//                     node_ptr_t dataNode = createNode<DataLoad>(vectorPtr);
+//                     node_ptr_t dataNode = createNodeBy<DataLoad>(vectorPtr);
 //                     if (dangling) {
 //                         dataNode = reparent(dataNode, execNode);
 //                     }
@@ -1514,12 +1514,12 @@
 //                         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
 //                     const auto &arrayPtr = make_shared<ArrayData>(type, size);
 //                     bool dangling = false;
-//                     node_ptr_t execNode = createNode<ExecLoad>();
+//                     node_ptr_t execNode = createNodeBy<ExecLoad>();
 //                     for (size_t i = 0; i < dataVec.size(); ++i) {
 //                         auto [data, _] = extractData(dataVec[i], execNode, dangling);
 //                         arrayPtr->emplace(data, i);
 //                     }
-//                     node_ptr_t dataNode = createNode<DataLoad>(arrayPtr);
+//                     node_ptr_t dataNode = createNodeBy<DataLoad>(arrayPtr);
 //                     if (dangling) {
 //                         dataNode = reparent(dataNode, execNode);
 //                     }
@@ -1534,10 +1534,10 @@
 //                         any_cast<vector<node_ptr_t>>(visitBracketValues(context->bracketValues()));
 //                     const auto &tensorPtr = make_shared<TensorData>(type, shape);
 //                     bool dangling = false;
-//                     node_ptr_t execNode = createNode<ExecLoad>();
+//                     node_ptr_t execNode = createNodeBy<ExecLoad>();
 //                     // TODO: Implement tensor data setting
 //                     reportWarning("Tensor data setting is not implemented yet", context->getStart());
-//                     node_ptr_t dataNode = createNode<DataLoad>(tensorPtr);
+//                     node_ptr_t dataNode = createNodeBy<DataLoad>(tensorPtr);
 //                     if (dangling) {
 //                         dataNode = reparent(dataNode, execNode);
 //                     }
@@ -1554,12 +1554,12 @@
 //                     any_cast<vector<node_ptr_t>>(visitBracedValues(context->bracedValues()));
 //                 const auto &setPtr = make_shared<SetData>(type);
 //                 bool dangling = false;
-//                 node_ptr_t execNode = createNode<ExecLoad>();
+//                 node_ptr_t execNode = createNodeBy<ExecLoad>();
 //                 for (const auto &node : dataVec) {
 //                     auto [data, _] = extractData(node, execNode, dangling);
 //                     setPtr->emplace(data);
 //                 }
-//                 node_ptr_t dataNode = createNode<DataLoad>(setPtr);
+//                 node_ptr_t dataNode = createNodeBy<DataLoad>(setPtr);
 //                 if (dangling) {
 //                     dataNode = reparent(dataNode, execNode);
 //                 }
@@ -1574,7 +1574,7 @@
 //                     context->getStart());
 //                 }
 //                 const auto &mapData = make_shared<MapData>(type1, type2);
-//                 res = createNode<DataLoad>(mapData);
+//                 res = createNodeBy<DataLoad>(mapData);
 //             }
 //         } else if (context->bracedIndexKVPairs()) { // Map <T1, T2> { [K]: V }
 //             if (typeExprs.size() == 1) {
@@ -1587,13 +1587,13 @@
 //                 node_ptr_t>>>(visitBracedIndexKVPairs(context->bracedIndexKVPairs()));
 //             auto mapPtr = make_shared<MapData>(type1, type2);
 //             bool dangling = false;
-//             node_ptr_t execNode = createNode<ExecLoad>();
+//             node_ptr_t execNode = createNodeBy<ExecLoad>();
 //             for (const auto &[key, data] : dataVec) {
 //                 auto [keyData, a] = extractData(key, execNode, dangling);
 //                 auto [valData, b] = extractData(data, execNode, dangling);
 //                 mapPtr->emplace(keyData, valData);
 //             }
-//             node_ptr_t dataNode = createNode<DataLoad>(mapPtr);
+//             node_ptr_t dataNode = createNodeBy<DataLoad>(mapPtr);
 //             if (dangling) {
 //                 dataNode = reparent(dataNode, execNode);
 //             }
@@ -1669,7 +1669,7 @@
 //         break;
 //     }
 
-//     any res = createNode<DataLoad>(data);
+//     any res = createNodeBy<DataLoad>(data);
 //     leave("Literal");
 //     return res;
 // };

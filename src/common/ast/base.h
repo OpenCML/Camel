@@ -103,10 +103,6 @@ class ModuleLoad : public Load {
     Reference ref_;
 };
 
-inline std::shared_ptr<ModuleLoad> module_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ModuleLoad>(ptr);
-}
-
 class ImportLoad : public Load {
   public:
     ImportLoad() : Load(LoadType::Import) {}

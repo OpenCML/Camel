@@ -56,6 +56,7 @@ enum class DataOp {
     NullThen,
     ErrorThen,
     NotNullThen,
+    Index,
     Call,
     With,
     Bind,

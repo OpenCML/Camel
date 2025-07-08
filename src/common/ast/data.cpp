@@ -86,6 +86,8 @@ std::string dataOpToString(DataOp op) {
         return "!!";
     case DataOp::NotNullThen:
         return "?";
+    case DataOp::Index:
+        return "[]";
     case DataOp::Call:
         return "->";
     case DataOp::With:
