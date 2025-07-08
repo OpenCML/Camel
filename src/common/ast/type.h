@@ -28,14 +28,7 @@ namespace AbstractSyntaxTree {
 
 enum class TypeType { Expr, List, Dict, Tuple, Func, Spec, Unit, Infer, Data, Ref };
 
-enum class TypeOp {
-    Union,
-    Inter,
-    Diff,
-    KeyUnion,
-    KeyInter,
-    KeyDiff,
-};
+enum class TypeOp { Union, Inter, Diff, KeyUnion, KeyInter, KeyDiff, ErrorThen, Specialize, TypeOf, TypeAs };
 
 std::string typeTypeToString(TypeType type);
 
@@ -61,8 +54,13 @@ class TypeExprLoad : public TypeLoad {
 
 class ListTypeLoad : public TypeLoad {
   public:
-    ListTypeLoad() : TypeLoad(TypeType::List) {}
+    ListTypeLoad(size_t dims) : TypeLoad(TypeType::List), dims_(dims) {}
     const std::string toString() const override { return "ListType"; }
+
+    size_t dims() const { return dims_; }
+
+  private:
+    size_t dims_ = 0;
 };
 
 class DictTypeLoad : public TypeLoad {
@@ -101,12 +99,6 @@ class FuncTypeLoad : public TypeLoad {
     bool macro_ = false;
     ImplMark implMark_;
     std::string uri_;
-};
-
-class SpecTypeLoad : public TypeLoad {
-  public:
-    SpecTypeLoad() : TypeLoad(TypeType::Spec) {}
-    const std::string toString() const override { return "SpecType"; }
 };
 
 class UnitTypeLoad : public TypeLoad {

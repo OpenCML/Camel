@@ -63,6 +63,14 @@ std::string typeOpToString(TypeOp op) {
         return "KEY_INTER";
     case TypeOp::KeyDiff:
         return "KEY_DIFF";
+    case TypeOp::ErrorThen:
+        return "?";
+    case TypeOp::Specialize:
+        return "SPEC";
+    case TypeOp::TypeOf:
+        return "typeof";
+    case TypeOp::TypeAs:
+        return "typeas";
     default:
         throw std::runtime_error("Unknown TypeOp");
     }

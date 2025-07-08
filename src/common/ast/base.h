@@ -62,10 +62,27 @@ class Load {
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
 };
 
+enum class LiteralType {
+    String,
+    FString,
+    Integer,
+    Real,
+    Boolean,
+    Null,
+};
+
 class Literal {
   public:
-    virtual ~Literal() = default;
-    virtual const std::string toString() const = 0;
+    Literal(LiteralType type, const std::string &data) : type_(type), data_(data) {}
+    ~Literal() = default;
+    const std::string toString() const { return data_; }
+
+    LiteralType type() const { return type_; }
+    const std::string &data() const { return data_; }
+
+  private:
+    LiteralType type_;
+    std::string data_;
 };
 
 enum class LoadType {

@@ -126,6 +126,10 @@ enum TypeOp {
     KeyUnion,
     KeyInter,
     KeyDiff,
+    ErrorThen,
+    Specialize, // Type type, (Type | Data)* args
+    TypeOf,
+    TypeAs
 }
 
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
@@ -163,7 +167,6 @@ DictType() : NamedType* types ;
 TupleType() : Type* types ;
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
-SpecType() : Type type, (Type | Data)* args ;
 UnitType(Ref ref) : Type type ;
 InferType(Ref ref) ;
 DataType() : Data data ;
