@@ -77,11 +77,11 @@ class DataLoad : public Load {
         : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}
     const std::string toString() const override {
         std::string result = "DataLoad: " + dataTypeToString(dataType_);
-        if (notNull_) {
-            result += " NOT NULL";
-        }
         if (waited_) {
-            result += " WAITED";
+            result += " wait";
+        }
+        if (notNull_) {
+            result += " !";
         }
         return result;
     }

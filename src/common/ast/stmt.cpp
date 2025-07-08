@@ -39,7 +39,7 @@ const std::string ExportLoad::toString() const {
 }
 
 const std::string DataDeclLoad::toString() const {
-    std::string result = isVar_ ? "DataDecl: VAR " : "DataDecl: LET ";
+    std::string result = isVar_ ? "DataDecl: var " : "DataDecl: let ";
     if (refs_.size() == 1) {
         result += refs_[0].toString();
     } else {
@@ -64,7 +64,7 @@ const std::string DataDeclLoad::toString() const {
 const std::string TypeDeclLoad::toString() const {
     std::string result = "TypeDecl: " + implMarkToString(implMark_) + ref_.toString();
     if (!uri_.empty()) {
-        result += " @ " + uri_;
+        result += " [" + uri_ + "]";
     }
     return result;
 }

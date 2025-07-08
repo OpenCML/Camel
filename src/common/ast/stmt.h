@@ -105,7 +105,7 @@ class StmtBlockLoad : public StmtLoad {
     bool isWait() const { return wait_; }
 
     const std::string toString() const override {
-        return std::string("StmtBlock: ") + (sync_ ? "SYNC" : "") + (wait_ ? " WAIT" : "");
+        return std::string("StmtBlock: ") + (sync_ ? "sync" : "") + (wait_ ? " wait" : "");
     }
 
   private:

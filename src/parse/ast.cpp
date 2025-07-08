@@ -1201,18 +1201,21 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
         auto child = context->children[i];
         if (antlr4::RuleContext::is(child)) {
             node_ptr_t exprNode = nullptr;
-            node_ptr_t rhsNode = nullptr;
             if (tt::is_instance_of<OpenCMLParser::MemberAccessContext>(child)) {
                 exprNode = createNodeBy<DataExprLoad>(DataOp::Index);
-                rhsNode = any2node(visitMemberAccess(tt::as<OpenCMLParser::MemberAccessContext>(child)));
+                node_ptr_t rhsNode = any2node(visitMemberAccess(tt::as<OpenCMLParser::MemberAccessContext>(child)));
+                *exprNode << lhsNode << rhsNode;
             } else if (tt::is_instance_of<OpenCMLParser::ParentArguesContext>(child)) {
                 exprNode = createNodeBy<DataExprLoad>(DataOp::Call);
-                rhsNode = any2node(visitParentArgues(tt::as<OpenCMLParser::ParentArguesContext>(child)));
+                auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
+                    visitParentArgues(tt::as<OpenCMLParser::ParentArguesContext>(child)));
+                *exprNode << lhsNode << dataList << namedDataList;
             } else if (tt::is_instance_of<OpenCMLParser::AngledValuesContext>(child)) {
                 exprNode = createNodeBy<DataExprLoad>(DataOp::With);
-                rhsNode = any2node(visitAngledValues(tt::as<OpenCMLParser::AngledValuesContext>(child)));
+                auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
+                    visitAngledValues(tt::as<OpenCMLParser::AngledValuesContext>(child)));
+                *exprNode << lhsNode << dataList << namedDataList;
             }
-            *exprNode << lhsNode << rhsNode;
             lhsNode = exprNode;
         } else {
             unwrapNodeAs<DataLoad>(lhsNode)->setNotNull(true);
@@ -1288,7 +1291,13 @@ primaryData
 any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
     enter("PrimaryData");
     any res;
-    if (context->dataExpr()) {
+    if (context->identRef()) {
+        Reference ref(context->identRef()->getText());
+        res = createNodeBy<RefDataLoad>(ref);
+    } else if (context->literal()) {
+        Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
+        res = createNodeBy<LiteralLoad>(literal);
+    } else if (context->dataExpr()) {
         res = visitDataExpr(context->dataExpr());
     } else {
         res = visit(context->children[0]);
@@ -1311,46 +1320,43 @@ literal
 */
 any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     enter("Literal: " + to_string(context->getAltNumber()));
-    node_ptr_t dataNode = nullptr;
     switch (context->getAltNumber()) {
     case 1: { // INTEGER
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Integer, context->INTEGER()->getText()));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::Integer, context->INTEGER()->getText());
     }
     case 2: { // REAL
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Real, context->REAL()->getText()));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::Real, context->REAL()->getText());
     }
     case 3: { // STRING
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::String, context->STRING()->getText()));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::String, context->STRING()->getText());
     }
     case 4: { // MULTI_STR
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::String, context->MULTI_STR()->getText()));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::String, context->MULTI_STR()->getText());
     }
     case 5: { // FSTRING
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::String, context->FSTRING()->getText()));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::String, context->FSTRING()->getText());
     }
     case 6: { // TRUE
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Boolean, "true"));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::Boolean, "true");
     }
     case 7: { // FALSE
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Boolean, "false"));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::Boolean, "false");
     }
     case 8: { // NULL
-        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Null, "null"));
-        break;
+        leave("Literal");
+        return Literal(LiteralType::Null, "null");
     }
 
     default:
-        break;
+        throw std::runtime_error("Invalid literal type: " + std::to_string(context->getAltNumber()));
     }
-    leave("Literal");
-    return dataNode;
 }
 
 /*
