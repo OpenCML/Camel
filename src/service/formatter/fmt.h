@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Mar. 09, 2025
+ * Updated: May. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,8 +22,8 @@
 #include <string>
 #include <unordered_set>
 
-#include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
+#include "parse/antlr/OpenCMLVisitor.h"
 
 class Formatter : public OpenCMLVisitor {
   private:
@@ -382,13 +382,13 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context);
 
+    std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context);
+
     std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
 
     std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
-    std::any visitWaitStmt(OpenCMLParser::WaitStmtContext *context);
-
-    std::any visitLambdaExpr(OpenCMLParser::LambdaExprContext *context);
+    std::any visitFuncData(OpenCMLParser::FuncDataContext *context);
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
 
@@ -400,19 +400,13 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitCarrier(OpenCMLParser::CarrierContext *context);
 
-    std::any visitLetDecl(OpenCMLParser::LetDeclContext *context);
+    std::any visitDataDecl(OpenCMLParser::DataDeclContext *context);
+
+    std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context);
 
     std::any visitUseDecl(OpenCMLParser::UseDeclContext *context);
 
     std::any visitRetStmt(OpenCMLParser::RetStmtContext *context);
-
-    std::any visitTypeDecl(OpenCMLParser::TypeDeclContext *context);
-
-    std::any visitEnumDecl(OpenCMLParser::EnumDeclContext *context);
-
-    std::any visitAnnotation(OpenCMLParser::AnnotationContext *context);
-
-    std::any visitAnnotations(OpenCMLParser::AnnotationsContext *context);
 
     std::any visitImplMark(OpenCMLParser::ImplMarkContext *context);
 
@@ -429,8 +423,6 @@ class Formatter : public OpenCMLVisitor {
     std::any visitDataList(OpenCMLParser::DataListContext *context);
 
     std::any visitIdentList(OpenCMLParser::IdentListContext *context);
-
-    std::any visitValueList(OpenCMLParser::ValueListContext *context);
 
     std::any visitIndexValues(OpenCMLParser::IndexValuesContext *context);
 
@@ -450,8 +442,6 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitAngledValues(OpenCMLParser::AngledValuesContext *context);
 
-    std::any visitWaitExpr(OpenCMLParser::WaitExprContext *context);
-
     std::any visitPattern(OpenCMLParser::PatternContext *context);
 
     std::any visitMatchCase(OpenCMLParser::MatchCaseContext *context);
@@ -461,6 +451,8 @@ class Formatter : public OpenCMLVisitor {
     std::any visitCtrlExpr(OpenCMLParser::CtrlExprContext *context);
 
     std::any visitDataExpr(OpenCMLParser::DataExprContext *context);
+
+    std::any visitWaitExpr(OpenCMLParser::WaitExprContext *context);
 
     std::any visitAssignExpr(OpenCMLParser::AssignExprContext *context);
 
@@ -484,13 +476,15 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitBindExpr(OpenCMLParser::BindExprContext *context);
 
-    std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
-
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 
-    std::any visitDictExpr(OpenCMLParser::DictExprContext *context);
+    std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
 
-    std::any visitListExpr(OpenCMLParser::ListExprContext *context);
+    std::any visitDictData(OpenCMLParser::DictDataContext *context);
+
+    std::any visitListData(OpenCMLParser::ListDataContext *context);
+
+    std::any visitTupleData(OpenCMLParser::TupleDataContext *context);
 
     std::any visitPrimaryData(OpenCMLParser::PrimaryDataContext *context);
 
@@ -500,17 +494,23 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitUnionType(OpenCMLParser::UnionTypeContext *context);
 
-    std::any visitUnionUnit(OpenCMLParser::UnionUnitContext *context);
+    std::any visitInterType(OpenCMLParser::InterTypeContext *context);
+
+    std::any visitDiffType(OpenCMLParser::DiffTypeContext *context);
+
+    std::any visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context);
+
+    std::any visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context);
+
+    std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *context);
 
     std::any visitListType(OpenCMLParser::ListTypeContext *context);
 
     std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context);
 
-    std::any visitArgsType(OpenCMLParser::ArgsTypeContext *context);
+    std::any visitSpecType(OpenCMLParser::SpecTypeContext *context);
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context);
-
-    std::any visitDictExprType(OpenCMLParser::DictExprTypeContext *context);
 
     std::any visitDictType(OpenCMLParser::DictTypeContext *context);
 
@@ -518,7 +518,7 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitTupleType(OpenCMLParser::TupleTypeContext *context);
 
-    std::any visitLambdaType(OpenCMLParser::LambdaTypeContext *context);
+    std::any visitFuncType(OpenCMLParser::FuncTypeContext *context);
 
     std::any visitIdentDef(OpenCMLParser::IdentDefContext *context);
 

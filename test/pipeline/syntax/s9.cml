@@ -1,0 +1,13 @@
+/*
+ * Module System, Namespaces
+ */
+
+module test_namespace
+
+import { math, io } from 'std'
+ 
+func main(): int {
+    let result = math::sqrt(25.0)
+    io::print("Square root is: ", result)
+    return 0
+}

@@ -1,8 +1,0 @@
-let a = 1;
-// connect laser to analyzer;
-
-func s() {
-    c
-    // connect laser to analyzer;
-    s
-};

@@ -1,0 +1,173 @@
+-- Camel's Abstract Syntax Tree Description Language
+-- This file describes the structure of Camel's abstract syntax tree (AST).
+
+// * => Repeated
+// ? => Optional
+
+enum ImplMark {
+    Inner,
+    Outer,
+    Graph
+}
+
+Module(Ref ref) : ImportDecl import, ExportDecl export, Stmt* ;
+
+StmtType {
+    Name,
+    Data,
+    Type,
+    Func,
+    Expr,
+    Exit,
+    Block,
+}
+
+Stmt := NameDecl | DataDecl | TypeDecl | FuncDecl | DataExpr | ExitStmt | StmtBlock ;
+
+ImportDecl(string path, Ref[] refs, Ref as) ;
+ExportDecl(Ref[] refs) ;
+DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
+FuncDecl(Ref ref) : FuncData ;
+TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
+NameDecl(Ref ref, Ref alias) ;
+
+enum UnpackType {
+    Dict,
+    List,
+    Tuple
+}
+
+StmtBlock(bool sync) : Stmt* stmts ;
+
+enum ExitType {
+    Return,
+    Raise,
+    Throw,
+    Yield,
+}
+
+ExitStmt(ExitType type) : Data* data ;
+
+enum DataOp {
+    Assign,
+    AssignAdd,
+    AssignSub,
+    AssignMul,
+    AssignDiv,
+    AssignMod,
+    AssignMat,
+    AssignExp,
+    AssignAnd,
+    AssignOr,
+    Or,
+    And,
+    Eq,
+    Neq,
+    StrictEq,
+    StrictNeq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Mat,
+    Exp,
+    NullThen,
+    ErrorThen,
+    NotNullThen,
+    Index, // Data obj, Data* indices
+    Call, // Data obj, Data* args, NamedData* kwargs
+    With, // Data obj, Data* args, NamedData* kwargs
+    Bind, // Data lhs, Data rhs
+    As, // Data lhs, Type rhs
+    Is, // Data lhs, Type rhs
+    Not, // Data expr
+    Neg, // Data expr
+    Inv, // Data expr
+}
+
+DataExpr(DataOp op) := Any... lhs, rhs... ;
+
+enum DataType {
+    DataExpr,
+    IfExpr,
+    MatchExpr,
+    TryExpr,
+    UnaryExpr,
+    Literal,
+    List,
+    Dict,
+    Tuple,
+    Func,
+    Ref
+}
+
+Data(DataType type, bool notNull, bool waited)
+    := DataExpr| IfExpr | MatchExpr | TryExpr | UnaryExpr | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
+
+IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
+
+Literal(Value value) ;
+ListData() : Data* data ;
+DictData() : KeyDataPair* pairs ;
+TupleData() : Data* data ;
+FuncData(Ref ref)
+    : FuncType funcType, StmtBlock body ;
+RefData(Ref ref) ;
+
+enum TypeOp {
+    Union,
+    Inter,
+    Diff,
+    KeyUnion,
+    KeyInter,
+    KeyDiff,
+    ErrorThen,
+    Specialize, // Type type, (Type | Data)* args
+    TypeOf,
+    TypeAs
+}
+
+TypeExpr(TypeOp op) := Type lhs, Type rhs ;
+
+enum TypeType {
+    Expr,
+    List,
+    Dict,
+    Tuple,
+    Func,
+    Spec,
+    Unit,
+    Infer,
+    Data,
+    Ref
+}
+
+enum Modifier {
+    Atomic,
+    Shared,
+    Sync,
+    Macro
+}
+
+NamedData(Ref ref) : Data data ;
+NamedType(Ref ref, bool isVar) : Type type ;
+NamedPair(Ref ref, bool isVar) : Type type, Data? data ;
+
+Type(TypeType type) := 
+    TypeExpr | ListType | DictType | TupleType
+    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+
+ListType(siz dim) : Type type ;
+DictType() : NamedType* types ;
+TupleType() : Type* types ;
+FuncType(Modifier[] modifiers, ImplMark impl, string uri)
+    : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
+UnitType(Ref ref) : Type type ;
+InferType(Ref ref) ;
+DataType() : Data data ;
+RefType(Ref ref) ;

@@ -23,20 +23,20 @@
 
 #include "nlohmann/json.hpp"
 
-#include "antlr/OpenCMLLexer.h"
-#include "antlr/OpenCMLParser.h"
+#include "parse/antlr/OpenCMLLexer.h"
+#include "parse/antlr/OpenCMLParser.h"
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "codegen/girdump/graphviz.h"
+#include "builtin/passes/girdump/graphviz.h"
 #include "common/error/error.h"
 #include "common/error/json.h"
 #include "common/type.h"
-#include "compile/parse/ast.h"
-#include "compile/parse/cst.h"
-#include "compile/parse/gct.h"
-#include "compile/parse/gir.h"
+#include "parse/ast.h"
+#include "parse/cst-dump.h"
+#include "compile/gct.h"
+#include "compile/gir.h"
 #include "config.h"
-#include "operators/init.h"
+#include "builtin/operators/init.h"
 #include "service/formatter/fmt.h"
 #include "utils/log.h"
 
@@ -105,22 +105,44 @@ bool buildCST(tree::ParseTree *&cst, OpenCMLParser &parser, ostream &os, string 
         debug(1) << "Parse failed. " << e.what() << endl;
         return false;
     }
-
     return true;
 }
 
-bool buildAST(tree::ParseTree *&ast, tree::ParseTree *cst, ostream &os, string errorFormat) {
-    // TODO: build AST
-    ast = cst;
-    return true;
+bool buildAST(AST::node_ptr_t &ast, tree::ParseTree *cst, ostream &os, string errorFormat) {
+    auto constructor = AST::Constructor();
+    try {
+        ast = constructor.construct(cst);
+        return true;
+    } catch (BuildException &e) {
+        if (errorFormat != "json") {
+            error << e.what() << endl;
+        } else {
+            os << e.json() << endl;
+        }
+        return false;
+    } catch (exception &e) {
+        if (errorFormat != "json") {
+            error << "AST construction failed: " << e.what() << endl;
+        } else {
+            os << "{"
+               << "\"type\": \"error\", "
+               << "\"filename\": \"" << targetFile << "\", "
+               << "\"line\": 0, "
+               << "\"column\": 0, "
+               << "\"message\": \"AST construction failed: " << e.what() << "\""
+               << "}" << endl;
+        }
+        return false;
+    }
 }
 
-bool buildGCT(GCT::node_ptr_t &gct, tree::ParseTree *ast, ostream &os, string errorFormat) {
+bool buildGCT(GCT::node_ptr_t &gct, AST::node_ptr_t &ast, ostream &os, string errorFormat) {
     return false; // TODO: build GCT
     initTypes();
     auto constructor = GCT::Constructor();
     try {
-        gct = constructor.construct(ast);
+        // gct = constructor.construct(ast);
+        // TODO: remove this line after GCT is implemented
         auto &warns = constructor.warns();
         if (selectedCommand == Command::CHECK) {
             while (!warns.empty()) {
@@ -225,8 +247,8 @@ int main(int argc, char *argv[]) {
         }
 
         tree::ParseTree *cst = nullptr;
-        tree::ParseTree *ast = nullptr;
-        // AST::node_ptr_t ast = nullptr;
+        //tree::ParseTree *ast = nullptr;
+        AST::node_ptr_t ast = nullptr;
         GCT::node_ptr_t gct = nullptr;
         GIR::graph_ptr_t gir = nullptr;
         context_ptr_t ctx = make_shared<Context>();
@@ -238,6 +260,9 @@ int main(int argc, char *argv[]) {
         if (Inspect::dumpCST) {
             auto visitor = CSTDumpVisitor(os);
             visitor.visit(cst);
+            if (!Inspect::dumpAST && !Inspect::dumpGCT && !Inspect::dumpGIR) {
+                return 0; // If only CST is requested, we can stop here
+            }
         }
         if (Format::formatCode) {
             auto formatter = Formatter(tokens.getTokens());
@@ -250,17 +275,22 @@ int main(int argc, char *argv[]) {
             return selectedCommand == Command::CHECK ? 0 : 3;
         }
         assert(ast != nullptr);
+        if (Inspect::dumpAST && ast) {
+            ast->print(os);
+            if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
+                return 0; // If only AST is requested, we can stop here
+            }
+        }
 
         if (!buildGCT(gct, ast, os, errorFormat)) {
             return selectedCommand == Command::CHECK ? 0 : 4;
         }
         assert(gct != nullptr);
-        if (Inspect::dumpAST && gct) {
-            // currently we do not have AST, print GCT instead
-            gct->print(os);
-        }
         if (Inspect::dumpGCT && gct) {
             gct->print(os);
+            if (!Inspect::dumpGIR) {
+                return 0; // If only GCT is requested, we can stop here
+            }
         }
 
         if (!buildGIR(gir, gct, ctx, os, errorFormat)) {

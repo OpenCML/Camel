@@ -1,0 +1,17 @@
+/*
+ * Complex Literal Construction
+ */
+
+module test_literals
+
+import { len } from 'std/array'
+
+func main(): int {
+    let array = [1, 2, 3, 4]
+    let matrix = [[1, 2], [3, 4]]
+    // let config = {
+    //     'input': 128,
+    //     'activation': 'relu'
+    // }
+    return array.len()
+}

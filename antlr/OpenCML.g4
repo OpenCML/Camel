@@ -34,84 +34,80 @@ bool isAdjacent() {
 
 program : SEP? (decl SEP?)* EOF;
 
+//declaration statement
 decl
     : moduleDecl
     | importDecl
     | exportDecl
-    | letDecl
-    | useDecl
+    | dataDecl
     | funcDecl
     | typeDecl
-    | enumDecl
+    | useDecl
     ;
 
+//executable statement
 stmt
-    : letDecl
-    | useDecl
+    : dataDecl
     | funcDecl
     | typeDecl
-    | enumDecl
-    | retStmt
-    | waitStmt
     | dataExpr
-    | stmtBlock
+    | useDecl
+    | retStmt
+    | blockStmt
     ;
 
 stmtList : stmt (SEP? stmt)* SEP? ;
 
 moduleDecl : MODULE identDef ;
 importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
-exportDecl : EXPORT (letDecl | typeDecl | bracedIdents) ;
+exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 
+blockStmt  : WAIT? stmtBlock ;
 stmtBlock  : SYNC? '{' stmtList? '}' ;
-blockExpr  : stmtBlock | waitExpr ;
-waitStmt   : WAIT (stmtBlock | dataList) ;
-lambdaExpr : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
-funcDecl   : annotations? (WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+blockExpr  : stmtBlock | dataExpr ;
+funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
+funcDecl   :
+        (WITH angledParams)?
+        EXPORT? implMark? modifiers? 
+        FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
 bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
 bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 
-letDecl    : (LET | VAR) carrier (':' typeList)? '=' valueList ;
-useDecl    : USE (identDef '=')? identRef ;
-retStmt    : (RETURN | RAISE | THROW) valueList ;
+dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
-enumDecl   : ENUM identDef (OF typeExpr)? '=' '{' pairedValues ','? '}' ;
+useDecl    : USE (identDef '=')? identRef ;
+retStmt    : (RETURN | RAISE | THROW) dataList ;
 
-annotation  : '@' primaryData ;
-annotations : annotation+ ;
 implMark    : INNER | OUTER ;
 modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
 
-indexValue   : '...'? waitExpr ;
+indexValue   : '...'? dataExpr ;
 keyTypePair  : identDef ':' typeExpr ;
-keyValuePair : identDef ':' waitExpr | '...' waitExpr ;
-keyParamPair : VAR? identDef annotation? ':' typeExpr ('=' waitExpr)? ;
+keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
+keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
 
 dataList     : dataExpr (',' dataExpr)* ;
 identList    : identDef (',' identDef)* ;
-valueList    : waitExpr (',' waitExpr)* ;
 indexValues  : indexValue (',' indexValue)* ;
 pairedValues : keyValuePair (',' keyValuePair)* ;
 pairedParams : keyParamPair (',' keyParamPair)* ;
 
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 
-memberAccess : '[' waitExpr (':' waitExpr (':' waitExpr)?)? ']' ;
+memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 
 parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
 parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 
-waitExpr : WAIT? dataExpr ;
-
 pattern
     : identRef
     | literal
-    | '(' (valueList | identList)? ','? ')'
+    | '(' (dataList | identList)? ','? ')'
     | '{' (pairedValues | identList)? ','? '}'
     | '_' // wildcard
     ;
@@ -131,12 +127,14 @@ ctrlExpr
     ;
 
 dataExpr
-    : assignExpr
+    : waitExpr
     | ctrlExpr
     ;
 
+waitExpr : WAIT? assignExpr ;
+
 assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=') logicalOrExpr)?
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
     ;
 
 logicalOrExpr
@@ -160,11 +158,11 @@ additiveExpr
     ;
 
 multiplicativeExpr
-    : nullableExpr (('^' | '*' | '/' | '%') nullableExpr)*
+    : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
     ;
 
 nullableExpr
-    : unaryExpr (('??' | '!!') waitExpr)?
+    : unaryExpr (('??' | '!!') dataExpr)?
     ;
 
 unaryExpr
@@ -177,33 +175,37 @@ linkExpr
     ;
 
 bindExpr
-    : withExpr (('..' | '?..') withExpr)*
-    ;
-
-withExpr
-    : annoExpr (('.' | '?.') annoExpr)*
+    : annoExpr (('..' | '?..') annoExpr)*
     ;
 
 annoExpr
-    : primaryData ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!') | annotation)*
+    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
     ;
 
-dictExpr
+withExpr
+    : primaryData (('.' | '?.') primaryData)*
+    ;
+
+dictData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
     ;
 
-listExpr
-    : '[' ((indexValues ','?) | waitExpr FOR identRef IN waitExpr (IF waitExpr)?)? ']'
+listData
+    : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
+    ;
+
+tupleData
+    : '(' dataList? ','? ')'
     ;
 
 primaryData
     : identRef
     | literal
-    | listExpr
-    | dictExpr
-    | '(' waitExpr ')'
-    | '(' valueList? ','? ')' // for tuple
-    | lambdaExpr
+    | listData
+    | dictData
+    | '(' dataExpr ')'
+    | tupleData
+    | funcData
     ;
 
 literal
@@ -222,34 +224,46 @@ typeExpr
     ;
 
 unionType
-    : unionUnit ('|' unionUnit)*
+    : interType ('|' interType)*
     ;
 
-unionUnit : (identDef OF)? listType ;
+interType
+    : diffType ('&' diffType)*
+    ;
+
+diffType
+    : keyUnionDiffType ('\\' keyUnionDiffType)*
+    ;
+
+keyUnionDiffType
+    : keyInterType (('+' | '-') keyInterType)*
+    ;
+
+keyInterType
+    : typeUnit ('^' typeUnit)*
+    ;
+
+typeUnit : (identDef OF)? listType ;
 
 listType
-    : argsType ('[' ']')*
+    : specType ('[' ']')*
     ;
 
-typeOrData : typeExpr | primaryData ;
+typeOrData : typeExpr | CONST dataExpr ;
 
-argsType
+specType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
 
 primaryType
     : INNER_ATOM_TYPE
-    | dictExprType
+    | dictType
     | identRef
     | '(' typeExpr ')'
     | tupleType
-    | lambdaType
-    | TYPEOF waitExpr
+    | funcType
+    | TYPEOF dataExpr
     | TYPEAS identDef
-    ;
-
-dictExprType
-    : dictType (('&' | '^') dictType)*
     ;
 
 dictType
@@ -264,7 +278,7 @@ tupleType
     : '(' typeList? ','? ')'
     ;
 
-lambdaType
+funcType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 

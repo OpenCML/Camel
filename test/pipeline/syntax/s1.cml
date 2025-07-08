@@ -1,0 +1,15 @@
+/*
+ * Variable Declaration, Basic Literals, Basic Function Structure
+ */
+
+module main
+
+func square(x: int): int {
+    let result = x * x
+    return result
+}
+
+func main(): int {
+    let value = square(5)
+    return value
+}

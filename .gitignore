@@ -12,7 +12,7 @@
 cmake-build-debug/
 node_modules/
 antlr/.antlr/
-src/antlr/
+src/parse/antlr
 vendor/
 legacy/
 build/

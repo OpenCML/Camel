@@ -1,7 +1,0 @@
-func main() {
-    // create instance of Analyzer and place it
-    let a = a
-    // connect laser to analyzer;
-    c()
-    let a = b || c || d
-}

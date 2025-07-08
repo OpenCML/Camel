@@ -1,4 +1,4 @@
-__version__ = '0.0.13'
+__version__ = '0.0.14'
 __author__ = 'Zhenjie Wei'
 __author_email__ = 'Kogler_S@outlook.com'
 __description__ = 'Camel: A Next-Generation Language for AI and High-Performance Computing'

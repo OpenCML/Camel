@@ -1,0 +1,17 @@
+/*
+ * Basic Arithmetic Expressions, Logical Operation Expressions, If-Else Expressions
+ */
+
+module main
+
+export func test(a: int, b: int): bool {
+    return ((a + b) * 3 > 10) && (a < b)
+}
+
+func main(): int {
+    return if test(4, 8) then {
+        return 1
+    } else {
+        return 0
+    }
+}

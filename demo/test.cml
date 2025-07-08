@@ -1,8 +1,0 @@
-with <src: Int[]>
-func map(f: (a: Int) => Int): Int[] {
-    return [f(src[0]), f(src[1])]
-}
-
-func fool(sig: Int[]): Any {
-    return sig.map((x: Int): Int => x + 1)
-}
