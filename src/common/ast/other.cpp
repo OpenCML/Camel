@@ -20,18 +20,4 @@
 #include "other.h"
 #include "utils/str.h"
 
-namespace AbstractSyntaxTree {
-const std::string CarrierLoad::toString() const {
-    std::string refs = join(refs_, std::string(", "));
-    switch (type_) {
-    case UnpackType::Dict:
-        return "Carrier: {" + refs + "}";
-    case UnpackType::List:
-        return "Carrier: [" + refs + "]";
-    case UnpackType::Tuple:
-        return "Carrier: (" + refs + ")";
-    default:
-        throw std::runtime_error("Unknown UnpackType");
-    }
-}
-} // namespace AbstractSyntaxTree
+namespace AbstractSyntaxTree {} // namespace AbstractSyntaxTree

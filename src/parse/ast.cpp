@@ -30,7 +30,7 @@ using namespace std;
 using namespace AST;
 
 template <typename LoadType, typename... Args> node_ptr_t createNodeBy(Args &&...args) {
-    return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
+    return std::dynamic_pointer_cast<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
 }
 
 template <typename LoadType> std::shared_ptr<LoadType> unwrapNodeAs(std::shared_ptr<Node> &node) {
@@ -89,6 +89,13 @@ stmt
 */
 any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
     enter("Stmt");
+    if (context->dataExpr()) {
+        node_ptr_t expr = any2node(visitDataExpr(context->dataExpr()));
+        node_ptr_t stmt = createNodeBy<ExprStmtLoad>();
+        *stmt << expr;
+        leave("Stmt");
+        return stmt;
+    }
     any res = visit(context->children[0]);
     leave("Stmt");
     return res;
@@ -204,7 +211,7 @@ any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
         res = any2node(visitStmtBlock(context->stmtBlock()));
     } else if (context->dataExpr()) {
         node_ptr_t expr = any2node(visitDataExpr(context->dataExpr()));
-        node_ptr_t stmt = createNodeBy<DataExprLoad>();
+        node_ptr_t stmt = createNodeBy<ExprStmtLoad>();
         res = createNodeBy<StmtBlockLoad>();
         *stmt << expr;
         *res << stmt;
@@ -738,10 +745,9 @@ pattern
 */
 any Constructor::visitPattern(OpenCMLParser::PatternContext *context) {
     enter("Pattern");
-    node_ptr_t res = nullptr;
-    assert(false, "visitPattern: not implemented yet");
+    throw std::runtime_error("visitPattern: not implemented yet");
     leave("Pattern");
-    return res;
+    return nullptr;
 }
 
 /*
@@ -752,7 +758,7 @@ matchCase
 any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     // TODO: match case
     enter("MatchCase");
-    assert(false, "visitMatchCase: not implemented yet");
+    throw std::runtime_error("visitMatchCase: not implemented yet");
     leave("MatchCase");
     return nullptr;
 }
@@ -765,7 +771,7 @@ catchClause
 any Constructor::visitCatchClause(OpenCMLParser::CatchClauseContext *context) {
     // TODO: catch clause
     enter("CatchClause");
-    assert(false, "visitCatchClause: not implemented yet");
+    throw std::runtime_error("visitCatchClause: not implemented yet");
     leave("CatchClause");
     return nullptr;
 }
@@ -779,7 +785,7 @@ ctrlExpr
 */
 any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     enter("CtrlExpr");
-    assert(false, "visitCtrlExpr: not implemented yet");
+    throw std::runtime_error("visitCtrlExpr: not implemented yet");
     leave("CtrlExpr");
     return nullptr;
 }
@@ -1296,36 +1302,35 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     node_ptr_t dataNode = nullptr;
     switch (context->getAltNumber()) {
     case 1: { // INTEGER
-        dataNode = createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::Integer, context->INTEGER()->getText()));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Integer, context->INTEGER()->getText()));
         break;
     }
     case 2: { // REAL
-        dataNode = createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::Real, context->REAL()->getText()));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Real, context->REAL()->getText()));
         break;
     }
     case 3: { // STRING
-        dataNode = createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::String, context->STRING()->getText()));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::String, context->STRING()->getText()));
         break;
     }
     case 4: { // MULTI_STR
-        dataNode =
-            createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::String, context->MULTI_STR()->getText()));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::String, context->MULTI_STR()->getText()));
         break;
     }
     case 5: { // FSTRING
-        dataNode = createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::String, context->FSTRING()->getText()));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::String, context->FSTRING()->getText()));
         break;
     }
     case 6: { // TRUE
-        dataNode = createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::Boolean, "true"));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Boolean, "true"));
         break;
     }
     case 7: { // FALSE
-        dataNode = createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::Boolean, "false"));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Boolean, "false"));
         break;
     }
     case 8: { // NULL
-        dataNode = createNodeBy<LiteralLoad>(make_shared<Literal>(LiteralType::Null, "null"));
+        dataNode = createNodeBy<LiteralLoad>(Literal(LiteralType::Null, "null"));
         break;
     }
 
@@ -1540,7 +1545,7 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     } else if (context->dictType()) {
         res = any2node(visitDictType(context->dictType()));
     } else if (context->identRef()) {
-        res = createNodeBy<RefTypeLoad>(visitIdentRef(context->identRef()));
+        res = createNodeBy<RefTypeLoad>(any_cast<Reference>(visitIdentRef(context->identRef())));
     } else if (context->typeExpr()) {
         res = any2node(visitTypeExpr(context->typeExpr()));
     } else if (context->tupleType()) {

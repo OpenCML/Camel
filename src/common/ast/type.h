@@ -77,8 +77,9 @@ class TupleTypeLoad : public TypeLoad {
 
 class FuncTypeLoad : public TypeLoad {
   public:
+    FuncTypeLoad() : TypeLoad(TypeType::Func) {}
     FuncTypeLoad(const std::string &uri, ImplMark impl = ImplMark::Graph)
-        : TypeLoad(TypeType::Func), uri_(uri), implMark_(impl) {}
+        : TypeLoad(TypeType::Func), implMark_(impl), uri_(uri) {}
     const std::string toString() const override;
 
     const std::string uri() const { return uri_; }
@@ -97,7 +98,7 @@ class FuncTypeLoad : public TypeLoad {
     bool shared_ = false;
     bool sync_ = false;
     bool macro_ = false;
-    ImplMark implMark_;
+    ImplMark implMark_ = ImplMark::Graph;
     std::string uri_;
 };
 

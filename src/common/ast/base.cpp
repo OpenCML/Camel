@@ -35,4 +35,21 @@ std::string implMarkToString(ImplMark mark) {
     }
 }
 
+std::string loadTypeToString(LoadType type) {
+    switch (type) {
+        case LoadType::Module: return "Module";
+        case LoadType::Import: return "Import";
+        case LoadType::Export: return "Export";
+        case LoadType::Stmt: return "Stmt";
+        case LoadType::Data: return "Data";
+        case LoadType::Type: return "Type";
+        case LoadType::NamedData: return "NamedData";
+        case LoadType::NamedType: return "NamedType";
+        case LoadType::NamedPair: return "NamedPair";
+        case LoadType::Repeated: return "Repeated";
+        case LoadType::Optional: return "Optional";
+        default: throw std::runtime_error("Unknown LoadType");
+    }
+}
+
 } // namespace AbstractSyntaxTree

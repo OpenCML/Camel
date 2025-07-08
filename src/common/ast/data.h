@@ -115,17 +115,11 @@ class IfExprLoad : public DataLoad {
 
 class LiteralLoad : public DataLoad {
   public:
-    LiteralLoad(std::shared_ptr<Literal> value) : DataLoad(DataType::Literal), value_(std::move(value)) {}
-    const std::string toString() const override {
-        if (value_) {
-            return value_->toString();
-        } else {
-            return "NULL";
-        }
-    }
+    LiteralLoad(Literal value) : DataLoad(DataType::Literal), value_(value) {}
+    const std::string toString() const override { return value_.toString(); }
 
   private:
-    std::shared_ptr<Literal> value_;
+    Literal value_;
 };
 
 class ListDataLoad : public DataLoad {

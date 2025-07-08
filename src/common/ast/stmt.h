@@ -60,8 +60,8 @@ class FuncDeclLoad : public StmtLoad {
 
 class TypeDeclLoad : public StmtLoad {
   public:
-    TypeDeclLoad(Reference ref, ImplMark impl = ImplMark::Graph, std::string uri)
-        : StmtLoad(StmtType::Type), ref_(ref), uri_(uri), implMark_(impl) {}
+    TypeDeclLoad(Reference ref, ImplMark impl = ImplMark::Graph, std::string uri = "")
+        : StmtLoad(StmtType::Type), ref_(ref), implMark_(impl), uri_(uri) {}
     const std::string toString() const override;
 
   private:
@@ -82,11 +82,8 @@ class NameDeclLoad : public StmtLoad {
 
 class ExprStmtLoad : public StmtLoad {
   public:
-    ExprStmtLoad(DataOp op) : StmtLoad(StmtType::Expr), op_(op) {}
-    const std::string toString() const override { return "ExprStmt: " + dataOpToString(op_); }
-
-  private:
-    DataOp op_;
+    ExprStmtLoad() : StmtLoad(StmtType::Expr) {}
+    const std::string toString() const override { return "ExprStmt"; }
 };
 
 class ExitStmtLoad : public StmtLoad {

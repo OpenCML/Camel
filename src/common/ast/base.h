@@ -29,7 +29,27 @@ namespace AbstractSyntaxTree {
 
 enum class ImplMark { Inner, Outer, Graph };
 
+enum class LoadType {
+    Module,
+
+    Import,
+    Export,
+
+    Stmt,
+    Data,
+    Type,
+
+    NamedData,
+    NamedType,
+    NamedPair,
+
+    Repeated,
+    Optional,
+};
+
 std::string implMarkToString(ImplMark mark);
+
+std::string loadTypeToString(LoadType type);
 
 class Node;
 using node_ptr_t = std::shared_ptr<Node>;
@@ -56,7 +76,7 @@ class Load {
 
     LoadType type() const { return type_; }
     std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
-    const std::string typeStr() const;
+    const std::string typeStr() const { return loadTypeToString(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
@@ -83,24 +103,6 @@ class Literal {
   private:
     LiteralType type_;
     std::string data_;
-};
-
-enum class LoadType {
-    Module,
-
-    Import,
-    Export,
-
-    Stmt,
-    Data,
-    Type,
-
-    NamedData,
-    NamedType,
-    NamedPair,
-
-    Repeated,
-    Optional,
 };
 
 class ModuleLoad : public Load {
