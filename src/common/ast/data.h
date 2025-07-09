@@ -76,20 +76,25 @@ class DataLoad : public Load {
     DataLoad(DataType type, bool notNull = false, bool waited = false)
         : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}
     const std::string toString() const override {
-        std::string result = "DataLoad: " + dataTypeToString(dataType_);
-        if (waited_) {
-            result += " wait";
-        }
-        if (notNull_) {
-            result += " !";
-        }
+        std::string result = "DataLoad: " + dataTypeToString(dataType_) + this->status();
         return result;
     }
 
-    void setNotNull(bool notNull) { notNull_ = notNull; }
-    void setWaited(bool waited) { waited_ = waited; }
+    const std::string status() const {
+        std::string status;
+        if (waited_) {
+            status += " (waited)";
+        }
+        if (notNull_) {
+            status += " (non-null)";
+        }
+        return status;
+    }
 
-    bool isNotNull() const { return notNull_; }
+    void setNonNull(bool notNull) { notNull_ = notNull; }
+    void setWait(bool waited) { waited_ = waited; }
+
+    bool isNonNull() const { return notNull_; }
     bool isWaited() const { return waited_; }
 
   private:
@@ -101,7 +106,7 @@ class DataLoad : public Load {
 class DataExprLoad : public DataLoad {
   public:
     DataExprLoad(DataOp op) : DataLoad(DataType::DataExpr), op_(op) {}
-    const std::string toString() const override { return "DataExpr: " + dataOpToString(op_); }
+    const std::string toString() const override { return "DataExpr: " + dataOpToString(op_) + this->status(); }
 
   private:
     DataOp op_;
@@ -110,25 +115,25 @@ class DataExprLoad : public DataLoad {
 class IfExprLoad : public DataLoad {
   public:
     IfExprLoad() : DataLoad(DataType::IfExpr) {}
-    const std::string toString() const override { return "IfExpr"; }
+    const std::string toString() const override { return "IfExpr" + this->status(); }
 };
 
 class MatchExprLoad : public DataLoad {
   public:
     MatchExprLoad() : DataLoad(DataType::MatchExpr) {}
-    const std::string toString() const override { return "MatchExpr"; }
+    const std::string toString() const override { return "MatchExpr" + this->status(); }
 };
 
 class TryExprLoad : public DataLoad {
   public:
     TryExprLoad() : DataLoad(DataType::TryExpr) {}
-    const std::string toString() const override { return "TryExpr"; }
+    const std::string toString() const override { return "TryExpr" + this->status(); }
 };
 
 class LiteralLoad : public DataLoad {
   public:
     LiteralLoad(Literal value) : DataLoad(DataType::Literal), value_(value) {}
-    const std::string toString() const override { return value_.toString(); }
+    const std::string toString() const override { return value_.toString() + this->status(); }
 
   private:
     Literal value_;
@@ -137,32 +142,32 @@ class LiteralLoad : public DataLoad {
 class ListDataLoad : public DataLoad {
   public:
     ListDataLoad() : DataLoad(DataType::List) {}
-    const std::string toString() const override { return "ListData"; }
+    const std::string toString() const override { return "ListData" + this->status(); }
 };
 
 class DictDataLoad : public DataLoad {
   public:
     DictDataLoad() : DataLoad(DataType::Dict) {}
-    const std::string toString() const override { return "DictData"; }
+    const std::string toString() const override { return "DictData" + this->status(); }
 };
 
 class TupleDataLoad : public DataLoad {
   public:
     TupleDataLoad() : DataLoad(DataType::Tuple) {}
-    const std::string toString() const override { return "TupleData"; }
+    const std::string toString() const override { return "TupleData" + this->status(); }
 };
 
 class IndexDataLoad : public DataLoad {
   public:
     IndexDataLoad() : DataLoad(DataType::Index) {}
-    const std::string toString() const override { return "IndexData"; }
+    const std::string toString() const override { return "IndexData" + this->status(); }
 };
 
 class FuncDataLoad : public DataLoad {
   public:
     FuncDataLoad() : DataLoad(DataType::Func) {} // anonymous function
     FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
-    const std::string toString() const override { return "FuncData: " + ref_.toString(); }
+    const std::string toString() const override { return "FuncData: " + ref_.toString() + this->status(); }
 
   private:
     Reference ref_;
@@ -171,7 +176,7 @@ class FuncDataLoad : public DataLoad {
 class RefDataLoad : public DataLoad {
   public:
     RefDataLoad(const Reference &ref) : DataLoad(DataType::Ref), ref_(ref) {}
-    const std::string toString() const override { return "RefData: " + ref_.toString(); }
+    const std::string toString() const override { return "RefData: " + ref_.toString() + this->status(); }
 
   private:
     Reference ref_;

@@ -38,6 +38,31 @@ template <typename LoadType> std::shared_ptr<LoadType> unwrapNodeAs(std::shared_
     return std::dynamic_pointer_cast<LoadType>(node->load());
 }
 
+inline std::pair<size_t, size_t> extractTokenRangeFromContext(const antlr4::ParserRuleContext *context) {
+    if (context && context->getStart() && context->getStop()) {
+        return {context->getStart()->getTokenIndex(), context->getStop()->getTokenIndex() + 1};
+    } else {
+        return {0, 0};
+    }
+}
+
+inline void setNodeTokenRange(node_ptr_t node, pair<size_t, size_t> range) { node->load()->setTokenRange(range); }
+inline void setNodeTokenRange(node_ptr_t node, size_t start, size_t end) { node->load()->setTokenRange(start, end); }
+
+inline void setNodeTokenRangeByContext(node_ptr_t node, const antlr4::ParserRuleContext *context) {
+    node->load()->setTokenRange(extractTokenRangeFromContext(context));
+}
+
+template <typename Context> inline void setNodeTokenRangeByContexts(node_ptr_t node, const vector<Context *> context) {
+    if (context.empty()) {
+        node->load()->setTokenRange(0, 0);
+        return;
+    }
+    size_t start = context.front()->getStart()->getTokenIndex();
+    size_t end = context.back()->getStop()->getTokenIndex() + 1;
+    node->load()->setTokenRange(start, end);
+}
+
 inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>(a); }
 
 /*
@@ -49,6 +74,7 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
     root_ = std::make_shared<Node>(module_);
 
     node_ptr_t stmts = createNodeBy<RepeatedLoad>("Stmts");
+    setNodeTokenRangeByContext(stmts, context);
     for (const auto &decl : context->decl()) {
         any res = visitDecl(decl);
         if (res.has_value()) {
@@ -105,6 +131,7 @@ any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
     if (context->dataExpr()) {
         node_ptr_t expr = any2node(visitDataExpr(context->dataExpr()));
         node_ptr_t stmt = createNodeBy<ExprStmtLoad>();
+        setNodeTokenRangeByContext(stmt, context->dataExpr());
         *stmt << expr;
         leave("Stmt");
         return stmt;
@@ -120,6 +147,7 @@ stmtList : stmt (SEP? stmt)* SEP? ;
 any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     enter("StmtList");
     node_ptr_t block = createNodeBy<StmtBlockLoad>();
+    setNodeTokenRangeByContext(block, context);
     if (context->stmt().size() > 0) {
         for (auto &stmt : context->stmt()) {
             *block << any2node(visitStmt(stmt));
@@ -215,6 +243,7 @@ any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
     } else {
         // If no statements are present, we create an empty block.
         blockNode = createNodeBy<StmtBlockLoad>();
+        setNodeTokenRangeByContext(blockNode, context);
     }
     leave("StmtBlock");
     return blockNode;
@@ -231,7 +260,9 @@ any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
     } else if (context->dataExpr()) {
         node_ptr_t expr = any2node(visitDataExpr(context->dataExpr()));
         node_ptr_t stmt = createNodeBy<ExprStmtLoad>();
+        setNodeTokenRangeByContext(stmt, context->dataExpr());
         res = createNodeBy<StmtBlockLoad>();
+        setNodeTokenRangeByContext(res, context);
         *stmt << expr;
         *res << stmt;
     }
@@ -245,6 +276,7 @@ funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExp
 any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     enter("FuncData");
     node_ptr_t funcTypeNode = createNodeBy<FuncTypeLoad>();
+    setNodeTokenRangeByContext(funcTypeNode, context);
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto modifier = context->modifiers();
@@ -274,6 +306,10 @@ any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     }
 
     node_ptr_t typeOptNode = createNodeBy<OptionalLoad>("Type");
+    setNodeTokenRange(typeOptNode, context->getStart()->getTokenIndex(),
+                      (context->typeExpr() ? context->typeExpr()->getStop()->getTokenIndex()
+                                           : context->parentParams()->getStart()->getTokenIndex()) +
+                          1);
     if (context->typeExpr()) {
         node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
         *typeOptNode << typeNode;
@@ -283,6 +319,7 @@ any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     node_ptr_t blockNode = any2node(visitBlockExpr(context->blockExpr()));
 
     node_ptr_t funcNode = createNodeBy<FuncDataLoad>();
+    setNodeTokenRangeByContext(funcNode, context);
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 
@@ -300,6 +337,9 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     enter("FuncDecl");
 
     node_ptr_t funcTypeNode = createNodeBy<FuncTypeLoad>();
+    pair<size_t, size_t> typeRange = {context->getStart()->getTokenIndex(),
+                                      context->stmtBlock()->getStart()->getTokenIndex() + 1};
+    setNodeTokenRange(funcTypeNode, typeRange);
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto implMark = context->implMark();
@@ -338,6 +378,7 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     }
 
     node_ptr_t typeOptNode = createNodeBy<OptionalLoad>("Type");
+    setNodeTokenRange(typeOptNode, typeRange);
     if (context->typeExpr()) {
         node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
         *typeOptNode << typeNode;
@@ -352,6 +393,7 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     node_ptr_t blockNode = any2node(visitStmtBlock(context->stmtBlock()));
 
     node_ptr_t funcNode = createNodeBy<FuncDataLoad>(ref);
+    setNodeTokenRangeByContext(funcNode, context);
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 
@@ -431,6 +473,7 @@ any Constructor::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
     }
     auto [type, refs] = any_cast<std::tuple<UnpackType, vector<Reference>>>(visitCarrier(context->carrier()));
     node_ptr_t dataDeclNode = createNodeBy<DataDeclLoad>(isVar, type, refs);
+    setNodeTokenRangeByContext(dataDeclNode, context);
 
     if (context->typeList()) {
         *dataDeclNode << any2node(visitTypeList(context->typeList()));
@@ -466,9 +509,11 @@ any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     }
 
     node_ptr_t typeDeclNode = createNodeBy<TypeDeclLoad>(ref, implMark, uri);
+    setNodeTokenRangeByContext(typeDeclNode, context);
 
     node_ptr_t typeOptNode = createNodeBy<OptionalLoad>("Type");
     if (context->typeExpr()) {
+        setNodeTokenRangeByContext(typeOptNode, context->typeExpr());
         *typeOptNode << any2node(visitTypeExpr(context->typeExpr()));
     }
 
@@ -488,6 +533,7 @@ any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
     }
     Reference alias(context->identRef()->getText());
     node_ptr_t nameDeclNode = createNodeBy<NameDeclLoad>(ref, alias);
+    setNodeTokenRangeByContext(nameDeclNode, context);
     leave("UseDecl");
     return nameDeclNode;
 }
@@ -509,6 +555,7 @@ any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
         exitType = ExitType::Return;
     }
     node_ptr_t exitNode = createNodeBy<ExitStmtLoad>(exitType);
+    setNodeTokenRangeByContext(exitNode, context);
     if (context->dataList()) {
         *exitNode << any2node(visitDataList(context->dataList()));
     }
@@ -553,6 +600,7 @@ any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
     enter("KeyTypePair");
     Reference ref(context->identDef()->getText());
     node_ptr_t namedTypeNode = createNodeBy<NamedTypeLoad>(ref);
+    setNodeTokenRangeByContext(namedTypeNode, context);
     if (context->typeExpr()) {
         *namedTypeNode << any2node(visitTypeExpr(context->typeExpr()));
     }
@@ -567,6 +615,7 @@ any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) 
     enter("KeyValuePair");
     Reference ref(context->identDef()->getText());
     node_ptr_t namedDataNode = createNodeBy<NamedDataLoad>(ref);
+    setNodeTokenRangeByContext(namedDataNode, context);
     if (context->dataExpr()) {
         *namedDataNode << any2node(visitDataExpr(context->dataExpr()));
     }
@@ -585,9 +634,11 @@ any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) 
     }
     Reference ref(context->identDef()->getText());
     node_ptr_t namedPairNode = createNodeBy<NamedPairLoad>(ref, isVar);
+    setNodeTokenRangeByContext(namedPairNode, context);
     *namedPairNode << any2node(visitTypeExpr(context->typeExpr()));
     node_ptr_t dataExprOptNode = createNodeBy<OptionalLoad>("DataExpr");
     if (context->dataExpr()) {
+        setNodeTokenRangeByContext(dataExprOptNode, context->dataExpr());
         *dataExprOptNode << any2node(visitDataExpr(context->dataExpr()));
     }
     *namedPairNode << dataExprOptNode;
@@ -601,6 +652,7 @@ dataList     : dataExpr (',' dataExpr)* ;
 any Constructor::visitDataList(OpenCMLParser::DataListContext *context) {
     enter("DataList");
     node_ptr_t rep = createNodeBy<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(rep, context);
     for (const auto &dataExpr : context->dataExpr()) {
         *rep << any2node(visitDataExpr(dataExpr));
     }
@@ -627,6 +679,7 @@ indexValues  : indexValue (',' indexValue)* ;
 any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
     enter("IndexValues");
     node_ptr_t rep = createNodeBy<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(rep, context);
     for (const auto &indexValue : context->indexValue()) {
         *rep << any2node(visitIndexValue(indexValue));
     }
@@ -640,6 +693,7 @@ pairedValues : keyValuePair (',' keyValuePair)* ;
 any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
     enter("PairedValues");
     node_ptr_t rep = createNodeBy<RepeatedLoad>("NamedData");
+    setNodeTokenRangeByContext(rep, context);
     for (const auto &keyValuePair : context->keyValuePair()) {
         *rep << any2node(visitKeyValuePair(keyValuePair));
     }
@@ -653,6 +707,7 @@ pairedParams : keyParamPair (',' keyParamPair)* ;
 any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
     enter("PairedParams");
     node_ptr_t rep = createNodeBy<RepeatedLoad>("NamedPair");
+    setNodeTokenRangeByContext(rep, context);
     for (const auto &keyParamPair : context->keyParamPair()) {
         *rep << any2node(visitKeyParamPair(keyParamPair));
     }
@@ -667,10 +722,12 @@ any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) 
     enter("ArgumentList");
     node_ptr_t dataList = createNodeBy<RepeatedLoad>("Data");
     if (context->indexValues()) {
+        setNodeTokenRangeByContext(dataList, context->indexValues());
         dataList = any2node(visitIndexValues(context->indexValues()));
     }
     node_ptr_t namedDataList = createNodeBy<RepeatedLoad>("NamedData");
     if (context->pairedValues()) {
+        setNodeTokenRangeByContext(namedDataList, context->pairedValues());
         namedDataList = any2node(visitPairedValues(context->pairedValues()));
     }
     leave("ArgumentList");
@@ -683,6 +740,7 @@ memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
     enter("MemberAccess");
     node_ptr_t dataList = createNodeBy<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(dataList, context);
     if (context->dataExpr(0)) {
         *dataList << any2node(visitDataExpr(context->dataExpr(0)));
     }
@@ -702,6 +760,7 @@ parentParams : '(' pairedParams? ','? ')' ;
 any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
     enter("ParentParams");
     node_ptr_t rep = createNodeBy<RepeatedLoad>("NamedPair");
+    setNodeTokenRangeByContext(rep, context);
     const auto &pairedParams = context->pairedParams();
     if (pairedParams) {
         rep = any2node(visitPairedParams(pairedParams));
@@ -716,6 +775,7 @@ parentArgues : '(' argumentList? ','? ')' ;
 any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
     enter("ParentArgues");
     node_ptr_t dataList = createNodeBy<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeBy<RepeatedLoad>("NamedData");
     if (context->argumentList()) {
         auto res = any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->argumentList()));
@@ -732,6 +792,7 @@ angledParams : '<' pairedParams? ','? '>' ;
 any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
     enter("AngledParams");
     node_ptr_t res = createNodeBy<RepeatedLoad>("NamedPair");
+    setNodeTokenRangeByContext(res, context);
     const auto &pairedParams = context->pairedParams();
     if (pairedParams) {
         res = any2node(visitPairedParams(pairedParams));
@@ -746,6 +807,7 @@ angledValues : '<' argumentList? ','? '>' ;
 any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
     enter("AngledValues");
     node_ptr_t dataList = createNodeBy<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeBy<RepeatedLoad>("NamedData");
     if (context->argumentList()) {
         auto res = any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->argumentList()));
@@ -812,11 +874,13 @@ any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     case 1: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     {
         ctrlNode = createNodeBy<IfExprLoad>();
+        setNodeTokenRangeByContext(ctrlNode, context);
         *ctrlNode << any2node(visitLogicalOrExpr(context->logicalOrExpr()));
         *ctrlNode << any2node(visitBlockExpr(context->blockExpr(0)));
         node_ptr_t elseBlockNode = createNodeBy<OptionalLoad>("StmtBlock");
         *ctrlNode << elseBlockNode;
         if (context->blockExpr(1)) {
+            setNodeTokenRangeByContext(elseBlockNode, context->blockExpr(1));
             *elseBlockNode << any2node(visitBlockExpr(context->blockExpr(1)));
         } else {
             *elseBlockNode << createNodeBy<StmtBlockLoad>();
@@ -855,7 +919,7 @@ any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
     enter("WaitExpr");
     node_ptr_t dataNode = any2node(visitAssignExpr(context->assignExpr()));
     if (context->WAIT()) {
-        unwrapNodeAs<DataLoad>(dataNode)->setWaited(true);
+        unwrapNodeAs<DataLoad>(dataNode)->setWait(true);
     }
     leave("WaitExpr");
     return dataNode;
@@ -897,6 +961,8 @@ any Constructor::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
         }
         node_ptr_t rhsNode = any2node(visitLogicalOrExpr(context->logicalOrExpr(i)));
         node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(op);
+        // TODO: set the token range for dataExprNode
+        setNodeTokenRangeByContext(dataExprNode, context->logicalOrExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
@@ -915,6 +981,7 @@ any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context
     for (size_t i = 1; i < context->logicalAndExpr().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitLogicalAndExpr(context->logicalAndExpr(i)));
         node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(DataOp::Or);
+        setNodeTokenRangeByContext(dataExprNode, context->logicalAndExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
@@ -933,6 +1000,7 @@ any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *conte
     for (size_t i = 1; i < context->equalityExpr().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitEqualityExpr(context->equalityExpr(i)));
         node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(DataOp::And);
+        setNodeTokenRangeByContext(dataExprNode, context->equalityExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
@@ -965,6 +1033,7 @@ any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) 
         }
         node_ptr_t rhsNode = any2node(visitRelationalExpr(context->relationalExpr(i)));
         node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(op);
+        setNodeTokenRangeByContext(dataExprNode, context->relationalExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
@@ -996,6 +1065,7 @@ any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *conte
         }
         node_ptr_t rhsNode = any2node(visitAdditiveExpr(context->additiveExpr(i)));
         node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(op);
+        setNodeTokenRangeByContext(dataExprNode, context->additiveExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
@@ -1023,6 +1093,7 @@ any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) 
         }
         node_ptr_t rhsNode = any2node(visitMultiplicativeExpr(context->multiplicativeExpr(i)));
         node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(op);
+        setNodeTokenRangeByContext(dataExprNode, context->multiplicativeExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
@@ -1056,6 +1127,7 @@ any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContex
         }
         node_ptr_t rhsNode = any2node(visitNullableExpr(context->nullableExpr(i)));
         node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(op);
+        setNodeTokenRangeByContext(dataExprNode, context->nullableExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
@@ -1085,6 +1157,7 @@ any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) 
 
         if (context->dataExpr()) {
             node_ptr_t dataExprNode = createNodeBy<DataExprLoad>(op);
+            setNodeTokenRangeByContext(dataExprNode, context->dataExpr());
             *dataExprNode << res << any2node(visitDataExpr(context->dataExpr()));
             res = dataExprNode;
         }
@@ -1120,6 +1193,7 @@ any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
             node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
             node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
             res = createNodeBy<DataExprLoad>(op);
+            setNodeTokenRangeByContext(res, context);
             *res << dataNode << typeNode;
         }
         break;
@@ -1138,6 +1212,7 @@ any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
         }
         node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
         res = createNodeBy<DataExprLoad>(op);
+        setNodeTokenRangeByContext(res, context);
         *res << dataNode;
         break;
     }
@@ -1163,6 +1238,7 @@ any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
         node_ptr_t rhsNode = any2node(visitBindExpr(context->bindExpr(i)));
         if (strOp == "?->") {
             node_ptr_t notNullNode = createNodeBy<DataExprLoad>(DataOp::NotNullThen);
+            setNodeTokenRangeByContext(notNullNode, context->bindExpr(i));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
@@ -1184,9 +1260,11 @@ any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {
     for (size_t i = 1; i < context->annoExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
         node_ptr_t dataNode = createNodeBy<DataExprLoad>(DataOp::Bind);
+        setNodeTokenRangeByContext(dataNode, context->annoExpr(i));
         node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
         if (strOp == "?..") {
             node_ptr_t notNullNode = createNodeBy<DataExprLoad>(DataOp::NotNullThen);
+            setNodeTokenRangeByContext(notNullNode, context->annoExpr(i));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
@@ -1211,22 +1289,25 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
             node_ptr_t exprNode = nullptr;
             if (tt::is_instance_of<OpenCMLParser::MemberAccessContext>(child)) {
                 exprNode = createNodeBy<DataExprLoad>(DataOp::Index);
+                setNodeTokenRangeByContext(exprNode, tt::as<OpenCMLParser::MemberAccessContext>(child));
                 node_ptr_t rhsNode = any2node(visitMemberAccess(tt::as<OpenCMLParser::MemberAccessContext>(child)));
                 *exprNode << lhsNode << rhsNode;
             } else if (tt::is_instance_of<OpenCMLParser::ParentArguesContext>(child)) {
                 exprNode = createNodeBy<DataExprLoad>(DataOp::Call);
+                setNodeTokenRangeByContext(exprNode, tt::as<OpenCMLParser::ParentArguesContext>(child));
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
                     visitParentArgues(tt::as<OpenCMLParser::ParentArguesContext>(child)));
                 *exprNode << lhsNode << dataList << namedDataList;
             } else if (tt::is_instance_of<OpenCMLParser::AngledValuesContext>(child)) {
                 exprNode = createNodeBy<DataExprLoad>(DataOp::With);
+                setNodeTokenRangeByContext(exprNode, tt::as<OpenCMLParser::AngledValuesContext>(child));
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
                     visitAngledValues(tt::as<OpenCMLParser::AngledValuesContext>(child)));
                 *exprNode << lhsNode << dataList << namedDataList;
             }
             lhsNode = exprNode;
         } else {
-            unwrapNodeAs<DataLoad>(lhsNode)->setNotNull(true);
+            unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
         }
     }
     leave("AnnoExpr");
@@ -1244,9 +1325,11 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     for (size_t i = 1; i < context->primaryData().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
         node_ptr_t dataNode = createNodeBy<DataExprLoad>(DataOp::With);
+        setNodeTokenRangeByContext(dataNode, context->primaryData(i));
         node_ptr_t rhsNode = any2node(visitPrimaryData(context->primaryData(i)));
         if (strOp == "?.") {
             node_ptr_t notNullNode = createNodeBy<DataExprLoad>(DataOp::NotNullThen);
+            setNodeTokenRangeByContext(notNullNode, context->primaryData(i));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
@@ -1265,6 +1348,7 @@ dictData
 any Constructor::visitDictData(OpenCMLParser::DictDataContext *context) {
     enter("DictData");
     node_ptr_t dataNode = createNodeBy<DictDataLoad>();
+    setNodeTokenRangeByContext(dataNode, context);
     if (context->pairedValues()) {
         *dataNode << any2node(visitPairedValues(context->pairedValues()));
     } else {
@@ -1282,6 +1366,7 @@ listData
 any Constructor::visitListData(OpenCMLParser::ListDataContext *context) {
     enter("ListData");
     node_ptr_t dataNode = createNodeBy<ListDataLoad>();
+    setNodeTokenRangeByContext(dataNode, context);
     if (context->indexValues()) {
         *dataNode << any2node(visitIndexValues(context->indexValues()));
     } else {
@@ -1300,6 +1385,7 @@ tupleData
 any Constructor::visitTupleData(OpenCMLParser::TupleDataContext *context) {
     enter("TupleData");
     node_ptr_t dataNode = createNodeBy<TupleDataLoad>();
+    setNodeTokenRangeByContext(dataNode, context);
     if (context->dataList()) {
         *dataNode << any2node(visitDataList(context->dataList()));
     } else {
@@ -1322,17 +1408,19 @@ primaryData
 */
 any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
     enter("PrimaryData");
-    any res;
+    node_ptr_t res;
     if (context->identRef()) {
         Reference ref(context->identRef()->getText());
         res = createNodeBy<RefDataLoad>(ref);
+        setNodeTokenRangeByContext(res, context->identRef());
     } else if (context->literal()) {
         Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
         res = createNodeBy<LiteralLoad>(literal);
+        setNodeTokenRangeByContext(res, context->literal());
     } else if (context->dataExpr()) {
-        res = visitDataExpr(context->dataExpr());
+        res = any2node(visitDataExpr(context->dataExpr()));
     } else {
-        res = visit(context->children[0]);
+        res = any2node(visit(context->children[0]));
     }
     leave("PrimaryData");
     return res;
@@ -1382,10 +1470,12 @@ any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
     if (context->children.size() > 1) {
         if (context->unionType().size() > 1) {
             node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(TypeOp::ErrorThen);
+            setNodeTokenRangeByContext(typeExprNode, context->unionType(1));
             *typeExprNode << any2node(visitUnionType(context->unionType(1)));
             lhsNode = typeExprNode;
         } else {
             node_ptr_t nullableTypeNode = createNodeBy<NullableTypeLoad>();
+            setNodeTokenRangeByContext(nullableTypeNode, context);
             *nullableTypeNode << lhsNode;
             lhsNode = nullableTypeNode;
         }
@@ -1405,6 +1495,7 @@ any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
     for (size_t i = 1; i < context->interType().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitInterType(context->interType(i)));
         node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(TypeOp::Union);
+        setNodeTokenRangeByContext(typeExprNode, context->interType(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -1423,6 +1514,7 @@ any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {
     for (size_t i = 1; i < context->diffType().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitDiffType(context->diffType(i)));
         node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(TypeOp::Inter);
+        setNodeTokenRangeByContext(typeExprNode, context->diffType(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -1441,6 +1533,7 @@ any Constructor::visitDiffType(OpenCMLParser::DiffTypeContext *context) {
     for (size_t i = 1; i < context->keyUnionDiffType().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(i)));
         node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(TypeOp::Diff);
+        setNodeTokenRangeByContext(typeExprNode, context->keyUnionDiffType(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -1468,6 +1561,7 @@ any Constructor::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *c
         }
         node_ptr_t rhsNode = any2node(visitKeyInterType(context->keyInterType(i)));
         node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(op);
+        setNodeTokenRangeByContext(typeExprNode, context->keyInterType(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -1486,6 +1580,7 @@ any Constructor::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) 
     for (size_t i = 1; i < context->typeUnit().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitTypeUnit(context->typeUnit(i)));
         node_ptr_t typeExprNode = createNodeBy<TypeExprLoad>(TypeOp::KeyInter);
+        setNodeTokenRangeByContext(typeExprNode, context->typeUnit(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -1519,6 +1614,7 @@ any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {
     if (context->children.size() > 1) {
         size_t dims = (context->children.size() - 1) / 2;
         node_ptr_t listTypeNode = createNodeBy<ListTypeLoad>(dims);
+        setNodeTokenRangeByContext(listTypeNode, context);
         *listTypeNode << res;
         res = listTypeNode;
     }
@@ -1552,8 +1648,10 @@ any Constructor::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
     enter("SpecType");
     node_ptr_t res = any2node(visitPrimaryType(context->primaryType()));
     node_ptr_t specTypeNode = createNodeBy<TypeExprLoad>(TypeOp::Specialize);
+    setNodeTokenRangeByContext(specTypeNode, context);
     if (context->typeOrData().size() > 0) {
         node_ptr_t repeatNode = createNodeBy<RepeatedLoad>("TypeOrData");
+        setNodeTokenRangeByContexts(repeatNode, context->typeOrData());
         for (auto &typeOrData : context->typeOrData()) {
             *repeatNode << any2node(visitTypeOrData(typeOrData));
         }
@@ -1582,10 +1680,12 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     if (context->INNER_ATOM_TYPE()) {
         Reference ref(context->INNER_ATOM_TYPE()->getText());
         res = createNodeBy<RefTypeLoad>(ref);
+        setNodeTokenRangeByContext(res, context);
     } else if (context->dictType()) {
         res = any2node(visitDictType(context->dictType()));
     } else if (context->identRef()) {
         res = createNodeBy<RefTypeLoad>(any_cast<Reference>(visitIdentRef(context->identRef())));
+        setNodeTokenRangeByContext(res, context->identRef());
     } else if (context->typeExpr()) {
         res = any2node(visitTypeExpr(context->typeExpr()));
     } else if (context->tupleType()) {
@@ -1594,11 +1694,14 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
         res = any2node(visitFuncType(context->funcType()));
     } else if (context->dataExpr()) {
         res = createNodeBy<TypeExprLoad>(TypeOp::TypeOf);
+        setNodeTokenRangeByContext(res, context);
         *res << any2node(visitDataExpr(context->dataExpr()));
     } else if (context->identDef()) {
         res = createNodeBy<TypeExprLoad>(TypeOp::TypeAs);
+        setNodeTokenRangeByContext(res, context);
         Reference ref(context->identDef()->getText());
         *res << createNodeBy<RefTypeLoad>(ref);
+        setNodeTokenRangeByContext(res, context->identDef());
     }
     leave("PrimaryType");
     return res;
@@ -1612,6 +1715,7 @@ dictType
 any Constructor::visitDictType(OpenCMLParser::DictTypeContext *context) {
     enter("DictType");
     node_ptr_t repeatNode = createNodeBy<RepeatedLoad>("NamedPair");
+    setNodeTokenRangeByContext(repeatNode, context);
     for (auto &pair : context->keyTypePair()) {
         node_ptr_t pairNode = any2node(visitKeyTypePair(pair));
         *repeatNode << pairNode;
@@ -1628,6 +1732,7 @@ typeList
 any Constructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
     enter("TypeList");
     node_ptr_t repeatNode = createNodeBy<RepeatedLoad>("Type");
+    setNodeTokenRangeByContext(repeatNode, context);
     for (auto &typeExpr : context->typeExpr()) {
         node_ptr_t typeExprNode = any2node(visitTypeExpr(typeExpr));
         *repeatNode << typeExprNode;
@@ -1644,6 +1749,7 @@ tupleType
 any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
     enter("TupleType");
     node_ptr_t res = createNodeBy<TupleTypeLoad>();
+    setNodeTokenRangeByContext(res, context);
     if (context->typeList()) {
         node_ptr_t repeatNode = any2node(visitTypeList(context->typeList()));
         *res << repeatNode;
@@ -1663,6 +1769,7 @@ any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
     enter("FuncType");
 
     node_ptr_t funcTypeNode = createNodeBy<FuncTypeLoad>();
+    setNodeTokenRangeByContext(funcTypeNode, context);
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto modifier = context->modifiers();
@@ -1693,6 +1800,8 @@ any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
 
     node_ptr_t typeOptNode = createNodeBy<OptionalLoad>("Type");
     if (context->typeExpr()) {
+        setNodeTokenRangeByContext(typeOptNode, context->typeExpr());
+        setNodeTokenRangeByContext(typeOptNode, context->typeExpr());
         node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
         *typeOptNode << typeNode;
     }
