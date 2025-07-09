@@ -30,7 +30,7 @@ using node_ptr_t = std::shared_ptr<Node>;
 class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
-enum class NodeType { DATA, VARI, TYPE, DECL, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC, FROM };
+enum class NodeType { DATA, VARI, TYPE, DECL, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, EXIT, EXEC, FROM };
 
 class Load {
   protected:
@@ -206,7 +206,7 @@ inline std::shared_ptr<WithLoad> with_load_ptr_cast(const load_ptr_t &ptr) {
 
 class RetnLoad : public Load {
   public:
-    RetnLoad() : Load(NodeType::RETN) {}
+    RetnLoad() : Load(NodeType::EXIT) {}
 
     // const std::string toString() const override;
 };
@@ -215,22 +215,13 @@ inline std::shared_ptr<RetnLoad> retn_load_ptr_cast(const load_ptr_t &ptr) {
     return std::dynamic_pointer_cast<RetnLoad>(ptr);
 }
 
-class RaseLoad : public Load {
+class ExitLoad : public Load {
   public:
-    RaseLoad() : Load(NodeType::RETN) {}
+    ExitLoad() : Load(NodeType::EXIT) {}
 };
 
-inline std::shared_ptr<RaseLoad> rase_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<RaseLoad>(ptr);
-}
-
-class ThrwLoad : public Load {
-  public:
-    ThrwLoad() : Load(NodeType::RETN) {}
-};
-
-inline std::shared_ptr<ThrwLoad> thrw_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ThrwLoad>(ptr);
+inline std::shared_ptr<ExitLoad> exit_load_ptr_cast(const load_ptr_t &ptr) {
+    return std::dynamic_pointer_cast<ExitLoad>(ptr);
 }
 
 class ExecLoad : public Load {

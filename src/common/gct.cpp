@@ -49,8 +49,8 @@ const string Load::typeStr() const {
         return "LINK";
     case NodeType::WITH:
         return "WITH";
-    case NodeType::RETN:
-        return "RETN";
+    case NodeType::EXIT:
+        return "EXIT";
     case NodeType::EXEC:
         return "EXEC";
     case NodeType::FROM:

@@ -65,20 +65,20 @@ any Constructor::visit(const GCT::node_ptr_t &node) {
         return visitLinkNode(node);
     case GCT::NodeType::WITH:
         return visitWithNode(node);
-    case GCT::NodeType::RETN:
+    case GCT::NodeType::EXIT:
         return visitRetnNode(node);
     case GCT::NodeType::EXEC:
         return visitExecNode(node);
     case GCT::NodeType::FROM:
         return visitFromNode(node);
     default:
-        throw runtime_error("Unknown ast::ASTNodeType");
+        throw runtime_error("Unknown gct::ASTNodeType");
     }
 }
 
-node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &ast) {
+node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
     enter("DATA");
-    const auto &dataNode = GCT::data_load_ptr_cast(ast->load());
+    const auto &dataNode = GCT::data_load_ptr_cast(gct->load());
     const data_ptr_t &data = dataNode->data();
     node_ptr_t node = DataNode::create(context_->currGraph(), data, false);
     if (!data->resolved()) {
@@ -96,9 +96,9 @@ node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &ast) {
     return node;
 }
 
-node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &ast) {
+node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
     enter("VARI");
-    const auto &res = visit(ast_ptr_cast(ast->childAt(0)));
+    const auto &res = visit(ast_ptr_cast(gct->childAt(0)));
     if (res.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter the child of VARI node");
     }
@@ -108,16 +108,16 @@ node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &ast) {
     return node;
 }
 
-type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &ast) {
+type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
     enter("TYPE");
-    const type_ptr_t &type = GCT::type_load_ptr_cast(ast->load())->dataType();
+    const type_ptr_t &type = GCT::type_load_ptr_cast(gct->load())->dataType();
     leave("TYPE");
     return type;
 }
 
-func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &ast) {
+func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     enter("DECL");
-    func_type_ptr_t funcType = GCT::decl_load_ptr_cast(ast->load())->funcType();
+    func_type_ptr_t funcType = GCT::decl_load_ptr_cast(gct->load())->funcType();
     if (context_->cached(funcType)) {
         leave("DECL");
         return getCachedFunc(funcType);
@@ -150,12 +150,12 @@ func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &ast) {
     return func;
 }
 
-node_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &ast) {
+node_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
     enter("FUNC");
-    func_ptr_t func = visitDeclNode(ast_ptr_cast(ast->childAt(0)));
+    func_ptr_t func = visitDeclNode(ast_ptr_cast(gct->childAt(0)));
     func_type_ptr_t funcType = func->funcType();
     context_->pushScope(funcType);
-    visitExecNode(ast_ptr_cast(ast->childAt(1)));
+    visitExecNode(ast_ptr_cast(gct->childAt(1)));
     context_->popScope(funcType);
     delCachedFunc(funcType);
     leave("FUNC");
@@ -169,13 +169,13 @@ inline bool validateIdent(const std::string &str) {
     return !(str.substr(0, 2) == "__" && str.substr(str.length() - 2) == "__");
 }
 
-void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &ast) {
+void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
     enter("NREF");
-    const string &ident = GCT::nref_load_ptr_cast(ast->load())->ident();
+    const string &ident = GCT::nref_load_ptr_cast(gct->load())->ident();
     if (!validateIdent(ident)) {
         throw runtime_error("Identifiers starting and ending with '__' are reserved for internal use.");
     }
-    const auto &res = visit(ast_ptr_cast(ast->childAt(0)));
+    const auto &res = visit(ast_ptr_cast(gct->childAt(0)));
     if (res.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter the child of NREF node.");
     }
@@ -187,9 +187,9 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &ast) {
     return nullptr;
 }
 
-node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &ast) {
+node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     enter("DREF");
-    const string &ident = dref_load_ptr_cast(ast->load())->ident();
+    const string &ident = dref_load_ptr_cast(gct->load())->ident();
     auto optNode = context_->nodeAt(ident);
     if (!optNode.has_value()) {
         throw runtime_error("Unresolved reference: " + ident);
@@ -200,17 +200,17 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &ast) {
     return res;
 }
 
-node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
+node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
 
-node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &ast) { throw runtime_error("Not implemented"); }
+node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
 
-node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &ast) {
+node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
     enter("LINK");
     // TODO: consider functor and operator overriden
     // for now, we just ignore it
     // because we cannot get the exact type of unref elements of struct data yet
-    any dataRes = visit(ast_ptr_cast(ast->at(0)));
-    any funcRes = visit(ast_ptr_cast(ast->at(1)));
+    any dataRes = visit(ast_ptr_cast(gct->at(0)));
+    any funcRes = visit(ast_ptr_cast(gct->at(1)));
     if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter children of LINK node");
     }
@@ -221,10 +221,10 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &ast) {
     return linkNode;
 }
 
-node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &ast) {
+node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
     enter("WITH");
-    any dataRes = visit(ast_ptr_cast(ast->at(0)));
-    any funcRes = visit(ast_ptr_cast(ast->at(1)));
+    any dataRes = visit(ast_ptr_cast(gct->at(0)));
+    any funcRes = visit(ast_ptr_cast(gct->at(1)));
     if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter children of LINK node");
     }
@@ -235,9 +235,9 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &ast) {
     return withNode;
 }
 
-void_ptr_t Constructor::visitRetnNode(const GCT::node_ptr_t &ast) {
+void_ptr_t Constructor::visitRetnNode(const GCT::node_ptr_t &gct) {
     enter("RETN");
-    auto res = visit(ast_ptr_cast(ast->at(0)));
+    auto res = visit(ast_ptr_cast(gct->at(0)));
     if (res.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter child of RETN node");
     }
@@ -247,11 +247,11 @@ void_ptr_t Constructor::visitRetnNode(const GCT::node_ptr_t &ast) {
     return nullptr;
 }
 
-node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &ast) {
+node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {
     enter("EXEC");
     node_ptr_t node;
-    for (size_t i = 0; i < ast->size(); i++) {
-        any result = visit(ast_ptr_cast(ast->at(i)));
+    for (size_t i = 0; i < gct->size(); i++) {
+        any result = visit(ast_ptr_cast(gct->at(i)));
         if (result.type() == typeid(node_ptr_t)) {
             node = any_cast<node_ptr_t>(result);
         }
@@ -260,4 +260,4 @@ node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &ast) {
     return node;
 }
 
-void_ptr_t Constructor::visitFromNode(const GCT::node_ptr_t &ast) { return nullptr; }
+void_ptr_t Constructor::visitFromNode(const GCT::node_ptr_t &gct) { return nullptr; }

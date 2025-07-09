@@ -24,6 +24,7 @@
 #include <string>
 
 #include "common/ref.h"
+#include "common/tree.h"
 
 namespace AbstractSyntaxTree {
 
@@ -66,9 +67,7 @@ class Load {
         tokenRange_.first = start;
         tokenRange_.second = end;
     }
-    void setTokenRange(std::pair<size_t, size_t> range) {
-        tokenRange_ = range;
-    }
+    void setTokenRange(std::pair<size_t, size_t> range) { tokenRange_ = range; }
     const std::string geneCode() const;
 
     LoadType type() const { return type_; }
@@ -81,6 +80,21 @@ class Load {
   protected:
     LoadType type_;
     std::pair<size_t, size_t> tokenRange_ = {0, 0};
+};
+
+class Node : public AbstractTreeNode<load_ptr_t> {
+  public:
+    Node(load_ptr_t load) : AbstractTreeNode(load) {}
+    virtual ~Node() = default;
+
+    LoadType type() const { return load_->type(); }
+    std::string toString() const { return load_->toString(); }
+
+    Node &operator<<(const node_ptr_t &node) {
+        node->setParent(this);
+        this->push_back(node);
+        return *this;
+    }
 };
 
 enum class LiteralType {
