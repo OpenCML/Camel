@@ -58,28 +58,29 @@ class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
 class Load {
-  protected:
-    LoadType type_;
-    size_t tokenStart_;
-    size_t tokenEnd_;
-
   public:
     Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
-    void setToken(size_t start, size_t end) {
-        tokenStart_ = start;
-        tokenEnd_ = end;
-        // TODO: add token range check
+    void setTokenRange(size_t start, size_t end) {
+        tokenRange_.first = start;
+        tokenRange_.second = end;
+    }
+    void setTokenRange(std::pair<size_t, size_t> range) {
+        tokenRange_ = range;
     }
     const std::string geneCode() const;
 
     LoadType type() const { return type_; }
-    std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
+    std::pair<size_t, size_t> range() const { return tokenRange_; }
     const std::string typeStr() const { return loadTypeToString(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
+
+  protected:
+    LoadType type_;
+    std::pair<size_t, size_t> tokenRange_ = {0, 0};
 };
 
 enum class LiteralType {
