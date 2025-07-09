@@ -855,7 +855,7 @@ any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
     enter("WaitExpr");
     node_ptr_t dataNode = any2node(visitAssignExpr(context->assignExpr()));
     if (context->WAIT()) {
-        unwrapNodeAs<DataLoad>(dataNode)->setWaited(true);
+        unwrapNodeAs<DataLoad>(dataNode)->setWait(true);
     }
     leave("WaitExpr");
     return dataNode;
@@ -1226,7 +1226,7 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
             }
             lhsNode = exprNode;
         } else {
-            unwrapNodeAs<DataLoad>(lhsNode)->setNotNull(true);
+            unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
         }
     }
     leave("AnnoExpr");
