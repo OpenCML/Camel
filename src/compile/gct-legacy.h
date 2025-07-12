@@ -136,7 +136,7 @@
 //         node_ptr_t lhsNode = std::any_cast<node_ptr_t>(visit(dataVec[0]));
 
 //         for (size_t i = 1; i < dataVec.size(); i++) {
-//             node_ptr_t execNode = createNodeBy<ExecLoad>();
+//             node_ptr_t execNode = createNodeAs<ExecLoad>();
 //             node_ptr_t rhsNode = std::any_cast<node_ptr_t>(visit(dataVec[i]));
 
 //             std::string op = context->children[i * 2 - 1]->getText();
@@ -317,11 +317,11 @@
 //     // End of auto-generated visitor methods
 // };
 
-// template <typename LoadType, typename... Args> node_ptr_t createNodeBy(Args &&...args) {
+// template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
 //     return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
 // }
 
 // template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&...args) {
-//     return createNodeBy<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
+//     return createNodeAs<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 // }
 // } // namespace GraphConstructTree

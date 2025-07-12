@@ -78,107 +78,107 @@
 //     if (__copy__)
 //         return;
 
-//     __copy__ = createNodeBy<DRefLoad>("__copy__");
+//     __copy__ = createNodeAs<DRefLoad>("__copy__");
 //     nodesMap["__copy__"] = __copy__;
-//     __cast__ = createNodeBy<DRefLoad>("__cast__");
+//     __cast__ = createNodeAs<DRefLoad>("__cast__");
 //     nodesMap["__cast__"] = __cast__;
-//     __type__ = createNodeBy<DRefLoad>("__type__");
+//     __type__ = createNodeAs<DRefLoad>("__type__");
 //     nodesMap["__type__"] = __type__;
-//     __index__ = createNodeBy<DRefLoad>("__index__");
+//     __index__ = createNodeAs<DRefLoad>("__index__");
 //     nodesMap["__index__"] = __index__;
 
-//     __as__ = createNodeBy<DRefLoad>("__as__");
+//     __as__ = createNodeAs<DRefLoad>("__as__");
 //     nodesMap["__as__"] = __as__;
 //     opNodesMap["as"] = __as__;
-//     __is__ = createNodeBy<DRefLoad>("__is__");
+//     __is__ = createNodeAs<DRefLoad>("__is__");
 //     nodesMap["__is__"] = __is__;
 //     opNodesMap["is"] = __is__;
 
-//     __add__ = createNodeBy<DRefLoad>("__add__");
+//     __add__ = createNodeAs<DRefLoad>("__add__");
 //     nodesMap["__add__"] = __add__;
 //     opNodesMap["+"] = __add__;
-//     __sub__ = createNodeBy<DRefLoad>("__sub__");
+//     __sub__ = createNodeAs<DRefLoad>("__sub__");
 //     nodesMap["__sub__"] = __sub__;
 //     opNodesMap["-"] = __sub__;
-//     __mul__ = createNodeBy<DRefLoad>("__mul__");
+//     __mul__ = createNodeAs<DRefLoad>("__mul__");
 //     nodesMap["__mul__"] = __mul__;
 //     opNodesMap["*"] = __mul__;
-//     __div__ = createNodeBy<DRefLoad>("__div__");
+//     __div__ = createNodeAs<DRefLoad>("__div__");
 //     nodesMap["__div__"] = __div__;
 //     opNodesMap["/"] = __div__;
-//     __mod__ = createNodeBy<DRefLoad>("__mod__");
+//     __mod__ = createNodeAs<DRefLoad>("__mod__");
 //     nodesMap["__mod__"] = __mod__;
 //     opNodesMap["%"] = __mod__;
-//     __pow__ = createNodeBy<DRefLoad>("__pow__");
+//     __pow__ = createNodeAs<DRefLoad>("__pow__");
 //     nodesMap["__pow__"] = __pow__;
 //     opNodesMap["^"] = __pow__;
-//     __inter__ = createNodeBy<DRefLoad>("__inter__");
+//     __inter__ = createNodeAs<DRefLoad>("__inter__");
 //     nodesMap["__inter__"] = __inter__;
 //     opNodesMap["&"] = __inter__;
-//     __union__ = createNodeBy<DRefLoad>("__union__");
+//     __union__ = createNodeAs<DRefLoad>("__union__");
 //     nodesMap["__union__"] = __union__;
 //     opNodesMap["|"] = __union__;
 
-//     __assn__ = createNodeBy<DRefLoad>("__assn__");
+//     __assn__ = createNodeAs<DRefLoad>("__assn__");
 //     nodesMap["__assn__"] = __assn__;
 //     opNodesMap["="] = __assn__;
-//     __assn_add__ = createNodeBy<DRefLoad>("__assn_add__");
+//     __assn_add__ = createNodeAs<DRefLoad>("__assn_add__");
 //     nodesMap["__assn_add__"] = __assn_add__;
 //     opNodesMap["+="] = __assn_add__;
-//     __assn_sub__ = createNodeBy<DRefLoad>("__assn_sub__");
+//     __assn_sub__ = createNodeAs<DRefLoad>("__assn_sub__");
 //     nodesMap["__assn_sub__"] = __assn_sub__;
 //     opNodesMap["-="] = __assn_sub__;
-//     __assn_mul__ = createNodeBy<DRefLoad>("__assn_mul__");
+//     __assn_mul__ = createNodeAs<DRefLoad>("__assn_mul__");
 //     nodesMap["__assn_mul__"] = __assn_mul__;
 //     opNodesMap["*="] = __assn_mul__;
-//     __assn_div__ = createNodeBy<DRefLoad>("__assn_div__");
+//     __assn_div__ = createNodeAs<DRefLoad>("__assn_div__");
 //     nodesMap["__assn_div__"] = __assn_div__;
 //     opNodesMap["/="] = __assn_div__;
-//     __assn_mod__ = createNodeBy<DRefLoad>("__assn_mod__");
+//     __assn_mod__ = createNodeAs<DRefLoad>("__assn_mod__");
 //     nodesMap["__assn_mod__"] = __assn_mod__;
 //     opNodesMap["%="] = __assn_mod__;
-//     __assn_pow__ = createNodeBy<DRefLoad>("__assn_pow__");
+//     __assn_pow__ = createNodeAs<DRefLoad>("__assn_pow__");
 //     nodesMap["__assn_pow__"] = __assn_pow__;
 //     opNodesMap["^="] = __assn_pow__;
-//     __assn_inter__ = createNodeBy<DRefLoad>("__assn_inter__");
+//     __assn_inter__ = createNodeAs<DRefLoad>("__assn_inter__");
 //     nodesMap["__assn_inter__"] = __assn_inter__;
 //     opNodesMap["&="] = __assn_inter__;
-//     __assn_union__ = createNodeBy<DRefLoad>("__assn_union__");
+//     __assn_union__ = createNodeAs<DRefLoad>("__assn_union__");
 //     nodesMap["__assn_union__"] = __assn_union__;
 //     opNodesMap["|="] = __assn_union__;
 
-//     __lt__ = createNodeBy<DRefLoad>("__lt__");
+//     __lt__ = createNodeAs<DRefLoad>("__lt__");
 //     nodesMap["__lt__"] = __lt__;
 //     opNodesMap["<"] = __lt__;
-//     __gt__ = createNodeBy<DRefLoad>("__gt__");
+//     __gt__ = createNodeAs<DRefLoad>("__gt__");
 //     nodesMap["__gt__"] = __gt__;
 //     opNodesMap[">"] = __gt__;
-//     __le__ = createNodeBy<DRefLoad>("__le__");
+//     __le__ = createNodeAs<DRefLoad>("__le__");
 //     nodesMap["__le__"] = __le__;
 //     opNodesMap["<="] = __le__;
-//     __ge__ = createNodeBy<DRefLoad>("__ge__");
+//     __ge__ = createNodeAs<DRefLoad>("__ge__");
 //     nodesMap["__ge__"] = __ge__;
 //     opNodesMap[">="] = __ge__;
-//     __eq__ = createNodeBy<DRefLoad>("__eq__");
+//     __eq__ = createNodeAs<DRefLoad>("__eq__");
 //     nodesMap["__eq__"] = __eq__;
 //     opNodesMap["=="] = __eq__;
-//     __ne__ = createNodeBy<DRefLoad>("__ne__");
+//     __ne__ = createNodeAs<DRefLoad>("__ne__");
 //     nodesMap["__ne__"] = __ne__;
 //     opNodesMap["!="] = __ne__;
-//     __and__ = createNodeBy<DRefLoad>("__and__");
+//     __and__ = createNodeAs<DRefLoad>("__and__");
 //     nodesMap["__and__"] = __and__;
 //     opNodesMap["&&"] = __and__;
-//     __or__ = createNodeBy<DRefLoad>("__or__");
+//     __or__ = createNodeAs<DRefLoad>("__or__");
 //     nodesMap["__or__"] = __or__;
 //     opNodesMap["||"] = __or__;
 
-//     __not__ = createNodeBy<DRefLoad>("__not__");
+//     __not__ = createNodeAs<DRefLoad>("__not__");
 //     nodesMap["__not__"] = __not__;
 //     opNodesMap["!"] = __not__;
-//     __neg__ = createNodeBy<DRefLoad>("__neg__");
+//     __neg__ = createNodeAs<DRefLoad>("__neg__");
 //     nodesMap["__neg__"] = __neg__;
 //     opNodesMap["-"] = __neg__;
-//     __rev__ = createNodeBy<DRefLoad>("__rev__");
+//     __rev__ = createNodeAs<DRefLoad>("__rev__");
 //     nodesMap["__rev__"] = __rev__;
 //     opNodesMap["~"] = __rev__;
 // }
@@ -191,7 +191,7 @@
 // }
 
 // inline node_ptr_t linkFunc(node_ptr_t &argsNode, node_ptr_t &funcNode) {
-//     node_ptr_t linkNode = createNodeBy<LinkLoad>();
+//     node_ptr_t linkNode = createNodeAs<LinkLoad>();
 //     *linkNode << argsNode << funcNode;
 //     return linkNode;
 // }
@@ -210,7 +210,7 @@
 
 // pair<node_ptr_t, data_ptr_t> Constructor::makeRefData(const node_ptr_t &expr) {
 //     const string indent = to_string(indentIndex_++);
-//     node_ptr_t refNode = createNodeBy<NRefLoad>(indent);
+//     node_ptr_t refNode = createNodeAs<NRefLoad>(indent);
 //     *refNode << expr;
 //     data_ptr_t data = make_shared<RefData>(indent);
 //     return make_pair(refNode, data);
@@ -241,7 +241,7 @@
 // any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
 //     enter("Program");
 
-//     root_ = createNodeBy<ExecLoad>();
+//     root_ = createNodeAs<ExecLoad>();
 
 //     const auto &decls = context->decl();
 
@@ -295,7 +295,7 @@
 //     enter("StmtList");
 //     pushScope();
 
-//     node_ptr_t execNode = createNodeBy<ExecLoad>();
+//     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
 //     vector<OpenCMLParser::UseDeclContext *> froms;
 //     vector<OpenCMLParser::TypeDeclContext *> types;
@@ -330,7 +330,7 @@
 //     // 2.3 Register function signatures (before their bodies are processed)
 //     for (const auto &decl : decls) {
 //         func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
-//         node_ptr_t declNode = createNodeBy<DeclLoad>(funcType); // Create declaration node
+//         node_ptr_t declNode = createNodeAs<DeclLoad>(funcType); // Create declaration node
 //         *execNode << declNode;                                  // Attach to execution block
 //     }
 
@@ -551,7 +551,7 @@
 //     }
 
 //     typeScope_->insert(ident, type);
-//     node_ptr_t result = createNodeBy<TypeLoad>(type);
+//     node_ptr_t result = createNodeAs<TypeLoad>(type);
 //     leave("TypeDecl");
 //     return result;
 // }
@@ -570,7 +570,7 @@
 //         path = any_cast<string>(visitIdentDef(context->identDef()));
 //     }
 
-//     node_ptr_t result = createNodeBy<FromLoad>(path, idents);
+//     node_ptr_t result = createNodeAs<FromLoad>(path, idents);
 
 //     leave("UseDecl");
 //     return result;
@@ -584,11 +584,11 @@
 //     node_ptr_t resNode;
 
 //     if (context->RETURN()) {
-//         resNode = createNodeBy<RetnLoad>();
+//         resNode = createNodeAs<RetnLoad>();
 //     } else if (context->RAISE()) {
-//         resNode = createNodeBy<ExitLoad>();
+//         resNode = createNodeAs<ExitLoad>();
 //     } else if (context->THROW()) {
-//         resNode = createNodeBy<ExitLoad>();
+//         resNode = createNodeAs<ExitLoad>();
 //     } else {
 //         throw runtime_error("Unknown return type");
 //     }
@@ -852,10 +852,10 @@
 //     node_ptr_t lhsNode = any_cast<node_ptr_t>(visitPrimaryData(dataList[0]));
 
 //     for (size_t i = 1; i < dataList.size(); ++i) {
-//         node_ptr_t execNode = createNodeBy<ExecLoad>();
+//         node_ptr_t execNode = createNodeAs<ExecLoad>();
 //         node_ptr_t rhsNode = any_cast<node_ptr_t>(visitPrimaryData(dataList[i]));
 
-//         node_ptr_t withNode = createNodeBy<WithLoad>();
+//         node_ptr_t withNode = createNodeAs<WithLoad>();
 //         *withNode << lhsNode << rhsNode;
 
 //         lhsNode = withNode;
@@ -954,7 +954,7 @@
 //         break;
 //     }
 
-//     any res = createNodeBy<DataLoad>(data);
+//     any res = createNodeAs<DataLoad>(data);
 //     leave("Literal");
 //     return res;
 // }

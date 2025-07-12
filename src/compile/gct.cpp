@@ -27,15 +27,13 @@ using namespace GCT;
 
 namespace GraphConstructTree {
 
-template <typename LoadType, typename... Args> node_ptr_t createNodeBy(Args &&...args) {
+template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
     return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
 }
 
 template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&...args) {
-    return createNodeBy<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
+    return createNodeAs<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 }
-
-std::any visit(const AST::node_ptr_t &ast) {}
 
 /*
 Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
@@ -48,19 +46,18 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
 
-    for (auto &import : *importNodes) {
-        // TODO: Handle import declarations
+    for (const auto &import : *importNodes) {
+        visitImport(import);
     }
 
-    root_ = createNodeBy<ExecLoad>();
+    root_ = createNodeAs<ExecLoad>();
     for (auto &stmt : *stmtNodes) {
         auto node = visitStmt(stmt);
         *root_ << node;
     }
 
     if (!exportOptNode->empty()) {
-        auto exportNode = visitExport(exportOptNode->front());
-        *root_ << exportNode;
+        visitExport(exportOptNode->front());
     }
 
     leave("Module");
@@ -69,12 +66,12 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
 /*
 ImportDecl(string path, Ref[] refs, Ref as) ;
 */
-node_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {}
+void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {}
 
 /*
 ExportDecl(Ref[] refs) ;
 */
-node_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) {}
+void_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) { return nullptr; }
 
 /*
 NamedData(Ref ref) : Data data ;

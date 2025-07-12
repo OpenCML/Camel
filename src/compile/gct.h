@@ -31,6 +31,7 @@
 #include "common/tree.h"
 
 namespace GraphConstructTree {
+using void_ptr_t = void *;
 
 class Node : public AbstractTreeNode<load_ptr_t, Node> {
   public:
@@ -74,12 +75,10 @@ class Constructor {
     void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
 
-    std::any visit(const AST::node_ptr_t &ast);
-
     // ast/base.h
     node_ptr_t visitModule(const AST::node_ptr_t &ast);
-    node_ptr_t visitImport(const AST::node_ptr_t &ast);
-    node_ptr_t visitExport(const AST::node_ptr_t &ast);
+    void_ptr_t visitImport(const AST::node_ptr_t &ast);
+    void_ptr_t visitExport(const AST::node_ptr_t &ast);
     node_ptr_t visitNamedData(const AST::node_ptr_t &ast);
     node_ptr_t visitNamedType(const AST::node_ptr_t &ast);
     node_ptr_t visitNamedPair(const AST::node_ptr_t &ast);
