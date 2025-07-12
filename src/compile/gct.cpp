@@ -35,11 +35,6 @@ template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&
     return createNodeBy<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 }
 
-inline bool optHasVal(const AST::node_ptr_t &opt) {
-    assert(opt->type() == AST::LoadType::Optional);
-    return opt && opt->size() > 0;
-}
-
 std::any visit(const AST::node_ptr_t &ast) {}
 
 /*
@@ -49,9 +44,9 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     enter("Module");
     assert(ast->type() == AST::LoadType::Module);
     auto moduleLoad = ast->loadAs<AST::ModuleLoad>();
-    auto importNodes = ast->at(0);
-    auto exportOptNode = ast->at(1);
-    auto stmtNodes = ast->at(2);
+    auto importNodes = ast->atAs<AST::RepeatedLoad>(0);
+    auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
+    auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
 
     for (auto &import : *importNodes) {
         // TODO: Handle import declarations
@@ -63,8 +58,8 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
         *root_ << node;
     }
 
-    if (optHasVal(exportOptNode)) {
-        auto exportNode = visitExport(exportOptNode);
+    if (!exportOptNode->empty()) {
+        auto exportNode = visitExport(exportOptNode->front());
         *root_ << exportNode;
     }
 

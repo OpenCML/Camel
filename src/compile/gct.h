@@ -39,6 +39,13 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
 
     NodeType type() const { return load_->type(); }
     std::string toString() const { return load_->toString(); }
+
+    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
 };
 
 class Constructor {

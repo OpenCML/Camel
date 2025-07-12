@@ -61,13 +61,6 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
     load_t &load() { return load_; }
     const load_t &load() const { return load_; }
 
-    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
-        return std::dynamic_pointer_cast<LoadType>(load_);
-    }
-    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
-        return std::dynamic_pointer_cast<LoadType>(load_);
-    }
-
     void setParent(node_t *parent) { parent_ = parent; }
 
     // ------------------ Add Child ------------------
@@ -83,7 +76,19 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
     node_ptr_t at(size_t index) const { return children_.at(index); }
     node_ptr_t operator[](size_t index) const { return children_.at(index); }
 
+    node_ptr_t front() const {
+        if (children_.empty())
+            throw std::out_of_range("No children in the node");
+        return children_.front();
+    }
+    node_ptr_t back() const {
+        if (children_.empty())
+            throw std::out_of_range("No children in the node");
+        return children_.back();
+    }
+
     size_t size() const { return children_.size(); }
+    bool empty() const { return children_.empty(); }
 
     // ------------------ Search ------------------
     std::optional<size_t> find(const load_t &load) const {

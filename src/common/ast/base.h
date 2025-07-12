@@ -89,6 +89,24 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
 
     LoadType type() const { return load_->type(); }
     std::string toString() const { return load_->toString(); }
+
+    template <typename LoadType> node_ptr_t atAs(size_t index) const {
+        // safe check for index and type
+        assert(index < children_.size() && "Index out of bounds");
+        assert(children_.at(index) != nullptr && "Child node is null");
+        assert(typeid(children_.at(index)->load()) == typeid(LoadType) &&
+               "Child node type does not match requested type");
+        return children_.at(index);
+    }
+
+    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
+        assert(typeid(load_) == typeid(LoadType) && "Load type does not match requested type");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
+        assert(typeid(load_) == typeid(LoadType) && "Load type does not match requested type");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
 };
 
 enum class LiteralType {
