@@ -35,6 +35,11 @@ template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&
     return createNodeBy<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 }
 
+inline bool optHasVal(const AST::node_ptr_t &opt) {
+    assert(opt->type() == AST::LoadType::Optional);
+    return opt && opt->size() > 0;
+}
+
 std::any visit(const AST::node_ptr_t &ast) {}
 
 /*
@@ -43,19 +48,24 @@ Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     enter("Module");
     assert(ast->type() == AST::LoadType::Module);
-    auto module_ = tt::as_shared<AST::ModuleLoad>(ast->load());
-    const auto &imports = ast->at(0);
-    const auto &exportOpt = ast->at(1);
-    const auto &stmts = ast->at(2);
+    auto moduleLoad = ast->loadAs<AST::ModuleLoad>();
+    auto importNodes = ast->at(0);
+    auto exportOptNode = ast->at(1);
+    auto stmtNodes = ast->at(2);
 
-    for (auto &import : *imports) {
+    for (auto &import : *importNodes) {
         // TODO: Handle import declarations
     }
 
     root_ = createNodeBy<ExecLoad>();
-    for (AST::node_ptr_t &stmt : *stmts) {
+    for (auto &stmt : *stmtNodes) {
         auto node = visitStmt(stmt);
         *root_ << node;
+    }
+
+    if (optHasVal(exportOptNode)) {
+        auto exportNode = visitExport(exportOptNode);
+        *root_ << exportNode;
     }
 
     leave("Module");
@@ -89,7 +99,7 @@ node_ptr_t Constructor::visitNamedPair(const AST::node_ptr_t &ast) {}
 node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
     enter("Stmt");
     assert(ast->type() == AST::LoadType::Stmt);
-    const auto &stmt = tt::as_shared<AST::StmtLoad>(ast->load());
+    const auto &stmt = ast->loadAs<AST::StmtLoad>();
     node_ptr_t stmtNode;
 
     switch (stmt->stmtType()) {
@@ -160,7 +170,7 @@ node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {}
 node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
     enter("Data");
     assert(ast->type() == AST::LoadType::Data);
-    const auto &data = tt::as_shared<AST::DataLoad>(ast->load());
+    const auto &data = ast->loadAs<AST::DataLoad>();
     node_ptr_t dataNode;
 
     switch (data->dataType()) {
@@ -263,7 +273,7 @@ node_ptr_t Constructor::visitRefData(const AST::node_ptr_t &ast) {}
 node_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
     enter("Type");
     assert(ast->type() == AST::LoadType::Type);
-    const auto &type = tt::as_shared<AST::TypeLoad>(ast->load());
+    const auto &type = ast->loadAs<AST::TypeLoad>();
     node_ptr_t typeNode;
 
     switch (type->typeType()) {

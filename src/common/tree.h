@@ -35,6 +35,7 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
   protected:
     using node_ptr_t = std::shared_ptr<node_t>;
     using children_container_t = std::vector<node_ptr_t>;
+
     node_t *parent_;
     load_t load_;
     children_container_t children_;
@@ -56,17 +57,25 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
 
     // ------------------ Accessors ------------------
     node_t *parent() const { return parent_; }
+
     load_t &load() { return load_; }
     const load_t &load() const { return load_; }
 
-    void setParent(node_t *parent) { parent_ = parent; }
+    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
 
-    static node_ptr_t createNodeBy(load_t load) { return std::make_shared<node_t>(load); }
+    void setParent(node_t *parent) { parent_ = parent; }
 
     // ------------------ Add Child ------------------
     node_t &operator<<(const node_ptr_t &node) {
-        node->parent_ = static_cast<node_t *>(this);
-        children_.push_back(node);
+        if (node != nullptr) {
+            node->parent_ = static_cast<node_t *>(this);
+            children_.push_back(node);
+        }
         return *static_cast<node_t *>(this);
     }
 
@@ -187,5 +196,5 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
     void print(std::ostream &os = std::cout) { dumpTree(os); }
 
     // ------------------ Virtual ------------------
-    virtual std::string toString() const { return ""; }
+    virtual std::string toString() const = 0;
 };

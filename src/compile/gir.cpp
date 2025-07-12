@@ -74,8 +74,8 @@ any Constructor::visit(const GCT::node_ptr_t &node) {
 
 node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
     enter("DATA");
-    const auto &dataNode = GCT::data_load_ptr_cast(gct->load());
-    const data_ptr_t &data = dataNode->data();
+    const auto &dataLoad = gct->loadAs<GCT::DataLoad>();
+    const data_ptr_t &data = dataLoad->data();
     node_ptr_t node = DataNode::create(context_->currGraph(), data, false);
     if (!data->resolved()) {
         for (const string &ref : data->refs()) {
@@ -106,14 +106,14 @@ node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
 
 type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
     enter("TYPE");
-    const type_ptr_t &type = GCT::type_load_ptr_cast(gct->load())->dataType();
+    const type_ptr_t &type = gct->loadAs<GCT::TypeLoad>()->dataType();
     leave("TYPE");
     return type;
 }
 
 func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     enter("DECL");
-    func_type_ptr_t funcType = GCT::decl_load_ptr_cast(gct->load())->funcType();
+    func_type_ptr_t funcType = gct->loadAs<GCT::DeclLoad>()->funcType();
     if (context_->cached(funcType)) {
         leave("DECL");
         return getCachedFunc(funcType);
@@ -167,7 +167,7 @@ inline bool validateIdent(const std::string &str) {
 
 void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
     enter("NREF");
-    const string &ident = GCT::nref_load_ptr_cast(gct->load())->ident();
+    const string &ident = gct->loadAs<GCT::NRefLoad>()->ident();
     if (!validateIdent(ident)) {
         throw runtime_error("Identifiers starting and ending with '__' are reserved for internal use.");
     }
@@ -185,7 +185,7 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     enter("DREF");
-    const string &ident = dref_load_ptr_cast(gct->load())->ident();
+    const string &ident = gct->loadAs<GCT::DRefLoad>()->ident();
     auto optNode = context_->nodeAt(ident);
     if (!optNode.has_value()) {
         throw runtime_error("Unresolved reference: " + ident);
