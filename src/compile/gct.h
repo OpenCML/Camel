@@ -32,19 +32,13 @@
 
 namespace GraphConstructTree {
 
-class Node : public AbstractTreeNode<load_ptr_t> {
+class Node : public AbstractTreeNode<load_ptr_t, Node> {
   public:
     Node(load_ptr_t load) : AbstractTreeNode(load) {}
     virtual ~Node() = default;
 
     NodeType type() const { return load_->type(); }
     std::string toString() const { return load_->toString(); }
-
-    Node &operator<<(const node_ptr_t &node) {
-        node->setParent(this);
-        this->push_back(node);
-        return *this;
-    }
 };
 
 class Constructor {
@@ -84,6 +78,7 @@ class Constructor {
     node_ptr_t visitNamedPair(const AST::node_ptr_t &ast);
 
     // ast/stmt.h
+    node_ptr_t visitStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
@@ -93,6 +88,7 @@ class Constructor {
     node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast);
 
     // ast/data.h
+    node_ptr_t visitData(const AST::node_ptr_t &ast);
     node_ptr_t visitDataExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
@@ -106,6 +102,7 @@ class Constructor {
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 
     // ast/type.h
+    node_ptr_t visitType(const AST::node_ptr_t &ast);
     node_ptr_t visitNullableType(const AST::node_ptr_t &ast);
     node_ptr_t visitTypeExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitListType(const AST::node_ptr_t &ast);

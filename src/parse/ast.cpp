@@ -85,12 +85,18 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
         }
     }
 
+    node_ptr_t importRep = createNodeBy<RepeatedLoad>("Import");
     for (auto &import_ : imports_) {
-        *root_ << std::make_shared<Node>(import_);
+        *importRep << std::make_shared<Node>(import_);
     }
+    *root_ << importRep;
+
+    node_ptr_t exportOpt = createNodeBy<OptionalLoad>("Export");
     if (!export_->isEmpty()) {
-        *root_ << std::make_shared<Node>(export_);
+        *exportOpt << std::make_shared<Node>(export_);
     }
+    *root_ << exportOpt;
+
     *root_ << stmts;
 
     leave("Program");

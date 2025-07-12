@@ -82,19 +82,13 @@ class Load {
     std::pair<size_t, size_t> tokenRange_ = {0, 0};
 };
 
-class Node : public AbstractTreeNode<load_ptr_t> {
+class Node : public AbstractTreeNode<load_ptr_t, Node> {
   public:
     Node(load_ptr_t load) : AbstractTreeNode(load) {}
     virtual ~Node() = default;
 
     LoadType type() const { return load_->type(); }
     std::string toString() const { return load_->toString(); }
-
-    Node &operator<<(const node_ptr_t &node) {
-        node->setParent(this);
-        this->push_back(node);
-        return *this;
-    }
 };
 
 enum class LiteralType {

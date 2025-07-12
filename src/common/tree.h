@@ -30,116 +30,123 @@
 
 #include "utils/log.h"
 
-template <typename load_t> class AbstractTreeNode;
-
-template <typename load_t> using tree_node_t = AbstractTreeNode<load_t>;
-
-template <typename load_t> using tree_node_ptr_t = std::shared_ptr<tree_node_t<load_t>>;
-
-template <typename load_t> using tree_children_t = std::vector<tree_node_ptr_t<load_t>>;
-
-template <typename load_t>
-class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from_this<AbstractTreeNode<load_t>> {
+template <typename load_t, typename node_t> // node_t is a derived class of AbstractTreeNode (CRTP)
+class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<load_t, node_t>> {
   protected:
-    tree_node_t<load_t> *parent_;
+    using node_ptr_t = std::shared_ptr<node_t>;
+    using children_container_t = std::vector<node_ptr_t>;
+    node_t *parent_;
     load_t load_;
+    children_container_t children_;
 
   public:
+    using iterator = typename children_container_t::iterator;
+    using const_iterator = typename children_container_t::const_iterator;
+
     AbstractTreeNode(load_t load) : parent_(nullptr), load_(load) {}
+    virtual ~AbstractTreeNode() = default;
 
-    tree_node_t<load_t> *parent() const { return parent_; }
+    // ------------------ Iterator Support ------------------
+    iterator begin() { return children_.begin(); }
+    iterator end() { return children_.end(); }
+    const_iterator begin() const { return children_.begin(); }
+    const_iterator end() const { return children_.end(); }
+    const_iterator cbegin() const { return children_.cbegin(); }
+    const_iterator cend() const { return children_.cend(); }
+
+    // ------------------ Accessors ------------------
+    node_t *parent() const { return parent_; }
     load_t &load() { return load_; }
+    const load_t &load() const { return load_; }
 
-    void setParent(tree_node_t<load_t> *parent) { parent_ = parent; }
+    void setParent(node_t *parent) { parent_ = parent; }
 
-    static tree_node_ptr_t<load_t> createNodeBy(load_t load) { return std::make_shared<tree_node_t<load_t>>(load); }
+    static node_ptr_t createNodeBy(load_t load) { return std::make_shared<node_t>(load); }
 
-    size_t find(load_t load) const {
-        auto it = find_if(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end(),
-                          [=](tree_node_ptr_t<load_t> node) { return node->load == load; });
-        return it == tree_children_t<load_t>::end() ? -1 : it - tree_children_t<load_t>::begin();
+    // ------------------ Add Child ------------------
+    node_t &operator<<(const node_ptr_t &node) {
+        node->parent_ = static_cast<node_t *>(this);
+        children_.push_back(node);
+        return *static_cast<node_t *>(this);
     }
 
-    template <typename func_t> size_t find(func_t cmp) const {
-        auto it = find_if(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end(), cmp);
-        return it == tree_children_t<load_t>::end() ? -1 : it - tree_children_t<load_t>::begin();
+    // ------------------ Index & Size ------------------
+    node_ptr_t at(size_t index) const { return children_.at(index); }
+    node_ptr_t operator[](size_t index) const { return children_.at(index); }
+
+    size_t size() const { return children_.size(); }
+
+    // ------------------ Search ------------------
+    std::optional<size_t> find(const load_t &load) const {
+        auto it = std::find_if(children_.begin(), children_.end(),
+                               [&](const node_ptr_t &node) { return node->load_ == load; });
+        if (it == children_.end())
+            return std::nullopt;
+        return std::distance(children_.begin(), it);
     }
 
-    void reverseChildren() { reverse(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end()); }
-
-    tree_node_ptr_t<load_t> operator[](size_t index) const {
-        tree_node_ptr_t<load_t> child = this->at(index);
-        return child;
+    template <typename func_t> std::optional<size_t> find(func_t cmp) const {
+        auto it = std::find_if(children_.begin(), children_.end(), cmp);
+        if (it == children_.end())
+            return std::nullopt;
+        return std::distance(children_.begin(), it);
     }
 
-    tree_node_ptr_t<load_t> childAt(size_t index) const {
-        tree_node_ptr_t<load_t> child = this->at(index);
-        return child;
-    }
+    void reverseChildren() { std::reverse(children_.begin(), children_.end()); }
 
-    tree_node_t<load_t> &operator<<(const tree_node_ptr_t<load_t> node) {
-        node->parent = this;
-        this->push_back(node);
-        return static_cast<tree_node_t<load_t> &>(*this);
-    }
-
-    size_t size() const { return tree_children_t<load_t>::size(); }
-
-    virtual std::string toString() const { return ""; }
-
+    // ------------------ Tree Traversal ------------------
     template <typename func_t> void foreach (func_t f) const {
-        auto nodeF = [=](typename tree_children_t<load_t>::const_reference ref) { f(*ref); };
-        for_each(tree_children_t<load_t>::begin(), tree_children_t<load_t>::end(), nodeF);
+        for (const auto &child : children_) {
+            f(*child);
+        }
     }
 
     template <typename func_t> void traverse(func_t f) const {
-        f(*this);
-        foreach ([=](tree_node_t<load_t> &ref) { ref.traverse(f); })
+        f(*static_cast<const node_t *>(this));
+        foreach ([&](const node_t &child) { child.traverse(f); })
             ;
     }
 
     template <typename func_t> void traverse(func_t f, size_t &level, size_t &index) {
-        tree_node_t<load_t> &self = *this;
-        f(self);
+        f(*static_cast<node_t *>(this));
         level++;
-        size_t tmpIdx = index++;
-        index = 0;
-        foreach ([&](tree_node_t<load_t> &ref) {
-            ref.traverse(f, level, index);
-            index++;
-        })
-            ;
+        size_t tmpIdx = index;
+        size_t childIndex = 0;
+        for (auto &child : children_) {
+            index = childIndex++;
+            child->traverse(f, level, index);
+        }
         level--;
         index = tmpIdx;
     }
 
     template <typename func_t> void postorder(func_t f) const {
-        foreach ([=](tree_node_t<load_t> &ref) { ref.postorder(f); })
+        foreach ([&](const node_t &child) { child.postorder(f); })
             ;
-        f(*this);
+        f(*static_cast<const node_t *>(this));
     }
 
     template <typename func_t> void postorder(func_t f, size_t &level, size_t &index) {
-        tree_node_t<load_t> &self = *this;
         level++;
         size_t tmpIdx = index++;
         index = 0;
-        foreach ([&](tree_node_t<load_t> &ref) {
-            ref.postorder(f, level, index);
+        for (size_t i = 0; i < children_.size(); ++i) {
+            children_[i]->postorder(f, level, index);
             index++;
-        })
-            ;
+        }
         level--;
         index = tmpIdx;
-        f(self);
+        f(*static_cast<node_t *>(this));
     }
 
+    // ------------------ Print ------------------
     void dumpTree(std::ostream &os) {
         std::vector<bool> visible;
         size_t depth = 0;
         size_t index = 0;
+
         traverse(
-            [&](tree_node_t<load_t> &node) {
+            [&](node_t &node) {
                 try {
                     bool isLast = false;
                     if (visible.size() <= depth)
@@ -156,33 +163,29 @@ class AbstractTreeNode : public tree_children_t<load_t>, std::enable_shared_from
                         size_t i = 0;
                         std::string ret;
                         while (depth > 0 && i < depth - 1) {
-                            if (visible.at(i))
-                                ret += "|  ";
-                            else
-                                ret += "   ";
-                            i++;
+                            ret += visible[i] ? "|  " : "   ";
+                            ++i;
                         }
-                        if (depth > 0) {
-                            if (isLast)
-                                ret += "\\-";
-                            else
-                                ret += "|-";
-                        }
+                        if (depth > 0)
+                            ret += isLast ? "\\-" : "|-";
                         return ret;
                     };
-                    os << getHead();
-                    os << node.toString();
-                    os << std::endl;
+                    os << getHead() << node.toString() << std::endl;
+
+                    // Reset visibility
                     if (depth > 0)
-                        for (size_t i = depth; i < visible.size(); i++)
-                            visible.at(i) = true;
+                        for (size_t i = depth; i < visible.size(); ++i)
+                            visible[i] = true;
+
                 } catch (const std::exception &e) {
                     os << "ERROR: " << e.what() << std::endl;
                 }
             },
             depth, index);
-        return;
     }
 
-    void print(std::ostream &os = std::cout) { this->dumpTree(os); }
+    void print(std::ostream &os = std::cout) { dumpTree(os); }
+
+    // ------------------ Virtual ------------------
+    virtual std::string toString() const { return ""; }
 };

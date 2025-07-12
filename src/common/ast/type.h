@@ -39,6 +39,8 @@ class TypeLoad : public Load {
     TypeLoad(TypeType type) : Load(LoadType::Type), typeType_(type) {}
     const std::string toString() const override { return "TypeLoad"; }
 
+    TypeType typeType() const { return typeType_; }
+
   private:
     TypeType typeType_;
 };

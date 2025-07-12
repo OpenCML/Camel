@@ -10,7 +10,7 @@ enum ImplMark {
     Graph
 }
 
-Module(Ref ref) : ImportDecl import, ExportDecl export, Stmt* ;
+Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 
 StmtType {
     Name,
