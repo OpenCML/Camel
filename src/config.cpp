@@ -246,7 +246,7 @@ bool parseArgs(int argc, char *argv[]) {
     bool showHelp = false;    // Help information
     bool showVersion = false; // Version information
     bool showDocs = false;
-    bool showCopyRightInfo = false; // Copyright information
+    bool showAbout = false; // About information
 
     auto run = (option("-P", "--profile").set(profile) % "profile the perf",
                 (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
@@ -260,7 +260,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     auto info = (option("-h", "--help").set(showHelp).set(selectedCommand, Command::INFO) % "show this help message",
                  option("-v", "--version").set(showVersion).set(selectedCommand, Command::INFO) % "show version",
-                 option("-a", "--about").set(showCopyRightInfo).set(selectedCommand, Command::INFO) %
+                 option("-a", "--about").set(showAbout).set(selectedCommand, Command::INFO) %
                      "show copyright and related information");
 
     auto format = (command("format").set(formatCode).set(selectedCommand, Command::FORMAT) % "format the code",
@@ -343,21 +343,21 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showVersion) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << endl;
+        cout << "Camel v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")" << endl;
 #else
-        cout << "Camel (DEBUG) v" << VERSION << endl;
+        cout << "Camel (DEBUG) v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")" << endl;
 #endif
     }
 
-    if (showCopyRightInfo) {
+    if (showAbout) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << endl;
+        cout << "Camel v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")";
 #else
-        cout << "Camel (DEBUG) v" << VERSION << endl;
+        cout << "Camel (DEBUG) v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")";
 #endif
-        cout << "Build at " << BUILD_TIMESTAMP << endl;
-        cout << "Copyright (c) 2024 the OpenCML Organization." << endl;
-        cout << "Camel is licensed under the MIT license." << endl;
+        cout <<
+#include "ABOUT"
+            ;
     }
 
     if (showDocs) {

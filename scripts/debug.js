@@ -9,7 +9,7 @@ function main() {
         .toISOString()
         .replace(/[-:]/g, '')
         .replace(/[T]/g, '_')
-        .slice(2, 16)
+        .slice(2, 15)
     logStep('Building Debug...')
     runCommand(
         `cmake .. -G "Ninja Multi-Config" -DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake`

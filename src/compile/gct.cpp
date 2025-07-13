@@ -41,7 +41,6 @@ Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     enter("Module");
     assert(ast->type() == AST::LoadType::Module);
-    auto moduleLoad = ast->loadAs<AST::ModuleLoad>();
     auto importNodes = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
@@ -52,8 +51,7 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
 
     root_ = createNodeAs<ExecLoad>();
     for (auto &stmt : *stmtNodes) {
-        auto node = visitStmt(stmt);
-        *root_ << node;
+        *root_ << visitStmt(stmt);
     }
 
     if (!exportOptNode->empty()) {
@@ -61,12 +59,13 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     }
 
     leave("Module");
+    return root_;
 }
 
 /*
 ImportDecl(string path, Ref[] refs, Ref as) ;
 */
-void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {}
+void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) { return nullptr; }
 
 /*
 ExportDecl(Ref[] refs) ;
