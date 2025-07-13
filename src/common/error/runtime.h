@@ -12,11 +12,16 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 31, 2024
- * Updated: Oct. 08, 2024
+ * Created: Jul. 13, 2025
+ * Updated: Jul. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "build.h"
+#pragma once
 
-std::string tmpMessage;
+#include "base.h"
+
+class RuntimeException : public CamelBaseException {
+  public:
+    RuntimeException(const std::string &msg) : CamelBaseException(msg) {}
+};

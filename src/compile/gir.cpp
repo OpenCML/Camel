@@ -18,7 +18,6 @@
  */
 
 #include "gir.h"
-#include "common/error/build.h"
 #include "utils/log.h"
 
 #define DEBUG_LEVEL 0

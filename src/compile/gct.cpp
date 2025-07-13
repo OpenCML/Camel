@@ -353,7 +353,17 @@ DataType() : Data data ;
 node_ptr_t Constructor::visitDataType(const AST::node_ptr_t &ast) {}
 
 /*
-Type(Ref ref) ;
+RefType(Ref ref) ;
 */
-node_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
+    assert(ast->load()->type() == AST::LoadType::Type);
+    auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
+    const Reference &ref = typeLoad->ref();
+    const auto &type = typeScope_->at(ref);
+    if (!type.has_value()) {
+        reportDiagnostic("Reference type not found: " + ref.toString(), ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        // TODO: Then how?
+    }
+}
 } // namespace GraphConstructTree

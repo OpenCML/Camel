@@ -72,7 +72,7 @@ class Load {
     const std::string geneCode() const;
 
     LoadType type() const { return type_; }
-    std::pair<size_t, size_t> range() const { return tokenRange_; }
+    std::pair<size_t, size_t> tokenRange() const { return tokenRange_; }
     const std::string typeStr() const { return loadTypeToString(type_); }
 
     virtual const std::string toString() const { return typeStr(); }

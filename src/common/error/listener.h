@@ -42,3 +42,46 @@ class CamelErrorListener : public antlr4::BaseErrorListener {
         os << "line " << line << ", column " << charPositionInLine << ": " << msg << std::endl;
     }
 };
+
+class JSONErrorListener : public CamelErrorListener {
+    std::string escapeString(const std::string &input) {
+        std::string result;
+        for (char c : input) {
+            switch (c) {
+            case '\\':
+                result += "\\\\";
+                break;
+            case '\"':
+                result += "\\\"";
+                break;
+            case '\n':
+                result += "\\n";
+                break;
+            case '\r':
+                result += "\\r";
+                break;
+            case '\t':
+                result += "\\t";
+                break;
+            default:
+                result += c;
+                break;
+            }
+        }
+        return result;
+    }
+
+  public:
+    JSONErrorListener(std::string filename, std::ostream &os) : CamelErrorListener(filename, os) {}
+
+    virtual void syntaxError(antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
+                             size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
+        hasError = true;
+        os << "{"
+           << "\"filename\": \"" << filename << "\", "
+           << "\"line\": " << line << ", "
+           << "\"column\": " << charPositionInLine << ", "
+           << "\"message\": \"" << escapeString(msg).c_str() << "\""
+           << "}" << std::endl;
+    }
+};

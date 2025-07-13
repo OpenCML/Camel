@@ -20,12 +20,11 @@
 #pragma once
 
 #include <iostream>
-#include <queue>
 #include <regex>
 #include <string>
 
 #include "common/ast/ast.h"
-#include "common/error/build.h"
+#include "common/error/diagnostic.h"
 #include "common/gct.h"
 #include "common/scope.h"
 #include "common/tree.h"
@@ -51,28 +50,30 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
 
 class Constructor {
   public:
-    Constructor() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(); };
+    Constructor() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(); };
     virtual ~Constructor() = default;
 
-    node_ptr_t construct(antlr4::tree::ParseTree *tree) {
+    node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
+        diagnostics_ = diagnostics;
         typeScope_->clear();
-        root_ = nullptr;
+        root_ = visitModule(node);
         return root_;
     }
-
-    std::queue<BuildWarning> &warns() { return warnQueue_; }
 
   private:
     node_ptr_t root_;
     size_t indentIndex_ = 0;
-    scope_ptr_t<std::string, type_ptr_t> typeScope_;
+    scope_ptr_t<Reference, type_ptr_t> typeScope_;
     std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
-    std::queue<BuildWarning> warnQueue_;
+    diagnostics_ptr_t diagnostics_;
 
-    void reportWarning(const std::string &msg, antlr4::Token *token) { warnQueue_.emplace(msg, token); }
+    void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange,
+                          Diagnostic::Severity sev = Diagnostic::Severity::Error) {
+        diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
+    }
 
-    void pushScope() { typeScope_ = std::make_shared<Scope<std::string, type_ptr_t>>(typeScope_); }
+    void pushScope() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
 
     // ast/base.h

@@ -33,14 +33,20 @@ class Constructor {
   public:
     Constructor(context_ptr_t &context) : context_(context) {}
 
-    graph_ptr_t construct(GCT::node_ptr_t &gct) {
+    graph_ptr_t construct(GCT::node_ptr_t &gct, diagnostics_ptr_t diagnostics) {
+        diagnostics_ = diagnostics;
         visit(gct);
         return context_->rootGraph();
     }
 
   private:
     context_ptr_t context_;
+    diagnostics_ptr_t diagnostics_;
     std::unordered_map<func_type_ptr_t, func_ptr_t> funcCache_;
+
+    void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange, Diagnostic::Severity sev) {
+        diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
+    }
 
     void cacheFunc(func_type_ptr_t key, func_ptr_t node) { funcCache_[key] = node; }
     void delCachedFunc(func_type_ptr_t key) { funcCache_.erase(key); }

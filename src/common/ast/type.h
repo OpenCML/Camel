@@ -142,6 +142,8 @@ class RefTypeLoad : public TypeLoad {
     RefTypeLoad(Reference ref) : TypeLoad(TypeType::Ref), ref_(ref) {}
     const std::string toString() const override { return "RefType: " + ref_.toString(); }
 
+    const Reference &ref() const { return ref_; }
+
   private:
     Reference ref_;
 };

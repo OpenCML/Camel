@@ -20,14 +20,13 @@
 #pragma once
 
 #include <iostream>
-#include <queue>
 #include <regex>
 #include <string>
 
 #include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "common/ast/ast.h"
-#include "common/error/build.h"
+#include "common/error/diagnostic.h"
 #include "common/scope.h"
 
 namespace AbstractSyntaxTree {
@@ -37,25 +36,26 @@ class Constructor : public OpenCMLVisitor {
     Constructor() {};
     virtual ~Constructor() = default;
 
-    node_ptr_t construct(antlr4::tree::ParseTree *tree) {
+    node_ptr_t construct(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diagnostics) {
+        diagnostics_ = diagnostics;
         root_ = nullptr;
         visit(tree);
         return root_;
     }
 
-    std::queue<BuildWarning> &warns() { return warnQueue_; }
-
   private:
     node_ptr_t root_;
     size_t indentIndex_ = 0;
 
-    std::queue<BuildWarning> warnQueue_;
+    diagnostics_ptr_t diagnostics_;
 
     std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
     std::vector<std::shared_ptr<ImportLoad>> imports_;
     std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
 
-    void reportWarning(const std::string &msg, antlr4::Token *token) { warnQueue_.emplace(msg, token); }
+    void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange, Diagnostic::Severity sev) {
+        diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
+    }
 
     // Auto-generated visitor methods
 

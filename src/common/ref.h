@@ -64,7 +64,33 @@ class Reference {
 
     operator std::string() const { return toString(); }
 
+    bool operator==(const Reference &other) const { return ident_ == other.ident_ && scope_ == other.scope_; }
+
+    bool operator<(const Reference &other) const {
+        if (scope_ != other.scope_) {
+            return scope_ < other.scope_;
+        }
+        return ident_ < other.ident_;
+    }
+
   private:
     std::vector<std::string> scope_;
     std::string ident_;
 };
+
+namespace std {
+template <> struct hash<Reference> {
+    std::size_t operator()(const Reference &ref) const {
+        std::size_t h = 0;
+        std::hash<std::string> hashStr;
+
+        for (const auto &s : ref.scope()) {
+            h ^= hashStr(s) + 0x9e3779b9 + (h << 6) + (h >> 2); // boost-style hash combine
+        }
+
+        h ^= hashStr(ref.ident()) + 0x9e3779b9 + (h << 6) + (h >> 2);
+
+        return h;
+    }
+};
+} // namespace std
