@@ -51,7 +51,11 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
 
     root_ = createNodeAs<ExecLoad>();
     for (auto &stmt : *stmtNodes) {
-        *root_ << visitStmt(stmt);
+        try {
+            *root_ << visitStmt(stmt);
+        } catch (const BuildAbortException &) {
+            continue;
+        }
     }
 
     if (!exportOptNode->empty()) {
@@ -363,7 +367,7 @@ node_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
     if (!type.has_value()) {
         reportDiagnostic("Reference type not found: " + ref.toString(), ast->load()->tokenRange(),
                          Diagnostic::Severity::Error);
-        // TODO: Then how?
+        throw BuildAbortException();
     }
 }
 } // namespace GraphConstructTree

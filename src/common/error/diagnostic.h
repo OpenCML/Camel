@@ -90,6 +90,20 @@ class Diagnostic : public CamelBaseException {
 
     Severity severity() const { return severity_; }
 
+    static std::string severityToString(Severity sev) {
+        switch (sev) {
+        case Severity::Error:
+            return "error";
+        case Severity::Warning:
+            return "warn";
+        case Severity::Information:
+            return "info";
+        case Severity::Hint:
+            return "hint";
+        }
+        return "unknown";
+    }
+
   private:
     bool rangeStoredAsIndex_ = false;
     Range range_;
@@ -118,20 +132,46 @@ class Diagnostic : public CamelBaseException {
 
         return Range{start, end};
     }
+};
 
-    std::string severityToString(Severity sev) const {
-        switch (sev) {
-        case Severity::Error:
-            return "error";
-        case Severity::Warning:
-            return "warn";
-        case Severity::Information:
-            return "info";
-        case Severity::Hint:
-            return "hint";
-        }
-        return "unknown";
-    }
+class DiagnosticsLimitExceededException : public CamelBaseException {
+  public:
+    DiagnosticsLimitExceededException(const std::string &message, const Diagnostic &lastDiagnostic)
+        : CamelBaseException(message), lastDiagnostic_(lastDiagnostic) {}
+
+    Diagnostic &lastDiagnostic() { return lastDiagnostic_; }
+
+  private:
+    Diagnostic lastDiagnostic_;
+};
+
+class DiagnosticsExceededLimitException : public DiagnosticsLimitExceededException {
+  public:
+    DiagnosticsExceededLimitException(Diagnostic::Severity sev, size_t limit, const Diagnostic &lastDiagnostic)
+        : DiagnosticsLimitExceededException("Too many " + Diagnostic::severityToString(sev) +
+                                                " diagnostics exceeded limit: " + std::to_string(limit),
+                                            lastDiagnostic),
+          severity_(sev), limit_(limit) {}
+
+    Diagnostic::Severity severity() const { return severity_; }
+    size_t limit() const { return limit_; }
+
+  private:
+    Diagnostic::Severity severity_;
+    size_t limit_;
+};
+
+class DiagnosticsExceededTotalLimitException : public DiagnosticsLimitExceededException {
+  public:
+    DiagnosticsExceededTotalLimitException(size_t total, const Diagnostic &lastDiagnostic)
+        : DiagnosticsLimitExceededException("Total diagnostic limit exceeded: " + std::to_string(total),
+                                            lastDiagnostic),
+          total_limit_(total) {}
+
+    size_t totalLimit() const { return total_limit_; }
+
+  private:
+    size_t total_limit_;
 };
 
 class Diagnostics {
@@ -140,20 +180,33 @@ class Diagnostics {
     Diagnostics(int totalLimit = -1, std::unordered_map<Severity, int> perSeverityLimits = {})
         : total_limit_(totalLimit), per_severity_limits_(std::move(perSeverityLimits)), current_index_(0) {}
 
+    void setLimit(Severity sev, int limit) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (limit < 0) {
+            per_severity_limits_.erase(sev);
+        } else {
+            per_severity_limits_[sev] = limit;
+        }
+    }
+
+    void setTotalLimit(int limit) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        total_limit_ = limit;
+    }
+
     void add(const Diagnostic &diag) {
         std::lock_guard<std::mutex> lock(mutex_);
 
         Severity sev = diag.severity();
 
         if (total_limit_ >= 0 && diagnostics_.size() >= static_cast<size_t>(total_limit_)) {
-            throw CamelBaseException("Total diagnostic limit exceeded (" + std::to_string(total_limit_) + ")");
+            throw DiagnosticsExceededTotalLimitException(total_limit_, diag);
         }
 
         if (per_severity_limits_.count(sev)) {
             int limit = per_severity_limits_[sev];
             if (limit >= 0 && severity_counts_[sev] >= static_cast<size_t>(limit)) {
-                throw CamelBaseException("Too many diagnostics of severity " + std::to_string(static_cast<int>(sev)) +
-                                         " (limit: " + std::to_string(limit) + ")");
+                throw DiagnosticsExceededLimitException(sev, limit, diag);
             }
         }
 

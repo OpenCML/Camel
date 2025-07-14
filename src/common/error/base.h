@@ -25,6 +25,7 @@
 class CamelBaseException : public std::exception {
   public:
     CamelBaseException(const std::string &msg) : message_(msg) {}
+    CamelBaseException() {}
     virtual ~CamelBaseException() noexcept = default;
 
     virtual std::string what(bool json = false) const {

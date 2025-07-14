@@ -173,6 +173,20 @@ int main(int argc, char *argv[]) {
         }
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
+        if (selectedCommand == Command::RUN) {
+            diagnostics->setLimit(Diagnostic::Severity::Error, 0);
+        }
+
+        auto printDiagnostics = [&tokens, &diagnostics, &os, &errorFormat]() {
+            const auto &tokenVec = tokens.getTokens();
+            while (!diagnostics->end()) {
+                auto diagOpt = diagnostics->next();
+                if (diagOpt.has_value()) {
+                    auto &diag = diagOpt.value();
+                    os << diag.fetchRange(tokenVec).what(errorFormat == "json") << std::endl;
+                }
+            }
+        };
 
         tree::ParseTree *cst = nullptr;
         AST::node_ptr_t ast = nullptr;
@@ -227,16 +241,21 @@ int main(int argc, char *argv[]) {
                 os << any_cast<string>(res);
             }
 
+        } catch (DiagnosticsLimitExceededException &e) {
+            if (selectedCommand == Command::RUN) {
+                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
+                return 1;
+            } else if (selectedCommand == Command::CHECK) {
+                printDiagnostics();
+                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
+                return 0;
+            } else {
+                os << e.what(errorFormat == "json") << endl;
+                return 1;
+            }
         } catch (CamelBaseException &e) {
             if (selectedCommand == Command::CHECK) {
-                const auto &tokenVec = tokens.getTokens();
-                while (!diagnostics->end()) {
-                    auto diagOpt = diagnostics->next();
-                    if (diagOpt.has_value()) {
-                        auto &diag = diagOpt.value();
-                        os << diag.fetchRange(tokenVec).what(errorFormat == "json") << endl;
-                    }
-                }
+                printDiagnostics();
                 return 0;
             } else {
                 os << e.what(errorFormat == "json") << endl;

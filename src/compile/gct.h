@@ -32,6 +32,11 @@
 namespace GraphConstructTree {
 using void_ptr_t = void *;
 
+class BuildAbortException : public std::exception {
+  public:
+    BuildAbortException() {}
+};
+
 class Node : public AbstractTreeNode<load_ptr_t, Node> {
   public:
     Node(load_ptr_t load) : AbstractTreeNode(load) {}
