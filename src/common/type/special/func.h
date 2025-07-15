@@ -33,7 +33,7 @@ enum class FunctorModifier {
 FunctorModifier str2modifier(const std::string &str);
 std::string modifier2str(FunctorModifier modifier);
 
-class FunctorType : public SpecialType {
+class FunctionType : public SpecialType {
   private:
     std::string name_;
     std::unordered_set<FunctorModifier> modifiers_;
@@ -44,8 +44,8 @@ class FunctorType : public SpecialType {
     type_ptr_t returnType_;
 
   public:
-    FunctorType() = delete;
-    FunctorType(const std::string &&name, const std::shared_ptr<ParamsType> &withType,
+    FunctionType() = delete;
+    FunctionType(const std::string &&name, const std::shared_ptr<ParamsType> &withType,
                 const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
 
     const std::string &name() const { return name_; }
@@ -80,4 +80,4 @@ class FunctorType : public SpecialType {
     TypeConv convertibility(const Type &other) const override;
 };
 
-using func_type_ptr_t = std::shared_ptr<FunctorType>;
+using func_type_ptr_t = std::shared_ptr<FunctionType>;

@@ -50,6 +50,7 @@ class Reference {
     }
 
     bool isNull() const { return ident_.empty(); }
+    bool isAlone() const { return scope_.empty(); }
 
     const std::string toString() const {
         std::string result;

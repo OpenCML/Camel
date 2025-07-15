@@ -91,13 +91,21 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
     LoadType type() const { return load_->type(); }
     std::string toString() const { return load_->toString(); }
 
-    template <typename LoadType> node_ptr_t atAs(size_t index) const {
+    template <typename T> node_ptr_t atAs(size_t index) const {
         // safe check for index and type
         assert(index < children_.size() && "Index out of bounds");
         assert(children_.at(index) != nullptr && "Child node is null");
-        assert(typeid(children_.at(index)->load()) == typeid(LoadType) &&
-               "Child node type does not match requested type");
+        assert(typeid(children_.at(index)->load()) == typeid(T) && "Child node type does not match requested type");
         return children_.at(index);
+    }
+    template <typename T> node_ptr_t optAtAs(size_t index) const {
+        const auto &opt = atAs<T>(index);
+        assert(opt->load()->type() == LoadType::Optional && "Child node is not an optional type");
+        if (opt->load()->type() == LoadType::Optional && opt->empty()) {
+            return nullptr; // return null if it's an empty optional
+        }
+        assert(typeid(opt->load()) == typeid(T) && "Child node type does not match requested type");
+        return opt->front();
     }
 
     template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
@@ -242,6 +250,7 @@ class NamedPairLoad : public Load {
         return "NamedPair: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }
     const Reference &getRef() const { return ref_; }
+    bool isVar() const { return isVar_; }
 
   private:
     Reference ref_;

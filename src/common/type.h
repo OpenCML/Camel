@@ -21,7 +21,7 @@
 
 #include "type/init.h"
 #include "type/primary.h"
-#include "type/special/functor.h"
+#include "type/special/func.h"
 #include "type/struct/array.h"
 #include "type/struct/dict.h"
 #include "type/struct/list.h"

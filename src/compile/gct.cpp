@@ -35,6 +35,16 @@ template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&
     return createNodeAs<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
 }
 
+data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
+    if (node->type() == NodeType::DATA) {
+        return node->loadAs<DataLoad>()->data();
+    } else if (node->type() == NodeType::DREF) {
+        return make_shared<RefData>(node->loadAs<DRefLoad>()->ident());
+    } else {
+        return nullptr;
+    }
+}
+
 /*
 Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
@@ -265,109 +275,206 @@ RefData(Ref ref) ;
 */
 node_ptr_t Constructor::visitRefData(const AST::node_ptr_t &ast) {}
 
-node_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
+type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
     enter("Type");
     assert(ast->type() == AST::LoadType::Type);
     const auto &type = ast->loadAs<AST::TypeLoad>();
-    node_ptr_t typeNode;
+    type_ptr_t res;
 
     switch (type->typeType()) {
     case AST::TypeType::Null:
-        typeNode = visitNullableType(ast);
+        res = visitNullableType(ast);
         break;
     case AST::TypeType::Expr:
-        typeNode = visitTypeExpr(ast);
+        res = visitTypeExpr(ast);
         break;
     case AST::TypeType::List:
-        typeNode = visitListType(ast);
+        res = visitListType(ast);
         break;
     case AST::TypeType::Dict:
-        typeNode = visitDictType(ast);
+        res = visitDictType(ast);
         break;
     case AST::TypeType::Tuple:
-        typeNode = visitTupleType(ast);
+        res = visitTupleType(ast);
         break;
     case AST::TypeType::Func:
-        typeNode = visitFuncType(ast);
+        res = visitFuncType(ast);
         break;
     case AST::TypeType::Unit:
-        typeNode = visitUnitType(ast);
+        res = visitUnitType(ast);
         break;
     case AST::TypeType::Infer:
-        typeNode = visitInferType(ast);
+        res = visitInferType(ast);
         break;
     case AST::TypeType::Data:
-        typeNode = visitDataType(ast);
+        res = visitDataType(ast);
         break;
     case AST::TypeType::Ref:
-        typeNode = visitRefType(ast);
+        res = visitRefType(ast);
         break;
     default:
         throw std::runtime_error("Unknown type type");
     }
 
     leave("Type");
-    return typeNode;
+    return res;
 }
 
 /*
 
 */
-node_ptr_t Constructor::visitNullableType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitNullableType(const AST::node_ptr_t &ast) {}
 
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 */
-node_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {}
 
 /*
 ListType(siz dim) : Type type ;
 */
-node_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {}
 
 /*
 DictType() : NamedType* types ;
 */
-node_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {}
 
 /*
 TupleType() : Type* types ;
 */
-node_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {}
 
 /*
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 */
-node_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
+    enter("FuncType");
+    assert(ast->type() == AST::LoadType::Type);
+    auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
+
+    const auto withParamsType = make_shared<ParamsType>();
+    const auto normParamsType = make_shared<ParamsType>();
+    type_ptr_t exitType = voidTypePtr;
+
+    const auto &exitTypeLoad = ast->optAtAs<AST::OptionalLoad>(2);
+    if (exitTypeLoad) {
+        exitType = visitTypeExpr(exitTypeLoad);
+    }
+
+    func_type_ptr_t funcType = make_shared<FunctionType>("", withParamsType, normParamsType, exitType);
+
+    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+        const Reference &paramRef = paramLoad->getRef();
+        if (!paramRef.isAlone()) {
+            reportDiagnostic("Parameter reference must be alone: " + paramRef.toString(), paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        const string &name = paramRef.ident();
+        type_ptr_t type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        data_ptr_t data = nullptr;
+        const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
+        if (dataNode) {
+            data = extractStaticDataFromNode(visitData(dataNode));
+            if (!data) {
+                reportDiagnostic("Data for parameter " + paramRef.toString() + " is not static",
+                                 dataNode->load()->tokenRange(), Diagnostic::Severity::Error);
+                throw BuildAbortException();
+            }
+        }
+        bool success = funcType->addIdent(name, paramLoad->isVar());
+        if (!success) {
+            reportDiagnostic("Duplicate parameter detected: " + name, paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        withParamsType->add(name, type, data);
+    }
+
+    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
+        const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+        const Reference &paramRef = paramLoad->getRef();
+        if (!paramRef.isAlone()) {
+            reportDiagnostic("Parameter reference must be alone: " + paramRef.toString(), paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        const string &name = paramRef.ident();
+        type_ptr_t type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        data_ptr_t data = nullptr;
+        const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
+        if (dataNode) {
+            data = extractStaticDataFromNode(visitData(dataNode));
+            if (!data) {
+                reportDiagnostic("Data for parameter " + paramRef.toString() + " is not static",
+                                 dataNode->load()->tokenRange(), Diagnostic::Severity::Error);
+                throw BuildAbortException();
+            }
+        }
+        bool success = funcType->addIdent(name, paramLoad->isVar());
+        if (!success) {
+            reportDiagnostic("Duplicate parameter detected: " + name, paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        normParamsType->add(name, type, data);
+    }
+
+    leave("FuncType");
+    return funcType;
+}
 
 /*
 UnitType(Ref ref) : Type type ;
 */
-node_ptr_t Constructor::visitUnitType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitUnitType(const AST::node_ptr_t &ast) {
+    enter("UnitType");
+    reportDiagnostic("UnitType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("UnitType");
+    return nullptr;
+}
 
 /*
 InferType(Ref ref) ;
 */
-node_ptr_t Constructor::visitInferType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitInferType(const AST::node_ptr_t &ast) {
+    enter("InferType");
+    reportDiagnostic("InferType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("InferType");
+    return nullptr;
+}
 
 /*
 DataType() : Data data ;
 */
-node_ptr_t Constructor::visitDataType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitDataType(const AST::node_ptr_t &ast) {
+    enter("DataType");
+    reportDiagnostic("DataType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("DataType");
+    return nullptr;
+}
 
 /*
 RefType(Ref ref) ;
 */
-node_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
+type_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
+    enter("RefType");
     assert(ast->load()->type() == AST::LoadType::Type);
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
     const Reference &ref = typeLoad->ref();
     const auto &type = typeScope_->at(ref);
     if (!type.has_value()) {
-        reportDiagnostic("Reference type not found: " + ref.toString(), ast->load()->tokenRange(),
+        reportDiagnostic("Unresolved type reference: " + ref.toString(), ast->load()->tokenRange(),
                          Diagnostic::Severity::Error);
         throw BuildAbortException();
     }
+    leave("RefType");
+    return type.value();
 }
 } // namespace GraphConstructTree

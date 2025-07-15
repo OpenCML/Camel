@@ -248,9 +248,19 @@ class Diagnostics {
         return result;
     }
 
+    std::vector<Diagnostic> errors() { return get_by_severity(Severity::Error); }
+    std::vector<Diagnostic> warnings() { return get_by_severity(Severity::Warning); }
+    std::vector<Diagnostic> information() { return get_by_severity(Severity::Information); }
+    std::vector<Diagnostic> hints() { return get_by_severity(Severity::Hint); }
+
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return diagnostics_.size();
+    }
+
+    bool hasErrors() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return severity_counts_.count(Severity::Error) && severity_counts_.at(Severity::Error) > 0;
     }
 
   private:

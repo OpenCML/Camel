@@ -113,21 +113,21 @@ bool buildCST(tree::ParseTree *&cst, OpenCMLParser &parser, ostream &os, string 
 bool buildAST(AST::node_ptr_t &ast, tree::ParseTree *cst, diagnostics_ptr_t diagnostics) {
     auto constructor = AST::Constructor();
     ast = constructor.construct(cst, diagnostics);
-    return ast != nullptr;
+    return ast != nullptr && !diagnostics->hasErrors();
 }
 
 bool buildGCT(GCT::node_ptr_t &gct, AST::node_ptr_t &ast, diagnostics_ptr_t diagnostics) {
     initTypes();
     auto constructor = GCT::Constructor();
     gct = constructor.construct(ast, diagnostics);
-    return gct != nullptr;
+    return gct != nullptr && !diagnostics->hasErrors();
 }
 
 bool buildGIR(GIR::graph_ptr_t &gir, GCT::node_ptr_t &gct, context_ptr_t &ctx, diagnostics_ptr_t diagnostics) {
     initOperators();
     auto constructor = GIR::Constructor(ctx);
     gir = constructor.construct(gct, diagnostics);
-    return gir != nullptr;
+    return gir != nullptr && !diagnostics->hasErrors();
 }
 
 int main(int argc, char *argv[]) {

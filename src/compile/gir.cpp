@@ -117,7 +117,7 @@ func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
         leave("DECL");
         return getCachedFunc(funcType);
     }
-    auto functorType = dynamic_pointer_cast<FunctorType>(funcType);
+    auto functorType = dynamic_pointer_cast<FunctionType>(funcType);
     const auto &varMap = functorType->variableMap();
     const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
     const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());

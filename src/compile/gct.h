@@ -114,17 +114,17 @@ class Constructor {
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 
     // ast/type.h
-    node_ptr_t visitType(const AST::node_ptr_t &ast);
-    node_ptr_t visitNullableType(const AST::node_ptr_t &ast);
-    node_ptr_t visitTypeExpr(const AST::node_ptr_t &ast);
-    node_ptr_t visitListType(const AST::node_ptr_t &ast);
-    node_ptr_t visitDictType(const AST::node_ptr_t &ast);
-    node_ptr_t visitTupleType(const AST::node_ptr_t &ast);
-    node_ptr_t visitFuncType(const AST::node_ptr_t &ast);
-    node_ptr_t visitUnitType(const AST::node_ptr_t &ast);
-    node_ptr_t visitInferType(const AST::node_ptr_t &ast);
-    node_ptr_t visitDataType(const AST::node_ptr_t &ast);
-    node_ptr_t visitRefType(const AST::node_ptr_t &ast);
+    type_ptr_t visitType(const AST::node_ptr_t &ast);
+    type_ptr_t visitNullableType(const AST::node_ptr_t &ast);
+    type_ptr_t visitTypeExpr(const AST::node_ptr_t &ast);
+    type_ptr_t visitListType(const AST::node_ptr_t &ast);
+    type_ptr_t visitDictType(const AST::node_ptr_t &ast);
+    type_ptr_t visitTupleType(const AST::node_ptr_t &ast);
+    type_ptr_t visitFuncType(const AST::node_ptr_t &ast);
+    type_ptr_t visitUnitType(const AST::node_ptr_t &ast);
+    type_ptr_t visitInferType(const AST::node_ptr_t &ast);
+    type_ptr_t visitDataType(const AST::node_ptr_t &ast);
+    type_ptr_t visitRefType(const AST::node_ptr_t &ast);
 };
 
 } // namespace GraphConstructTree
