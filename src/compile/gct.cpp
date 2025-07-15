@@ -364,6 +364,8 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
     }
 
     func_type_ptr_t funcType = make_shared<FunctionType>("", withParamsType, normParamsType, exitType);
+    funcType->setImplMark(typeLoad->implMark());
+    funcType->setModifiers(typeLoad->modifiers());
 
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();

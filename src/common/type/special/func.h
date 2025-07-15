@@ -19,49 +19,26 @@
 
 #pragma once
 
+#include "common/func.h"
+#include "common/impl.h"
 #include "special.h"
 
-enum class FunctorModifier {
-    INNER = 0b00000001,
-    OUTER = 0b00000010,
-    ATOMIC = 0b00000100,
-    SHARED = 0b00001000,
-    SYNC = 0b00010000,
-    MACRO = 0b00100000,
-};
-
-FunctorModifier str2modifier(const std::string &str);
-std::string modifier2str(FunctorModifier modifier);
-
 class FunctionType : public SpecialType {
-  private:
-    std::string name_;
-    std::unordered_set<FunctorModifier> modifiers_;
-    std::shared_ptr<ParamsType> withType_;
-    std::shared_ptr<ParamsType> linkType_;
-    std::unordered_map<std::string, bool> variableMap_;
-    bool hasSideEffect_ = false;
-    type_ptr_t returnType_;
-
   public:
     FunctionType() = delete;
     FunctionType(const std::string &&name, const std::shared_ptr<ParamsType> &withType,
-                const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
+                 const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
 
     const std::string &name() const { return name_; }
     const std::string &argNameAt(size_t idx) const;
 
-    void addModifier(FunctorModifier modifier);
-    void setModifiers(const std::unordered_set<FunctorModifier> &modifiers);
+    ImplMark implMark() const { return implMark_; }
+    void setImplMark(ImplMark mark) { implMark_ = mark; }
 
-    void checkModifiers() const; // throws exception
+    const ModifierSet &modifiers() const { return modifiers_; }
+    void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
 
-    bool sync() const { return modifiers_.find(FunctorModifier::SYNC) != modifiers_.end(); }
-    bool shared() const { return modifiers_.find(FunctorModifier::SHARED) != modifiers_.end(); }
-    bool atomic() const { return modifiers_.find(FunctorModifier::ATOMIC) != modifiers_.end(); }
-    bool inner() const { return modifiers_.find(FunctorModifier::INNER) != modifiers_.end(); }
-    bool outer() const { return modifiers_.find(FunctorModifier::OUTER) != modifiers_.end(); }
-    bool macro() const { return modifiers_.find(FunctorModifier::MACRO) != modifiers_.end(); }
+    bool checkModifiers() const;
 
     bool addIdent(const std::string &ident, bool isVar);
     bool hasSideEffect() const;
@@ -78,6 +55,16 @@ class FunctionType : public SpecialType {
     bool operator!=(const Type &other) const override;
 
     TypeConv convertibility(const Type &other) const override;
+
+  private:
+    std::string name_;
+    ImplMark implMark_ = ImplMark::Graph;
+    ModifierSet modifiers_ = Modifier::None;
+    std::shared_ptr<ParamsType> withType_;
+    std::shared_ptr<ParamsType> linkType_;
+    std::unordered_map<std::string, bool> variableMap_;
+    bool hasSideEffect_ = false;
+    type_ptr_t returnType_;
 };
 
 using func_type_ptr_t = std::shared_ptr<FunctionType>;

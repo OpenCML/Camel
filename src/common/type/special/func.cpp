@@ -21,48 +21,12 @@
 
 #include "../../data.h"
 #include "../struct/params.h"
+#include "utils/str.h"
 
 using namespace std;
 
-FunctorModifier str2modifier(const string &str) {
-    if (str == "inner") {
-        return FunctorModifier::INNER;
-    } else if (str == "outer") {
-        return FunctorModifier::OUTER;
-    } else if (str == "atomic") {
-        return FunctorModifier::ATOMIC;
-    } else if (str == "shared") {
-        return FunctorModifier::SHARED;
-    } else if (str == "sync") {
-        return FunctorModifier::SYNC;
-    } else if (str == "macro") {
-        return FunctorModifier::MACRO;
-    } else {
-        throw runtime_error("Unknown modifier: " + str);
-    }
-}
-
-string modifier2str(FunctorModifier modifier) {
-    switch (modifier) {
-    case FunctorModifier::INNER:
-        return "inner";
-    case FunctorModifier::OUTER:
-        return "outer";
-    case FunctorModifier::ATOMIC:
-        return "atomic";
-    case FunctorModifier::SHARED:
-        return "shared";
-    case FunctorModifier::SYNC:
-        return "sync";
-    case FunctorModifier::MACRO:
-        return "macro";
-    default:
-        throw runtime_error("Unknown modifier: " + to_string(static_cast<int>(modifier)));
-    }
-}
-
 FunctionType::FunctionType(const std::string &&name, const shared_ptr<ParamsType> &withType,
-                         const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
+                           const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
     : SpecialType(TypeCode::FUNCTOR), name_(std::move(name)), withType_(withType), linkType_(paramsType),
       returnType_(returnType) {}
 
@@ -71,19 +35,6 @@ const std::string &FunctionType::argNameAt(size_t idx) const {
         return std::get<0>(withType_->elementAt(idx));
     else
         return std::get<0>(linkType_->elementAt(idx - withType_->size()));
-}
-
-void FunctionType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
-
-void FunctionType::setModifiers(const unordered_set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
-
-void FunctionType::checkModifiers() const {
-    if (hasSideEffect_ && !sync()) {
-        throw runtime_error("Functor with side effect must be sync.");
-    }
-    if (inner() && outer()) {
-        throw runtime_error("Functor cannot be both inner and outer.");
-    }
 }
 
 bool FunctionType::addIdent(const string &ident, bool isVar) {
@@ -105,10 +56,12 @@ type_ptr_t FunctionType::linkType() const { return dynamic_pointer_cast<Type>(li
 
 type_ptr_t FunctionType::returnType() const { return dynamic_pointer_cast<Type>(returnType_); }
 
+bool FunctionType::checkModifiers() const { return true; }
+
 string FunctionType::toString() const {
-    string result = "";
-    for (const auto &modifier : modifiers_) {
-        result += modifier2str(modifier) + " ";
+    string result = modifiers_;
+    if (!result.empty()) {
+        result += " ";
     }
     if (withType_ && withType_->size() > 0) {
         result += "<";

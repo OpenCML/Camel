@@ -26,10 +26,10 @@
 
 #include "common/ref.h"
 #include "common/tree.h"
+#include "common/impl.h"
+#include "common/func.h"
 
 namespace AbstractSyntaxTree {
-
-enum class ImplMark { Inner, Outer, Graph };
 
 enum class LoadType {
     Module,
@@ -48,8 +48,6 @@ enum class LoadType {
     Repeated,
     Optional,
 };
-
-std::string implMarkToString(ImplMark mark);
 
 std::string loadTypeToString(LoadType type);
 

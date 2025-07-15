@@ -286,20 +286,22 @@ any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto modifier = context->modifiers();
+    ModifierSet modSet;
     if (modifier) {
         if (modifier->ATOMIC().size() > 0) {
-            funcType->setAtomic(true);
+            modSet.insert(Modifier::Atomic);
         }
         if (modifier->SHARED().size() > 0) {
-            funcType->setShared(true);
+            modSet.insert(Modifier::Shared);
         }
         if (modifier->SYNC().size() > 0) {
-            funcType->setSync(true);
+            modSet.insert(Modifier::Sync);
         }
         if (modifier->MACRO().size() > 0) {
-            funcType->setMacro(true);
+            modSet.insert(Modifier::Macro);
         }
     }
+    funcType->setModifiers(modSet);
 
     if (context->angledParams()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
@@ -358,20 +360,22 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     }
 
     auto modifier = context->modifiers();
+    ModifierSet modSet;
     if (modifier) {
         if (modifier->ATOMIC().size() > 0) {
-            funcType->setAtomic(true);
+            modSet.insert(Modifier::Atomic);
         }
         if (modifier->SHARED().size() > 0) {
-            funcType->setShared(true);
+            modSet.insert(Modifier::Shared);
         }
         if (modifier->SYNC().size() > 0) {
-            funcType->setSync(true);
+            modSet.insert(Modifier::Sync);
         }
         if (modifier->MACRO().size() > 0) {
-            funcType->setMacro(true);
+            modSet.insert(Modifier::Macro);
         }
     }
+    funcType->setModifiers(modSet);
 
     if (context->angledParams()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
@@ -1779,20 +1783,22 @@ any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto modifier = context->modifiers();
+    ModifierSet modSet;
     if (modifier) {
         if (modifier->ATOMIC().size() > 0) {
-            funcType->setAtomic(true);
+            modSet.insert(Modifier::Atomic);
         }
         if (modifier->SHARED().size() > 0) {
-            funcType->setShared(true);
+            modSet.insert(Modifier::Shared);
         }
         if (modifier->SYNC().size() > 0) {
-            funcType->setSync(true);
+            modSet.insert(Modifier::Sync);
         }
         if (modifier->MACRO().size() > 0) {
-            funcType->setMacro(true);
+            modSet.insert(Modifier::Macro);
         }
     }
+    funcType->setModifiers(modSet);
 
     if (context->angledParams()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
