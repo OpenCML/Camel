@@ -33,6 +33,8 @@ class StmtLoad : public Load {
   public:
     StmtLoad(StmtType type_) : Load(LoadType::Stmt), StmtType_(type_) {}
 
+    StmtType stmtType() const { return StmtType_; }
+
   private:
     StmtType StmtType_;
 };

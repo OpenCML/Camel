@@ -39,6 +39,8 @@ class TypeLoad : public Load {
     TypeLoad(TypeType type) : Load(LoadType::Type), typeType_(type) {}
     const std::string toString() const override { return "TypeLoad"; }
 
+    TypeType typeType() const { return typeType_; }
+
   private:
     TypeType typeType_;
 };
@@ -89,22 +91,15 @@ class FuncTypeLoad : public TypeLoad {
     const std::string toString() const override;
 
     const std::string uri() const { return uri_; }
-    void setAtomic(bool atomic) { atomic_ = atomic; }
-    void setShared(bool shared) { shared_ = shared; }
-    void setSync(bool sync) { sync_ = sync; }
-    void setMacro(bool macro) { macro_ = macro; }
-    bool isAtomic() const { return atomic_; }
-    bool isShared() const { return shared_; }
-    bool isSync() const { return sync_; }
-    bool isMacro() const { return macro_; }
+    void setUri(const std::string &uri) { uri_ = uri; }
+    const ModifierSet &modifiers() const { return modifiers_; }
+    void setModifiers(const ModifierSet &modifiers) { modifiers_ = modifiers; }
+    ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark implMark) { implMark_ = implMark; }
 
   private:
-    bool atomic_ = false;
-    bool shared_ = false;
-    bool sync_ = false;
-    bool macro_ = false;
     ImplMark implMark_ = ImplMark::Graph;
+    ModifierSet modifiers_;
     std::string uri_;
 };
 
@@ -139,6 +134,8 @@ class RefTypeLoad : public TypeLoad {
   public:
     RefTypeLoad(Reference ref) : TypeLoad(TypeType::Ref), ref_(ref) {}
     const std::string toString() const override { return "RefType: " + ref_.toString(); }
+
+    const Reference &ref() const { return ref_; }
 
   private:
     Reference ref_;

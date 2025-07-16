@@ -10,7 +10,7 @@ enum ImplMark {
     Graph
 }
 
-Module(Ref ref) : ImportDecl import, ExportDecl export, Stmt* ;
+Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 
 StmtType {
     Name,
@@ -113,10 +113,9 @@ IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 
 Literal(Value value) ;
 ListData() : Data* data ;
-DictData() : KeyDataPair* pairs ;
+DictData() : NamedPair* pairs ;
 TupleData() : Data* data ;
-FuncData(Ref ref)
-    : FuncType funcType, StmtBlock body ;
+FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 RefData(Ref ref) ;
 
 enum TypeOp {

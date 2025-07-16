@@ -30,7 +30,7 @@ using node_ptr_t = std::shared_ptr<Node>;
 class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
-enum class NodeType { DATA, VARI, TYPE, DECL, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC, FROM };
+enum class NodeType { DATA, VARI, TYPE, DECL, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, EXIT, EXEC, FROM };
 
 class Load {
   protected:
@@ -66,20 +66,12 @@ class DataLoad : public Load {
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<DataLoad> data_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<DataLoad>(ptr);
-}
-
 class VariLoad : public Load {
   public:
     VariLoad() : Load(NodeType::VARI) {}
 
     // const std::string toString() const override;
 };
-
-inline std::shared_ptr<VariLoad> vari_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<VariLoad>(ptr);
-}
 
 class TypeLoad : public Load {
     type_ptr_t dataType_;
@@ -91,10 +83,6 @@ class TypeLoad : public Load {
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<TypeLoad> type_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<TypeLoad>(ptr);
-}
-
 class DeclLoad : public Load {
     func_type_ptr_t funcType_;
 
@@ -105,10 +93,6 @@ class DeclLoad : public Load {
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<DeclLoad> decl_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<DeclLoad>(ptr);
-}
-
 class FuncLoad : public Load {
     func_type_ptr_t funcType_;
 
@@ -118,10 +102,6 @@ class FuncLoad : public Load {
 
     const std::string toString() const override;
 };
-
-inline std::shared_ptr<FuncLoad> func_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<FuncLoad>(ptr);
-}
 
 class NRefLoad : public Load {
     std::string ident_;
@@ -134,10 +114,6 @@ class NRefLoad : public Load {
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<NRefLoad> nref_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<NRefLoad>(ptr);
-}
-
 class DRefLoad : public Load {
     std::string ident_;
 
@@ -148,10 +124,6 @@ class DRefLoad : public Load {
 
     const std::string toString() const override;
 };
-
-inline std::shared_ptr<DRefLoad> dref_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<DRefLoad>(ptr);
-}
 
 class WaitLoad : public Load {
     std::vector<std::string> idents_;
@@ -165,10 +137,6 @@ class WaitLoad : public Load {
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<WaitLoad> wait_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<WaitLoad>(ptr);
-}
-
 class AnnoLoad : public Load {
     std::string annotation_;
 
@@ -178,20 +146,12 @@ class AnnoLoad : public Load {
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<AnnoLoad> anno_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<AnnoLoad>(ptr);
-}
-
 class LinkLoad : public Load {
   public:
     LinkLoad() : Load(NodeType::LINK) {}
 
     // const std::string toString() const override;
 };
-
-inline std::shared_ptr<LinkLoad> link_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<LinkLoad>(ptr);
-}
 
 class WithLoad : public Load {
   public:
@@ -200,38 +160,17 @@ class WithLoad : public Load {
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<WithLoad> with_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<WithLoad>(ptr);
-}
-
 class RetnLoad : public Load {
   public:
-    RetnLoad() : Load(NodeType::RETN) {}
+    RetnLoad() : Load(NodeType::EXIT) {}
 
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<RetnLoad> retn_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<RetnLoad>(ptr);
-}
-
-class RaseLoad : public Load {
+class ExitLoad : public Load {
   public:
-    RaseLoad() : Load(NodeType::RETN) {}
+    ExitLoad() : Load(NodeType::EXIT) {}
 };
-
-inline std::shared_ptr<RaseLoad> rase_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<RaseLoad>(ptr);
-}
-
-class ThrwLoad : public Load {
-  public:
-    ThrwLoad() : Load(NodeType::RETN) {}
-};
-
-inline std::shared_ptr<ThrwLoad> thrw_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ThrwLoad>(ptr);
-}
 
 class ExecLoad : public Load {
   public:
@@ -239,10 +178,6 @@ class ExecLoad : public Load {
 
     // const std::string toString() const override;
 };
-
-inline std::shared_ptr<ExecLoad> exec_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ExecLoad>(ptr);
-}
 
 class FromLoad : public Load {
     std::string path_;
@@ -257,10 +192,6 @@ class FromLoad : public Load {
 
     const std::string toString() const override;
 };
-
-inline std::shared_ptr<FromLoad> from_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<FromLoad>(ptr);
-}
 
 } // namespace GraphConstructTree
 

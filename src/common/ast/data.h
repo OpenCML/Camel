@@ -80,6 +80,8 @@ class DataLoad : public Load {
         return result;
     }
 
+    DataType dataType() const { return dataType_; }
+
     const std::string status() const {
         std::string status;
         if (waited_) {

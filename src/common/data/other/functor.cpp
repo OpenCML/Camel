@@ -36,11 +36,11 @@ GraphIR::graph_ptr_t FunctorData::graph() const { return thisGraph_; }
 GraphIR::graph_ptr_t FunctorData::baseGraph() const { return baseGraph_; }
 
 std::string FunctorData::name() const {
-    auto func = dynamic_pointer_cast<FunctorType>(type_);
+    auto func = dynamic_pointer_cast<FunctionType>(type_);
     return func->name();
 }
 
-func_type_ptr_t FunctorData::funcType() const { return dynamic_pointer_cast<FunctorType>(type_); }
+func_type_ptr_t FunctorData::funcType() const { return dynamic_pointer_cast<FunctionType>(type_); }
 
 bool FunctorData::equals(const data_ptr_t &other) const { return true; }
 
@@ -56,6 +56,6 @@ data_ptr_t FunctorData::clone(bool deep) const {
 }
 
 const std::string FunctorData::toString() const {
-    FunctorType *type = dynamic_cast<FunctorType *>(type_.get());
+    FunctionType *type = dynamic_cast<FunctionType *>(type_.get());
     return "Functor<" + type->toString() + ">";
 }

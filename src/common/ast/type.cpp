@@ -81,19 +81,10 @@ std::string typeOpToString(TypeOp op) {
 const std::string FuncTypeLoad::toString() const {
     std::string result = "FuncType: ";
     if (implMark_ != ImplMark::Graph) {
-        result += implMarkToString(implMark_);
+        result += to_string(implMark_);
     }
-    if (macro_) {
-        result += " macro";
-    }
-    if (atomic_) {
-        result += " atomic";
-    }
-    if (shared_) {
-        result += " shared";
-    }
-    if (sync_) {
-        result += " sync";
+    if (!modifiers_.empty()) {
+        result += " " + std::string(modifiers_);
     }
     if (!uri_.empty()) {
         result += " [" + uri_ + "]";

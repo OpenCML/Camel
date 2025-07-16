@@ -306,7 +306,7 @@ node_ptr_t FunctorNode::create(graph_ptr_t graph, const func_ptr_t &func) {
 
 func_ptr_t FunctorNode::func() const { return func_; }
 
-func_type_ptr_t FunctorNode::type() const { return dynamic_pointer_cast<FunctorType>(func_->type()); }
+func_type_ptr_t FunctorNode::type() const { return dynamic_pointer_cast<FunctionType>(func_->type()); }
 
 func_node_ptr_t FunctorNode::copyTo(graph_ptr_t graph) const {
     func_node_ptr_t node = make_shared<FunctorNode>(graph, dynamic_pointer_cast<FunctorData>(func_->clone()));
@@ -353,7 +353,7 @@ void FunctorNode::fulfill() {
     cml_assert(withNode, "With node is not set.");
     cml_assert(linkNode, "Link node is not set.");
 
-    FunctorType *func = dynamic_cast<FunctorType *>(func_->type().get());
+    FunctionType *func = dynamic_cast<FunctionType *>(func_->type().get());
 
     auto withData = inputToParams(withNode, func->withType());
     auto linkData = inputToParams(linkNode, func->linkType());
@@ -412,7 +412,7 @@ vector<func_type_ptr_t> SelectNode::types() const {
     vector<func_type_ptr_t> res;
     if (funcs_) {
         for (const auto &func : *funcs_) {
-            res.push_back(dynamic_pointer_cast<FunctorType>(func->type()));
+            res.push_back(dynamic_pointer_cast<FunctionType>(func->type()));
         }
     } else {
         for (const auto &oper : *opers_) {

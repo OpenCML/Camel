@@ -28,6 +28,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "common/impl.h"
+
 enum class TypeCode {
     // primitive types
     INT32 = 0b00'000000,
@@ -107,8 +109,6 @@ class Type {
     Type() = delete;
     Type(TypeCode type);
     virtual ~Type() = default;
-
-    enum ImplMark {INNER, OUTER, GRAPH};
 
     const TypeCode &code() const;
 

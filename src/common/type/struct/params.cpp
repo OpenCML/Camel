@@ -54,7 +54,7 @@ TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
 
 ParamsType::ParamsType() : StructType(TypeCode::PARAMS) {}
 
-ParamsType::ParamsType(const std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>> &&elements)
+ParamsType::ParamsType(const std::initializer_list<std::tuple<string, type_ptr_t, data_ptr_t>> &&elements)
     : StructType(TypeCode::PARAMS), elements_(std::move(elements)) {}
 
 string ParamsType::toString() const {
@@ -111,7 +111,7 @@ bool ParamsType::add(const string &key, const type_ptr_t &type, const data_ptr_t
 
 size_t ParamsType::size() const { return elements_.size(); }
 
-const std::tuple<std::string, type_ptr_t, data_ptr_t> &ParamsType::elementAt(size_t idx) const {
+const std::tuple<string, type_ptr_t, data_ptr_t> &ParamsType::elementAt(size_t idx) const {
     if (idx >= elements_.size()) {
         throw out_of_range("Index out of range");
     }
@@ -120,8 +120,8 @@ const std::tuple<std::string, type_ptr_t, data_ptr_t> &ParamsType::elementAt(siz
 
 const vector<tuple<string, type_ptr_t, data_ptr_t>> &ParamsType::elements() const { return elements_; }
 
-std::vector<type_ptr_t> ParamsType::indexElements() const {
-    auto result = std::vector<type_ptr_t>();
+vector<type_ptr_t> ParamsType::indexElements() const {
+    auto result = vector<type_ptr_t>();
     for (const auto &tuple : elements_) {
         const auto &[name, type, value] = tuple;
         if (name.empty()) {
@@ -131,7 +131,7 @@ std::vector<type_ptr_t> ParamsType::indexElements() const {
     return result;
 }
 
-std::unordered_map<std::string, type_ptr_t> ParamsType::namedElements() const {
+std::unordered_map<string, type_ptr_t> ParamsType::namedElements() const {
     auto result = std::unordered_map<string, type_ptr_t>();
     for (const auto &tuple : elements_) {
         const auto &[name, type, value] = tuple;

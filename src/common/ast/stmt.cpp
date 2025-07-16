@@ -73,7 +73,7 @@ const std::string DataDeclLoad::toString() const {
 const std::string TypeDeclLoad::toString() const {
     std::string result = "TypeDecl: ";
     if (implMark_ != ImplMark::Graph) {
-        result += implMarkToString(implMark_) + " ";
+        result += to_string(implMark_) + " ";
     }
     result += ref_.toString();
     if (!uri_.empty()) {

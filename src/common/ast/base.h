@@ -19,15 +19,17 @@
 
 #pragma once
 
+#include <cassert>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
 #include "common/ref.h"
+#include "common/tree.h"
+#include "common/impl.h"
+#include "common/func.h"
 
 namespace AbstractSyntaxTree {
-
-enum class ImplMark { Inner, Outer, Graph };
 
 enum class LoadType {
     Module,
@@ -47,8 +49,6 @@ enum class LoadType {
     Optional,
 };
 
-std::string implMarkToString(ImplMark mark);
-
 std::string loadTypeToString(LoadType type);
 
 class Node;
@@ -66,13 +66,11 @@ class Load {
         tokenRange_.first = start;
         tokenRange_.second = end;
     }
-    void setTokenRange(std::pair<size_t, size_t> range) {
-        tokenRange_ = range;
-    }
+    void setTokenRange(std::pair<size_t, size_t> range) { tokenRange_ = range; }
     const std::string geneCode() const;
 
     LoadType type() const { return type_; }
-    std::pair<size_t, size_t> range() const { return tokenRange_; }
+    std::pair<size_t, size_t> tokenRange() const { return tokenRange_; }
     const std::string typeStr() const { return loadTypeToString(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
@@ -81,6 +79,41 @@ class Load {
   protected:
     LoadType type_;
     std::pair<size_t, size_t> tokenRange_ = {0, 0};
+};
+
+class Node : public AbstractTreeNode<load_ptr_t, Node> {
+  public:
+    Node(load_ptr_t load) : AbstractTreeNode(load) {}
+    virtual ~Node() = default;
+
+    LoadType type() const { return load_->type(); }
+    std::string toString() const { return load_->toString(); }
+
+    template <typename T> node_ptr_t atAs(size_t index) const {
+        // safe check for index and type
+        assert(index < children_.size() && "Index out of bounds");
+        assert(children_.at(index) != nullptr && "Child node is null");
+        assert(typeid(children_.at(index)->load()) == typeid(T) && "Child node type does not match requested type");
+        return children_.at(index);
+    }
+    template <typename T> node_ptr_t optAtAs(size_t index) const {
+        const auto &opt = atAs<T>(index);
+        assert(opt->load()->type() == LoadType::Optional && "Child node is not an optional type");
+        if (opt->load()->type() == LoadType::Optional && opt->empty()) {
+            return nullptr; // return null if it's an empty optional
+        }
+        assert(typeid(opt->load()) == typeid(T) && "Child node type does not match requested type");
+        return opt->front();
+    }
+
+    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
+        assert(typeid(load_) == typeid(LoadType) && "Load type does not match requested type");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
+        assert(typeid(load_) == typeid(LoadType) && "Load type does not match requested type");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
 };
 
 enum class LiteralType {
@@ -215,6 +248,7 @@ class NamedPairLoad : public Load {
         return "NamedPair: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }
     const Reference &getRef() const { return ref_; }
+    bool isVar() const { return isVar_; }
 
   private:
     Reference ref_;

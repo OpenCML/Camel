@@ -12,24 +12,16 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 09, 2024
- * Updated: Mar. 09, 2025
+ * Created: Jul. 13, 2025
+ * Updated: Jul. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "type/init.h"
-#include "type/primary.h"
-#include "type/special/func.h"
-#include "type/struct/array.h"
-#include "type/struct/dict.h"
-#include "type/struct/list.h"
-#include "type/struct/map.h"
-#include "type/struct/params.h"
-#include "type/struct/set.h"
-#include "type/struct/tensor.h"
-#include "type/struct/tuple.h"
-#include "type/struct/union.h"
-#include "type/struct/vector.h"
-#include "type/type.h"
+#include "base.h"
+
+class CompileAbortException : public CamelBaseException {
+  public:
+    CompileAbortException(const std::string &msg) : CamelBaseException(msg) {}
+};
