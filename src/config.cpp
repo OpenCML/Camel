@@ -243,10 +243,11 @@ void printCliArgs(Command selected) {
 }
 
 bool parseArgs(int argc, char *argv[]) {
-    bool showHelp = false;    // Help information
     bool showVersion = false; // Version information
-    bool showDocs = false;
-    bool showAbout = false; // About information
+    bool showHelp = false;    // Help information
+    bool showDocs = false;    // Documentation information
+    bool showAbout = false;   // About information
+    bool showZen = false;     // Show Zen of Camel
 
     auto run = (option("-P", "--profile").set(profile) % "profile the perf",
                 (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
@@ -258,10 +259,12 @@ bool parseArgs(int argc, char *argv[]) {
                 (option("-E", "--error-format") & value("error format", errorFormat)) % "error format: text or json",
                 values("input", targetFiles) % "input file");
 
-    auto info = (option("-h", "--help").set(showHelp).set(selectedCommand, Command::INFO) % "show this help message",
-                 option("-v", "--version").set(showVersion).set(selectedCommand, Command::INFO) % "show version",
+    auto info = (option("-v", "--version").set(showVersion).set(selectedCommand, Command::INFO) % "show version",
+                 option("-h", "--help").set(showHelp).set(selectedCommand, Command::INFO) % "show this help message",
+                 option("-d", "--docs").set(showDocs).set(selectedCommand, Command::INFO) % "show documentation",
                  option("-a", "--about").set(showAbout).set(selectedCommand, Command::INFO) %
-                     "show copyright and related information");
+                     "show copyright and related information",
+                 option("-z", "--zen").set(showZen).set(selectedCommand, Command::INFO) % "show the Zen of Camel");
 
     auto format = (command("format").set(formatCode).set(selectedCommand, Command::FORMAT) % "format the code",
                    (option("-t", "--tab-size") & integer("tabsize", tabSize)) % "indentation size in spaces",
@@ -337,16 +340,20 @@ bool parseArgs(int argc, char *argv[]) {
     printCliArgs(selectedCommand);
 #endif
 
-    if (showHelp) {
-        cout << make_man_page(cli, "camel");
-    }
-
     if (showVersion) {
 #ifdef NDEBUG
         cout << "Camel v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")" << endl;
 #else
         cout << "Camel (DEBUG) v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")" << endl;
 #endif
+    }
+
+    if (showHelp) {
+        cout << make_man_page(cli, "camel");
+    }
+
+    if (showDocs) {
+        cout << "Not implemented yet" << endl;
     }
 
     if (showAbout) {
@@ -360,8 +367,10 @@ bool parseArgs(int argc, char *argv[]) {
             ;
     }
 
-    if (showDocs) {
-        cout << "Not implemented yet" << endl;
+    if (showZen) {
+        cout <<
+#include "ZEN"
+            ;
     }
 
     if (selectedCommand == Command::INFO || selectedCommand == Command::SERVE) {
