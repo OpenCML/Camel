@@ -68,7 +68,7 @@ blockExpr  : stmtBlock | dataExpr ;
 funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 funcDecl   :
         (WITH angledParams)?
-        EXPORT? implMark? modifiers? 
+        EXPORT? implMark? modifiers?
         FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
@@ -183,7 +183,11 @@ annoExpr
     ;
 
 withExpr
-    : primaryData (('.' | '?.') primaryData)*
+    : indexExpr (('.' | '?.') indexExpr)*
+    ;
+
+indexExpr
+    : primaryData ('.$' primaryData)*
     ;
 
 dictData

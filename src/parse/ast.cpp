@@ -20,8 +20,8 @@
 #include "antlr/OpenCMLLexer.h"
 
 #include "ast.h"
-#include "common/token.h"
 #include "utils/log.h"
+#include "utils/token.h"
 #include "utils/type.h"
 
 #define DEBUG_LEVEL 0
@@ -1324,22 +1324,28 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
     return lhsNode;
 }
 
+// TODO: MODIFIED
 /*
 withExpr
     : primaryData (('.' | '?.') primaryData)*
     ;
 */
+/*
+withExpr
+    : indexExpr (('.' | '?.') indexExpr)*
+    ;
+*/
 any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     enter("WithExpr");
-    node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData(0)));
-    for (size_t i = 1; i < context->primaryData().size(); i++) {
+    node_ptr_t lhsNode = any2node(visitIndexExpr(context->indexExpr(0)));
+    for (size_t i = 1; i < context->indexExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
         node_ptr_t dataNode = createNodeAs<DataExprLoad>(DataOp::With);
-        setNodeTokenRangeByContext(dataNode, context->primaryData(i));
-        node_ptr_t rhsNode = any2node(visitPrimaryData(context->primaryData(i)));
+        setNodeTokenRangeByContext(dataNode, context->indexExpr(i));
+        node_ptr_t rhsNode = any2node(visitIndexExpr(context->indexExpr(i)));
         if (strOp == "?.") {
             node_ptr_t notNullNode = createNodeAs<DataExprLoad>(DataOp::NotNullThen);
-            setNodeTokenRangeByContext(notNullNode, context->primaryData(i));
+            setNodeTokenRangeByContext(notNullNode, context->indexExpr(i));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
@@ -1347,6 +1353,26 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
         lhsNode = dataNode;
     }
     leave("WithExpr");
+    return lhsNode;
+}
+
+/*
+indexExpr
+    : primaryData ('.$' primaryData)*
+    ;
+*/
+any Constructor::visitIndexExpr(OpenCMLParser::IndexExprContext *context) {
+    enter("IndexExpr");
+    node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData(0)));
+    for (size_t i = 1; i < context->primaryData().size(); i++) {
+        string strOp = context->children[i * 2 - 1]->getText();
+        node_ptr_t dataNode = createNodeAs<DataExprLoad>(DataOp::With);
+        setNodeTokenRangeByContext(dataNode, context->primaryData(i));
+        node_ptr_t rhsNode = any2node(visitPrimaryData(context->primaryData(i)));
+        *dataNode << lhsNode << rhsNode;
+        lhsNode = dataNode;
+    }
+    leave("IndexExpr");
     return lhsNode;
 }
 

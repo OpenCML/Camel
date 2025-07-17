@@ -878,10 +878,19 @@ any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
 
 /*
 withExpr
-    : primaryData (('.' | '?.') primaryData)*
+    : indexExpr (('.' | '?.') indexExpr)*
     ;
 */
 any Formatter::visitWithExpr(OpenCMLParser::WithExprContext *context) {
+    return formatBiOpsList(context->indexExpr(), context->children, false);
+}
+
+/*
+indexExpr
+    : primaryData ('.$' primaryData)*
+    ;
+*/
+any Formatter::visitIndexExpr(OpenCMLParser::IndexExprContext *context) {
     return formatBiOpsList(context->primaryData(), context->children, false);
 }
 

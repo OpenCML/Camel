@@ -148,6 +148,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitWithExpr(OpenCMLParser::WithExprContext *context) { return dumpNode(context, "WithExpr"); };
 
+    std::any visitIndexExpr(OpenCMLParser::IndexExprContext *context) { return dumpNode(context, "IndexExpr"); };
+
     std::any visitDictData(OpenCMLParser::DictDataContext *context) { return dumpNode(context, "DictData"); };
 
     std::any visitListData(OpenCMLParser::ListDataContext *context) { return dumpNode(context, "ListData"); };

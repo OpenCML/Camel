@@ -171,6 +171,8 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
 
+    std::any visitIndexExpr(OpenCMLParser::IndexExprContext *context);
+
     std::any visitDictData(OpenCMLParser::DictDataContext *context);
 
     std::any visitListData(OpenCMLParser::ListDataContext *context);

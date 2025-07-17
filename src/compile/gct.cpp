@@ -292,10 +292,13 @@ node_ptr_t Constructor::visitDataExpr(const AST::node_ptr_t &ast) {
     node_ptr_t res;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
+    node_ptr_t opNode;
+
     switch (dataExpr->op()) {
     // Assignment operations
-    case AST::DataOp::Assign: {
-    } break;
+    case AST::DataOp::Assign:
+        opNode = createNodeAs<DRefLoad>("__assn__");
+        break;
     case AST::DataOp::AssignAdd: {
     } break;
     case AST::DataOp::AssignSub: {
