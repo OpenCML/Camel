@@ -48,7 +48,13 @@ enum ExitType {
 
 ExitStmt(ExitType type) : Data* data ;
 
-enum DataOp {
+enum UnaryDataOp {
+    Not,
+    Neg,
+    Inv
+}
+
+enum BinaryDataOp {
     Assign,
     AssignAdd,
     AssignSub,
@@ -76,28 +82,33 @@ enum DataOp {
     Mod,
     Mat,
     Exp,
+    Index, // Data obj, Data* indices
+}
+
+enum ReservedDataOp {
+    NullThen,
     NullThen,
     ErrorThen,
     NotNullThen,
-    Index, // Data obj, Data* indices
     Call, // Data obj, Data* args, NamedData* kwargs
     With, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data lhs, Data rhs
     As, // Data lhs, Type rhs
     Is, // Data lhs, Type rhs
-    Not, // Data expr
-    Neg, // Data expr
-    Inv, // Data expr
+    Access, // Data obj, RefData ref
 }
 
-DataExpr(DataOp op) := Any... lhs, rhs... ;
+UnaryExpr(UnaryDataOp op) := Data data ;
+BinaryExpr(BinaryDataOp op) := Data lhs, data rhs ;
+ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
 
 enum DataType {
-    DataExpr,
+    UnaryExpr,
+    BinaryExpr,
+    ReservedExpr,
     IfExpr,
     MatchExpr,
     TryExpr,
-    UnaryExpr,
     Literal,
     List,
     Dict,
@@ -107,7 +118,9 @@ enum DataType {
 }
 
 Data(DataType type, bool notNull, bool waited)
-    := DataExpr| IfExpr | MatchExpr | TryExpr | UnaryExpr | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
+    := UnaryExpr | BinaryExpr | ReservedExpr
+    | IfExpr | MatchExpr | TryExpr
+    | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
 
 IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 

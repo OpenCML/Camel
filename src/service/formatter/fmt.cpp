@@ -587,9 +587,9 @@ any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
 }
 
 /*
-memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
-any Formatter::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
+any Formatter::visitIndices(OpenCMLParser::IndicesContext *context) {
     string result = "[" + any_cast<string>(visitDataExpr(context->dataExpr(0)));
     if (context->children.size() > 3) {
         result += ": " + any_cast<string>(visitDataExpr(context->dataExpr(1)));
@@ -859,7 +859,7 @@ any Formatter::visitBindExpr(OpenCMLParser::BindExprContext *context) {
 
 /*
 annoExpr
-    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    : withExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
     ;
 */
 any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
@@ -878,20 +878,30 @@ any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
 
 /*
 withExpr
-    : indexExpr (('.' | '?.') indexExpr)*
+    : accessExpr (('.' | '?.') accessExpr)*
     ;
 */
 any Formatter::visitWithExpr(OpenCMLParser::WithExprContext *context) {
-    return formatBiOpsList(context->indexExpr(), context->children, false);
+    return formatBiOpsList(context->accessExpr(), context->children, false);
 }
 
 /*
-indexExpr
-    : primaryData ('.$' primaryData)*
+accessExpr
+    : primaryData ('.$' (IDENTIFIER | INTEGER))*
     ;
 */
-any Formatter::visitIndexExpr(OpenCMLParser::IndexExprContext *context) {
-    return formatBiOpsList(context->primaryData(), context->children, false);
+any Formatter::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
+    string result = any_cast<string>(visitPrimaryData(context->primaryData()));
+    for (size_t i = 1; i < context->children.size(); i++) {
+        const auto &child = context->children[i];
+        if (antlr4::tree::TerminalNode::is(child)) {
+            antlr4::tree::TerminalNode *terminalNode = dynamic_cast<antlr4::tree::TerminalNode *>(child);
+            result += terminalNode->getText();
+        } else {
+            result += any_cast<string>(visit(child));
+        }
+    }
+    return result;
 }
 
 /*

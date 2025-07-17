@@ -1036,12 +1036,12 @@ any Constructor::visitBracketValues(OpenCMLParser::BracketValuesContext *context
 };
 
 /*
-memberAccess : '[' entityExpr ']' ;
+indices : '[' entityExpr ']' ;
 */
-any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
-    enter("MemberAccess");
+any Constructor::visitIndices(OpenCMLParser::IndicesContext *context) {
+    enter("Indices");
     any res = visitEntityExpr(context->entityExpr());
-    leave("MemberAccess");
+    leave("Indices");
     return res;
 };
 
@@ -1327,7 +1327,7 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
 
 /*
 annotatedExpr
-    : primaryExpr (memberAccess | parentArgues | angledValues | annotation)*
+    : primaryExpr (indices | parentArgues | angledValues | annotation)*
     ;
 */
 any Constructor::visitAnnotatedExpr(OpenCMLParser::AnnotatedExprContext *context) {

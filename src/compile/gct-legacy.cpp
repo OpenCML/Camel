@@ -684,9 +684,9 @@
 // any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return nullptr; }
 
 // /*
-// memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+// indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 // */
-// any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) { return nullptr; }
+// any Constructor::visitIndices(OpenCMLParser::IndicesContext *context) { return nullptr; }
 
 // /*
 // parentParams : '(' pairedParams? ','? ')' ;
@@ -835,7 +835,7 @@
 
 // /*
 // annoExpr
-//     : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+//     : withExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
 //     ;
 // */
 // any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }

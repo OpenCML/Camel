@@ -288,7 +288,7 @@ class DataOp {
 node_ptr_t Constructor::visitDataExpr(const AST::node_ptr_t &ast) {
     enter("DataExpr");
     assert(ast->type() == AST::LoadType::Data);
-    const auto &dataExpr = ast->loadAs<AST::DataExprLoad>();
+    const auto &dataExpr = ast->loadAs<AST::BinaryExprLoad>();
     node_ptr_t res;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 

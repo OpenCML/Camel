@@ -123,7 +123,7 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context);
 
-    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
+    std::any visitIndices(OpenCMLParser::IndicesContext *context);
 
     std::any visitParentParams(OpenCMLParser::ParentParamsContext *context);
 
@@ -171,7 +171,7 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
 
-    std::any visitIndexExpr(OpenCMLParser::IndexExprContext *context);
+    std::any visitAccessExpr(OpenCMLParser::AccessExprContext *context);
 
     std::any visitDictData(OpenCMLParser::DictDataContext *context);
 

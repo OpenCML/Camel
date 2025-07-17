@@ -23,9 +23,25 @@
 
 namespace AbstractSyntaxTree {
 
-enum class DataType { DataExpr, IfExpr, MatchExpr, TryExpr, UnaryExpr, Literal, List, Dict, Tuple, Func, Ref };
+enum class DataType {
+    UnaryExpr,
+    BinaryExpr,
+    ReservedExpr,
+    IfExpr,
+    MatchExpr,
+    TryExpr,
+    UnaryExpr,
+    Literal,
+    List,
+    Dict,
+    Tuple,
+    Func,
+    Ref
+};
 
-enum class DataOp {
+enum class UnaryDataOp { Not, Neg, Inv };
+
+enum class BinaryDataOp {
     Assign,
     AssignAdd,
     AssignSub,
@@ -53,30 +69,22 @@ enum class DataOp {
     Mod,
     Mat,
     Exp,
-    NullThen,
-    ErrorThen,
-    NotNullThen,
-    Index,
-    Call,
-    With,
-    Bind,
-    As,
-    Is,
-    Not,
-    Neg,
-    Inv
+    Index
 };
 
-std::string dataOpToString(DataOp op);
+enum class ReservedDataOp { NullThen, ErrorThen, NotNullThen, Access, Call, With, Bind, As, Is };
 
-std::string dataTypeToString(DataType type);
+std::string to_string(DataType type);
+std::string to_string(UnaryDataOp op);
+std::string to_string(BinaryDataOp op);
+std::string to_string(ReservedDataOp op);
 
 class DataLoad : public Load {
   public:
     DataLoad(DataType type, bool notNull = false, bool waited = false)
         : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}
     const std::string toString() const override {
-        std::string result = "DataLoad: " + dataTypeToString(dataType_) + this->status();
+        std::string result = "DataLoad: " + to_string(dataType_) + this->status();
         return result;
     }
 
@@ -105,15 +113,37 @@ class DataLoad : public Load {
     bool waited_;
 };
 
-class DataExprLoad : public DataLoad {
+class UnaryExprLoad : public DataLoad {
   public:
-    DataExprLoad(DataOp op) : DataLoad(DataType::DataExpr), op_(op) {}
-    const std::string toString() const override { return "DataExpr: " + dataOpToString(op_) + this->status(); }
+    UnaryExprLoad(UnaryDataOp op) : DataLoad(DataType::UnaryExpr), op_(op) {}
+    const std::string toString() const override { return "UnaryExpr: " + to_string(op_) + this->status(); }
 
-    DataOp op() const { return op_; }
+    UnaryDataOp op() const { return op_; }
 
   private:
-    DataOp op_;
+    UnaryDataOp op_;
+};
+
+class BinaryExprLoad : public DataLoad {
+  public:
+    BinaryExprLoad(BinaryDataOp op) : DataLoad(DataType::BinaryExpr), op_(op) {}
+    const std::string toString() const override { return "BinaryExpr: " + to_string(op_) + this->status(); }
+
+    BinaryDataOp op() const { return op_; }
+
+  private:
+    BinaryDataOp op_;
+};
+
+class ReservedExprLoad : public DataLoad {
+  public:
+    ReservedExprLoad(ReservedDataOp op) : DataLoad(DataType::ReservedExpr), op_(op) {}
+    const std::string toString() const override { return "ReservedExpr: " + to_string(op_) + this->status(); }
+
+    ReservedDataOp op() const { return op_; }
+
+  private:
+    ReservedDataOp op_;
 };
 
 class IfExprLoad : public DataLoad {

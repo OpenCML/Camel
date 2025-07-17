@@ -97,7 +97,7 @@ pairedParams : keyParamPair (',' keyParamPair)* ;
 
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 
-memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 
 parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
 parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
@@ -179,15 +179,15 @@ bindExpr
     ;
 
 annoExpr
-    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    : withExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
     ;
 
 withExpr
-    : indexExpr (('.' | '?.') indexExpr)*
+    : accessExpr (('.' | '?.') accessExpr)*
     ;
 
-indexExpr
-    : primaryData ('.$' primaryData)*
+accessExpr
+    : primaryData ('.$' (IDENTIFIER | INTEGER))*
     ;
 
 dictData

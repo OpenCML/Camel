@@ -24,117 +24,137 @@
 
 namespace AbstractSyntaxTree {
 
-std::string dataOpToString(DataOp op) {
-    switch (op) {
-    case DataOp::Assign:
-        return "=";
-    case DataOp::AssignAdd:
-        return "+=";
-    case DataOp::AssignSub:
-        return "-=";
-    case DataOp::AssignMul:
-        return "*=";
-    case DataOp::AssignDiv:
-        return "/=";
-    case DataOp::AssignMod:
-        return "%=";
-    case DataOp::AssignMat:
-        return "@=";
-    case DataOp::AssignExp:
-        return "^=";
-    case DataOp::AssignAnd:
-        return "&=";
-    case DataOp::AssignOr:
-        return "|=";
-    case DataOp::Or:
-        return "||";
-    case DataOp::And:
-        return "&&";
-    case DataOp::Eq:
-        return "==";
-    case DataOp::Neq:
-        return "!=";
-    case DataOp::StrictEq:
-        return "===";
-    case DataOp::StrictNeq:
-        return "!==";
-    case DataOp::Less:
-        return "<";
-    case DataOp::LessEq:
-        return "<=";
-    case DataOp::Greater:
-        return ">";
-    case DataOp::GreaterEq:
-        return ">=";
-    case DataOp::Add:
-        return "+";
-    case DataOp::Sub:
-        return "-";
-    case DataOp::Mul:
-        return "*";
-    case DataOp::Div:
-        return "/";
-    case DataOp::Mod:
-        return "%";
-    case DataOp::Mat:
-        return "@";
-    case DataOp::Exp:
-        return "^";
-    case DataOp::NullThen:
-        return "??";
-    case DataOp::ErrorThen:
-        return "!!";
-    case DataOp::NotNullThen:
-        return "?";
-    case DataOp::Index:
-        return "[]";
-    case DataOp::Call:
-        return "()";
-    case DataOp::With:
-        return "<>";
-    case DataOp::Bind:
-        return "..";
-    case DataOp::As:
-        return "AS";
-    case DataOp::Is:
-        return "IS";
-    case DataOp::Not:
-        return "!";
-    case DataOp::Neg:
-        return "-";
-    case DataOp::Inv:
-        return "~";
-    default:
-        throw std::runtime_error("Unknown data operation");
-    }
-}
-
-std::string dataTypeToString(DataType type) {
+std::string to_string(DataType type) {
     switch (type) {
-    case DataType::DataExpr:
-        return "DataExpr";
+    case DataType::UnaryExpr:
+        return "UnaryExpr";
+    case DataType::BinaryExpr:
+        return "BinaryExpr";
+    case DataType::ReservedExpr:
+        return "ReservedExpr";
     case DataType::IfExpr:
         return "IfExpr";
     case DataType::MatchExpr:
         return "MatchExpr";
     case DataType::TryExpr:
         return "TryExpr";
-    case DataType::UnaryExpr:
-        return "UnaryExpr";
     case DataType::Literal:
         return "Literal";
     case DataType::List:
-        return "List";
+        return "ListData";
     case DataType::Dict:
-        return "Dict";
+        return "DictData";
     case DataType::Tuple:
-        return "Tuple";
+        return "TupleData";
     case DataType::Func:
-        return "Func";
+        return "FuncData";
     case DataType::Ref:
-        return "Ref";
+        return "RefData";
     default:
-        throw std::runtime_error("Unknown DataType");
+        assert(false && "Unknown DataType");
+        return "UnknownDataType";
+    }
+}
+
+std::string to_string(UnaryDataOp op) {
+    switch (op) {
+    case UnaryDataOp::Not:
+        return "!";
+    case UnaryDataOp::Neg:
+        return "-";
+    case UnaryDataOp::Inv:
+        return "~";
+    default:
+        assert(false && "Unknown UnaryDataOp");
+        return "UnknownUnaryDataOp";
+    }
+}
+
+std::string to_string(BinaryDataOp op) {
+    switch (op) {
+    case BinaryDataOp::Assign:
+        return "=";
+    case BinaryDataOp::AssignAdd:
+        return "+=";
+    case BinaryDataOp::AssignSub:
+        return "-=";
+    case BinaryDataOp::AssignMul:
+        return "*=";
+    case BinaryDataOp::AssignDiv:
+        return "/=";
+    case BinaryDataOp::AssignMod:
+        return "%=";
+    case BinaryDataOp::AssignMat:
+        return "@=";
+    case BinaryDataOp::AssignExp:
+        return "^=";
+    case BinaryDataOp::AssignAnd:
+        return "&=";
+    case BinaryDataOp::AssignOr:
+        return "|=";
+    case BinaryDataOp::Or:
+        return "||";
+    case BinaryDataOp::And:
+        return "&&";
+    case BinaryDataOp::Eq:
+        return "==";
+    case BinaryDataOp::Neq:
+        return "!=";
+    case BinaryDataOp::StrictEq:
+        return "===";
+    case BinaryDataOp::StrictNeq:
+        return "!==";
+    case BinaryDataOp::Less:
+        return "<";
+    case BinaryDataOp::LessEq:
+        return "<=";
+    case BinaryDataOp::Greater:
+        return ">";
+    case BinaryDataOp::GreaterEq:
+        return ">=";
+    case BinaryDataOp::Add:
+        return "+";
+    case BinaryDataOp::Sub:
+        return "-";
+    case BinaryDataOp::Mul:
+        return "*";
+    case BinaryDataOp::Div:
+        return "/";
+    case BinaryDataOp::Mod:
+        return "%";
+    case BinaryDataOp::Mat:
+        return "@";
+    case BinaryDataOp::Exp:
+        return "^";
+    case BinaryDataOp::Index:
+        return "[]";
+    default:
+        assert(false && "Unknown BinaryDataOp");
+        return "UnknownBinaryDataOp";
+    }
+}
+
+std::string to_string(ReservedDataOp op) {
+    switch (op) {
+    case ReservedDataOp::NullThen:
+        return "??";
+    case ReservedDataOp::ErrorThen:
+        return "!!";
+    case ReservedDataOp::NotNullThen:
+        return "?";
+    case ReservedDataOp::Call:
+        return "()";
+    case ReservedDataOp::With:
+        return "<>";
+    case ReservedDataOp::Bind:
+        return "..";
+    case ReservedDataOp::As:
+        return "AS";
+    case ReservedDataOp::Is:
+        return "IS";
+    default:
+        assert(false && "Unknown ReservedDataOp");
+        return "UnknownReservedDataOp";
     }
 }
 
