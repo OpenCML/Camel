@@ -24,10 +24,11 @@
 #include <stdexcept>
 #include <string>
 
+#include "common/func.h"
+#include "common/impl.h"
+#include "common/literal.h"
 #include "common/ref.h"
 #include "common/tree.h"
-#include "common/impl.h"
-#include "common/func.h"
 
 namespace AbstractSyntaxTree {
 
@@ -114,29 +115,6 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
         assert(typeid(load_) == typeid(LoadType) && "Load type does not match requested type");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
-};
-
-enum class LiteralType {
-    String,
-    FString,
-    Integer,
-    Real,
-    Boolean,
-    Null,
-};
-
-class Literal {
-  public:
-    Literal(LiteralType type, const std::string &data) : type_(type), data_(data) {}
-    ~Literal() = default;
-    const std::string toString() const { return data_; }
-
-    LiteralType type() const { return type_; }
-    const std::string &data() const { return data_; }
-
-  private:
-    LiteralType type_;
-    std::string data_;
 };
 
 class ModuleLoad : public Load {

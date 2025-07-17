@@ -91,9 +91,9 @@ const string FuncLoad::toString() const {
     return ss.str();
 }
 
-const string NRefLoad::toString() const { return "NREF: " + ident_; }
+const string NRefLoad::toString() const { return "NREF: " + ref_; }
 
-const string DRefLoad::toString() const { return "DREF: " + ident_; }
+const string DRefLoad::toString() const { return "DREF: " + ref_; }
 
 const string WaitLoad::toString() const {
     ostringstream oss;

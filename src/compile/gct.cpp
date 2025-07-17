@@ -18,6 +18,7 @@
  */
 
 #include "gct.h"
+#include "utils/token.h"
 #include "utils/type.h"
 
 #define DEBUG_LEVEL 0
@@ -31,18 +32,41 @@ template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&..
     return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
 }
 
-template <typename DataType, typename... Args> node_ptr_t createDataNode(Args &&...args) {
-    return createNodeAs<DataLoad>(std::make_shared<DataType>(std::forward<Args>(args)...));
-}
-
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
     if (node->type() == NodeType::DATA) {
         return node->loadAs<DataLoad>()->data();
     } else if (node->type() == NodeType::DREF) {
-        return make_shared<RefData>(node->loadAs<DRefLoad>()->ident());
+        return make_shared<RefData>(node->loadAs<DRefLoad>()->ref());
     } else {
         return nullptr;
     }
+}
+
+pair<node_ptr_t, data_ptr_t> Constructor::makeRefData(const node_ptr_t &expr) {
+    const string indent = to_string(indentIndex_++);
+    node_ptr_t refNode = createNodeAs<NRefLoad>(indent);
+    *refNode << expr;
+    data_ptr_t data = make_shared<RefData>(indent);
+    return make_pair(refNode, data);
+}
+
+pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr_t &execNode) {
+    const data_ptr_t data = extractStaticDataFromNode(node);
+    if (data) {
+        return make_pair(data, false);
+    } else {
+        auto [refNode, refData] = makeRefData(node);
+        *execNode << refNode;
+        return make_pair(refData, true);
+    }
+}
+
+pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling) {
+    auto [refData, dang] = extractData(node, execNode);
+    if (dang) {
+        dangling = true;
+    }
+    return make_pair(refData, dang);
 }
 
 /*
@@ -85,21 +109,6 @@ void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) { return nullptr
 ExportDecl(Ref[] refs) ;
 */
 void_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) { return nullptr; }
-
-/*
-NamedData(Ref ref) : Data data ;
-*/
-node_ptr_t Constructor::visitNamedData(const AST::node_ptr_t &ast) {}
-
-/*
-NamedType(Ref ref, bool isVar) : Type type ;
-*/
-node_ptr_t Constructor::visitNamedType(const AST::node_ptr_t &ast) {}
-
-/*
-NamedPair(Ref ref, bool isVar) : Type type, Data? data ;
-*/
-node_ptr_t Constructor::visitNamedPair(const AST::node_ptr_t &ast) {}
 
 node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
     enter("Stmt");
@@ -170,7 +179,22 @@ node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {}
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
-node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {
+    enter("StmtBlock");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+
+    pushScope();
+    for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
+        assert(stmt->type() == AST::LoadType::Stmt && "Expected a statement in StmtBlock");
+        *execNode << visitStmt(stmt);
+    }
+    popScope();
+
+    leave("StmtBlock");
+    return execNode;
+}
 
 node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
     enter("Data");
@@ -203,9 +227,6 @@ node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::Tuple:
         dataNode = visitTupleData(ast);
         break;
-    case AST::DataType::Index:
-        dataNode = visitIndexData(ast);
-        break;
     case AST::DataType::Func:
         dataNode = visitFuncData(ast);
         break;
@@ -222,59 +243,357 @@ node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
 
 /*
 DataExpr(DataOp op) := Any... lhs, rhs... ;
+class DataOp {
+    Assign,
+    AssignAdd,
+    AssignSub,
+    AssignMul,
+    AssignDiv,
+    AssignMod,
+    AssignMat,
+    AssignExp,
+    AssignAnd,
+    AssignOr,
+    Or,
+    And,
+    Eq,
+    Neq,
+    StrictEq,
+    StrictNeq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Mat,
+    Exp,
+    NullThen,
+    ErrorThen,
+    NotNullThen,
+    Index,
+    Call,
+    With,
+    Bind,
+    As,
+    Is,
+    Not,
+    Neg,
+    Inv
+};
 */
-node_ptr_t Constructor::visitDataExpr(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitDataExpr(const AST::node_ptr_t &ast) {
+    enter("DataExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &dataExpr = ast->loadAs<AST::DataExprLoad>();
+    node_ptr_t res;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+
+    switch (dataExpr->op()) {
+    // Assignment operations
+    case AST::DataOp::Assign: {
+    } break;
+    case AST::DataOp::AssignAdd: {
+    } break;
+    case AST::DataOp::AssignSub: {
+    } break;
+    case AST::DataOp::AssignMul: {
+    } break;
+    case AST::DataOp::AssignDiv: {
+    } break;
+    case AST::DataOp::AssignMod: {
+    } break;
+    case AST::DataOp::AssignMat: {
+    } break;
+    case AST::DataOp::AssignExp: {
+    } break;
+    case AST::DataOp::AssignAnd: {
+    } break;
+    case AST::DataOp::AssignOr: {
+    } break;
+
+    // Logical operations
+    case AST::DataOp::Or: {
+    } break;
+    case AST::DataOp::And: {
+    } break;
+    case AST::DataOp::Eq: {
+    } break;
+    case AST::DataOp::Neq: {
+    } break;
+    case AST::DataOp::StrictEq: {
+    } break;
+    case AST::DataOp::StrictNeq: {
+    } break;
+    case AST::DataOp::Less: {
+    } break;
+    case AST::DataOp::LessEq: {
+    } break;
+    case AST::DataOp::Greater: {
+    } break;
+    case AST::DataOp::GreaterEq: {
+    } break;
+
+    // Arithmetic operations
+    case AST::DataOp::Add: {
+    } break;
+    case AST::DataOp::Sub: {
+    } break;
+    case AST::DataOp::Mul: {
+    } break;
+    case AST::DataOp::Div: {
+    } break;
+    case AST::DataOp::Mod: {
+    } break;
+    case AST::DataOp::Mat: {
+    } break;
+    case AST::DataOp::Exp: {
+    } break;
+
+    // Null-safety operations
+    case AST::DataOp::NullThen: {
+    } break;
+    case AST::DataOp::ErrorThen: {
+    } break;
+    case AST::DataOp::NotNullThen: {
+    } break;
+
+    // Indexing and function call operations
+    case AST::DataOp::Index: {
+    } break;
+    case AST::DataOp::Call: {
+    } break;
+    case AST::DataOp::With: {
+    } break;
+    case AST::DataOp::Bind: {
+    } break;
+
+    // Type checking operations
+    case AST::DataOp::As: {
+    } break;
+    case AST::DataOp::Is: {
+    } break;
+
+    // Unary operations
+    case AST::DataOp::Not: {
+    } break;
+    case AST::DataOp::Neg: {
+    } break;
+    case AST::DataOp::Inv: {
+    } break;
+
+    default: {
+        reportDiagnostic("Unsupported DataOp: " + dataOpToString(dataExpr->op()), ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    }
+    }
+
+    leave("DataExpr");
+    return res;
+}
 
 /*
 IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 */
-node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
+    enter("IfExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    reportDiagnostic("IfExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("IfExpr");
+    return nullptr;
+}
 
 /*
 
 */
-node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
+    enter("MatchExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    reportDiagnostic("MatchExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("MatchExpr");
+    return nullptr;
+}
 
 /*
 
 */
-node_ptr_t Constructor::visitTryExpr(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitTryExpr(const AST::node_ptr_t &ast) {
+    enter("TryExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    reportDiagnostic("TryExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("TryExpr");
+    return nullptr;
+}
+
+template <typename T> inline data_ptr_t makeDataFromLiteral(const T &value) {
+    return tt::as_shared<Data>(make_shared<PrimaryData<T>>(value));
+}
 
 /*
 Literal(Value value) ;
+enum LiteralType {
+    String,
+    FString,
+    Integer,
+    Real,
+    Boolean,
+    Null,
+};
 */
-node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
+    enter("Literal");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &literal = ast->loadAs<AST::LiteralLoad>();
+    const Literal &value = literal->value();
+    const auto &str = value.data();
+    data_ptr_t data;
+    node_ptr_t res = createNodeAs<DataLoad>(data);
+    switch (value.type()) {
+    case LiteralType::String: {
+        data = tt::as_shared<Data>(make_shared<StringData>(str));
+    } break;
+    case LiteralType::FString: {
+        reportDiagnostic("FString is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case LiteralType::Integer: {
+        data = makeDataFromLiteral(parseNumber<int64_t>(str));
+    } break;
+    case LiteralType::Real: {
+        data = makeDataFromLiteral(parseNumber<double>(str));
+    } break;
+    case LiteralType::Boolean: {
+        if (str == "true") {
+            data = makeDataFromLiteral(true);
+        } else if (str == "false") {
+            data = makeDataFromLiteral(false);
+        } else {
+            reportDiagnostic("Invalid boolean literal: " + str, ast->load()->tokenRange(), Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+    } break;
+    case LiteralType::Null: {
+        data = tt::as_shared<Data>(make_shared<NullData>());
+    } break;
+    default: {
+        reportDiagnostic("Unknown literal type", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    }
+    }
+    leave("Literal");
+    return res;
+}
 
 /*
 ListData() : Data* data ;
 */
-node_ptr_t Constructor::visitListData(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitListData(const AST::node_ptr_t &ast) {
+    enter("ListData");
+    assert(ast->type() == AST::LoadType::Data);
+    auto listData = make_shared<ListData>();
+    node_ptr_t res = createNodeAs<DataLoad>(listData);
+    bool dangling = false;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        node_ptr_t dataNode = visitData(item);
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        listData->emplace(data);
+    }
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    leave("ListData");
+    return res;
+}
 
 /*
-DictData() : NamedPair* pairs ;
+DictData() : NamedData* dataList ;
 */
-node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {
+    enter("DictData");
+    assert(ast->type() == AST::LoadType::Data);
+    auto dictData = make_shared<DictData>();
+    node_ptr_t res = createNodeAs<DataLoad>(dictData);
+    bool dangling = false;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
+        const string &name = namedPair->getRef().ident();
+        node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        dictData->emplace(name, data);
+    }
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    leave("DictData");
+    return res;
+}
 
 /*
 TupleData() : Data* data ;
 */
-node_ptr_t Constructor::visitTupleData(const AST::node_ptr_t &ast) {}
-
-/*
-
-*/
-node_ptr_t Constructor::visitIndexData(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitTupleData(const AST::node_ptr_t &ast) {
+    enter("TupleData");
+    assert(ast->type() == AST::LoadType::Data);
+    auto tupleData = make_shared<TupleData>();
+    node_ptr_t res = createNodeAs<DataLoad>(tupleData);
+    bool dangling = false;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        node_ptr_t dataNode = visitData(item);
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        tupleData->emplace(data);
+    }
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    leave("TupleData");
+    return res;
+}
 
 /*
 FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 */
-node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {
+    enter("FuncData");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
+    func_type_ptr_t funcType = tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
+    node_ptr_t funcNode = createNodeAs<FuncLoad>(funcType);
+    *funcNode << stmtsNode;
+    leave("FuncData");
+    return funcNode;
+}
 
 /*
 RefData(Ref ref) ;
 */
-node_ptr_t Constructor::visitRefData(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitRefData(const AST::node_ptr_t &ast) {
+    enter("RefData");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &refData = ast->loadAs<AST::RefDataLoad>();
+    node_ptr_t refNode = createNodeAs<DRefLoad>(refData->ref());
+    leave("RefData");
+    return refNode;
+}
 
+/*
+Type(TypeType type) :=
+    NullableType | TypeExpr | ListType | DictType | TupleType
+    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+*/
 type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
     enter("Type");
     assert(ast->type() == AST::LoadType::Type);
@@ -321,29 +640,142 @@ type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
 }
 
 /*
-
+NullableType : Type type ;
 */
-type_ptr_t Constructor::visitNullableType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitNullableType(const AST::node_ptr_t &ast) {
+    enter("NullableType");
+    assert(ast->type() == AST::LoadType::Type);
+    type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
+    leave("NullableType");
+    return type;
+}
 
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
+enum TypeOp {
+    Union,
+    Inter,
+    Diff,
+    KeyUnion,
+    KeyInter,
+    KeyDiff,
+    ErrorThen,
+    Specialize, // Type type, (Type | Data)* args
+    TypeOf,
+    TypeAs
+}
 */
-type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
+    enter("TypeExpr");
+    assert(ast->type() == AST::LoadType::Type);
+    type_ptr_t res;
+    const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
+    AST::TypeOp op = typeExpr->op();
+    switch (op) {
+    case AST::TypeOp::Union: {
+        const auto &lhsType = visitType(ast->atAs<AST::TypeLoad>(0));
+        const auto &rhsType = visitType(ast->atAs<AST::TypeLoad>(1));
+        res = make_shared<UnionType>(lhsType, rhsType);
+    } break;
+    case AST::TypeOp::Inter: {
+        reportDiagnostic("TypeOp::Inter is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::Diff: {
+        reportDiagnostic("TypeOp::Diff is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::KeyUnion: {
+        reportDiagnostic("TypeOp::KeyUnion is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::KeyInter: {
+        reportDiagnostic("TypeOp::KeyInter is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::KeyDiff: {
+        reportDiagnostic("TypeOp::KeyDiff is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::ErrorThen: {
+        reportDiagnostic("TypeOp::ErrorThen is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::Specialize: {
+        reportDiagnostic("TypeOp::Specialize is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::TypeOf: {
+        reportDiagnostic("TypeOp::TypeOf is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::TypeAs: {
+        reportDiagnostic("TypeOp::TypeAs is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    default:
+        reportDiagnostic("Unsupported TypeOp: " + AST::typeOpToString(op), ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    }
+    leave("TypeExpr");
+    return res;
+}
 
 /*
 ListType(siz dim) : Type type ;
 */
-type_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {
+    enter("ListType");
+    assert(ast->type() == AST::LoadType::Type);
+    const auto &listTypeLoad = ast->loadAs<AST::ListTypeLoad>();
+    type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
+    const auto &arrayType = make_shared<ArrayType>(type, listTypeLoad->dims());
+    leave("ListType");
+    return arrayType;
+}
 
 /*
 DictType() : NamedType* types ;
 */
-type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {
+    enter("DictType");
+    assert(ast->type() == AST::LoadType::Type);
+    auto res = make_shared<DictType>();
+    for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &namedPair = child->loadAs<AST::NamedPairLoad>();
+        const string &name = namedPair->getRef().ident();
+        type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
+        data_ptr_t data = nullptr;
+        if (!res->add(name, type)) {
+            reportDiagnostic("Duplicate key detected: " + name, namedPair->tokenRange(), Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+    }
+    leave("DictType");
+    return res;
+}
 
 /*
 TupleType() : Type* types ;
 */
-type_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {}
+type_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {
+    enter("TupleType");
+    assert(ast->type() == AST::LoadType::Type);
+    vector<type_ptr_t> types;
+    for (const auto &child : *ast) {
+        type_ptr_t type = visitType(child);
+        types.push_back(type);
+    }
+    type_ptr_t tupleType = make_shared<TupleType>(types);
+    leave("TupleType");
+    return tupleType;
+}
 
 /*
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)

@@ -166,7 +166,7 @@ inline bool validateIdent(const std::string &str) {
 
 void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
     enter("NREF");
-    const string &ident = gct->loadAs<GCT::NRefLoad>()->ident();
+    const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     if (!validateIdent(ident)) {
         throw runtime_error("Identifiers starting and ending with '__' are reserved for internal use.");
     }
@@ -184,7 +184,7 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     enter("DREF");
-    const string &ident = gct->loadAs<GCT::DRefLoad>()->ident();
+    const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
     auto optNode = context_->nodeAt(ident);
     if (!optNode.has_value()) {
         throw runtime_error("Unresolved reference: " + ident);

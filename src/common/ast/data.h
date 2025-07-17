@@ -23,7 +23,7 @@
 
 namespace AbstractSyntaxTree {
 
-enum class DataType { DataExpr, IfExpr, MatchExpr, TryExpr, UnaryExpr, Literal, List, Dict, Tuple, Index, Func, Ref };
+enum class DataType { DataExpr, IfExpr, MatchExpr, TryExpr, UnaryExpr, Literal, List, Dict, Tuple, Func, Ref };
 
 enum class DataOp {
     Assign,
@@ -110,6 +110,8 @@ class DataExprLoad : public DataLoad {
     DataExprLoad(DataOp op) : DataLoad(DataType::DataExpr), op_(op) {}
     const std::string toString() const override { return "DataExpr: " + dataOpToString(op_) + this->status(); }
 
+    DataOp op() const { return op_; }
+
   private:
     DataOp op_;
 };
@@ -137,6 +139,8 @@ class LiteralLoad : public DataLoad {
     LiteralLoad(Literal value) : DataLoad(DataType::Literal), value_(value) {}
     const std::string toString() const override { return value_.toString() + this->status(); }
 
+    const Literal &value() const { return value_; }
+
   private:
     Literal value_;
 };
@@ -159,17 +163,13 @@ class TupleDataLoad : public DataLoad {
     const std::string toString() const override { return "TupleData" + this->status(); }
 };
 
-class IndexDataLoad : public DataLoad {
-  public:
-    IndexDataLoad() : DataLoad(DataType::Index) {}
-    const std::string toString() const override { return "IndexData" + this->status(); }
-};
-
 class FuncDataLoad : public DataLoad {
   public:
     FuncDataLoad() : DataLoad(DataType::Func) {} // anonymous function
     FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
     const std::string toString() const override { return "FuncData: " + ref_.toString() + this->status(); }
+
+    const Reference &ref() const { return ref_; }
 
   private:
     Reference ref_;
@@ -179,6 +179,8 @@ class RefDataLoad : public DataLoad {
   public:
     RefDataLoad(const Reference &ref) : DataLoad(DataType::Ref), ref_(ref) {}
     const std::string toString() const override { return "RefData: " + ref_.toString() + this->status(); }
+
+    const Reference &ref() const { return ref_; }
 
   private:
     Reference ref_;

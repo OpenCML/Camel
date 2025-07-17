@@ -56,6 +56,8 @@ class TypeExprLoad : public TypeLoad {
     TypeExprLoad(TypeOp op) : TypeLoad(TypeType::Expr), op_(op) {}
     const std::string toString() const override { return "TypeExpr: " + typeOpToString(op_); }
 
+    TypeOp op() const { return op_; }
+
   private:
     TypeOp op_;
 };

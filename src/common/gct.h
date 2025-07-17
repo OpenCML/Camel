@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "common/ref.h"
 #include "data.h"
 #include "entity.h"
 
@@ -104,23 +105,23 @@ class FuncLoad : public Load {
 };
 
 class NRefLoad : public Load {
-    std::string ident_;
+    Reference ref_;
 
   public:
-    NRefLoad(const std::string &ident) : Load(NodeType::NREF), ident_(ident) {}
+    NRefLoad(const Reference &ref) : Load(NodeType::NREF), ref_(ref) {}
 
-    const std::string ident() const { return ident_; }
+    const Reference ref() const { return ref_; }
 
     const std::string toString() const override;
 };
 
 class DRefLoad : public Load {
-    std::string ident_;
+    Reference ref_;
 
   public:
-    DRefLoad(const std::string &ident) : Load(NodeType::DREF), ident_(ident) {}
+    DRefLoad(const Reference &ref) : Load(NodeType::DREF), ref_(ref) {}
 
-    const std::string ident() const { return ident_; }
+    const Reference ref() const { return ref_; }
 
     const std::string toString() const override;
 };

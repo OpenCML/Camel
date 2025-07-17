@@ -129,8 +129,6 @@ std::string dataTypeToString(DataType type) {
         return "Dict";
     case DataType::Tuple:
         return "Tuple";
-    case DataType::Index:
-        return "Index";
     case DataType::Func:
         return "Func";
     case DataType::Ref:
