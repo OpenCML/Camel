@@ -103,7 +103,9 @@ class Constructor {
 
     // ast/data.h
     node_ptr_t visitData(const AST::node_ptr_t &ast);
-    node_ptr_t visitDataExpr(const AST::node_ptr_t &ast);
+    node_ptr_t visitUnaryExpr(const AST::node_ptr_t &ast);
+    node_ptr_t visitBinaryExpr(const AST::node_ptr_t &ast);
+    node_ptr_t visitReservedExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);

@@ -29,7 +29,8 @@ using namespace GCT;
 namespace GraphConstructTree {
 
 template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
-    return std::make_shared<Node>(std::make_shared<LoadType>(std::forward<Args>(args)...));
+    return std::make_shared<Node>(
+        std::dynamic_pointer_cast<Load>(std::make_shared<LoadType>(std::forward<Args>(args)...)));
 }
 
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
@@ -149,32 +150,145 @@ node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
 /*
 DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
 */
-node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
+    enter("DataDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &dataDeclLoad = ast->loadAs<AST::DataDeclLoad>();
+    bool isVar = dataDeclLoad->isVar();
+    const auto &refs = dataDeclLoad->refs();
+    const auto &typeNodes = ast->atAs<AST::RepeatedLoad>(0);
+    const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(1);
+
+    node_ptr_t res = createNodeAs<ExecLoad>();
+
+    switch (dataDeclLoad->unpackType()) {
+    case AST::UnpackType::Dict: {
+        reportDiagnostic("Dict unpacking is not supported in DataDecl", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::UnpackType::List: {
+        reportDiagnostic("List unpacking is not supported in DataDecl", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::UnpackType::Tuple: {
+        if (refs.size() != dataNodes->size()) {
+            reportDiagnostic("Tuple unpacking requires the same number of references and data nodes",
+                             ast->load()->tokenRange(), Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        for (size_t i = 0; i < refs.size(); ++i) {
+            const auto &ref = refs[i];
+            const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
+            if (dataNode->type() != AST::LoadType::Data) {
+                reportDiagnostic("Tuple unpacking requires Data type nodes", dataNode->load()->tokenRange(),
+                                 Diagnostic::Severity::Error);
+                throw BuildAbortException();
+            }
+            node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
+            *nRefNode << visitData(dataNode);
+            *res << nRefNode;
+        }
+    } break;
+    default:
+        assert(false && "Unknown unpack type in DataDecl");
+    }
+
+    leave("DataDecl");
+    return res;
+}
 
 /*
 FuncDecl(Ref ref) : FuncData ;
 */
-node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {
+    enter("FuncDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
+    const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
+    node_ptr_t funcNode = visitFuncData(funcDataNode);
+    node_ptr_t newRefNode = createNodeAs<NRefLoad>(funcLoad->ref().ident());
+    leave("FuncDecl");
+    return newRefNode;
+}
 
 /*
 TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
 */
-node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
+    enter("TypeDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
+    type_ptr_t type;
+    if (typeNode) {
+        type = visitType(typeNode);
+    } else {
+        reportDiagnostic("Type declaration requires a type", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    }
+    const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
+    node_ptr_t res = createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
+    leave("TypeDecl");
+    return res;
+}
 
 /*
 NameDecl(Ref ref, Ref alias) ;
 */
-node_ptr_t Constructor::visitNameDecl(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitNameDecl(const AST::node_ptr_t &ast) {
+    enter("NameDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    reportDiagnostic("NameDecl is not supported in the current version of the compiler. "
+                     "Please use DataDecl or TypeDecl instead.",
+                     ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("NameDecl");
+    return nullptr;
+}
 
 /*
-
+ExprStmt() : Data data ;
 */
-node_ptr_t Constructor::visitExprStmt(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitExprStmt(const AST::node_ptr_t &ast) {
+    enter("ExprStmt");
+    assert(ast->type() == AST::LoadType::Stmt);
+    node_ptr_t exprNode = visitData(ast->atAs<AST::DataLoad>(0));
+    leave("ExprStmt");
+    return exprNode;
+}
 
 /*
-
+ExitStmt(ExitType type) : Data* data ;
 */
-node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {}
+node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
+    enter("ExitStmt");
+    assert(ast->type() == AST::LoadType::Stmt);
+    node_ptr_t exitNode = createNodeAs<ExitLoad>();
+    if (ast->size() > 0) {
+        if (ast->size() == 1) {
+            const auto &dataNode = ast->atAs<AST::DataLoad>(0);
+            *exitNode << visitData(dataNode);
+        } else {
+            auto tupleData = make_shared<TupleData>();
+            node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
+            bool dangling = false;
+            node_ptr_t execNode = createNodeAs<ExecLoad>();
+            for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+                node_ptr_t dataNode = visitData(item);
+                auto [data, _] = extractData(dataNode, execNode, dangling);
+                tupleData->emplace(data);
+            }
+            if (dangling) {
+                *execNode << dataNode;
+                dataNode = execNode;
+            }
+            *exitNode << dataNode;
+        }
+    }
+    enter("ExitStmt");
+    return exitNode;
+}
 
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
@@ -203,8 +317,14 @@ node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
     node_ptr_t dataNode;
 
     switch (data->dataType()) {
-    case AST::DataType::DataExpr:
-        dataNode = visitDataExpr(ast);
+    case AST::DataType::UnaryExpr:
+        dataNode = visitUnaryExpr(ast);
+        break;
+    case AST::DataType::BinaryExpr:
+        dataNode = visitBinaryExpr(ast);
+        break;
+    case AST::DataType::ReservedExpr:
+        dataNode = visitReservedExpr(ast);
         break;
     case AST::DataType::IfExpr:
         dataNode = visitIfExpr(ast);
@@ -242,8 +362,41 @@ node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
 }
 
 /*
-DataExpr(DataOp op) := Any... lhs, rhs... ;
-class DataOp {
+enum UnaryDataOp {
+    Not,
+    Neg,
+    Inv
+}
+UnaryExpr(UnaryDataOp op) := Data data ;
+*/
+node_ptr_t Constructor::visitUnaryExpr(const AST::node_ptr_t &ast) {
+    enter("UnaryExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &unaryExpr = ast->loadAs<AST::UnaryExprLoad>();
+    const auto &dataASTNode = ast->atAs<AST::DataLoad>(0);
+    node_ptr_t opNode;
+    switch (unaryExpr->op()) {
+    case AST::UnaryDataOp::Not: {
+        opNode = createNodeAs<DRefLoad>("__not__");
+    } break;
+    case AST::UnaryDataOp::Neg: {
+        opNode = createNodeAs<DRefLoad>("__neg__");
+    } break;
+    case AST::UnaryDataOp::Inv: {
+        opNode = createNodeAs<DRefLoad>("__inv__");
+    } break;
+    default:
+        assert(false && "Unknown unary operation");
+        return nullptr;
+    }
+    node_ptr_t linkNode = createNodeAs<LinkLoad>();
+    *linkNode << opNode << visitData(dataASTNode);
+    leave("UnaryExpr");
+    return linkNode;
+}
+
+/*
+enum BinaryDataOp {
     Assign,
     AssignAdd,
     AssignSub,
@@ -271,131 +424,215 @@ class DataOp {
     Mod,
     Mat,
     Exp,
+    Index, // Data obj, Data* indices
+}
+BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
+*/
+node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
+    enter("BinaryExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
+    const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
+    node_ptr_t opNode;
+    switch (binaryExpr->op()) {
+    case AST::BinaryDataOp::Assign: {
+        opNode = createNodeAs<DRefLoad>("__assn__");
+    } break;
+    case AST::BinaryDataOp::AssignAdd: {
+        opNode = createNodeAs<DRefLoad>("__assn_add__");
+    } break;
+    case AST::BinaryDataOp::AssignSub: {
+        opNode = createNodeAs<DRefLoad>("__assn_sub__");
+    } break;
+    case AST::BinaryDataOp::AssignMul: {
+        opNode = createNodeAs<DRefLoad>("__assn_mul__");
+    } break;
+    case AST::BinaryDataOp::AssignDiv: {
+        opNode = createNodeAs<DRefLoad>("__assn_div__");
+    } break;
+    case AST::BinaryDataOp::AssignMod: {
+        opNode = createNodeAs<DRefLoad>("__assn_mod__");
+    } break;
+    case AST::BinaryDataOp::AssignMat: {
+        opNode = createNodeAs<DRefLoad>("__assn_mat__");
+    } break;
+    case AST::BinaryDataOp::AssignExp: {
+        opNode = createNodeAs<DRefLoad>("__assn_exp__");
+    } break;
+    case AST::BinaryDataOp::AssignAnd: {
+        opNode = createNodeAs<DRefLoad>("__assn_and__");
+    } break;
+    case AST::BinaryDataOp::AssignOr: {
+        opNode = createNodeAs<DRefLoad>("__assn_or__");
+    } break;
+    case AST::BinaryDataOp::Or: {
+        opNode = createNodeAs<DRefLoad>("__or__");
+    } break;
+    case AST::BinaryDataOp::And: {
+        opNode = createNodeAs<DRefLoad>("__and__");
+    } break;
+    case AST::BinaryDataOp::Eq: {
+        opNode = createNodeAs<DRefLoad>("__eq__");
+    } break;
+    case AST::BinaryDataOp::Neq: {
+        opNode = createNodeAs<DRefLoad>("__neq__");
+    } break;
+    case AST::BinaryDataOp::StrictEq: {
+        opNode = createNodeAs<DRefLoad>("__strict_eq__");
+    } break;
+    case AST::BinaryDataOp::StrictNeq: {
+        opNode = createNodeAs<DRefLoad>("__strict_neq__");
+    } break;
+    case AST::BinaryDataOp::Less: {
+        opNode = createNodeAs<DRefLoad>("__less__");
+    } break;
+    case AST::BinaryDataOp::LessEq: {
+        opNode = createNodeAs<DRefLoad>("__less_eq__");
+    } break;
+    case AST::BinaryDataOp::Greater: {
+        opNode = createNodeAs<DRefLoad>("__greater__");
+    } break;
+    case AST::BinaryDataOp::GreaterEq: {
+        opNode = createNodeAs<DRefLoad>("__greater_eq__");
+    } break;
+    case AST::BinaryDataOp::Add: {
+        opNode = createNodeAs<DRefLoad>("__add__");
+    } break;
+    case AST::BinaryDataOp::Sub: {
+        opNode = createNodeAs<DRefLoad>("__sub__");
+    } break;
+    case AST::BinaryDataOp::Mul: {
+        opNode = createNodeAs<DRefLoad>("__mul__");
+    } break;
+    case AST::BinaryDataOp::Div: {
+        opNode = createNodeAs<DRefLoad>("__div__");
+    } break;
+    case AST::BinaryDataOp::Mod: {
+        opNode = createNodeAs<DRefLoad>("__mod__");
+    } break;
+    case AST::BinaryDataOp::Mat: {
+        opNode = createNodeAs<DRefLoad>("__mat__");
+    } break;
+    case AST::BinaryDataOp::Exp: {
+        opNode = createNodeAs<DRefLoad>("__exp__");
+    } break;
+    case AST::BinaryDataOp::Index: {
+        opNode = createNodeAs<DRefLoad>("__index__");
+    } break;
+    default:
+        assert(false && "Unknown binary operation");
+        return nullptr;
+    }
+    node_ptr_t linkNode = createNodeAs<LinkLoad>();
+    *linkNode << opNode << visitData(lhsASTNode);
+    if (binaryExpr->op() == AST::BinaryDataOp::Index) {
+        auto indices = ast->atAs<AST::RepeatedLoad>(1);
+        for (const auto &index : *indices) {
+            *linkNode << visitData(index);
+        }
+    } else {
+        const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
+        *linkNode << visitData(rhsASTNode);
+    }
+    leave("BinaryExpr");
+    return linkNode;
+}
+
+/*
+enum ReservedDataOp {
+    NullThen,
     NullThen,
     ErrorThen,
     NotNullThen,
-    Index,
-    Call,
-    With,
-    Bind,
-    As,
-    Is,
-    Not,
-    Neg,
-    Inv
-};
+    Call, // Data obj, Data* args, NamedData* kwargs
+    With, // Data obj, Data* args, NamedData* kwargs
+    Bind, // Data lhs, Data rhs
+    As, // Data lhs, Type rhs
+    Is, // Data lhs, Type rhs
+    Access, // Data obj, RefData ref
+}
+ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
 */
-node_ptr_t Constructor::visitDataExpr(const AST::node_ptr_t &ast) {
-    enter("DataExpr");
+node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
+    enter("ReservedExpr");
     assert(ast->type() == AST::LoadType::Data);
-    const auto &dataExpr = ast->loadAs<AST::BinaryExprLoad>();
     node_ptr_t res;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
-
-    node_ptr_t opNode;
-
-    switch (dataExpr->op()) {
-    // Assignment operations
-    case AST::DataOp::Assign:
-        opNode = createNodeAs<DRefLoad>("__assn__");
-        break;
-    case AST::DataOp::AssignAdd: {
-    } break;
-    case AST::DataOp::AssignSub: {
-    } break;
-    case AST::DataOp::AssignMul: {
-    } break;
-    case AST::DataOp::AssignDiv: {
-    } break;
-    case AST::DataOp::AssignMod: {
-    } break;
-    case AST::DataOp::AssignMat: {
-    } break;
-    case AST::DataOp::AssignExp: {
-    } break;
-    case AST::DataOp::AssignAnd: {
-    } break;
-    case AST::DataOp::AssignOr: {
-    } break;
-
-    // Logical operations
-    case AST::DataOp::Or: {
-    } break;
-    case AST::DataOp::And: {
-    } break;
-    case AST::DataOp::Eq: {
-    } break;
-    case AST::DataOp::Neq: {
-    } break;
-    case AST::DataOp::StrictEq: {
-    } break;
-    case AST::DataOp::StrictNeq: {
-    } break;
-    case AST::DataOp::Less: {
-    } break;
-    case AST::DataOp::LessEq: {
-    } break;
-    case AST::DataOp::Greater: {
-    } break;
-    case AST::DataOp::GreaterEq: {
-    } break;
-
-    // Arithmetic operations
-    case AST::DataOp::Add: {
-    } break;
-    case AST::DataOp::Sub: {
-    } break;
-    case AST::DataOp::Mul: {
-    } break;
-    case AST::DataOp::Div: {
-    } break;
-    case AST::DataOp::Mod: {
-    } break;
-    case AST::DataOp::Mat: {
-    } break;
-    case AST::DataOp::Exp: {
-    } break;
-
-    // Null-safety operations
-    case AST::DataOp::NullThen: {
-    } break;
-    case AST::DataOp::ErrorThen: {
-    } break;
-    case AST::DataOp::NotNullThen: {
-    } break;
-
-    // Indexing and function call operations
-    case AST::DataOp::Index: {
-    } break;
-    case AST::DataOp::Call: {
-    } break;
-    case AST::DataOp::With: {
-    } break;
-    case AST::DataOp::Bind: {
-    } break;
-
-    // Type checking operations
-    case AST::DataOp::As: {
-    } break;
-    case AST::DataOp::Is: {
-    } break;
-
-    // Unary operations
-    case AST::DataOp::Not: {
-    } break;
-    case AST::DataOp::Neg: {
-    } break;
-    case AST::DataOp::Inv: {
-    } break;
-
-    default: {
-        reportDiagnostic("Unsupported DataOp: " + dataOpToString(dataExpr->op()), ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+    const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
+    const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
+    switch (reservedExpr->op()) {
+    case AST::ReservedDataOp::NullThen: {
+        reportDiagnostic("NullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
         throw BuildAbortException();
-    }
-    }
+    } break;
+    case AST::ReservedDataOp::ErrorThen: {
+        reportDiagnostic("ErrorThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::ReservedDataOp::NotNullThen: {
+        reportDiagnostic("NotNullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
 
-    leave("DataExpr");
+    case AST::ReservedDataOp::Call: {
+        const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
+        const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
+        res = createNodeAs<LinkLoad>(argsNode->size());
+        const auto &linkLoad = res->loadAs<LinkLoad>();
+        *res << visitData(lhsASTNode);
+        for (auto &argNode : *argsNode) {
+            *res << visitData(argNode);
+        }
+        for (const auto &kwargNode : *kwargsNode) {
+            const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
+            const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
+            const auto &kwargName = namedData->ref().ident();
+            linkLoad->addKwarg(kwargName);
+            *res << visitData(dataNode);
+        }
+    } break;
+    case AST::ReservedDataOp::With: {
+        const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
+        const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
+        res = createNodeAs<WithLoad>(argsNode->size());
+        const auto &linkLoad = res->loadAs<WithLoad>();
+        *res << visitData(lhsASTNode);
+        for (auto &argNode : *argsNode) {
+            *res << visitData(argNode);
+        }
+        for (const auto &kwargNode : *kwargsNode) {
+            const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
+            const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
+            const auto &kwargName = namedData->ref().ident();
+            linkLoad->addKwarg(kwargName);
+            *res << visitData(dataNode);
+        }
+    } break;
+    case AST::ReservedDataOp::Bind: {
+        const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
+        res = createNodeAs<BindLoad>();
+        *res << visitData(lhsASTNode) << visitData(rhsASTNode);
+    } break;
+
+    case AST::ReservedDataOp::As: {
+        reportDiagnostic("As is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::ReservedDataOp::Is: {
+        reportDiagnostic("Is is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+
+    case AST::ReservedDataOp::Access: {
+        const auto &refASTNode = ast->atAs<AST::RefDataLoad>(1);
+        const auto &refData = refASTNode->loadAs<RefData>();
+        res = createNodeAs<AccsLoad>(refData->ref());
+        *res << visitData(lhsASTNode);
+    } break;
+    default:
+        assert(false && "Unknown reserved operation");
+        res = nullptr;
+    }
+    leave("ReservedExpr");
     return res;
 }
 
@@ -529,7 +766,7 @@ node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {
     node_ptr_t execNode = createNodeAs<ExecLoad>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
-        const string &name = namedPair->getRef().ident();
+        const string &name = namedPair->ref().ident();
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
         auto [data, _] = extractData(dataNode, execNode, dangling);
         dictData->emplace(name, data);

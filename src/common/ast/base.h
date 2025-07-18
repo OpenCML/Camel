@@ -199,7 +199,7 @@ class NamedDataLoad : public Load {
     NamedDataLoad(const Reference &ref) : Load(LoadType::NamedData), ref_(ref) {}
     const std::string toString() const override { return "NamedData: " + ref_.toString(); }
 
-    const Reference &getRef() const { return ref_; }
+    const Reference &ref() const { return ref_; }
 
   private:
     Reference ref_;

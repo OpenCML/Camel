@@ -36,5 +36,3 @@ class RefData : public Data {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };
-
-using ref_data_ptr_t = std::shared_ptr<RefData>;

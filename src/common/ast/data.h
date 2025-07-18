@@ -30,7 +30,6 @@ enum class DataType {
     IfExpr,
     MatchExpr,
     TryExpr,
-    UnaryExpr,
     Literal,
     List,
     Dict,

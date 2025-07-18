@@ -31,7 +31,25 @@ using node_ptr_t = std::shared_ptr<Node>;
 class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
-enum class NodeType { DATA, VARI, TYPE, DECL, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, EXIT, EXEC, FROM };
+enum class NodeType {
+    DATA, //
+    VARI,
+    TYPE,
+    DECL,
+    FUNC,
+    NREF,
+    DREF,
+    WAIT,
+    ANNO,
+    LINK,
+    WITH,
+    BIND,
+    EXIT,
+    EXEC,
+    FROM,
+    ACCS,
+    BRCH,
+};
 
 class Load {
   protected:
@@ -78,10 +96,18 @@ class TypeLoad : public Load {
     type_ptr_t dataType_;
 
   public:
-    TypeLoad(type_ptr_t type) : Load(NodeType::TYPE), dataType_(type) {}
+    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri)
+        : Load(NodeType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
     type_ptr_t dataType() const { return dataType_; }
 
+    ImplMark implMark() const { return implMark_; }
+    const std::string &uri() const { return uri_; }
+
     const std::string toString() const override;
+
+  private:
+    ImplMark implMark_ = ImplMark::Graph;
+    std::string uri_;
 };
 
 class DeclLoad : public Load {
@@ -109,6 +135,7 @@ class NRefLoad : public Load {
 
   public:
     NRefLoad(const Reference &ref) : Load(NodeType::NREF), ref_(ref) {}
+    NRefLoad(const std::string &str) : Load(NodeType::NREF), ref_(str) {}
 
     const Reference ref() const { return ref_; }
 
@@ -120,6 +147,7 @@ class DRefLoad : public Load {
 
   public:
     DRefLoad(const Reference &ref) : Load(NodeType::DREF), ref_(ref) {}
+    DRefLoad(const std::string &str) : Load(NodeType::DREF), ref_(str) {}
 
     const Reference ref() const { return ref_; }
 
@@ -149,14 +177,59 @@ class AnnoLoad : public Load {
 
 class LinkLoad : public Load {
   public:
-    LinkLoad() : Load(NodeType::LINK) {}
+    LinkLoad(size_t args = 0) : Load(NodeType::LINK), args_(args) {}
 
-    // const std::string toString() const override;
+    void setArgs(size_t args) { args_ = args; }
+    void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
+
+    const std::string toString() const override {
+        std::string result = "LINK: args=" + std::to_string(args_);
+        if (!kwargs_.empty()) {
+            result += ", kwargs=[";
+            for (const auto &kwarg : kwargs_) {
+                result += kwarg + ", ";
+            }
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+            result += "]";
+        }
+        return result;
+    }
+
+  private:
+    size_t args_;
+    std::vector<std::string> kwargs_;
 };
 
 class WithLoad : public Load {
   public:
-    WithLoad() : Load(NodeType::WITH) {}
+    WithLoad(size_t args = 0) : Load(NodeType::WITH), args_(args) {}
+
+    void setArgs(size_t args) { args_ = args; }
+    void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
+
+    const std::string toString() const override {
+        std::string result = "WITH: args=" + std::to_string(args_);
+        if (!kwargs_.empty()) {
+            result += ", kwargs=[";
+            for (const auto &kwarg : kwargs_) {
+                result += kwarg + ", ";
+            }
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+            result += "]";
+        }
+        return result;
+    }
+
+  private:
+    size_t args_;
+    std::vector<std::string> kwargs_;
+};
+
+class BindLoad : public Load {
+  public:
+    BindLoad() : Load(NodeType::BIND) {}
 
     // const std::string toString() const override;
 };
@@ -192,6 +265,25 @@ class FromLoad : public Load {
     const std::vector<std::string> &idents() const { return idents_; }
 
     const std::string toString() const override;
+};
+
+class AccsLoad : public Load {
+  public:
+    AccsLoad(const std::string &index) : Load(NodeType::ACCS), index_(index) {}
+
+    const std::string toString() const override { return "ACCS: " + index_; }
+
+    const std::string &index() const { return index_; }
+
+  private:
+    std::string index_;
+};
+
+class BrchLoad : public Load {
+  public:
+    BrchLoad() : Load(NodeType::BRCH) {}
+
+    // const std::string toString() const override;
 };
 
 } // namespace GraphConstructTree
