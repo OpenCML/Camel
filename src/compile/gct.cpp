@@ -241,9 +241,11 @@ node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
-    node_ptr_t res = createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
+    typeScope_->insert(typeLoad->ref(), type);
+    node_ptr_t nRefNode = createNodeAs<NRefLoad>(typeLoad->ref());
+    *nRefNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
     leave("TypeDecl");
-    return res;
+    return nRefNode;
 }
 
 /*
@@ -1055,7 +1057,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
     const auto normParamsType = make_shared<ParamsType>();
     type_ptr_t exitType = voidTypePtr;
 
-    const auto &exitTypeNode = ast->optAtAs<AST::RefTypeLoad>(2);
+    const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {
         exitType = visitType(exitTypeNode);
     }

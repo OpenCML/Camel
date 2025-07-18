@@ -92,6 +92,12 @@ const string DeclLoad::toString() const {
     return ss.str();
 }
 
+const string FuncLoad::toString() const {
+    stringstream ss;
+    ss << "FUNC: " << funcType_->toString();
+    return ss.str();
+}
+
 const string NRefLoad::toString() const { return "NREF: " + ref_.toString(); }
 
 const string DRefLoad::toString() const { return "DREF: " + ref_.toString(); }

@@ -1355,8 +1355,8 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     node_ptr_t lhsNode = any2node(visitAccessExpr(context->accessExpr(0)));
     for (size_t i = 1; i < context->accessExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
-        node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::With);
-        setNodeTokenRangeByContext(dataNode, context->accessExpr(i));
+        node_ptr_t withNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::With);
+        setNodeTokenRangeByContext(withNode, context->accessExpr(i));
         node_ptr_t rhsNode = any2node(visitAccessExpr(context->accessExpr(i)));
         if (strOp == "?.") {
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
@@ -1364,8 +1364,13 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
-        *dataNode << lhsNode << rhsNode;
-        lhsNode = dataNode;
+        node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(dataList, context->accessExpr(i));
+        node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+        setNodeTokenRangeByContext(namedDataList, context->accessExpr(i));
+        *dataList << lhsNode;
+        *withNode << rhsNode << dataList << namedDataList;
+        lhsNode = withNode;
     }
     leave("WithExpr");
     return lhsNode;

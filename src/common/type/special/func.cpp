@@ -59,9 +59,12 @@ type_ptr_t FunctionType::returnType() const { return dynamic_pointer_cast<Type>(
 bool FunctionType::checkModifiers() const { return true; }
 
 string FunctionType::toString() const {
-    string result = modifiers_;
-    if (!result.empty()) {
-        result += " ";
+    string result;
+    if (implMark_ != ImplMark::Graph) {
+        result += to_string(implMark_) + " ";
+    }
+    if (!modifiers_.empty()) {
+        result += string(modifiers_) + " ";
     }
     if (withType_ && withType_->size() > 0) {
         result += "<";
