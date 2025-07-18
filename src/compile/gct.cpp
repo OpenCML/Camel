@@ -22,10 +22,9 @@
 #include "utils/token.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 1
+#define DEBUG_LEVEL 0
 
 using namespace std;
-using namespace GCT;
 
 namespace GraphConstructTree {
 
@@ -185,22 +184,28 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     case AST::UnpackType::Tuple: {
-        if (refs.size() != dataNodes->size()) {
-            reportDiagnostic("Tuple unpacking requires the same number of references and data nodes",
-                             ast->load()->tokenRange(), Diagnostic::Severity::Error);
-            throw BuildAbortException();
-        }
-        for (size_t i = 0; i < refs.size(); ++i) {
-            const auto &ref = refs[i];
-            const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
-            if (dataNode->type() != AST::LoadType::Data) {
-                reportDiagnostic("Tuple unpacking requires Data type nodes", dataNode->load()->tokenRange(),
-                                 Diagnostic::Severity::Error);
+        if (refs.size() == dataNodes->size()) {
+            for (size_t i = 0; i < refs.size(); ++i) {
+                const auto &ref = refs[i];
+                const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
+                if (dataNode->type() != AST::LoadType::Data) {
+                    reportDiagnostic("Tuple unpacking requires Data type nodes", dataNode->load()->tokenRange(),
+                                     Diagnostic::Severity::Error);
+                    throw BuildAbortException();
+                }
+                node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
+                *nRefNode << visitData(dataNode);
+                res = nRefNode;
+            }
+        } else {
+            if (dataNodes->size() == 1) {
+                // TODO: Handle single tuple data unpacking
+            } else {
+                reportDiagnostic(
+                    "Tuple unpacking requires the same number of references and data nodes, or exactly one tuple data",
+                    ast->load()->tokenRange(), Diagnostic::Severity::Error);
                 throw BuildAbortException();
             }
-            node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
-            *nRefNode << visitData(dataNode);
-            res = nRefNode;
         }
     } break;
     default:
@@ -578,16 +583,16 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
     switch (reservedExpr->op()) {
     case AST::ReservedDataOp::NullThen: {
-        reportDiagnostic("NullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
-        throw BuildAbortException();
+        reportDiagnostic("NullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::ErrorThen: {
-        reportDiagnostic("ErrorThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
-        throw BuildAbortException();
+        reportDiagnostic("ErrorThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::NotNullThen: {
-        reportDiagnostic("NotNullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
-        throw BuildAbortException();
+        reportDiagnostic("NotNullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        res = visitData(lhsASTNode);
     } break;
 
     case AST::ReservedDataOp::Call: {
@@ -1027,7 +1032,6 @@ type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {
     leave("DictType");
     return res;
 }
-
 /*
 TupleType() : Type* types ;
 */
@@ -1035,7 +1039,7 @@ type_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {
     enter("TupleType");
     assert(ast->type() == AST::LoadType::Type);
     vector<type_ptr_t> types;
-    for (const auto &child : *ast) {
+    for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         type_ptr_t type = visitType(child);
         types.push_back(type);
     }

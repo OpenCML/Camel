@@ -1265,7 +1265,7 @@ any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
     node_ptr_t lhsNode = any2node(visitBindExpr(context->bindExpr(0)));
     for (size_t i = 1; i < context->bindExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
-        node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+        node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
         node_ptr_t rhsNode = any2node(visitBindExpr(context->bindExpr(i)));
         if (strOp == "?->") {
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
@@ -1273,8 +1273,13 @@ any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
-        *dataNode << lhsNode << rhsNode;
-        lhsNode = dataNode;
+        node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(dataList, context->bindExpr(i));
+        node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+        setNodeTokenRangeByContext(namedDataList, context->bindExpr(i));
+        *dataList << lhsNode;
+        *linkNode << rhsNode << dataList << namedDataList;
+        lhsNode = linkNode;
     }
     leave("LinkExpr");
     return lhsNode;
@@ -1502,11 +1507,16 @@ literal
 any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     enter("Literal: " + std::to_string(context->getAltNumber()));
     LiteralType type;
+    string data = context->getText();
     if (context->INTEGER()) {
         type = LiteralType::Integer;
     } else if (context->REAL()) {
         type = LiteralType::Real;
-    } else if (context->STRING() || context->MULTI_STR() || context->FSTRING()) {
+    } else if (context->STRING()|| context->FSTRING()) {
+        data = data.substr(1, data.size() - 2); // Remove quotes
+        type = LiteralType::String;
+    } else if (context->MULTI_STR()) {
+        data = data.substr(3, data.size() - 6); // Remove triple quotes
         type = LiteralType::String;
     } else if (context->TRUE() || context->FALSE()) {
         type = LiteralType::Boolean;
@@ -1515,7 +1525,7 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
     } else {
         throw std::runtime_error("Unknown literal type in visitLiteral");
     }
-    Literal literal(type, context->getText());
+    Literal literal(type, data);
     leave("Literal: " + std::to_string(context->getAltNumber()));
     return literal;
 }

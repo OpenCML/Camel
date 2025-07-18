@@ -36,19 +36,19 @@ string typeCodeToString(TypeCode code) {
     switch (code) {
         // primitive types
     case TypeCode::INT32:
-        return "Int32";
+        return "int32";
     case TypeCode::INT64:
-        return "Int64";
+        return "int64";
     case TypeCode::FLOAT:
-        return "Float";
+        return "float";
     case TypeCode::DOUBLE:
-        return "Double";
+        return "double";
     case TypeCode::STRING:
-        return "String";
+        return "string";
     case TypeCode::BOOL:
-        return "Bool";
+        return "bool";
     case TypeCode::CHAR:
-        return "Char";
+        return "char";
         // structured types
     case TypeCode::SET:
         return "Set";
@@ -72,11 +72,11 @@ string typeCodeToString(TypeCode code) {
         return "Tensor";
         // special types
     case TypeCode::ANY:
-        return "Any";
+        return "any";
     case TypeCode::VOID:
-        return "Void";
+        return "void";
     case TypeCode::FUNCTOR:
-        return "Functor";
+        return "functor";
     case TypeCode::REF:
         return "REF";
     }
