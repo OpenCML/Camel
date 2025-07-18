@@ -130,7 +130,7 @@ class FuncLoad : public Load {
     FuncLoad(func_type_ptr_t type) : Load(NodeType::FUNC), funcType_(type) {}
     func_type_ptr_t funcType() const { return funcType_; }
 
-    const std::string toString() const override;
+    // const std::string toString() const override;
 };
 
 class NRefLoad : public Load {

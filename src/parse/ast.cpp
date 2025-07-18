@@ -253,6 +253,7 @@ any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
         // If no statements are present, we create an empty block.
         blockNode = createNodeAs<StmtBlockLoad>();
         setNodeTokenRangeByContext(blockNode, context);
+        *blockNode << createNodeAs<RepeatedLoad>("Stmt");
     }
     leave("StmtBlock");
     return blockNode;
@@ -272,8 +273,11 @@ any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
         setNodeTokenRangeByContext(stmt, context->dataExpr());
         res = createNodeAs<StmtBlockLoad>();
         setNodeTokenRangeByContext(res, context);
+        node_ptr_t rep = createNodeAs<RepeatedLoad>("Stmt");
+        setNodeTokenRangeByContext(rep, context);
         *stmt << expr;
-        *res << stmt;
+        *rep << stmt;
+        *res << rep;
     }
     leave("BlockExpr");
     return res;
@@ -908,7 +912,9 @@ any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
             setNodeTokenRangeByContext(elseBlockNode, context->blockExpr(1));
             *elseBlockNode << any2node(visitBlockExpr(context->blockExpr(1)));
         } else {
-            *elseBlockNode << createNodeAs<StmtBlockLoad>();
+            node_ptr_t stmts = createNodeAs<StmtBlockLoad>();
+            *stmts << createNodeAs<RepeatedLoad>("Stmt");
+            *elseBlockNode << stmts;
         }
     } break;
 

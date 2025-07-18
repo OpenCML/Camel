@@ -200,7 +200,7 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
             }
             node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
             *nRefNode << visitData(dataNode);
-            *res << nRefNode;
+            res = nRefNode;
         }
     } break;
     default:
@@ -404,7 +404,7 @@ node_ptr_t Constructor::visitUnaryExpr(const AST::node_ptr_t &ast) {
         assert(false && "Unknown unary operation");
         return nullptr;
     }
-    node_ptr_t linkNode = createNodeAs<LinkLoad>();
+    node_ptr_t linkNode = createNodeAs<LinkLoad>(1);
     *linkNode << opNode << visitData(dataASTNode);
     leave("UnaryExpr");
     return linkNode;
@@ -538,7 +538,7 @@ node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
         assert(false && "Unknown binary operation");
         return nullptr;
     }
-    node_ptr_t linkNode = createNodeAs<LinkLoad>();
+    node_ptr_t linkNode = createNodeAs<LinkLoad>(2);
     *linkNode << opNode << visitData(lhsASTNode);
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         auto indices = ast->atAs<AST::RepeatedLoad>(1);
@@ -1045,7 +1045,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
     const auto normParamsType = make_shared<ParamsType>();
     type_ptr_t exitType = voidTypePtr;
 
-    const auto &exitTypeNode = ast->optAtAs<AST::OptionalLoad>(2);
+    const auto &exitTypeNode = ast->optAtAs<AST::RefTypeLoad>(2);
     if (exitTypeNode) {
         exitType = visitType(exitTypeNode);
     }

@@ -102,13 +102,12 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
         return children_.at(index);
     }
     template <typename T> node_ptr_t optAtAs(size_t index) const {
-        const auto &opt = atAs<T>(index);
-        assert(opt->load()->type() == LoadType::Optional && "Child node is not an optional type");
+        const auto &opt = at(index);
+        assert(opt->type() == LoadType::Optional && "Expected OptionalLoad type");
         if (opt->load()->type() == LoadType::Optional && opt->empty()) {
             return nullptr; // return null if it's an empty optional
         }
-        assert(std::dynamic_pointer_cast<T>(opt->load()) && "Child node type does not match requested type");
-        return opt->front();
+        return opt->atAs<T>(0);
     }
 
     template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
