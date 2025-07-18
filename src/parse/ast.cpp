@@ -154,11 +154,14 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
     enter("StmtList");
     node_ptr_t block = createNodeAs<StmtBlockLoad>();
     setNodeTokenRangeByContext(block, context);
+    node_ptr_t rep = createNodeAs<RepeatedLoad>("Stmt");
+    setNodeTokenRangeByContext(rep, context);
     if (context->stmt().size() > 0) {
         for (auto &stmt : context->stmt()) {
-            *block << any2node(visitStmt(stmt));
+            *rep << any2node(visitStmt(stmt));
         }
     }
+    *block << rep;
     leave("StmtList");
     return block;
 }
@@ -306,11 +309,15 @@ any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     if (context->angledParams()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
         *funcTypeNode << withParams;
+    } else {
+        *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
     if (context->parentParams()) {
         node_ptr_t normParams = any2node(visitParentParams(context->parentParams()));
         *funcTypeNode << normParams;
+    } else {
+        *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
@@ -380,11 +387,15 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     if (context->angledParams()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
         *funcTypeNode << withParams;
+    } else {
+        *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
     if (context->parentParams()) {
         node_ptr_t normParams = any2node(visitParentParams(context->parentParams()));
         *funcTypeNode << normParams;
+    } else {
+        *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
@@ -407,8 +418,12 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 
+    node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
+    *funcDeclNode << funcNode;
+    setNodeTokenRangeByContext(funcDeclNode, context);
+
     leave("FuncDecl");
-    return funcNode;
+    return funcDeclNode;
 }
 
 /*
@@ -1828,11 +1843,15 @@ any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
     if (context->angledParams()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
         *funcTypeNode << withParams;
+    } else {
+        *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
     if (context->parentParams()) {
         node_ptr_t normParams = any2node(visitParentParams(context->parentParams()));
         *funcTypeNode << normParams;
+    } else {
+        *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");

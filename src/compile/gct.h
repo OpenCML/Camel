@@ -61,7 +61,7 @@ class Constructor {
     node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
         indentIndex_ = 0;
         diagnostics_ = diagnostics;
-        typeScope_->clear();
+        initInnerTypes();
         root_ = visitModule(node);
         return root_;
     }
@@ -73,6 +73,8 @@ class Constructor {
     std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
     diagnostics_ptr_t diagnostics_;
+
+    void initInnerTypes();
 
     std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);

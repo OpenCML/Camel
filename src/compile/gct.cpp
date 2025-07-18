@@ -18,10 +18,11 @@
  */
 
 #include "gct.h"
+#include "common/type/init.h"
 #include "utils/token.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL 1
 
 using namespace std;
 using namespace GCT;
@@ -68,6 +69,17 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
         dangling = true;
     }
     return make_pair(refData, dang);
+}
+
+void Constructor::initInnerTypes() {
+    typeScope_->clear();
+    typeScope_->insert(Reference("int"), int32TypePtr);
+    typeScope_->insert(Reference("float"), floatTypePtr);
+    typeScope_->insert(Reference("bool"), boolTypePtr);
+    typeScope_->insert(Reference("char"), charTypePtr);
+    typeScope_->insert(Reference("string"), stringTypePtr);
+    typeScope_->insert(Reference("any"), anyTypePtr);
+    typeScope_->insert(Reference("void"), voidTypePtr);
 }
 
 /*
@@ -208,9 +220,10 @@ node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
     const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
     node_ptr_t funcNode = visitFuncData(funcDataNode);
-    node_ptr_t newRefNode = createNodeAs<NRefLoad>(funcLoad->ref().ident());
+    node_ptr_t nRefNode = createNodeAs<NRefLoad>(funcLoad->ref().ident());
+    *nRefNode << funcNode;
     leave("FuncDecl");
-    return newRefNode;
+    return nRefNode;
 }
 
 /*
@@ -265,16 +278,18 @@ node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
     enter("ExitStmt");
     assert(ast->type() == AST::LoadType::Stmt);
     node_ptr_t exitNode = createNodeAs<ExitLoad>();
-    if (ast->size() > 0) {
-        if (ast->size() == 1) {
-            const auto &dataNode = ast->atAs<AST::DataLoad>(0);
+    const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
+    if (dataNodes->size() > 0) {
+        if (dataNodes->size() == 1) {
+            const auto &dataNode = dataNodes->front();
+            node_ptr_t d = visitData(dataNode);
             *exitNode << visitData(dataNode);
         } else {
             auto tupleData = make_shared<TupleData>();
             node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
             bool dangling = false;
             node_ptr_t execNode = createNodeAs<ExecLoad>();
-            for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+            for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
                 auto [data, _] = extractData(dataNode, execNode, dangling);
                 tupleData->emplace(data);
@@ -286,7 +301,7 @@ node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
             *exitNode << dataNode;
         }
     }
-    enter("ExitStmt");
+    leave("ExitStmt");
     return exitNode;
 }
 
@@ -694,7 +709,6 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
     const Literal &value = literal->value();
     const auto &str = value.data();
     data_ptr_t data;
-    node_ptr_t res = createNodeAs<DataLoad>(data);
     switch (value.type()) {
     case LiteralType::String: {
         data = tt::as_shared<Data>(make_shared<StringData>(str));
@@ -727,6 +741,7 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
     }
+    node_ptr_t res = createNodeAs<DataLoad>(data);
     leave("Literal");
     return res;
 }
@@ -1030,9 +1045,9 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
     const auto normParamsType = make_shared<ParamsType>();
     type_ptr_t exitType = voidTypePtr;
 
-    const auto &exitTypeLoad = ast->optAtAs<AST::OptionalLoad>(2);
-    if (exitTypeLoad) {
-        exitType = visitTypeExpr(exitTypeLoad);
+    const auto &exitTypeNode = ast->optAtAs<AST::OptionalLoad>(2);
+    if (exitTypeNode) {
+        exitType = visitType(exitTypeNode);
     }
 
     func_type_ptr_t funcType = make_shared<FunctionType>("", withParamsType, normParamsType, exitType);

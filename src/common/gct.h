@@ -22,6 +22,7 @@
 #include "common/ref.h"
 #include "data.h"
 #include "entity.h"
+#include <cassert>
 
 namespace GraphConstructTree {
 
@@ -78,7 +79,9 @@ class DataLoad : public Load {
     data_ptr_t data_;
 
   public:
-    DataLoad(data_ptr_t data) : Load(NodeType::DATA), data_(data) {}
+    DataLoad(data_ptr_t data) : Load(NodeType::DATA), data_(data) {
+        assert(data != nullptr && "DataLoad cannot be constructed with a null data pointer");
+    }
 
     data_ptr_t data() { return data_; }
 
