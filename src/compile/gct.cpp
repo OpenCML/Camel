@@ -45,7 +45,7 @@ data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
 }
 
 pair<node_ptr_t, data_ptr_t> Constructor::makeRefData(const node_ptr_t &expr) {
-    const string indent = to_string(indentIndex_++);
+    const string indent = std::to_string(indentIndex_++);
     node_ptr_t refNode = createNodeAs<NRefLoad>(indent);
     *refNode << expr;
     data_ptr_t data = make_shared<RefData>(indent);
@@ -657,10 +657,20 @@ IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
     enter("IfExpr");
     assert(ast->type() == AST::LoadType::Data);
-    reportDiagnostic("IfExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
-    throw BuildAbortException();
+    node_ptr_t brchNode = createNodeAs<BrchLoad>();
+    *brchNode << visitData(ast->atAs<AST::DataLoad>(0)); // condition
+    const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
+    node_ptr_t thenNode = visitStmtBlock(thenBlock);
+    *brchNode << thenNode; // then block
+    const auto &elseNode = ast->optAtAs<AST::StmtBlockLoad>(2);
+    if (elseNode) {
+        node_ptr_t elseBlock = visitStmtBlock(elseNode);
+        *brchNode << elseBlock; // else block
+    } else {
+        *brchNode << createNodeAs<ExecLoad>(); // empty else block
+    }
     leave("IfExpr");
-    return nullptr;
+    return brchNode;
 }
 
 /*

@@ -52,6 +52,8 @@ enum class NodeType {
     BRCH,
 };
 
+std::string to_string(NodeType type);
+
 class Load {
   protected:
     NodeType type_;
@@ -69,9 +71,8 @@ class Load {
 
     NodeType type() const { return type_; }
     std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
-    const std::string typeStr() const;
 
-    virtual const std::string toString() const { return typeStr(); }
+    virtual const std::string toString() const { return to_string(type_); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
 };
 

@@ -23,10 +23,11 @@
 #include "utils/log.h"
 
 using namespace std;
-using namespace GCT;
 
-const string Load::typeStr() const {
-    switch (type_) {
+namespace GraphConstructTree {
+
+std::string to_string(NodeType type) {
+    switch (type) {
     case NodeType::DATA:
         return "DATA";
     case NodeType::VARI:
@@ -49,14 +50,20 @@ const string Load::typeStr() const {
         return "LINK";
     case NodeType::WITH:
         return "WITH";
+    case NodeType::BIND:
+        return "BIND";
     case NodeType::EXIT:
         return "EXIT";
     case NodeType::EXEC:
         return "EXEC";
     case NodeType::FROM:
         return "FROM";
+    case NodeType::ACCS:
+        return "ACCS";
+    case NodeType::BRCH:
+        return "BRCH";
     default:
-        return "REF";
+        assert(false && "Unknown NodeType");
     }
 }
 
@@ -111,3 +118,5 @@ const string FromLoad::toString() const {
     oss << " }";
     return oss.str();
 }
+
+} // namespace GraphConstructTree

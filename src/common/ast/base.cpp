@@ -22,7 +22,7 @@
 
 namespace AbstractSyntaxTree {
 
-std::string loadTypeToString(LoadType type) {
+std::string to_string(LoadType type) {
     switch (type) {
         case LoadType::Module: return "Module";
         case LoadType::Import: return "Import";

@@ -50,7 +50,7 @@ enum class LoadType {
     Optional,
 };
 
-std::string loadTypeToString(LoadType type);
+std::string to_string(LoadType type);
 
 class Node;
 using node_ptr_t = std::shared_ptr<Node>;
@@ -72,7 +72,7 @@ class Load {
 
     LoadType type() const { return type_; }
     std::pair<size_t, size_t> tokenRange() const { return tokenRange_; }
-    const std::string typeStr() const { return loadTypeToString(type_); }
+    const std::string typeStr() const { return to_string(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
