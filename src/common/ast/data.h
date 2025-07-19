@@ -100,11 +100,11 @@ class DataLoad : public Load {
         return status;
     }
 
-    void setNonNull(bool notNull) { notNull_ = notNull; }
-    void setWait(bool waited) { waited_ = waited; }
+    void wait() { waited_ = true; }
+    bool waited() const { return waited_; }
 
+    void setNonNull(bool notNull) { notNull_ = notNull; }
     bool isNonNull() const { return notNull_; }
-    bool isWaited() const { return waited_; }
 
   private:
     DataType dataType_;

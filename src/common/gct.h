@@ -117,11 +117,14 @@ class TypeLoad : public Load {
 };
 
 class DeclLoad : public Load {
-    func_type_ptr_t funcType_;
+    Reference ref_;
+    bool isType_ = false;
 
   public:
-    DeclLoad(func_type_ptr_t type) : Load(NodeType::DECL), funcType_(type) {}
-    func_type_ptr_t funcType() const { return funcType_; }
+    DeclLoad(const Reference &ref, bool isType = false) : Load(NodeType::DECL), ref_(ref), isType_(isType) {}
+    DeclLoad(const std::string &str, bool isType = false) : Load(NodeType::DECL), ref_(str), isType_(isType) {}
+
+    const Reference ref() const { return ref_; }
 
     const std::string toString() const override;
 };
@@ -189,7 +192,7 @@ class LinkLoad : public Load {
     void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
 
     const std::string toString() const override {
-        std::string result = "LINK: args=" + std::to_string(args_);
+        std::string result = "LINK: argcnt=" + std::to_string(args_);
         if (!kwargs_.empty()) {
             result += ", kwargs=[";
             for (const auto &kwarg : kwargs_) {
@@ -215,7 +218,7 @@ class WithLoad : public Load {
     void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
 
     const std::string toString() const override {
-        std::string result = "WITH: args=" + std::to_string(args_);
+        std::string result = "WITH: argcnt=" + std::to_string(args_);
         if (!kwargs_.empty()) {
             result += ", kwargs=[";
             for (const auto &kwarg : kwargs_) {
@@ -254,9 +257,12 @@ class ExitLoad : public Load {
 
 class ExecLoad : public Load {
   public:
-    ExecLoad() : Load(NodeType::EXEC) {}
+    ExecLoad(bool sync = false) : Load(NodeType::EXEC), synced_(sync) {}
 
-    // const std::string toString() const override;
+    const std::string toString() const override { return synced_ ? "SYNC" : "EXEC"; }
+
+  private:
+    bool synced_ = false;
 };
 
 class FromLoad : public Load {
@@ -278,13 +284,8 @@ class AccsLoad : public Load {
     AccsLoad(const std::string &index) : Load(NodeType::ACCS), index_(index) {}
     AccsLoad(size_t index) : Load(NodeType::ACCS), index_(index) {}
 
-    bool isNum() const {
-        return std::holds_alternative<size_t>(index_);
-    }
-    template <typename T>
-    T index() const {
-        return std::get<T>(index_);
-    }
+    bool isNum() const { return std::holds_alternative<size_t>(index_); }
+    template <typename T> T index() const { return std::get<T>(index_); }
 
     const std::string toString() const override {
         std::string result = "ACCS: ";

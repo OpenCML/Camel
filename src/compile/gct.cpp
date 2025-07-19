@@ -239,10 +239,10 @@ node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
     const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
     node_ptr_t funcNode = visitFuncData(funcDataNode);
-    node_ptr_t nRefNode = createNodeAs<NRefLoad>(funcLoad->ref().ident());
-    *nRefNode << funcNode;
+    node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->ref().ident(), true);
+    *declNode << funcNode;
     leave("FuncDecl");
-    return nRefNode;
+    return declNode;
 }
 
 /*
@@ -261,10 +261,10 @@ node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
     }
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     typeScope_->insert(typeLoad->ref(), type);
-    node_ptr_t nRefNode = createNodeAs<NRefLoad>(typeLoad->ref());
-    *nRefNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
+    node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref());
+    *declNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
     leave("TypeDecl");
-    return nRefNode;
+    return declNode;
 }
 
 /*
@@ -333,7 +333,7 @@ node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {
     enter("StmtBlock");
     assert(ast->type() == AST::LoadType::Stmt);
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(stmtBlock->synced());
 
     pushScope();
     for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {

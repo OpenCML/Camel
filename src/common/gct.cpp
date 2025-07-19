@@ -86,11 +86,7 @@ const string TypeLoad::toString() const {
     return ss.str();
 }
 
-const string DeclLoad::toString() const {
-    stringstream ss;
-    ss << "DECL: " << funcType_->toString();
-    return ss.str();
-}
+const string DeclLoad::toString() const { return "DECL: " + ref_.toString(); }
 
 const string FuncLoad::toString() const {
     stringstream ss;

@@ -231,7 +231,7 @@ any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
     enter("BlockStmt");
     node_ptr_t res = any2node(visitStmtBlock(context->stmtBlock()));
     if (context->WAIT()) {
-        unwrapNodeAs<StmtBlockLoad>(res)->setWait(true);
+        unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
     leave("BlockStmt");
     return res;
@@ -247,7 +247,7 @@ any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
         blockNode = any2node(visitStmtList(context->stmtList()));
         if (context->SYNC()) {
             // If SYNC is present, we treat this as a synchronous block statement.
-            unwrapNodeAs<StmtBlockLoad>(blockNode)->setSync(true);
+            unwrapNodeAs<StmtBlockLoad>(blockNode)->sync();
         }
     } else {
         // If no statements are present, we create an empty block.
@@ -950,7 +950,7 @@ any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
     enter("WaitExpr");
     node_ptr_t dataNode = any2node(visitAssignExpr(context->assignExpr()));
     if (context->WAIT()) {
-        unwrapNodeAs<DataLoad>(dataNode)->setWait(true);
+        unwrapNodeAs<DataLoad>(dataNode)->wait();
     }
     leave("WaitExpr");
     return dataNode;

@@ -114,20 +114,21 @@ class ExitStmtLoad : public StmtLoad {
 
 class StmtBlockLoad : public StmtLoad {
   public:
-    StmtBlockLoad(bool sync = false) : StmtLoad(StmtType::Block), sync_(sync) {}
-    void setSync(bool sync) { sync_ = sync; }
-    bool isSync() const { return sync_; }
+    StmtBlockLoad(bool sync = false) : StmtLoad(StmtType::Block), synced_(sync) {}
 
-    void setWait(bool wait) { wait_ = wait; }
-    bool isWait() const { return wait_; }
+    void sync() { synced_ = true; }
+    bool synced() const { return synced_; }
+
+    void wait() { waited_ = true; }
+    bool waited() const { return waited_; }
 
     const std::string toString() const override {
-        return std::string("StmtBlock: ") + (sync_ ? "sync" : "") + (wait_ ? " wait" : "");
+        return std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
     }
 
   private:
-    bool sync_ = false;
-    bool wait_ = false;
+    bool synced_ = false;
+    bool waited_ = false;
 };
 
 } // namespace AbstractSyntaxTree
