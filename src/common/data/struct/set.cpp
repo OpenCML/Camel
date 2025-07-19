@@ -45,12 +45,12 @@ bool SetData::emplace(const data_ptr_t &e) {
 }
 
 bool SetData::add(const data_ptr_t &e) {
-    cml_assert(resolved(), "Cannot add data to unresolved SetData");
+    ASSERT(resolved(), "Cannot add data to unresolved SetData");
     return data_.insert(e).second;
 }
 
 bool SetData::del(const data_ptr_t &e) {
-    cml_assert(resolved(), "Cannot delete data from unresolved SetData");
+    ASSERT(resolved(), "Cannot delete data from unresolved SetData");
     return data_.erase(e) > 0;
 }
 
@@ -104,7 +104,7 @@ void SetData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         data_ptr_t ref = refs_[i];
         data_ptr_t data = dataList[i];

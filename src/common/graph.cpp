@@ -71,7 +71,7 @@ Node
 
 data_ptr_t Node::data() const {
     const auto wg = graph_.lock();
-    cml_assert(wg, "Graph is not set.");
+    ASSERT(wg, "Graph is not set.");
     if (dataType_.variable) {
         return wg->getVariable(dataIndex_);
     } else {
@@ -81,8 +81,8 @@ data_ptr_t Node::data() const {
 
 void Node::makeVariable(bool shared) {
     const auto wg = graph_.lock();
-    cml_assert(wg, "Graph is not set for Node.");
-    cml_assert(!dataType_.variable, "Node is already a variable.");
+    ASSERT(wg, "Graph is not set for Node.");
+    ASSERT(!dataType_.variable, "Node is already a variable.");
     dataIndex_ = wg->makeVariable(dataIndex_, shared);
     dataType_.shared = shared;
 }
@@ -149,7 +149,7 @@ void GIR::Graph::setOutput(const node_ptr_t &node) { output_ = node; }
 
 size_t GIR::Graph::makeVariable(size_t index, bool shared) {
     if (shared) {
-        cml_assert(!dataType_.shared, "Cannot make a shared variable from a runtime constant.");
+        ASSERT(!dataType_.shared, "Cannot make a shared variable from a runtime constant.");
         sharedVariables_->push_back(sharedConstants_->at(index));
         return sharedVariables_->size() - 1;
     } else {
@@ -172,20 +172,20 @@ size_t GIR::Graph::addConstant(const data_ptr_t &data, bool shared) {
 
 data_ptr_t GIR::Graph::getConstant(size_t index, bool shared) {
     if (shared) {
-        cml_assert(index < sharedConstants_->size(), "Constant index out of range.");
+        ASSERT(index < sharedConstants_->size(), "Constant index out of range.");
         return sharedConstants_->at(index);
     } else {
-        cml_assert(index < runtimeConstants_.size(), "Constant index out of range.");
+        ASSERT(index < runtimeConstants_.size(), "Constant index out of range.");
         return runtimeConstants_.at(index);
     }
 }
 
 data_ptr_t GIR::Graph::getVariable(size_t index, bool shared) {
     if (shared) {
-        cml_assert(index < sharedVariables_->size(), "Variable index out of range.");
+        ASSERT(index < sharedVariables_->size(), "Variable index out of range.");
         return sharedVariables_->at(index);
     } else {
-        cml_assert(index < runtimeVariables_.size(), "Variable index out of range.");
+        ASSERT(index < runtimeVariables_.size(), "Variable index out of range.");
         auto &var = runtimeVariables_.at(index);
         if (holds_alternative<InitIndex>(var)) {
             // on first access, replace the index with the copied(deep) actual data
@@ -206,26 +206,26 @@ data_ptr_t GIR::Graph::getVariable(size_t index, bool shared) {
 
 void GIR::Graph::setConstant(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
-        cml_assert(index < sharedConstants_->size(), "Constant index out of range.");
+        ASSERT(index < sharedConstants_->size(), "Constant index out of range.");
         sharedConstants_->at(index) = data;
     } else {
-        cml_assert(index < runtimeConstants_.size(), "Constant index out of range.");
+        ASSERT(index < runtimeConstants_.size(), "Constant index out of range.");
         runtimeConstants_.at(index) = data;
     }
 }
 
 void GIR::Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
-        cml_assert(index < sharedVariables_->size(), "Variable index out of range.");
+        ASSERT(index < sharedVariables_->size(), "Variable index out of range.");
         sharedVariables_->at(index) = data;
     } else {
-        cml_assert(index < runtimeVariables_.size(), "Variable index out of range.");
+        ASSERT(index < runtimeVariables_.size(), "Variable index out of range.");
         runtimeVariables_.at(index) = data;
     }
 }
 
 void GIR::Graph::fulfill(const data_vec_t &dataList) {
-    cml_assert(dataList.size() == ports_->size(), "Data list size does not match ports size.");
+    ASSERT(dataList.size() == ports_->size(), "Data list size does not match ports size.");
     for (size_t i = 0; i < dataList.size(); i++) {
         const auto &data = dataList[i];
         const auto &[_, dataIndex, isVar] = ports_->at(i);
@@ -245,7 +245,7 @@ DataNode
 
 DataNode::DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared)
     : Node(NodeType::DATA, DataType{shared, false}, graph) {
-    cml_assert(graph, "Graph is not set for DataNode.");
+    ASSERT(graph, "Graph is not set for DataNode.");
     dataIndex_ = graph->addConstant(data, shared);
 }
 
@@ -261,7 +261,7 @@ StructNode
 
 StructNode::StructNode(graph_ptr_t graph, const data_ptr_t &data)
     : Node(NodeType::STRUCT, DataType(DataTypeEnum::RUNTIME_CONSTANT), graph) {
-    cml_assert(graph, "Graph is not set for StructNode.");
+    ASSERT(graph, "Graph is not set for StructNode.");
     // add data to graph as a runtime constant
     dataIndex_ = graph->addConstant(data, false);
 }
@@ -280,8 +280,8 @@ data_ptr_t StructNode::eval() {
         data_vec_t resVec;
         for (auto node : inputs_) {
             const data_ptr_t &data = node->data();
-            cml_assert(data, "Input data is null.");
-            cml_assert(data->resolved(), "Input data is not resolved.");
+            ASSERT(data, "Input data is null.");
+            ASSERT(data->resolved(), "Input data is not resolved.");
             resVec.push_back(data);
         }
         data->resolve(resVec);
@@ -350,8 +350,8 @@ void FunctorNode::fulfill() {
     const auto &withNode = inputs_[0];
     const auto &linkNode = inputs_[1];
 
-    cml_assert(withNode, "With node is not set.");
-    cml_assert(linkNode, "Link node is not set.");
+    ASSERT(withNode, "With node is not set.");
+    ASSERT(linkNode, "Link node is not set.");
 
     FunctionType *func = dynamic_cast<FunctionType *>(func_->type().get());
 

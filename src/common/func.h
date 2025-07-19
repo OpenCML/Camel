@@ -19,12 +19,12 @@
 
 #pragma once
 
-#include <cassert>
 #include <cstdint>
 #include <ostream>
 #include <string>
 #include <vector>
 
+#include "utils/assert.h"
 #include "utils/str.h"
 
 enum Modifier : uint32_t {
@@ -55,7 +55,7 @@ inline std::string to_string(Modifier mod) {
     case Modifier::None:
         return "";
     default:
-        assert(false && "Unknown Modifier");
+        ASSERT(false, "Unknown Modifier");
         return "unknown";
     }
 }
@@ -83,7 +83,7 @@ inline std::string to_string(ExitType type) {
     case ExitType::Throw:
         return "throw";
     default:
-        assert(false && "Unknown ExitType");
+        ASSERT(false, "Unknown ExitType");
         return "unknown";
     }
 }

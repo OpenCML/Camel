@@ -24,6 +24,7 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "parse/antlr/OpenCMLVisitor.h"
+#include "utils/assert.h"
 
 class Formatter : public OpenCMLVisitor {
   private:
@@ -154,11 +155,12 @@ class Formatter : public OpenCMLVisitor {
 
         // given a token index range, find the range of comments in the token stream
         const auto findCmtRange = [&](size_t index, bool reverse = false) -> std::pair<size_t, size_t> {
-            assert(!(reverse && index != 0)); // reverse lookup should always start from the first element
+            ASSERT(!(reverse && index != 0), "Reverse lookup should always start from the last element");
             size_t start = 0, end = tokens.size() - 1;
             if (!tokenRanges.empty()) {
                 // the last pair of the tokenRanges is the range of the reverse lookup
-                assert(tokenRanges.size() == list.size() + 1);
+                ASSERT(tokenRanges.size() == list.size() + 1, 
+                       "Token ranges should match the list size plus one for reverse lookup");
                 if (!reverse) {
                     start = tokenRanges[index].first;
                     end = tokenRanges[index].second;
@@ -181,7 +183,7 @@ class Formatter : public OpenCMLVisitor {
                     }
                     end = list[0]->getStart()->getTokenIndex();
                 }
-                assert(start <= end);
+                ASSERT(start <= end, "Start index should not be greater than end index");
             }
 
             size_t predCmtStart = start, predCmtEnd = end;

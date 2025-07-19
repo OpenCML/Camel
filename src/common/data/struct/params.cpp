@@ -58,7 +58,7 @@ void ParamsData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         const auto &[idx, key] = refs_[i];
         indexData_[idx] = dataList[i];

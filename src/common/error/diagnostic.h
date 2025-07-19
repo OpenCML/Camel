@@ -68,7 +68,7 @@ class Diagnostic : public CamelBaseException {
     }
 
     std::string what(bool json = false) const override {
-        assert(!rangeStoredAsIndex_);
+        ASSERT(!rangeStoredAsIndex_, "Diagnostic range is stored as index, call fetchRange() first");
         std::ostringstream oss;
         if (json) {
             oss << "{"

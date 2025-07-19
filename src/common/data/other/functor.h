@@ -26,6 +26,8 @@ class Graph;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIntermediateRepresentation
 
+namespace GIR = GraphIntermediateRepresentation;
+
 class FunctorData : public Data {
     GIR::graph_ptr_t baseGraph_;
     GIR::graph_ptr_t thisGraph_;

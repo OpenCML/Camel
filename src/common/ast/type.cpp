@@ -47,7 +47,7 @@ std::string to_string(TypeType type) {
     case TypeType::Ref:
         return "Ref";
     default:
-        assert(false && "Unknown TypeType");
+        ASSERT(false, "Unknown TypeType");
         return "Unknown";
     }
 }
@@ -75,7 +75,7 @@ std::string to_string(TypeOp op) {
     case TypeOp::TypeAs:
         return "typeas";
     default:
-        assert(false && "Unknown TypeOp");
+        ASSERT(false, "Unknown TypeOp");
         return "Unknown";
     }
 }

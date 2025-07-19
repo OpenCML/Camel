@@ -93,23 +93,3 @@ inline std::string rainbowPattern(int depth) {
             std::cout << rainbowPattern(__depth__) << _green("[leave] ") << target << std::endl;                       \
         }                                                                                                              \
     } while (false)
-
-#ifdef NDEBUG
-
-#define cml_assert(condition, message)                                                                                 \
-    do {                                                                                                               \
-    } while (false)
-
-#else
-
-#define cml_assert(condition, message)                                                                                 \
-    do {                                                                                                               \
-        if (!(condition)) {                                                                                            \
-            std::cerr << "Assertion failed: (" #condition "), function " << __FUNCTION__ << ", file " << __FILE__      \
-                      << ", line " << __LINE__ << ".\n"                                                                \
-                      << "Message: " << message << std::endl;                                                          \
-            std::abort();                                                                                              \
-        }                                                                                                              \
-    } while (false)
-
-#endif

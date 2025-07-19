@@ -19,13 +19,13 @@
 
 #pragma once
 
-#include <cassert>
 #include <variant>
 
 #include "common/func.h"
 #include "common/ref.h"
 #include "data.h"
 #include "entity.h"
+#include "utils/assert.h"
 
 namespace GraphConstructTree {
 
@@ -84,7 +84,7 @@ class DataLoad : public Load {
 
   public:
     DataLoad(data_ptr_t data) : Load(NodeType::DATA), data_(data) {
-        assert(data != nullptr && "DataLoad cannot be constructed with a null data pointer");
+        ASSERT(data != nullptr, "DataLoad cannot be constructed with a null data pointer");
     }
 
     data_ptr_t data() { return data_; }

@@ -86,7 +86,7 @@ Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
 node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     enter("Module");
-    assert(ast->type() == AST::LoadType::Module);
+    ASSERT(ast->type() == AST::LoadType::Module, "Expected ModuleLoad type");
     auto importNodes = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
@@ -124,7 +124,7 @@ void_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) { return nullptr
 
 node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
     enter("Stmt");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type");
     const auto &stmt = ast->loadAs<AST::StmtLoad>();
     node_ptr_t stmtNode;
 
@@ -163,7 +163,7 @@ DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
 */
 node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
     enter("DataDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for DataDecl");
     const auto &dataDeclLoad = ast->loadAs<AST::DataDeclLoad>();
     bool isVar = dataDeclLoad->isVar();
     const auto &refs = dataDeclLoad->refs();
@@ -223,7 +223,7 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
         }
     } break;
     default:
-        assert(false && "Unknown unpack type in DataDecl");
+        ASSERT(false, "Unknown unpack type in DataDecl");
     }
 
     if (isVar) {
@@ -241,7 +241,7 @@ FuncDecl(Ref ref) : FuncData ;
 */
 node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {
     enter("FuncDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
     const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
     node_ptr_t funcNode = visitFuncData(funcDataNode);
@@ -256,7 +256,7 @@ TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
 */
 node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
     enter("TypeDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     type_ptr_t type;
     if (typeNode) {
@@ -278,7 +278,7 @@ NameDecl(Ref ref, Ref alias) ;
 */
 node_ptr_t Constructor::visitNameDecl(const AST::node_ptr_t &ast) {
     enter("NameDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for NameDecl");
     reportDiagnostic("NameDecl is not supported in the current version of the compiler. "
                      "Please use DataDecl or TypeDecl instead.",
                      ast->load()->tokenRange(), Diagnostic::Severity::Error);
@@ -292,7 +292,7 @@ ExprStmt() : Data data ;
 */
 node_ptr_t Constructor::visitExprStmt(const AST::node_ptr_t &ast) {
     enter("ExprStmt");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExprStmt");
     node_ptr_t exprNode = visitData(ast->atAs<AST::DataLoad>(0));
     leave("ExprStmt");
     return exprNode;
@@ -303,7 +303,7 @@ ExitStmt(ExitType type) : Data* data ;
 */
 node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
     enter("ExitStmt");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
     node_ptr_t exitNode = createNodeAs<ExitLoad>();
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
     if (dataNodes->size() > 0) {
@@ -337,13 +337,13 @@ StmtBlock(bool sync) : Stmt* stmts ;
 */
 node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {
     enter("StmtBlock");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
     node_ptr_t execNode = createNodeAs<ExecLoad>(stmtBlock->synced());
 
     pushScope();
     for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
-        assert(stmt->type() == AST::LoadType::Stmt && "Expected a statement in StmtBlock");
+        ASSERT(stmt->type() == AST::LoadType::Stmt, "Expected a statement in StmtBlock");
         *execNode << visitStmt(stmt);
     }
     popScope();
@@ -354,7 +354,7 @@ node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {
 
 node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
     enter("Data");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for visitData");
     const auto &data = ast->loadAs<AST::DataLoad>();
     node_ptr_t dataNode;
 
@@ -413,7 +413,7 @@ UnaryExpr(UnaryDataOp op) := Data data ;
 */
 node_ptr_t Constructor::visitUnaryExpr(const AST::node_ptr_t &ast) {
     enter("UnaryExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for UnaryExpr");
     const auto &unaryExpr = ast->loadAs<AST::UnaryExprLoad>();
     const auto &dataASTNode = ast->atAs<AST::DataLoad>(0);
     node_ptr_t opNode;
@@ -428,7 +428,7 @@ node_ptr_t Constructor::visitUnaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__inv__");
     } break;
     default:
-        assert(false && "Unknown unary operation");
+        ASSERT(false, "Unknown unary operation");
         return nullptr;
     }
     node_ptr_t linkNode = createNodeAs<LinkLoad>(1);
@@ -472,7 +472,7 @@ BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
 */
 node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
     enter("BinaryExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for BinaryExpr");
     const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
     node_ptr_t opNode;
@@ -562,7 +562,7 @@ node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__index__");
     } break;
     default:
-        assert(false && "Unknown binary operation");
+        ASSERT(false, "Unknown binary operation");
         return nullptr;
     }
     node_ptr_t linkNode = createNodeAs<LinkLoad>(2);
@@ -597,7 +597,7 @@ ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
 */
 node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
     enter("ReservedExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ReservedExpr");
     node_ptr_t res;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
     bool waited = reservedExpr->waited();
@@ -672,7 +672,7 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
         *res << visitData(lhsASTNode);
     } break;
     default:
-        assert(false && "Unknown reserved operation");
+        ASSERT(false, "Unknown reserved operation");
         res = nullptr;
     }
     if (waited) {
@@ -689,7 +689,7 @@ IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 */
 node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
     enter("IfExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for IfExpr");
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
     *brchNode << visitData(ast->atAs<AST::DataLoad>(0)); // condition
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
@@ -711,7 +711,7 @@ node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
 */
 node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
     enter("MatchExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
     reportDiagnostic("MatchExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
     throw BuildAbortException();
     leave("MatchExpr");
@@ -723,7 +723,7 @@ node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
 */
 node_ptr_t Constructor::visitTryExpr(const AST::node_ptr_t &ast) {
     enter("TryExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TryExpr");
     reportDiagnostic("TryExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
     throw BuildAbortException();
     leave("TryExpr");
@@ -747,7 +747,7 @@ enum LiteralType {
 */
 node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
     enter("Literal");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for Literal");
     const auto &literal = ast->loadAs<AST::LiteralLoad>();
     const Literal &value = literal->value();
     const auto &str = value.data();
@@ -794,7 +794,7 @@ ListData() : Data* data ;
 */
 node_ptr_t Constructor::visitListData(const AST::node_ptr_t &ast) {
     enter("ListData");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ListData");
     auto listData = make_shared<ListData>();
     node_ptr_t res = createNodeAs<DataLoad>(listData);
     bool dangling = false;
@@ -817,7 +817,7 @@ DictData() : NamedData* dataList ;
 */
 node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {
     enter("DictData");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for DictData");
     auto dictData = make_shared<DictData>();
     node_ptr_t res = createNodeAs<DataLoad>(dictData);
     bool dangling = false;
@@ -842,7 +842,7 @@ TupleData() : Data* data ;
 */
 node_ptr_t Constructor::visitTupleData(const AST::node_ptr_t &ast) {
     enter("TupleData");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TupleData");
     auto tupleData = make_shared<TupleData>();
     node_ptr_t res = createNodeAs<DataLoad>(tupleData);
     bool dangling = false;
@@ -865,7 +865,7 @@ FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 */
 node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {
     enter("FuncData");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
     func_type_ptr_t funcType = tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
@@ -880,7 +880,7 @@ RefData(Ref ref) ;
 */
 node_ptr_t Constructor::visitRefData(const AST::node_ptr_t &ast) {
     enter("RefData");
-    assert(ast->type() == AST::LoadType::Data);
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for RefData");
     const auto &refData = ast->loadAs<AST::RefDataLoad>();
     node_ptr_t refNode = createNodeAs<DRefLoad>(refData->ref());
     leave("RefData");
@@ -894,7 +894,7 @@ Type(TypeType type) :=
 */
 type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
     enter("Type");
-    assert(ast->type() == AST::LoadType::Type);
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for visitType");
     const auto &type = ast->loadAs<AST::TypeLoad>();
     type_ptr_t res;
 
@@ -942,7 +942,7 @@ NullableType : Type type ;
 */
 type_ptr_t Constructor::visitNullableType(const AST::node_ptr_t &ast) {
     enter("NullableType");
-    assert(ast->type() == AST::LoadType::Type);
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for NullableType");
     type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
     leave("NullableType");
     return type;
@@ -965,7 +965,7 @@ enum TypeOp {
 */
 type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
     enter("TypeExpr");
-    assert(ast->type() == AST::LoadType::Type);
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TypeExpr");
     type_ptr_t res;
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
     AST::TypeOp op = typeExpr->op();
@@ -1030,7 +1030,7 @@ ListType(siz dim) : Type type ;
 */
 type_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {
     enter("ListType");
-    assert(ast->type() == AST::LoadType::Type);
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ListType");
     const auto &listTypeLoad = ast->loadAs<AST::ListTypeLoad>();
     type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
     const auto &arrayType = make_shared<ArrayType>(type, listTypeLoad->dims());
@@ -1043,7 +1043,7 @@ DictType() : NamedType* types ;
 */
 type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {
     enter("DictType");
-    assert(ast->type() == AST::LoadType::Type);
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for DictType");
     auto res = make_shared<DictType>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedPairLoad>();
@@ -1063,7 +1063,7 @@ TupleType() : Type* types ;
 */
 type_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {
     enter("TupleType");
-    assert(ast->type() == AST::LoadType::Type);
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TupleType");
     vector<type_ptr_t> types;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         type_ptr_t type = visitType(child);
@@ -1080,7 +1080,7 @@ FuncType(Modifier[] modifiers, ImplMark impl, string uri)
 */
 type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
     enter("FuncType");
-    assert(ast->type() == AST::LoadType::Type);
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
     const auto withParamsType = make_shared<ParamsType>();
@@ -1196,7 +1196,7 @@ RefType(Ref ref) ;
 */
 type_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
     enter("RefType");
-    assert(ast->load()->type() == AST::LoadType::Type);
+    ASSERT(ast->load()->type() == AST::LoadType::Type, "Expected TypeLoad type for RefType");
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
     const Reference &ref = typeLoad->ref();
     const auto &type = typeScope_->at(ref);

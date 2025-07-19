@@ -63,7 +63,7 @@ std::string to_string(NodeType type) {
     case NodeType::BRCH:
         return "BRCH";
     default:
-        assert(false && "Unknown NodeType");
+        ASSERT(false, "Unknown NodeType");
     }
 }
 

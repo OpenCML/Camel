@@ -74,7 +74,7 @@ any Constructor::visit(const GCT::node_ptr_t &node) {
     case GCT::NodeType::EXEC:
         return visitExecNode(node);
     default:
-        assert(false && "Unknown GCT NodeType");
+        ASSERT(false, "Unknown GCT NodeType");
     }
     return nullptr;
 }
