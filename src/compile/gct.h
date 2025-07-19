@@ -59,7 +59,7 @@ class Constructor {
     virtual ~Constructor() = default;
 
     node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
-        indentIndex_ = 0;
+        idIndex_ = 0;
         diagnostics_ = diagnostics;
         initInnerTypes();
         root_ = visitModule(node);
@@ -68,7 +68,7 @@ class Constructor {
 
   private:
     node_ptr_t root_;
-    size_t indentIndex_ = 0;
+    size_t idIndex_ = 0;
     scope_ptr_t<Reference, type_ptr_t> typeScope_;
     std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 

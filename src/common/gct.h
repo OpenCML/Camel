@@ -19,10 +19,12 @@
 
 #pragma once
 
+#include <cassert>
+#include <variant>
+
 #include "common/ref.h"
 #include "data.h"
 #include "entity.h"
-#include <cassert>
 
 namespace GraphConstructTree {
 
@@ -274,13 +276,28 @@ class FromLoad : public Load {
 class AccsLoad : public Load {
   public:
     AccsLoad(const std::string &index) : Load(NodeType::ACCS), index_(index) {}
+    AccsLoad(size_t index) : Load(NodeType::ACCS), index_(index) {}
 
-    const std::string toString() const override { return "ACCS: " + index_; }
+    bool isNum() const {
+        return std::holds_alternative<size_t>(index_);
+    }
+    template <typename T>
+    T index() const {
+        return std::get<T>(index_);
+    }
 
-    const std::string &index() const { return index_; }
+    const std::string toString() const override {
+        std::string result = "ACCS: ";
+        if (std::holds_alternative<size_t>(index_)) {
+            result += std::to_string(std::get<size_t>(index_));
+        } else {
+            result += std::get<std::string>(index_);
+        }
+        return result;
+    }
 
   private:
-    std::string index_;
+    std::variant<std::string, size_t> index_;
 };
 
 class BrchLoad : public Load {

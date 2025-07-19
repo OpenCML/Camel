@@ -44,10 +44,10 @@ data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
 }
 
 pair<node_ptr_t, data_ptr_t> Constructor::makeRefData(const node_ptr_t &expr) {
-    const string indent = std::to_string(indentIndex_++);
-    node_ptr_t refNode = createNodeAs<NRefLoad>(indent);
+    const string id = std::to_string(idIndex_++);
+    node_ptr_t refNode = createNodeAs<NRefLoad>(id);
     *refNode << expr;
-    data_ptr_t data = make_shared<RefData>(indent);
+    data_ptr_t data = make_shared<RefData>(id);
     return make_pair(refNode, data);
 }
 
@@ -199,7 +199,21 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
             }
         } else {
             if (dataNodes->size() == 1) {
-                // TODO: Handle single tuple data unpacking
+                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
+                node_ptr_t dataNode = visitData(dataASTNode);
+                const string id = std::to_string(idIndex_++);
+                node_ptr_t dataRefNode = createNodeAs<NRefLoad>(id);
+                node_ptr_t dRefNode = createNodeAs<DRefLoad>(id);
+                *dataRefNode << dataNode;
+                *res << dataRefNode;
+                for (size_t i = 0; i < refs.size(); ++i) {
+                    const auto &ref = refs[i];
+                    node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
+                    node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
+                    *accsNode << dRefNode;
+                    *nRefNode << accsNode;
+                    *res << nRefNode;
+                }
             } else {
                 reportDiagnostic(
                     "Tuple unpacking requires the same number of references and data nodes, or exactly one tuple data",
