@@ -62,6 +62,7 @@ class Diagnostic : public CamelBaseException {
             size_t startIndex = range_.start.line;
             size_t endIndex = range_.end.line;
             range_ = getRange(tokens, startIndex, endIndex);
+            rangeStoredAsIndex_ = false;
         }
         return *this;
     }
@@ -81,9 +82,9 @@ class Diagnostic : public CamelBaseException {
                 << "\"source\": \"BuildSystem\""
                 << "}";
         } else {
-            oss << "Diagnostic: " << message_ << " at "
+            oss << "[" << severityToString(severity_) << "] "
                 << "line: " << range_.start.line + 1 << ", "
-                << "character: " << range_.start.character + 1 << " [" << severityToString(severity_) << "]";
+                << "char: " << range_.start.character + 1 << " : " << message_;
         }
         return oss.str();
     }

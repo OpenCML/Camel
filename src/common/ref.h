@@ -21,6 +21,7 @@
 
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 class Reference {
   public:
@@ -45,7 +46,7 @@ class Reference {
         if (pos < str.size()) {
             ident_ = str.substr(pos);
         } else {
-            throw std::invalid_argument("Invalid reference name: " + str);
+            throw std::runtime_error("Invalid reference name: " + str);
         }
     }
 

@@ -24,10 +24,11 @@
 #include <stdexcept>
 #include <string>
 
+#include "common/func.h"
+#include "common/impl.h"
+#include "common/literal.h"
 #include "common/ref.h"
 #include "common/tree.h"
-#include "common/impl.h"
-#include "common/func.h"
 
 namespace AbstractSyntaxTree {
 
@@ -49,7 +50,7 @@ enum class LoadType {
     Optional,
 };
 
-std::string loadTypeToString(LoadType type);
+std::string to_string(LoadType type);
 
 class Node;
 using node_ptr_t = std::shared_ptr<Node>;
@@ -71,7 +72,7 @@ class Load {
 
     LoadType type() const { return type_; }
     std::pair<size_t, size_t> tokenRange() const { return tokenRange_; }
-    const std::string typeStr() const { return loadTypeToString(type_); }
+    const std::string typeStr() const { return to_string(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
@@ -93,50 +94,26 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
         // safe check for index and type
         assert(index < children_.size() && "Index out of bounds");
         assert(children_.at(index) != nullptr && "Child node is null");
-        assert(typeid(children_.at(index)->load()) == typeid(T) && "Child node type does not match requested type");
+        assert(std::dynamic_pointer_cast<T>(children_.at(index)->load()) && "Dynamic pointer cast failed");
         return children_.at(index);
     }
     template <typename T> node_ptr_t optAtAs(size_t index) const {
-        const auto &opt = atAs<T>(index);
-        assert(opt->load()->type() == LoadType::Optional && "Child node is not an optional type");
+        const auto &opt = at(index);
+        assert(opt->type() == LoadType::Optional && "Expected OptionalLoad type");
         if (opt->load()->type() == LoadType::Optional && opt->empty()) {
             return nullptr; // return null if it's an empty optional
         }
-        assert(typeid(opt->load()) == typeid(T) && "Child node type does not match requested type");
-        return opt->front();
+        return opt->atAs<T>(0);
     }
 
     template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
-        assert(typeid(load_) == typeid(LoadType) && "Load type does not match requested type");
+        assert(std::dynamic_pointer_cast<LoadType>(load_) && "Load type cast failed");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
     template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
-        assert(typeid(load_) == typeid(LoadType) && "Load type does not match requested type");
+        assert(std::dynamic_pointer_cast<LoadType>(load_) && "Load type does not match requested type");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
-};
-
-enum class LiteralType {
-    String,
-    FString,
-    Integer,
-    Real,
-    Boolean,
-    Null,
-};
-
-class Literal {
-  public:
-    Literal(LiteralType type, const std::string &data) : type_(type), data_(data) {}
-    ~Literal() = default;
-    const std::string toString() const { return data_; }
-
-    LiteralType type() const { return type_; }
-    const std::string &data() const { return data_; }
-
-  private:
-    LiteralType type_;
-    std::string data_;
 };
 
 class ModuleLoad : public Load {
@@ -221,7 +198,7 @@ class NamedDataLoad : public Load {
     NamedDataLoad(const Reference &ref) : Load(LoadType::NamedData), ref_(ref) {}
     const std::string toString() const override { return "NamedData: " + ref_.toString(); }
 
-    const Reference &getRef() const { return ref_; }
+    const Reference &ref() const { return ref_; }
 
   private:
     Reference ref_;

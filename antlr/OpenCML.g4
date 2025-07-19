@@ -68,7 +68,7 @@ blockExpr  : stmtBlock | dataExpr ;
 funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 funcDecl   :
         (WITH angledParams)?
-        EXPORT? implMark? modifiers? 
+        EXPORT? implMark? modifiers?
         FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
@@ -97,7 +97,7 @@ pairedParams : keyParamPair (',' keyParamPair)* ;
 
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 
-memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 
 parentParams : '(' pairedParams? ','? ')' ; // for functor parameters definition
 parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
@@ -179,11 +179,15 @@ bindExpr
     ;
 
 annoExpr
-    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
+    : withExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
     ;
 
 withExpr
-    : primaryData (('.' | '?.') primaryData)*
+    : accessExpr (('.' | '?.') accessExpr)*
+    ;
+
+accessExpr
+    : primaryData ('.$' (IDENTIFIER | INTEGER))*
     ;
 
 dictData

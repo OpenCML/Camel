@@ -45,6 +45,10 @@ class DataDeclLoad : public StmtLoad {
         : StmtLoad(StmtType::Data), isVar_(isVar), type_(type), refs_(refs) {}
     const std::string toString() const override;
 
+    bool isVar() const { return isVar_; }
+    UnpackType unpackType() const { return type_; }
+    const std::vector<Reference> &refs() const { return refs_; }
+
   private:
     bool isVar_;
     UnpackType type_;
@@ -54,6 +58,9 @@ class DataDeclLoad : public StmtLoad {
 class FuncDeclLoad : public StmtLoad {
   public:
     FuncDeclLoad(Reference ref) : StmtLoad(StmtType::Func), ref_(ref) {}
+
+    const Reference &ref() const { return ref_; }
+
     const std::string toString() const override { return "FuncDecl: " + ref_.toString(); }
 
   private:
@@ -64,6 +71,11 @@ class TypeDeclLoad : public StmtLoad {
   public:
     TypeDeclLoad(Reference ref, ImplMark impl = ImplMark::Graph, std::string uri = "")
         : StmtLoad(StmtType::Type), ref_(ref), implMark_(impl), uri_(uri) {}
+
+    const Reference &ref() const { return ref_; }
+    ImplMark implMark() const { return implMark_; }
+    const std::string &uri() const { return uri_; }
+
     const std::string toString() const override;
 
   private:
@@ -76,6 +88,9 @@ class NameDeclLoad : public StmtLoad {
   public:
     NameDeclLoad(Reference ref, Reference alias) : StmtLoad(StmtType::Name), ref_(ref), alias_(alias) {}
     const std::string toString() const override { return "NameDecl: " + ref_.toString() + " as " + alias_.toString(); }
+
+    const Reference &ref() const { return ref_; }
+    const Reference &alias() const { return alias_; }
 
   private:
     Reference ref_;
@@ -99,20 +114,21 @@ class ExitStmtLoad : public StmtLoad {
 
 class StmtBlockLoad : public StmtLoad {
   public:
-    StmtBlockLoad(bool sync = false) : StmtLoad(StmtType::Block), sync_(sync) {}
-    void setSync(bool sync) { sync_ = sync; }
-    bool isSync() const { return sync_; }
+    StmtBlockLoad(bool sync = false) : StmtLoad(StmtType::Block), synced_(sync) {}
 
-    void setWait(bool wait) { wait_ = wait; }
-    bool isWait() const { return wait_; }
+    void sync() { synced_ = true; }
+    bool synced() const { return synced_; }
+
+    void wait() { waited_ = true; }
+    bool waited() const { return waited_; }
 
     const std::string toString() const override {
-        return std::string("StmtBlock: ") + (sync_ ? "sync" : "") + (wait_ ? " wait" : "");
+        return std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
     }
 
   private:
-    bool sync_ = false;
-    bool wait_ = false;
+    bool synced_ = false;
+    bool waited_ = false;
 };
 
 } // namespace AbstractSyntaxTree

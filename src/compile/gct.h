@@ -59,19 +59,26 @@ class Constructor {
     virtual ~Constructor() = default;
 
     node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
+        idIndex_ = 0;
         diagnostics_ = diagnostics;
-        typeScope_->clear();
+        initInnerTypes();
         root_ = visitModule(node);
         return root_;
     }
 
   private:
     node_ptr_t root_;
-    size_t indentIndex_ = 0;
+    size_t idIndex_ = 0;
     scope_ptr_t<Reference, type_ptr_t> typeScope_;
     std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
     diagnostics_ptr_t diagnostics_;
+
+    void initInnerTypes();
+
+    std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
+    std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
+    std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
     void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange,
                           Diagnostic::Severity sev = Diagnostic::Severity::Error) {
@@ -85,9 +92,6 @@ class Constructor {
     node_ptr_t visitModule(const AST::node_ptr_t &ast);
     void_ptr_t visitImport(const AST::node_ptr_t &ast);
     void_ptr_t visitExport(const AST::node_ptr_t &ast);
-    node_ptr_t visitNamedData(const AST::node_ptr_t &ast);
-    node_ptr_t visitNamedType(const AST::node_ptr_t &ast);
-    node_ptr_t visitNamedPair(const AST::node_ptr_t &ast);
 
     // ast/stmt.h
     node_ptr_t visitStmt(const AST::node_ptr_t &ast);
@@ -101,7 +105,9 @@ class Constructor {
 
     // ast/data.h
     node_ptr_t visitData(const AST::node_ptr_t &ast);
-    node_ptr_t visitDataExpr(const AST::node_ptr_t &ast);
+    node_ptr_t visitUnaryExpr(const AST::node_ptr_t &ast);
+    node_ptr_t visitBinaryExpr(const AST::node_ptr_t &ast);
+    node_ptr_t visitReservedExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
@@ -109,7 +115,6 @@ class Constructor {
     node_ptr_t visitListData(const AST::node_ptr_t &ast);
     node_ptr_t visitDictData(const AST::node_ptr_t &ast);
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
-    node_ptr_t visitIndexData(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 

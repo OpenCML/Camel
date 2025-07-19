@@ -3,7 +3,7 @@ module main
 import { dense, dropout, relu, softmax } from 'nn'
 import opt from 'opt'
 
-inner type Tensor = 'std::Tensor'
+inner type Tensor = int
 
 type Model = (x: Tensor) => Tensor
 

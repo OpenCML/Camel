@@ -9,30 +9,37 @@
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the the MIT license for more details.
+ * See the the MIT license for more details
  *
  * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Created: Jul. 17, 2025
+ * Updated: Jul. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../data.h"
+#include <string>
 
-class RefData : public Data {
-  private:
-    std::string ref_;
+enum class LiteralType {
+    String,
+    FString,
+    Integer,
+    Real,
+    Boolean,
+    Null,
+};
 
+class Literal {
   public:
-    RefData(const std::string &ref);
-    virtual ~RefData() = default;
+    Literal(LiteralType type, const std::string &data) : type_(type), data_(data) {}
+    ~Literal() = default;
+    const std::string toString() const { return data_; }
 
-    const std::string &ref() const;
+    LiteralType type() const { return type_; }
+    const std::string &data() const { return data_; }
 
-    virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual data_ptr_t clone(bool deep = false) const override;
-    virtual const std::string toString() const override;
+  private:
+    LiteralType type_;
+    std::string data_;
 };

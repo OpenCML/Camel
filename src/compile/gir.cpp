@@ -112,37 +112,37 @@ type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
 
 func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     enter("DECL");
-    func_type_ptr_t funcType = gct->loadAs<GCT::DeclLoad>()->funcType();
-    if (context_->cached(funcType)) {
-        leave("DECL");
-        return getCachedFunc(funcType);
-    }
-    auto functorType = dynamic_pointer_cast<FunctionType>(funcType);
-    const auto &varMap = functorType->variableMap();
-    const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
-    const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
+    // func_type_ptr_t funcType = gct->loadAs<GCT::DeclLoad>()->funcType();
+    // if (context_->cached(funcType)) {
+    //     leave("DECL");
+    //     return getCachedFunc(funcType);
+    // }
+    // auto functorType = dynamic_pointer_cast<FunctionType>(funcType);
+    // const auto &varMap = functorType->variableMap();
+    // const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
+    // const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
 
-    context_->pushScope(funcType);
-    graph_ptr_t &graph = context_->currGraph();
-    for (const auto &[name, type, data] : withType->elements()) {
-        node_ptr_t node = graph->addPort(varMap.at(name));
-        context_->insertNode(name, node);
-    }
-    for (const auto &[name, type, data] : linkType->elements()) {
-        node_ptr_t node = graph->addPort(varMap.at(name));
-        context_->insertNode(name, node);
-    }
-    func_ptr_t func = make_shared<FunctorData>(funcType, graph);
-    graph->setFuncType(funcType);
-    context_->popScope();
+    // context_->pushScope(funcType);
+    // graph_ptr_t &graph = context_->currGraph();
+    // for (const auto &[name, type, data] : withType->elements()) {
+    //     node_ptr_t node = graph->addPort(varMap.at(name));
+    //     context_->insertNode(name, node);
+    // }
+    // for (const auto &[name, type, data] : linkType->elements()) {
+    //     node_ptr_t node = graph->addPort(varMap.at(name));
+    //     context_->insertNode(name, node);
+    // }
+    // func_ptr_t func = make_shared<FunctorData>(funcType, graph);
+    // graph->setFuncType(funcType);
+    // context_->popScope();
 
-    if (!functorType->name().empty()) {
-        // lambda functors my not have a name
-        context_->insertFunc(funcType->name(), func);
-    }
-    cacheFunc(funcType, func);
+    // if (!functorType->name().empty()) {
+    //     // lambda functors my not have a name
+    //     context_->insertFunc(funcType->name(), func);
+    // }
+    // cacheFunc(funcType, func);
     leave("DECL");
-    return func;
+    return nullptr;
 }
 
 node_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
@@ -166,7 +166,7 @@ inline bool validateIdent(const std::string &str) {
 
 void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
     enter("NREF");
-    const string &ident = gct->loadAs<GCT::NRefLoad>()->ident();
+    const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     if (!validateIdent(ident)) {
         throw runtime_error("Identifiers starting and ending with '__' are reserved for internal use.");
     }
@@ -184,7 +184,7 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     enter("DREF");
-    const string &ident = gct->loadAs<GCT::DRefLoad>()->ident();
+    const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
     auto optNode = context_->nodeAt(ident);
     if (!optNode.has_value()) {
         throw runtime_error("Unresolved reference: " + ident);

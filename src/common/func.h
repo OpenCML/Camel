@@ -19,10 +19,11 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstdint>
+#include <ostream>
 #include <string>
 #include <vector>
-#include <ostream>
 
 #include "utils/str.h"
 
@@ -32,6 +33,13 @@ enum Modifier : uint32_t {
     Shared = 1 << 2,
     Sync = 1 << 3,
     Macro = 1 << 4,
+};
+
+enum class ExitType {
+    Return,
+    Yield,
+    Raise,
+    Throw,
 };
 
 inline std::string to_string(Modifier mod) {
@@ -47,6 +55,7 @@ inline std::string to_string(Modifier mod) {
     case Modifier::None:
         return "";
     default:
+        assert(false && "Unknown Modifier");
         return "unknown";
     }
 }
@@ -61,6 +70,22 @@ inline Modifier from_string(const std::string &str) {
     if (str == "macro")
         return Modifier::Macro;
     return Modifier::None;
+}
+
+inline std::string to_string(ExitType type) {
+    switch (type) {
+    case ExitType::Return:
+        return "return";
+    case ExitType::Yield:
+        return "yield";
+    case ExitType::Raise:
+        return "raise";
+    case ExitType::Throw:
+        return "throw";
+    default:
+        assert(false && "Unknown ExitType");
+        return "unknown";
+    }
 }
 
 using ModifierMask = uint32_t;

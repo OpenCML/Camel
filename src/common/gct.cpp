@@ -23,10 +23,11 @@
 #include "utils/log.h"
 
 using namespace std;
-using namespace GCT;
 
-const string Load::typeStr() const {
-    switch (type_) {
+namespace GraphConstructTree {
+
+std::string to_string(NodeType type) {
+    switch (type) {
     case NodeType::DATA:
         return "DATA";
     case NodeType::VARI:
@@ -49,14 +50,20 @@ const string Load::typeStr() const {
         return "LINK";
     case NodeType::WITH:
         return "WITH";
+    case NodeType::BIND:
+        return "BIND";
     case NodeType::EXIT:
         return "EXIT";
     case NodeType::EXEC:
         return "EXEC";
     case NodeType::FROM:
         return "FROM";
+    case NodeType::ACCS:
+        return "ACCS";
+    case NodeType::BRCH:
+        return "BRCH";
     default:
-        return "REF";
+        assert(false && "Unknown NodeType");
     }
 }
 
@@ -79,31 +86,17 @@ const string TypeLoad::toString() const {
     return ss.str();
 }
 
-const string DeclLoad::toString() const {
-    stringstream ss;
-    ss << "DECL: " << funcType_->toString();
-    return ss.str();
-}
+const string DeclLoad::toString() const { return "DECL: " + ref_.toString(); }
 
 const string FuncLoad::toString() const {
     stringstream ss;
-    ss << "FUNC: " << funcType_->name();
+    ss << "FUNC: " << funcType_->toString();
     return ss.str();
 }
 
-const string NRefLoad::toString() const { return "NREF: " + ident_; }
+const string NRefLoad::toString() const { return "NREF: " + ref_.toString(); }
 
-const string DRefLoad::toString() const { return "DREF: " + ident_; }
-
-const string WaitLoad::toString() const {
-    ostringstream oss;
-    oss << "WAIT: ";
-    if (!idents_.empty()) {
-        copy(idents_.begin(), idents_.end() - 1, ostream_iterator<string>(oss, ", "));
-        oss << idents_.back();
-    }
-    return oss.str();
-}
+const string DRefLoad::toString() const { return "DREF: " + ref_.toString(); }
 
 const string FromLoad::toString() const {
     ostringstream oss;
@@ -117,3 +110,5 @@ const string FromLoad::toString() const {
     oss << " }";
     return oss.str();
 }
+
+} // namespace GraphConstructTree

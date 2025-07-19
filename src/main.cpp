@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
         }
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
-        if (selectedCommand == Command::RUN) {
+        if (selectedCommand == Command::RUN | selectedCommand == Command::INSPECT) {
             diagnostics->setLimit(Diagnostic::Severity::Error, 0);
         }
 
@@ -242,15 +242,12 @@ int main(int argc, char *argv[]) {
             }
 
         } catch (DiagnosticsLimitExceededException &e) {
-            if (selectedCommand == Command::RUN) {
-                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
-                return 1;
-            } else if (selectedCommand == Command::CHECK) {
+            if (selectedCommand == Command::CHECK) {
                 printDiagnostics();
                 os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
                 return 0;
             } else {
-                os << e.what(errorFormat == "json") << endl;
+                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
                 return 1;
             }
         } catch (CamelBaseException &e) {

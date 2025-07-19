@@ -45,7 +45,6 @@ class Constructor : public OpenCMLVisitor {
 
   private:
     node_ptr_t root_;
-    size_t indentIndex_ = 0;
 
     diagnostics_ptr_t diagnostics_;
 
@@ -123,7 +122,7 @@ class Constructor : public OpenCMLVisitor {
 
     std::any visitArgumentList(OpenCMLParser::ArgumentListContext *context);
 
-    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
+    std::any visitIndices(OpenCMLParser::IndicesContext *context);
 
     std::any visitParentParams(OpenCMLParser::ParentParamsContext *context);
 
@@ -170,6 +169,8 @@ class Constructor : public OpenCMLVisitor {
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 
     std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
+
+    std::any visitAccessExpr(OpenCMLParser::AccessExprContext *context);
 
     std::any visitDictData(OpenCMLParser::DictDataContext *context);
 
