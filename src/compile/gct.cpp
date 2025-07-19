@@ -226,6 +226,12 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
         assert(false && "Unknown unpack type in DataDecl");
     }
 
+    if (isVar) {
+        node_ptr_t variNode = createNodeAs<VariLoad>();
+        *variNode << res;
+        res = variNode;
+    }
+
     leave("DataDecl");
     return res;
 }
@@ -594,6 +600,7 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
     assert(ast->type() == AST::LoadType::Data);
     node_ptr_t res;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
+    bool waited = reservedExpr->waited();
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
     switch (reservedExpr->op()) {
     case AST::ReservedDataOp::NullThen: {
@@ -667,6 +674,11 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
     default:
         assert(false && "Unknown reserved operation");
         res = nullptr;
+    }
+    if (waited) {
+        node_ptr_t waitNode = createNodeAs<WaitLoad>();
+        *waitNode << res; // Wait for the result of the reserved expression
+        res = waitNode;
     }
     leave("ReservedExpr");
     return res;
@@ -1005,7 +1017,7 @@ type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     default:
-        reportDiagnostic("Unsupported TypeOp: " + AST::typeOpToString(op), ast->load()->tokenRange(),
+        reportDiagnostic("Unsupported TypeOp: " + AST::to_string(op), ast->load()->tokenRange(),
                          Diagnostic::Severity::Error);
         throw BuildAbortException();
     }

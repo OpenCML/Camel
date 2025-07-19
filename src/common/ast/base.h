@@ -94,11 +94,7 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
         // safe check for index and type
         assert(index < children_.size() && "Index out of bounds");
         assert(children_.at(index) != nullptr && "Child node is null");
-        if (std::dynamic_pointer_cast<T>(children_.at(index)->load()) == nullptr) {
-            std::cerr << "Error: Node type cast filed. Expected: " << typeid(T).name()
-                      << ", Actual: " << typeid(*children_.at(index)->load()).name() << std::endl;
-            throw std::runtime_error("Node type mismatch");
-        }
+        assert(std::dynamic_pointer_cast<T>(children_.at(index)->load()) && "Dynamic pointer cast failed");
         return children_.at(index);
     }
     template <typename T> node_ptr_t optAtAs(size_t index) const {
@@ -111,12 +107,7 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
     }
 
     template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
-        if (std::dynamic_pointer_cast<LoadType>(load_) == nullptr) {
-            // TODO: delete this line in production code
-            std::cerr << "Error: Load type cast failed. Expected: " << typeid(LoadType).name()
-                      << ", Actual: " << typeid(*load_).name() << std::endl;
-            throw std::runtime_error("Load type mismatch");
-        }
+        assert(std::dynamic_pointer_cast<LoadType>(load_) && "Load type cast failed");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
     template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {

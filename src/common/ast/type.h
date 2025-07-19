@@ -30,9 +30,8 @@ enum class TypeType { Null, Expr, List, Dict, Tuple, Func, Spec, Unit, Infer, Da
 
 enum class TypeOp { Union, Inter, Diff, KeyUnion, KeyInter, KeyDiff, ErrorThen, Specialize, TypeOf, TypeAs };
 
-std::string typeTypeToString(TypeType type);
-
-std::string typeOpToString(TypeOp op);
+std::string to_string(TypeType type);
+std::string to_string(TypeOp op);
 
 class TypeLoad : public Load {
   public:
@@ -54,7 +53,7 @@ class NullableTypeLoad : public TypeLoad {
 class TypeExprLoad : public TypeLoad {
   public:
     TypeExprLoad(TypeOp op) : TypeLoad(TypeType::Expr), op_(op) {}
-    const std::string toString() const override { return "TypeExpr: " + typeOpToString(op_); }
+    const std::string toString() const override { return "TypeExpr: " + to_string(op_); }
 
     TypeOp op() const { return op_; }
 

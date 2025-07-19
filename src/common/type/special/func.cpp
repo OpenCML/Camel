@@ -72,6 +72,9 @@ string FunctionType::toString() const {
         const auto &elements = with.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
+            if (variableMap_.count(name) && variableMap_.at(name)) {
+                result += "var ";
+            }
             result += name + ": " + type->toString();
             if (value) {
                 result += " = " + value->toString();
@@ -91,6 +94,9 @@ string FunctionType::toString() const {
         const auto &elements = params.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
+            if (variableMap_.count(name) && variableMap_.at(name)) {
+                result += "var ";
+            }
             result += name + ": " + type->toString();
             if (value) {
                 result += " = " + value->toString();

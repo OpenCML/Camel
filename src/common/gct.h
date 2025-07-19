@@ -22,6 +22,7 @@
 #include <cassert>
 #include <variant>
 
+#include "common/func.h"
 #include "common/ref.h"
 #include "data.h"
 #include "entity.h"
@@ -35,23 +36,23 @@ class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
 enum class NodeType {
-    DATA, //
-    VARI,
-    TYPE,
-    DECL,
+    DECL, //
     FUNC,
+    DATA,
+    TYPE,
     NREF,
     DREF,
+    VARI,
     WAIT,
-    ANNO,
     LINK,
     WITH,
     BIND,
-    EXIT,
-    EXEC,
-    FROM,
     ACCS,
     BRCH,
+    FROM,
+    ANNO,
+    EXIT,
+    EXEC,
 };
 
 std::string to_string(NodeType type);
@@ -125,6 +126,7 @@ class DeclLoad : public Load {
     DeclLoad(const std::string &str, bool isType = false) : Load(NodeType::DECL), ref_(str), isType_(isType) {}
 
     const Reference ref() const { return ref_; }
+    bool isType() const { return isType_; }
 
     const std::string toString() const override;
 };
@@ -164,15 +166,10 @@ class DRefLoad : public Load {
 };
 
 class WaitLoad : public Load {
-    std::vector<std::string> idents_;
-
   public:
     WaitLoad() : Load(NodeType::WAIT) {}
 
-    void wait(const std::string &ident) { idents_.push_back(ident); }
-    const std::vector<std::string> &waited() const { return idents_; }
-
-    const std::string toString() const override;
+    // const std::string toString() const override;
 };
 
 class AnnoLoad : public Load {
@@ -243,16 +240,16 @@ class BindLoad : public Load {
     // const std::string toString() const override;
 };
 
-class RetnLoad : public Load {
-  public:
-    RetnLoad() : Load(NodeType::EXIT) {}
-
-    // const std::string toString() const override;
-};
-
 class ExitLoad : public Load {
   public:
-    ExitLoad() : Load(NodeType::EXIT) {}
+    ExitLoad(ExitType type = ExitType::Return) : Load(NodeType::EXIT), exitType_(type) {}
+
+    ExitType exitType() const { return exitType_; }
+
+    const std::string toString() const override { return "EXIT: " + to_string(exitType_); }
+
+  private:
+    ExitType exitType_ = ExitType::Return;
 };
 
 class ExecLoad : public Load {

@@ -45,7 +45,6 @@ class Constructor : public OpenCMLVisitor {
 
   private:
     node_ptr_t root_;
-    size_t indentIndex_ = 0;
 
     diagnostics_ptr_t diagnostics_;
 

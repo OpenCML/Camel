@@ -98,16 +98,6 @@ const string NRefLoad::toString() const { return "NREF: " + ref_.toString(); }
 
 const string DRefLoad::toString() const { return "DREF: " + ref_.toString(); }
 
-const string WaitLoad::toString() const {
-    ostringstream oss;
-    oss << "WAIT: ";
-    if (!idents_.empty()) {
-        copy(idents_.begin(), idents_.end() - 1, ostream_iterator<string>(oss, ", "));
-        oss << idents_.back();
-    }
-    return oss.str();
-}
-
 const string FromLoad::toString() const {
     ostringstream oss;
     oss << "FROM: " << path_ << " USE { ";

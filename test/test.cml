@@ -1,6 +1,29 @@
-// import { dense, dropout, relu, softmax } from 'nn'
-// import opt from 'opt'
+inner type Tensor = int
 
-func main() {
-    ApplyGradients<opt::adam<lr: 0.1>>(forward)
+type Model = (x: Tensor) => Tensor
+
+with <var weights: Tensor[], var biases: Tensor[]>
+macro sync func MLP(input: int, configs: (int, Model?)[]): Model {
+    return if configs.len() == 0 then {
+        return (x: Tensor) => x
+    } else {
+        var output, act = configs.head()
+        wait weights.push(Tensor::new([input, output]))
+        wait biases.push(Tensor::new([output]))
+        let layer = dense<act ?? relu, weights, biases>
+        let rest = wait MLP<weights, biases>(output, configs.tail())
+        return layer..rest
+    }
+}
+
+with <model: Model, epochs: int, batch_size: int>
+sync func run(input: Tensor) {
+    var batches = input.batch(batch_size)
+    return wait batches.map(sync (batch: Tensor, index: int) => sync {
+        let loss = model(batch)
+        if index % 100 == 0 then {
+            print('Epoch: ', index, 'Loss: ', loss)
+        }
+        return loss
+    })
 }
