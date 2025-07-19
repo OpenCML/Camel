@@ -21,21 +21,21 @@
 
 #include "../data.h"
 
-namespace GraphIR {
+namespace GraphIntermediateRepresentation {
 class Graph;
 using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace GraphIR
+} // namespace GraphIntermediateRepresentation
 
 class FunctorData : public Data {
-    GraphIR::graph_ptr_t baseGraph_;
-    GraphIR::graph_ptr_t thisGraph_;
+    GIR::graph_ptr_t baseGraph_;
+    GIR::graph_ptr_t thisGraph_;
 
   public:
-    FunctorData(const type_ptr_t &type, GraphIR::graph_ptr_t graph, GraphIR::graph_ptr_t base = nullptr);
+    FunctorData(const type_ptr_t &type, GIR::graph_ptr_t graph, GIR::graph_ptr_t base = nullptr);
     virtual ~FunctorData() = default;
 
-    GraphIR::graph_ptr_t graph() const;
-    GraphIR::graph_ptr_t baseGraph() const;
+    GIR::graph_ptr_t graph() const;
+    GIR::graph_ptr_t baseGraph() const;
     std::string name() const;
     func_type_ptr_t funcType() const;
 

@@ -25,7 +25,7 @@
 #include "common/graph.h"
 #include "gct.h"
 
-namespace GraphIR {
+namespace GraphIntermediateRepresentation {
 
 using void_ptr_t = void *;
 
@@ -54,19 +54,22 @@ class Constructor {
 
     std::any visit(const GCT::node_ptr_t &gct);
 
-    node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitVariNode(const GCT::node_ptr_t &gct);
-    type_ptr_t visitTypeNode(const GCT::node_ptr_t &gct);
     func_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
+    type_ptr_t visitTypeNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitNRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDRefNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitVariNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitWaitNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitLinkNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitWithNode(const GCT::node_ptr_t &gct);
-    void_ptr_t visitRetnNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitExecNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitBindNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitAccsNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitBrchNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitFromNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
+    void_ptr_t visitExitNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitExecNode(const GCT::node_ptr_t &gct);
 };
-} // namespace GraphIR
+} // namespace GraphIntermediateRepresentation

@@ -23,7 +23,8 @@
 #define DEBUG_LEVEL 0
 
 using namespace std;
-using namespace GIR;
+
+namespace GraphIntermediateRepresentation {
 
 inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
     node_ptr_t res = selNode;
@@ -38,76 +39,44 @@ inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
 
 any Constructor::visit(const GCT::node_ptr_t &node) {
     switch (node->type()) {
-    case GCT::NodeType::DATA:
-        return visitDataNode(node);
-    case GCT::NodeType::VARI:
-        return visitVariNode(node);
-    case GCT::NodeType::TYPE:
-        return visitTypeNode(node);
     case GCT::NodeType::DECL:
         return visitDeclNode(node);
     case GCT::NodeType::FUNC:
         return visitFuncNode(node);
+    case GCT::NodeType::DATA:
+        return visitDataNode(node);
+    case GCT::NodeType::TYPE:
+        return visitTypeNode(node);
     case GCT::NodeType::NREF:
         return visitNRefNode(node);
     case GCT::NodeType::DREF:
         return visitDRefNode(node);
+    case GCT::NodeType::VARI:
+        return visitVariNode(node);
     case GCT::NodeType::WAIT:
         return visitWaitNode(node);
-    case GCT::NodeType::ANNO:
-        return visitAnnoNode(node);
     case GCT::NodeType::LINK:
         return visitLinkNode(node);
     case GCT::NodeType::WITH:
         return visitWithNode(node);
-    case GCT::NodeType::EXIT:
-        return visitRetnNode(node);
-    case GCT::NodeType::EXEC:
-        return visitExecNode(node);
+    case GCT::NodeType::BIND:
+        return visitBindNode(node);
+    case GCT::NodeType::ACCS:
+        return visitAccsNode(node);
+    case GCT::NodeType::BRCH:
+        return visitBrchNode(node);
     case GCT::NodeType::FROM:
         return visitFromNode(node);
+    case GCT::NodeType::ANNO:
+        return visitAnnoNode(node);
+    case GCT::NodeType::EXIT:
+        return visitExitNode(node);
+    case GCT::NodeType::EXEC:
+        return visitExecNode(node);
     default:
-        throw runtime_error("Unknown gct::ASTNodeType");
+        assert(false && "Unknown GCT NodeType");
     }
-}
-
-node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
-    enter("DATA");
-    const auto &dataLoad = gct->loadAs<GCT::DataLoad>();
-    const data_ptr_t &data = dataLoad->data();
-    node_ptr_t node = DataNode::create(context_->currGraph(), data, false);
-    if (!data->resolved()) {
-        for (const string &ref : data->refs()) {
-            auto optSrcNode = context_->nodeAt(ref);
-            if (optSrcNode.has_value()) {
-                node_ptr_t srcNode = selectNode(optSrcNode.value(), context_->currGraph());
-                Node::link(srcNode, node);
-            } else {
-                throw runtime_error("Unresolved reference: " + ref);
-            }
-        }
-    }
-    leave("DATA");
-    return node;
-}
-
-node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
-    enter("VARI");
-    const auto &res = visit(gct->at(0));
-    if (res.type() != typeid(node_ptr_t)) {
-        throw runtime_error("Unexpected result type from Enter the child of VARI node");
-    }
-    node_ptr_t node = any_cast<node_ptr_t>(res);
-    node->makeVariable();
-    leave("VARI");
-    return node;
-}
-
-type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
-    enter("TYPE");
-    const type_ptr_t &type = gct->loadAs<GCT::TypeLoad>()->dataType();
-    leave("TYPE");
-    return type;
+    return nullptr;
 }
 
 func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
@@ -157,6 +126,33 @@ node_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
     return SelectNode::create(context_->currGraph(), func_vec_t{func});
 }
 
+node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
+    enter("DATA");
+    const auto &dataLoad = gct->loadAs<GCT::DataLoad>();
+    const data_ptr_t &data = dataLoad->data();
+    node_ptr_t node = DataNode::create(context_->currGraph(), data, false);
+    if (!data->resolved()) {
+        for (const string &ref : data->refs()) {
+            auto optSrcNode = context_->nodeAt(ref);
+            if (optSrcNode.has_value()) {
+                node_ptr_t srcNode = selectNode(optSrcNode.value(), context_->currGraph());
+                Node::link(srcNode, node);
+            } else {
+                throw runtime_error("Unresolved reference: " + ref);
+            }
+        }
+    }
+    leave("DATA");
+    return node;
+}
+
+type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
+    enter("TYPE");
+    const type_ptr_t &type = gct->loadAs<GCT::TypeLoad>()->dataType();
+    leave("TYPE");
+    return type;
+}
+
 inline bool validateIdent(const std::string &str) {
     if (str.length() < 4) {
         return true;
@@ -195,9 +191,19 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     return res;
 }
 
-node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
 
-node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
+node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
+    enter("VARI");
+    const auto &res = visit(gct->at(0));
+    if (res.type() != typeid(node_ptr_t)) {
+        throw runtime_error("Unexpected result type from Enter the child of VARI node");
+    }
+    node_ptr_t node = any_cast<node_ptr_t>(res);
+    node->makeVariable();
+    leave("VARI");
+    return node;
+}
+node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
 
 node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
     enter("LINK");
@@ -230,7 +236,29 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
     return withNode;
 }
 
-void_ptr_t Constructor::visitRetnNode(const GCT::node_ptr_t &gct) {
+node_ptr_t Constructor::visitBindNode(const GCT::node_ptr_t &gct) {
+    enter("BIND");
+    leave("BIND");
+    return nullptr;
+}
+
+node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
+    enter("ACCS");
+    leave("ACCS");
+    return nullptr;
+}
+
+node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
+    enter("BRCH");
+    leave("BRCH");
+    return nullptr;
+}
+
+void_ptr_t Constructor::visitFromNode(const GCT::node_ptr_t &gct) { return nullptr; }
+
+node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
+
+void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     enter("RETN");
     auto res = visit(gct->at(0));
     if (res.type() != typeid(node_ptr_t)) {
@@ -255,4 +283,4 @@ node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
-void_ptr_t Constructor::visitFromNode(const GCT::node_ptr_t &gct) { return nullptr; }
+} // namespace GraphIntermediateRepresentation

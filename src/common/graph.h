@@ -28,7 +28,7 @@
 
 #include "data/other/functor.h"
 
-namespace GraphIR {
+namespace GraphIntermediateRepresentation {
 
 enum class NodeType { GRAPH, DATA, STRUCT, SELECT, FUNCTOR, OPERATOR };
 
@@ -293,6 +293,6 @@ inline std::shared_ptr<SelectNode> select_node_ptr_cast(const node_ptr_t &ptr) {
 
 using select_node_ptr_t = std::shared_ptr<SelectNode>;
 
-} // namespace GraphIR
+} // namespace GraphIntermediateRepresentation
 
-namespace GIR = GraphIR;
+namespace GIR = GraphIntermediateRepresentation;

@@ -21,7 +21,7 @@
 #include "common/graph.h"
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
 
 FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph, graph_ptr_t base) : Data(type), thisGraph_(graph) {
     if (base == nullptr) {
@@ -31,9 +31,9 @@ FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph, graph_ptr_t 
     }
 };
 
-GraphIR::graph_ptr_t FunctorData::graph() const { return thisGraph_; }
+GIR::graph_ptr_t FunctorData::graph() const { return thisGraph_; }
 
-GraphIR::graph_ptr_t FunctorData::baseGraph() const { return baseGraph_; }
+GIR::graph_ptr_t FunctorData::baseGraph() const { return baseGraph_; }
 
 std::string FunctorData::name() const {
     auto func = dynamic_pointer_cast<FunctionType>(type_);
