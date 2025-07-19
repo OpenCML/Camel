@@ -145,18 +145,6 @@ function generateParserCode() {
     geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
     fs.writeFileSync('./src/parse/ast.tmp.cpp', geneCode)
     logDone('Generated AST Constructor code')
-
-    logStep('Modifying GCT Constructor header code...')
-    srcCode = fs.readFileSync('./src/compile/gct.h', 'utf-8')
-    geneCode = transformHeaderCode(srcCode, rules)
-    fs.writeFileSync('./src/compile/gct.h', geneCode)
-    logDone('Modified GCT Constructor header')
-
-    logStep('Generating GCT Constructor cpp code...')
-    srcCode = fs.readFileSync('./src/compile/gct.cpp', 'utf-8')
-    geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
-    fs.writeFileSync('./src/compile/gct.tmp.cpp', geneCode)
-    logDone('Generated GCT Constructor code')
 }
 
 generateParserCode()

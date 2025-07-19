@@ -19,15 +19,18 @@
 
 #pragma once
 
+#include <cassert>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
+#include "common/func.h"
+#include "common/impl.h"
+#include "common/literal.h"
 #include "common/ref.h"
+#include "common/tree.h"
 
 namespace AbstractSyntaxTree {
-
-enum class ImplMark { Inner, Outer, Graph };
 
 enum class LoadType {
     Module,
@@ -47,9 +50,7 @@ enum class LoadType {
     Optional,
 };
 
-std::string implMarkToString(ImplMark mark);
-
-std::string loadTypeToString(LoadType type);
+std::string to_string(LoadType type);
 
 class Node;
 using node_ptr_t = std::shared_ptr<Node>;
@@ -58,51 +59,61 @@ class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
 class Load {
-  protected:
-    LoadType type_;
-    size_t tokenStart_;
-    size_t tokenEnd_;
-
   public:
     Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
-    void setToken(size_t start, size_t end) {
-        tokenStart_ = start;
-        tokenEnd_ = end;
-        // TODO: add token range check
+    void setTokenRange(size_t start, size_t end) {
+        tokenRange_.first = start;
+        tokenRange_.second = end;
     }
+    void setTokenRange(std::pair<size_t, size_t> range) { tokenRange_ = range; }
     const std::string geneCode() const;
 
     LoadType type() const { return type_; }
-    std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
-    const std::string typeStr() const { return loadTypeToString(type_); }
+    std::pair<size_t, size_t> tokenRange() const { return tokenRange_; }
+    const std::string typeStr() const { return to_string(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
+
+  protected:
+    LoadType type_;
+    std::pair<size_t, size_t> tokenRange_ = {0, 0};
 };
 
-enum class LiteralType {
-    String,
-    FString,
-    Integer,
-    Real,
-    Boolean,
-    Null,
-};
-
-class Literal {
+class Node : public AbstractTreeNode<load_ptr_t, Node> {
   public:
-    Literal(LiteralType type, const std::string &data) : type_(type), data_(data) {}
-    ~Literal() = default;
-    const std::string toString() const { return data_; }
+    Node(load_ptr_t load) : AbstractTreeNode(load) {}
+    virtual ~Node() = default;
 
-    LiteralType type() const { return type_; }
-    const std::string &data() const { return data_; }
+    LoadType type() const { return load_->type(); }
+    std::string toString() const { return load_->toString(); }
 
-  private:
-    LiteralType type_;
-    std::string data_;
+    template <typename T> node_ptr_t atAs(size_t index) const {
+        // safe check for index and type
+        assert(index < children_.size() && "Index out of bounds");
+        assert(children_.at(index) != nullptr && "Child node is null");
+        assert(std::dynamic_pointer_cast<T>(children_.at(index)->load()) && "Dynamic pointer cast failed");
+        return children_.at(index);
+    }
+    template <typename T> node_ptr_t optAtAs(size_t index) const {
+        const auto &opt = at(index);
+        assert(opt->type() == LoadType::Optional && "Expected OptionalLoad type");
+        if (opt->load()->type() == LoadType::Optional && opt->empty()) {
+            return nullptr; // return null if it's an empty optional
+        }
+        return opt->atAs<T>(0);
+    }
+
+    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
+        assert(std::dynamic_pointer_cast<LoadType>(load_) && "Load type cast failed");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
+        assert(std::dynamic_pointer_cast<LoadType>(load_) && "Load type does not match requested type");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
 };
 
 class ModuleLoad : public Load {
@@ -169,6 +180,7 @@ class ExportLoad : public Load {
         }
         return refs_;
     }
+    bool isEmpty() const { return refs_.empty(); }
 
     void addRef(const Reference &ref) {
         if (ref.isNull()) {
@@ -186,7 +198,7 @@ class NamedDataLoad : public Load {
     NamedDataLoad(const Reference &ref) : Load(LoadType::NamedData), ref_(ref) {}
     const std::string toString() const override { return "NamedData: " + ref_.toString(); }
 
-    const Reference &getRef() const { return ref_; }
+    const Reference &ref() const { return ref_; }
 
   private:
     Reference ref_;
@@ -213,6 +225,7 @@ class NamedPairLoad : public Load {
         return "NamedPair: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }
     const Reference &getRef() const { return ref_; }
+    bool isVar() const { return isVar_; }
 
   private:
     Reference ref_;

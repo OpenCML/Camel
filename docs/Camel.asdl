@@ -10,7 +10,7 @@ enum ImplMark {
     Graph
 }
 
-Module(Ref ref) : ImportDecl import, ExportDecl export, Stmt* ;
+Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 
 StmtType {
     Name,
@@ -22,7 +22,7 @@ StmtType {
     Block,
 }
 
-Stmt := NameDecl | DataDecl | TypeDecl | FuncDecl | DataExpr | ExitStmt | StmtBlock ;
+Stmt := NameDecl | DataDecl | TypeDecl | FuncDecl | ExprStmt | ExitStmt | StmtBlock ;
 
 ImportDecl(string path, Ref[] refs, Ref as) ;
 ExportDecl(Ref[] refs) ;
@@ -30,6 +30,8 @@ DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
 FuncDecl(Ref ref) : FuncData ;
 TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
 NameDecl(Ref ref, Ref alias) ;
+
+ExprStmt() : Data data ;
 
 enum UnpackType {
     Dict,
@@ -48,7 +50,13 @@ enum ExitType {
 
 ExitStmt(ExitType type) : Data* data ;
 
-enum DataOp {
+enum UnaryDataOp {
+    Not,
+    Neg,
+    Inv
+}
+
+enum BinaryDataOp {
     Assign,
     AssignAdd,
     AssignSub,
@@ -76,28 +84,33 @@ enum DataOp {
     Mod,
     Mat,
     Exp,
+    Index, // Data obj, Data* indices
+}
+
+enum ReservedDataOp {
+    NullThen,
     NullThen,
     ErrorThen,
     NotNullThen,
-    Index, // Data obj, Data* indices
     Call, // Data obj, Data* args, NamedData* kwargs
     With, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data lhs, Data rhs
     As, // Data lhs, Type rhs
     Is, // Data lhs, Type rhs
-    Not, // Data expr
-    Neg, // Data expr
-    Inv, // Data expr
+    Access, // Data obj, RefData ref
 }
 
-DataExpr(DataOp op) := Any... lhs, rhs... ;
+UnaryExpr(UnaryDataOp op) := Data data ;
+BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
+ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
 
 enum DataType {
-    DataExpr,
+    UnaryExpr,
+    BinaryExpr,
+    ReservedExpr,
     IfExpr,
     MatchExpr,
     TryExpr,
-    UnaryExpr,
     Literal,
     List,
     Dict,
@@ -107,16 +120,17 @@ enum DataType {
 }
 
 Data(DataType type, bool notNull, bool waited)
-    := DataExpr| IfExpr | MatchExpr | TryExpr | UnaryExpr | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
+    := UnaryExpr | BinaryExpr | ReservedExpr
+    | IfExpr | MatchExpr | TryExpr
+    | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
 
 IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 
 Literal(Value value) ;
 ListData() : Data* data ;
-DictData() : KeyDataPair* pairs ;
+DictData() : NamedData* dataList ;
 TupleData() : Data* data ;
-FuncData(Ref ref)
-    : FuncType funcType, StmtBlock body ;
+FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 RefData(Ref ref) ;
 
 enum TypeOp {
@@ -135,6 +149,7 @@ enum TypeOp {
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 
 enum TypeType {
+    Null,
     Expr,
     List,
     Dict,
@@ -146,6 +161,8 @@ enum TypeType {
     Data,
     Ref
 }
+
+NullableType : Type type ;
 
 enum Modifier {
     Atomic,
@@ -159,7 +176,7 @@ NamedType(Ref ref, bool isVar) : Type type ;
 NamedPair(Ref ref, bool isVar) : Type type, Data? data ;
 
 Type(TypeType type) := 
-    TypeExpr | ListType | DictType | TupleType
+    NullableType | TypeExpr | ListType | DictType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 
 ListType(siz dim) : Type type ;

@@ -20,23 +20,25 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <queue>
 
 #include "nlohmann/json.hpp"
 
+#include "antlr4-runtime/antlr4-runtime.h"
 #include "parse/antlr/OpenCMLLexer.h"
 #include "parse/antlr/OpenCMLParser.h"
-#include "antlr4-runtime/antlr4-runtime.h"
 
+#include "builtin/operators/init.h"
 #include "builtin/passes/girdump/graphviz.h"
-#include "common/error/error.h"
-#include "common/error/json.h"
+#include "common/error/base.h"
+#include "common/error/diagnostic.h"
+#include "common/error/listener.h"
 #include "common/type.h"
-#include "parse/ast.h"
-#include "parse/cst-dump.h"
 #include "compile/gct.h"
 #include "compile/gir.h"
 #include "config.h"
-#include "builtin/operators/init.h"
+#include "parse/ast.h"
+#include "parse/cst-dump.h"
 #include "service/formatter/fmt.h"
 #include "utils/log.h"
 
@@ -108,100 +110,24 @@ bool buildCST(tree::ParseTree *&cst, OpenCMLParser &parser, ostream &os, string 
     return true;
 }
 
-bool buildAST(AST::node_ptr_t &ast, tree::ParseTree *cst, ostream &os, string errorFormat) {
+bool buildAST(AST::node_ptr_t &ast, tree::ParseTree *cst, diagnostics_ptr_t diagnostics) {
     auto constructor = AST::Constructor();
-    try {
-        ast = constructor.construct(cst);
-        return true;
-    } catch (BuildException &e) {
-        if (errorFormat != "json") {
-            error << e.what() << endl;
-        } else {
-            os << e.json() << endl;
-        }
-        return false;
-    } catch (exception &e) {
-        if (errorFormat != "json") {
-            error << "AST construction failed: " << e.what() << endl;
-        } else {
-            os << "{"
-               << "\"type\": \"error\", "
-               << "\"filename\": \"" << targetFile << "\", "
-               << "\"line\": 0, "
-               << "\"column\": 0, "
-               << "\"message\": \"AST construction failed: " << e.what() << "\""
-               << "}" << endl;
-        }
-        return false;
-    }
+    ast = constructor.construct(cst, diagnostics);
+    return ast != nullptr && !diagnostics->hasErrors();
 }
 
-bool buildGCT(GCT::node_ptr_t &gct, AST::node_ptr_t &ast, ostream &os, string errorFormat) {
-    return false; // TODO: build GCT
+bool buildGCT(GCT::node_ptr_t &gct, AST::node_ptr_t &ast, diagnostics_ptr_t diagnostics) {
     initTypes();
     auto constructor = GCT::Constructor();
-    try {
-        // gct = constructor.construct(ast);
-        // TODO: remove this line after GCT is implemented
-        auto &warns = constructor.warns();
-        if (selectedCommand == Command::CHECK) {
-            while (!warns.empty()) {
-                const auto &warning = warns.front();
-                if (errorFormat != "json") {
-                    error << warning.what() << endl;
-                } else {
-                    os << warning.json() << endl;
-                }
-                warns.pop();
-            }
-        }
-    } catch (BuildException &e) {
-        if (errorFormat != "json") {
-            error << e.what() << endl;
-            return false;
-        } else {
-            os << e.json() << endl;
-            return false;
-        }
-    } catch (exception &e) {
-        if (errorFormat != "json") {
-            error << "GCT construction failed: " << e.what() << endl;
-            return false;
-        } else {
-            os << "{"
-               << "\"type\": \"error\", "
-               << "\"filename\": \"" << targetFile << "\", "
-               << "\"line\": 0, "
-               << "\"column\": 0, "
-               << "\"message\": \"GCT construction failed: " << e.what() << "\""
-               << "}" << endl;
-            return false;
-        }
-    }
-    return true;
+    gct = constructor.construct(ast, diagnostics);
+    return gct != nullptr && !diagnostics->hasErrors();
 }
 
-bool buildGIR(GIR::graph_ptr_t &gir, GCT::node_ptr_t &gct, context_ptr_t &ctx, ostream &os, string errorFormat) {
+bool buildGIR(GIR::graph_ptr_t &gir, GCT::node_ptr_t &gct, context_ptr_t &ctx, diagnostics_ptr_t diagnostics) {
     initOperators();
     auto constructor = GIR::Constructor(ctx);
-    try {
-        gir = constructor.construct(gct);
-    } catch (exception &e) {
-        if (errorFormat != "json") {
-            error << "GIR construction failed: " << e.what() << endl;
-            return false;
-        } else {
-            os << "{"
-               << "\"type\": \"error\", "
-               << "\"filename\": \"" << targetFile << "\", "
-               << "\"line\": 0, "
-               << "\"column\": 0, "
-               << "\"message\": \"GIR construction failed: " << e.what() << "\""
-               << "}" << endl;
-            return false;
-        }
-    }
-    return true;
+    gir = constructor.construct(gct, diagnostics);
+    return gir != nullptr && !diagnostics->hasErrors();
 }
 
 int main(int argc, char *argv[]) {
@@ -246,61 +172,105 @@ int main(int argc, char *argv[]) {
             dumpTokens(tokens);
         }
 
+        diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
+        if (selectedCommand == Command::RUN | selectedCommand == Command::INSPECT) {
+            diagnostics->setLimit(Diagnostic::Severity::Error, 0);
+        }
+
+        auto printDiagnostics = [&tokens, &diagnostics, &os, &errorFormat]() {
+            const auto &tokenVec = tokens.getTokens();
+            while (!diagnostics->end()) {
+                auto diagOpt = diagnostics->next();
+                if (diagOpt.has_value()) {
+                    auto &diag = diagOpt.value();
+                    os << diag.fetchRange(tokenVec).what(errorFormat == "json") << std::endl;
+                }
+            }
+        };
+
         tree::ParseTree *cst = nullptr;
-        //tree::ParseTree *ast = nullptr;
         AST::node_ptr_t ast = nullptr;
         GCT::node_ptr_t gct = nullptr;
         GIR::graph_ptr_t gir = nullptr;
         context_ptr_t ctx = make_shared<Context>();
 
-        if (!buildCST(cst, parser, os, errorFormat)) {
-            return selectedCommand == Command::CHECK ? 0 : 2;
-        }
-        assert(cst != nullptr);
-        if (Inspect::dumpCST) {
-            auto visitor = CSTDumpVisitor(os);
-            visitor.visit(cst);
-            if (!Inspect::dumpAST && !Inspect::dumpGCT && !Inspect::dumpGIR) {
-                return 0; // If only CST is requested, we can stop here
+        try {
+            if (!buildCST(cst, parser, os, errorFormat)) {
+                return selectedCommand == Command::CHECK ? 0 : 2;
             }
-        }
-        if (Format::formatCode) {
-            auto formatter = Formatter(tokens.getTokens());
-            const string formattedCode = any_cast<string>(formatter.visit(cst));
-            os << formattedCode;
-            return 0;
-        }
-
-        if (!buildAST(ast, cst, os, errorFormat)) {
-            return selectedCommand == Command::CHECK ? 0 : 3;
-        }
-        assert(ast != nullptr);
-        if (Inspect::dumpAST && ast) {
-            ast->print(os);
-            if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
-                return 0; // If only AST is requested, we can stop here
+            if (Inspect::dumpCST) {
+                auto visitor = CSTDumpVisitor(os);
+                visitor.visit(cst);
+                if (!Inspect::dumpAST && !Inspect::dumpGCT && !Inspect::dumpGIR) {
+                    return 0; // If only CST is requested, we can stop here
+                }
             }
-        }
-
-        if (!buildGCT(gct, ast, os, errorFormat)) {
-            return selectedCommand == Command::CHECK ? 0 : 4;
-        }
-        assert(gct != nullptr);
-        if (Inspect::dumpGCT && gct) {
-            gct->print(os);
-            if (!Inspect::dumpGIR) {
-                return 0; // If only GCT is requested, we can stop here
+            if (Format::formatCode) {
+                auto formatter = Formatter(tokens.getTokens());
+                const string formattedCode = any_cast<string>(formatter.visit(cst));
+                os << formattedCode;
+                return 0;
             }
-        }
 
-        if (!buildGIR(gir, gct, ctx, os, errorFormat)) {
-            return selectedCommand == Command::CHECK ? 0 : 5;
-        }
-        assert(gir != nullptr);
-        if (Inspect::dumpGIR) {
-            GraphVizDumpPass pass(ctx);
-            auto res = pass.apply(gir);
-            os << any_cast<string>(res);
+            if (!buildAST(ast, cst, diagnostics)) {
+                return selectedCommand == Command::CHECK ? 0 : 3;
+            }
+            if (Inspect::dumpAST && ast) {
+                ast->print(os);
+                if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
+                    return 0; // If only AST is requested, we can stop here
+                }
+            }
+
+            if (!buildGCT(gct, ast, diagnostics)) {
+                return selectedCommand == Command::CHECK ? 0 : 4;
+            }
+            if (Inspect::dumpGCT && gct) {
+                gct->print(os);
+                if (!Inspect::dumpGIR) {
+                    return 0; // If only GCT is requested, we can stop here
+                }
+            }
+
+            if (!buildGIR(gir, gct, ctx, diagnostics)) {
+                return selectedCommand == Command::CHECK ? 0 : 5;
+            }
+            if (Inspect::dumpGIR) {
+                GraphVizDumpPass pass(ctx);
+                auto res = pass.apply(gir);
+                os << any_cast<string>(res);
+            }
+
+        } catch (DiagnosticsLimitExceededException &e) {
+            if (selectedCommand == Command::CHECK) {
+                printDiagnostics();
+                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
+                return 0;
+            } else {
+                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
+                return 1;
+            }
+        } catch (CamelBaseException &e) {
+            if (selectedCommand == Command::CHECK) {
+                printDiagnostics();
+                return 0;
+            } else {
+                os << e.what(errorFormat == "json") << endl;
+                return 1;
+            }
+        } catch (exception &e) {
+            if (errorFormat != "json") {
+                os << "An error occurred: " << e.what() << endl;
+            } else {
+                os << "{"
+                   << "\"type\": \"error\", "
+                   << "\"filename\": \"" << targetFile << "\", "
+                   << "\"line\": 0, "
+                   << "\"column\": 0, "
+                   << "\"message\": \"An error occurred: " << e.what() << "\""
+                   << "}" << endl;
+            }
+            return selectedCommand == Command::CHECK ? 0 : 1;
         }
 
         if (Run::profile) {

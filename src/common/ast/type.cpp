@@ -22,7 +22,7 @@
 
 namespace AbstractSyntaxTree {
 
-std::string typeTypeToString(TypeType type) {
+std::string to_string(TypeType type) {
     switch (type) {
     case TypeType::Null:
         return "Null";
@@ -47,11 +47,12 @@ std::string typeTypeToString(TypeType type) {
     case TypeType::Ref:
         return "Ref";
     default:
-        throw std::runtime_error("Unknown TypeType");
+        assert(false && "Unknown TypeType");
+        return "Unknown";
     }
 }
 
-std::string typeOpToString(TypeOp op) {
+std::string to_string(TypeOp op) {
     switch (op) {
     case TypeOp::Union:
         return "|";
@@ -74,26 +75,18 @@ std::string typeOpToString(TypeOp op) {
     case TypeOp::TypeAs:
         return "typeas";
     default:
-        throw std::runtime_error("Unknown TypeOp");
+        assert(false && "Unknown TypeOp");
+        return "Unknown";
     }
 }
 
 const std::string FuncTypeLoad::toString() const {
-    std::string result = "FuncType: ";
+    std::string result = "FuncType:";
     if (implMark_ != ImplMark::Graph) {
-        result += implMarkToString(implMark_);
+        result += " " + to_string(implMark_);
     }
-    if (macro_) {
-        result += " macro";
-    }
-    if (atomic_) {
-        result += " atomic";
-    }
-    if (shared_) {
-        result += " shared";
-    }
-    if (sync_) {
-        result += " sync";
+    if (!modifiers_.empty()) {
+        result += " " + std::string(modifiers_);
     }
     if (!uri_.empty()) {
         result += " [" + uri_ + "]";

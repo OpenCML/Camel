@@ -19,6 +19,11 @@
 
 #pragma once
 
+#include <cassert>
+#include <variant>
+
+#include "common/func.h"
+#include "common/ref.h"
 #include "data.h"
 #include "entity.h"
 
@@ -30,7 +35,27 @@ using node_ptr_t = std::shared_ptr<Node>;
 class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
-enum class NodeType { DATA, VARI, TYPE, DECL, FUNC, NREF, DREF, WAIT, ANNO, LINK, WITH, RETN, EXEC, FROM };
+enum class NodeType {
+    DECL, //
+    FUNC,
+    DATA,
+    TYPE,
+    NREF,
+    DREF,
+    VARI,
+    WAIT,
+    LINK,
+    WITH,
+    BIND,
+    ACCS,
+    BRCH,
+    FROM,
+    ANNO,
+    EXIT,
+    EXEC,
+};
+
+std::string to_string(NodeType type);
 
 class Load {
   protected:
@@ -49,9 +74,8 @@ class Load {
 
     NodeType type() const { return type_; }
     std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
-    const std::string typeStr() const;
 
-    virtual const std::string toString() const { return typeStr(); }
+    virtual const std::string toString() const { return to_string(type_); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
 };
 
@@ -59,16 +83,14 @@ class DataLoad : public Load {
     data_ptr_t data_;
 
   public:
-    DataLoad(data_ptr_t data) : Load(NodeType::DATA), data_(data) {}
+    DataLoad(data_ptr_t data) : Load(NodeType::DATA), data_(data) {
+        assert(data != nullptr && "DataLoad cannot be constructed with a null data pointer");
+    }
 
     data_ptr_t data() { return data_; }
 
     const std::string toString() const override;
 };
-
-inline std::shared_ptr<DataLoad> data_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<DataLoad>(ptr);
-}
 
 class VariLoad : public Load {
   public:
@@ -77,37 +99,37 @@ class VariLoad : public Load {
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<VariLoad> vari_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<VariLoad>(ptr);
-}
-
 class TypeLoad : public Load {
     type_ptr_t dataType_;
 
   public:
-    TypeLoad(type_ptr_t type) : Load(NodeType::TYPE), dataType_(type) {}
+    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri)
+        : Load(NodeType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
     type_ptr_t dataType() const { return dataType_; }
 
-    const std::string toString() const override;
-};
+    ImplMark implMark() const { return implMark_; }
+    const std::string &uri() const { return uri_; }
 
-inline std::shared_ptr<TypeLoad> type_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<TypeLoad>(ptr);
-}
+    const std::string toString() const override;
+
+  private:
+    ImplMark implMark_ = ImplMark::Graph;
+    std::string uri_;
+};
 
 class DeclLoad : public Load {
-    func_type_ptr_t funcType_;
+    Reference ref_;
+    bool isType_ = false;
 
   public:
-    DeclLoad(func_type_ptr_t type) : Load(NodeType::DECL), funcType_(type) {}
-    func_type_ptr_t funcType() const { return funcType_; }
+    DeclLoad(const Reference &ref, bool isType = false) : Load(NodeType::DECL), ref_(ref), isType_(isType) {}
+    DeclLoad(const std::string &str, bool isType = false) : Load(NodeType::DECL), ref_(str), isType_(isType) {}
+
+    const Reference ref() const { return ref_; }
+    bool isType() const { return isType_; }
 
     const std::string toString() const override;
 };
-
-inline std::shared_ptr<DeclLoad> decl_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<DeclLoad>(ptr);
-}
 
 class FuncLoad : public Load {
     func_type_ptr_t funcType_;
@@ -119,55 +141,36 @@ class FuncLoad : public Load {
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<FuncLoad> func_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<FuncLoad>(ptr);
-}
-
 class NRefLoad : public Load {
-    std::string ident_;
+    Reference ref_;
 
   public:
-    NRefLoad(const std::string &ident) : Load(NodeType::NREF), ident_(ident) {}
+    NRefLoad(const Reference &ref) : Load(NodeType::NREF), ref_(ref) {}
+    NRefLoad(const std::string &str) : Load(NodeType::NREF), ref_(str) {}
 
-    const std::string ident() const { return ident_; }
+    const Reference ref() const { return ref_; }
 
     const std::string toString() const override;
 };
-
-inline std::shared_ptr<NRefLoad> nref_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<NRefLoad>(ptr);
-}
 
 class DRefLoad : public Load {
-    std::string ident_;
+    Reference ref_;
 
   public:
-    DRefLoad(const std::string &ident) : Load(NodeType::DREF), ident_(ident) {}
+    DRefLoad(const Reference &ref) : Load(NodeType::DREF), ref_(ref) {}
+    DRefLoad(const std::string &str) : Load(NodeType::DREF), ref_(str) {}
 
-    const std::string ident() const { return ident_; }
+    const Reference ref() const { return ref_; }
 
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<DRefLoad> dref_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<DRefLoad>(ptr);
-}
-
 class WaitLoad : public Load {
-    std::vector<std::string> idents_;
-
   public:
     WaitLoad() : Load(NodeType::WAIT) {}
 
-    void wait(const std::string &ident) { idents_.push_back(ident); }
-    const std::vector<std::string> &waited() const { return idents_; }
-
-    const std::string toString() const override;
+    // const std::string toString() const override;
 };
-
-inline std::shared_ptr<WaitLoad> wait_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<WaitLoad>(ptr);
-}
 
 class AnnoLoad : public Load {
     std::string annotation_;
@@ -178,71 +181,86 @@ class AnnoLoad : public Load {
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<AnnoLoad> anno_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<AnnoLoad>(ptr);
-}
-
 class LinkLoad : public Load {
   public:
-    LinkLoad() : Load(NodeType::LINK) {}
+    LinkLoad(size_t args = 0) : Load(NodeType::LINK), args_(args) {}
 
-    // const std::string toString() const override;
+    void setArgs(size_t args) { args_ = args; }
+    void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
+
+    const std::string toString() const override {
+        std::string result = "LINK: argcnt=" + std::to_string(args_);
+        if (!kwargs_.empty()) {
+            result += ", kwargs=[";
+            for (const auto &kwarg : kwargs_) {
+                result += kwarg + ", ";
+            }
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+            result += "]";
+        }
+        return result;
+    }
+
+  private:
+    size_t args_;
+    std::vector<std::string> kwargs_;
 };
-
-inline std::shared_ptr<LinkLoad> link_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<LinkLoad>(ptr);
-}
 
 class WithLoad : public Load {
   public:
-    WithLoad() : Load(NodeType::WITH) {}
+    WithLoad(size_t args = 0) : Load(NodeType::WITH), args_(args) {}
+
+    void setArgs(size_t args) { args_ = args; }
+    void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
+
+    const std::string toString() const override {
+        std::string result = "WITH: argcnt=" + std::to_string(args_);
+        if (!kwargs_.empty()) {
+            result += ", kwargs=[";
+            for (const auto &kwarg : kwargs_) {
+                result += kwarg + ", ";
+            }
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+            result += "]";
+        }
+        return result;
+    }
+
+  private:
+    size_t args_;
+    std::vector<std::string> kwargs_;
+};
+
+class BindLoad : public Load {
+  public:
+    BindLoad() : Load(NodeType::BIND) {}
 
     // const std::string toString() const override;
 };
 
-inline std::shared_ptr<WithLoad> with_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<WithLoad>(ptr);
-}
-
-class RetnLoad : public Load {
+class ExitLoad : public Load {
   public:
-    RetnLoad() : Load(NodeType::RETN) {}
+    ExitLoad(ExitType type = ExitType::Return) : Load(NodeType::EXIT), exitType_(type) {}
 
-    // const std::string toString() const override;
+    ExitType exitType() const { return exitType_; }
+
+    const std::string toString() const override { return "EXIT: " + to_string(exitType_); }
+
+  private:
+    ExitType exitType_ = ExitType::Return;
 };
-
-inline std::shared_ptr<RetnLoad> retn_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<RetnLoad>(ptr);
-}
-
-class RaseLoad : public Load {
-  public:
-    RaseLoad() : Load(NodeType::RETN) {}
-};
-
-inline std::shared_ptr<RaseLoad> rase_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<RaseLoad>(ptr);
-}
-
-class ThrwLoad : public Load {
-  public:
-    ThrwLoad() : Load(NodeType::RETN) {}
-};
-
-inline std::shared_ptr<ThrwLoad> thrw_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ThrwLoad>(ptr);
-}
 
 class ExecLoad : public Load {
   public:
-    ExecLoad() : Load(NodeType::EXEC) {}
+    ExecLoad(bool sync = false) : Load(NodeType::EXEC), synced_(sync) {}
 
-    // const std::string toString() const override;
+    const std::string toString() const override { return synced_ ? "SYNC" : "EXEC"; }
+
+  private:
+    bool synced_ = false;
 };
-
-inline std::shared_ptr<ExecLoad> exec_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<ExecLoad>(ptr);
-}
 
 class FromLoad : public Load {
     std::string path_;
@@ -258,9 +276,34 @@ class FromLoad : public Load {
     const std::string toString() const override;
 };
 
-inline std::shared_ptr<FromLoad> from_load_ptr_cast(const load_ptr_t &ptr) {
-    return std::dynamic_pointer_cast<FromLoad>(ptr);
-}
+class AccsLoad : public Load {
+  public:
+    AccsLoad(const std::string &index) : Load(NodeType::ACCS), index_(index) {}
+    AccsLoad(size_t index) : Load(NodeType::ACCS), index_(index) {}
+
+    bool isNum() const { return std::holds_alternative<size_t>(index_); }
+    template <typename T> T index() const { return std::get<T>(index_); }
+
+    const std::string toString() const override {
+        std::string result = "ACCS: ";
+        if (std::holds_alternative<size_t>(index_)) {
+            result += std::to_string(std::get<size_t>(index_));
+        } else {
+            result += std::get<std::string>(index_);
+        }
+        return result;
+    }
+
+  private:
+    std::variant<std::string, size_t> index_;
+};
+
+class BrchLoad : public Load {
+  public:
+    BrchLoad() : Load(NodeType::BRCH) {}
+
+    // const std::string toString() const override;
+};
 
 } // namespace GraphConstructTree
 

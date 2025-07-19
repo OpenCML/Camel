@@ -9,14 +9,37 @@
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the the MIT license for more details.
+ * See the the MIT license for more details
  *
  * Author: Zhenjie Wei
- * Created: Jul. 31, 2024
- * Updated: Oct. 08, 2024
+ * Created: Jul. 17, 2025
+ * Updated: Jul. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "build.h"
+#pragma once
 
-std::string tmpMessage;
+#include <string>
+
+enum class LiteralType {
+    String,
+    FString,
+    Integer,
+    Real,
+    Boolean,
+    Null,
+};
+
+class Literal {
+  public:
+    Literal(LiteralType type, const std::string &data) : type_(type), data_(data) {}
+    ~Literal() = default;
+    const std::string toString() const { return data_; }
+
+    LiteralType type() const { return type_; }
+    const std::string &data() const { return data_; }
+
+  private:
+    LiteralType type_;
+    std::string data_;
+};

@@ -17,76 +17,27 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "functor.h"
+#include "func.h"
 
 #include "../../data.h"
 #include "../struct/params.h"
+#include "utils/str.h"
 
 using namespace std;
 
-FunctorModifier str2modifier(const string &str) {
-    if (str == "inner") {
-        return FunctorModifier::INNER;
-    } else if (str == "outer") {
-        return FunctorModifier::OUTER;
-    } else if (str == "atomic") {
-        return FunctorModifier::ATOMIC;
-    } else if (str == "shared") {
-        return FunctorModifier::SHARED;
-    } else if (str == "sync") {
-        return FunctorModifier::SYNC;
-    } else if (str == "macro") {
-        return FunctorModifier::MACRO;
-    } else {
-        throw runtime_error("Unknown modifier: " + str);
-    }
-}
-
-string modifier2str(FunctorModifier modifier) {
-    switch (modifier) {
-    case FunctorModifier::INNER:
-        return "inner";
-    case FunctorModifier::OUTER:
-        return "outer";
-    case FunctorModifier::ATOMIC:
-        return "atomic";
-    case FunctorModifier::SHARED:
-        return "shared";
-    case FunctorModifier::SYNC:
-        return "sync";
-    case FunctorModifier::MACRO:
-        return "macro";
-    default:
-        throw runtime_error("Unknown modifier: " + to_string(static_cast<int>(modifier)));
-    }
-}
-
-FunctorType::FunctorType(const std::string &&name, const shared_ptr<ParamsType> &withType,
-                         const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
+FunctionType::FunctionType(const std::string &&name, const shared_ptr<ParamsType> &withType,
+                           const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
     : SpecialType(TypeCode::FUNCTOR), name_(std::move(name)), withType_(withType), linkType_(paramsType),
       returnType_(returnType) {}
 
-const std::string &FunctorType::argNameAt(size_t idx) const {
+const std::string &FunctionType::argNameAt(size_t idx) const {
     if (idx < withType_->size())
         return std::get<0>(withType_->elementAt(idx));
     else
         return std::get<0>(linkType_->elementAt(idx - withType_->size()));
 }
 
-void FunctorType::addModifier(FunctorModifier modifier) { modifiers_.insert(modifier); }
-
-void FunctorType::setModifiers(const unordered_set<FunctorModifier> &modifiers) { modifiers_ = modifiers; }
-
-void FunctorType::checkModifiers() const {
-    if (hasSideEffect_ && !sync()) {
-        throw runtime_error("Functor with side effect must be sync.");
-    }
-    if (inner() && outer()) {
-        throw runtime_error("Functor cannot be both inner and outer.");
-    }
-}
-
-bool FunctorType::addIdent(const string &ident, bool isVar) {
+bool FunctionType::addIdent(const string &ident, bool isVar) {
     if (variableMap_.find(ident) != variableMap_.end()) {
         return false;
     }
@@ -97,18 +48,23 @@ bool FunctorType::addIdent(const string &ident, bool isVar) {
     return true;
 }
 
-bool FunctorType::hasSideEffect() const { return hasSideEffect_; }
+bool FunctionType::hasSideEffect() const { return hasSideEffect_; }
 
-type_ptr_t FunctorType::withType() const { return dynamic_pointer_cast<Type>(withType_); }
+type_ptr_t FunctionType::withType() const { return dynamic_pointer_cast<Type>(withType_); }
 
-type_ptr_t FunctorType::linkType() const { return dynamic_pointer_cast<Type>(linkType_); }
+type_ptr_t FunctionType::linkType() const { return dynamic_pointer_cast<Type>(linkType_); }
 
-type_ptr_t FunctorType::returnType() const { return dynamic_pointer_cast<Type>(returnType_); }
+type_ptr_t FunctionType::returnType() const { return dynamic_pointer_cast<Type>(returnType_); }
 
-string FunctorType::toString() const {
-    string result = "";
-    for (const auto &modifier : modifiers_) {
-        result += modifier2str(modifier) + " ";
+bool FunctionType::checkModifiers() const { return true; }
+
+string FunctionType::toString() const {
+    string result;
+    if (implMark_ != ImplMark::Graph) {
+        result += to_string(implMark_) + " ";
+    }
+    if (!modifiers_.empty()) {
+        result += string(modifiers_) + " ";
     }
     if (withType_ && withType_->size() > 0) {
         result += "<";
@@ -116,6 +72,9 @@ string FunctorType::toString() const {
         const auto &elements = with.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
+            if (variableMap_.count(name) && variableMap_.at(name)) {
+                result += "var ";
+            }
             result += name + ": " + type->toString();
             if (value) {
                 result += " = " + value->toString();
@@ -135,6 +94,9 @@ string FunctorType::toString() const {
         const auto &elements = params.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
+            if (variableMap_.count(name) && variableMap_.at(name)) {
+                result += "var ";
+            }
             result += name + ": " + type->toString();
             if (value) {
                 result += " = " + value->toString();
@@ -155,11 +117,11 @@ string FunctorType::toString() const {
     return result;
 }
 
-bool FunctorType::operator==(const Type &other) const {
+bool FunctionType::operator==(const Type &other) const {
     if (other.code() != TypeCode::FUNCTOR) {
         return false;
     }
-    const FunctorType &otherFunctor = dynamic_cast<const FunctorType &>(other);
+    const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
     if (withType_ != nullptr && !withType_->equals(otherFunctor.withType_)) {
         return false;
     }
@@ -172,13 +134,13 @@ bool FunctorType::operator==(const Type &other) const {
     return true;
 }
 
-bool FunctorType::operator!=(const Type &other) const { return !(*this == other); }
+bool FunctionType::operator!=(const Type &other) const { return !(*this == other); }
 
-TypeConv FunctorType::convertibility(const Type &other) const {
+TypeConv FunctionType::convertibility(const Type &other) const {
     // TODO: not fully implemented
     if (other.code() == TypeCode::FUNCTOR) {
         TypeConv result = TypeConv::SAFE;
-        const FunctorType &otherFunctor = dynamic_cast<const FunctorType &>(other);
+        const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
         if (withType_ && !otherFunctor.withType_) {
             const TypeConv withTypeConv = withType_->convertibility(*otherFunctor.withType_);
             if (withTypeConv == TypeConv::FORBIDDEN) {

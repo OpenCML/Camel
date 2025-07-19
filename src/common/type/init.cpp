@@ -20,7 +20,7 @@
 #include "type.h"
 
 #include "primary.h"
-#include "special/functor.h"
+#include "special/func.h"
 #include "struct/list.h"
 
 using namespace std;
@@ -66,7 +66,7 @@ void initTypes() {
     // initialize special types
     anyTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::ANY));
     voidTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::VOID));
-    functorTypePtr = dynamic_pointer_cast<Type>(make_shared<FunctorType>("", nullptr, nullptr, anyTypePtr));
+    functorTypePtr = dynamic_pointer_cast<Type>(make_shared<FunctionType>("", nullptr, nullptr, anyTypePtr));
 
     // initialize unknown type
     refTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::REF));

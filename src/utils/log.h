@@ -50,6 +50,24 @@ inline std::string pointerToHex(const void *ptr) {
     return ss.str();
 }
 
+inline std::string rainbowPattern(int depth) {
+    static const std::string colors[] = {
+        "\033[31m", // Red
+        "\033[33m", // Yellow
+        "\033[32m", // Green
+        "\033[36m", // Cyan
+        "\033[34m", // Blue
+        "\033[35m", // Magenta
+    };
+    const int colorCount = sizeof(colors) / sizeof(colors[0]);
+
+    std::stringstream ss;
+    for (int i = 0; i < depth; ++i) {
+        ss << colors[i % colorCount] << "| " << "\033[0m";
+    }
+    return ss.str();
+}
+
 // #define DEBUG_LEVEL -1
 
 #define debug(level)                                                                                                   \
@@ -63,7 +81,7 @@ inline std::string pointerToHex(const void *ptr) {
 #define enter(target)                                                                                                  \
     do {                                                                                                               \
         if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << repeatPattern("|   ", __depth__) << _blue("[enter] ") << target << std::endl;                 \
+            std::cout << rainbowPattern(__depth__) << _blue("[enter] ") << target << std::endl;                        \
         }                                                                                                              \
         __depth__++;                                                                                                   \
     } while (false)
@@ -72,7 +90,7 @@ inline std::string pointerToHex(const void *ptr) {
     do {                                                                                                               \
         __depth__--;                                                                                                   \
         if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << repeatPattern("|   ", __depth__) << _green("[leave] ") << target << std::endl;                \
+            std::cout << rainbowPattern(__depth__) << _green("[leave] ") << target << std::endl;                       \
         }                                                                                                              \
     } while (false)
 

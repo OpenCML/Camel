@@ -9,215 +9,50 @@
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the the MIT license for more details.
+ * See the the MIT license for more details
  *
  * Author: Zhenjie Wei
- * Created: Mar. 26, 2024
- * Updated: Mar. 10, 2025
+ * Created: Jul. 09, 2025
+ * Updated: Jul. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "parse/antlr/OpenCMLLexer.h"
-
-#include "common/token.h"
 #include "gct.h"
-#include "utils/log.h"
+#include "common/type/init.h"
+#include "utils/token.h"
+#include "utils/type.h"
 
 #define DEBUG_LEVEL 0
 
 using namespace std;
-using namespace GCT;
 
-namespace GraphConstructTree::InnerFuncDRefNodes {
-node_ptr_t __copy__ = nullptr;
-node_ptr_t __cast__ = nullptr;
-node_ptr_t __type__ = nullptr;
-node_ptr_t __index__ = nullptr;
+namespace GraphConstructTree {
 
-node_ptr_t __as__ = nullptr;
-node_ptr_t __is__ = nullptr;
-
-node_ptr_t __add__ = nullptr;
-node_ptr_t __sub__ = nullptr;
-node_ptr_t __mul__ = nullptr;
-node_ptr_t __div__ = nullptr;
-node_ptr_t __mod__ = nullptr;
-node_ptr_t __pow__ = nullptr;
-node_ptr_t __inter__ = nullptr;
-node_ptr_t __union__ = nullptr;
-
-node_ptr_t __assn__ = nullptr;
-node_ptr_t __assn_add__ = nullptr;
-node_ptr_t __assn_sub__ = nullptr;
-node_ptr_t __assn_mul__ = nullptr;
-node_ptr_t __assn_div__ = nullptr;
-node_ptr_t __assn_mod__ = nullptr;
-node_ptr_t __assn_pow__ = nullptr;
-node_ptr_t __assn_inter__ = nullptr;
-node_ptr_t __assn_union__ = nullptr;
-
-node_ptr_t __lt__ = nullptr;
-node_ptr_t __gt__ = nullptr;
-node_ptr_t __le__ = nullptr;
-node_ptr_t __ge__ = nullptr;
-node_ptr_t __eq__ = nullptr;
-node_ptr_t __ne__ = nullptr;
-node_ptr_t __and__ = nullptr;
-node_ptr_t __or__ = nullptr;
-
-node_ptr_t __not__ = nullptr;
-node_ptr_t __neg__ = nullptr;
-node_ptr_t __rev__ = nullptr;
-
-node_ptr_t __ifexpr__ = nullptr;
-
-unordered_map<string, node_ptr_t> nodesMap;
-unordered_map<string, node_ptr_t> opNodesMap;
-
-void init() {
-    if (__copy__)
-        return;
-
-    __copy__ = createNodeBy<DRefLoad>("__copy__");
-    nodesMap["__copy__"] = __copy__;
-    __cast__ = createNodeBy<DRefLoad>("__cast__");
-    nodesMap["__cast__"] = __cast__;
-    __type__ = createNodeBy<DRefLoad>("__type__");
-    nodesMap["__type__"] = __type__;
-    __index__ = createNodeBy<DRefLoad>("__index__");
-    nodesMap["__index__"] = __index__;
-
-    __as__ = createNodeBy<DRefLoad>("__as__");
-    nodesMap["__as__"] = __as__;
-    opNodesMap["as"] = __as__;
-    __is__ = createNodeBy<DRefLoad>("__is__");
-    nodesMap["__is__"] = __is__;
-    opNodesMap["is"] = __is__;
-
-    __add__ = createNodeBy<DRefLoad>("__add__");
-    nodesMap["__add__"] = __add__;
-    opNodesMap["+"] = __add__;
-    __sub__ = createNodeBy<DRefLoad>("__sub__");
-    nodesMap["__sub__"] = __sub__;
-    opNodesMap["-"] = __sub__;
-    __mul__ = createNodeBy<DRefLoad>("__mul__");
-    nodesMap["__mul__"] = __mul__;
-    opNodesMap["*"] = __mul__;
-    __div__ = createNodeBy<DRefLoad>("__div__");
-    nodesMap["__div__"] = __div__;
-    opNodesMap["/"] = __div__;
-    __mod__ = createNodeBy<DRefLoad>("__mod__");
-    nodesMap["__mod__"] = __mod__;
-    opNodesMap["%"] = __mod__;
-    __pow__ = createNodeBy<DRefLoad>("__pow__");
-    nodesMap["__pow__"] = __pow__;
-    opNodesMap["^"] = __pow__;
-    __inter__ = createNodeBy<DRefLoad>("__inter__");
-    nodesMap["__inter__"] = __inter__;
-    opNodesMap["&"] = __inter__;
-    __union__ = createNodeBy<DRefLoad>("__union__");
-    nodesMap["__union__"] = __union__;
-    opNodesMap["|"] = __union__;
-
-    __assn__ = createNodeBy<DRefLoad>("__assn__");
-    nodesMap["__assn__"] = __assn__;
-    opNodesMap["="] = __assn__;
-    __assn_add__ = createNodeBy<DRefLoad>("__assn_add__");
-    nodesMap["__assn_add__"] = __assn_add__;
-    opNodesMap["+="] = __assn_add__;
-    __assn_sub__ = createNodeBy<DRefLoad>("__assn_sub__");
-    nodesMap["__assn_sub__"] = __assn_sub__;
-    opNodesMap["-="] = __assn_sub__;
-    __assn_mul__ = createNodeBy<DRefLoad>("__assn_mul__");
-    nodesMap["__assn_mul__"] = __assn_mul__;
-    opNodesMap["*="] = __assn_mul__;
-    __assn_div__ = createNodeBy<DRefLoad>("__assn_div__");
-    nodesMap["__assn_div__"] = __assn_div__;
-    opNodesMap["/="] = __assn_div__;
-    __assn_mod__ = createNodeBy<DRefLoad>("__assn_mod__");
-    nodesMap["__assn_mod__"] = __assn_mod__;
-    opNodesMap["%="] = __assn_mod__;
-    __assn_pow__ = createNodeBy<DRefLoad>("__assn_pow__");
-    nodesMap["__assn_pow__"] = __assn_pow__;
-    opNodesMap["^="] = __assn_pow__;
-    __assn_inter__ = createNodeBy<DRefLoad>("__assn_inter__");
-    nodesMap["__assn_inter__"] = __assn_inter__;
-    opNodesMap["&="] = __assn_inter__;
-    __assn_union__ = createNodeBy<DRefLoad>("__assn_union__");
-    nodesMap["__assn_union__"] = __assn_union__;
-    opNodesMap["|="] = __assn_union__;
-
-    __lt__ = createNodeBy<DRefLoad>("__lt__");
-    nodesMap["__lt__"] = __lt__;
-    opNodesMap["<"] = __lt__;
-    __gt__ = createNodeBy<DRefLoad>("__gt__");
-    nodesMap["__gt__"] = __gt__;
-    opNodesMap[">"] = __gt__;
-    __le__ = createNodeBy<DRefLoad>("__le__");
-    nodesMap["__le__"] = __le__;
-    opNodesMap["<="] = __le__;
-    __ge__ = createNodeBy<DRefLoad>("__ge__");
-    nodesMap["__ge__"] = __ge__;
-    opNodesMap[">="] = __ge__;
-    __eq__ = createNodeBy<DRefLoad>("__eq__");
-    nodesMap["__eq__"] = __eq__;
-    opNodesMap["=="] = __eq__;
-    __ne__ = createNodeBy<DRefLoad>("__ne__");
-    nodesMap["__ne__"] = __ne__;
-    opNodesMap["!="] = __ne__;
-    __and__ = createNodeBy<DRefLoad>("__and__");
-    nodesMap["__and__"] = __and__;
-    opNodesMap["&&"] = __and__;
-    __or__ = createNodeBy<DRefLoad>("__or__");
-    nodesMap["__or__"] = __or__;
-    opNodesMap["||"] = __or__;
-
-    __not__ = createNodeBy<DRefLoad>("__not__");
-    nodesMap["__not__"] = __not__;
-    opNodesMap["!"] = __not__;
-    __neg__ = createNodeBy<DRefLoad>("__neg__");
-    nodesMap["__neg__"] = __neg__;
-    opNodesMap["-"] = __neg__;
-    __rev__ = createNodeBy<DRefLoad>("__rev__");
-    nodesMap["__rev__"] = __rev__;
-    opNodesMap["~"] = __rev__;
+template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
+    return std::make_shared<Node>(
+        std::dynamic_pointer_cast<Load>(std::make_shared<LoadType>(std::forward<Args>(args)...)));
 }
 
-} // namespace GraphConstructTree::InnerFuncDRefNodes
-
-inline node_ptr_t reparent(node_ptr_t &node, node_ptr_t &parent) {
-    *parent << node;
-    return parent;
-}
-
-inline node_ptr_t linkFunc(node_ptr_t &argsNode, node_ptr_t &funcNode) {
-    node_ptr_t linkNode = createNodeBy<LinkLoad>();
-    *linkNode << argsNode << funcNode;
-    return linkNode;
-}
-
-data_ptr_t Constructor::extractStaticData(const node_ptr_t &node) {
+data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
     if (node->type() == NodeType::DATA) {
-        const auto dataNode = dynamic_pointer_cast<DataLoad>(node->load());
-        return dataNode->data();
+        return node->loadAs<DataLoad>()->data();
     } else if (node->type() == NodeType::DREF) {
-        const auto refNode = dynamic_pointer_cast<DRefLoad>(node->load());
-        return make_shared<RefData>(refNode->ident());
+        return make_shared<RefData>(node->loadAs<DRefLoad>()->ref());
     } else {
         return nullptr;
     }
 }
 
 pair<node_ptr_t, data_ptr_t> Constructor::makeRefData(const node_ptr_t &expr) {
-    const string indent = to_string(indentIndex_++);
-    node_ptr_t refNode = createNodeBy<NRefLoad>(indent);
+    const string id = std::to_string(idIndex_++);
+    node_ptr_t refNode = createNodeAs<NRefLoad>(id);
     *refNode << expr;
-    data_ptr_t data = make_shared<RefData>(indent);
+    data_ptr_t data = make_shared<RefData>(id);
     return make_pair(refNode, data);
 }
 
 pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr_t &execNode) {
-    const data_ptr_t data = extractStaticData(node);
+    const data_ptr_t data = extractStaticDataFromNode(node);
     if (data) {
         return make_pair(data, false);
     } else {
@@ -235,852 +70,1142 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
     return make_pair(refData, dang);
 }
 
+void Constructor::initInnerTypes() {
+    typeScope_->clear();
+    typeScope_->insert(Reference("int"), int32TypePtr);
+    typeScope_->insert(Reference("float"), floatTypePtr);
+    typeScope_->insert(Reference("bool"), boolTypePtr);
+    typeScope_->insert(Reference("char"), charTypePtr);
+    typeScope_->insert(Reference("string"), stringTypePtr);
+    typeScope_->insert(Reference("any"), anyTypePtr);
+    typeScope_->insert(Reference("void"), voidTypePtr);
+}
+
 /*
-program : SEP? (decl SEP?)* EOF;
+Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
-any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
-    enter("Program");
+node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
+    enter("Module");
+    assert(ast->type() == AST::LoadType::Module);
+    auto importNodes = ast->atAs<AST::RepeatedLoad>(0);
+    auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
+    auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
 
-    root_ = createNodeBy<ExecLoad>();
+    for (const auto &import : *importNodes) {
+        visitImport(import);
+    }
 
-    const auto &decls = context->decl();
-
-    if (decls.size() == 1)
-        root_ = any_cast<node_ptr_t>(visitDecl(decls[0]));
-    else {
-        for (const auto &decl : decls) {
-            *root_ << any_cast<node_ptr_t>(visitDecl(decl));
+    root_ = createNodeAs<ExecLoad>();
+    for (auto &stmt : *stmtNodes) {
+        try {
+            *root_ << visitStmt(stmt);
+        } catch (const BuildAbortException &) {
+            continue;
         }
     }
 
-    leave("Program");
+    if (!exportOptNode->empty()) {
+        visitExport(exportOptNode->front());
+    }
+
+    leave("Module");
     return root_;
 }
 
 /*
-decl
-    : moduleDecl
-    | importDecl
-    | exportDecl
-    | dataDecl
-    | funcDecl
-    | typeDecl
-    | useDecl
-    ;
+ImportDecl(string path, Ref[] refs, Ref as) ;
 */
-any Constructor::visitDecl(OpenCMLParser::DeclContext *context) { return visit(context->children[0]); }
+void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) { return nullptr; }
 
 /*
-stmt
-    : dataDecl
-    | funcDecl
-    | typeDecl
-    | dataExpr
-    | useDecl
-    | retStmt
-    | blockStmt
-    ;
+ExportDecl(Ref[] refs) ;
 */
-any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
+void_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) { return nullptr; }
+
+node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
     enter("Stmt");
-    any res = visit(context->children[0]);
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &stmt = ast->loadAs<AST::StmtLoad>();
+    node_ptr_t stmtNode;
+
+    switch (stmt->stmtType()) {
+    case AST::StmtType::Data:
+        stmtNode = visitDataDecl(ast);
+        break;
+    case AST::StmtType::Func:
+        stmtNode = visitFuncDecl(ast);
+        break;
+    case AST::StmtType::Type:
+        stmtNode = visitTypeDecl(ast);
+        break;
+    case AST::StmtType::Name:
+        stmtNode = visitNameDecl(ast);
+        break;
+    case AST::StmtType::Expr:
+        stmtNode = visitExprStmt(ast);
+        break;
+    case AST::StmtType::Exit:
+        stmtNode = visitExitStmt(ast);
+        break;
+    case AST::StmtType::Block:
+        stmtNode = visitStmtBlock(ast);
+        break;
+    default:
+        throw std::runtime_error("Unknown statement type");
+    }
+
     leave("Stmt");
+    return stmtNode;
+}
+
+/*
+DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
+*/
+node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
+    enter("DataDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &dataDeclLoad = ast->loadAs<AST::DataDeclLoad>();
+    bool isVar = dataDeclLoad->isVar();
+    const auto &refs = dataDeclLoad->refs();
+    const auto &typeNodes = ast->atAs<AST::RepeatedLoad>(0);
+    const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(1);
+
+    node_ptr_t res = createNodeAs<ExecLoad>();
+
+    switch (dataDeclLoad->unpackType()) {
+    case AST::UnpackType::Dict: {
+        reportDiagnostic("Dict unpacking is not supported in DataDecl", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::UnpackType::List: {
+        reportDiagnostic("List unpacking is not supported in DataDecl", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::UnpackType::Tuple: {
+        if (refs.size() == dataNodes->size()) {
+            for (size_t i = 0; i < refs.size(); ++i) {
+                const auto &ref = refs[i];
+                const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
+                if (dataNode->type() != AST::LoadType::Data) {
+                    reportDiagnostic("Tuple unpacking requires Data type nodes", dataNode->load()->tokenRange(),
+                                     Diagnostic::Severity::Error);
+                    throw BuildAbortException();
+                }
+                node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
+                *nRefNode << visitData(dataNode);
+                res = nRefNode;
+            }
+        } else {
+            if (dataNodes->size() == 1) {
+                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
+                node_ptr_t dataNode = visitData(dataASTNode);
+                const string id = std::to_string(idIndex_++);
+                node_ptr_t dataRefNode = createNodeAs<NRefLoad>(id);
+                node_ptr_t dRefNode = createNodeAs<DRefLoad>(id);
+                *dataRefNode << dataNode;
+                *res << dataRefNode;
+                for (size_t i = 0; i < refs.size(); ++i) {
+                    const auto &ref = refs[i];
+                    node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
+                    node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
+                    *accsNode << dRefNode;
+                    *nRefNode << accsNode;
+                    *res << nRefNode;
+                }
+            } else {
+                reportDiagnostic(
+                    "Tuple unpacking requires the same number of references and data nodes, or exactly one tuple data",
+                    ast->load()->tokenRange(), Diagnostic::Severity::Error);
+                throw BuildAbortException();
+            }
+        }
+    } break;
+    default:
+        assert(false && "Unknown unpack type in DataDecl");
+    }
+
+    if (isVar) {
+        node_ptr_t variNode = createNodeAs<VariLoad>();
+        *variNode << res;
+        res = variNode;
+    }
+
+    leave("DataDecl");
     return res;
 }
 
 /*
-stmtList : stmt (SEP? stmt)* SEP? ;
+FuncDecl(Ref ref) : FuncData ;
 */
-any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    enter("StmtList");
-    pushScope();
+node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {
+    enter("FuncDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
+    const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
+    node_ptr_t funcNode = visitFuncData(funcDataNode);
+    node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->ref().ident(), true);
+    *declNode << funcNode;
+    leave("FuncDecl");
+    return declNode;
+}
 
-    node_ptr_t execNode = createNodeBy<ExecLoad>();
+/*
+TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
+*/
+node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
+    enter("TypeDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
+    type_ptr_t type;
+    if (typeNode) {
+        type = visitType(typeNode);
+    } else {
+        reportDiagnostic("Type declaration requires a type", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    }
+    const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
+    typeScope_->insert(typeLoad->ref(), type);
+    node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref());
+    *declNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
+    leave("TypeDecl");
+    return declNode;
+}
 
-    vector<OpenCMLParser::UseDeclContext *> froms;
-    vector<OpenCMLParser::TypeDeclContext *> types;
-    vector<OpenCMLParser::FuncDeclContext *> decls;
-    vector<OpenCMLParser::StmtContext *> stmts;
+/*
+NameDecl(Ref ref, Ref alias) ;
+*/
+node_ptr_t Constructor::visitNameDecl(const AST::node_ptr_t &ast) {
+    enter("NameDecl");
+    assert(ast->type() == AST::LoadType::Stmt);
+    reportDiagnostic("NameDecl is not supported in the current version of the compiler. "
+                     "Please use DataDecl or TypeDecl instead.",
+                     ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("NameDecl");
+    return nullptr;
+}
 
-    // 1. Classify each statement into the appropriate category. Sequence: Decl > Type > Def >
-    for (const auto &stmt : context->stmt()) {
-        if (stmt->useDecl()) {
-            froms.push_back(stmt->useDecl());
-        } else if (stmt->typeDecl()) {
-            types.push_back(stmt->typeDecl());
-        } else if (stmt->funcDecl()) {
-            decls.push_back(stmt->funcDecl());
-            stmts.push_back(stmt);
+/*
+ExprStmt() : Data data ;
+*/
+node_ptr_t Constructor::visitExprStmt(const AST::node_ptr_t &ast) {
+    enter("ExprStmt");
+    assert(ast->type() == AST::LoadType::Stmt);
+    node_ptr_t exprNode = visitData(ast->atAs<AST::DataLoad>(0));
+    leave("ExprStmt");
+    return exprNode;
+}
+
+/*
+ExitStmt(ExitType type) : Data* data ;
+*/
+node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
+    enter("ExitStmt");
+    assert(ast->type() == AST::LoadType::Stmt);
+    node_ptr_t exitNode = createNodeAs<ExitLoad>();
+    const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
+    if (dataNodes->size() > 0) {
+        if (dataNodes->size() == 1) {
+            const auto &dataNode = dataNodes->front();
+            node_ptr_t d = visitData(dataNode);
+            *exitNode << visitData(dataNode);
         } else {
-            stmts.push_back(stmt);
+            auto tupleData = make_shared<TupleData>();
+            node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
+            bool dangling = false;
+            node_ptr_t execNode = createNodeAs<ExecLoad>();
+            for (const auto &item : *dataNodes) {
+                node_ptr_t dataNode = visitData(item);
+                auto [data, _] = extractData(dataNode, execNode, dangling);
+                tupleData->emplace(data);
+            }
+            if (dangling) {
+                *execNode << dataNode;
+                dataNode = execNode;
+            }
+            *exitNode << dataNode;
         }
     }
+    leave("ExitStmt");
+    return exitNode;
+}
 
-    // 2. Process statements in priority order
-    // 2.1 Handle imports first (may affect type resolution)
-    for (const auto &stmt : froms) {
-        *execNode << any_cast<node_ptr_t>(visitUseDecl(stmt));
+/*
+StmtBlock(bool sync) : Stmt* stmts ;
+*/
+node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {
+    enter("StmtBlock");
+    assert(ast->type() == AST::LoadType::Stmt);
+    const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(stmtBlock->synced());
+
+    pushScope();
+    for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
+        assert(stmt->type() == AST::LoadType::Stmt && "Expected a statement in StmtBlock");
+        *execNode << visitStmt(stmt);
     }
-
-    // 2.2 Process type declarations (prerequisite for functions)
-    for (const auto &stmt : types) {
-        *execNode << any_cast<node_ptr_t>(visitTypeDecl(stmt));
-    }
-
-    // 2.3 Register function signatures (before their bodies are processed)
-    for (const auto &decl : decls) {
-        func_type_ptr_t funcType = any_cast<func_type_ptr_t>(visitFuncDecl(decl));
-        node_ptr_t declNode = createNodeBy<DeclLoad>(funcType); // Create declaration node
-        *execNode << declNode;                                  // Attach to execution block
-    }
-
-    // 2.4 Process general statements and function bodies
-    for (const auto &stmt : stmts) {
-        *execNode << any_cast<node_ptr_t>(visitStmt(stmt));
-    }
-
     popScope();
-    leave("StmtList");
+
+    leave("StmtBlock");
     return execNode;
 }
 
-/*
-moduleDecl : MODULE identDef ;
-*/
-any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) { return nullptr; }
+node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
+    enter("Data");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &data = ast->loadAs<AST::DataLoad>();
+    node_ptr_t dataNode;
 
-/*
-importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
-*/
-any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) { return nullptr; }
-
-/*
-exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
-*/
-any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) { return nullptr; }
-
-/*
-blockStmt  : WAIT? stmtBlock ;
-*/
-any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) { return nullptr; }
-
-/*
-stmtBlock  : SYNC? '{' stmtList? '}' ;
-*/
-any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) { return nullptr; }
-
-/*
-blockExpr  : stmtBlock | dataExpr ;
-*/
-any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) { return nullptr; }
-
-/*
-funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
-*/
-any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {}
-
-/*
-funcDecl   :
-        (WITH angledParams)?
-        EXPORT? implMark? modifiers?
-        FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
-*/
-any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
-    enter("FuncDecl");
-
-    if (funcDecls_.find(context) != funcDecls_.end()) { // hit memory
-        leave("FuncDecl");
-        return funcDecls_[context];
-    }
-
-    // TODO: Implement annotations
-
-    const string ident = any_cast<string>(visitIdentDef(context->identDef()));
-
-    shared_ptr<FunctorType> funcType = nullptr;
-    const auto withType = make_shared<ParamsType>();
-    const auto paramsType = make_shared<ParamsType>();
-
-    const auto &typeExpr = context->typeExpr();
-    if (typeExpr) {
-        const auto returnType = any_cast<type_ptr_t>(visitTypeExpr(typeExpr));
-        funcType = make_shared<FunctorType>(std::move(ident), withType, paramsType, returnType);
-    } else {
-        // if no return type is specified, the default return type is void
-        funcType = make_shared<FunctorType>(std::move(ident), withType, paramsType, voidTypePtr);
-    }
-
-    const auto &angledParams = context->angledParams();
-    if (angledParams) {
-        const auto &pairedParams =
-            any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitAngledParams(context->angledParams()));
-        for (const auto &[name, type, data, isVar] : pairedParams) {
-            withType->add(name, type, data);
-            bool success = funcType->addIdent(name, isVar);
-            if (!success) {
-                const auto &token = context->getStart();
-                throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
-            }
-        }
-    }
-
-    const auto &params =
-        any_cast<vector<tuple<string, type_ptr_t, data_ptr_t, bool>>>(visitParentParams(context->parentParams()));
-    for (const auto &[name, type, data, isVar] : params) {
-        paramsType->add(name, type, data);
-        bool success = funcType->addIdent(name, isVar);
-        if (!success) {
-            const auto &token = context->getStart();
-            throw BuildException("Identifier '" + name + "' already exists in the function signature", token);
-        }
-    }
-
-    const auto &modifiers = context->modifiers();
-    if (modifiers) {
-        const auto &modSet = any_cast<unordered_set<FunctorModifier>>(visitModifiers(modifiers));
-        funcType->setModifiers(modSet);
-        try {
-            funcType->checkModifiers();
-        } catch (const exception &e) {
-            const auto &token = modifiers->getStart();
-            throw BuildException(e.what(), token);
-        }
-    }
-
-    // note: this node may be shared
-    funcDecls_[context] = funcType;
-    leave("FuncDecl");
-    return funcType;
-}
-
-/*
-parentIdents  : '(' identList? ','? ')' ;
-*/
-any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
-    enter("ParentIndents");
-    any res;
-    const auto &identList = context->identList();
-    if (identList) {
-        res = visitIdentList(identList);
-    } else {
-        res = vector<string>();
-    }
-    leave("ParentIndents");
-    return res;
-}
-
-/*
-bracedIdents  : '{' identList? ','? '}' ;
-*/
-any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
-    enter("BracedIdents");
-    any res;
-    const auto &identList = context->identList();
-    if (identList) {
-        res = visitIdentList(identList);
-    } else {
-        res = vector<string>();
-    }
-    leave("BracedIdents");
-    return res;
-}
-
-/*
-bracketIdents : '[' identList? ','? ']' ;
-*/
-any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
-    enter("BracketIdents");
-    any res;
-    const auto &identList = context->identList();
-    if (identList) {
-        res = visitIdentList(identList);
-    } else {
-        res = vector<string>();
-    }
-    leave("BracketIdents");
-    return res;
-}
-
-/*
-carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
-*/
-any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
-    enter("Carrier");
-    const size_t alt = context->getAltNumber();
-    any res;
-    switch (alt) {
-    case 1: // identList
-        res = make_pair(alt, visitIdentList(context->identList()));
+    switch (data->dataType()) {
+    case AST::DataType::UnaryExpr:
+        dataNode = visitUnaryExpr(ast);
         break;
-    case 2: // parentIdents
-        res = make_pair(alt, visitParentIdents(context->parentIdents()));
+    case AST::DataType::BinaryExpr:
+        dataNode = visitBinaryExpr(ast);
         break;
-    case 3: // bracedIdents
-        res = make_pair(alt, visitBracedIdents(context->bracedIdents()));
+    case AST::DataType::ReservedExpr:
+        dataNode = visitReservedExpr(ast);
         break;
-    case 4: // bracketIdents
-        res = make_pair(alt, visitBracketIdents(context->bracketIdents()));
+    case AST::DataType::IfExpr:
+        dataNode = visitIfExpr(ast);
         break;
-
+    case AST::DataType::MatchExpr:
+        dataNode = visitMatchExpr(ast);
+        break;
+    case AST::DataType::TryExpr:
+        dataNode = visitTryExpr(ast);
+        break;
+    case AST::DataType::Literal:
+        dataNode = visitLiteral(ast);
+        break;
+    case AST::DataType::List:
+        dataNode = visitListData(ast);
+        break;
+    case AST::DataType::Dict:
+        dataNode = visitDictData(ast);
+        break;
+    case AST::DataType::Tuple:
+        dataNode = visitTupleData(ast);
+        break;
+    case AST::DataType::Func:
+        dataNode = visitFuncData(ast);
+        break;
+    case AST::DataType::Ref:
+        dataNode = visitRefData(ast);
+        break;
     default:
-        throw runtime_error("Unknown carrier type");
+        throw std::runtime_error("Unknown data type");
     }
-    leave("Carrier");
+
+    leave("Data");
+    return dataNode;
+}
+
+/*
+enum UnaryDataOp {
+    Not,
+    Neg,
+    Inv
+}
+UnaryExpr(UnaryDataOp op) := Data data ;
+*/
+node_ptr_t Constructor::visitUnaryExpr(const AST::node_ptr_t &ast) {
+    enter("UnaryExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &unaryExpr = ast->loadAs<AST::UnaryExprLoad>();
+    const auto &dataASTNode = ast->atAs<AST::DataLoad>(0);
+    node_ptr_t opNode;
+    switch (unaryExpr->op()) {
+    case AST::UnaryDataOp::Not: {
+        opNode = createNodeAs<DRefLoad>("__not__");
+    } break;
+    case AST::UnaryDataOp::Neg: {
+        opNode = createNodeAs<DRefLoad>("__neg__");
+    } break;
+    case AST::UnaryDataOp::Inv: {
+        opNode = createNodeAs<DRefLoad>("__inv__");
+    } break;
+    default:
+        assert(false && "Unknown unary operation");
+        return nullptr;
+    }
+    node_ptr_t linkNode = createNodeAs<LinkLoad>(1);
+    *linkNode << opNode << visitData(dataASTNode);
+    leave("UnaryExpr");
+    return linkNode;
+}
+
+/*
+enum BinaryDataOp {
+    Assign,
+    AssignAdd,
+    AssignSub,
+    AssignMul,
+    AssignDiv,
+    AssignMod,
+    AssignMat,
+    AssignExp,
+    AssignAnd,
+    AssignOr,
+    Or,
+    And,
+    Eq,
+    Neq,
+    StrictEq,
+    StrictNeq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Mat,
+    Exp,
+    Index, // Data obj, Data* indices
+}
+BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
+*/
+node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
+    enter("BinaryExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
+    const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
+    node_ptr_t opNode;
+    switch (binaryExpr->op()) {
+    case AST::BinaryDataOp::Assign: {
+        opNode = createNodeAs<DRefLoad>("__assn__");
+    } break;
+    case AST::BinaryDataOp::AssignAdd: {
+        opNode = createNodeAs<DRefLoad>("__assn_add__");
+    } break;
+    case AST::BinaryDataOp::AssignSub: {
+        opNode = createNodeAs<DRefLoad>("__assn_sub__");
+    } break;
+    case AST::BinaryDataOp::AssignMul: {
+        opNode = createNodeAs<DRefLoad>("__assn_mul__");
+    } break;
+    case AST::BinaryDataOp::AssignDiv: {
+        opNode = createNodeAs<DRefLoad>("__assn_div__");
+    } break;
+    case AST::BinaryDataOp::AssignMod: {
+        opNode = createNodeAs<DRefLoad>("__assn_mod__");
+    } break;
+    case AST::BinaryDataOp::AssignMat: {
+        opNode = createNodeAs<DRefLoad>("__assn_mat__");
+    } break;
+    case AST::BinaryDataOp::AssignExp: {
+        opNode = createNodeAs<DRefLoad>("__assn_exp__");
+    } break;
+    case AST::BinaryDataOp::AssignAnd: {
+        opNode = createNodeAs<DRefLoad>("__assn_and__");
+    } break;
+    case AST::BinaryDataOp::AssignOr: {
+        opNode = createNodeAs<DRefLoad>("__assn_or__");
+    } break;
+    case AST::BinaryDataOp::Or: {
+        opNode = createNodeAs<DRefLoad>("__or__");
+    } break;
+    case AST::BinaryDataOp::And: {
+        opNode = createNodeAs<DRefLoad>("__and__");
+    } break;
+    case AST::BinaryDataOp::Eq: {
+        opNode = createNodeAs<DRefLoad>("__eq__");
+    } break;
+    case AST::BinaryDataOp::Neq: {
+        opNode = createNodeAs<DRefLoad>("__neq__");
+    } break;
+    case AST::BinaryDataOp::StrictEq: {
+        opNode = createNodeAs<DRefLoad>("__strict_eq__");
+    } break;
+    case AST::BinaryDataOp::StrictNeq: {
+        opNode = createNodeAs<DRefLoad>("__strict_neq__");
+    } break;
+    case AST::BinaryDataOp::Less: {
+        opNode = createNodeAs<DRefLoad>("__less__");
+    } break;
+    case AST::BinaryDataOp::LessEq: {
+        opNode = createNodeAs<DRefLoad>("__less_eq__");
+    } break;
+    case AST::BinaryDataOp::Greater: {
+        opNode = createNodeAs<DRefLoad>("__greater__");
+    } break;
+    case AST::BinaryDataOp::GreaterEq: {
+        opNode = createNodeAs<DRefLoad>("__greater_eq__");
+    } break;
+    case AST::BinaryDataOp::Add: {
+        opNode = createNodeAs<DRefLoad>("__add__");
+    } break;
+    case AST::BinaryDataOp::Sub: {
+        opNode = createNodeAs<DRefLoad>("__sub__");
+    } break;
+    case AST::BinaryDataOp::Mul: {
+        opNode = createNodeAs<DRefLoad>("__mul__");
+    } break;
+    case AST::BinaryDataOp::Div: {
+        opNode = createNodeAs<DRefLoad>("__div__");
+    } break;
+    case AST::BinaryDataOp::Mod: {
+        opNode = createNodeAs<DRefLoad>("__mod__");
+    } break;
+    case AST::BinaryDataOp::Mat: {
+        opNode = createNodeAs<DRefLoad>("__mat__");
+    } break;
+    case AST::BinaryDataOp::Exp: {
+        opNode = createNodeAs<DRefLoad>("__exp__");
+    } break;
+    case AST::BinaryDataOp::Index: {
+        opNode = createNodeAs<DRefLoad>("__index__");
+    } break;
+    default:
+        assert(false && "Unknown binary operation");
+        return nullptr;
+    }
+    node_ptr_t linkNode = createNodeAs<LinkLoad>(2);
+    *linkNode << opNode << visitData(lhsASTNode);
+    if (binaryExpr->op() == AST::BinaryDataOp::Index) {
+        auto indices = ast->atAs<AST::RepeatedLoad>(1);
+        for (const auto &index : *indices) {
+            *linkNode << visitData(index);
+        }
+    } else {
+        const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
+        *linkNode << visitData(rhsASTNode);
+    }
+    leave("BinaryExpr");
+    return linkNode;
+}
+
+/*
+enum ReservedDataOp {
+    NullThen,
+    NullThen,
+    ErrorThen,
+    NotNullThen,
+    Call, // Data obj, Data* args, NamedData* kwargs
+    With, // Data obj, Data* args, NamedData* kwargs
+    Bind, // Data lhs, Data rhs
+    As, // Data lhs, Type rhs
+    Is, // Data lhs, Type rhs
+    Access, // Data obj, RefData ref
+}
+ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
+*/
+node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
+    enter("ReservedExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    node_ptr_t res;
+    const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
+    bool waited = reservedExpr->waited();
+    const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
+    switch (reservedExpr->op()) {
+    case AST::ReservedDataOp::NullThen: {
+        reportDiagnostic("NullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        res = visitData(lhsASTNode);
+    } break;
+    case AST::ReservedDataOp::ErrorThen: {
+        reportDiagnostic("ErrorThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        res = visitData(lhsASTNode);
+    } break;
+    case AST::ReservedDataOp::NotNullThen: {
+        reportDiagnostic("NotNullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        res = visitData(lhsASTNode);
+    } break;
+
+    case AST::ReservedDataOp::Call: {
+        const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
+        const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
+        res = createNodeAs<LinkLoad>(argsNode->size());
+        const auto &linkLoad = res->loadAs<LinkLoad>();
+        *res << visitData(lhsASTNode);
+        for (auto &argNode : *argsNode) {
+            *res << visitData(argNode);
+        }
+        for (const auto &kwargNode : *kwargsNode) {
+            const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
+            const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
+            const auto &kwargName = namedData->ref().ident();
+            linkLoad->addKwarg(kwargName);
+            *res << visitData(dataNode);
+        }
+    } break;
+    case AST::ReservedDataOp::With: {
+        const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
+        const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
+        res = createNodeAs<WithLoad>(argsNode->size());
+        const auto &linkLoad = res->loadAs<WithLoad>();
+        *res << visitData(lhsASTNode);
+        for (auto &argNode : *argsNode) {
+            *res << visitData(argNode);
+        }
+        for (const auto &kwargNode : *kwargsNode) {
+            const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
+            const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
+            const auto &kwargName = namedData->ref().ident();
+            linkLoad->addKwarg(kwargName);
+            *res << visitData(dataNode);
+        }
+    } break;
+    case AST::ReservedDataOp::Bind: {
+        const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
+        res = createNodeAs<BindLoad>();
+        *res << visitData(lhsASTNode) << visitData(rhsASTNode);
+    } break;
+
+    case AST::ReservedDataOp::As: {
+        reportDiagnostic("As is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::ReservedDataOp::Is: {
+        reportDiagnostic("Is is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+
+    case AST::ReservedDataOp::Access: {
+        const auto &refASTNode = ast->atAs<AST::RefDataLoad>(1);
+        const auto &refData = refASTNode->loadAs<RefData>();
+        res = createNodeAs<AccsLoad>(refData->ref());
+        *res << visitData(lhsASTNode);
+    } break;
+    default:
+        assert(false && "Unknown reserved operation");
+        res = nullptr;
+    }
+    if (waited) {
+        node_ptr_t waitNode = createNodeAs<WaitLoad>();
+        *waitNode << res; // Wait for the result of the reserved expression
+        res = waitNode;
+    }
+    leave("ReservedExpr");
     return res;
 }
 
 /*
-dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
+IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 */
-any Constructor::visitDataDecl(OpenCMLParser::DataDeclContext *context) {}
-
-/*
-typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
-*/
-any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
-    enter("TypeDecl");
-
-    const string &ident = any_cast<string>(visitIdentDef(context->identDef()));
-
-    type_ptr_t type;
-
-    if (context->typeExpr()) {
-        type = any_cast<type_ptr_t>(visitTypeExpr(context->typeExpr()));
+node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
+    enter("IfExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    node_ptr_t brchNode = createNodeAs<BrchLoad>();
+    *brchNode << visitData(ast->atAs<AST::DataLoad>(0)); // condition
+    const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
+    node_ptr_t thenNode = visitStmtBlock(thenBlock);
+    *brchNode << thenNode; // then block
+    const auto &elseNode = ast->optAtAs<AST::StmtBlockLoad>(2);
+    if (elseNode) {
+        node_ptr_t elseBlock = visitStmtBlock(elseNode);
+        *brchNode << elseBlock; // else block
     } else {
-        type = any_cast<type_ptr_t>(context->STRING());
+        *brchNode << createNodeAs<ExecLoad>(); // empty else block
     }
-
-    typeScope_->insert(ident, type);
-    node_ptr_t result = createNodeBy<TypeLoad>(type);
-    leave("TypeDecl");
-    return result;
+    leave("IfExpr");
+    return brchNode;
 }
 
 /*
-useDecl    : USE (identDef '=')? identRef ;
+
 */
-any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
-    enter("UseDecl");
-    string path = "";
-
-    vector<string> idents;
-    idents.push_back(any_cast<string>(visitIdentRef(context->identRef())));
-
-    if (context->identDef()) {
-        path = any_cast<string>(visitIdentDef(context->identDef()));
-    }
-
-    node_ptr_t result = createNodeBy<FromLoad>(path, idents);
-
-    leave("UseDecl");
-    return result;
+node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
+    enter("MatchExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    reportDiagnostic("MatchExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("MatchExpr");
+    return nullptr;
 }
 
 /*
-retStmt    : (RETURN | RAISE | THROW) dataList ;
+
 */
-any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
-    enter("RetStmt");
-    node_ptr_t resNode;
+node_ptr_t Constructor::visitTryExpr(const AST::node_ptr_t &ast) {
+    enter("TryExpr");
+    assert(ast->type() == AST::LoadType::Data);
+    reportDiagnostic("TryExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("TryExpr");
+    return nullptr;
+}
 
-    if (context->RETURN()) {
-        resNode = createNodeBy<RetnLoad>();
-    } else if (context->RAISE()) {
-        resNode = createNodeBy<RaseLoad>();
-    } else if (context->THROW()) {
-        resNode = createNodeBy<ThrwLoad>();
-    } else {
-        throw runtime_error("Unknown return type");
-    }
-
-    // TODO: ??
-    *resNode << any_cast<node_ptr_t>(context->dataList());
-
-    leave("RetStmt");
-    return resNode;
+template <typename T> inline data_ptr_t makeDataFromLiteral(const T &value) {
+    return tt::as_shared<Data>(make_shared<PrimaryData<T>>(value));
 }
 
 /*
-implMark    : INNER | OUTER ;
+Literal(Value value) ;
+enum LiteralType {
+    String,
+    FString,
+    Integer,
+    Real,
+    Boolean,
+    Null,
+};
 */
-any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) {
-    enter("ImplMark");
-
-    Type::ImplMark result;
-    if (context->INNER()) {
-        result = Type::ImplMark::INNER;
-    } else if (context->OUTER()) {
-        result = Type::ImplMark::OUTER;
-    } else {
-        result = Type::ImplMark::GRAPH;
-    }
-
-    leave("ImplMark");
-
-    return result;
-}
-
-/*
-modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
-*/
-any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) { return nullptr; }
-
-/*
-indexValue   : '...'? dataExpr ;
-*/
-any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) { return nullptr; }
-
-/*
-keyTypePair  : identDef ':' typeExpr ;
-*/
-any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) { return nullptr; }
-
-/*
-keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
-*/
-any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) { return nullptr; }
-
-/*
-keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
-*/
-any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) { return nullptr; }
-
-/*
-dataList     : dataExpr (',' dataExpr)* ;
-*/
-any Constructor::visitDataList(OpenCMLParser::DataListContext *context) { return nullptr; }
-
-/*
-identList    : identDef (',' identDef)* ;
-*/
-any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {
-    enter("IdentList");
-    vector<string> identList;
-    for (const auto &ident : context->identDef()) {
-        identList.push_back(ident->getText());
-    }
-    leave("IdentList");
-    return identList;
-}
-
-/*
-indexValues  : indexValue (',' indexValue)* ;
-*/
-any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) { return nullptr; }
-
-/*
-pairedValues : keyValuePair (',' keyValuePair)* ;
-*/
-any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) { return nullptr; }
-
-/*
-pairedParams : keyParamPair (',' keyParamPair)* ;
-*/
-any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) { return nullptr; }
-
-/*
-argumentList : indexValues (',' pairedValues)? | pairedValues ;
-*/
-any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) { return nullptr; }
-
-/*
-memberAccess : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
-*/
-any Constructor::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) { return nullptr; }
-
-/*
-parentParams : '(' pairedParams? ','? ')' ;
-*/
-any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) { return nullptr; }
-
-/*
-parentArgues : '(' argumentList? ','? ')' ;
-*/
-any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) { return nullptr; }
-
-/*
-angledParams : '<' pairedParams? ','? '>' ;
-*/
-any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) { return nullptr; }
-
-/*
-angledValues : '<' argumentList? ','? '>' ;
-*/
-any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) { return nullptr; }
-
-/*
-pattern
-    : identRef
-    | literal
-    | '(' (dataList | identList)? ','? ')'
-    | '{' (pairedValues | identList)? ','? '}'
-    | '_' // wildcard
-    ;
-*/
-any Constructor::visitPattern(OpenCMLParser::PatternContext *context) { return nullptr; }
-
-/*
-matchCase
-    : CASE pattern ('|' pattern)* '=>' blockExpr
-    ;
-*/
-any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) { return nullptr; }
-
-/*
-catchClause
-    : CATCH identDef ':' typeExpr stmtBlock
-    ;
-*/
-any Constructor::visitCatchClause(OpenCMLParser::CatchClauseContext *context) { return nullptr; }
-
-/*
-ctrlExpr
-    : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
-    | MATCH identRef '{' matchCase+ '}'
-    | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
-    ;
-*/
-any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) { return nullptr; }
-
-/*
-dataExpr
-    : waitExpr
-    | ctrlExpr
-    ;
-*/
-any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) { return nullptr; }
-
-/*
-waitExpr : WAIT? assignExpr ;
-*/
-any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) { return nullptr; }
-
-/*
-assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
-    ;
-*/
-any Constructor::visitAssignExpr(OpenCMLParser::AssignExprContext *context) { return nullptr; }
-
-/*
-logicalOrExpr
-    : logicalAndExpr ('||' logicalAndExpr)*
-    ;
-*/
-any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) { return nullptr; }
-
-/*
-logicalAndExpr
-    : equalityExpr ('&&' equalityExpr)*
-    ;
-*/
-any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) { return nullptr; }
-
-/*
-equalityExpr
-    : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
-    ;
-*/
-any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) { return nullptr; }
-
-/*
-relationalExpr
-    : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
-    ;
-*/
-any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) { return nullptr; }
-
-/*
-additiveExpr
-    : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
-    ;
-*/
-any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) { return nullptr; }
-
-/*
-multiplicativeExpr
-    : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
-    ;
-*/
-any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) { return nullptr; }
-
-/*
-nullableExpr
-    : unaryExpr (('??' | '!!') dataExpr)?
-    ;
-*/
-any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) { return nullptr; }
-
-/*
-unaryExpr
-    : linkExpr ((AS | IS) typeExpr)?
-    | ('!' | '-' | '~') linkExpr
-    ;
-*/
-any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) { return nullptr; }
-
-/*
-linkExpr
-    : bindExpr (('->' | '?->') bindExpr)*
-    ;
-*/
-any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) { return nullptr; }
-
-/*
-bindExpr
-    : annoExpr (('..' | '?..') annoExpr)*
-    ;
-*/
-any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) { return nullptr; }
-
-/*
-annoExpr
-    : withExpr ({isAdjacent()}? (memberAccess | parentArgues | angledValues | '!'))*
-    ;
-*/
-any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) { return nullptr; }
-
-/*
-withExpr
-    : primaryData (('.' | '?.') primaryData)*
-    ;
-*/
-any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
-    // TODO: ?.
-    enter("WithExpr");
-    const auto &dataList = context->primaryData();
-    node_ptr_t lhsNode = any_cast<node_ptr_t>(visitPrimaryData(dataList[0]));
-
-    for (size_t i = 1; i < dataList.size(); ++i) {
-        node_ptr_t execNode = createNodeBy<ExecLoad>();
-        node_ptr_t rhsNode = any_cast<node_ptr_t>(visitPrimaryData(dataList[i]));
-
-        node_ptr_t withNode = createNodeBy<WithLoad>();
-        *withNode << lhsNode << rhsNode;
-
-        lhsNode = withNode;
-    }
-
-    leave("WithExpr");
-    return lhsNode;
-}
-
-/*
-dictData
-    : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
-    ;
-*/
-any Constructor::visitDictData(OpenCMLParser::DictDataContext *context) {}
-
-/*
-listData
-    : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
-    ;
-*/
-any Constructor::visitListData(OpenCMLParser::ListDataContext *context) {}
-
-/*
-tupleData
-    : '(' dataList? ','? ')'
-    ;
-*/
-any Constructor::visitTupleData(OpenCMLParser::TupleDataContext *context) {}
-
-/*
-primaryData
-    : identRef
-    | literal
-    | listData
-    | dictData
-    | '(' dataExpr ')'
-    | tupleData
-    | funcData
-    ;
-*/
-any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) { return nullptr; }
-
-/*
-literal
-    : INTEGER
-    | REAL
-    | STRING
-    | MULTI_STR
-    | FSTRING
-    | TRUE
-    | FALSE
-    | NULL
-    ;
-*/
-any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
-    enter("Literal: " + to_string(context->getAltNumber()));
-    data_ptr_t data = nullptr;
-
-    switch (context->getAltNumber()) {
-    case 1: // INTEGER
-        data = dynamic_pointer_cast<Data>(
-            make_shared<PrimaryData<int64_t>>(parseNumber<int64_t>(context->INTEGER()->getText())));
-        break;
-    case 2: // REAL
-        data = dynamic_pointer_cast<Data>(
-            make_shared<PrimaryData<double>>(parseNumber<double>(context->REAL()->getText())));
-        break;
-    case 3: // STRING
-    {
-        const auto &text = context->STRING()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(1, text.size() - 2)));
+node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
+    enter("Literal");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &literal = ast->loadAs<AST::LiteralLoad>();
+    const Literal &value = literal->value();
+    const auto &str = value.data();
+    data_ptr_t data;
+    switch (value.type()) {
+    case LiteralType::String: {
+        data = tt::as_shared<Data>(make_shared<StringData>(str));
     } break;
-    case 4: // MULTI_STR
-    {
-        const auto &text = context->MULTI_STR()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(3, text.size() - 6)));
+    case LiteralType::FString: {
+        reportDiagnostic("FString is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
     } break;
-    case 5: // FSTRING
-    {
-        // TODO: Implement FSTRING
-        const auto &text = context->FSTRING()->getText();
-        data = dynamic_pointer_cast<Data>(make_shared<StringData>(text.substr(2, text.size() - 3)));
+    case LiteralType::Integer: {
+        data = makeDataFromLiteral(parseNumber<int64_t>(str));
     } break;
-    case 6: // TRUE
-        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(true));
-        break;
-    case 7: // FALSE
-        data = dynamic_pointer_cast<Data>(make_shared<PrimaryData<bool>>(false));
-        break;
-    case 8: // NULL
-        data = dynamic_pointer_cast<Data>(make_shared<NullData>());
-        break;
-
-    default:
-        break;
+    case LiteralType::Real: {
+        data = makeDataFromLiteral(parseNumber<double>(str));
+    } break;
+    case LiteralType::Boolean: {
+        if (str == "true") {
+            data = makeDataFromLiteral(true);
+        } else if (str == "false") {
+            data = makeDataFromLiteral(false);
+        } else {
+            reportDiagnostic("Invalid boolean literal: " + str, ast->load()->tokenRange(), Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+    } break;
+    case LiteralType::Null: {
+        data = tt::as_shared<Data>(make_shared<NullData>());
+    } break;
+    default: {
+        reportDiagnostic("Unknown literal type", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
     }
-
-    any res = createNodeBy<DataLoad>(data);
+    }
+    node_ptr_t res = createNodeAs<DataLoad>(data);
     leave("Literal");
     return res;
 }
 
 /*
-typeExpr
-    : unionType ('?' unionType?)?
-    ;
+ListData() : Data* data ;
 */
-any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) { return nullptr; }
-
-/*
-unionType
-    : interType ('|' interType)*
-    ;
-*/
-any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) { return nullptr; }
-
-/*
-interType
-    : diffType ('&' diffType)*
-    ;
-*/
-any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {}
-
-/*
-diffType
-    : keyUnionDiffType ('\\' keyUnionDiffType)*
-    ;
-*/
-any Constructor::visitDiffType(OpenCMLParser::DiffTypeContext *context) {}
-
-/*
-keyUnionDiffType
-    : keyInterType (('+' | '-') keyInterType)*
-    ;
-*/
-any Constructor::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context) {}
-
-/*
-keyInterType
-    : typeUnit ('^' typeUnit)*
-    ;
-*/
-any Constructor::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {}
-
-/*
-typeUnit : (identDef OF)? listType ;
-*/
-any Constructor::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {}
-
-/*
-listType
-    : specType ('[' ']')*
-    ;
-*/
-any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) { return nullptr; }
-
-/*
-typeOrData : typeExpr | CONST dataExpr ;
-*/
-any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) { return visit(context->children[0]); }
-
-/*
-specType
-    : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-    ;
-*/
-any Constructor::visitSpecType(OpenCMLParser::SpecTypeContext *context) {}
-
-/*
-primaryType
-    : INNER_ATOM_TYPE
-    | dictType
-    | identRef
-    | '(' typeExpr ')'
-    | tupleType
-    | funcType
-    | TYPEOF dataExpr
-    | TYPEAS identDef
-    ;
-*/
-any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) { return nullptr; }
-
-/*
-dictType
-    : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
-    ;
-*/
-any Constructor::visitDictType(OpenCMLParser::DictTypeContext *context) { return nullptr; }
-
-/*
-typeList
-    : typeExpr (',' typeExpr)*
-    ;
-*/
-any Constructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
-    enter("TypeList");
-    vector<type_ptr_t> typeList;
-    for (const auto &type : context->typeExpr()) {
-        typeList.push_back(any_cast<type_ptr_t>(visitTypeExpr(type)));
+node_ptr_t Constructor::visitListData(const AST::node_ptr_t &ast) {
+    enter("ListData");
+    assert(ast->type() == AST::LoadType::Data);
+    auto listData = make_shared<ListData>();
+    node_ptr_t res = createNodeAs<DataLoad>(listData);
+    bool dangling = false;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        node_ptr_t dataNode = visitData(item);
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        listData->emplace(data);
     }
-    leave("TypeList");
-    return typeList;
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    leave("ListData");
+    return res;
 }
 
 /*
-tupleType
-    : '(' typeList? ','? ')'
-    ;
+DictData() : NamedData* dataList ;
 */
-any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) { return nullptr; }
+node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {
+    enter("DictData");
+    assert(ast->type() == AST::LoadType::Data);
+    auto dictData = make_shared<DictData>();
+    node_ptr_t res = createNodeAs<DataLoad>(dictData);
+    bool dangling = false;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
+        const string &name = namedPair->ref().ident();
+        node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        dictData->emplace(name, data);
+    }
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    leave("DictData");
+    return res;
+}
 
 /*
-funcType
-    : modifiers? angledParams? parentParams '=>' typeExpr
-    ;
+TupleData() : Data* data ;
 */
-any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {}
+node_ptr_t Constructor::visitTupleData(const AST::node_ptr_t &ast) {
+    enter("TupleData");
+    assert(ast->type() == AST::LoadType::Data);
+    auto tupleData = make_shared<TupleData>();
+    node_ptr_t res = createNodeAs<DataLoad>(tupleData);
+    bool dangling = false;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        node_ptr_t dataNode = visitData(item);
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        tupleData->emplace(data);
+    }
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    leave("TupleData");
+    return res;
+}
 
 /*
-identDef : IDENTIFIER ;
+FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 */
-any Constructor::visitIdentDef(OpenCMLParser::IdentDefContext *context) { return nullptr; }
+node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {
+    enter("FuncData");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
+    func_type_ptr_t funcType = tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
+    node_ptr_t funcNode = createNodeAs<FuncLoad>(funcType);
+    *funcNode << stmtsNode;
+    leave("FuncData");
+    return funcNode;
+}
 
 /*
-identRef : (IDENTIFIER '::')* IDENTIFIER ;
+RefData(Ref ref) ;
 */
-any Constructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) { return nullptr; }
+node_ptr_t Constructor::visitRefData(const AST::node_ptr_t &ast) {
+    enter("RefData");
+    assert(ast->type() == AST::LoadType::Data);
+    const auto &refData = ast->loadAs<AST::RefDataLoad>();
+    node_ptr_t refNode = createNodeAs<DRefLoad>(refData->ref());
+    leave("RefData");
+    return refNode;
+}
+
+/*
+Type(TypeType type) :=
+    NullableType | TypeExpr | ListType | DictType | TupleType
+    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+*/
+type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
+    enter("Type");
+    assert(ast->type() == AST::LoadType::Type);
+    const auto &type = ast->loadAs<AST::TypeLoad>();
+    type_ptr_t res;
+
+    switch (type->typeType()) {
+    case AST::TypeType::Null:
+        res = visitNullableType(ast);
+        break;
+    case AST::TypeType::Expr:
+        res = visitTypeExpr(ast);
+        break;
+    case AST::TypeType::List:
+        res = visitListType(ast);
+        break;
+    case AST::TypeType::Dict:
+        res = visitDictType(ast);
+        break;
+    case AST::TypeType::Tuple:
+        res = visitTupleType(ast);
+        break;
+    case AST::TypeType::Func:
+        res = visitFuncType(ast);
+        break;
+    case AST::TypeType::Unit:
+        res = visitUnitType(ast);
+        break;
+    case AST::TypeType::Infer:
+        res = visitInferType(ast);
+        break;
+    case AST::TypeType::Data:
+        res = visitDataType(ast);
+        break;
+    case AST::TypeType::Ref:
+        res = visitRefType(ast);
+        break;
+    default:
+        throw std::runtime_error("Unknown type type");
+    }
+
+    leave("Type");
+    return res;
+}
+
+/*
+NullableType : Type type ;
+*/
+type_ptr_t Constructor::visitNullableType(const AST::node_ptr_t &ast) {
+    enter("NullableType");
+    assert(ast->type() == AST::LoadType::Type);
+    type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
+    leave("NullableType");
+    return type;
+}
+
+/*
+TypeExpr(TypeOp op) := Type lhs, Type rhs ;
+enum TypeOp {
+    Union,
+    Inter,
+    Diff,
+    KeyUnion,
+    KeyInter,
+    KeyDiff,
+    ErrorThen,
+    Specialize, // Type type, (Type | Data)* args
+    TypeOf,
+    TypeAs
+}
+*/
+type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
+    enter("TypeExpr");
+    assert(ast->type() == AST::LoadType::Type);
+    type_ptr_t res;
+    const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
+    AST::TypeOp op = typeExpr->op();
+    switch (op) {
+    case AST::TypeOp::Union: {
+        const auto &lhsType = visitType(ast->atAs<AST::TypeLoad>(0));
+        const auto &rhsType = visitType(ast->atAs<AST::TypeLoad>(1));
+        res = make_shared<UnionType>(lhsType, rhsType);
+    } break;
+    case AST::TypeOp::Inter: {
+        reportDiagnostic("TypeOp::Inter is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::Diff: {
+        reportDiagnostic("TypeOp::Diff is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::KeyUnion: {
+        reportDiagnostic("TypeOp::KeyUnion is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::KeyInter: {
+        reportDiagnostic("TypeOp::KeyInter is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::KeyDiff: {
+        reportDiagnostic("TypeOp::KeyDiff is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::ErrorThen: {
+        reportDiagnostic("TypeOp::ErrorThen is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::Specialize: {
+        reportDiagnostic("TypeOp::Specialize is not supported yet", ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::TypeOf: {
+        reportDiagnostic("TypeOp::TypeOf is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    case AST::TypeOp::TypeAs: {
+        reportDiagnostic("TypeOp::TypeAs is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    } break;
+    default:
+        reportDiagnostic("Unsupported TypeOp: " + AST::to_string(op), ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    }
+    leave("TypeExpr");
+    return res;
+}
+
+/*
+ListType(siz dim) : Type type ;
+*/
+type_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {
+    enter("ListType");
+    assert(ast->type() == AST::LoadType::Type);
+    const auto &listTypeLoad = ast->loadAs<AST::ListTypeLoad>();
+    type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
+    const auto &arrayType = make_shared<ArrayType>(type, listTypeLoad->dims());
+    leave("ListType");
+    return arrayType;
+}
+
+/*
+DictType() : NamedType* types ;
+*/
+type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {
+    enter("DictType");
+    assert(ast->type() == AST::LoadType::Type);
+    auto res = make_shared<DictType>();
+    for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &namedPair = child->loadAs<AST::NamedPairLoad>();
+        const string &name = namedPair->getRef().ident();
+        type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
+        data_ptr_t data = nullptr;
+        if (!res->add(name, type)) {
+            reportDiagnostic("Duplicate key detected: " + name, namedPair->tokenRange(), Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+    }
+    leave("DictType");
+    return res;
+}
+/*
+TupleType() : Type* types ;
+*/
+type_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {
+    enter("TupleType");
+    assert(ast->type() == AST::LoadType::Type);
+    vector<type_ptr_t> types;
+    for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
+        type_ptr_t type = visitType(child);
+        types.push_back(type);
+    }
+    type_ptr_t tupleType = make_shared<TupleType>(types);
+    leave("TupleType");
+    return tupleType;
+}
+
+/*
+FuncType(Modifier[] modifiers, ImplMark impl, string uri)
+    : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
+*/
+type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
+    enter("FuncType");
+    assert(ast->type() == AST::LoadType::Type);
+    auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
+
+    const auto withParamsType = make_shared<ParamsType>();
+    const auto normParamsType = make_shared<ParamsType>();
+    type_ptr_t exitType = voidTypePtr;
+
+    const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
+    if (exitTypeNode) {
+        exitType = visitType(exitTypeNode);
+    }
+
+    func_type_ptr_t funcType = make_shared<FunctionType>("", withParamsType, normParamsType, exitType);
+    funcType->setImplMark(typeLoad->implMark());
+    funcType->setModifiers(typeLoad->modifiers());
+
+    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+        const Reference &paramRef = paramLoad->getRef();
+        if (!paramRef.isAlone()) {
+            reportDiagnostic("Parameter reference must be alone: " + paramRef.toString(), paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        const string &name = paramRef.ident();
+        type_ptr_t type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        data_ptr_t data = nullptr;
+        const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
+        if (dataNode) {
+            data = extractStaticDataFromNode(visitData(dataNode));
+            if (!data) {
+                reportDiagnostic("Data for parameter " + paramRef.toString() + " is not static",
+                                 dataNode->load()->tokenRange(), Diagnostic::Severity::Error);
+                throw BuildAbortException();
+            }
+        }
+        bool success = funcType->addIdent(name, paramLoad->isVar());
+        if (!success) {
+            reportDiagnostic("Duplicate parameter detected: " + name, paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        withParamsType->add(name, type, data);
+    }
+
+    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
+        const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+        const Reference &paramRef = paramLoad->getRef();
+        if (!paramRef.isAlone()) {
+            reportDiagnostic("Parameter reference must be alone: " + paramRef.toString(), paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        const string &name = paramRef.ident();
+        type_ptr_t type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        data_ptr_t data = nullptr;
+        const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
+        if (dataNode) {
+            data = extractStaticDataFromNode(visitData(dataNode));
+            if (!data) {
+                reportDiagnostic("Data for parameter " + paramRef.toString() + " is not static",
+                                 dataNode->load()->tokenRange(), Diagnostic::Severity::Error);
+                throw BuildAbortException();
+            }
+        }
+        bool success = funcType->addIdent(name, paramLoad->isVar());
+        if (!success) {
+            reportDiagnostic("Duplicate parameter detected: " + name, paramLoad->tokenRange(),
+                             Diagnostic::Severity::Error);
+            throw BuildAbortException();
+        }
+        normParamsType->add(name, type, data);
+    }
+
+    leave("FuncType");
+    return funcType;
+}
+
+/*
+UnitType(Ref ref) : Type type ;
+*/
+type_ptr_t Constructor::visitUnitType(const AST::node_ptr_t &ast) {
+    enter("UnitType");
+    reportDiagnostic("UnitType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("UnitType");
+    return nullptr;
+}
+
+/*
+InferType(Ref ref) ;
+*/
+type_ptr_t Constructor::visitInferType(const AST::node_ptr_t &ast) {
+    enter("InferType");
+    reportDiagnostic("InferType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("InferType");
+    return nullptr;
+}
+
+/*
+DataType() : Data data ;
+*/
+type_ptr_t Constructor::visitDataType(const AST::node_ptr_t &ast) {
+    enter("DataType");
+    reportDiagnostic("DataType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    throw BuildAbortException();
+    leave("DataType");
+    return nullptr;
+}
+
+/*
+RefType(Ref ref) ;
+*/
+type_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
+    enter("RefType");
+    assert(ast->load()->type() == AST::LoadType::Type);
+    auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
+    const Reference &ref = typeLoad->ref();
+    const auto &type = typeScope_->at(ref);
+    if (!type.has_value()) {
+        reportDiagnostic("Unresolved type reference: " + ref.toString(), ast->load()->tokenRange(),
+                         Diagnostic::Severity::Error);
+        throw BuildAbortException();
+    }
+    leave("RefType");
+    return type.value();
+}
+} // namespace GraphConstructTree

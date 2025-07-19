@@ -22,20 +22,7 @@
 
 namespace AbstractSyntaxTree {
 
-std::string implMarkToString(ImplMark mark) {
-    switch (mark) {
-    case ImplMark::Inner:
-        return "inner";
-    case ImplMark::Outer:
-        return "outer";
-    case ImplMark::Graph:
-        return "graph";
-    default:
-        return "UNKNOWN";
-    }
-}
-
-std::string loadTypeToString(LoadType type) {
+std::string to_string(LoadType type) {
     switch (type) {
         case LoadType::Module: return "Module";
         case LoadType::Import: return "Import";

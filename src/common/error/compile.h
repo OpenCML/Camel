@@ -12,27 +12,16 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Created: Jul. 13, 2025
+ * Updated: Jul. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../data.h"
+#include "base.h"
 
-class RefData : public Data {
-  private:
-    std::string ref_;
-
+class CompileAbortException : public CamelBaseException {
   public:
-    RefData(const std::string &ref);
-    virtual ~RefData() = default;
-
-    const std::string &ref() const;
-
-    virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
-    virtual data_ptr_t clone(bool deep = false) const override;
-    virtual const std::string toString() const override;
+    CompileAbortException(const std::string &msg) : CamelBaseException(msg) {}
 };

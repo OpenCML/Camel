@@ -1,0 +1,27 @@
+R"(
+The Zen of Camel
+
+1. Let the graph speak.
+    - All computation is a graph of intent.
+
+2. Graphs are primitives, not artifacts.
+    - Graphs are the native shape of intent, not a byproduct of code.
+
+3. Imperative for operators, declarative for structure.
+    - Code the 'what' declaratively, the 'how' imperatively.
+
+4. Async by nature, sync when explicit.
+    - Order emerges from dependencies, not from syntax.
+
+5. Explicit dependencies, implicit parallelism.
+    - Parallelism is discovered, not programmed.
+
+6. Keep code pure, let runtimes specialize.
+    - Context is injected at runtime, not embedded in code.
+
+7. Execution is polymorphic and multi-staged.
+    - Graphs can be interpreted, compiled, staged, rewritten.
+
+8. Let compilers bear the burden.
+    - Scheduling, mapping, fusing, and lowering -- these are not your job.
+)"
