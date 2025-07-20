@@ -11,9 +11,9 @@ function getGitVersion() {
         })
             .trim()
             .replace(/-/g, '_')
-        return `Git/${output}`
+        return `G${output}`
     } catch (e) {
-        return 'nogit'
+        return ''
     }
 }
 
@@ -25,7 +25,7 @@ function main() {
 
     const BUILD_FOOTPRINT =
         new Date().toISOString().replace(/[-:]/g, '').replace(/[T]/g, '_').slice(2, 15) +
-        `_${gitVersion}`
+        (gitVersion ? `_${gitVersion}` : '')
 
     logStep(`Building Debug... (${BUILD_FOOTPRINT})`)
     runCommand(

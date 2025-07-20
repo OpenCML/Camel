@@ -336,15 +336,15 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-#ifndef NDEBUG
-    printCliArgs(selectedCommand);
-#endif
+// #ifndef NDEBUG
+//     printCliArgs(selectedCommand);
+// #endif
 
     if (showVersion) {
 #ifdef NDEBUG
         cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")" << endl;
 #else
-        cout << "Camel (DEBUG) v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")" << endl;
+        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")" << endl;
 #endif
     }
 
@@ -360,7 +360,7 @@ bool parseArgs(int argc, char *argv[]) {
 #ifdef NDEBUG
         cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")";
 #else
-        cout << "Camel (DEBUG) v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")";
+        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")";
 #endif
         cout <<
 #include "ABOUT"
