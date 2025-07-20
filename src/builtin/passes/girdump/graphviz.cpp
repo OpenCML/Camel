@@ -126,7 +126,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     res += baseIndent_ + indent_ + funcId + " [label=\"RET\", shape=doublecircle];\r\n";
 
     for (const auto &node : graph->nodes()) {
-        const auto &vec = node->inputs();
+        const auto &vec = node->normInputs();
         for (size_t i = 0; i < vec.size(); i++) {
             if (vec[i] == nullptr) {
                 continue;

@@ -11,7 +11,7 @@ function getGitVersion() {
         })
             .trim()
             .replace(/-/g, '_')
-        return `G${output}`
+        return `${output}`
     } catch (e) {
         return ''
     }

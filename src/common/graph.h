@@ -30,45 +30,40 @@
 
 namespace GraphIntermediateRepresentation {
 
-enum class NodeType { GRAPH, DATA, STRUCT, SELECT, FUNCTOR, OPERATOR };
-
-std::ostream &operator<<(std::ostream &os, NodeType type);
-
-enum class DataTypeEnum {
-    SHARED_CONSTANT,  // shared among all copies of the graph and never changed
-    SHARED_VARIABLE,  // produced during runtime and never changed once produced
-    RUNTIME_CONSTANT, // shared among all copies of the graph and may be changed during runtime
-    RUNTIME_VARIABLE  // produced during runtime and may be changed during runtime
+enum class DependType {
+    Source, // 0 in-degree
+    Normal, // non-zero in/out-degree, all inputs and outputs are connected
+    Select, // non-zero in/out-degree, but not all inputs and outputs are connected
+    Return, // 0 out-degree
 };
 
-std::ostream &operator<<(std::ostream &os, DataTypeEnum type);
-
-struct DataType {
-    bool shared;
-    bool variable;
-
-    DataType(bool shared = false, bool variable = false) : shared(shared), variable(variable) {}
-    constexpr DataType(DataTypeEnum type) : shared(false), variable(false) {
-        switch (type) {
-        case DataTypeEnum::SHARED_CONSTANT:
-            shared = true;
-            variable = false;
-            break;
-        case DataTypeEnum::SHARED_VARIABLE:
-            shared = true;
-            variable = true;
-            break;
-        case DataTypeEnum::RUNTIME_CONSTANT:
-            shared = false;
-            variable = false;
-            break;
-        case DataTypeEnum::RUNTIME_VARIABLE:
-            shared = false;
-            variable = true;
-            break;
-        }
-    }
+enum class ActionType {
+    Graph,    // (Sub)-Graph, function
+    Access,   // Element accessed during runtime
+    Struct,   // Runtime constructed data structure
+    Literal,  // Compile-time constant
+    Operator, // Atomic operation
 };
+
+enum class LinkType {
+    Norm, // node edge
+    With, // with edge
+    Ctrl, // control edge
+};
+
+enum class OutputType {
+    StaticConstant = 0b00,  // Compile-time constant, shared among all copies of the graph and never changed
+    StaticVariable = 0b01,  // Compile-time variable, shared among graphs and may be changed during runtime
+    RuntimeConstant = 0b10, // Produced during runtime and never changed, not shared
+    RuntimeVariable = 0b11, // Produced during runtime and may be changed, not shared
+};
+
+std::string to_string(DependType type);
+std::string to_string(ActionType type);
+std::string to_string(OutputType type);
+
+constexpr bool isStatic(OutputType type) { return (static_cast<int>(type) & 0b10) == 0; }
+constexpr bool isConstant(OutputType type) { return (static_cast<int>(type) & 0b01) == 0; }
 
 class Node;
 
@@ -83,35 +78,35 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 using graph_wptr_t = std::weak_ptr<Graph>;
 
 class Node : public std::enable_shared_from_this<Node> {
-  protected:
-    size_t refs_ = 0;
-    NodeType nodeType_;
-    DataType dataType_;
-    graph_wptr_t graph_;
-    size_t dataIndex_;
-
-    node_vec_t inputs_;
-    node_vec_t outputs_;
 
   public:
-    Node(NodeType nodeType, DataType dataType, graph_ptr_t graph = nullptr)
-        : nodeType_(nodeType), dataType_(dataType), graph_(graph) {};
+    Node(DependType dType, ActionType aType, OutputType oType, graph_ptr_t outer = nullptr)
+        : dependType_(dType), actionType_(aType), outputType_(oType), outerGraph_(outer) {}
     virtual ~Node() = default;
 
-    NodeType type() const { return nodeType_; }
-    DataType dataType() const { return dataType_; }
+    DependType dependType() const { return dependType_; }
+    ActionType actionType() const { return actionType_; }
+    OutputType outputType() const { return outputType_; }
 
     void makeVariable(bool shared = false);
 
-    graph_ptr_t outer() const { return graph_.lock(); }
+    bool isRoot() const { return !outerGraph_.lock(); }
+    graph_ptr_t outer() const {
+        ASSERT(outerGraph_.lock(), "Graph is not set for Node.");
+        return outerGraph_.lock();
+    }
     data_ptr_t data() const;
     size_t index() const { return dataIndex_; }
 
-    node_vec_t &inputs() { return inputs_; }
-    node_vec_t &outputs() { return outputs_; }
+    node_vec_t &normInputs() { return normInputs_; }
+    node_vec_t &withInputs() { return withInputs_; }
+    node_vec_t &ctrlInputs() { return ctrlInputs_; }
 
-    size_t inDegree() const { return inputs_.size(); }
-    size_t outDegree() const { return outputs_.size(); }
+    node_vec_t &dataOutputs() { return dataOutputs_; }
+    node_vec_t &ctrlOutputs() { return ctrlOutputs_; }
+
+    size_t inDegree() const { return normInputs_.size() + withInputs_.size() + ctrlInputs_.size(); }
+    size_t outDegree() const { return dataOutputs_.size() + ctrlOutputs_.size(); }
 
     void ref() { refs_++; }
     void unref() {
@@ -123,20 +118,41 @@ class Node : public std::enable_shared_from_this<Node> {
 
     virtual data_ptr_t eval() { return data(); };
 
-    static void link(node_ptr_t &from, node_ptr_t &to, int index = -1) {
-        if (index >= 0) {
-            from->outputs().push_back(to);
-            if (static_cast<std::size_t>(index) > to->inputs().size()) {
-                // this can only happen when the link target is a variable
-                // etc. port, variable
-                to->inputs().resize(index + 1);
-            }
-            to->inputs().at(index) = from;
-        } else {
-            from->outputs().push_back(to);
-            to->inputs().push_back(from);
+    static void link(LinkType type, node_ptr_t &from, node_ptr_t &to) {
+        switch (type) {
+        case LinkType::Norm:
+            from->dataOutputs().push_back(to);
+            to->normInputs().push_back(from);
+            break;
+        case LinkType::With:
+            from->dataOutputs().push_back(to);
+            to->withInputs().push_back(from);
+            break;
+        case LinkType::Ctrl:
+            from->ctrlOutputs().push_back(to);
+            to->ctrlInputs().push_back(from);
+            break;
         }
     }
+
+  protected:
+    size_t refs_ = 0;
+    bool macro_ = false;
+    bool const_ = false;
+
+    DependType dependType_;
+    ActionType actionType_;
+    OutputType outputType_;
+
+    graph_wptr_t outerGraph_;
+    size_t dataIndex_;
+
+    node_vec_t normInputs_;
+    node_vec_t withInputs_;
+    node_vec_t ctrlInputs_;
+
+    node_vec_t dataOutputs_;
+    node_vec_t ctrlOutputs_;
 };
 
 class Graph : public Node {
@@ -239,8 +255,8 @@ class FunctorNode : public Node {
     std::shared_ptr<FunctorNode> copyTo(graph_ptr_t graph) const;
 
     graph_ptr_t subGraph() const { return func_->graph(); }
-    node_ptr_t &withNode() { return inputs_[0]; }
-    node_ptr_t &linkNode() { return inputs_[1]; }
+    node_ptr_t &withNode() { return normInputs_[0]; }
+    node_ptr_t &linkNode() { return normInputs_[1]; }
 
     void fulfill();
 
