@@ -24,69 +24,43 @@ using namespace std;
 
 namespace GraphIntermediateRepresentation {
 
-std::string to_string(DependType type) {
+std::string to_string(NodeType type) {
     switch (type) {
-    case DependType::Source:
-        return "Source";
-    case DependType::Normal:
-        return "Normal";
-    case DependType::Select:
+    case NodeType::Select:
         return "Select";
-    case DependType::Return:
-        return "Return";
-    }
-    ASSERT(false, "Unknown DependType");
-    return "Unknown";
-}
-
-std::string to_string(ActionType type) {
-    switch (type) {
-    case ActionType::Graph:
-        return "Graph";
-    case ActionType::Access:
+    case NodeType::Access:
         return "Access";
-    case ActionType::Struct:
+    case NodeType::Struct:
         return "Struct";
-    case ActionType::Literal:
+    case NodeType::Literal:
         return "Literal";
-    case ActionType::Operator:
+    case NodeType::Operator:
         return "Operator";
+    case NodeType::Function:
+        return "Function";
     }
-    ASSERT(false, "Unknown ActionType");
+    ASSERT(false, "Unknown NodeType");
     return "Unknown";
 }
 
-std::string to_string(OutputType type) {
-    switch (type) {
-    case OutputType::StaticConstant:
-        return "StaticConstant";
-    case OutputType::StaticVariable:
-        return "StaticVariable";
-    case OutputType::RuntimeConstant:
-        return "RuntimeConstant";
-    case OutputType::RuntimeVariable:
-        return "RuntimeVariable";
-    }
-    ASSERT(false, "Unknown OutputType");
-    return "Unknown";
-}
+
 
 /*
 Node
 */
 
 data_ptr_t Node::data() const {
-    const auto wg = outerGraph_.lock();
+    const auto wg = graph_.lock();
     ASSERT(wg, "Graph is not set.");
-    if (dataType_.variable) {
-        return wg->getVariable(dataIndex_);
-    } else {
+    if (isConstant()) {
         return wg->getConstant(dataIndex_);
+    } else {
+        return wg->getVariable(dataIndex_);
     }
 }
 
 void Node::makeVariable(bool shared) {
-    const auto wg = outerGraph_.lock();
+    const auto wg = graph_.lock();
     ASSERT(wg, "Graph is not set for Node.");
     ASSERT(!dataType_.variable, "Node is already a variable.");
     dataIndex_ = wg->makeVariable(dataIndex_, shared);
@@ -100,12 +74,12 @@ Graph
 Graph::Graph()
     : Node(NodeType::GRAPH, DataType{}), nodes_(make_shared<node_vec_t>()),
       ports_(make_shared<vector<tuple<size_t, size_t, bool>>>()), subGraphs_(),
-      sharedConstants_(make_shared<data_vec_t>()), sharedVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
+      staticConstants_(make_shared<data_vec_t>()), staticVariables_(make_shared<data_vec_t>()), runtimeConstants_(),
       rtVariableIndices_(make_shared<vector<InitIndex>>()), runtimeVariables_() {}
 
 Graph::Graph(Graph &other)
     : Node(NodeType::GRAPH, DataType{}), nodes_(other.nodes_), ports_(other.ports_), subGraphs_(other.subGraphs_),
-      sharedConstants_(other.sharedConstants_), sharedVariables_(other.sharedVariables_),
+      staticConstants_(other.staticConstants_), staticVariables_(other.staticVariables_),
       runtimeConstants_(other.runtimeConstants_.size()), rtVariableIndices_(other.rtVariableIndices_),
       runtimeVariables_() {
     for (const auto &g : other.subGraphs_) {
@@ -118,7 +92,7 @@ Graph::Graph(Graph &other)
 
 graph_ptr_t Graph::create(graph_ptr_t graph) {
     const auto res = make_shared<Graph>();
-    res->outerGraph_ = graph;
+    res->graph_ = graph;
     if (graph) {
         graph->addSubGraph(res);
     }
@@ -137,7 +111,7 @@ func_type_ptr_t Graph::funcType() const {
 void Graph::addNode(const node_ptr_t &node) { nodes_->push_back(node); }
 
 node_ptr_t Graph::addPort(bool isVar) {
-    node_ptr_t node = DataNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);
+    node_ptr_t node = LiteralNode::create(dynamic_pointer_cast<Graph>(shared_from_this()), make_shared<NullData>(), false);
     if (isVar) {
         node->makeVariable();
     }
@@ -156,8 +130,8 @@ void Graph::setOutput(const node_ptr_t &node) { output_ = node; }
 size_t Graph::makeVariable(size_t index, bool shared) {
     if (shared) {
         ASSERT(!dataType_.shared, "Cannot make a shared variable from a runtime constant.");
-        sharedVariables_->push_back(sharedConstants_->at(index));
-        return sharedVariables_->size() - 1;
+        staticVariables_->push_back(staticConstants_->at(index));
+        return staticVariables_->size() - 1;
     } else {
         InitIndex idx{index, false};
         rtVariableIndices_->push_back(idx);
@@ -168,8 +142,8 @@ size_t Graph::makeVariable(size_t index, bool shared) {
 
 size_t Graph::addConstant(const data_ptr_t &data, bool shared) {
     if (shared) {
-        sharedConstants_->push_back(data);
-        return sharedConstants_->size() - 1;
+        staticConstants_->push_back(data);
+        return staticConstants_->size() - 1;
     } else {
         runtimeConstants_.push_back(data);
         return runtimeConstants_.size() - 1;
@@ -178,8 +152,8 @@ size_t Graph::addConstant(const data_ptr_t &data, bool shared) {
 
 data_ptr_t Graph::getConstant(size_t index, bool shared) {
     if (shared) {
-        ASSERT(index < sharedConstants_->size(), "Constant index out of range.");
-        return sharedConstants_->at(index);
+        ASSERT(index < staticConstants_->size(), "Constant index out of range.");
+        return staticConstants_->at(index);
     } else {
         ASSERT(index < runtimeConstants_.size(), "Constant index out of range.");
         return runtimeConstants_.at(index);
@@ -188,8 +162,8 @@ data_ptr_t Graph::getConstant(size_t index, bool shared) {
 
 data_ptr_t Graph::getVariable(size_t index, bool shared) {
     if (shared) {
-        ASSERT(index < sharedVariables_->size(), "Variable index out of range.");
-        return sharedVariables_->at(index);
+        ASSERT(index < staticVariables_->size(), "Variable index out of range.");
+        return staticVariables_->at(index);
     } else {
         ASSERT(index < runtimeVariables_.size(), "Variable index out of range.");
         auto &var = runtimeVariables_.at(index);
@@ -198,7 +172,7 @@ data_ptr_t Graph::getVariable(size_t index, bool shared) {
             InitIndex &i = get<InitIndex>(var);
             data_ptr_t data = nullptr;
             if (i.shared) {
-                data = sharedConstants_->at(i.index)->clone(true);
+                data = staticConstants_->at(i.index)->clone(true);
             } else {
                 data = runtimeConstants_.at(i.index)->clone(true);
             }
@@ -212,8 +186,8 @@ data_ptr_t Graph::getVariable(size_t index, bool shared) {
 
 void Graph::setConstant(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
-        ASSERT(index < sharedConstants_->size(), "Constant index out of range.");
-        sharedConstants_->at(index) = data;
+        ASSERT(index < staticConstants_->size(), "Constant index out of range.");
+        staticConstants_->at(index) = data;
     } else {
         ASSERT(index < runtimeConstants_.size(), "Constant index out of range.");
         runtimeConstants_.at(index) = data;
@@ -222,8 +196,8 @@ void Graph::setConstant(size_t index, const data_ptr_t &data, bool shared) {
 
 void Graph::setVariable(size_t index, const data_ptr_t &data, bool shared) {
     if (shared) {
-        ASSERT(index < sharedVariables_->size(), "Variable index out of range.");
-        sharedVariables_->at(index) = data;
+        ASSERT(index < staticVariables_->size(), "Variable index out of range.");
+        staticVariables_->at(index) = data;
     } else {
         ASSERT(index < runtimeVariables_.size(), "Variable index out of range.");
         runtimeVariables_.at(index) = data;
@@ -243,20 +217,19 @@ void Graph::fulfill(const data_vec_t &dataList) {
     }
 }
 
-data_ptr_t Graph::eval() { return nullptr; }
 
 /*
 DataNode
 */
 
-DataNode::DataNode(graph_ptr_t graph, const data_ptr_t &data, bool shared)
+LiteralNode::LiteralNode(graph_ptr_t graph, const data_ptr_t &data, bool shared)
     : Node(NodeType::DATA, DataType{shared, false}, graph) {
     ASSERT(graph, "Graph is not set for DataNode.");
     dataIndex_ = graph->addConstant(data, shared);
 }
 
-node_ptr_t DataNode::create(graph_ptr_t graph, const data_ptr_t &data, bool shared) {
-    const auto res = make_shared<DataNode>(graph, data, shared);
+node_ptr_t LiteralNode::create(graph_ptr_t graph, const data_ptr_t &data, bool shared) {
+    const auto res = make_shared<LiteralNode>(graph, data, shared);
     graph->addNode(res);
     return res;
 }
@@ -266,7 +239,7 @@ StructNode
 */
 
 StructNode::StructNode(graph_ptr_t graph, const data_ptr_t &data)
-    : Node(NodeType::STRUCT, DataType(OutputType::RuntimeConstant), graph) {
+    : Node(NodeType::STRUCT, DataType(DataType::RuntimeConstant), graph) {
     ASSERT(graph, "Graph is not set for StructNode.");
     // add data to graph as a runtime constant
     dataIndex_ = graph->addConstant(data, false);
@@ -300,7 +273,7 @@ FunctorNode
 */
 
 FunctorNode::FunctorNode(graph_ptr_t graph, const func_ptr_t &func)
-    : Node(NodeType::FUNCTOR, DataType(OutputType::RuntimeConstant), graph), func_(func) {
+    : Node(NodeType::FUNCTOR, DataType(DataType::RuntimeConstant), graph), func_(func) {
     normInputs_.resize(2, nullptr);
 }
 
@@ -382,7 +355,7 @@ OperatorNode
 */
 
 OperatorNode::OperatorNode(graph_ptr_t graph, Operator op)
-    : Node(NodeType::OPERATOR, DataType(OutputType::RuntimeConstant), graph), operator_(op) {
+    : Node(NodeType::OPERATOR, DataType(DataType::RuntimeConstant), graph), operator_(op) {
     normInputs_.resize(2, nullptr);
 }
 
@@ -397,10 +370,10 @@ SelectNode
 */
 
 SelectNode::SelectNode(graph_ptr_t graph, const func_vec_t &cases)
-    : Node(NodeType::SELECT, DataType(OutputType::RuntimeConstant), graph), funcs_(make_shared<func_vec_t>(cases)) {}
+    : Node(NodeType::SELECT, DataType(DataType::RuntimeConstant), graph), funcs_(make_shared<func_vec_t>(cases)) {}
 
 SelectNode::SelectNode(graph_ptr_t graph, const oper_vec_t &cases)
-    : Node(NodeType::SELECT, DataType(OutputType::RuntimeConstant), graph), opers_(make_shared<oper_vec_t>(cases)) {}
+    : Node(NodeType::SELECT, DataType(DataType::RuntimeConstant), graph), opers_(make_shared<oper_vec_t>(cases)) {}
 
 node_ptr_t SelectNode::create(graph_ptr_t graph, const func_vec_t &cases) {
     const auto res = make_shared<SelectNode>(graph, cases);
@@ -430,9 +403,9 @@ vector<func_type_ptr_t> SelectNode::types() const {
 
 node_ptr_t SelectNode::select(size_t index) {
     if (funcs_) {
-        return FunctorNode::create(outerGraph_.lock(), funcs_->at(index));
+        return FunctorNode::create(graph_.lock(), funcs_->at(index));
     } else {
-        return OperatorNode::create(outerGraph_.lock(), *opers_->at(index));
+        return OperatorNode::create(graph_.lock(), *opers_->at(index));
     }
 }
 

@@ -31,7 +31,7 @@ inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
     if (selNode->type() == NodeType::SELECT) {
         res = select_node_ptr_cast(selNode)->select(0);
         if (res->type() == NodeType::FUNCTOR) {
-            res = dynamic_pointer_cast<FunctorNode>(res);
+            res = dynamic_pointer_cast<FunctionNode>(res);
         }
     }
     return res;
@@ -130,7 +130,7 @@ node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
     enter("DATA");
     const auto &dataLoad = gct->loadAs<GCT::DataLoad>();
     const data_ptr_t &data = dataLoad->data();
-    node_ptr_t node = DataNode::create(context_->currGraph(), data, false);
+    node_ptr_t node = LiteralNode::create(context_->currGraph(), data, false);
     if (!data->resolved()) {
         for (const string &ref : data->refs()) {
             auto optSrcNode = context_->nodeAt(ref);

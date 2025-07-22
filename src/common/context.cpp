@@ -76,7 +76,7 @@ void Context::popScope(func_type_ptr_t key) {
     nodeScope_ = nodeScope_->pop();
     funcScope_ = funcScope_->pop();
     opScope_ = opScope_->pop();
-    currGraph_ = currGraph_->outer();
+    currGraph_ = currGraph_->graph();
     if (key != nullptr) {
         funcCache_.erase(key);
     }

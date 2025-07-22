@@ -25,7 +25,7 @@ using namespace GIR;
 
 FunctorData::FunctorData(const type_ptr_t &type, graph_ptr_t graph, graph_ptr_t base) : Data(type), thisGraph_(graph) {
     if (base == nullptr) {
-        baseGraph_ = graph->outer();
+        baseGraph_ = graph->graph();
     } else {
         baseGraph_ = base;
     }
