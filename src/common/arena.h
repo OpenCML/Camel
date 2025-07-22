@@ -110,7 +110,7 @@ using arena_wptr_t = std::weak_ptr<DataArena>;
 class DataArray : public std::enable_shared_from_this<DataArray> {
   public:
     DataArray(DataType type) : type_(type) {}
-    ~DataArray() = default;
+    virtual ~DataArray() = default;
 
     DataType type() const { return type_; }
     size_t size() const { return dataArr_.size(); }
@@ -148,6 +148,7 @@ class ConstantArray : public DataArray {
 
 class VariableArray : public DataArray {
   public:
+    VariableArray(bool shared) : DataArray(DataType(shared, false)) {}
     VariableArray(bool shared, const array_wptr_t &refs) : DataArray(DataType(shared, false)), refs_(refs) {}
 
     DataIndex emplace(DataIndex constIndex) {
@@ -189,8 +190,6 @@ class VariableArray : public DataArray {
     }
 
   private:
-    VariableArray(bool shared) : DataArray(DataType(shared, false)) {}
-
     std::shared_ptr<std::vector<size_t>> indices_;
     array_wptr_t refs_;
 };
@@ -200,6 +199,12 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
     DataArena() {
         sharedConstants_ = std::make_shared<ConstantArray>(true);
         sharedVariables_ = std::make_shared<VariableArray>(true, sharedConstants_);
+        runtimeConstants_ = std::make_shared<ConstantArray>(false);
+        runtimeVariables_ = std::make_shared<VariableArray>(false, runtimeConstants_);
+    }
+    DataArena(std::shared_ptr<ConstantArray> sharedConsts, std::shared_ptr<VariableArray> sharedVars) {
+        sharedConstants_ = sharedConsts;
+        sharedVariables_ = sharedVars;
         runtimeConstants_ = std::make_shared<ConstantArray>(false);
         runtimeVariables_ = std::make_shared<VariableArray>(false, runtimeConstants_);
     }
@@ -255,12 +260,6 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
     arena_ptr_t clone() { return std::make_shared<DataArena>(sharedConstants_, sharedVariables_); }
 
   private:
-    DataArena(std::shared_ptr<ConstantArray> sharedConsts, std::shared_ptr<VariableArray> sharedVars) {
-        sharedConstants_ = sharedConsts;
-        sharedVariables_ = sharedVars;
-        runtimeConstants_ = std::make_shared<ConstantArray>(false);
-        runtimeVariables_ = std::make_shared<VariableArray>(false, runtimeConstants_);
-    }
     std::shared_ptr<ConstantArray> sharedConstants_;
     std::shared_ptr<VariableArray> sharedVariables_;
     std::shared_ptr<ConstantArray> runtimeConstants_;

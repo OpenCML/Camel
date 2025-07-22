@@ -106,8 +106,6 @@ class Node : public std::enable_shared_from_this<Node> {
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
 
-    void makeVariable(bool shared = false);
-
     bool isRoot() const { return !graph_.lock(); }
     graph_ptr_t graph() const {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
@@ -178,58 +176,62 @@ class SelectNode : public Node {
   public:
     SelectNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Select, index) {}
     ~SelectNode() = default;
+
+    data_ptr_t eval() override {}
 };
 
 class AccessNode : public Node {
   public:
-    AccessNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Access, index) {}
+    AccessNode(graph_ptr_t graph, DataIndex &data, const std::string &index)
+        : Node(graph, NodeType::Access, data), index_(index) {}
+    AccessNode(graph_ptr_t graph, DataIndex &data, const size_t &index)
+        : Node(graph, NodeType::Access, data), index_(index) {}
     ~AccessNode() = default;
+
+    bool isNum() const { return std::holds_alternative<size_t>(index_); }
+    template <typename T> T index() const { return std::get<T>(index_); }
+
+    data_ptr_t eval() override {}
+
+  private:
+    std::variant<std::string, size_t> index_;
 };
 
 class StructNode : public Node {
   public:
     StructNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Struct, index) {}
     ~StructNode() = default;
+
+    data_ptr_t eval() override;
 };
 
 class LiteralNode : public Node {
   public:
     LiteralNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Literal, index) {}
     ~LiteralNode() = default;
+
+    data_ptr_t eval() override {}
 };
 
 class OperatorNode : public Node {
     Operator operator_;
 
   public:
-    OperatorNode(graph_ptr_t graph, Operator op);
+    OperatorNode(graph_ptr_t graph, DataIndex &index, Operator op)
+        : Node(graph, NodeType::Operator, index), operator_(op) {}
     ~OperatorNode() = default;
 
     std::string operName() const { return operator_.name(); }
 
-    static node_ptr_t create(graph_ptr_t graph, Operator op);
+    data_ptr_t eval() override {}
 };
 
 class FunctionNode : public Node {
-    func_ptr_t func_;
-
   public:
-    FunctionNode(graph_ptr_t graph, const func_ptr_t &func);
+    FunctionNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Function, index) {}
     ~FunctionNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, const func_ptr_t &func);
-
-    func_ptr_t func() const;
-    func_type_ptr_t type() const;
-    std::shared_ptr<FunctionNode> copyTo(graph_ptr_t graph) const;
-
-    graph_ptr_t subGraph() const { return func_->graph(); }
-    node_ptr_t &withNode() { return normInputs_[0]; }
-    node_ptr_t &linkNode() { return normInputs_[1]; }
-
-    void fulfill();
-
-    virtual data_ptr_t eval() override;
+    data_ptr_t eval() override {}
 };
 
 } // namespace GraphIntermediateRepresentation

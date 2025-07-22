@@ -26,15 +26,15 @@ using namespace std;
 
 namespace GraphIntermediateRepresentation {
 
-inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
-    node_ptr_t res = selNode;
-    if (selNode->type() == NodeType::SELECT) {
-        res = select_node_ptr_cast(selNode)->select(0);
-        if (res->type() == NodeType::FUNCTOR) {
-            res = dynamic_pointer_cast<FunctionNode>(res);
-        }
-    }
-    return res;
+// inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
+//     node_ptr_t res = selNode;
+//     if (selNode->type() == NodeType::SELECT) {
+//         res = select_node_ptr_cast(selNode)->select(0);
+//         if (res->type() == NodeType::FUNCTOR) {
+//             res = dynamic_pointer_cast<FunctionNode>(res);
+//         }
+//     }
+//     return res;
 }
 
 any Constructor::visit(const GCT::node_ptr_t &node) {
