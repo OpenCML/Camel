@@ -158,6 +158,13 @@ node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
     return stmtNode;
 }
 
+inline bool validateIdent(const std::string &str) {
+    if (str.length() < 4) {
+        return true;
+    }
+    return !(str.substr(0, 2) == "__" && str.substr(str.length() - 2) == "__");
+}
+
 /*
 DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
 */
@@ -188,6 +195,11 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
             for (size_t i = 0; i < refs.size(); ++i) {
                 const auto &ref = refs[i];
                 const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
+                if (!validateIdent(ref.ident())) {
+                    reportDiagnostic("Identifiers starting and ending with '__' are reserved for internal use.",
+                        dataDeclLoad->tokenRange(), Diagnostic::Severity::Error);
+                    throw BuildAbortException();
+                }
                 if (dataNode->type() != AST::LoadType::Data) {
                     reportDiagnostic("Tuple unpacking requires Data type nodes", dataNode->load()->tokenRange(),
                                      Diagnostic::Severity::Error);
@@ -208,6 +220,11 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
                 *res << dataRefNode;
                 for (size_t i = 0; i < refs.size(); ++i) {
                     const auto &ref = refs[i];
+                    if (!validateIdent(ref.ident())) {
+                        reportDiagnostic("Identifiers starting and ending with '__' are reserved for internal use.",
+                            dataDeclLoad->tokenRange(), Diagnostic::Severity::Error);
+                        throw BuildAbortException();
+                    }
                     node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
                     node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
                     *accsNode << dRefNode;

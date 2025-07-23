@@ -34,6 +34,9 @@ class Constructor {
     Constructor(context_ptr_t &context) : context_(context) {}
 
     graph_ptr_t construct(GCT::node_ptr_t &gct, diagnostics_ptr_t diagnostics) {
+        waited_ = false;
+        synced_ = false;
+        varied_ = false;
         diagnostics_ = diagnostics;
         visit(gct);
         return context_->rootGraph();
@@ -42,15 +45,14 @@ class Constructor {
   private:
     context_ptr_t context_;
     diagnostics_ptr_t diagnostics_;
-    std::unordered_map<func_type_ptr_t, func_ptr_t> funcCache_;
+
+    bool waited_;
+    bool synced_;
+    bool varied_;
 
     void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange, Diagnostic::Severity sev) {
         diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
     }
-
-    void cacheFunc(func_type_ptr_t key, func_ptr_t node) { funcCache_[key] = node; }
-    void delCachedFunc(func_type_ptr_t key) { funcCache_.erase(key); }
-    func_ptr_t getCachedFunc(func_type_ptr_t key) { return funcCache_[key]; }
 
     std::any visit(const GCT::node_ptr_t &gct);
 

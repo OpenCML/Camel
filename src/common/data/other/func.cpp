@@ -23,6 +23,12 @@
 using namespace std;
 using namespace GIR;
 
+FunctionData::FunctionData(GIR::graph_ptr_t graph) : Data(graph->funcType()), graph_(graph) {
+    arena_ = graph->arena()->clone();
+}
+
+std::string FunctionData::name() const { return graph_->name(); }
+
 func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<FunctionType>(type_); }
 
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
@@ -31,7 +37,7 @@ data_ptr_t FunctionData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert functor to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<FunctionData>(type_, graph_); }
+data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<FunctionData>(graph_); }
 
 const std::string FunctionData::toString() const {
     FunctionType *type = dynamic_cast<FunctionType *>(type_.get());

@@ -77,23 +77,6 @@ LiteralNode
 StructNode
 */
 
-data_ptr_t StructNode::eval() {
-    data_ptr_t data = Node::data();
-    if (data->resolved()) {
-        return data;
-    } else {
-        data_vec_t resVec;
-        for (auto node : normInputs_) {
-            const data_ptr_t &data = node->data();
-            ASSERT(data, "Input data is null.");
-            ASSERT(data->resolved(), "Input data is not resolved.");
-            resVec.push_back(data);
-        }
-        data->resolve(resVec);
-    }
-    return data;
-}
-
 /*
 OperatorNode
 */

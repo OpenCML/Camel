@@ -196,7 +196,7 @@ class SelectNode : public Node {
 
     static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<SelectNode>(graph, index); }
 
-    data_ptr_t eval() override {}
+    data_ptr_t eval() override { return nullptr; }
 };
 
 class AccessNode : public Node {
@@ -214,7 +214,7 @@ class AccessNode : public Node {
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
 
-    data_ptr_t eval() override {}
+    data_ptr_t eval() override { return nullptr; }
 
   private:
     std::variant<std::string, size_t> index_;
@@ -227,7 +227,7 @@ class StructNode : public Node {
 
     static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<StructNode>(graph, index); }
 
-    data_ptr_t eval() override;
+    data_ptr_t eval() override { return nullptr; }
 };
 
 class LiteralNode : public Node {
@@ -239,7 +239,7 @@ class LiteralNode : public Node {
         return std::make_shared<LiteralNode>(graph, index);
     }
 
-    data_ptr_t eval() override {}
+    data_ptr_t eval() override { return nullptr; }
 };
 
 class OperatorNode : public Node {
@@ -256,7 +256,7 @@ class OperatorNode : public Node {
 
     std::string operName() const { return operator_.name(); }
 
-    data_ptr_t eval() override {}
+    data_ptr_t eval() override { return nullptr; }
 };
 
 class FunctionNode : public Node {
@@ -268,7 +268,7 @@ class FunctionNode : public Node {
         return std::make_shared<FunctionNode>(graph, index);
     }
 
-    data_ptr_t eval() override {}
+    data_ptr_t eval() override { return nullptr; }
 };
 
 } // namespace GraphIntermediateRepresentation

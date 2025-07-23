@@ -66,7 +66,7 @@ void initTypes() {
     // initialize special types
     anyTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::ANY));
     voidTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::VOID));
-    functorTypePtr = dynamic_pointer_cast<Type>(make_shared<FunctionType>("", nullptr, nullptr, anyTypePtr));
+    functorTypePtr = dynamic_pointer_cast<Type>(make_shared<FunctionType>(nullptr, nullptr, anyTypePtr));
 
     // initialize unknown type
     refTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::REF));

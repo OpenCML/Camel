@@ -34,12 +34,10 @@ class FunctionData : public Data {
     arena_ptr_t arena_;
 
   public:
-    FunctionData(GIR::graph_ptr_t graph) : Data(graph->funcType()), graph_(graph) {
-        arena_ = graph->arena()->clone();
-    }
+    FunctionData(GIR::graph_ptr_t graph);
     virtual ~FunctionData() = default;
 
-    std::string name() const { return graph_->name(); }
+    std::string name() const;
     GIR::graph_ptr_t graph() const { return graph_; }
     arena_ptr_t arena() const { return arena_; }
     func_type_ptr_t funcType() const;
