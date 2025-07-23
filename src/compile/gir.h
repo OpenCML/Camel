@@ -69,7 +69,6 @@ class Constructor {
     node_ptr_t visitBindNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitBrchNode(const GCT::node_ptr_t &gct);
-    void_ptr_t visitFromNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitExitNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitExecNode(const GCT::node_ptr_t &gct);

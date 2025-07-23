@@ -28,39 +28,37 @@ namespace GraphIntermediateRepresentation {
 
 any Constructor::visit(const GCT::node_ptr_t &node) {
     switch (node->type()) {
-    case GCT::NodeType::DECL:
+    case GCT::LoadType::DECL:
         return visitDeclNode(node);
-    case GCT::NodeType::FUNC:
+    case GCT::LoadType::FUNC:
         return visitFuncNode(node);
-    case GCT::NodeType::DATA:
+    case GCT::LoadType::DATA:
         return visitDataNode(node);
-    case GCT::NodeType::TYPE:
+    case GCT::LoadType::TYPE:
         return visitTypeNode(node);
-    case GCT::NodeType::NREF:
+    case GCT::LoadType::NREF:
         return visitNRefNode(node);
-    case GCT::NodeType::DREF:
+    case GCT::LoadType::DREF:
         return visitDRefNode(node);
-    case GCT::NodeType::VARI:
+    case GCT::LoadType::VARI:
         return visitVariNode(node);
-    case GCT::NodeType::WAIT:
+    case GCT::LoadType::WAIT:
         return visitWaitNode(node);
-    case GCT::NodeType::LINK:
+    case GCT::LoadType::LINK:
         return visitLinkNode(node);
-    case GCT::NodeType::WITH:
+    case GCT::LoadType::WITH:
         return visitWithNode(node);
-    case GCT::NodeType::BIND:
+    case GCT::LoadType::BIND:
         return visitBindNode(node);
-    case GCT::NodeType::ACCS:
+    case GCT::LoadType::ACCS:
         return visitAccsNode(node);
-    case GCT::NodeType::BRCH:
+    case GCT::LoadType::BRCH:
         return visitBrchNode(node);
-    case GCT::NodeType::FROM:
-        return visitFromNode(node);
-    case GCT::NodeType::ANNO:
+    case GCT::LoadType::ANNO:
         return visitAnnoNode(node);
-    case GCT::NodeType::EXIT:
+    case GCT::LoadType::EXIT:
         return visitExitNode(node);
-    case GCT::NodeType::EXEC:
+    case GCT::LoadType::EXEC:
         return visitExecNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
@@ -236,8 +234,6 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     leave("BRCH");
     return nullptr;
 }
-
-void_ptr_t Constructor::visitFromNode(const GCT::node_ptr_t &gct) { return nullptr; }
 
 node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
 

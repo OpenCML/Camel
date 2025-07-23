@@ -23,6 +23,7 @@
 
 #include "common/func.h"
 #include "common/ref.h"
+#include "common/tree.h"
 #include "data.h"
 #include "entity.h"
 #include "utils/assert.h"
@@ -35,7 +36,7 @@ using node_ptr_t = std::shared_ptr<Node>;
 class Load;
 using load_ptr_t = std::shared_ptr<Load>;
 
-enum class NodeType {
+enum class LoadType {
     DECL, //
     FUNC,
     DATA,
@@ -49,22 +50,21 @@ enum class NodeType {
     BIND,
     ACCS,
     BRCH,
-    FROM,
     ANNO,
     EXIT,
     EXEC,
 };
 
-std::string to_string(NodeType type);
+std::string to_string(LoadType type);
 
 class Load {
   protected:
-    NodeType type_;
+    LoadType type_;
     size_t tokenStart_;
     size_t tokenEnd_;
 
   public:
-    Load(NodeType type) : type_(type) {}
+    Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
     void setToken(size_t start, size_t end) {
@@ -72,18 +72,43 @@ class Load {
         tokenEnd_ = end;
     }
 
-    NodeType type() const { return type_; }
+    LoadType type() const { return type_; }
     std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
 
     virtual const std::string toString() const { return to_string(type_); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
 };
 
+class Node : public AbstractTreeNode<load_ptr_t, Node> {
+  public:
+    Node(load_ptr_t load) : AbstractTreeNode(load) {}
+    virtual ~Node() = default;
+
+    LoadType type() const { return load_->type(); }
+    std::string toString() const { return load_->toString(); }
+
+    template <typename T> node_ptr_t atAs(size_t index) const {
+        ASSERT(index < children_.size(), "Index out of bounds");
+        ASSERT(children_.at(index) != nullptr, "Child node is null");
+        ASSERT(std::dynamic_pointer_cast<T>(children_.at(index)->load()), "Dynamic pointer cast failed");
+        return children_.at(index);
+    }
+
+    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
+        ASSERT(std::dynamic_pointer_cast<LoadType>(load_), "Load type cast failed");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
+        ASSERT(std::dynamic_pointer_cast<LoadType>(load_), "Load type does not match requested type");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+};
+
 class DataLoad : public Load {
     data_ptr_t data_;
 
   public:
-    DataLoad(data_ptr_t data) : Load(NodeType::DATA), data_(data) {
+    DataLoad(data_ptr_t data) : Load(LoadType::DATA), data_(data) {
         ASSERT(data != nullptr, "DataLoad cannot be constructed with a null data pointer");
     }
 
@@ -94,7 +119,7 @@ class DataLoad : public Load {
 
 class VariLoad : public Load {
   public:
-    VariLoad() : Load(NodeType::VARI) {}
+    VariLoad() : Load(LoadType::VARI) {}
 
     // const std::string toString() const override;
 };
@@ -104,7 +129,7 @@ class TypeLoad : public Load {
 
   public:
     TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri)
-        : Load(NodeType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
+        : Load(LoadType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
     type_ptr_t dataType() const { return dataType_; }
 
     ImplMark implMark() const { return implMark_; }
@@ -118,25 +143,25 @@ class TypeLoad : public Load {
 };
 
 class DeclLoad : public Load {
+    bool isFunc_;
     Reference ref_;
-    bool isType_ = false;
 
   public:
-    DeclLoad(const Reference &ref, bool isType = false) : Load(NodeType::DECL), ref_(ref), isType_(isType) {}
-    DeclLoad(const std::string &str, bool isType = false) : Load(NodeType::DECL), ref_(str), isType_(isType) {}
+    DeclLoad(const Reference &ref, bool isFunc = false) : Load(LoadType::DECL), isFunc_(isFunc), ref_(ref) {}
+    DeclLoad(const std::string &str, bool isFunc = false) : Load(LoadType::DECL), isFunc_(isFunc), ref_(str) {}
 
     const Reference ref() const { return ref_; }
-    bool isType() const { return isType_; }
 
     const std::string toString() const override;
 };
 
 class FuncLoad : public Load {
-    func_type_ptr_t funcType_;
+    std::string name_;
 
   public:
-    FuncLoad(func_type_ptr_t type) : Load(NodeType::FUNC), funcType_(type) {}
-    func_type_ptr_t funcType() const { return funcType_; }
+    FuncLoad(const std::string name) : Load(LoadType::FUNC), name_(name) {}
+
+    std::string name() const { return name_; }
 
     const std::string toString() const override;
 };
@@ -145,8 +170,8 @@ class NRefLoad : public Load {
     Reference ref_;
 
   public:
-    NRefLoad(const Reference &ref) : Load(NodeType::NREF), ref_(ref) {}
-    NRefLoad(const std::string &str) : Load(NodeType::NREF), ref_(str) {}
+    NRefLoad(const Reference &ref) : Load(LoadType::NREF), ref_(ref) {}
+    NRefLoad(const std::string &str) : Load(LoadType::NREF), ref_(str) {}
 
     const Reference ref() const { return ref_; }
 
@@ -157,8 +182,8 @@ class DRefLoad : public Load {
     Reference ref_;
 
   public:
-    DRefLoad(const Reference &ref) : Load(NodeType::DREF), ref_(ref) {}
-    DRefLoad(const std::string &str) : Load(NodeType::DREF), ref_(str) {}
+    DRefLoad(const Reference &ref) : Load(LoadType::DREF), ref_(ref) {}
+    DRefLoad(const std::string &str) : Load(LoadType::DREF), ref_(str) {}
 
     const Reference ref() const { return ref_; }
 
@@ -167,7 +192,7 @@ class DRefLoad : public Load {
 
 class WaitLoad : public Load {
   public:
-    WaitLoad() : Load(NodeType::WAIT) {}
+    WaitLoad() : Load(LoadType::WAIT) {}
 
     // const std::string toString() const override;
 };
@@ -176,14 +201,14 @@ class AnnoLoad : public Load {
     std::string annotation_;
 
   public:
-    AnnoLoad(const std::string &annotation) : Load(NodeType::ANNO), annotation_(annotation) {}
+    AnnoLoad(const std::string &annotation) : Load(LoadType::ANNO), annotation_(annotation) {}
 
     // const std::string toString() const override;
 };
 
 class LinkLoad : public Load {
   public:
-    LinkLoad(size_t args = 0) : Load(NodeType::LINK), args_(args) {}
+    LinkLoad(size_t args = 0) : Load(LoadType::LINK), args_(args) {}
 
     void setArgs(size_t args) { args_ = args; }
     void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
@@ -209,7 +234,7 @@ class LinkLoad : public Load {
 
 class WithLoad : public Load {
   public:
-    WithLoad(size_t args = 0) : Load(NodeType::WITH), args_(args) {}
+    WithLoad(size_t args = 0) : Load(LoadType::WITH), args_(args) {}
 
     void setArgs(size_t args) { args_ = args; }
     void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
@@ -235,14 +260,14 @@ class WithLoad : public Load {
 
 class BindLoad : public Load {
   public:
-    BindLoad() : Load(NodeType::BIND) {}
+    BindLoad() : Load(LoadType::BIND) {}
 
     // const std::string toString() const override;
 };
 
 class ExitLoad : public Load {
   public:
-    ExitLoad(ExitType type = ExitType::Return) : Load(NodeType::EXIT), exitType_(type) {}
+    ExitLoad(ExitType type = ExitType::Return) : Load(LoadType::EXIT), exitType_(type) {}
 
     ExitType exitType() const { return exitType_; }
 
@@ -254,7 +279,7 @@ class ExitLoad : public Load {
 
 class ExecLoad : public Load {
   public:
-    ExecLoad(bool sync = false) : Load(NodeType::EXEC), synced_(sync) {}
+    ExecLoad(bool sync = false) : Load(LoadType::EXEC), synced_(sync) {}
 
     const std::string toString() const override { return synced_ ? "SYNC" : "EXEC"; }
 
@@ -262,24 +287,10 @@ class ExecLoad : public Load {
     bool synced_ = false;
 };
 
-class FromLoad : public Load {
-    std::string path_;
-    std::vector<std::string> idents_; // if empty, load all(*)
-
-  public:
-    FromLoad(std::string &path, std::vector<std::string> &idents)
-        : Load(NodeType::FROM), path_(path), idents_(idents) {}
-
-    const std::string path() const { return path_; }
-    const std::vector<std::string> &idents() const { return idents_; }
-
-    const std::string toString() const override;
-};
-
 class AccsLoad : public Load {
   public:
-    AccsLoad(const std::string &index) : Load(NodeType::ACCS), index_(index) {}
-    AccsLoad(size_t index) : Load(NodeType::ACCS), index_(index) {}
+    AccsLoad(const std::string &index) : Load(LoadType::ACCS), index_(index) {}
+    AccsLoad(size_t index) : Load(LoadType::ACCS), index_(index) {}
 
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
@@ -300,7 +311,7 @@ class AccsLoad : public Load {
 
 class BrchLoad : public Load {
   public:
-    BrchLoad() : Load(NodeType::BRCH) {}
+    BrchLoad() : Load(LoadType::BRCH) {}
 
     // const std::string toString() const override;
 };

@@ -34,9 +34,9 @@ template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&..
 }
 
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
-    if (node->type() == NodeType::DATA) {
+    if (node->type() == LoadType::DATA) {
         return node->loadAs<DataLoad>()->data();
-    } else if (node->type() == NodeType::DREF) {
+    } else if (node->type() == LoadType::DREF) {
         return make_shared<RefData>(node->loadAs<DRefLoad>()->ref());
     } else {
         return nullptr;
@@ -95,13 +95,35 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
         visitImport(import);
     }
 
+    vector<node_ptr_t> decls;
+    vector<node_ptr_t> stmts;
+
     root_ = createNodeAs<ExecLoad>();
     for (auto &stmt : *stmtNodes) {
         try {
-            *root_ << visitStmt(stmt);
+            node_ptr_t node = visitStmt(stmt);
+            if (node->type() == GCT::LoadType::DECL) {
+                decls.push_back(node);
+            } else if (node->type() == GCT::LoadType::FUNC) {
+                const auto &funcLoad = node->loadAs<FuncLoad>();
+                node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->name(), true);
+                *declNode << node->atAs<TypeLoad>(0);
+                decls.push_back(declNode);
+                stmts.push_back(node);
+            } else {
+                stmts.push_back(node);
+            }
         } catch (const BuildAbortException &) {
             continue;
         }
+    }
+    if (!decls.empty()) {
+        for (const auto &decl : decls) {
+            *root_ << decl;
+        }
+    }
+    for (const auto &stmt : stmts) {
+        *root_ << stmt;
     }
 
     if (!exportOptNode->empty()) {
@@ -197,7 +219,7 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
                 const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
                 if (!validateIdent(ref.ident())) {
                     reportDiagnostic("Identifiers starting and ending with '__' are reserved for internal use.",
-                        dataDeclLoad->tokenRange(), Diagnostic::Severity::Error);
+                                     dataDeclLoad->tokenRange(), Diagnostic::Severity::Error);
                     throw BuildAbortException();
                 }
                 if (dataNode->type() != AST::LoadType::Data) {
@@ -222,7 +244,7 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &ref = refs[i];
                     if (!validateIdent(ref.ident())) {
                         reportDiagnostic("Identifiers starting and ending with '__' are reserved for internal use.",
-                            dataDeclLoad->tokenRange(), Diagnostic::Severity::Error);
+                                         dataDeclLoad->tokenRange(), Diagnostic::Severity::Error);
                         throw BuildAbortException();
                     }
                     node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
@@ -262,10 +284,8 @@ node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
     const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
     node_ptr_t funcNode = visitFuncData(funcDataNode);
-    node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->ref().ident(), true);
-    *declNode << funcNode;
     leave("FuncDecl");
-    return declNode;
+    return funcNode;
 }
 
 /*
@@ -284,7 +304,7 @@ node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
     }
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     typeScope_->insert(typeLoad->ref(), type);
-    node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref());
+    node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
     *declNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
     leave("TypeDecl");
     return declNode;
@@ -885,9 +905,10 @@ node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
     func_type_ptr_t funcType = tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark(), funcType->uri());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
-    node_ptr_t funcNode = createNodeAs<FuncLoad>(funcType);
-    *funcNode << stmtsNode;
+    node_ptr_t funcNode = createNodeAs<FuncLoad>(funcData->ref().ident());
+    *funcNode << typeNode << stmtsNode;
     leave("FuncData");
     return funcNode;
 }

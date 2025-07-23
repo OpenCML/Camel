@@ -52,7 +52,7 @@ bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
 
 bool Context::insertGraph(const std::string &name, const GIR::graph_ptr_t &graph) {
     if (graphScope_->has(name, false)) {
-        const auto &graphs = graphScope_->at(name).value();
+        auto graphs = graphScope_->at(name).value();
         // TODO: check if the graph is already in the list
         graphs->push_back(graph);
     }
@@ -62,7 +62,7 @@ bool Context::insertGraph(const std::string &name, const GIR::graph_ptr_t &graph
 
 bool Context::insertOperator(const std::string &name, const operator_ptr_t &op) {
     if (opScope_->has(name, false)) {
-        const auto ops = opScope_->at(name).value();
+        auto ops = opScope_->at(name).value();
         // TODO: check if the operator is already in the list
         ops->push_back(op);
     }

@@ -91,7 +91,6 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
     std::string toString() const { return load_->toString(); }
 
     template <typename T> node_ptr_t atAs(size_t index) const {
-        // safe check for index and type
         ASSERT(index < children_.size(), "Index out of bounds");
         ASSERT(children_.at(index) != nullptr, "Child node is null");
         ASSERT(std::dynamic_pointer_cast<T>(children_.at(index)->load()), "Dynamic pointer cast failed");
@@ -101,7 +100,7 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
         const auto &opt = at(index);
         ASSERT(opt->type() == LoadType::Optional, "Expected OptionalLoad type");
         if (opt->load()->type() == LoadType::Optional && opt->empty()) {
-            return nullptr; // return null if it's an empty optional
+            return nullptr;
         }
         return opt->atAs<T>(0);
     }

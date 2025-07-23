@@ -34,6 +34,9 @@ class FunctionType : public SpecialType {
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
 
+    const std::string &uri() const { return uri_; }
+    void setUri(const std::string &uri) { uri_ = uri; }
+
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
 
@@ -57,6 +60,7 @@ class FunctionType : public SpecialType {
 
   private:
     ImplMark implMark_ = ImplMark::Graph;
+    std::string uri_;
     ModifierSet modifiers_ = Modifier::None;
     std::shared_ptr<ParamsType> withType_;
     std::shared_ptr<ParamsType> linkType_;

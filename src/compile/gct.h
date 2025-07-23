@@ -27,7 +27,6 @@
 #include "common/error/diagnostic.h"
 #include "common/gct.h"
 #include "common/scope.h"
-#include "common/tree.h"
 
 namespace GraphConstructTree {
 using void_ptr_t = void *;
@@ -35,22 +34,6 @@ using void_ptr_t = void *;
 class BuildAbortException : public std::exception {
   public:
     BuildAbortException() {}
-};
-
-class Node : public AbstractTreeNode<load_ptr_t, Node> {
-  public:
-    Node(load_ptr_t load) : AbstractTreeNode(load) {}
-    virtual ~Node() = default;
-
-    NodeType type() const { return load_->type(); }
-    std::string toString() const { return load_->toString(); }
-
-    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
-        return std::dynamic_pointer_cast<LoadType>(load_);
-    }
-    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
-        return std::dynamic_pointer_cast<LoadType>(load_);
-    }
 };
 
 class Constructor {
