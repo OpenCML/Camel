@@ -28,14 +28,18 @@ Context::Context()
     currGraph_ = rootGraph_;
 }
 
-void Context::pushScope(func_type_ptr_t key) {
+GIR::graph_ptr_t Context::pushScope(const std::string &name) {
     nodeScope_ = nodeScope_->push();
     graphScope_ = graphScope_->push();
     opScope_ = opScope_->push();
-    currGraph_ = GIR::Graph::create(currGraph_);
+    currGraph_ = GIR::Graph::create(currGraph_, name);
+    if (!name.empty()) { // avoid inserting anonymous graphs
+        insertGraph(name, currGraph_);
+    }
+    return currGraph_;
 }
 
-void Context::popScope(func_type_ptr_t key) {
+void Context::popScope() {
     nodeScope_ = nodeScope_->pop();
     graphScope_ = graphScope_->pop();
     opScope_ = opScope_->pop();

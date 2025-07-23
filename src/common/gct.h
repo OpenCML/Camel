@@ -150,6 +150,7 @@ class DeclLoad : public Load {
     DeclLoad(const Reference &ref, bool isFunc = false) : Load(LoadType::DECL), isFunc_(isFunc), ref_(ref) {}
     DeclLoad(const std::string &str, bool isFunc = false) : Load(LoadType::DECL), isFunc_(isFunc), ref_(str) {}
 
+    bool isFunc() const { return isFunc_; }
     const Reference ref() const { return ref_; }
 
     const std::string toString() const override;

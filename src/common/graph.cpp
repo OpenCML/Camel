@@ -32,8 +32,8 @@ std::string to_string(NodeType type) {
         return "Access";
     case NodeType::Struct:
         return "Struct";
-    case NodeType::Literal:
-        return "Literal";
+    case NodeType::Source:
+        return "Source";
     case NodeType::Operator:
         return "Operator";
     case NodeType::Function:
@@ -51,7 +51,10 @@ Node
 Graph
 */
 
-void Graph::setFuncType(const func_type_ptr_t &type) { funcType_ = type; }
+void Graph::setFuncType(const func_type_ptr_t &type) {
+    ASSERT(funcType_ == nullptr, "Function type has already been set.");
+    funcType_ = type;
+}
 
 func_type_ptr_t Graph::funcType() const {
     ASSERT(funcType_ != nullptr, "Graph has not been set to a function type.");
@@ -60,14 +63,23 @@ func_type_ptr_t Graph::funcType() const {
 
 void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
-node_ptr_t Graph::addPort(bool isVar) {}
+node_ptr_t Graph::addPort() {
+    DataIndex index = arena_->addConstant(nullptr, false);
+    ports_.push_back(index);
+    node_ptr_t portNode = SourceNode::create(shared_from_this(), index);
+    addNode(portNode);
+    return portNode;
+}
 
 void Graph::addSubGraph(const graph_ptr_t &graph) {
     // here we assume that the subgraph is a new blank graph
     subGraphs_.push_back(graph);
 }
 
-void Graph::setOutput(const node_ptr_t &node) { output_ = node; }
+void Graph::setOutput(const node_ptr_t &node) {
+    ASSERT(output_ == nullptr, "Output node has already been set.");
+    output_ = node;
+}
 
 /*
 LiteralNode

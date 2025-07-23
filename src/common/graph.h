@@ -34,7 +34,7 @@ enum class NodeType {
     Select,
     Access,   // Element accessed during runtime
     Struct,   // Runtime constructed data structure
-    Literal,  // Compile-time constant
+    Source,   // Compile-time constant or port
     Operator, // Atomic operation
     Function, // (Sub)-Graph, function
 };
@@ -58,7 +58,7 @@ using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;
 using node_vec_t = std::vector<node_ptr_t>;
 
-class Graph {
+class Graph : public std::enable_shared_from_this<Graph> {
   public:
     Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name) {
         outer_ = graph;
@@ -83,7 +83,7 @@ class Graph {
     func_type_ptr_t funcType() const;
 
     void addNode(const node_ptr_t &node);
-    node_ptr_t addPort(bool isVar = false);
+    node_ptr_t addPort();
 
     void addSubGraph(const graph_ptr_t &graph);
     std::vector<graph_ptr_t> &subGraphs() { return subGraphs_; }
@@ -116,10 +116,6 @@ class Node : public std::enable_shared_from_this<Node> {
     }
     virtual ~Node() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, NodeType type, DataIndex index) {
-        return std::make_shared<Node>(graph, type, index);
-    }
-
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
 
@@ -128,7 +124,6 @@ class Node : public std::enable_shared_from_this<Node> {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
         return graph_.lock();
     }
-    data_ptr_t data() const;
     const DataIndex &index() const { return dataIndex_; }
 
     node_vec_t &normInputs() { return normInputs_; }
@@ -152,7 +147,7 @@ class Node : public std::enable_shared_from_this<Node> {
     }
     size_t refCnt() const { return refs_; }
 
-    virtual data_ptr_t eval() { return data(); };
+    virtual data_ptr_t eval() = 0;
 
     static void link(LinkType type, node_ptr_t &from, node_ptr_t &to) {
         switch (type) {
@@ -230,14 +225,12 @@ class StructNode : public Node {
     data_ptr_t eval() override { return nullptr; }
 };
 
-class LiteralNode : public Node {
+class SourceNode : public Node {
   public:
-    LiteralNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Literal, index) {}
-    ~LiteralNode() = default;
+    SourceNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Source, index) {}
+    ~SourceNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
-        return std::make_shared<LiteralNode>(graph, index);
-    }
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<SourceNode>(graph, index); }
 
     data_ptr_t eval() override { return nullptr; }
 };

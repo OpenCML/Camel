@@ -52,8 +52,8 @@ class Context {
     GIR::graph_ptr_t &rootGraph() { return rootGraph_; }
     GIR::graph_ptr_t &currGraph() { return currGraph_; }
 
-    void pushScope(func_type_ptr_t key);
-    void popScope(func_type_ptr_t key = nullptr);
+    GIR::graph_ptr_t pushScope(const std::string &name);
+    void popScope();
 
     std::optional<std::pair<GIR::node_ptr_t, GIR::node_ptr_t>> nodeAt(const std::string &name) {
         return nodeScope_->at(name);

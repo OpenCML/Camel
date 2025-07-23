@@ -43,14 +43,13 @@ class Diagnostic : public CamelBaseException {
         Position end;
     };
 
-    Diagnostic(const std::string &msg, size_t startIndex, size_t endIndex, Severity sev = Severity::Warning)
+    Diagnostic(Severity sev, const std::string &msg, size_t startIndex, size_t endIndex)
         : CamelBaseException(msg), severity_(sev) {
         rangeStoredAsIndex_ = true;
         range_.start.line = startIndex;
         range_.start.character = endIndex;
     }
-    Diagnostic(const std::string &msg, antlr4::Token *startToken, antlr4::Token *endToken,
-               Severity sev = Severity::Warning)
+    Diagnostic(Severity sev, const std::string &msg, antlr4::Token *startToken, antlr4::Token *endToken)
         : CamelBaseException(msg), severity_(sev) {
         rangeStoredAsIndex_ = false;
         range_.start.line = startToken->getLine() - 1;
@@ -215,8 +214,8 @@ class Diagnostics {
         severity_counts_[sev]++;
     }
 
-    void emplace(const std::string &msg, size_t startIndex, size_t endIndex, Severity sev = Severity::Warning) {
-        add(Diagnostic(msg, startIndex, endIndex, sev));
+    void emplace(Severity sev, const std::string &msg, size_t startIndex = 0, size_t endIndex = 0) {
+        add(Diagnostic(sev, msg, startIndex, endIndex));
     }
 
     std::optional<Diagnostic> next() {

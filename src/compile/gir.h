@@ -50,13 +50,13 @@ class Constructor {
     bool synced_;
     bool varied_;
 
-    void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange, Diagnostic::Severity sev) {
-        diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
+    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg, std::pair<size_t, size_t> tokenRange = {0, 0}) {
+        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 
     std::any visit(const GCT::node_ptr_t &gct);
 
-    func_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
+    void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
     type_ptr_t visitTypeNode(const GCT::node_ptr_t &gct);

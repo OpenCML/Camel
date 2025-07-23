@@ -19,6 +19,7 @@
 
 #include "gir.h"
 #include "utils/log.h"
+#include "utils/type.h"
 
 #define DEBUG_LEVEL 0
 
@@ -66,37 +67,41 @@ any Constructor::visit(const GCT::node_ptr_t &node) {
     return nullptr;
 }
 
-func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
+void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     enter("DECL");
-    // func_type_ptr_t funcType = gct->loadAs<GCT::DeclLoad>()->funcType();
-    // if (context_->cached(funcType)) {
-    //     leave("DECL");
-    //     return getCachedFunc(funcType);
-    // }
-    // auto functorType = dynamic_pointer_cast<FunctionType>(funcType);
-    // const auto &varMap = functorType->variableMap();
-    // const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
-    // const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
+    const auto &declLoad = gct->loadAs<GCT::DeclLoad>();
+    if (!declLoad->isFunc()) {
+        leave("DECL");
+        return nullptr;
+    }
 
-    // context_->pushScope(funcType);
-    // graph_ptr_t &graph = context_->currGraph();
-    // for (const auto &[name, type, data] : withType->elements()) {
-    //     node_ptr_t node = graph->addPort(varMap.at(name));
-    //     context_->insertNode(name, node);
-    // }
-    // for (const auto &[name, type, data] : linkType->elements()) {
-    //     node_ptr_t node = graph->addPort(varMap.at(name));
-    //     context_->insertNode(name, node);
-    // }
-    // func_ptr_t func = make_shared<FunctionData>(funcType, graph);
-    // graph->setFuncType(funcType);
-    // context_->popScope();
+    GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
+    type_ptr_t type = typeNode->loadAs<GCT::TypeLoad>()->dataType();
+    func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
+    const auto &withType = tt::as_shared<ParamsType>(funcType->withType());
+    const auto &linkType = tt::as_shared<ParamsType>(funcType->linkType());
 
-    // if (!functorType->name().empty()) {
-    //     // lambda functors my not have a name
-    //     context_->insertFunc(funcType->name(), func);
-    // }
-    // cacheFunc(funcType, func);
+    graph_ptr_t graph = context_->pushScope(declLoad->ref().ident());
+    graph->setFuncType(funcType);
+    arena_ptr_t arena = graph->arena();
+    for (const auto &[name, type, data] : withType->elements()) {
+        // TODO: ignored type and default data here
+        if (data != nullptr) {
+            reportDiagnostic(Diagnostic::Severity::Warning,
+                             "Default data is currently not supported in function parameters.");
+        }
+        context_->insertNode(name, graph->addPort());
+    }
+    for (const auto &[name, type, data] : linkType->elements()) {
+        // TODO: ignored type and default data here
+        if (data != nullptr) {
+            reportDiagnostic(Diagnostic::Severity::Warning,
+                             "Default data is currently not supported in function parameters.");
+        }
+        context_->insertNode(name, graph->addPort());
+    }
+    context_->popScope();
+
     leave("DECL");
     return nullptr;
 }
@@ -169,7 +174,6 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     // return res;
     return nullptr;
 }
-
 
 node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
     enter("VARI");

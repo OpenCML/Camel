@@ -209,7 +209,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
         runtimeVariables_ = std::make_shared<VariableArray>(false, runtimeConstants_);
     }
 
-    DataIndex insertConstant(const data_ptr_t &data, bool shared) {
+    DataIndex addConstant(const data_ptr_t &data, bool shared) {
         if (shared) {
             return sharedConstants_->emplace(data);
         } else {
@@ -217,7 +217,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
         }
     }
 
-    DataIndex insertVariable(DataIndex index) {
+    DataIndex addVariable(DataIndex index) {
         ASSERT(index.type.constant, "Cannot insert non-constant data as a variable.");
         if (index.type.shared) {
             return sharedVariables_->emplace(index);
