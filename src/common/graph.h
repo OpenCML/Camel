@@ -25,7 +25,7 @@
 
 #include "arena.h"
 #include "data.h"
-#include "data/other/functor.h"
+#include "data/other/func.h"
 #include "operator.h"
 
 namespace GraphIntermediateRepresentation {
@@ -52,6 +52,7 @@ class Node;
 
 using graph_ptr_t = std::shared_ptr<Graph>;
 using graph_wptr_t = std::weak_ptr<Graph>;
+using graph_vec_t = std::vector<graph_ptr_t>;
 using node_ptr_t = std::shared_ptr<Node>;
 using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;
@@ -59,13 +60,24 @@ using node_vec_t = std::vector<node_ptr_t>;
 
 class Graph {
   public:
-    Graph(graph_ptr_t graph = nullptr) {
+    Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name) {
         outer_ = graph;
         arena_ = std::make_shared<DataArena>();
     }
     ~Graph() = default;
 
+    static graph_ptr_t create(graph_ptr_t graph = nullptr, const std::string &name = "") {
+        return std::make_shared<Graph>(graph);
+    }
+
+    const std::string &name() const { return name_; }
     arena_ptr_t arena() const { return arena_; }
+    graph_ptr_t outer() const {
+        if (outer_.expired()) {
+            return nullptr;
+        }
+        return outer_.lock();
+    }
 
     void setFuncType(const func_type_ptr_t &type);
     func_type_ptr_t funcType() const;
@@ -85,6 +97,7 @@ class Graph {
     void fulfill(const data_vec_t &dataList);
 
   private:
+    std::string name_;
     graph_wptr_t outer_;
     std::vector<graph_ptr_t> subGraphs_;
 
@@ -102,6 +115,10 @@ class Node : public std::enable_shared_from_this<Node> {
         ASSERT(graph, "Graph is not set for Node.");
     }
     virtual ~Node() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, NodeType type, DataIndex index) {
+        return std::make_shared<Node>(graph, type, index);
+    }
 
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
@@ -177,6 +194,8 @@ class SelectNode : public Node {
     SelectNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Select, index) {}
     ~SelectNode() = default;
 
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<SelectNode>(graph, index); }
+
     data_ptr_t eval() override {}
 };
 
@@ -187,6 +206,10 @@ class AccessNode : public Node {
     AccessNode(graph_ptr_t graph, DataIndex &data, const size_t &index)
         : Node(graph, NodeType::Access, data), index_(index) {}
     ~AccessNode() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &data, const std::string &index) {
+        return std::make_shared<AccessNode>(graph, data, index);
+    }
 
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
@@ -202,6 +225,8 @@ class StructNode : public Node {
     StructNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Struct, index) {}
     ~StructNode() = default;
 
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<StructNode>(graph, index); }
+
     data_ptr_t eval() override;
 };
 
@@ -209,6 +234,10 @@ class LiteralNode : public Node {
   public:
     LiteralNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Literal, index) {}
     ~LiteralNode() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
+        return std::make_shared<LiteralNode>(graph, index);
+    }
 
     data_ptr_t eval() override {}
 };
@@ -221,6 +250,10 @@ class OperatorNode : public Node {
         : Node(graph, NodeType::Operator, index), operator_(op) {}
     ~OperatorNode() = default;
 
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, Operator op) {
+        return std::make_shared<OperatorNode>(graph, index, op);
+    }
+
     std::string operName() const { return operator_.name(); }
 
     data_ptr_t eval() override {}
@@ -230,6 +263,10 @@ class FunctionNode : public Node {
   public:
     FunctionNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Function, index) {}
     ~FunctionNode() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
+        return std::make_shared<FunctionNode>(graph, index);
+    }
 
     data_ptr_t eval() override {}
 };

@@ -43,9 +43,9 @@ class Operator {
     const OperatorFunction &func() const { return func_; }
 };
 
-using oper_ptr_t = std::shared_ptr<Operator>;
-using oper_vec_t = std::vector<oper_ptr_t>;
+using operator_ptr_t = std::shared_ptr<Operator>;
+using operator_vec_t = std::vector<operator_ptr_t>;
 
-extern std::unordered_map<std::string, std::shared_ptr<oper_vec_t>> globalOperators;
+extern std::unordered_map<std::string, std::shared_ptr<operator_vec_t>> globalOperators;
 
-void registerOperator(const oper_ptr_t &&op);
+void registerOperator(const operator_ptr_t &&op);

@@ -101,7 +101,7 @@ func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
         node_ptr_t node = graph->addPort(varMap.at(name));
         context_->insertNode(name, node);
     }
-    func_ptr_t func = make_shared<FunctorData>(funcType, graph);
+    func_ptr_t func = make_shared<FunctionData>(funcType, graph);
     graph->setFuncType(funcType);
     context_->popScope();
 
