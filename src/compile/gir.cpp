@@ -68,10 +68,10 @@ any Constructor::visit(const GCT::node_ptr_t &node) {
 }
 
 void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
-    enter("DECL");
+    ENTER("DECL");
     const auto &declLoad = gct->loadAs<GCT::DeclLoad>();
     if (!declLoad->isFunc()) {
-        leave("DECL");
+        LEAVE("DECL");
         return nullptr;
     }
 
@@ -81,7 +81,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     const auto &withType = tt::as_shared<ParamsType>(funcType->withType());
     const auto &linkType = tt::as_shared<ParamsType>(funcType->linkType());
 
-    graph_ptr_t graph = context_->pushScope(declLoad->ref().ident());
+    graph_ptr_t graph = context_->enterScope(declLoad->ref().ident());
     graph->setFuncType(funcType);
     arena_ptr_t arena = graph->arena();
     for (const auto &[name, type, data] : withType->elements()) {
@@ -100,27 +100,27 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
         }
         context_->insertNode(name, graph->addPort());
     }
-    context_->popScope();
+    context_->leaveScope();
 
-    leave("DECL");
+    LEAVE("DECL");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
-    enter("FUNC");
+    ENTER("FUNC");
     // func_ptr_t func = visitDeclNode(gct->at(0));
     // func_type_ptr_t funcType = func->funcType();
     // context_->pushScope(funcType);
     // visitExecNode(gct->at(1));
     // context_->popScope(funcType);
     // delCachedFunc(funcType);
-    leave("FUNC");
+    LEAVE("FUNC");
     // return SelectNode::create(context_->currGraph(), func_vec_t{func});
     return nullptr;
 }
 
 node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
-    enter("DATA");
+    ENTER("DATA");
     // const auto &dataLoad = gct->loadAs<GCT::DataLoad>();
     // const data_ptr_t &data = dataLoad->data();
     // node_ptr_t node = LiteralNode::create(context_->currGraph(), data, false);
@@ -135,19 +135,19 @@ node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
     //         }
     //     }
     // }
-    leave("DATA");
+    LEAVE("DATA");
     return nullptr;
 }
 
 type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
-    enter("TYPE");
+    ENTER("TYPE");
     const type_ptr_t &type = gct->loadAs<GCT::TypeLoad>()->dataType();
-    leave("TYPE");
+    LEAVE("TYPE");
     return type;
 }
 
 void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
-    enter("NREF");
+    ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     const auto &res = visit(gct->at(0));
     if (res.type() != typeid(node_ptr_t)) {
@@ -157,18 +157,18 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
     if (!context_->insertNode(ident, node)) {
         throw runtime_error("Redeclaration of entity: " + ident);
     }
-    leave("NREF");
+    LEAVE("NREF");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
-    enter("DREF");
+    ENTER("DREF");
     // const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
     // auto optNode = context_->nodeAt(ident);
     // if (!optNode.has_value()) {
     //     throw runtime_error("Unresolved reference: " + ident);
     // }
-    // leave("DREF");
+    // LEAVE("DREF");
     // node_ptr_t res = optNode.value();
     // res->ref();
     // return res;
@@ -176,21 +176,21 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
 }
 
 node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
-    enter("VARI");
+    ENTER("VARI");
     // const auto &res = visit(gct->at(0));
     // if (res.type() != typeid(node_ptr_t)) {
     //     throw runtime_error("Unexpected result type from Enter the child of VARI node");
     // }
     // node_ptr_t node = any_cast<node_ptr_t>(res);
     // node->makeVariable();
-    leave("VARI");
+    LEAVE("VARI");
     // return node;
     return nullptr;
 }
 node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
 
 node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
-    enter("LINK");
+    ENTER("LINK");
     // // TODO: consider functor and operator overriden
     // // for now, we just ignore it
     // // because we cannot get the exact type of unref elements of struct data yet
@@ -202,12 +202,12 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
     // node_ptr_t dataNode = selectNode(any_cast<node_ptr_t>(dataRes), context_->currGraph());
     // node_ptr_t linkNode = selectNode(any_cast<node_ptr_t>(funcRes), context_->currGraph());
     // Node::link(dataNode, linkNode, 1);
-    leave("LINK");
+    LEAVE("LINK");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
-    enter("WITH");
+    ENTER("WITH");
     // any dataRes = visit(gct->at(0));
     // any funcRes = visit(gct->at(1));
     // if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
@@ -216,45 +216,45 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
     // node_ptr_t dataNode = selectNode(any_cast<node_ptr_t>(dataRes), context_->currGraph());
     // node_ptr_t withNode = selectNode(any_cast<node_ptr_t>(funcRes), context_->currGraph());
     // Node::link(dataNode, withNode, 0);
-    leave("WITH");
+    LEAVE("WITH");
     // return withNode;
     return nullptr;
 }
 
 node_ptr_t Constructor::visitBindNode(const GCT::node_ptr_t &gct) {
-    enter("BIND");
-    leave("BIND");
+    ENTER("BIND");
+    LEAVE("BIND");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
-    enter("ACCS");
-    leave("ACCS");
+    ENTER("ACCS");
+    LEAVE("ACCS");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
-    enter("BRCH");
-    leave("BRCH");
+    ENTER("BRCH");
+    LEAVE("BRCH");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
 
 void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
-    enter("RETN");
+    ENTER("RETN");
     auto res = visit(gct->at(0));
     if (res.type() != typeid(node_ptr_t)) {
         throw runtime_error("Unexpected result type from Enter child of RETN node");
     }
     const auto &node = any_cast<node_ptr_t>(res);
     context_->currGraph()->setOutput(node);
-    leave("RETN");
+    LEAVE("RETN");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {
-    enter("EXEC");
+    ENTER("EXEC");
     node_ptr_t node;
     for (size_t i = 0; i < gct->size(); i++) {
         any result = visit(gct->at(i));
@@ -262,7 +262,7 @@ node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {
             node = any_cast<node_ptr_t>(result);
         }
     }
-    leave("EXEC");
+    LEAVE("EXEC");
     return node;
 }
 

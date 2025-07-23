@@ -24,29 +24,41 @@
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <string>
 #include <unordered_map>
 
-template <typename T, typename = std::void_t<>> struct hashable : std::false_type {};
+template <typename T>
+concept Hashable = requires(T t) {
+    { std::hash<T>{}(t) } -> std::convertible_to<std::size_t>;
+};
 
 template <typename T>
-struct hashable<T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declval<T>()))>> : std::true_type {};
+concept HasEmpty = requires(T t) {
+    { t.empty() } -> std::convertible_to<bool>;
+};
 
-template <typename K, typename V> class Scope : public std::enable_shared_from_this<Scope<K, V>> {
+template <typename T>
+concept HashableAndHasEmpty = Hashable<T> && HasEmpty<T>;
+
+template <Hashable Key, typename Val, HashableAndHasEmpty Name = std::string>
+class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
   protected:
+    using scope_ptr_t = std::shared_ptr<Scope<Key, Val, Name>>;
     mutable std::shared_mutex rwMutex_;
-    std::unordered_map<K, V> map_;
-    std::shared_ptr<Scope<K, V>> outer_;
+    std::unordered_map<Key, Val> map_;
+    scope_ptr_t outer_;
+    std::unordered_map<Name, scope_ptr_t> innerScopes_;
 
   public:
     Scope() = default;
-    Scope(std::unordered_map<K, V> map, std::shared_ptr<Scope<K, V>> outer = nullptr)
+    Scope(std::unordered_map<Key, Val> map, std::shared_ptr<Scope<Key, Val>> outer = nullptr)
         : map_(std::move(map)), outer_(std::move(outer)) {}
-    Scope(std::shared_ptr<Scope<K, V>> outer) : map_(), outer_(std::move(outer)) {}
+    Scope(scope_ptr_t outer) : map_(), outer_(std::move(outer)) {}
 
-    std::shared_ptr<Scope<K, V>> &outer() { return outer_; }
-    std::unordered_map<K, V> &map() { return map_; }
+    scope_ptr_t &outer() { return outer_; }
+    std::unordered_map<Key, Val> &map() { return map_; }
 
-    std::optional<V> at(const K &k, bool recursive = true) {
+    std::optional<Val> at(const Key &k, bool recursive = true) {
         // std::shared_lock<std::shared_mutex> lock(rwMutex_);
         auto it = map_.find(k);
         if (it != map_.end()) {
@@ -58,7 +70,7 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
         }
     }
 
-    void insert(const K &k, const V &v) {
+    void insert(const Key &k, const Val &v) {
         // this method won't check if the key already exists
         // keep in mind that the insertion is successful
         // even if the key already exists in the outer scope
@@ -66,7 +78,7 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
         map_.insert({k, v});
     }
 
-    bool erase(const K &k, bool recursive = true) {
+    bool erase(const Key &k, bool recursive = true) {
         // std::unique_lock<std::shared_mutex> lock(rwMutex_);
         auto c = map_.erase(k);
         if (recursive && outer_) {
@@ -86,7 +98,7 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
         }
     }
 
-    bool has(const K &k, bool recursive = true) const {
+    bool has(const Key &k, bool recursive = true) const {
         // std::shared_lock<std::shared_mutex> lock(rwMutex_);
         if (map_.count(k) != 0) {
             return true;
@@ -99,23 +111,32 @@ template <typename K, typename V> class Scope : public std::enable_shared_from_t
 
     bool isRoot() const { return !outer_; }
 
-    std::unordered_map<K, V> self() const { return map_; }
+    std::unordered_map<Key, Val> self() const { return map_; }
 
-    static std::shared_ptr<Scope<K, V>> create(std::shared_ptr<Scope<K, V>> outer = nullptr) {
-        return std::make_shared<Scope<K, V>>(outer);
+    static scope_ptr_t create(scope_ptr_t outer = nullptr) { return std::make_shared<Scope<Key, Val, Name>>(outer); }
+
+    static scope_ptr_t create(std::unordered_map<Key, Val> map, scope_ptr_t outer = nullptr) {
+        return std::make_shared<Scope<Key, Val, Name>>(map, outer);
     }
 
-    static std::shared_ptr<Scope<K, V>> create(std::unordered_map<K, V> map,
-                                               std::shared_ptr<Scope<K, V>> outer = nullptr) {
-        return std::make_shared<Scope<K, V>>(map, outer);
+    scope_ptr_t enter(Name name = Name()) {
+        if (!name.empty()) {
+            auto it = innerScopes_.find(name);
+            if (it != innerScopes_.end()) {
+                return it->second;
+            }
+            auto newScope = std::make_shared<Scope<Key, Val, Name>>(this->shared_from_this());
+            innerScopes_[name] = newScope;
+            return newScope;
+        } else {
+            return std::make_shared<Scope<Key, Val, Name>>(this->shared_from_this());
+        }
     }
 
-    std::shared_ptr<Scope<K, V>> push() { return std::make_shared<Scope<K, V>>(this->shared_from_this()); }
-
-    std::shared_ptr<Scope<K, V>> pop() {
+    scope_ptr_t leave() {
         // TODO: Shall we free the scope?
         return outer();
     }
 };
 
-template <typename K, typename V> using scope_ptr_t = std::shared_ptr<Scope<K, V>>;
+template <typename Key, typename Val, typename Name = std::string> using scope_ptr_t = std::shared_ptr<Scope<Key, Val, Name>>;

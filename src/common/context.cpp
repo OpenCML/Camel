@@ -28,10 +28,10 @@ Context::Context()
     currGraph_ = rootGraph_;
 }
 
-GIR::graph_ptr_t Context::pushScope(const std::string &name) {
-    nodeScope_ = nodeScope_->push();
-    graphScope_ = graphScope_->push();
-    opScope_ = opScope_->push();
+GIR::graph_ptr_t Context::enterScope(const std::string &name) {
+    nodeScope_ = nodeScope_->enter();
+    graphScope_ = graphScope_->enter();
+    opScope_ = opScope_->enter();
     currGraph_ = GIR::Graph::create(currGraph_, name);
     if (!name.empty()) { // avoid inserting anonymous graphs
         insertGraph(name, currGraph_);
@@ -39,10 +39,10 @@ GIR::graph_ptr_t Context::pushScope(const std::string &name) {
     return currGraph_;
 }
 
-void Context::popScope() {
-    nodeScope_ = nodeScope_->pop();
-    graphScope_ = graphScope_->pop();
-    opScope_ = opScope_->pop();
+void Context::leaveScope() {
+    nodeScope_ = nodeScope_->leave();
+    graphScope_ = graphScope_->leave();
+    opScope_ = opScope_->leave();
     currGraph_ = currGraph_->outer();
 }
 

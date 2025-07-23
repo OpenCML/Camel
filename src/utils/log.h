@@ -78,7 +78,7 @@ inline std::string rainbowPattern(int depth) {
     if (level <= DEBUG_LEVEL)                                                                                          \
     std::cout
 
-#define enter(target)                                                                                                  \
+#define ENTER(target)                                                                                                  \
     do {                                                                                                               \
         if (DEBUG_LEVEL > 0) {                                                                                         \
             std::cout << rainbowPattern(__depth__) << _blue("[enter] ") << target << std::endl;                        \
@@ -86,7 +86,7 @@ inline std::string rainbowPattern(int depth) {
         __depth__++;                                                                                                   \
     } while (false)
 
-#define leave(target)                                                                                                  \
+#define LEAVE(target)                                                                                                  \
     do {                                                                                                               \
         __depth__--;                                                                                                   \
         if (DEBUG_LEVEL > 0) {                                                                                         \
