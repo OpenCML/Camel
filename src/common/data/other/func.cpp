@@ -23,23 +23,6 @@
 using namespace std;
 using namespace GIR;
 
-FunctionData::FunctionData(const type_ptr_t &type, graph_ptr_t graph, graph_ptr_t base) : Data(type), thisGraph_(graph) {
-    if (base == nullptr) {
-        baseGraph_ = graph->graph();
-    } else {
-        baseGraph_ = base;
-    }
-};
-
-GIR::graph_ptr_t FunctionData::graph() const { return thisGraph_; }
-
-GIR::graph_ptr_t FunctionData::baseGraph() const { return baseGraph_; }
-
-std::string FunctionData::name() const {
-    auto func = dynamic_pointer_cast<FunctionType>(type_);
-    return func->name();
-}
-
 func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<FunctionType>(type_); }
 
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
@@ -48,14 +31,9 @@ data_ptr_t FunctionData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert functor to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t FunctionData::clone(bool deep) const {
-    auto newGraph = make_shared<Graph>(*thisGraph_);
-    func_ptr_t func = std::make_shared<FunctionData>(type_, newGraph, baseGraph_);
-    newGraph->setFuncType(func->funcType());
-    return func;
-}
+data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<FunctionData>(type_, graph_); }
 
 const std::string FunctionData::toString() const {
     FunctionType *type = dynamic_cast<FunctionType *>(type_.get());
-    return "Functor<" + type->toString() + ">";
+    return "Function<" + type->toString() + ">";
 }

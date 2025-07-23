@@ -20,6 +20,7 @@
 #pragma once
 
 #include "../data.h"
+#include "common/arena.h"
 
 namespace GraphIntermediateRepresentation {
 class Graph;
@@ -29,16 +30,18 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 namespace GIR = GraphIntermediateRepresentation;
 
 class FunctionData : public Data {
-    GIR::graph_ptr_t baseGraph_;
-    GIR::graph_ptr_t thisGraph_;
+    GIR::graph_ptr_t graph_;
+    arena_ptr_t arena_;
 
   public:
-    FunctionData(const type_ptr_t &type, GIR::graph_ptr_t graph, GIR::graph_ptr_t base = nullptr);
+    FunctionData(GIR::graph_ptr_t graph) : Data(graph->funcType()), graph_(graph) {
+        arena_ = graph->arena()->clone();
+    }
     virtual ~FunctionData() = default;
 
-    GIR::graph_ptr_t graph() const;
-    GIR::graph_ptr_t baseGraph() const;
-    std::string name() const;
+    std::string name() const { return graph_->name(); }
+    GIR::graph_ptr_t graph() const { return graph_; }
+    arena_ptr_t arena() const { return arena_; }
     func_type_ptr_t funcType() const;
 
     virtual bool equals(const data_ptr_t &other) const override;

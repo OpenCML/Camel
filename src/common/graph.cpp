@@ -54,9 +54,7 @@ Graph
 void Graph::setFuncType(const func_type_ptr_t &type) { funcType_ = type; }
 
 func_type_ptr_t Graph::funcType() const {
-    if (funcType_ == nullptr) {
-        throw runtime_error("This graph has not been set to a functor.");
-    }
+    ASSERT(funcType_ != nullptr, "Graph has not been set to a function type.");
     return funcType_;
 }
 
@@ -74,7 +72,6 @@ void Graph::setOutput(const node_ptr_t &node) { output_ = node; }
 /*
 LiteralNode
 */
-
 
 /*
 StructNode

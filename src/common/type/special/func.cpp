@@ -25,10 +25,9 @@
 
 using namespace std;
 
-FunctionType::FunctionType(const std::string &&name, const shared_ptr<ParamsType> &withType,
-                           const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
-    : SpecialType(TypeCode::FUNCTOR), name_(std::move(name)), withType_(withType), linkType_(paramsType),
-      returnType_(returnType) {}
+FunctionType::FunctionType(const shared_ptr<ParamsType> &withType, const shared_ptr<ParamsType> &paramsType,
+                           const type_ptr_t &returnType)
+    : SpecialType(TypeCode::FUNCTOR), withType_(withType), linkType_(paramsType), returnType_(returnType) {}
 
 const std::string &FunctionType::argNameAt(size_t idx) const {
     if (idx < withType_->size())
@@ -87,7 +86,6 @@ string FunctionType::toString() const {
         }
         result += "> ";
     }
-    result += name_;
     result += "(";
     if (linkType_ && linkType_->size() > 0) {
         const auto &params = dynamic_cast<const ParamsType &>(*linkType_);

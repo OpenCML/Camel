@@ -1092,7 +1092,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         exitType = visitType(exitTypeNode);
     }
 
-    func_type_ptr_t funcType = make_shared<FunctionType>("", withParamsType, normParamsType, exitType);
+    func_type_ptr_t funcType = make_shared<FunctionType>(withParamsType, normParamsType, exitType);
     funcType->setImplMark(typeLoad->implMark());
     funcType->setModifiers(typeLoad->modifiers());
 
