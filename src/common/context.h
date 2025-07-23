@@ -56,10 +56,10 @@ class Context {
     void leaveScope();
 
     std::optional<std::pair<GIR::node_ptr_t, GIR::node_ptr_t>> nodeAt(const std::string &name) {
-        return nodeScope_->at(name);
+        return nodeScope_->get(name);
     }
-    std::optional<std::shared_ptr<GIR::graph_vec_t>> graphAt(const std::string &name) { return graphScope_->at(name); }
-    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) { return opScope_->at(name); }
+    std::optional<std::shared_ptr<GIR::graph_vec_t>> graphAt(const std::string &name) { return graphScope_->get(name); }
+    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) { return opScope_->get(name); }
 
     bool insertNode(const std::string &name, const GIR::node_ptr_t &node);
     bool insertGraph(const std::string &name, const GIR::graph_ptr_t &graph);

@@ -1244,7 +1244,7 @@ type_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
     ASSERT(ast->load()->type() == AST::LoadType::Type, "Expected TypeLoad type for RefType");
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
     const Reference &ref = typeLoad->ref();
-    const auto &type = typeScope_->at(ref);
+    const auto &type = typeScope_->get(ref);
     if (!type.has_value()) {
         reportDiagnostic(Diagnostic::Severity::Error, "Unresolved type reference: " + ref.toString(),
                          ast->load()->tokenRange());

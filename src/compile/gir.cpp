@@ -106,17 +106,15 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     return nullptr;
 }
 
-node_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
+graph_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
-    // func_ptr_t func = visitDeclNode(gct->at(0));
-    // func_type_ptr_t funcType = func->funcType();
-    // context_->pushScope(funcType);
-    // visitExecNode(gct->at(1));
-    // context_->popScope(funcType);
-    // delCachedFunc(funcType);
+    // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
+    std::string name = gct->loadAs<GCT::FuncLoad>()->name();
+    graph_ptr_t graph = context_->enterScope(name);
+    visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    context_->leaveScope();
     LEAVE("FUNC");
-    // return SelectNode::create(context_->currGraph(), func_vec_t{func});
-    return nullptr;
+    return graph;
 }
 
 node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
@@ -141,7 +139,7 @@ node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
 
 type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
     ENTER("TYPE");
-    const type_ptr_t &type = gct->loadAs<GCT::TypeLoad>()->dataType();
+    type_ptr_t type = gct->loadAs<GCT::TypeLoad>()->dataType();
     LEAVE("TYPE");
     return type;
 }

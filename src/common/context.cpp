@@ -29,13 +29,20 @@ Context::Context()
 }
 
 GIR::graph_ptr_t Context::enterScope(const std::string &name) {
-    nodeScope_ = nodeScope_->enter();
-    graphScope_ = graphScope_->enter();
-    opScope_ = opScope_->enter();
-    currGraph_ = GIR::Graph::create(currGraph_, name);
-    if (!name.empty()) { // avoid inserting anonymous graphs
-        insertGraph(name, currGraph_);
+    if (name.empty()) {
+        currGraph_ = GIR::Graph::create(currGraph_);
+    } else {
+        auto graphs = graphScope_->get(name);
+        if (graphs.has_value() && !graphs.value()->empty()) {
+            currGraph_ = graphs.value()->front();
+        } else {
+            currGraph_ = GIR::Graph::create(currGraph_, name);
+            insertGraph(name, currGraph_);
+        }
     }
+    nodeScope_ = nodeScope_->enter(name);
+    graphScope_ = graphScope_->enter(name);
+    opScope_ = opScope_->enter(name);
     return currGraph_;
 }
 
@@ -56,7 +63,7 @@ bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
 
 bool Context::insertGraph(const std::string &name, const GIR::graph_ptr_t &graph) {
     if (graphScope_->has(name, false)) {
-        auto graphs = graphScope_->at(name).value();
+        auto graphs = graphScope_->get(name).value();
         // TODO: check if the graph is already in the list
         graphs->push_back(graph);
     }
@@ -66,7 +73,7 @@ bool Context::insertGraph(const std::string &name, const GIR::graph_ptr_t &graph
 
 bool Context::insertOperator(const std::string &name, const operator_ptr_t &op) {
     if (opScope_->has(name, false)) {
-        auto ops = opScope_->at(name).value();
+        auto ops = opScope_->get(name).value();
         // TODO: check if the operator is already in the list
         ops->push_back(op);
     }

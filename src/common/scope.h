@@ -58,13 +58,24 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     scope_ptr_t &outer() { return outer_; }
     std::unordered_map<Key, Val> &map() { return map_; }
 
-    std::optional<Val> at(const Key &k, bool recursive = true) {
+    bool has(const Key &k, bool recursive = true) const {
+        // std::shared_lock<std::shared_mutex> lock(rwMutex_);
+        if (map_.count(k) != 0) {
+            return true;
+        } else if (recursive && outer_) {
+            // lock.unlock(); // Release the shared lock before calling outer->has
+            return outer_->has(k, recursive);
+        }
+        return false;
+    }
+
+    std::optional<Val> get(const Key &k, bool recursive = true) {
         // std::shared_lock<std::shared_mutex> lock(rwMutex_);
         auto it = map_.find(k);
         if (it != map_.end()) {
             return it->second;
         } else if (recursive && outer_) {
-            return (*outer_).at(k, recursive);
+            return (*outer_).get(k, recursive);
         } else {
             return std::nullopt;
         }
@@ -98,17 +109,6 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
         }
     }
 
-    bool has(const Key &k, bool recursive = true) const {
-        // std::shared_lock<std::shared_mutex> lock(rwMutex_);
-        if (map_.count(k) != 0) {
-            return true;
-        } else if (recursive && outer_) {
-            // lock.unlock(); // Release the shared lock before calling outer->has
-            return outer_->has(k, recursive);
-        }
-        return false;
-    }
-
     bool isRoot() const { return !outer_; }
 
     std::unordered_map<Key, Val> self() const { return map_; }
@@ -139,4 +139,5 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     }
 };
 
-template <typename Key, typename Val, typename Name = std::string> using scope_ptr_t = std::shared_ptr<Scope<Key, Val, Name>>;
+template <typename Key, typename Val, typename Name = std::string>
+using scope_ptr_t = std::shared_ptr<Scope<Key, Val, Name>>;
