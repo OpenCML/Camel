@@ -107,7 +107,8 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
             } else if (node->type() == GCT::LoadType::FUNC) {
                 const auto &funcLoad = node->loadAs<FuncLoad>();
                 node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->name(), true);
-                *declNode << node->atAs<TypeLoad>(0);
+                node_ptr_t typeNode = node->atAs<TypeLoad>(0);
+                *declNode << typeNode->clone();
                 decls.push_back(declNode);
                 stmts.push_back(node);
             } else {
@@ -249,7 +250,7 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
                     }
                     node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
                     node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
-                    *accsNode << dRefNode;
+                    *accsNode << dRefNode->clone();
                     *nRefNode << accsNode;
                     *res << nRefNode;
                 }

@@ -29,10 +29,10 @@ namespace cml {
 
 inline void handle_assert_failure(const std::string &expression, const std::string &message,
                                   const std::source_location location = std::source_location::current()) {
-    std::cerr << "Camel Debug Assertion failed:\n"
-              << "    Expression : " << expression << "\n"
-              << "    Function   : " << location.function_name() << "\n"
+    std::cerr << "Camel Debug Assertion Failed:\n"
               << "    Location   : " << location.file_name() << "(" << location.line() << ")\n"
+              << "    Function   : " << location.function_name() << "\n"
+              << "    Expression : " << expression << "\n"
               << "    Message    : " << message << "\n";
 
     std::cerr << "\nStack trace:\n";
