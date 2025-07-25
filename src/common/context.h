@@ -21,6 +21,7 @@
 
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 #include "graph.h"
 #include "operator.h"
@@ -54,6 +55,8 @@ class Context {
 
     GIR::graph_ptr_t enterScope(const std::string &name);
     void leaveScope();
+
+    std::unordered_map<GIR::node_ptr_t, std::string> buildNodeIdentsMap() const;
 
     std::optional<std::pair<GIR::node_ptr_t, GIR::node_ptr_t>> nodeAt(const std::string &name) {
         return nodeScope_->get(name);

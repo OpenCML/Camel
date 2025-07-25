@@ -19,6 +19,7 @@
 
 #include "graphviz.h"
 #include "utils/log.h"
+#include "utils/type.h"
 
 using namespace std;
 using namespace GIR;
@@ -56,73 +57,77 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     unordered_map<size_t, pair<string, bool>> portsNameMap;
     void *retNodePtr = graph->output().get();
 
-    // res += baseIndent_;
-    // if (depth_ == 0) {
-    //     res += "digraph GraphIR {\r\n";
-    // } else {
-    //     func_type_ptr_t type = graph->funcType();
-    //     for (const auto &[idx, _, isVar] : graph->ports()) {
-    //         portsNameMap[idx] = make_pair(type->argNameAt(idx), isVar);
-    //     }
-    //     res += "subgraph cluster_" + funcId + " {\r\n";
-    //     string funcName = type->name().empty() ? lambdaFuncIdents_[type] : type->name();
-    //     res += baseIndent_ + indent_ + "label=\"" + funcName + "\";\r\n";
-    // }
+    res += baseIndent_;
+    if (depth_ == 0) {
+        res += "digraph GraphIR {\r\n";
+    } else {
+        func_type_ptr_t type = graph->funcType();
+        for (size_t i = 0; i < graph->ports().size(); i++) {
+            const string name = type->argNameAt(i);
+            bool isVar = type->variableMap().at(name);
+            portsNameMap[i] = make_pair(name, isVar);
+        }
+        res += "subgraph cluster_" + funcId + " {\r\n";
+        string funcName = graph->name().empty() ? lambdaFuncIdents_[graph] : graph->name();
+        res += baseIndent_ + indent_ + "label=\"" + funcName + "\";\r\n";
+    }
 
-    // size_t lambdaFuncCnt = 0;
-    // for (auto &subGraph : graph->subGraphs()) {
-    //     pushIndent();
-    //     func_type_ptr_t type = subGraph->funcType();
-    //     if (type->name().empty()) {
-    //         lambdaFuncIdents_[type] = "__lambda_" + to_string(lambdaFuncCnt++) + "__";
-    //     }
-    //     res += any_cast<string>(apply(subGraph));
-    //     popIndent();
-    // }
+    size_t lambdaFuncCnt = 0;
+    for (auto &subGraph : graph->subGraphs()) {
+        pushIndent();
+        if (subGraph->name().empty()) {
+            lambdaFuncIdents_[subGraph] = "__lambda_" + to_string(lambdaFuncCnt++) + "__";
+        }
+        res += any_cast<string>(apply(subGraph));
+        popIndent();
+    }
 
-    // size_t dataCnt = 0;
-    // node_vec_t &nodes = graph->nodes();
-    // for (size_t i = 0; i < nodes.size(); i++) {
-    //     string label;
-    //     string shape;
-    //     const node_ptr_t &node = nodes[i];
-    //     switch (node->type()) {
-    //     case NodeType::STRUCT:
-    //         [[fallthrough]];
-    //     case NodeType::DATA: {
-    //         if (portsNameMap.find(i) != portsNameMap.end()) {
-    //             label = portsNameMap[i].first;
-    //             shape = "circle";
-    //         } else {
-    //             const auto &name = context_->getNodeIdent(node);
-    //             if (name.has_value()) {
-    //                 label = name.value();
-    //             } else {
-    //                 label = "__D" + to_string(dataCnt++) + "__";
-    //             }
-    //             shape = "cylinder";
-    //         }
-    //         break;
-    //     }
-    //     case NodeType::FUNCTOR: {
-    //         func_ptr_t func = func_node_ptr_cast(node)->func();
-    //         func_type_ptr_t type = func->funcType();
-    //         label = type->name().empty() ? lambdaFuncIdents_[type] : type->name();
-    //         shape = "parallelogram";
-    //         break;
-    //     }
-    //     case NodeType::OPERATOR: {
-    //         oper_node_ptr_t oper = oper_node_ptr_cast(node);
-    //         label = oper->operName();
-    //         shape = "diamond";
-    //         break;
-    //     }
-    //     default:
-    //         throw runtime_error("Unknown node type");
-    //     }
-    //     res +=
-    //         baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
-    // }
+    size_t dataCnt = 0;
+    const node_vec_t &nodes = graph->nodes();
+    for (size_t i = 0; i < nodes.size(); i++) {
+        string label;
+        string shape;
+        const node_ptr_t &node = nodes[i];
+        switch (node->type()) {
+        case NodeType::Select:
+            [[fallthrough]];
+        case NodeType::Access:
+            [[fallthrough]];
+        case NodeType::Struct:
+            [[fallthrough]];
+        case NodeType::Source: {
+            if (portsNameMap.find(i) != portsNameMap.end()) {
+                label = portsNameMap[i].first;
+                shape = "circle";
+            } else {
+                const auto &name = nodeIdents_.find(node);
+                if (name != nodeIdents_.end()) {
+                    label = name->second;
+                } else {
+                    label = "__N" + to_string(dataCnt++) + "__";
+                }
+                shape = "cylinder";
+            }
+            break;
+        }
+        case NodeType::Function: {
+            func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
+            label = func->name().empty() ? lambdaFuncIdents_[func->graph()] : func->name();
+            shape = "parallelogram";
+            break;
+        }
+        case NodeType::Operator: {
+            auto oper = tt::as_shared<OperatorNode>(node);
+            label = oper->oper()->name();
+            shape = "diamond";
+            break;
+        }
+        default:
+            throw runtime_error("Unknown node type");
+        }
+        res +=
+            baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
+    }
     res += baseIndent_ + indent_ + funcId + " [label=\"RET\", shape=doublecircle];\r\n";
 
     for (const auto &node : graph->nodes()) {

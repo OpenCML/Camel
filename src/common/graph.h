@@ -249,7 +249,7 @@ class OperatorNode : public Node {
         return std::make_shared<OperatorNode>(graph, index, op);
     }
 
-    std::string operName() const { return operator_->name(); }
+    operator_ptr_t oper() const { return operator_; }
 
     data_ptr_t eval() override { return nullptr; }
 };

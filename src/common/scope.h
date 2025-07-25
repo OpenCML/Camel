@@ -56,6 +56,13 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     Scope(scope_ptr_t outer) : map_(), outer_(std::move(outer)) {}
 
     scope_ptr_t &outer() { return outer_; }
+    std::vector<scope_ptr_t> innerScopes() const {
+        std::vector<scope_ptr_t> scopes;
+        for (const auto &pair : innerScopes_) {
+            scopes.push_back(pair.second);
+        }
+        return scopes;
+    }
     std::unordered_map<Key, Val> &map() { return map_; }
 
     bool has(const Key &k, bool recursive = true) const {

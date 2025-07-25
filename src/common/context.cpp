@@ -18,6 +18,7 @@
  */
 
 #include "context.h"
+
 #include <set>
 
 using namespace std;
@@ -51,6 +52,24 @@ void Context::leaveScope() {
     graphScope_ = graphScope_->leave();
     opScope_ = opScope_->leave();
     currGraph_ = currGraph_->outer();
+}
+
+std::unordered_map<GIR::node_ptr_t, std::string> Context::buildNodeIdentsMap() const {
+    std::unordered_map<GIR::node_ptr_t, std::string> identsMap;
+    auto visit = [&identsMap](auto self, node_scope_ptr_t scope) -> void {
+        for (const auto &pair : scope->map()) {
+            const auto &name = pair.first;
+            const auto &nodePair = pair.second;
+            if (nodePair.first) {
+                identsMap[nodePair.first] = name;
+            }
+        }
+        for (const auto &innerScope : scope->innerScopes()) {
+            self(self, innerScope);
+        }
+    };
+    visit(visit, nodeScope_); // Recursive lambda to visit all inner scopes
+    return identsMap;
 }
 
 bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
