@@ -24,6 +24,18 @@
 using namespace std;
 using namespace GIR;
 
+std::string escapeQuotes(const std::string &input) {
+    std::string result;
+    for (char c : input) {
+        if (c == '"') {
+            result += "\\\"";
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
 string GraphVizDumpPass::pointerToIdent(const void *ptr) {
     uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
     if (!showRawPtr) {
@@ -86,7 +98,8 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); i++) {
         string label;
-        string shape;
+        string shape = "circle";
+        string style = "solid";
         const node_ptr_t &node = nodes[i];
         switch (node->type()) {
         case NodeType::Select:
@@ -98,22 +111,26 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         case NodeType::Source: {
             if (portsNameMap.find(i) != portsNameMap.end()) {
                 label = portsNameMap[i].first;
-                shape = "circle";
+                style = "dashed";
             } else {
-                const auto &name = nodeIdents_.find(node);
-                if (name != nodeIdents_.end()) {
-                    label = name->second;
+                if (node->type() == NodeType::Source) {
+                    data_ptr_t data = node->eval(graph->arena());
+                    label = escapeQuotes(data->toString());
                 } else {
-                    label = "__N" + to_string(dataCnt++) + "__";
+                    const auto &name = nodeIdents_.find(node);
+                    if (name != nodeIdents_.end()) {
+                        label = name->second;
+                    } else {
+                        label = "__N" + to_string(dataCnt++) + "__";
+                    }
                 }
-                shape = "cylinder";
             }
             break;
         }
         case NodeType::Function: {
             func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
             label = func->name().empty() ? lambdaFuncIdents_[func->graph()] : func->name();
-            shape = "parallelogram";
+            shape = "diamond";
             break;
         }
         case NodeType::Operator: {
@@ -125,10 +142,12 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         default:
             throw runtime_error("Unknown node type");
         }
-        res +=
-            baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape + "];\r\n";
+        res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + label + "\", shape=" + shape +
+               ", style=" + style + "];\r\n";
     }
-    res += baseIndent_ + indent_ + funcId + " [label=\"RET\", shape=doublecircle];\r\n";
+    if (!graph->isRoot()) {
+        res += baseIndent_ + indent_ + funcId + " [label=\"RET\", shape=doublecircle];\r\n";
+    }
 
     for (const auto &node : graph->nodes()) {
         auto vec = node->normInputs();
@@ -145,7 +164,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
                 continue;
             }
             res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
-                   " [label=\"" + to_string(i) + "\"];\r\n";
+                   " [label=\"" + to_string(i) + "\", style=dashed];\r\n";
         }
         vec = node->ctrlInputs();
         for (size_t i = 0; i < vec.size(); i++) {
@@ -153,7 +172,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
                 continue;
             }
             res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
-                   " [label=\"" + to_string(i) + "\"];\r\n";
+                   " [label=\"" + to_string(i) + "\", style=dashed, arrowhead=empty];\r\n";
         }
         if (node.get() == retNodePtr) {
             res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + funcId + ";\r\n";

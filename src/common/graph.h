@@ -74,6 +74,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
         return newGraph;
     }
 
+    bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     arena_ptr_t arena() const { return arena_; }
     graph_ptr_t outer() const {
@@ -127,7 +128,6 @@ class Node : public std::enable_shared_from_this<Node> {
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
 
-    bool isRoot() const { return !graph_.lock(); }
     graph_ptr_t graph() const {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
         return graph_.lock();
@@ -155,7 +155,7 @@ class Node : public std::enable_shared_from_this<Node> {
     }
     size_t refCnt() const { return refs_; }
 
-    virtual data_ptr_t eval() = 0;
+    virtual data_ptr_t eval(arena_ptr_t arena) = 0;
 
     static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         switch (type) {
@@ -197,9 +197,13 @@ class SelectNode : public Node {
     SelectNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Select, index) {}
     ~SelectNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<SelectNode>(graph, index); }
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
+        auto node = std::make_shared<SelectNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
 
 class AccessNode : public Node {
@@ -209,13 +213,15 @@ class AccessNode : public Node {
     ~AccessNode() = default;
 
     static node_ptr_t create(graph_ptr_t graph, DataIndex &data, const std::variant<std::string, size_t> &index) {
-        return std::make_shared<AccessNode>(graph, data, index);
+        auto node = std::make_shared<AccessNode>(graph, data, index);
+        graph->addNode(node);
+        return node;
     }
 
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 
   private:
     std::variant<std::string, size_t> index_;
@@ -226,9 +232,13 @@ class StructNode : public Node {
     StructNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Struct, index) {}
     ~StructNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<StructNode>(graph, index); }
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
+        auto node = std::make_shared<StructNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
 
 class SourceNode : public Node {
@@ -236,9 +246,17 @@ class SourceNode : public Node {
     SourceNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Source, index) {}
     ~SourceNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<SourceNode>(graph, index); }
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
+        auto node = std::make_shared<SourceNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override {
+        auto data = arena->get(dataIndex_);
+        ASSERT(data != nullptr, "Data not found in arena for SourceNode.");
+        return data;
+    }
 };
 
 class OperatorNode : public Node {
@@ -250,12 +268,14 @@ class OperatorNode : public Node {
     ~OperatorNode() = default;
 
     static node_ptr_t create(graph_ptr_t graph, DataIndex &index, operator_ptr_t op) {
-        return std::make_shared<OperatorNode>(graph, index, op);
+        auto node = std::make_shared<OperatorNode>(graph, index, op);
+        graph->addNode(node);
+        return node;
     }
 
     operator_ptr_t oper() const { return operator_; }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
 
 class FunctionNode : public Node {
@@ -267,12 +287,14 @@ class FunctionNode : public Node {
     ~FunctionNode() = default;
 
     static node_ptr_t create(graph_ptr_t graph, DataIndex &index, func_ptr_t func) {
-        return std::make_shared<FunctionNode>(graph, index, func);
+        auto node = std::make_shared<FunctionNode>(graph, index, func);
+        graph->addNode(node);
+        return node;
     }
 
     func_ptr_t func() const { return func_; }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
 
 } // namespace GraphIntermediateRepresentation
