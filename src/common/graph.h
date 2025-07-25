@@ -67,7 +67,11 @@ class Graph : public std::enable_shared_from_this<Graph> {
     ~Graph() = default;
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr, const std::string &name = "") {
-        return std::make_shared<Graph>(graph);
+        const auto newGraph = std::make_shared<Graph>(graph, name);
+        if (graph) {
+            graph->addSubGraph(newGraph);
+        }
+        return newGraph;
     }
 
     const std::string &name() const { return name_; }
