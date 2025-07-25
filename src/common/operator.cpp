@@ -21,6 +21,7 @@
 
 using namespace std;
 
+bool globalOperatorsInitialized = false;
 unordered_map<string, std::shared_ptr<operator_vec_t>> globalOperators;
 
 void registerOperator(const operator_ptr_t &&op) {

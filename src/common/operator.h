@@ -46,6 +46,7 @@ class Operator {
 using operator_ptr_t = std::shared_ptr<Operator>;
 using operator_vec_t = std::vector<operator_ptr_t>;
 
+extern bool globalOperatorsInitialized;
 extern std::unordered_map<std::string, std::shared_ptr<operator_vec_t>> globalOperators;
 
 void registerOperator(const operator_ptr_t &&op);

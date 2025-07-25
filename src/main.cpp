@@ -124,7 +124,6 @@ bool buildGCT(GCT::node_ptr_t &gct, AST::node_ptr_t &ast, diagnostics_ptr_t diag
 }
 
 bool buildGIR(GIR::graph_ptr_t &gir, GCT::node_ptr_t &gct, context_ptr_t &ctx, diagnostics_ptr_t diagnostics) {
-    initOperators();
     auto constructor = GIR::Constructor(ctx);
     gir = constructor.construct(gct, diagnostics);
     return gir != nullptr && !diagnostics->hasErrors();

@@ -20,7 +20,12 @@
 #include "init.h"
 #include "common/type.h"
 
-void initOperators() {
+void initGlobalOperators() {
+    if (globalOperatorsInitialized) {
+        return;
+    }
+    globalOperatorsInitialized = true;
+
     registerOperator(std::make_shared<Operator>(
         "__copy__",
         std::make_shared<FunctionType>(

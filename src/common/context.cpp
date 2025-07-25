@@ -18,14 +18,21 @@
  */
 
 #include "context.h"
+#include "builtin/operators/init.h"
 
 #include <set>
 
 using namespace std;
 
 Context::Context()
-    : rootGraph_(GIR::Graph::create()), nodeScope_(node_scope_t::create()), graphScope_(graph_scope_t::create()),
-      opScope_(operator_scope_t::create(globalOperators)) {
+    : rootGraph_(GIR::Graph::create()), nodeScope_(node_scope_t::create()), graphScope_(graph_scope_t::create()) {
+    initGlobalOperators(); // Initialize global operators
+    // for (const auto &pair : globalOperators) {
+    //     const auto &name = pair.first;
+    //     const auto &ops = pair.second;
+    //     std::cout << "Registered global operator: " << name << " with " << ops->size() << " variants." << std::endl;
+    // }
+    opScope_ = operator_scope_t::create(globalOperators);
     currGraph_ = rootGraph_;
 }
 
