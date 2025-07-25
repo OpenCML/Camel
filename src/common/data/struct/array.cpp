@@ -53,7 +53,7 @@ bool ArrayData::emplace(const data_ptr_t &e, size_t index) {
 }
 
 data_ptr_t ArrayData::get(size_t index) const {
-    cml_assert(resolved(), "Cannot get data from unresolved ArrayData");
+    ASSERT(resolved(), "Cannot get data from unresolved ArrayData");
     if (index >= data_.size()) {
         return nullptr;
     }
@@ -61,7 +61,7 @@ data_ptr_t ArrayData::get(size_t index) const {
 }
 
 bool ArrayData::set(size_t index, const data_ptr_t &e) {
-    cml_assert(resolved(), "Cannot set data to unresolved ArrayData");
+    ASSERT(resolved(), "Cannot set data to unresolved ArrayData");
     if (index >= data_.size()) {
         return false;
     }
@@ -127,7 +127,7 @@ void ArrayData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         // TODO: need to check type compatibility

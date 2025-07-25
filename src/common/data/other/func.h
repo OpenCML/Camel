@@ -20,23 +20,36 @@
 #pragma once
 
 #include "../data.h"
+#include "common/arena.h"
 
-namespace GraphIR {
+namespace GraphIntermediateRepresentation {
 class Graph;
 using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace GraphIR
+} // namespace GraphIntermediateRepresentation
 
-class FunctorData : public Data {
-    GraphIR::graph_ptr_t baseGraph_;
-    GraphIR::graph_ptr_t thisGraph_;
+namespace GIR = GraphIntermediateRepresentation;
+
+class FunctionData;
+
+using func_ptr_t = std::shared_ptr<FunctionData>;
+using func_wptr_t = std::weak_ptr<FunctionData>;
+using func_lst_t = std::list<func_ptr_t>;
+using func_vec_t = std::vector<func_ptr_t>;
+using func_list_t = std::initializer_list<func_ptr_t>;
+
+class FunctionData : public Data {
+    GIR::graph_ptr_t graph_;
+    arena_ptr_t arena_;
 
   public:
-    FunctorData(const type_ptr_t &type, GraphIR::graph_ptr_t graph, GraphIR::graph_ptr_t base = nullptr);
-    virtual ~FunctorData() = default;
+    FunctionData(GIR::graph_ptr_t graph);
+    virtual ~FunctionData() = default;
 
-    GraphIR::graph_ptr_t graph() const;
-    GraphIR::graph_ptr_t baseGraph() const;
+    static func_ptr_t create(GIR::graph_ptr_t graph);
+
     std::string name() const;
+    GIR::graph_ptr_t graph() const { return graph_; }
+    arena_ptr_t arena() const { return arena_; }
     func_type_ptr_t funcType() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
@@ -44,9 +57,3 @@ class FunctorData : public Data {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };
-
-using func_ptr_t = std::shared_ptr<FunctorData>;
-using func_wptr_t = std::weak_ptr<FunctorData>;
-using func_lst_t = std::list<func_ptr_t>;
-using func_vec_t = std::vector<func_ptr_t>;
-using func_list_t = std::initializer_list<func_ptr_t>;

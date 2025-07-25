@@ -50,7 +50,7 @@ void TupleData::emplace(const data_ptr_t &e) {
 }
 
 data_ptr_t TupleData::get(size_t index) const {
-    cml_assert(resolved(), "Cannot get data from unresolved TupleData");
+    ASSERT(resolved(), "Cannot get data from unresolved TupleData");
     if (index >= data_.size()) {
         return nullptr;
     }
@@ -108,7 +108,7 @@ void TupleData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         data_[idx] = dataList[i];

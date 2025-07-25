@@ -19,240 +19,319 @@
 
 #include "gir.h"
 #include "utils/log.h"
+#include "utils/type.h"
 
 #define DEBUG_LEVEL 0
 
 using namespace std;
-using namespace GIR;
 
-inline node_ptr_t selectNode(node_ptr_t selNode, graph_ptr_t tgtGraph) {
-    node_ptr_t res = selNode;
-    if (selNode->type() == NodeType::SELECT) {
-        res = select_node_ptr_cast(selNode)->select(0);
-        if (res->type() == NodeType::FUNCTOR) {
-            res = dynamic_pointer_cast<FunctorNode>(res);
-        }
+namespace GraphIntermediateRepresentation {
+
+node_ptr_t Constructor::resolveNodeByRef(const std::string &name) {
+    auto optSrcNode = context_->nodeAt(name);
+    if (!optSrcNode.has_value()) {
+        reportDiagnostic(Diagnostic::Severity::Error, "Unresolved reference: " + name);
+        throw BuildAbortException();
     }
-    return res;
+    auto [srcNode, modifier] = optSrcNode.value();
+    return modifier == nullptr ? srcNode : modifier;
 }
 
 any Constructor::visit(const GCT::node_ptr_t &node) {
     switch (node->type()) {
-    case GCT::NodeType::DATA:
-        return visitDataNode(node);
-    case GCT::NodeType::VARI:
-        return visitVariNode(node);
-    case GCT::NodeType::TYPE:
-        return visitTypeNode(node);
-    case GCT::NodeType::DECL:
+    case GCT::LoadType::DECL:
         return visitDeclNode(node);
-    case GCT::NodeType::FUNC:
+    case GCT::LoadType::FUNC:
         return visitFuncNode(node);
-    case GCT::NodeType::NREF:
+    case GCT::LoadType::DATA:
+        return visitDataNode(node);
+    case GCT::LoadType::TYPE:
+        return visitTypeNode(node);
+    case GCT::LoadType::NREF:
         return visitNRefNode(node);
-    case GCT::NodeType::DREF:
+    case GCT::LoadType::DREF:
         return visitDRefNode(node);
-    case GCT::NodeType::WAIT:
+    case GCT::LoadType::VARI:
+        return visitVariNode(node);
+    case GCT::LoadType::WAIT:
         return visitWaitNode(node);
-    case GCT::NodeType::ANNO:
-        return visitAnnoNode(node);
-    case GCT::NodeType::LINK:
+    case GCT::LoadType::LINK:
         return visitLinkNode(node);
-    case GCT::NodeType::WITH:
+    case GCT::LoadType::WITH:
         return visitWithNode(node);
-    case GCT::NodeType::EXIT:
-        return visitRetnNode(node);
-    case GCT::NodeType::EXEC:
+    case GCT::LoadType::BIND:
+        return visitBindNode(node);
+    case GCT::LoadType::ACCS:
+        return visitAccsNode(node);
+    case GCT::LoadType::BRCH:
+        return visitBrchNode(node);
+    case GCT::LoadType::ANNO:
+        return visitAnnoNode(node);
+    case GCT::LoadType::EXIT:
+        return visitExitNode(node);
+    case GCT::LoadType::EXEC:
         return visitExecNode(node);
-    case GCT::NodeType::FROM:
-        return visitFromNode(node);
     default:
-        throw runtime_error("Unknown gct::ASTNodeType");
+        ASSERT(false, "Unknown GCT NodeType");
     }
+    return nullptr;
+}
+
+void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
+    ENTER("DECL");
+    const auto &declLoad = gct->loadAs<GCT::DeclLoad>();
+    if (!declLoad->isFunc()) {
+        LEAVE("DECL");
+        return nullptr;
+    }
+
+    GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
+    type_ptr_t type = typeNode->loadAs<GCT::TypeLoad>()->dataType();
+    func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
+    const auto &withType = tt::as_shared<ParamsType>(funcType->withType());
+    const auto &linkType = tt::as_shared<ParamsType>(funcType->linkType());
+
+    graph_ptr_t graph = context_->enterScope(declLoad->ref().ident());
+    graph->setFuncType(funcType);
+    arena_ptr_t arena = graph->arena();
+    for (const auto &[name, type, data] : withType->elements()) {
+        // TODO: ignored type and default data here
+        if (data != nullptr) {
+            reportDiagnostic(Diagnostic::Severity::Warning,
+                             "Default data is currently not supported in function parameters.");
+        }
+        context_->insertNode(name, graph->addPort());
+    }
+    for (const auto &[name, type, data] : linkType->elements()) {
+        // TODO: ignored type and default data here
+        if (data != nullptr) {
+            reportDiagnostic(Diagnostic::Severity::Warning,
+                             "Default data is currently not supported in function parameters.");
+        }
+        context_->insertNode(name, graph->addPort());
+    }
+    context_->leaveScope();
+
+    LEAVE("DECL");
+    return nullptr;
+}
+
+graph_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
+    ENTER("FUNC");
+    // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
+    std::string name = gct->loadAs<GCT::FuncLoad>()->name();
+    graph_ptr_t graph = context_->enterScope(name);
+    visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    context_->leaveScope();
+    LEAVE("FUNC");
+    return graph;
 }
 
 node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
-    enter("DATA");
+    ENTER("DATA");
     const auto &dataLoad = gct->loadAs<GCT::DataLoad>();
     const data_ptr_t &data = dataLoad->data();
-    node_ptr_t node = DataNode::create(context_->currGraph(), data, false);
-    if (!data->resolved()) {
+    graph_ptr_t &graph = context_->currGraph();
+    node_ptr_t node = nullptr;
+    if (data->resolved()) {
+        DataIndex index = graph->addSharedConstant(data);
+        node = SourceNode::create(context_->currGraph(), index);
+    } else {
+        DataIndex index = graph->addRuntimeConstant(data);
+        node = StructNode::create(context_->currGraph(), index);
         for (const string &ref : data->refs()) {
-            auto optSrcNode = context_->nodeAt(ref);
-            if (optSrcNode.has_value()) {
-                node_ptr_t srcNode = selectNode(optSrcNode.value(), context_->currGraph());
-                Node::link(srcNode, node);
-            } else {
-                throw runtime_error("Unresolved reference: " + ref);
-            }
+            Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
         }
     }
-    leave("DATA");
-    return node;
-}
-
-node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
-    enter("VARI");
-    const auto &res = visit(gct->at(0));
-    if (res.type() != typeid(node_ptr_t)) {
-        throw runtime_error("Unexpected result type from Enter the child of VARI node");
-    }
-    node_ptr_t node = any_cast<node_ptr_t>(res);
-    node->makeVariable();
-    leave("VARI");
+    LEAVE("DATA");
     return node;
 }
 
 type_ptr_t Constructor::visitTypeNode(const GCT::node_ptr_t &gct) {
-    enter("TYPE");
-    const type_ptr_t &type = gct->loadAs<GCT::TypeLoad>()->dataType();
-    leave("TYPE");
+    ENTER("TYPE");
+    type_ptr_t type = gct->loadAs<GCT::TypeLoad>()->dataType();
+    LEAVE("TYPE");
     return type;
 }
 
-func_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
-    enter("DECL");
-    // func_type_ptr_t funcType = gct->loadAs<GCT::DeclLoad>()->funcType();
-    // if (context_->cached(funcType)) {
-    //     leave("DECL");
-    //     return getCachedFunc(funcType);
-    // }
-    // auto functorType = dynamic_pointer_cast<FunctionType>(funcType);
-    // const auto &varMap = functorType->variableMap();
-    // const auto &withType = dynamic_pointer_cast<ParamsType>(functorType->withType());
-    // const auto &linkType = dynamic_pointer_cast<ParamsType>(functorType->linkType());
-
-    // context_->pushScope(funcType);
-    // graph_ptr_t &graph = context_->currGraph();
-    // for (const auto &[name, type, data] : withType->elements()) {
-    //     node_ptr_t node = graph->addPort(varMap.at(name));
-    //     context_->insertNode(name, node);
-    // }
-    // for (const auto &[name, type, data] : linkType->elements()) {
-    //     node_ptr_t node = graph->addPort(varMap.at(name));
-    //     context_->insertNode(name, node);
-    // }
-    // func_ptr_t func = make_shared<FunctorData>(funcType, graph);
-    // graph->setFuncType(funcType);
-    // context_->popScope();
-
-    // if (!functorType->name().empty()) {
-    //     // lambda functors my not have a name
-    //     context_->insertFunc(funcType->name(), func);
-    // }
-    // cacheFunc(funcType, func);
-    leave("DECL");
-    return nullptr;
-}
-
-node_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
-    enter("FUNC");
-    func_ptr_t func = visitDeclNode(gct->at(0));
-    func_type_ptr_t funcType = func->funcType();
-    context_->pushScope(funcType);
-    visitExecNode(gct->at(1));
-    context_->popScope(funcType);
-    delCachedFunc(funcType);
-    leave("FUNC");
-    return SelectNode::create(context_->currGraph(), func_vec_t{func});
-}
-
-inline bool validateIdent(const std::string &str) {
-    if (str.length() < 4) {
-        return true;
-    }
-    return !(str.substr(0, 2) == "__" && str.substr(str.length() - 2) == "__");
-}
-
 void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
-    enter("NREF");
+    ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
-    if (!validateIdent(ident)) {
-        throw runtime_error("Identifiers starting and ending with '__' are reserved for internal use.");
-    }
     const auto &res = visit(gct->at(0));
-    if (res.type() != typeid(node_ptr_t)) {
-        throw runtime_error("Unexpected result type from Enter the child of NREF node.");
-    }
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of NREF node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
-    if (!context_->insertNode(ident, node)) {
-        throw runtime_error("Redeclaration of entity: " + ident);
+    bool success = context_->insertNode(ident, node);
+    if (!success) {
+        reportDiagnostic(Diagnostic::Severity::Error, "Redeclaration of reference: " + ident);
+        throw BuildAbortException();
     }
-    leave("NREF");
+    LEAVE("NREF");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
-    enter("DREF");
+    ENTER("DREF");
     const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
     auto optNode = context_->nodeAt(ident);
-    if (!optNode.has_value()) {
-        throw runtime_error("Unresolved reference: " + ident);
+    if (optNode.has_value()) {
+        auto [srcNode, modifier] = optNode.value();
+        LEAVE("DREF");
+        return modifier == nullptr ? srcNode : modifier;
     }
-    leave("DREF");
-    node_ptr_t res = optNode.value();
-    res->ref();
-    return res;
+    graph_ptr_t &graph = context_->currGraph();
+    auto optGraph = context_->graphAt(ident);
+    if (optGraph.has_value()) {
+        auto graphs = optGraph.value();
+        if (!graphs->empty()) {
+            // TODO: generate data as the return value of a function
+            DataIndex index = graph->addRuntimeConstant(nullptr);
+            graph_ptr_t &tgtGraph = graphs->front();
+            func_ptr_t funcData = FunctionData::create(tgtGraph);
+            node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
+            LEAVE("DREF");
+            return funcNode;
+        }
+    }
+    auto optOp = context_->operatorAt(ident);
+    if (optOp.has_value()) {
+        auto ops = optOp.value();
+        if (!ops->empty()) {
+            DataIndex index = graph->addRuntimeConstant(nullptr);
+            operator_ptr_t &op = ops->front();
+            node_ptr_t opNode = OperatorNode::create(graph, index, op);
+            LEAVE("DREF");
+            return opNode;
+        }
+    }
+    reportDiagnostic(Diagnostic::Severity::Error, "Unresolved reference: " + ident);
+    throw BuildAbortException();
 }
 
-node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
-
-node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) { throw runtime_error("Not implemented"); }
+node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
+    ENTER("VARI");
+    bool old = varied_;
+    varied_ = true;
+    const auto &res = visit(gct->at(0));
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of VARI node.");
+    node_ptr_t node = any_cast<node_ptr_t>(res);
+    varied_ = old;
+    LEAVE("VARI");
+    return node;
+}
+node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) {
+    ENTER("WAIT");
+    bool old = waited_;
+    waited_ = true;
+    const auto &res = visit(gct->at(0));
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of WAIT node.");
+    node_ptr_t node = any_cast<node_ptr_t>(res);
+    waited_ = old;
+    LEAVE("WAIT");
+    return node;
+}
 
 node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
-    enter("LINK");
-    // TODO: consider functor and operator overriden
-    // for now, we just ignore it
-    // because we cannot get the exact type of unref elements of struct data yet
-    any dataRes = visit(gct->at(0));
-    any funcRes = visit(gct->at(1));
-    if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
-        throw runtime_error("Unexpected result type from Enter children of LINK node");
+    ENTER("LINK");
+    any funcNodeRes = visit(gct->at(0));
+    ASSERT(funcNodeRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
+    node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
+    for (size_t i = 1; i < gct->size(); i++) {
+        any dataRes = visit(gct->at(i));
+        ASSERT(dataRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
+        node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
+        Node::link(LinkType::Norm, inputNode, funcNode);
+        if (synced_ && lastCalledFuncNode_) {
+            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+            lastCalledFuncNode_ = funcNode;
+        }
     }
-    node_ptr_t dataNode = selectNode(any_cast<node_ptr_t>(dataRes), context_->currGraph());
-    node_ptr_t linkNode = selectNode(any_cast<node_ptr_t>(funcRes), context_->currGraph());
-    Node::link(dataNode, linkNode, 1);
-    leave("LINK");
-    return linkNode;
+    LEAVE("LINK");
+    return funcNode;
 }
 
 node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
-    enter("WITH");
-    any dataRes = visit(gct->at(0));
-    any funcRes = visit(gct->at(1));
-    if (dataRes.type() != typeid(node_ptr_t) || funcRes.type() != typeid(node_ptr_t)) {
-        throw runtime_error("Unexpected result type from Enter children of LINK node");
+    ENTER("WITH");
+    any funcNodeRes = visit(gct->at(0));
+    ASSERT(funcNodeRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of WITH node.");
+    node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
+    for (size_t i = 1; i < gct->size(); i++) {
+        any dataRes = visit(gct->at(i));
+        ASSERT(dataRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of WITH node.");
+        node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
+        Node::link(LinkType::With, inputNode, funcNode);
+        if (synced_ && lastCalledFuncNode_) {
+            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+            lastCalledFuncNode_ = funcNode;
+        }
     }
-    node_ptr_t dataNode = selectNode(any_cast<node_ptr_t>(dataRes), context_->currGraph());
-    node_ptr_t withNode = selectNode(any_cast<node_ptr_t>(funcRes), context_->currGraph());
-    Node::link(dataNode, withNode, 0);
-    leave("WITH");
-    return withNode;
+    LEAVE("WITH");
+    return funcNode;
 }
 
-void_ptr_t Constructor::visitRetnNode(const GCT::node_ptr_t &gct) {
-    enter("RETN");
+node_ptr_t Constructor::visitBindNode(const GCT::node_ptr_t &gct) {
+    ENTER("BIND");
+    ASSERT(false, "Bind nodes are not supported in the current version of the compiler.");
+    LEAVE("BIND");
+    return nullptr;
+}
+
+node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
+    ENTER("ACCS");
+    const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
+    graph_ptr_t &graph = context_->currGraph();
+    DataIndex index = graph->addRuntimeConstant(nullptr);
+    // TODO: here may need inplace access to the data
+    node_ptr_t accsNode = AccessNode::create(graph, index, accsLoad->index());
+    LEAVE("ACCS");
+    return accsNode;
+}
+
+node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
+    ENTER("BRCH");
+    ASSERT(false, "Branch nodes are not supported in the current version of the compiler.");
+    LEAVE("BRCH");
+    return nullptr;
+}
+
+node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) {
+    ENTER("ANNO");
+    ASSERT(false, "Annotation nodes are not supported in the current version of the compiler.");
+    LEAVE("ANNO");
+    return nullptr;
+}
+
+void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
+    ENTER("EXIT");
     auto res = visit(gct->at(0));
-    if (res.type() != typeid(node_ptr_t)) {
-        throw runtime_error("Unexpected result type from Enter child of RETN node");
-    }
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter child of EXIT node.");
     const auto &node = any_cast<node_ptr_t>(res);
     context_->currGraph()->setOutput(node);
-    leave("RETN");
+    LEAVE("EXIT");
     return nullptr;
 }
 
 node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {
-    enter("EXEC");
-    node_ptr_t node;
+    ENTER("EXEC");
+    const auto &execLoad = gct->loadAs<GCT::ExecLoad>();
+    bool old = synced_;
+    synced_ = execLoad->synced();
+    if (synced_ && !old) {
+        lastCalledFuncNode_ = nullptr;
+    }
+    node_ptr_t res = nullptr;
     for (size_t i = 0; i < gct->size(); i++) {
-        any result = visit(gct->at(i));
-        if (result.type() == typeid(node_ptr_t)) {
-            node = any_cast<node_ptr_t>(result);
+        try {
+            any result = visit(gct->at(i));
+            if (result.has_value() && result.type() == typeid(node_ptr_t)) {
+                res = any_cast<node_ptr_t>(result);
+            }
+        } catch (const BuildAbortException &e) {
+            continue;
         }
     }
-    leave("EXEC");
-    return node;
+    synced_ = old;
+    LEAVE("EXEC");
+    return res;
 }
 
-void_ptr_t Constructor::visitFromNode(const GCT::node_ptr_t &gct) { return nullptr; }
+} // namespace GraphIntermediateRepresentation

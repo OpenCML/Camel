@@ -26,14 +26,16 @@
 class FunctionType : public SpecialType {
   public:
     FunctionType() = delete;
-    FunctionType(const std::string &&name, const std::shared_ptr<ParamsType> &withType,
-                 const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
+    FunctionType(const std::shared_ptr<ParamsType> &withType, const std::shared_ptr<ParamsType> &paramsType,
+                 const type_ptr_t &returnType);
 
-    const std::string &name() const { return name_; }
     const std::string &argNameAt(size_t idx) const;
 
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
+
+    const std::string &uri() const { return uri_; }
+    void setUri(const std::string &uri) { uri_ = uri; }
 
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
@@ -57,8 +59,8 @@ class FunctionType : public SpecialType {
     TypeConv convertibility(const Type &other) const override;
 
   private:
-    std::string name_;
     ImplMark implMark_ = ImplMark::Graph;
+    std::string uri_;
     ModifierSet modifiers_ = Modifier::None;
     std::shared_ptr<ParamsType> withType_;
     std::shared_ptr<ParamsType> linkType_;

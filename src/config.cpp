@@ -22,8 +22,8 @@
 #include "clipp/clipp.h"
 #include "config.h"
 
-#ifndef BUILD_TIMESTAMP
-#define BUILD_TIMESTAMP "%y%m%d_%H%M%S"
+#ifndef BUILD_FOOTPRINT
+#define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
 #endif
 
 using namespace clipp;
@@ -336,15 +336,15 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-#ifndef NDEBUG
-    printCliArgs(selectedCommand);
-#endif
+// #ifndef NDEBUG
+//     printCliArgs(selectedCommand);
+// #endif
 
     if (showVersion) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")" << endl;
+        cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")" << endl;
 #else
-        cout << "Camel (DEBUG) v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")" << endl;
+        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")" << endl;
 #endif
     }
 
@@ -358,9 +358,9 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showAbout) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")";
+        cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")";
 #else
-        cout << "Camel (DEBUG) v" << VERSION << " (Build " << BUILD_TIMESTAMP << ")";
+        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")";
 #endif
         cout <<
 #include "ABOUT"

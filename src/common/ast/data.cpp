@@ -51,7 +51,7 @@ std::string to_string(DataType type) {
     case DataType::Ref:
         return "RefData";
     default:
-        assert(false && "Unknown DataType");
+        ASSERT(false, "Unknown DataType");
         return "UnknownDataType";
     }
 }
@@ -65,7 +65,7 @@ std::string to_string(UnaryDataOp op) {
     case UnaryDataOp::Inv:
         return "~";
     default:
-        assert(false && "Unknown UnaryDataOp");
+        ASSERT(false, "Unknown UnaryDataOp");
         return "UnknownUnaryDataOp";
     }
 }
@@ -129,7 +129,7 @@ std::string to_string(BinaryDataOp op) {
     case BinaryDataOp::Index:
         return "[]";
     default:
-        assert(false && "Unknown BinaryDataOp");
+        ASSERT(false, "Unknown BinaryDataOp");
         return "UnknownBinaryDataOp";
     }
 }
@@ -142,6 +142,8 @@ std::string to_string(ReservedDataOp op) {
         return "!!";
     case ReservedDataOp::NotNullThen:
         return "?";
+    case ReservedDataOp::Access:
+        return ".$";
     case ReservedDataOp::Call:
         return "()";
     case ReservedDataOp::With:
@@ -153,7 +155,7 @@ std::string to_string(ReservedDataOp op) {
     case ReservedDataOp::Is:
         return "IS";
     default:
-        assert(false && "Unknown ReservedDataOp");
+        ASSERT(false, "Unknown ReservedDataOp");
         return "UnknownReservedDataOp";
     }
 }

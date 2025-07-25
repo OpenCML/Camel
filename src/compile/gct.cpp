@@ -34,9 +34,9 @@ template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&..
 }
 
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
-    if (node->type() == NodeType::DATA) {
+    if (node->type() == LoadType::DATA) {
         return node->loadAs<DataLoad>()->data();
-    } else if (node->type() == NodeType::DREF) {
+    } else if (node->type() == LoadType::DREF) {
         return make_shared<RefData>(node->loadAs<DRefLoad>()->ref());
     } else {
         return nullptr;
@@ -85,8 +85,8 @@ void Constructor::initInnerTypes() {
 Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
 node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
-    enter("Module");
-    assert(ast->type() == AST::LoadType::Module);
+    ENTER("Module");
+    ASSERT(ast->type() == AST::LoadType::Module, "Expected ModuleLoad type");
     auto importNodes = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
@@ -95,20 +95,43 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
         visitImport(import);
     }
 
+    vector<node_ptr_t> decls;
+    vector<node_ptr_t> stmts;
+
     root_ = createNodeAs<ExecLoad>();
     for (auto &stmt : *stmtNodes) {
         try {
-            *root_ << visitStmt(stmt);
+            node_ptr_t node = visitStmt(stmt);
+            if (node->type() == GCT::LoadType::DECL) {
+                decls.push_back(node);
+            } else if (node->type() == GCT::LoadType::FUNC) {
+                const auto &funcLoad = node->loadAs<FuncLoad>();
+                node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->name(), true);
+                node_ptr_t typeNode = node->atAs<TypeLoad>(0);
+                *declNode << typeNode->clone();
+                decls.push_back(declNode);
+                stmts.push_back(node);
+            } else {
+                stmts.push_back(node);
+            }
         } catch (const BuildAbortException &) {
             continue;
         }
+    }
+    if (!decls.empty()) {
+        for (const auto &decl : decls) {
+            *root_ << decl;
+        }
+    }
+    for (const auto &stmt : stmts) {
+        *root_ << stmt;
     }
 
     if (!exportOptNode->empty()) {
         visitExport(exportOptNode->front());
     }
 
-    leave("Module");
+    LEAVE("Module");
     return root_;
 }
 
@@ -123,8 +146,8 @@ ExportDecl(Ref[] refs) ;
 void_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) { return nullptr; }
 
 node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
-    enter("Stmt");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ENTER("Stmt");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type");
     const auto &stmt = ast->loadAs<AST::StmtLoad>();
     node_ptr_t stmtNode;
 
@@ -154,16 +177,23 @@ node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
         throw std::runtime_error("Unknown statement type");
     }
 
-    leave("Stmt");
+    LEAVE("Stmt");
     return stmtNode;
+}
+
+inline bool validateIdent(const std::string &str) {
+    if (str.length() < 4) {
+        return true;
+    }
+    return !(str.substr(0, 2) == "__" && str.substr(str.length() - 2) == "__");
 }
 
 /*
 DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
 */
 node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
-    enter("DataDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ENTER("DataDecl");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for DataDecl");
     const auto &dataDeclLoad = ast->loadAs<AST::DataDeclLoad>();
     bool isVar = dataDeclLoad->isVar();
     const auto &refs = dataDeclLoad->refs();
@@ -174,13 +204,13 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
 
     switch (dataDeclLoad->unpackType()) {
     case AST::UnpackType::Dict: {
-        reportDiagnostic("Dict unpacking is not supported in DataDecl", ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "Dict unpacking is not supported in DataDecl",
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::UnpackType::List: {
-        reportDiagnostic("List unpacking is not supported in DataDecl", ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "List unpacking is not supported in DataDecl",
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::UnpackType::Tuple: {
@@ -188,9 +218,15 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
             for (size_t i = 0; i < refs.size(); ++i) {
                 const auto &ref = refs[i];
                 const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
+                if (!validateIdent(ref.ident())) {
+                    reportDiagnostic(Diagnostic::Severity::Error,
+                                     "Identifiers starting and ending with '__' are reserved for internal use.",
+                                     dataDeclLoad->tokenRange());
+                    throw BuildAbortException();
+                }
                 if (dataNode->type() != AST::LoadType::Data) {
-                    reportDiagnostic("Tuple unpacking requires Data type nodes", dataNode->load()->tokenRange(),
-                                     Diagnostic::Severity::Error);
+                    reportDiagnostic(Diagnostic::Severity::Error, "Tuple unpacking requires Data type nodes",
+                                     dataNode->load()->tokenRange());
                     throw BuildAbortException();
                 }
                 node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
@@ -208,22 +244,29 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
                 *res << dataRefNode;
                 for (size_t i = 0; i < refs.size(); ++i) {
                     const auto &ref = refs[i];
+                    if (!validateIdent(ref.ident())) {
+                        reportDiagnostic(Diagnostic::Severity::Error,
+                                         "Identifiers starting and ending with '__' are reserved for internal use.",
+                                         dataDeclLoad->tokenRange());
+                        throw BuildAbortException();
+                    }
                     node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
                     node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
-                    *accsNode << dRefNode;
+                    *accsNode << dRefNode->clone();
                     *nRefNode << accsNode;
                     *res << nRefNode;
                 }
             } else {
                 reportDiagnostic(
+                    Diagnostic::Severity::Error,
                     "Tuple unpacking requires the same number of references and data nodes, or exactly one tuple data",
-                    ast->load()->tokenRange(), Diagnostic::Severity::Error);
+                    ast->load()->tokenRange());
                 throw BuildAbortException();
             }
         }
     } break;
     default:
-        assert(false && "Unknown unpack type in DataDecl");
+        ASSERT(false, "Unknown unpack type in DataDecl");
     }
 
     if (isVar) {
@@ -232,7 +275,7 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
         res = variNode;
     }
 
-    leave("DataDecl");
+    LEAVE("DataDecl");
     return res;
 }
 
@@ -240,36 +283,34 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
 FuncDecl(Ref ref) : FuncData ;
 */
 node_ptr_t Constructor::visitFuncDecl(const AST::node_ptr_t &ast) {
-    enter("FuncDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ENTER("FuncDecl");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
     const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
     node_ptr_t funcNode = visitFuncData(funcDataNode);
-    node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->ref().ident(), true);
-    *declNode << funcNode;
-    leave("FuncDecl");
-    return declNode;
+    LEAVE("FuncDecl");
+    return funcNode;
 }
 
 /*
 TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
 */
 node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
-    enter("TypeDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ENTER("TypeDecl");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     type_ptr_t type;
     if (typeNode) {
         type = visitType(typeNode);
     } else {
-        reportDiagnostic("Type declaration requires a type", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "Type declaration requires a type", ast->load()->tokenRange());
         throw BuildAbortException();
     }
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     typeScope_->insert(typeLoad->ref(), type);
-    node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref());
+    node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
     *declNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
-    leave("TypeDecl");
+    LEAVE("TypeDecl");
     return declNode;
 }
 
@@ -277,13 +318,14 @@ node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
 NameDecl(Ref ref, Ref alias) ;
 */
 node_ptr_t Constructor::visitNameDecl(const AST::node_ptr_t &ast) {
-    enter("NameDecl");
-    assert(ast->type() == AST::LoadType::Stmt);
-    reportDiagnostic("NameDecl is not supported in the current version of the compiler. "
+    ENTER("NameDecl");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for NameDecl");
+    reportDiagnostic(Diagnostic::Severity::Error,
+                     "NameDecl is not supported in the current version of the compiler. "
                      "Please use DataDecl or TypeDecl instead.",
-                     ast->load()->tokenRange(), Diagnostic::Severity::Error);
+                     ast->load()->tokenRange());
     throw BuildAbortException();
-    leave("NameDecl");
+    LEAVE("NameDecl");
     return nullptr;
 }
 
@@ -291,10 +333,10 @@ node_ptr_t Constructor::visitNameDecl(const AST::node_ptr_t &ast) {
 ExprStmt() : Data data ;
 */
 node_ptr_t Constructor::visitExprStmt(const AST::node_ptr_t &ast) {
-    enter("ExprStmt");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ENTER("ExprStmt");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExprStmt");
     node_ptr_t exprNode = visitData(ast->atAs<AST::DataLoad>(0));
-    leave("ExprStmt");
+    LEAVE("ExprStmt");
     return exprNode;
 }
 
@@ -302,8 +344,8 @@ node_ptr_t Constructor::visitExprStmt(const AST::node_ptr_t &ast) {
 ExitStmt(ExitType type) : Data* data ;
 */
 node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
-    enter("ExitStmt");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ENTER("ExitStmt");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
     node_ptr_t exitNode = createNodeAs<ExitLoad>();
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
     if (dataNodes->size() > 0) {
@@ -328,7 +370,7 @@ node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
             *exitNode << dataNode;
         }
     }
-    leave("ExitStmt");
+    LEAVE("ExitStmt");
     return exitNode;
 }
 
@@ -336,25 +378,25 @@ node_ptr_t Constructor::visitExitStmt(const AST::node_ptr_t &ast) {
 StmtBlock(bool sync) : Stmt* stmts ;
 */
 node_ptr_t Constructor::visitStmtBlock(const AST::node_ptr_t &ast) {
-    enter("StmtBlock");
-    assert(ast->type() == AST::LoadType::Stmt);
+    ENTER("StmtBlock");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
     node_ptr_t execNode = createNodeAs<ExecLoad>(stmtBlock->synced());
 
     pushScope();
     for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
-        assert(stmt->type() == AST::LoadType::Stmt && "Expected a statement in StmtBlock");
+        ASSERT(stmt->type() == AST::LoadType::Stmt, "Expected a statement in StmtBlock");
         *execNode << visitStmt(stmt);
     }
     popScope();
 
-    leave("StmtBlock");
+    LEAVE("StmtBlock");
     return execNode;
 }
 
 node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
-    enter("Data");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("Data");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for visitData");
     const auto &data = ast->loadAs<AST::DataLoad>();
     node_ptr_t dataNode;
 
@@ -399,7 +441,7 @@ node_ptr_t Constructor::visitData(const AST::node_ptr_t &ast) {
         throw std::runtime_error("Unknown data type");
     }
 
-    leave("Data");
+    LEAVE("Data");
     return dataNode;
 }
 
@@ -412,8 +454,8 @@ enum UnaryDataOp {
 UnaryExpr(UnaryDataOp op) := Data data ;
 */
 node_ptr_t Constructor::visitUnaryExpr(const AST::node_ptr_t &ast) {
-    enter("UnaryExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("UnaryExpr");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for UnaryExpr");
     const auto &unaryExpr = ast->loadAs<AST::UnaryExprLoad>();
     const auto &dataASTNode = ast->atAs<AST::DataLoad>(0);
     node_ptr_t opNode;
@@ -428,12 +470,12 @@ node_ptr_t Constructor::visitUnaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__inv__");
     } break;
     default:
-        assert(false && "Unknown unary operation");
+        ASSERT(false, "Unknown unary operation");
         return nullptr;
     }
     node_ptr_t linkNode = createNodeAs<LinkLoad>(1);
     *linkNode << opNode << visitData(dataASTNode);
-    leave("UnaryExpr");
+    LEAVE("UnaryExpr");
     return linkNode;
 }
 
@@ -471,8 +513,8 @@ enum BinaryDataOp {
 BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
 */
 node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
-    enter("BinaryExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("BinaryExpr");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for BinaryExpr");
     const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
     node_ptr_t opNode;
@@ -562,7 +604,7 @@ node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__index__");
     } break;
     default:
-        assert(false && "Unknown binary operation");
+        ASSERT(false, "Unknown binary operation");
         return nullptr;
     }
     node_ptr_t linkNode = createNodeAs<LinkLoad>(2);
@@ -576,7 +618,7 @@ node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         *linkNode << visitData(rhsASTNode);
     }
-    leave("BinaryExpr");
+    LEAVE("BinaryExpr");
     return linkNode;
 }
 
@@ -596,23 +638,23 @@ enum ReservedDataOp {
 ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
 */
 node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
-    enter("ReservedExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("ReservedExpr");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ReservedExpr");
     node_ptr_t res;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
     bool waited = reservedExpr->waited();
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
     switch (reservedExpr->op()) {
     case AST::ReservedDataOp::NullThen: {
-        reportDiagnostic("NullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        reportDiagnostic(Diagnostic::Severity::Warning, "NullThen is not supported yet", ast->load()->tokenRange());
         res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::ErrorThen: {
-        reportDiagnostic("ErrorThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        reportDiagnostic(Diagnostic::Severity::Warning, "ErrorThen is not supported yet", ast->load()->tokenRange());
         res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::NotNullThen: {
-        reportDiagnostic("NotNullThen is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Warning);
+        reportDiagnostic(Diagnostic::Severity::Warning, "NotNullThen is not supported yet", ast->load()->tokenRange());
         res = visitData(lhsASTNode);
     } break;
 
@@ -657,22 +699,22 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::ReservedDataOp::As: {
-        reportDiagnostic("As is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "As is not supported yet", ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::ReservedDataOp::Is: {
-        reportDiagnostic("Is is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "Is is not supported yet", ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
 
     case AST::ReservedDataOp::Access: {
         const auto &refASTNode = ast->atAs<AST::RefDataLoad>(1);
-        const auto &refData = refASTNode->loadAs<RefData>();
-        res = createNodeAs<AccsLoad>(refData->ref());
+        const auto &refDataLoad = refASTNode->loadAs<AST::RefDataLoad>();
+        res = createNodeAs<AccsLoad>(refDataLoad->ref());
         *res << visitData(lhsASTNode);
     } break;
     default:
-        assert(false && "Unknown reserved operation");
+        ASSERT(false, "Unknown reserved operation");
         res = nullptr;
     }
     if (waited) {
@@ -680,7 +722,7 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
         *waitNode << res; // Wait for the result of the reserved expression
         res = waitNode;
     }
-    leave("ReservedExpr");
+    LEAVE("ReservedExpr");
     return res;
 }
 
@@ -688,8 +730,8 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
 IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 */
 node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
-    enter("IfExpr");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("IfExpr");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for IfExpr");
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
     *brchNode << visitData(ast->atAs<AST::DataLoad>(0)); // condition
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
@@ -702,7 +744,7 @@ node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
     } else {
         *brchNode << createNodeAs<ExecLoad>(); // empty else block
     }
-    leave("IfExpr");
+    LEAVE("IfExpr");
     return brchNode;
 }
 
@@ -710,11 +752,11 @@ node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
 
 */
 node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
-    enter("MatchExpr");
-    assert(ast->type() == AST::LoadType::Data);
-    reportDiagnostic("MatchExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    ENTER("MatchExpr");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
+    reportDiagnostic(Diagnostic::Severity::Error, "MatchExpr is not supported yet", ast->load()->tokenRange());
     throw BuildAbortException();
-    leave("MatchExpr");
+    LEAVE("MatchExpr");
     return nullptr;
 }
 
@@ -722,11 +764,11 @@ node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
 
 */
 node_ptr_t Constructor::visitTryExpr(const AST::node_ptr_t &ast) {
-    enter("TryExpr");
-    assert(ast->type() == AST::LoadType::Data);
-    reportDiagnostic("TryExpr is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    ENTER("TryExpr");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TryExpr");
+    reportDiagnostic(Diagnostic::Severity::Error, "TryExpr is not supported yet", ast->load()->tokenRange());
     throw BuildAbortException();
-    leave("TryExpr");
+    LEAVE("TryExpr");
     return nullptr;
 }
 
@@ -746,8 +788,8 @@ enum LiteralType {
 };
 */
 node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
-    enter("Literal");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("Literal");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for Literal");
     const auto &literal = ast->loadAs<AST::LiteralLoad>();
     const Literal &value = literal->value();
     const auto &str = value.data();
@@ -757,7 +799,7 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
         data = tt::as_shared<Data>(make_shared<StringData>(str));
     } break;
     case LiteralType::FString: {
-        reportDiagnostic("FString is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "FString is not supported yet", ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
@@ -772,7 +814,7 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
         } else if (str == "false") {
             data = makeDataFromLiteral(false);
         } else {
-            reportDiagnostic("Invalid boolean literal: " + str, ast->load()->tokenRange(), Diagnostic::Severity::Error);
+            reportDiagnostic(Diagnostic::Severity::Error, "Invalid boolean literal: " + str, ast->load()->tokenRange());
             throw BuildAbortException();
         }
     } break;
@@ -780,12 +822,12 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
         data = tt::as_shared<Data>(make_shared<NullData>());
     } break;
     default: {
-        reportDiagnostic("Unknown literal type", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "Unknown literal type", ast->load()->tokenRange());
         throw BuildAbortException();
     }
     }
     node_ptr_t res = createNodeAs<DataLoad>(data);
-    leave("Literal");
+    LEAVE("Literal");
     return res;
 }
 
@@ -793,8 +835,8 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
 ListData() : Data* data ;
 */
 node_ptr_t Constructor::visitListData(const AST::node_ptr_t &ast) {
-    enter("ListData");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("ListData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ListData");
     auto listData = make_shared<ListData>();
     node_ptr_t res = createNodeAs<DataLoad>(listData);
     bool dangling = false;
@@ -808,7 +850,7 @@ node_ptr_t Constructor::visitListData(const AST::node_ptr_t &ast) {
         *execNode << res;
         res = execNode;
     }
-    leave("ListData");
+    LEAVE("ListData");
     return res;
 }
 
@@ -816,8 +858,8 @@ node_ptr_t Constructor::visitListData(const AST::node_ptr_t &ast) {
 DictData() : NamedData* dataList ;
 */
 node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {
-    enter("DictData");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("DictData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for DictData");
     auto dictData = make_shared<DictData>();
     node_ptr_t res = createNodeAs<DataLoad>(dictData);
     bool dangling = false;
@@ -833,7 +875,7 @@ node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {
         *execNode << res;
         res = execNode;
     }
-    leave("DictData");
+    LEAVE("DictData");
     return res;
 }
 
@@ -841,8 +883,8 @@ node_ptr_t Constructor::visitDictData(const AST::node_ptr_t &ast) {
 TupleData() : Data* data ;
 */
 node_ptr_t Constructor::visitTupleData(const AST::node_ptr_t &ast) {
-    enter("TupleData");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("TupleData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TupleData");
     auto tupleData = make_shared<TupleData>();
     node_ptr_t res = createNodeAs<DataLoad>(tupleData);
     bool dangling = false;
@@ -856,7 +898,7 @@ node_ptr_t Constructor::visitTupleData(const AST::node_ptr_t &ast) {
         *execNode << res;
         res = execNode;
     }
-    leave("TupleData");
+    LEAVE("TupleData");
     return res;
 }
 
@@ -864,14 +906,15 @@ node_ptr_t Constructor::visitTupleData(const AST::node_ptr_t &ast) {
 FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 */
 node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {
-    enter("FuncData");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("FuncData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
     func_type_ptr_t funcType = tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark(), funcType->uri());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
-    node_ptr_t funcNode = createNodeAs<FuncLoad>(funcType);
-    *funcNode << stmtsNode;
-    leave("FuncData");
+    node_ptr_t funcNode = createNodeAs<FuncLoad>(funcData->ref().ident());
+    *funcNode << typeNode << stmtsNode;
+    LEAVE("FuncData");
     return funcNode;
 }
 
@@ -879,11 +922,11 @@ node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {
 RefData(Ref ref) ;
 */
 node_ptr_t Constructor::visitRefData(const AST::node_ptr_t &ast) {
-    enter("RefData");
-    assert(ast->type() == AST::LoadType::Data);
+    ENTER("RefData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for RefData");
     const auto &refData = ast->loadAs<AST::RefDataLoad>();
     node_ptr_t refNode = createNodeAs<DRefLoad>(refData->ref());
-    leave("RefData");
+    LEAVE("RefData");
     return refNode;
 }
 
@@ -893,8 +936,8 @@ Type(TypeType type) :=
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 */
 type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
-    enter("Type");
-    assert(ast->type() == AST::LoadType::Type);
+    ENTER("Type");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for visitType");
     const auto &type = ast->loadAs<AST::TypeLoad>();
     type_ptr_t res;
 
@@ -933,7 +976,7 @@ type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
         throw std::runtime_error("Unknown type type");
     }
 
-    leave("Type");
+    LEAVE("Type");
     return res;
 }
 
@@ -941,10 +984,10 @@ type_ptr_t Constructor::visitType(const AST::node_ptr_t &ast) {
 NullableType : Type type ;
 */
 type_ptr_t Constructor::visitNullableType(const AST::node_ptr_t &ast) {
-    enter("NullableType");
-    assert(ast->type() == AST::LoadType::Type);
+    ENTER("NullableType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for NullableType");
     type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
-    leave("NullableType");
+    LEAVE("NullableType");
     return type;
 }
 
@@ -964,8 +1007,8 @@ enum TypeOp {
 }
 */
 type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
-    enter("TypeExpr");
-    assert(ast->type() == AST::LoadType::Type);
+    ENTER("TypeExpr");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TypeExpr");
     type_ptr_t res;
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
     AST::TypeOp op = typeExpr->op();
@@ -976,52 +1019,52 @@ type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
         res = make_shared<UnionType>(lhsType, rhsType);
     } break;
     case AST::TypeOp::Inter: {
-        reportDiagnostic("TypeOp::Inter is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::Inter is not supported yet", ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Diff: {
-        reportDiagnostic("TypeOp::Diff is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::Diff is not supported yet", ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyUnion: {
-        reportDiagnostic("TypeOp::KeyUnion is not supported yet", ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::KeyUnion is not supported yet",
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyInter: {
-        reportDiagnostic("TypeOp::KeyInter is not supported yet", ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::KeyInter is not supported yet",
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyDiff: {
-        reportDiagnostic("TypeOp::KeyDiff is not supported yet", ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::KeyDiff is not supported yet",
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::ErrorThen: {
-        reportDiagnostic("TypeOp::ErrorThen is not supported yet", ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::ErrorThen is not supported yet",
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Specialize: {
-        reportDiagnostic("TypeOp::Specialize is not supported yet", ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::Specialize is not supported yet",
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeOf: {
-        reportDiagnostic("TypeOp::TypeOf is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::TypeOf is not supported yet", ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeAs: {
-        reportDiagnostic("TypeOp::TypeAs is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::TypeAs is not supported yet", ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     default:
-        reportDiagnostic("Unsupported TypeOp: " + AST::to_string(op), ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "Unsupported TypeOp: " + AST::to_string(op),
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     }
-    leave("TypeExpr");
+    LEAVE("TypeExpr");
     return res;
 }
 
@@ -1029,12 +1072,12 @@ type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
 ListType(siz dim) : Type type ;
 */
 type_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {
-    enter("ListType");
-    assert(ast->type() == AST::LoadType::Type);
+    ENTER("ListType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ListType");
     const auto &listTypeLoad = ast->loadAs<AST::ListTypeLoad>();
     type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
     const auto &arrayType = make_shared<ArrayType>(type, listTypeLoad->dims());
-    leave("ListType");
+    LEAVE("ListType");
     return arrayType;
 }
 
@@ -1042,8 +1085,8 @@ type_ptr_t Constructor::visitListType(const AST::node_ptr_t &ast) {
 DictType() : NamedType* types ;
 */
 type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {
-    enter("DictType");
-    assert(ast->type() == AST::LoadType::Type);
+    ENTER("DictType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for DictType");
     auto res = make_shared<DictType>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedPairLoad>();
@@ -1051,26 +1094,26 @@ type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {
         type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
         data_ptr_t data = nullptr;
         if (!res->add(name, type)) {
-            reportDiagnostic("Duplicate key detected: " + name, namedPair->tokenRange(), Diagnostic::Severity::Error);
+            reportDiagnostic(Diagnostic::Severity::Error, "Duplicate key detected: " + name, namedPair->tokenRange());
             throw BuildAbortException();
         }
     }
-    leave("DictType");
+    LEAVE("DictType");
     return res;
 }
 /*
 TupleType() : Type* types ;
 */
 type_ptr_t Constructor::visitTupleType(const AST::node_ptr_t &ast) {
-    enter("TupleType");
-    assert(ast->type() == AST::LoadType::Type);
+    ENTER("TupleType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TupleType");
     vector<type_ptr_t> types;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         type_ptr_t type = visitType(child);
         types.push_back(type);
     }
     type_ptr_t tupleType = make_shared<TupleType>(types);
-    leave("TupleType");
+    LEAVE("TupleType");
     return tupleType;
 }
 
@@ -1079,8 +1122,8 @@ FuncType(Modifier[] modifiers, ImplMark impl, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 */
 type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
-    enter("FuncType");
-    assert(ast->type() == AST::LoadType::Type);
+    ENTER("FuncType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
     const auto withParamsType = make_shared<ParamsType>();
@@ -1092,7 +1135,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         exitType = visitType(exitTypeNode);
     }
 
-    func_type_ptr_t funcType = make_shared<FunctionType>("", withParamsType, normParamsType, exitType);
+    func_type_ptr_t funcType = make_shared<FunctionType>(withParamsType, normParamsType, exitType);
     funcType->setImplMark(typeLoad->implMark());
     funcType->setModifiers(typeLoad->modifiers());
 
@@ -1100,8 +1143,8 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         const Reference &paramRef = paramLoad->getRef();
         if (!paramRef.isAlone()) {
-            reportDiagnostic("Parameter reference must be alone: " + paramRef.toString(), paramLoad->tokenRange(),
-                             Diagnostic::Severity::Error);
+            reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
+                             paramLoad->tokenRange());
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
@@ -1111,15 +1154,16 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         if (dataNode) {
             data = extractStaticDataFromNode(visitData(dataNode));
             if (!data) {
-                reportDiagnostic("Data for parameter " + paramRef.toString() + " is not static",
-                                 dataNode->load()->tokenRange(), Diagnostic::Severity::Error);
+                reportDiagnostic(Diagnostic::Severity::Error,
+                                 "Data for parameter " + paramRef.toString() + " is not static",
+                                 dataNode->load()->tokenRange());
                 throw BuildAbortException();
             }
         }
         bool success = funcType->addIdent(name, paramLoad->isVar());
         if (!success) {
-            reportDiagnostic("Duplicate parameter detected: " + name, paramLoad->tokenRange(),
-                             Diagnostic::Severity::Error);
+            reportDiagnostic(Diagnostic::Severity::Error, "Duplicate parameter detected: " + name,
+                             paramLoad->tokenRange());
             throw BuildAbortException();
         }
         withParamsType->add(name, type, data);
@@ -1129,8 +1173,8 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         const Reference &paramRef = paramLoad->getRef();
         if (!paramRef.isAlone()) {
-            reportDiagnostic("Parameter reference must be alone: " + paramRef.toString(), paramLoad->tokenRange(),
-                             Diagnostic::Severity::Error);
+            reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
+                             paramLoad->tokenRange());
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
@@ -1140,21 +1184,22 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         if (dataNode) {
             data = extractStaticDataFromNode(visitData(dataNode));
             if (!data) {
-                reportDiagnostic("Data for parameter " + paramRef.toString() + " is not static",
-                                 dataNode->load()->tokenRange(), Diagnostic::Severity::Error);
+                reportDiagnostic(Diagnostic::Severity::Error,
+                                 "Data for parameter " + paramRef.toString() + " is not static",
+                                 dataNode->load()->tokenRange());
                 throw BuildAbortException();
             }
         }
         bool success = funcType->addIdent(name, paramLoad->isVar());
         if (!success) {
-            reportDiagnostic("Duplicate parameter detected: " + name, paramLoad->tokenRange(),
-                             Diagnostic::Severity::Error);
+            reportDiagnostic(Diagnostic::Severity::Error, "Duplicate parameter detected: " + name,
+                             paramLoad->tokenRange());
             throw BuildAbortException();
         }
         normParamsType->add(name, type, data);
     }
 
-    leave("FuncType");
+    LEAVE("FuncType");
     return funcType;
 }
 
@@ -1162,10 +1207,10 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
 UnitType(Ref ref) : Type type ;
 */
 type_ptr_t Constructor::visitUnitType(const AST::node_ptr_t &ast) {
-    enter("UnitType");
-    reportDiagnostic("UnitType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    ENTER("UnitType");
+    reportDiagnostic(Diagnostic::Severity::Error, "UnitType is not supported yet", ast->load()->tokenRange());
     throw BuildAbortException();
-    leave("UnitType");
+    LEAVE("UnitType");
     return nullptr;
 }
 
@@ -1173,10 +1218,10 @@ type_ptr_t Constructor::visitUnitType(const AST::node_ptr_t &ast) {
 InferType(Ref ref) ;
 */
 type_ptr_t Constructor::visitInferType(const AST::node_ptr_t &ast) {
-    enter("InferType");
-    reportDiagnostic("InferType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    ENTER("InferType");
+    reportDiagnostic(Diagnostic::Severity::Error, "InferType is not supported yet", ast->load()->tokenRange());
     throw BuildAbortException();
-    leave("InferType");
+    LEAVE("InferType");
     return nullptr;
 }
 
@@ -1184,10 +1229,10 @@ type_ptr_t Constructor::visitInferType(const AST::node_ptr_t &ast) {
 DataType() : Data data ;
 */
 type_ptr_t Constructor::visitDataType(const AST::node_ptr_t &ast) {
-    enter("DataType");
-    reportDiagnostic("DataType is not supported yet", ast->load()->tokenRange(), Diagnostic::Severity::Error);
+    ENTER("DataType");
+    reportDiagnostic(Diagnostic::Severity::Error, "DataType is not supported yet", ast->load()->tokenRange());
     throw BuildAbortException();
-    leave("DataType");
+    LEAVE("DataType");
     return nullptr;
 }
 
@@ -1195,17 +1240,17 @@ type_ptr_t Constructor::visitDataType(const AST::node_ptr_t &ast) {
 RefType(Ref ref) ;
 */
 type_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
-    enter("RefType");
-    assert(ast->load()->type() == AST::LoadType::Type);
+    ENTER("RefType");
+    ASSERT(ast->load()->type() == AST::LoadType::Type, "Expected TypeLoad type for RefType");
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
     const Reference &ref = typeLoad->ref();
-    const auto &type = typeScope_->at(ref);
+    const auto &type = typeScope_->get(ref);
     if (!type.has_value()) {
-        reportDiagnostic("Unresolved type reference: " + ref.toString(), ast->load()->tokenRange(),
-                         Diagnostic::Severity::Error);
+        reportDiagnostic(Diagnostic::Severity::Error, "Unresolved type reference: " + ref.toString(),
+                         ast->load()->tokenRange());
         throw BuildAbortException();
     }
-    leave("RefType");
+    LEAVE("RefType");
     return type.value();
 }
 } // namespace GraphConstructTree

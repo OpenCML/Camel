@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include <stdexcept>
+#include <exception>
 #include <string>
 
 class CamelBaseException : public std::exception {

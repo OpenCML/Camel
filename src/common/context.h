@@ -21,56 +21,52 @@
 
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 #include "graph.h"
 #include "operator.h"
 #include "scope.h"
 
-using node_scope_t = Scope<std::string, GIR::node_ptr_t>;
-using node_scope_ptr_t = scope_ptr_t<std::string, GIR::node_ptr_t>;
-using func_scope_t = Scope<std::string, std::shared_ptr<func_vec_t>>;
-using func_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<func_vec_t>>;
-using operator_scope_t = Scope<std::string, std::shared_ptr<oper_vec_t>>;
-using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<oper_vec_t>>;
+using node_scope_t = Scope<std::string, std::pair<GIR::node_ptr_t, GIR::node_ptr_t>>;
+using node_scope_ptr_t = scope_ptr_t<std::string, std::pair<GIR::node_ptr_t, GIR::node_ptr_t>>; // pair<node, modifier>
+using graph_scope_t = Scope<std::string, std::shared_ptr<GIR::graph_vec_t>>;
+using graph_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<GIR::graph_vec_t>>;
+using operator_scope_t = Scope<std::string, std::shared_ptr<operator_vec_t>>;
+using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<operator_vec_t>>;
 
 class Context {
     GIR::graph_ptr_t rootGraph_;
     GIR::graph_ptr_t currGraph_;
+
     node_scope_ptr_t nodeScope_;
-    func_scope_ptr_t funcScope_;
+    graph_scope_ptr_t graphScope_;
     operator_scope_ptr_t opScope_;
-
-    std::unordered_map<func_type_ptr_t,
-                       std::tuple<node_scope_ptr_t, func_scope_ptr_t, operator_scope_ptr_t, GIR::graph_ptr_t>>
-        funcCache_;
-
-    // only generated when getNodeIdent() is called to save memory
-    std::unordered_map<GIR::node_ptr_t, std::string> nodeIdentsMap_;
-    void generateNodeIdentsMap();
 
   public:
     Context();
     virtual ~Context() = default;
 
     node_scope_t &nodeScope() { return *nodeScope_; }
-    func_scope_t &funcScope() { return *funcScope_; }
+    graph_scope_t &graphScope() { return *graphScope_; }
     operator_scope_t &opScope() { return *opScope_; }
 
     GIR::graph_ptr_t &rootGraph() { return rootGraph_; }
     GIR::graph_ptr_t &currGraph() { return currGraph_; }
 
-    std::optional<std::string> getNodeIdent(const GIR::node_ptr_t &node);
+    GIR::graph_ptr_t enterScope(const std::string &name);
+    void leaveScope();
 
-    void pushScope(func_type_ptr_t key);
-    void popScope(func_type_ptr_t key = nullptr);
+    std::unordered_map<GIR::node_ptr_t, std::string> buildNodeIdentsMap() const;
 
-    bool cached(func_type_ptr_t key) { return funcCache_.find(key) != funcCache_.end(); }
-
-    std::optional<GIR::node_ptr_t> nodeAt(const std::string &name);
+    std::optional<std::pair<GIR::node_ptr_t, GIR::node_ptr_t>> nodeAt(const std::string &name) {
+        return nodeScope_->get(name);
+    }
+    std::optional<std::shared_ptr<GIR::graph_vec_t>> graphAt(const std::string &name) { return graphScope_->get(name); }
+    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) { return opScope_->get(name); }
 
     bool insertNode(const std::string &name, const GIR::node_ptr_t &node);
-    bool insertFunc(const std::string &name, func_ptr_t func);
-    bool insertOperator(const std::string &name, const oper_ptr_t &op);
+    bool insertGraph(const std::string &name, const GIR::graph_ptr_t &graph);
+    bool insertOperator(const std::string &name, const operator_ptr_t &op);
 };
 
 using context_ptr_t = std::shared_ptr<Context>;
