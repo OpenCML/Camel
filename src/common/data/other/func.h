@@ -29,6 +29,14 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 
 namespace GIR = GraphIntermediateRepresentation;
 
+class FunctionData;
+
+using func_ptr_t = std::shared_ptr<FunctionData>;
+using func_wptr_t = std::weak_ptr<FunctionData>;
+using func_lst_t = std::list<func_ptr_t>;
+using func_vec_t = std::vector<func_ptr_t>;
+using func_list_t = std::initializer_list<func_ptr_t>;
+
 class FunctionData : public Data {
     GIR::graph_ptr_t graph_;
     arena_ptr_t arena_;
@@ -36,6 +44,8 @@ class FunctionData : public Data {
   public:
     FunctionData(GIR::graph_ptr_t graph);
     virtual ~FunctionData() = default;
+
+    static func_ptr_t create(GIR::graph_ptr_t graph);
 
     std::string name() const;
     GIR::graph_ptr_t graph() const { return graph_; }
@@ -47,9 +57,3 @@ class FunctionData : public Data {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };
-
-using func_ptr_t = std::shared_ptr<FunctionData>;
-using func_wptr_t = std::weak_ptr<FunctionData>;
-using func_lst_t = std::list<func_ptr_t>;
-using func_vec_t = std::vector<func_ptr_t>;
-using func_list_t = std::initializer_list<func_ptr_t>;

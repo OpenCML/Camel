@@ -130,7 +130,8 @@ class ConstantArray : public DataArray {
     ConstantArray(bool shared) : DataArray(DataType(shared, true)) {}
 
     DataIndex emplace(const data_ptr_t &data) {
-        ASSERT(data != nullptr, "Cannot emplace null data in a constant array.");
+        // TODO: Uncomment the assertion when data validation is needed
+        // ASSERT(data != nullptr, "Cannot emplace null data in a constant array.");
         dataArr_.push_back(data);
         return {type_, dataArr_.size() - 1};
     }

@@ -21,6 +21,7 @@
 #include <iostream>
 
 #include "common/context.h"
+#include "common/error/abort.h"
 #include "common/gct.h"
 #include "common/graph.h"
 #include "gct.h"
@@ -50,9 +51,14 @@ class Constructor {
     bool synced_;
     bool varied_;
 
-    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg, std::pair<size_t, size_t> tokenRange = {0, 0}) {
+    node_ptr_t lastCalledFuncNode_;
+
+    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
+                          std::pair<size_t, size_t> tokenRange = {0, 0}) {
         diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
+
+    node_ptr_t resolveNodeByRef(const std::string &name);
 
     std::any visit(const GCT::node_ptr_t &gct);
 

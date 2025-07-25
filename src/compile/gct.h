@@ -24,17 +24,13 @@
 #include <string>
 
 #include "common/ast/ast.h"
+#include "common/error/abort.h"
 #include "common/error/diagnostic.h"
 #include "common/gct.h"
 #include "common/scope.h"
 
 namespace GraphConstructTree {
 using void_ptr_t = void *;
-
-class BuildAbortException : public std::exception {
-  public:
-    BuildAbortException() {}
-};
 
 class Constructor {
   public:
@@ -63,7 +59,8 @@ class Constructor {
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
-    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg, std::pair<size_t, size_t> tokenRange = {0, 0}) {
+    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
+                          std::pair<size_t, size_t> tokenRange = {0, 0}) {
         diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 

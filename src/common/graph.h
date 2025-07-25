@@ -79,6 +79,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
         return outer_.lock();
     }
 
+    DataIndex addSharedConstant(const data_ptr_t &data) { return arena_->addConstant(data, true); }
+    DataIndex addRuntimeConstant(const data_ptr_t &data) { return arena_->addConstant(data, false); }
+    DataIndex addVariable(DataIndex index) { return arena_->addVariable(index); }
+
     void setFuncType(const func_type_ptr_t &type);
     func_type_ptr_t funcType() const;
 
@@ -149,7 +153,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
     virtual data_ptr_t eval() = 0;
 
-    static void link(LinkType type, node_ptr_t &from, node_ptr_t &to) {
+    static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         switch (type) {
         case LinkType::Norm:
             from->dataOutputs().push_back(to);
@@ -196,13 +200,11 @@ class SelectNode : public Node {
 
 class AccessNode : public Node {
   public:
-    AccessNode(graph_ptr_t graph, DataIndex &data, const std::string &index)
-        : Node(graph, NodeType::Access, data), index_(index) {}
-    AccessNode(graph_ptr_t graph, DataIndex &data, const size_t &index)
+    AccessNode(graph_ptr_t graph, DataIndex &data, const std::variant<std::string, size_t> &index)
         : Node(graph, NodeType::Access, data), index_(index) {}
     ~AccessNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &data, const std::string &index) {
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &data, const std::variant<std::string, size_t> &index) {
         return std::make_shared<AccessNode>(graph, data, index);
     }
 
@@ -236,30 +238,35 @@ class SourceNode : public Node {
 };
 
 class OperatorNode : public Node {
-    Operator operator_;
+    operator_ptr_t operator_;
 
   public:
-    OperatorNode(graph_ptr_t graph, DataIndex &index, Operator op)
+    OperatorNode(graph_ptr_t graph, DataIndex &index, operator_ptr_t op)
         : Node(graph, NodeType::Operator, index), operator_(op) {}
     ~OperatorNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, Operator op) {
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, operator_ptr_t op) {
         return std::make_shared<OperatorNode>(graph, index, op);
     }
 
-    std::string operName() const { return operator_.name(); }
+    std::string operName() const { return operator_->name(); }
 
     data_ptr_t eval() override { return nullptr; }
 };
 
 class FunctionNode : public Node {
+    func_ptr_t func_;
+
   public:
-    FunctionNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Function, index) {}
+    FunctionNode(graph_ptr_t graph, DataIndex &index, func_ptr_t func)
+        : Node(graph, NodeType::Function, index), func_(func) {}
     ~FunctionNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
-        return std::make_shared<FunctionNode>(graph, index);
+    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, func_ptr_t func) {
+        return std::make_shared<FunctionNode>(graph, index, func);
     }
+
+    func_ptr_t func() const { return func_; }
 
     data_ptr_t eval() override { return nullptr; }
 };

@@ -27,6 +27,12 @@ FunctionData::FunctionData(GIR::graph_ptr_t graph) : Data(graph->funcType()), gr
     arena_ = graph->arena()->clone();
 }
 
+func_ptr_t FunctionData::create(GIR::graph_ptr_t graph) {
+    ASSERT(graph != nullptr, "Graph cannot be null for FunctionData.");
+    ASSERT(graph->funcType() != nullptr, "Graph must have a function type for FunctionData.");
+    return std::make_shared<FunctionData>(graph);
+}
+
 std::string FunctionData::name() const { return graph_->name(); }
 
 func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<FunctionType>(type_); }

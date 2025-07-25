@@ -282,6 +282,8 @@ class ExecLoad : public Load {
   public:
     ExecLoad(bool sync = false) : Load(LoadType::EXEC), synced_(sync) {}
 
+    bool synced() const { return synced_; }
+
     const std::string toString() const override { return synced_ ? "SYNC" : "EXEC"; }
 
   private:
@@ -295,6 +297,7 @@ class AccsLoad : public Load {
 
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
+    std::variant<std::string, size_t> index() const { return index_; }
 
     const std::string toString() const override {
         std::string result = "ACCS: ";

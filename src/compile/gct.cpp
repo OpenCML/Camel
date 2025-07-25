@@ -709,8 +709,8 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Access: {
         const auto &refASTNode = ast->atAs<AST::RefDataLoad>(1);
-        const auto &refData = refASTNode->loadAs<RefData>();
-        res = createNodeAs<AccsLoad>(refData->ref());
+        const auto &refDataLoad = refASTNode->loadAs<AST::RefDataLoad>();
+        res = createNodeAs<AccsLoad>(refDataLoad->ref());
         *res << visitData(lhsASTNode);
     } break;
     default:
