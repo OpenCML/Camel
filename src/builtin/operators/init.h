@@ -21,4 +21,4 @@
 
 #include "common/operator.h"
 
-void initOperators();
+void initGlobalOperators();

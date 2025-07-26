@@ -18,85 +18,61 @@
  */
 
 #include "context.h"
+#include "builtin/operators/init.h"
+
 #include <set>
 
 using namespace std;
 
 Context::Context()
-    : rootGraph_(GIR::Graph::create()), nodeScope_(node_scope_t::create()), funcScope_(func_scope_t::create()),
-      opScope_(operator_scope_t::create(globalOperators)) {
+    : rootGraph_(GIR::Graph::create(nullptr, "__root__")), nodeScope_(node_scope_t::create()),
+      graphScope_(graph_scope_t::create()) {
+    initGlobalOperators(); // Initialize global operators
+    opScope_ = operator_scope_t::create(globalOperators);
     currGraph_ = rootGraph_;
-    funcCache_[nullptr] = {nodeScope_, funcScope_, opScope_, currGraph_};
 }
 
-void Context::generateNodeIdentsMap() {
-    multiset<string> idents;
-    for (auto &[key, cache] : funcCache_) {
-        auto &[scope, _, __, ___] = cache;
-        for (auto &[k, node] : scope->self()) {
-            idents.insert(k);
-            string ident;
-            if (idents.count(k) > 1) {
-                ident = k + "_" + to_string(idents.count(k));
-            } else {
-                ident = k;
-            }
-            nodeIdentsMap_[node] = ident;
+GIR::graph_ptr_t Context::enterScope(const std::string &name) {
+    if (name.empty()) {
+        currGraph_ = GIR::Graph::create(currGraph_);
+    } else {
+        auto graphs = graphScope_->get(name);
+        if (graphs.has_value() && !graphs.value()->empty()) {
+            currGraph_ = graphs.value()->front();
+        } else {
+            currGraph_ = GIR::Graph::create(currGraph_, name);
+            insertGraph(name, currGraph_);
         }
     }
+    nodeScope_ = nodeScope_->enter(name);
+    graphScope_ = graphScope_->enter(name);
+    opScope_ = opScope_->enter(name);
+    return currGraph_;
 }
 
-std::optional<std::string> Context::getNodeIdent(const GIR::node_ptr_t &node) {
-    if (nodeIdentsMap_.empty()) {
-        generateNodeIdentsMap();
-    }
-    if (nodeIdentsMap_.find(node) != nodeIdentsMap_.end()) {
-        return nodeIdentsMap_[node];
-    }
-    return std::nullopt;
-}
-
-void Context::pushScope(func_type_ptr_t key) {
-    if (funcCache_.find(key) != funcCache_.end()) {
-        auto [nodeScope, funcScope, opScope, graph] = funcCache_[key];
-        nodeScope_ = nodeScope;
-        funcScope_ = funcScope;
-        opScope_ = opScope;
-        currGraph_ = graph;
-    } else {
-        nodeScope_ = nodeScope_->push();
-        funcScope_ = funcScope_->push();
-        opScope_ = opScope_->push();
-        currGraph_ = GIR::Graph::create(currGraph_);
-        funcCache_[key] = std::make_tuple(nodeScope_, funcScope_, opScope_, currGraph_);
-    }
-}
-
-void Context::popScope(func_type_ptr_t key) {
-    nodeScope_ = nodeScope_->pop();
-    funcScope_ = funcScope_->pop();
-    opScope_ = opScope_->pop();
+void Context::leaveScope() {
+    nodeScope_ = nodeScope_->leave();
+    graphScope_ = graphScope_->leave();
+    opScope_ = opScope_->leave();
     currGraph_ = currGraph_->outer();
-    if (key != nullptr) {
-        funcCache_.erase(key);
-    }
 }
 
-std::optional<GIR::node_ptr_t> Context::nodeAt(const std::string &name) {
-    auto opNode = nodeScope_->at(name);
-    if (opNode.has_value()) {
-        return opNode.value();
-    }
-    auto opFunc = funcScope_->at(name);
-    if (opFunc.has_value()) {
-        func_vec_t &funcs = *opFunc.value();
-        return GIR::SelectNode::create(currGraph_, funcs);
-    }
-    auto opOp = opScope_->at(name);
-    if (opOp.has_value()) {
-        return GIR::SelectNode::create(currGraph_, *opOp.value());
-    }
-    return std::nullopt;
+std::unordered_map<GIR::node_ptr_t, std::string> Context::buildNodeIdentsMap() const {
+    std::unordered_map<GIR::node_ptr_t, std::string> identsMap;
+    auto visit = [&identsMap](auto self, node_scope_ptr_t scope) -> void {
+        for (const auto &pair : scope->map()) {
+            const auto &name = pair.first;
+            const auto &node = pair.second;
+            if (node) {
+                identsMap[node] = name;
+            }
+        }
+        for (const auto &innerScope : scope->innerScopes()) {
+            self(self, innerScope);
+        }
+    };
+    visit(visit, nodeScope_->root()); // Recursive lambda to visit all inner scopes
+    return identsMap;
 }
 
 bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
@@ -107,22 +83,22 @@ bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
     return true;
 }
 
-bool Context::insertFunc(const std::string &name, func_ptr_t func) {
-    if (funcScope_->has(name, false)) {
-        const auto funcs = funcScope_->at(name).value();
-        // TODO: check if the func node is already in the list
-        funcs->push_back(func);
+bool Context::insertGraph(const std::string &name, const GIR::graph_ptr_t &graph) {
+    if (graphScope_->has(name, false)) {
+        auto graphs = graphScope_->get(name).value();
+        // TODO: check if the graph is already in the list
+        graphs->push_back(graph);
     }
-    funcScope_->insert(name, std::make_shared<func_vec_t>(1, func));
+    graphScope_->insert(name, std::make_shared<GIR::graph_vec_t>(1, graph));
     return true;
 }
 
-bool Context::insertOperator(const std::string &name, const oper_ptr_t &op) {
+bool Context::insertOperator(const std::string &name, const operator_ptr_t &op) {
     if (opScope_->has(name, false)) {
-        const auto ops = opScope_->at(name).value();
+        auto ops = opScope_->get(name).value();
         // TODO: check if the operator is already in the list
         ops->push_back(op);
     }
-    opScope_->insert(name, std::make_shared<oper_vec_t>(1, op));
+    opScope_->insert(name, std::make_shared<operator_vec_t>(1, op));
     return true;
 }

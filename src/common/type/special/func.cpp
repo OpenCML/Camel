@@ -25,16 +25,37 @@
 
 using namespace std;
 
-FunctionType::FunctionType(const std::string &&name, const shared_ptr<ParamsType> &withType,
-                           const shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType)
-    : SpecialType(TypeCode::FUNCTOR), name_(std::move(name)), withType_(withType), linkType_(paramsType),
+FunctionType::FunctionType()
+    : SpecialType(TypeCode::FUNC), withParamsType_(make_shared<ParamsType>()),
+      normParamsType_(make_shared<ParamsType>()), returnType_(voidTypePtr) {}
+
+FunctionType::FunctionType(const shared_ptr<ParamsType> &withParamsType, const shared_ptr<ParamsType> &paramsType,
+                           const type_ptr_t &returnType)
+    : SpecialType(TypeCode::FUNC), withParamsType_(withParamsType), normParamsType_(paramsType),
       returnType_(returnType) {}
 
+FunctionType::FunctionType(const param_init_list &withParamsList, const param_init_list &normParamsList,
+                           const type_ptr_t &returnType)
+    : SpecialType(TypeCode::FUNC) {
+    withParamsType_ = make_shared<ParamsType>();
+    normParamsType_ = make_shared<ParamsType>();
+    for (const auto &tuple : withParamsList) {
+        const auto &[name, type, value, isVar] = tuple;
+        withParamsType_->add(name, type, value);
+        variableMap_.insert({name, isVar});
+    }
+    for (const auto &tuple : normParamsList) {
+        const auto &[name, type, value, isVar] = tuple;
+        normParamsType_->add(name, type, value);
+        variableMap_.insert({name, isVar});
+    }
+}
+
 const std::string &FunctionType::argNameAt(size_t idx) const {
-    if (idx < withType_->size())
-        return std::get<0>(withType_->elementAt(idx));
+    if (idx < withParamsType_->size())
+        return std::get<0>(withParamsType_->elementAt(idx));
     else
-        return std::get<0>(linkType_->elementAt(idx - withType_->size()));
+        return std::get<0>(normParamsType_->elementAt(idx - withParamsType_->size()));
 }
 
 bool FunctionType::addIdent(const string &ident, bool isVar) {
@@ -50,11 +71,35 @@ bool FunctionType::addIdent(const string &ident, bool isVar) {
 
 bool FunctionType::hasSideEffect() const { return hasSideEffect_; }
 
-type_ptr_t FunctionType::withType() const { return dynamic_pointer_cast<Type>(withType_); }
+type_ptr_t FunctionType::withParamsType() const { return dynamic_pointer_cast<Type>(withParamsType_); }
 
-type_ptr_t FunctionType::linkType() const { return dynamic_pointer_cast<Type>(linkType_); }
+type_ptr_t FunctionType::normParamsType() const { return dynamic_pointer_cast<Type>(normParamsType_); }
 
 type_ptr_t FunctionType::returnType() const { return dynamic_pointer_cast<Type>(returnType_); }
+
+std::vector<std::tuple<std::string, type_ptr_t, bool>> FunctionType::withParams() const {
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> result;
+    if (withParamsType_) {
+        const auto &elements = withParamsType_->elements();
+        for (const auto &tuple : elements) {
+            const auto &[name, type, _] = tuple;
+            result.emplace_back(name, type, variableMap_.count(name) && variableMap_.at(name));
+        }
+    }
+    return result;
+}
+
+std::vector<std::tuple<std::string, type_ptr_t, bool>> FunctionType::normParams() const {
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> result;
+    if (normParamsType_) {
+        const auto &elements = normParamsType_->elements();
+        for (const auto &tuple : elements) {
+            const auto &[name, type, _] = tuple;
+            result.emplace_back(name, type, variableMap_.count(name) && variableMap_.at(name));
+        }
+    }
+    return result;
+}
 
 bool FunctionType::checkModifiers() const { return true; }
 
@@ -66,9 +111,9 @@ string FunctionType::toString() const {
     if (!modifiers_.empty()) {
         result += string(modifiers_) + " ";
     }
-    if (withType_ && withType_->size() > 0) {
+    if (withParamsType_ && withParamsType_->size() > 0) {
         result += "<";
-        const auto &with = dynamic_cast<const ParamsType &>(*withType_);
+        const auto &with = dynamic_cast<const ParamsType &>(*withParamsType_);
         const auto &elements = with.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
@@ -87,10 +132,9 @@ string FunctionType::toString() const {
         }
         result += "> ";
     }
-    result += name_;
     result += "(";
-    if (linkType_ && linkType_->size() > 0) {
-        const auto &params = dynamic_cast<const ParamsType &>(*linkType_);
+    if (normParamsType_ && normParamsType_->size() > 0) {
+        const auto &params = dynamic_cast<const ParamsType &>(*normParamsType_);
         const auto &elements = params.elements();
         for (const auto &tuple : elements) {
             const auto &[name, type, value] = tuple;
@@ -118,14 +162,14 @@ string FunctionType::toString() const {
 }
 
 bool FunctionType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::FUNCTOR) {
+    if (other.code() != TypeCode::FUNC) {
         return false;
     }
     const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
-    if (withType_ != nullptr && !withType_->equals(otherFunctor.withType_)) {
+    if (withParamsType_ != nullptr && !withParamsType_->equals(otherFunctor.withParamsType_)) {
         return false;
     }
-    if (linkType_ != nullptr && !linkType_->equals(otherFunctor.linkType_)) {
+    if (normParamsType_ != nullptr && !normParamsType_->equals(otherFunctor.normParamsType_)) {
         return false;
     }
     if (returnType_ != nullptr && !returnType_->equals(otherFunctor.returnType_)) {
@@ -138,11 +182,11 @@ bool FunctionType::operator!=(const Type &other) const { return !(*this == other
 
 TypeConv FunctionType::convertibility(const Type &other) const {
     // TODO: not fully implemented
-    if (other.code() == TypeCode::FUNCTOR) {
+    if (other.code() == TypeCode::FUNC) {
         TypeConv result = TypeConv::SAFE;
         const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
-        if (withType_ && !otherFunctor.withType_) {
-            const TypeConv withTypeConv = withType_->convertibility(*otherFunctor.withType_);
+        if (withParamsType_ && !otherFunctor.withParamsType_) {
+            const TypeConv withTypeConv = withParamsType_->convertibility(*otherFunctor.withParamsType_);
             if (withTypeConv == TypeConv::FORBIDDEN) {
                 return TypeConv::FORBIDDEN;
             }
@@ -150,8 +194,8 @@ TypeConv FunctionType::convertibility(const Type &other) const {
                 result = TypeConv::UNSAFE;
             }
         }
-        if (linkType_ && !otherFunctor.linkType_) {
-            const TypeConv paramsTypeConv = linkType_->convertibility(*otherFunctor.linkType_);
+        if (normParamsType_ && !otherFunctor.normParamsType_) {
+            const TypeConv paramsTypeConv = normParamsType_->convertibility(*otherFunctor.normParamsType_);
             if (paramsTypeConv == TypeConv::FORBIDDEN) {
                 return TypeConv::FORBIDDEN;
             }

@@ -69,7 +69,7 @@ inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>
 program : SEP? (decl SEP?)* EOF;
 */
 any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
-    enter("Program");
+    ENTER("Program");
 
     root_ = std::make_shared<Node>(module_);
 
@@ -99,7 +99,7 @@ any Constructor::visitProgram(OpenCMLParser::ProgramContext *context) {
 
     *root_ << stmts;
 
-    leave("Program");
+    LEAVE("Program");
     return root_;
 }
 
@@ -115,9 +115,9 @@ decl
     ;
 */
 any Constructor::visitDecl(OpenCMLParser::DeclContext *context) {
-    enter("Decl");
+    ENTER("Decl");
     any res = visit(context->children[0]);
-    leave("Decl");
+    LEAVE("Decl");
     return res;
 }
 
@@ -133,17 +133,17 @@ stmt
     ;
 */
 any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
-    enter("Stmt");
+    ENTER("Stmt");
     if (context->dataExpr()) {
         node_ptr_t expr = any2node(visitDataExpr(context->dataExpr()));
         node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
         setNodeTokenRangeByContext(stmt, context->dataExpr());
         *stmt << expr;
-        leave("Stmt");
+        LEAVE("Stmt");
         return stmt;
     }
     any res = visit(context->children[0]);
-    leave("Stmt");
+    LEAVE("Stmt");
     return res;
 }
 
@@ -151,7 +151,7 @@ any Constructor::visitStmt(OpenCMLParser::StmtContext *context) {
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
 any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
-    enter("StmtList");
+    ENTER("StmtList");
     node_ptr_t block = createNodeAs<StmtBlockLoad>();
     setNodeTokenRangeByContext(block, context);
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Stmt");
@@ -162,7 +162,7 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
         }
     }
     *block << rep;
-    leave("StmtList");
+    LEAVE("StmtList");
     return block;
 }
 
@@ -170,10 +170,10 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
 moduleDecl : MODULE identDef ;
 */
 any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
-    enter("ModuleDecl");
+    ENTER("ModuleDecl");
     Reference ref(context->identDef()->getText());
     module_->setRef(ref);
-    leave("ModuleDecl");
+    LEAVE("ModuleDecl");
     return std::any();
 }
 
@@ -181,7 +181,7 @@ any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
 importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
 */
 any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
-    enter("ImportDecl");
+    ENTER("ImportDecl");
     auto import_ = std::make_shared<ImportLoad>();
     if (context->STRING()) {
         import_->setPath(context->STRING()->getText());
@@ -196,7 +196,7 @@ any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
         import_->setRefs(refs);
     }
     imports_.push_back(import_);
-    leave("ImportDecl");
+    LEAVE("ImportDecl");
     return std::any();
 }
 
@@ -204,7 +204,7 @@ any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
 exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 */
 any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
-    enter("ExportDecl");
+    ENTER("ExportDecl");
     node_ptr_t res = nullptr;
     if (context->dataDecl()) {
         res = any2node(visitDataDecl(context->dataDecl()));
@@ -216,7 +216,7 @@ any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
             export_->addRef(Reference(ident->getText()));
         }
     }
-    leave("ExportDecl");
+    LEAVE("ExportDecl");
     if (res) {
         return res;
     } else {
@@ -228,12 +228,12 @@ any Constructor::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
 blockStmt  : WAIT? stmtBlock ;
 */
 any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
-    enter("BlockStmt");
+    ENTER("BlockStmt");
     node_ptr_t res = any2node(visitStmtBlock(context->stmtBlock()));
     if (context->WAIT()) {
         unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
-    leave("BlockStmt");
+    LEAVE("BlockStmt");
     return res;
 }
 
@@ -241,7 +241,7 @@ any Constructor::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
 any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
-    enter("StmtBlock");
+    ENTER("StmtBlock");
     node_ptr_t blockNode = nullptr;
     if (context->stmtList()) {
         blockNode = any2node(visitStmtList(context->stmtList()));
@@ -255,7 +255,7 @@ any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
         setNodeTokenRangeByContext(blockNode, context);
         *blockNode << createNodeAs<RepeatedLoad>("Stmt");
     }
-    leave("StmtBlock");
+    LEAVE("StmtBlock");
     return blockNode;
 }
 
@@ -263,7 +263,7 @@ any Constructor::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
 blockExpr  : stmtBlock | dataExpr ;
 */
 any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
-    enter("BlockExpr");
+    ENTER("BlockExpr");
     node_ptr_t res = nullptr;
     if (context->stmtBlock()) {
         res = any2node(visitStmtBlock(context->stmtBlock()));
@@ -279,7 +279,7 @@ any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
         *rep << stmt;
         *res << rep;
     }
-    leave("BlockExpr");
+    LEAVE("BlockExpr");
     return res;
 }
 
@@ -287,7 +287,7 @@ any Constructor::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
 funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 */
 any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
-    enter("FuncData");
+    ENTER("FuncData");
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     setNodeTokenRangeByContext(funcTypeNode, context);
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
@@ -342,7 +342,7 @@ any Constructor::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 
-    leave("FuncData");
+    LEAVE("FuncData");
     return funcNode;
 }
 
@@ -353,7 +353,7 @@ funcDecl   :
         FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
-    enter("FuncDecl");
+    ENTER("FuncDecl");
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     pair<size_t, size_t> typeRange = {context->getStart()->getTokenIndex(),
@@ -426,7 +426,7 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     *funcDeclNode << funcNode;
     setNodeTokenRangeByContext(funcDeclNode, context);
 
-    leave("FuncDecl");
+    LEAVE("FuncDecl");
     return funcDeclNode;
 }
 
@@ -434,12 +434,12 @@ any Constructor::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 parentIdents  : '(' identList? ','? ')' ;
 */
 any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
-    enter("ParentIdents");
+    ENTER("ParentIdents");
     vector<Reference> refs;
     if (context->identList()) {
         refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
     }
-    leave("ParentIdents");
+    LEAVE("ParentIdents");
     return refs;
 }
 
@@ -447,12 +447,12 @@ any Constructor::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) 
 bracedIdents  : '{' identList? ','? '}' ;
 */
 any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
-    enter("BracedIdents");
+    ENTER("BracedIdents");
     vector<Reference> refs;
     if (context->identList()) {
         refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
     }
-    leave("BracedIdents");
+    LEAVE("BracedIdents");
     return refs;
 }
 
@@ -460,12 +460,12 @@ any Constructor::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) 
 bracketIdents : '[' identList? ','? ']' ;
 */
 any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
-    enter("BracketIdents");
+    ENTER("BracketIdents");
     vector<Reference> refs;
     if (context->identList()) {
         refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
     }
-    leave("BracketIdents");
+    LEAVE("BracketIdents");
     return refs;
 }
 
@@ -473,7 +473,7 @@ any Constructor::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 */
 any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
-    enter("Carrier");
+    ENTER("Carrier");
     UnpackType type = UnpackType::Tuple;
     vector<Reference> refs;
     if (context->identList()) {
@@ -487,7 +487,7 @@ any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
         type = UnpackType::List;
         refs = any_cast<vector<Reference>>(visitBracketIdents(context->bracketIdents()));
     }
-    leave("Carrier");
+    LEAVE("Carrier");
     return make_tuple(type, refs);
 }
 
@@ -495,7 +495,7 @@ any Constructor::visitCarrier(OpenCMLParser::CarrierContext *context) {
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 */
 any Constructor::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
-    enter("DataDecl");
+    ENTER("DataDecl");
     bool isVar = false;
     if (context->VAR()) {
         isVar = true;
@@ -512,7 +512,7 @@ any Constructor::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
     }
 
     *dataDeclNode << any2node(visitDataList(context->dataList()));
-    leave("DataDecl");
+    LEAVE("DataDecl");
     return dataDeclNode;
 }
 
@@ -520,7 +520,7 @@ any Constructor::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
 */
 any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
-    enter("TypeDecl");
+    ENTER("TypeDecl");
     string uri;
     ImplMark implMark = ImplMark::Graph;
     Reference ref(context->identDef()->getText());
@@ -547,7 +547,7 @@ any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     }
 
     *typeDeclNode << typeOptNode;
-    leave("TypeDecl");
+    LEAVE("TypeDecl");
     return typeDeclNode;
 }
 
@@ -555,7 +555,7 @@ any Constructor::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
 useDecl    : USE (identDef '=')? identRef ;
 */
 any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
-    enter("UseDecl");
+    ENTER("UseDecl");
     Reference ref;
     if (context->identDef()) {
         ref.set(context->identDef()->getText());
@@ -563,7 +563,7 @@ any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
     Reference alias(context->identRef()->getText());
     node_ptr_t nameDeclNode = createNodeAs<NameDeclLoad>(ref, alias);
     setNodeTokenRangeByContext(nameDeclNode, context);
-    leave("UseDecl");
+    LEAVE("UseDecl");
     return nameDeclNode;
 }
 
@@ -571,7 +571,7 @@ any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
 retStmt    : (RETURN | RAISE | THROW) dataList ;
 */
 any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
-    enter("RetStmt");
+    ENTER("RetStmt");
     ExitType exitType;
     if (context->RETURN()) {
         exitType = ExitType::Return;
@@ -588,7 +588,7 @@ any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
     if (context->dataList()) {
         *exitNode << any2node(visitDataList(context->dataList()));
     }
-    leave("RetStmt");
+    LEAVE("RetStmt");
     return exitNode;
 }
 
@@ -596,9 +596,9 @@ any Constructor::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
 implMark    : INNER | OUTER ;
 */
 any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) {
-    enter("ImplMark");
+    ENTER("ImplMark");
     // NOTHING TO DO
-    leave("ImplMark");
+    LEAVE("ImplMark");
     return nullptr;
 }
 
@@ -606,9 +606,9 @@ any Constructor::visitImplMark(OpenCMLParser::ImplMarkContext *context) {
 modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
 */
 any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
-    enter("Modifiers");
+    ENTER("Modifiers");
     // NOTHING TO DO
-    leave("Modifiers");
+    LEAVE("Modifiers");
     return nullptr;
 }
 
@@ -616,9 +616,9 @@ any Constructor::visitModifiers(OpenCMLParser::ModifiersContext *context) {
 indexValue   : '...'? dataExpr ;
 */
 any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
-    enter("IndexValue");
+    ENTER("IndexValue");
     node_ptr_t res = any2node(visitDataExpr(context->dataExpr()));
-    leave("IndexValue");
+    LEAVE("IndexValue");
     return res;
 }
 
@@ -626,14 +626,14 @@ any Constructor::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
 keyTypePair  : identDef ':' typeExpr ;
 */
 any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
-    enter("KeyTypePair");
+    ENTER("KeyTypePair");
     Reference ref(context->identDef()->getText());
     node_ptr_t namedTypeNode = createNodeAs<NamedTypeLoad>(ref);
     setNodeTokenRangeByContext(namedTypeNode, context);
     if (context->typeExpr()) {
         *namedTypeNode << any2node(visitTypeExpr(context->typeExpr()));
     }
-    leave("KeyTypePair");
+    LEAVE("KeyTypePair");
     return namedTypeNode;
 }
 
@@ -641,14 +641,14 @@ any Constructor::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
 keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
 any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
-    enter("KeyValuePair");
+    ENTER("KeyValuePair");
     Reference ref(context->identDef()->getText());
     node_ptr_t namedDataNode = createNodeAs<NamedDataLoad>(ref);
     setNodeTokenRangeByContext(namedDataNode, context);
     if (context->dataExpr()) {
         *namedDataNode << any2node(visitDataExpr(context->dataExpr()));
     }
-    leave("KeyValuePair");
+    LEAVE("KeyValuePair");
     return namedDataNode;
 }
 
@@ -656,7 +656,7 @@ any Constructor::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) 
 keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
 */
 any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
-    enter("KeyParamPair");
+    ENTER("KeyParamPair");
     bool isVar = false;
     if (context->VAR()) {
         isVar = true;
@@ -671,7 +671,7 @@ any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) 
         *dataExprOptNode << any2node(visitDataExpr(context->dataExpr()));
     }
     *namedPairNode << dataExprOptNode;
-    leave("KeyParamPair");
+    LEAVE("KeyParamPair");
     return namedPairNode;
 }
 
@@ -679,13 +679,13 @@ any Constructor::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) 
 dataList     : dataExpr (',' dataExpr)* ;
 */
 any Constructor::visitDataList(OpenCMLParser::DataListContext *context) {
-    enter("DataList");
+    ENTER("DataList");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(rep, context);
     for (const auto &dataExpr : context->dataExpr()) {
         *rep << any2node(visitDataExpr(dataExpr));
     }
-    leave("DataList");
+    LEAVE("DataList");
     return rep;
 }
 
@@ -693,12 +693,12 @@ any Constructor::visitDataList(OpenCMLParser::DataListContext *context) {
 identList    : identDef (',' identDef)* ;
 */
 any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {
-    enter("IdentList");
+    ENTER("IdentList");
     std::vector<Reference> refs;
     for (const auto &identDef : context->identDef()) {
         refs.emplace_back(identDef->getText());
     }
-    leave("IdentList");
+    LEAVE("IdentList");
     return refs;
 }
 
@@ -706,13 +706,13 @@ any Constructor::visitIdentList(OpenCMLParser::IdentListContext *context) {
 indexValues  : indexValue (',' indexValue)* ;
 */
 any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
-    enter("IndexValues");
+    ENTER("IndexValues");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(rep, context);
     for (const auto &indexValue : context->indexValue()) {
         *rep << any2node(visitIndexValue(indexValue));
     }
-    leave("IndexValues");
+    LEAVE("IndexValues");
     return rep;
 }
 
@@ -720,13 +720,13 @@ any Constructor::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
 any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
-    enter("PairedValues");
+    ENTER("PairedValues");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedData");
     setNodeTokenRangeByContext(rep, context);
     for (const auto &keyValuePair : context->keyValuePair()) {
         *rep << any2node(visitKeyValuePair(keyValuePair));
     }
-    leave("PairedValues");
+    LEAVE("PairedValues");
     return rep;
 }
 
@@ -734,13 +734,13 @@ any Constructor::visitPairedValues(OpenCMLParser::PairedValuesContext *context) 
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
-    enter("PairedParams");
+    ENTER("PairedParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
     for (const auto &keyParamPair : context->keyParamPair()) {
         *rep << any2node(visitKeyParamPair(keyParamPair));
     }
-    leave("PairedParams");
+    LEAVE("PairedParams");
     return rep;
 }
 
@@ -748,7 +748,7 @@ any Constructor::visitPairedParams(OpenCMLParser::PairedParamsContext *context) 
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
 any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
-    enter("ArgumentList");
+    ENTER("ArgumentList");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     if (context->indexValues()) {
         setNodeTokenRangeByContext(dataList, context->indexValues());
@@ -759,7 +759,7 @@ any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) 
         setNodeTokenRangeByContext(namedDataList, context->pairedValues());
         namedDataList = any2node(visitPairedValues(context->pairedValues()));
     }
-    leave("ArgumentList");
+    LEAVE("ArgumentList");
     return make_pair(dataList, namedDataList);
 }
 
@@ -767,7 +767,7 @@ any Constructor::visitArgumentList(OpenCMLParser::ArgumentListContext *context) 
 indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
 any Constructor::visitIndices(OpenCMLParser::IndicesContext *context) {
-    enter("Indices");
+    ENTER("Indices");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     if (context->dataExpr(0)) {
@@ -779,7 +779,7 @@ any Constructor::visitIndices(OpenCMLParser::IndicesContext *context) {
     if (context->dataExpr(2)) {
         *dataList << any2node(visitDataExpr(context->dataExpr(2)));
     }
-    leave("Indices");
+    LEAVE("Indices");
     return dataList;
 }
 
@@ -787,14 +787,14 @@ any Constructor::visitIndices(OpenCMLParser::IndicesContext *context) {
 parentParams : '(' pairedParams? ','? ')' ;
 */
 any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
-    enter("ParentParams");
+    ENTER("ParentParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
     const auto &pairedParams = context->pairedParams();
     if (pairedParams) {
         rep = any2node(visitPairedParams(pairedParams));
     }
-    leave("ParentParams");
+    LEAVE("ParentParams");
     return rep;
 }
 
@@ -802,7 +802,7 @@ any Constructor::visitParentParams(OpenCMLParser::ParentParamsContext *context) 
 parentArgues : '(' argumentList? ','? ')' ;
 */
 any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
-    enter("ParentArgues");
+    ENTER("ParentArgues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
@@ -811,7 +811,7 @@ any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) 
         dataList = res.first;
         namedDataList = res.second;
     }
-    leave("ParentArgues");
+    LEAVE("ParentArgues");
     return make_pair(dataList, namedDataList);
 }
 
@@ -819,14 +819,14 @@ any Constructor::visitParentArgues(OpenCMLParser::ParentArguesContext *context) 
 angledParams : '<' pairedParams? ','? '>' ;
 */
 any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
-    enter("AngledParams");
+    ENTER("AngledParams");
     node_ptr_t res = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(res, context);
     const auto &pairedParams = context->pairedParams();
     if (pairedParams) {
         res = any2node(visitPairedParams(pairedParams));
     }
-    leave("AngledParams");
+    LEAVE("AngledParams");
     return res;
 }
 
@@ -834,7 +834,7 @@ any Constructor::visitAngledParams(OpenCMLParser::AngledParamsContext *context) 
 angledValues : '<' argumentList? ','? '>' ;
 */
 any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
-    enter("AngledValues");
+    ENTER("AngledValues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
@@ -843,7 +843,7 @@ any Constructor::visitAngledValues(OpenCMLParser::AngledValuesContext *context) 
         dataList = res.first;
         namedDataList = res.second;
     }
-    leave("AngledValues");
+    LEAVE("AngledValues");
     return make_pair(dataList, namedDataList);
 }
 
@@ -857,9 +857,9 @@ pattern
     ;
 */
 any Constructor::visitPattern(OpenCMLParser::PatternContext *context) {
-    enter("Pattern");
+    ENTER("Pattern");
     throw std::runtime_error("visitPattern: not implemented yet");
-    leave("Pattern");
+    LEAVE("Pattern");
     return nullptr;
 }
 
@@ -870,9 +870,9 @@ matchCase
 */
 any Constructor::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     // TODO: match case
-    enter("MatchCase");
+    ENTER("MatchCase");
     throw std::runtime_error("visitMatchCase: not implemented yet");
-    leave("MatchCase");
+    LEAVE("MatchCase");
     return nullptr;
 }
 
@@ -883,9 +883,9 @@ catchClause
 */
 any Constructor::visitCatchClause(OpenCMLParser::CatchClauseContext *context) {
     // TODO: catch clause
-    enter("CatchClause");
+    ENTER("CatchClause");
     throw std::runtime_error("visitCatchClause: not implemented yet");
-    leave("CatchClause");
+    LEAVE("CatchClause");
     return nullptr;
 }
 
@@ -897,7 +897,7 @@ ctrlExpr
     ;
 */
 any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
-    enter("CtrlExpr");
+    ENTER("CtrlExpr");
     node_ptr_t ctrlNode = nullptr;
     switch (context->getAltNumber()) {
     case 1: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
@@ -921,7 +921,7 @@ any Constructor::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     default:
         throw std::runtime_error("visitCtrlExpr: unsupported control expression type");
     }
-    leave("CtrlExpr");
+    LEAVE("CtrlExpr");
     return ctrlNode;
 }
 
@@ -932,14 +932,14 @@ dataExpr
     ;
 */
 any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) {
-    enter("DataExpr");
+    ENTER("DataExpr");
     node_ptr_t res = nullptr;
     if (context->waitExpr()) {
         res = any2node(visitWaitExpr(context->waitExpr()));
     } else if (context->ctrlExpr()) {
         res = any2node(visitCtrlExpr(context->ctrlExpr()));
     }
-    leave("DataExpr");
+    LEAVE("DataExpr");
     return res;
 }
 
@@ -947,12 +947,12 @@ any Constructor::visitDataExpr(OpenCMLParser::DataExprContext *context) {
 waitExpr : WAIT? assignExpr ;
 */
 any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
-    enter("WaitExpr");
+    ENTER("WaitExpr");
     node_ptr_t dataNode = any2node(visitAssignExpr(context->assignExpr()));
     if (context->WAIT()) {
         unwrapNodeAs<DataLoad>(dataNode)->wait();
     }
-    leave("WaitExpr");
+    LEAVE("WaitExpr");
     return dataNode;
 }
 
@@ -962,7 +962,7 @@ assignExpr
     ;
 */
 any Constructor::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
-    enter("AssignExpr");
+    ENTER("AssignExpr");
     node_ptr_t lhsNode = any2node(visitLogicalOrExpr(context->logicalOrExpr(0)));
     for (size_t i = 1; i < context->logicalOrExpr().size(); i++) {
         BinaryDataOp op;
@@ -997,7 +997,7 @@ any Constructor::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
-    leave("AssignExpr");
+    LEAVE("AssignExpr");
     return lhsNode;
 }
 
@@ -1007,7 +1007,7 @@ logicalOrExpr
     ;
 */
 any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
-    enter("LogicalOrExpr");
+    ENTER("LogicalOrExpr");
     node_ptr_t lhsNode = any2node(visitLogicalAndExpr(context->logicalAndExpr(0)));
     for (size_t i = 1; i < context->logicalAndExpr().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitLogicalAndExpr(context->logicalAndExpr(i)));
@@ -1016,7 +1016,7 @@ any Constructor::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
-    leave("LogicalOrExpr");
+    LEAVE("LogicalOrExpr");
     return lhsNode;
 }
 
@@ -1026,7 +1026,7 @@ logicalAndExpr
     ;
 */
 any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {
-    enter("LogicalAndExpr");
+    ENTER("LogicalAndExpr");
     node_ptr_t lhsNode = any2node(visitEqualityExpr(context->equalityExpr(0)));
     for (size_t i = 1; i < context->equalityExpr().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitEqualityExpr(context->equalityExpr(i)));
@@ -1035,7 +1035,7 @@ any Constructor::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *conte
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
-    leave("LogicalAndExpr");
+    LEAVE("LogicalAndExpr");
     return lhsNode;
 }
 
@@ -1045,7 +1045,7 @@ equalityExpr
     ;
 */
 any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
-    enter("EqualityExpr");
+    ENTER("EqualityExpr");
     node_ptr_t lhsNode =
         any2node(visitRelationalExpr(context->relationalExpr(0))); // get the left hand side of the equality expr
     for (size_t i = 1; i < context->relationalExpr().size(); ++i) {
@@ -1068,7 +1068,7 @@ any Constructor::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) 
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
-    leave("EqualityExpr");
+    LEAVE("EqualityExpr");
     return lhsNode;
 }
 
@@ -1078,7 +1078,7 @@ relationalExpr
     ;
 */
 any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {
-    enter("RelationalExpr");
+    ENTER("RelationalExpr");
     node_ptr_t lhsNode = any2node(visitAdditiveExpr(context->additiveExpr(0)));
     for (size_t i = 1; i < context->additiveExpr().size(); ++i) {
         BinaryDataOp op;
@@ -1100,7 +1100,7 @@ any Constructor::visitRelationalExpr(OpenCMLParser::RelationalExprContext *conte
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
-    leave("RelationalExpr");
+    LEAVE("RelationalExpr");
     return lhsNode;
 }
 
@@ -1110,7 +1110,7 @@ additiveExpr
     ;
 */
 any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
-    enter("AdditiveExpr");
+    ENTER("AdditiveExpr");
     node_ptr_t lhsNode = any2node(visitMultiplicativeExpr(context->multiplicativeExpr(0)));
     for (size_t i = 1; i < context->multiplicativeExpr().size(); i++) {
         BinaryDataOp op;
@@ -1128,7 +1128,7 @@ any Constructor::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) 
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
-    leave("AdditiveExpr");
+    LEAVE("AdditiveExpr");
     return lhsNode;
 }
 
@@ -1138,7 +1138,7 @@ multiplicativeExpr
     ;
 */
 any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {
-    enter("MultiplicativeExpr");
+    ENTER("MultiplicativeExpr");
     BinaryDataOp op;
     node_ptr_t lhsNode = any2node(visitNullableExpr(context->nullableExpr(0)));
     for (size_t i = 1; i < context->nullableExpr().size(); i++) {
@@ -1162,7 +1162,7 @@ any Constructor::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContex
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
     }
-    leave("MultiplicativeExpr");
+    LEAVE("MultiplicativeExpr");
     return lhsNode;
 }
 
@@ -1172,7 +1172,7 @@ nullableExpr
     ;
 */
 any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
-    enter("NullableExpr");
+    ENTER("NullableExpr");
     node_ptr_t res = any2node(visitUnaryExpr(context->unaryExpr()));
 
     if (context->children.size() > 1) {
@@ -1194,7 +1194,7 @@ any Constructor::visitNullableExpr(OpenCMLParser::NullableExprContext *context) 
         }
     }
 
-    leave("NullableExpr");
+    LEAVE("NullableExpr");
     return res;
 }
 
@@ -1205,7 +1205,7 @@ unaryExpr
     ;
 */
 any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
-    enter("UnaryExpr");
+    ENTER("UnaryExpr");
     node_ptr_t res = nullptr;
 
     switch (context->getAltNumber()) {
@@ -1251,7 +1251,7 @@ any Constructor::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
         throw std::runtime_error("Invalid alternative number in UnaryExpr: " + std::to_string(context->getAltNumber()));
     }
 
-    leave("UnaryExpr");
+    LEAVE("UnaryExpr");
     return res;
 }
 
@@ -1261,7 +1261,7 @@ linkExpr
     ;
 */
 any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
-    enter("LinkExpr");
+    ENTER("LinkExpr");
     node_ptr_t lhsNode = any2node(visitBindExpr(context->bindExpr(0)));
     for (size_t i = 1; i < context->bindExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
@@ -1281,7 +1281,7 @@ any Constructor::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
         *linkNode << rhsNode << dataList << namedDataList;
         lhsNode = linkNode;
     }
-    leave("LinkExpr");
+    LEAVE("LinkExpr");
     return lhsNode;
 }
 
@@ -1291,7 +1291,7 @@ bindExpr
     ;
 */
 any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {
-    enter("BindExpr");
+    ENTER("BindExpr");
     node_ptr_t lhsNode = any2node(visitAnnoExpr(context->annoExpr(0)));
     for (size_t i = 1; i < context->annoExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
@@ -1307,7 +1307,7 @@ any Constructor::visitBindExpr(OpenCMLParser::BindExprContext *context) {
         *dataNode << lhsNode << rhsNode;
         lhsNode = dataNode;
     }
-    leave("BindExpr");
+    LEAVE("BindExpr");
     return lhsNode;
 }
 
@@ -1317,7 +1317,7 @@ annoExpr
     ;
 */
 any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
-    enter("AnnoExpr");
+    ENTER("AnnoExpr");
     node_ptr_t lhsNode = any2node(visitWithExpr(context->withExpr()));
     for (size_t i = 1; i < context->children.size(); i++) {
         auto child = context->children[i];
@@ -1346,7 +1346,7 @@ any Constructor::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
             unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
         }
     }
-    leave("AnnoExpr");
+    LEAVE("AnnoExpr");
     return lhsNode;
 }
 
@@ -1356,7 +1356,7 @@ withExpr
     ;
 */
 any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
-    enter("WithExpr");
+    ENTER("WithExpr");
     node_ptr_t lhsNode = any2node(visitAccessExpr(context->accessExpr(0)));
     for (size_t i = 1; i < context->accessExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
@@ -1377,7 +1377,7 @@ any Constructor::visitWithExpr(OpenCMLParser::WithExprContext *context) {
         *withNode << rhsNode << dataList << namedDataList;
         lhsNode = withNode;
     }
-    leave("WithExpr");
+    LEAVE("WithExpr");
     return lhsNode;
 }
 
@@ -1387,7 +1387,7 @@ accessExpr
     ;
 */
 any Constructor::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
-    enter("AccessExpr");
+    ENTER("AccessExpr");
     node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData()));
     for (size_t i = 1; i < context->children.size(); i += 2) {
         string strOp = context->children[i]->getText();
@@ -1402,7 +1402,7 @@ any Constructor::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
             throw std::runtime_error("Invalid access operator: " + strOp);
         }
     }
-    leave("AccessExpr");
+    LEAVE("AccessExpr");
     return lhsNode;
 }
 
@@ -1412,7 +1412,7 @@ dictData
     ;
 */
 any Constructor::visitDictData(OpenCMLParser::DictDataContext *context) {
-    enter("DictData");
+    ENTER("DictData");
     node_ptr_t dataNode = createNodeAs<DictDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->pairedValues()) {
@@ -1420,7 +1420,7 @@ any Constructor::visitDictData(OpenCMLParser::DictDataContext *context) {
     } else {
         *dataNode << createNodeAs<RepeatedLoad>("NamedData");
     }
-    leave("DictData");
+    LEAVE("DictData");
     return dataNode;
 }
 
@@ -1430,7 +1430,7 @@ listData
     ;
 */
 any Constructor::visitListData(OpenCMLParser::ListDataContext *context) {
-    enter("ListData");
+    ENTER("ListData");
     node_ptr_t dataNode = createNodeAs<ListDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->indexValues()) {
@@ -1439,7 +1439,7 @@ any Constructor::visitListData(OpenCMLParser::ListDataContext *context) {
         *dataNode << createNodeAs<RepeatedLoad>("Data");
         // TODO: Handle list comprehension
     }
-    leave("ListData");
+    LEAVE("ListData");
     return dataNode;
 }
 
@@ -1449,7 +1449,7 @@ tupleData
     ;
 */
 any Constructor::visitTupleData(OpenCMLParser::TupleDataContext *context) {
-    enter("TupleData");
+    ENTER("TupleData");
     node_ptr_t dataNode = createNodeAs<TupleDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->dataList()) {
@@ -1457,7 +1457,7 @@ any Constructor::visitTupleData(OpenCMLParser::TupleDataContext *context) {
     } else {
         *dataNode << createNodeAs<RepeatedLoad>("Data");
     }
-    leave("TupleData");
+    LEAVE("TupleData");
     return dataNode;
 }
 
@@ -1473,7 +1473,7 @@ primaryData
     ;
 */
 any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
-    enter("PrimaryData");
+    ENTER("PrimaryData");
     node_ptr_t res;
     if (context->identRef()) {
         Reference ref(context->identRef()->getText());
@@ -1488,7 +1488,7 @@ any Constructor::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
     } else {
         res = any2node(visit(context->children[0]));
     }
-    leave("PrimaryData");
+    LEAVE("PrimaryData");
     return res;
 }
 
@@ -1505,7 +1505,7 @@ literal
     ;
 */
 any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
-    enter("Literal: " + std::to_string(context->getAltNumber()));
+    ENTER("Literal: " + std::to_string(context->getAltNumber()));
     LiteralType type;
     string data = context->getText();
     if (context->INTEGER()) {
@@ -1526,7 +1526,7 @@ any Constructor::visitLiteral(OpenCMLParser::LiteralContext *context) {
         throw std::runtime_error("Unknown literal type in visitLiteral");
     }
     Literal literal(type, data);
-    leave("Literal: " + std::to_string(context->getAltNumber()));
+    LEAVE("Literal: " + std::to_string(context->getAltNumber()));
     return literal;
 }
 
@@ -1536,7 +1536,7 @@ typeExpr
     ;
 */
 any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
-    enter("TypeExpr");
+    ENTER("TypeExpr");
     node_ptr_t lhsNode = any2node(visitUnionType(context->unionType(0)));
     if (context->children.size() > 1) {
         if (context->unionType().size() > 1) {
@@ -1551,7 +1551,7 @@ any Constructor::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
             lhsNode = nullableTypeNode;
         }
     }
-    leave("TypeExpr");
+    LEAVE("TypeExpr");
     return lhsNode;
 }
 
@@ -1561,7 +1561,7 @@ unionType
     ;
 */
 any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
-    enter("UnionType");
+    ENTER("UnionType");
     node_ptr_t lhsNode = any2node(visitInterType(context->interType(0)));
     for (size_t i = 1; i < context->interType().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitInterType(context->interType(i)));
@@ -1570,7 +1570,7 @@ any Constructor::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
-    leave("UnionType");
+    LEAVE("UnionType");
     return lhsNode;
 }
 
@@ -1580,7 +1580,7 @@ interType
     ;
 */
 any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {
-    enter("InterType");
+    ENTER("InterType");
     node_ptr_t lhsNode = any2node(visitDiffType(context->diffType(0)));
     for (size_t i = 1; i < context->diffType().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitDiffType(context->diffType(i)));
@@ -1589,7 +1589,7 @@ any Constructor::visitInterType(OpenCMLParser::InterTypeContext *context) {
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
-    leave("InterType");
+    LEAVE("InterType");
     return lhsNode;
 }
 
@@ -1599,7 +1599,7 @@ diffType
     ;
 */
 any Constructor::visitDiffType(OpenCMLParser::DiffTypeContext *context) {
-    enter("DiffType");
+    ENTER("DiffType");
     node_ptr_t lhsNode = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(0)));
     for (size_t i = 1; i < context->keyUnionDiffType().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(i)));
@@ -1608,7 +1608,7 @@ any Constructor::visitDiffType(OpenCMLParser::DiffTypeContext *context) {
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
-    leave("DiffType");
+    LEAVE("DiffType");
     return lhsNode;
 }
 
@@ -1618,7 +1618,7 @@ keyUnionDiffType
     ;
 */
 any Constructor::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context) {
-    enter("KeyUnionDiffType");
+    ENTER("KeyUnionDiffType");
     node_ptr_t lhsNode = any2node(visitKeyInterType(context->keyInterType(0)));
     for (size_t i = 1; i < context->keyInterType().size(); ++i) {
         TypeOp op;
@@ -1636,7 +1636,7 @@ any Constructor::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *c
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
-    leave("KeyUnionDiffType");
+    LEAVE("KeyUnionDiffType");
     return lhsNode;
 }
 
@@ -1646,7 +1646,7 @@ keyInterType
     ;
 */
 any Constructor::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {
-    enter("KeyInterType");
+    ENTER("KeyInterType");
     node_ptr_t lhsNode = any2node(visitTypeUnit(context->typeUnit(0)));
     for (size_t i = 1; i < context->typeUnit().size(); ++i) {
         node_ptr_t rhsNode = any2node(visitTypeUnit(context->typeUnit(i)));
@@ -1655,7 +1655,7 @@ any Constructor::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) 
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
-    leave("KeyInterType");
+    LEAVE("KeyInterType");
     return lhsNode;
 }
 
@@ -1663,14 +1663,14 @@ any Constructor::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) 
 typeUnit : (identDef OF)? listType ;
 */
 any Constructor::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
-    enter("TypeUnit");
+    ENTER("TypeUnit");
     node_ptr_t res = nullptr;
     if (context->identDef()) {
         throw std::runtime_error("visitTypeUnit: identDef is not implemented yet");
     } else if (context->listType()) {
         res = any2node(visitListType(context->listType()));
     }
-    leave("TypeUnit");
+    LEAVE("TypeUnit");
     return res;
 }
 
@@ -1680,7 +1680,7 @@ listType
     ;
 */
 any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {
-    enter("ListType");
+    ENTER("ListType");
     node_ptr_t res = any2node(visitSpecType(context->specType()));
     if (context->children.size() > 1) {
         size_t dims = (context->children.size() - 1) / 2;
@@ -1689,7 +1689,7 @@ any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {
         *listTypeNode << res;
         res = listTypeNode;
     }
-    leave("ListType");
+    LEAVE("ListType");
     return res;
 }
 
@@ -1697,7 +1697,7 @@ any Constructor::visitListType(OpenCMLParser::ListTypeContext *context) {
 typeOrData : typeExpr | CONST dataExpr ;
 */
 any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) {
-    enter("TypeOrData");
+    ENTER("TypeOrData");
     node_ptr_t res = nullptr;
     if (context->typeExpr()) {
         res = any2node(visitTypeExpr(context->typeExpr()));
@@ -1706,7 +1706,7 @@ any Constructor::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) {
     } else {
         throw std::runtime_error("Invalid TypeOrData context");
     }
-    leave("TypeOrData");
+    LEAVE("TypeOrData");
     return res;
 }
 
@@ -1716,7 +1716,7 @@ specType
     ;
 */
 any Constructor::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
-    enter("SpecType");
+    ENTER("SpecType");
     node_ptr_t res = any2node(visitPrimaryType(context->primaryType()));
     node_ptr_t specTypeNode = createNodeAs<TypeExprLoad>(TypeOp::Specialize);
     setNodeTokenRangeByContext(specTypeNode, context);
@@ -1729,7 +1729,7 @@ any Constructor::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
         *specTypeNode << res << repeatNode;
         res = specTypeNode;
     }
-    leave("SpecType");
+    LEAVE("SpecType");
     return res;
 }
 
@@ -1746,7 +1746,7 @@ primaryType
     ;
 */
 any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
-    enter("PrimaryType");
+    ENTER("PrimaryType");
     node_ptr_t res = nullptr;
     if (context->INNER_ATOM_TYPE()) {
         Reference ref(context->INNER_ATOM_TYPE()->getText());
@@ -1774,7 +1774,7 @@ any Constructor::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
         *res << createNodeAs<RefTypeLoad>(ref);
         setNodeTokenRangeByContext(res, context->identDef());
     }
-    leave("PrimaryType");
+    LEAVE("PrimaryType");
     return res;
 }
 
@@ -1784,14 +1784,14 @@ dictType
     ;
 */
 any Constructor::visitDictType(OpenCMLParser::DictTypeContext *context) {
-    enter("DictType");
+    ENTER("DictType");
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(repeatNode, context);
     for (auto &pair : context->keyTypePair()) {
         node_ptr_t pairNode = any2node(visitKeyTypePair(pair));
         *repeatNode << pairNode;
     }
-    leave("DictType");
+    LEAVE("DictType");
     return repeatNode;
 }
 
@@ -1801,14 +1801,14 @@ typeList
     ;
 */
 any Constructor::visitTypeList(OpenCMLParser::TypeListContext *context) {
-    enter("TypeList");
+    ENTER("TypeList");
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("Type");
     setNodeTokenRangeByContext(repeatNode, context);
     for (auto &typeExpr : context->typeExpr()) {
         node_ptr_t typeExprNode = any2node(visitTypeExpr(typeExpr));
         *repeatNode << typeExprNode;
     }
-    leave("TypeList");
+    LEAVE("TypeList");
     return repeatNode;
 }
 
@@ -1818,7 +1818,7 @@ tupleType
     ;
 */
 any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
-    enter("TupleType");
+    ENTER("TupleType");
     node_ptr_t res = createNodeAs<TupleTypeLoad>();
     setNodeTokenRangeByContext(res, context);
     if (context->typeList()) {
@@ -1827,7 +1827,7 @@ any Constructor::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
     } else {
         *res << createNodeAs<RepeatedLoad>("Type");
     }
-    leave("TupleType");
+    LEAVE("TupleType");
     return res;
 }
 
@@ -1837,7 +1837,7 @@ funcType
     ;
 */
 any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
-    enter("FuncType");
+    ENTER("FuncType");
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     setNodeTokenRangeByContext(funcTypeNode, context);
@@ -1884,7 +1884,7 @@ any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
     }
     *funcTypeNode << typeOptNode;
 
-    leave("FuncType");
+    LEAVE("FuncType");
     return funcTypeNode;
 }
 
@@ -1892,9 +1892,9 @@ any Constructor::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
 identDef : IDENTIFIER ;
 */
 any Constructor::visitIdentDef(OpenCMLParser::IdentDefContext *context) {
-    enter("IdentDef");
+    ENTER("IdentDef");
     Reference ref(context->IDENTIFIER()->getText());
-    leave("IdentDef");
+    LEAVE("IdentDef");
     return ref;
 }
 
@@ -1902,8 +1902,8 @@ any Constructor::visitIdentDef(OpenCMLParser::IdentDefContext *context) {
 identRef : (IDENTIFIER '::')* IDENTIFIER ;
 */
 any Constructor::visitIdentRef(OpenCMLParser::IdentRefContext *context) {
-    enter("IdentRef");
+    ENTER("IdentRef");
     Reference ref(context->getText());
-    leave("IdentRef");
+    LEAVE("IdentRef");
     return ref;
 }

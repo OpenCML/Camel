@@ -35,17 +35,18 @@ class Operator {
     OperatorFunction func_;
 
   public:
-    Operator(const func_type_ptr_t &&type, OperatorFunction &&func)
-        : name_(type->name()), type_(std::move(type)), func_(std::move(func)) {}
+    Operator(const std::string &name, const func_type_ptr_t &&type, OperatorFunction &&func)
+        : name_(name), type_(std::move(type)), func_(std::move(func)) {}
 
     const std::string &name() const { return name_; }
-    const func_type_ptr_t &type() const { return type_; }
+    const func_type_ptr_t &funcType() const { return type_; }
     const OperatorFunction &func() const { return func_; }
 };
 
-using oper_ptr_t = std::shared_ptr<Operator>;
-using oper_vec_t = std::vector<oper_ptr_t>;
+using operator_ptr_t = std::shared_ptr<Operator>;
+using operator_vec_t = std::vector<operator_ptr_t>;
 
-extern std::unordered_map<std::string, std::shared_ptr<oper_vec_t>> globalOperators;
+extern bool globalOperatorsInitialized;
+extern std::unordered_map<std::string, std::shared_ptr<operator_vec_t>> globalOperators;
 
-void registerOperator(const oper_ptr_t &&op);
+void registerOperator(const operator_ptr_t &&op);

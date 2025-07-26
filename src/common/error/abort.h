@@ -12,23 +12,16 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 17, 2024
- * Updated: Oct. 22, 2024
+ * Created: Jul. 24, 2025
+ * Updated: Jul. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "operator.h"
+#pragma once
 
-using namespace std;
+#include <exception>
 
-bool globalOperatorsInitialized = false;
-unordered_map<string, std::shared_ptr<operator_vec_t>> globalOperators;
-
-void registerOperator(const operator_ptr_t &&op) {
-    const auto &name = op->name();
-    if (globalOperators.find(name) == globalOperators.end()) {
-        globalOperators[name] = make_shared<operator_vec_t>(1, op);
-    } else {
-        globalOperators[name]->push_back(op);
-    }
-}
+class BuildAbortException : public std::exception {
+  public:
+    BuildAbortException() {}
+};

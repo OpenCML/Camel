@@ -20,344 +20,214 @@
 #include "init.h"
 #include "common/type.h"
 
-void initOperators() {
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__copy__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+inline operator_ptr_t makeOperator(const std::string &name, const func_type_ptr_t &&type, OperatorFunction &&func) {
+    return std::make_shared<Operator>(name, std::move(type), std::move(func));
+}
+
+inline func_type_ptr_t makeFuncType(const param_init_list &with, const param_init_list &norm,
+                                    const type_ptr_t &returnType) {
+    return std::make_shared<FunctionType>(with, norm, returnType);
+}
+
+void initGlobalOperators() {
+    if (globalOperatorsInitialized) {
+        return;
+    }
+    globalOperatorsInitialized = true;
+
+    registerOperator(makeOperator(
+        "__assn__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__cast__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_add__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__type__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_sub__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__index__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_mul__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__as__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_div__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__is__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_mod__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__add__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_mat__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__sub__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_exp__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__mul__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_and__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__div__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__assn_or__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__mod__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__or__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__pow__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__and__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__inter__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__eq__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__union__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__neq__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__strict_eq__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_add__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__strict_neq__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_sub__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__lt__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_mul__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__le__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_div__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__gt__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_mod__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__ge__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_pow__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__add__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_inter__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__sub__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__assn_union__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__mul__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__lt__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__div__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__gt__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__mod__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__le__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__mat__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__ge__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__exp__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__eq__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
-        [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
-
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__ne__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
-        [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
-
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__and__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
-        [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
-
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__or__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
-        [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
-
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__not__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
-        [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
-
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__neg__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
-        [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
-
-    registerOperator(std::make_shared<Operator>(
-        std::make_shared<FunctionType>(
-            "__rev__",
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"a", int64TypePtr, nullptr}}),
-            std::make_shared<ParamsType>(
-                std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>>{{"b", int64TypePtr, nullptr}}),
-            int64TypePtr),
+    registerOperator(makeOperator(
+        "__idx__",
+        makeFuncType(param_init_list{},
+                     param_init_list{{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+                     anyTypePtr),
         [](Context &ctx, data_vec_t &&args) -> data_ptr_t { return nullptr; }));
 }

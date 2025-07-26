@@ -26,44 +26,42 @@ using namespace std;
 
 namespace GraphConstructTree {
 
-std::string to_string(NodeType type) {
+std::string to_string(LoadType type) {
     switch (type) {
-    case NodeType::DATA:
+    case LoadType::DATA:
         return "DATA";
-    case NodeType::VARI:
+    case LoadType::VARI:
         return "VARI";
-    case NodeType::TYPE:
+    case LoadType::TYPE:
         return "TYPE";
-    case NodeType::DECL:
+    case LoadType::DECL:
         return "DECL";
-    case NodeType::FUNC:
+    case LoadType::FUNC:
         return "FUNC";
-    case NodeType::NREF:
+    case LoadType::NREF:
         return "NREF";
-    case NodeType::DREF:
+    case LoadType::DREF:
         return "DREF";
-    case NodeType::WAIT:
+    case LoadType::WAIT:
         return "WAIT";
-    case NodeType::ANNO:
+    case LoadType::ANNO:
         return "ANNO";
-    case NodeType::LINK:
+    case LoadType::LINK:
         return "LINK";
-    case NodeType::WITH:
+    case LoadType::WITH:
         return "WITH";
-    case NodeType::BIND:
+    case LoadType::BIND:
         return "BIND";
-    case NodeType::EXIT:
+    case LoadType::EXIT:
         return "EXIT";
-    case NodeType::EXEC:
+    case LoadType::EXEC:
         return "EXEC";
-    case NodeType::FROM:
-        return "FROM";
-    case NodeType::ACCS:
+    case LoadType::ACCS:
         return "ACCS";
-    case NodeType::BRCH:
+    case LoadType::BRCH:
         return "BRCH";
     default:
-        assert(false && "Unknown NodeType");
+        ASSERT(false, "Unknown NodeType");
     }
 }
 
@@ -86,29 +84,21 @@ const string TypeLoad::toString() const {
     return ss.str();
 }
 
-const string DeclLoad::toString() const { return "DECL: " + ref_.toString(); }
+const string DeclLoad::toString() const { return "DECL: " + std::string(isFunc_ ? "func " : "type ") + ref_.toString(); }
 
 const string FuncLoad::toString() const {
     stringstream ss;
-    ss << "FUNC: " << funcType_->toString();
+    ss << "FUNC: ";
+    if (!name_.empty()) {
+        ss << name_;
+    } else {
+        ss << "(anonymous)";
+    }
     return ss.str();
 }
 
 const string NRefLoad::toString() const { return "NREF: " + ref_.toString(); }
 
 const string DRefLoad::toString() const { return "DREF: " + ref_.toString(); }
-
-const string FromLoad::toString() const {
-    ostringstream oss;
-    oss << "FROM: " << path_ << " USE { ";
-    if (idents_.empty()) {
-        oss << "*";
-    } else {
-        copy(idents_.begin(), idents_.end() - 1, ostream_iterator<string>(oss, ", "));
-        oss << idents_.back();
-    }
-    oss << " }";
-    return oss.str();
-}
 
 } // namespace GraphConstructTree

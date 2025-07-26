@@ -23,17 +23,23 @@
 #include "common/impl.h"
 #include "special.h"
 
+using param_init_list = std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>;
+
 class FunctionType : public SpecialType {
   public:
-    FunctionType() = delete;
-    FunctionType(const std::string &&name, const std::shared_ptr<ParamsType> &withType,
-                 const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
+    FunctionType();
+    FunctionType(const std::shared_ptr<ParamsType> &withParamsType, const std::shared_ptr<ParamsType> &paramsType,
+                 const type_ptr_t &returnType);
+    FunctionType(const param_init_list &withParamsList, const param_init_list &normParamsList,
+                 const type_ptr_t &returnType);
 
-    const std::string &name() const { return name_; }
     const std::string &argNameAt(size_t idx) const;
 
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
+
+    const std::string &uri() const { return uri_; }
+    void setUri(const std::string &uri) { uri_ = uri; }
 
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
@@ -43,9 +49,12 @@ class FunctionType : public SpecialType {
     bool addIdent(const std::string &ident, bool isVar);
     bool hasSideEffect() const;
 
-    type_ptr_t withType() const;
-    type_ptr_t linkType() const;
+    type_ptr_t withParamsType() const;
+    type_ptr_t normParamsType() const;
     type_ptr_t returnType() const;
+
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> withParams() const;
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> normParams() const;
 
     const std::unordered_map<std::string, bool> &variableMap() const { return variableMap_; }
 
@@ -57,11 +66,11 @@ class FunctionType : public SpecialType {
     TypeConv convertibility(const Type &other) const override;
 
   private:
-    std::string name_;
     ImplMark implMark_ = ImplMark::Graph;
+    std::string uri_;
     ModifierSet modifiers_ = Modifier::None;
-    std::shared_ptr<ParamsType> withType_;
-    std::shared_ptr<ParamsType> linkType_;
+    std::shared_ptr<ParamsType> withParamsType_;
+    std::shared_ptr<ParamsType> normParamsType_;
     std::unordered_map<std::string, bool> variableMap_;
     bool hasSideEffect_ = false;
     type_ptr_t returnType_;

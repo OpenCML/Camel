@@ -21,11 +21,12 @@
 #include <iostream>
 
 #include "common/context.h"
+#include "common/error/abort.h"
 #include "common/gct.h"
 #include "common/graph.h"
 #include "gct.h"
 
-namespace GraphIR {
+namespace GraphIntermediateRepresentation {
 
 using void_ptr_t = void *;
 
@@ -34,6 +35,9 @@ class Constructor {
     Constructor(context_ptr_t &context) : context_(context) {}
 
     graph_ptr_t construct(GCT::node_ptr_t &gct, diagnostics_ptr_t diagnostics) {
+        waited_ = false;
+        synced_ = false;
+        varied_ = false;
         diagnostics_ = diagnostics;
         visit(gct);
         return context_->rootGraph();
@@ -42,31 +46,38 @@ class Constructor {
   private:
     context_ptr_t context_;
     diagnostics_ptr_t diagnostics_;
-    std::unordered_map<func_type_ptr_t, func_ptr_t> funcCache_;
 
-    void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange, Diagnostic::Severity sev) {
-        diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
+    bool waited_;
+    bool synced_;
+    bool varied_;
+
+    std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
+    node_ptr_t lastCalledFuncNode_;
+
+    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
+                          std::pair<size_t, size_t> tokenRange = {0, 0}) {
+        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 
-    void cacheFunc(func_type_ptr_t key, func_ptr_t node) { funcCache_[key] = node; }
-    void delCachedFunc(func_type_ptr_t key) { funcCache_.erase(key); }
-    func_ptr_t getCachedFunc(func_type_ptr_t key) { return funcCache_[key]; }
+    node_ptr_t resolveNodeByRef(const std::string &name);
 
     std::any visit(const GCT::node_ptr_t &gct);
 
+    void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
+    graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitVariNode(const GCT::node_ptr_t &gct);
     type_ptr_t visitTypeNode(const GCT::node_ptr_t &gct);
-    func_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitNRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDRefNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitVariNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitWaitNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitLinkNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitWithNode(const GCT::node_ptr_t &gct);
-    void_ptr_t visitRetnNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitBindNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitAccsNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitBrchNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
+    void_ptr_t visitExitNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitExecNode(const GCT::node_ptr_t &gct);
-    void_ptr_t visitFromNode(const GCT::node_ptr_t &gct);
 };
-} // namespace GraphIR
+} // namespace GraphIntermediateRepresentation

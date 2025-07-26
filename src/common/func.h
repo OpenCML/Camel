@@ -19,12 +19,12 @@
 
 #pragma once
 
-#include <cassert>
 #include <cstdint>
 #include <ostream>
 #include <string>
 #include <vector>
 
+#include "utils/assert.h"
 #include "utils/str.h"
 
 enum Modifier : uint32_t {
@@ -55,7 +55,7 @@ inline std::string to_string(Modifier mod) {
     case Modifier::None:
         return "";
     default:
-        assert(false && "Unknown Modifier");
+        ASSERT(false, "Unknown Modifier");
         return "unknown";
     }
 }
@@ -83,7 +83,7 @@ inline std::string to_string(ExitType type) {
     case ExitType::Throw:
         return "throw";
     default:
-        assert(false && "Unknown ExitType");
+        ASSERT(false, "Unknown ExitType");
         return "unknown";
     }
 }
@@ -101,6 +101,11 @@ class ModifierSet {
     void remove(Modifier mod) { mask &= ~mod; }
     bool has(Modifier mod) const { return mask & mod; }
     void clear() { mask = static_cast<ModifierMask>(Modifier::None); }
+
+    bool atomic() const { return has(Modifier::Atomic); }
+    bool shared() const { return has(Modifier::Shared); }
+    bool sync() const { return has(Modifier::Sync); }
+    bool macro() const { return has(Modifier::Macro); }
 
     bool empty() const { return mask == static_cast<ModifierMask>(Modifier::None); }
 

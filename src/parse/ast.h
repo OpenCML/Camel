@@ -52,8 +52,8 @@ class Constructor : public OpenCMLVisitor {
     std::vector<std::shared_ptr<ImportLoad>> imports_;
     std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
 
-    void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange, Diagnostic::Severity sev) {
-        diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
+    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg, std::pair<size_t, size_t> tokenRange = {0, 0}) {
+        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 
     // Auto-generated visitor methods

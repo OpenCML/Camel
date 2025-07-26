@@ -50,7 +50,7 @@ void VectorData::emplace(const data_ptr_t &e) {
 }
 
 void VectorData::pushBack(const data_ptr_t &e) {
-    cml_assert(resolved(), "Cannot push data to unresolved VectorData");
+    ASSERT(resolved(), "Cannot push data to unresolved VectorData");
     if (e->type()->convertibility(*type_) != TypeConv::SAFE) {
         throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
     }
@@ -58,7 +58,7 @@ void VectorData::pushBack(const data_ptr_t &e) {
 }
 
 data_ptr_t VectorData::popBack() {
-    cml_assert(resolved(), "Cannot pop data from unresolved VectorData");
+    ASSERT(resolved(), "Cannot pop data from unresolved VectorData");
     if (data_.empty()) {
         return nullptr;
     }
@@ -68,7 +68,7 @@ data_ptr_t VectorData::popBack() {
 }
 
 data_ptr_t VectorData::get(size_t index) const {
-    cml_assert(resolved(), "Cannot get data from unresolved VectorData");
+    ASSERT(resolved(), "Cannot get data from unresolved VectorData");
     if (index >= data_.size()) {
         return nullptr;
     }
@@ -76,7 +76,7 @@ data_ptr_t VectorData::get(size_t index) const {
 }
 
 bool VectorData::set(size_t index, const data_ptr_t &e) {
-    cml_assert(resolved(), "Cannot set data to unresolved VectorData");
+    ASSERT(resolved(), "Cannot set data to unresolved VectorData");
     if (index >= data_.size()) {
         return false;
     }
@@ -145,7 +145,7 @@ void VectorData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
         return;
     }
-    cml_assert(refs_.size() == dataList.size(), "DataList size mismatch");
+    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refs_.size(); i++) {
         size_t idx = refs_[i];
         data_[idx] = dataList[i];

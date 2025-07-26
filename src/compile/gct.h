@@ -24,34 +24,13 @@
 #include <string>
 
 #include "common/ast/ast.h"
+#include "common/error/abort.h"
 #include "common/error/diagnostic.h"
 #include "common/gct.h"
 #include "common/scope.h"
-#include "common/tree.h"
 
 namespace GraphConstructTree {
 using void_ptr_t = void *;
-
-class BuildAbortException : public std::exception {
-  public:
-    BuildAbortException() {}
-};
-
-class Node : public AbstractTreeNode<load_ptr_t, Node> {
-  public:
-    Node(load_ptr_t load) : AbstractTreeNode(load) {}
-    virtual ~Node() = default;
-
-    NodeType type() const { return load_->type(); }
-    std::string toString() const { return load_->toString(); }
-
-    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
-        return std::dynamic_pointer_cast<LoadType>(load_);
-    }
-    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
-        return std::dynamic_pointer_cast<LoadType>(load_);
-    }
-};
 
 class Constructor {
   public:
@@ -80,9 +59,9 @@ class Constructor {
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
-    void reportDiagnostic(const std::string &msg, std::pair<size_t, size_t> tokenRange,
-                          Diagnostic::Severity sev = Diagnostic::Severity::Error) {
-        diagnostics_->emplace(msg, tokenRange.first, tokenRange.second, sev);
+    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
+                          std::pair<size_t, size_t> tokenRange = {0, 0}) {
+        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 
     void pushScope() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(typeScope_); }

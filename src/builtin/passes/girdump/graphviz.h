@@ -25,22 +25,25 @@
 class GraphVizDumpPass : public GraphIRPass {
     context_ptr_t context_;
 
-    uintptr_t ptrCnt = 0;
     bool showRawPtr = false;
-    std::unordered_map<uintptr_t, uintptr_t> ptrsMap_;
-    std::unordered_map<func_type_ptr_t, std::string> lambdaFuncIdents_;
+    std::unordered_map<std::string, size_t> ptrCnt_;
+    std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
+    std::unordered_map<GIR::graph_ptr_t, std::string> lambdaFuncIdents_;
 
     size_t depth_ = 0;
     std::string baseIndent_;
     const std::string indent_ = "    ";
+    std::unordered_map<GIR::node_ptr_t, std::string> nodeIdents_;
 
     void pushIndent();
     void popIndent();
 
-    std::string pointerToIdent(const void *ptr);
+    std::string pointerToIdent(const void *ptr, const char *prefix = "N");
 
   public:
-    GraphVizDumpPass(const context_ptr_t &context) : context_(context) {};
+    GraphVizDumpPass(const context_ptr_t &context) : context_(context) {
+        nodeIdents_ = context_->buildNodeIdentsMap();
+    };
     virtual ~GraphVizDumpPass() = default;
 
     void reset() override;

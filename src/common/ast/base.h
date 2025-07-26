@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <cassert>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -29,6 +28,7 @@
 #include "common/literal.h"
 #include "common/ref.h"
 #include "common/tree.h"
+#include "utils/assert.h"
 
 namespace AbstractSyntaxTree {
 
@@ -91,27 +91,26 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
     std::string toString() const { return load_->toString(); }
 
     template <typename T> node_ptr_t atAs(size_t index) const {
-        // safe check for index and type
-        assert(index < children_.size() && "Index out of bounds");
-        assert(children_.at(index) != nullptr && "Child node is null");
-        assert(std::dynamic_pointer_cast<T>(children_.at(index)->load()) && "Dynamic pointer cast failed");
+        ASSERT(index < children_.size(), "Index out of bounds");
+        ASSERT(children_.at(index) != nullptr, "Child node is null");
+        ASSERT(std::dynamic_pointer_cast<T>(children_.at(index)->load()), "Dynamic pointer cast failed");
         return children_.at(index);
     }
     template <typename T> node_ptr_t optAtAs(size_t index) const {
         const auto &opt = at(index);
-        assert(opt->type() == LoadType::Optional && "Expected OptionalLoad type");
+        ASSERT(opt->type() == LoadType::Optional, "Expected OptionalLoad type");
         if (opt->load()->type() == LoadType::Optional && opt->empty()) {
-            return nullptr; // return null if it's an empty optional
+            return nullptr;
         }
         return opt->atAs<T>(0);
     }
 
     template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
-        assert(std::dynamic_pointer_cast<LoadType>(load_) && "Load type cast failed");
+        ASSERT(std::dynamic_pointer_cast<LoadType>(load_), "Load type cast failed");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
     template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
-        assert(std::dynamic_pointer_cast<LoadType>(load_) && "Load type does not match requested type");
+        ASSERT(std::dynamic_pointer_cast<LoadType>(load_), "Load type does not match requested type");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
 };

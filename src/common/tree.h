@@ -63,9 +63,18 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
 
     void setParent(node_t *parent) { parent_ = parent; }
 
+    node_ptr_t clone() { // no parent in the cloned node
+        node_ptr_t newNode = std::make_shared<node_t>(load_);
+        for (const auto &child : children_) {
+            *newNode << child->clone();
+        }
+        return newNode;
+    }
+
     // ------------------ Add Child ------------------
     node_t &operator<<(const node_ptr_t &node) {
         if (node != nullptr) {
+            ASSERT(node->parent_ == nullptr, "Node already has a parent");
             node->parent_ = static_cast<node_t *>(this);
             children_.push_back(node);
         }
