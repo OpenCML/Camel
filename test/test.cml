@@ -1,7 +1,7 @@
 func print() {return 0}
 func sleep() {return 0}
 func len() {return 0}
-func push() {return 0}
+func push(var input: any) {return 0}
 func head() {return 0}
 func tail() {return 0}
 func new() {return 0}
@@ -25,3 +25,11 @@ macro sync func MLP(input: int, configs: (int, Model?)[]): Model {
         return rest
     }
 }
+
+// with <var weights: Tensor[], var biases: Tensor[]>
+// macro sync func MLP(input: int, configs: (int, Model?)[]): Model {
+//     let output, act = configs.head()
+//     wait weights.push(new([input, output]))
+//     wait biases.push(new([output]))
+//     return rest
+// }

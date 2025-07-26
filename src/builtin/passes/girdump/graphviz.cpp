@@ -106,13 +106,16 @@ std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) 
     return result;
 }
 
-string GraphVizDumpPass::pointerToIdent(const void *ptr) {
+string GraphVizDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
     uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
+    string prefixStr(prefix);
+
     if (!showRawPtr) {
-        if (ptrsMap_.find(ptrVal) == ptrsMap_.end()) {
-            ptrsMap_[ptrVal] = ptrCnt++;
+        auto &mapForPrefix = ptrsMap_[prefixStr];
+        if (mapForPrefix.find(ptrVal) == mapForPrefix.end()) {
+            mapForPrefix[ptrVal] = ptrCnt_[prefixStr]++;
         }
-        ptrVal = ptrsMap_[ptrVal];
+        ptrVal = mapForPrefix[ptrVal];
     }
 
     int hexDigits = 1;
@@ -124,7 +127,7 @@ string GraphVizDumpPass::pointerToIdent(const void *ptr) {
     int width = ((hexDigits + 1) / 2) * 2;
 
     stringstream ss;
-    ss << "P" << hex << uppercase << setw(width) << setfill('0') << ptrVal << dec << nouppercase;
+    ss << prefix << hex << uppercase << setw(width) << setfill('0') << ptrVal << dec << nouppercase;
     return ss.str();
 }
 
@@ -143,8 +146,8 @@ void GraphVizDumpPass::reset() {}
 void GraphVizDumpPass::reset(context_ptr_t &context) { context_ = context; }
 
 any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
-    string funcId = pointerToIdent(graph.get());
-    string exitId = pointerToIdent(graph->arena().get());
+    string funcId = pointerToIdent(graph.get(), "F");
+    string exitId = pointerToIdent(graph->arena().get(), "R");
     string funcName = graph->name().empty() ? lambdaFuncIdents_[graph] : graph->name();
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
@@ -180,13 +183,17 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     if (!graph->isRoot()) {
         res += baseIndent_ + indent_ + funcId + " [label=\"ARGS\", style=dashed, shape=circle];\r\n";
     }
-    size_t dataCnt = 0;
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); i++) {
         string label;
+        const node_ptr_t &node = nodes[i];
+        const auto &name = nodeIdents_.find(node);
+        if (name != nodeIdents_.end()) {
+            label = name->second;
+        }
         string shape = "circle";
         string style = "solid";
-        const node_ptr_t &node = nodes[i];
+        string size = "";
         switch (node->type()) {
         case NodeType::Select: {
             auto selectNode = tt::as_shared<SelectNode>(node);
@@ -198,10 +205,18 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
             shape = "diamond";
             break;
         }
-        case NodeType::Access:
-            [[fallthrough]];
-        case NodeType::Struct:
-            [[fallthrough]];
+        case NodeType::Access: {
+            auto accessNode = tt::as_shared<AccessNode>(node);
+            label = "$" + accessNode->indexAsString() + ": " + label;
+            break;
+        }
+        case NodeType::Struct: {
+            auto structNode = tt::as_shared<StructNode>(node);
+            label = structNode->dataType()->toString();
+            shape = "box";
+            size = "width=1, height=0.5";
+            break;
+        }
         case NodeType::Source: {
             if (portsNameMap.find(i) != portsNameMap.end()) {
                 label = portsNameMap[i].first;
@@ -211,13 +226,6 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
                 if (node->type() == NodeType::Source) {
                     data_ptr_t data = node->eval(graph->arena());
                     label = data->toString();
-                } else {
-                    const auto &name = nodeIdents_.find(node);
-                    if (name != nodeIdents_.end()) {
-                        label = name->second;
-                    } else {
-                        label = "__N" + to_string(dataCnt++) + "__";
-                    }
                 }
             }
             break;
@@ -225,7 +233,8 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         case NodeType::Function: {
             func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
             label = func->name().empty() ? lambdaFuncIdents_[func->graph()] : func->name();
-            shape = "diamond";
+            shape = "Mdiamond";
+            size = "width=1.1, height=1.1";
             break;
         }
         case NodeType::Operator: {
@@ -238,7 +247,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
             throw runtime_error("Unknown node type");
         }
         res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + escape(wrapText(label, 8, 2)) +
-               "\", shape=" + shape + ", style=" + style + "];\r\n";
+               "\", shape=" + shape + ", style=" + style + (size.empty() ? ("") : (", " + size)) + "];\r\n";
     }
     if (!graph->isRoot()) {
         res += baseIndent_ + indent_ + exitId + " [label=\"RETN\", shape=doublecircle, width=0.9, height=0.9];\r\n";
@@ -271,7 +280,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
                 continue;
             }
             res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
-                   " [label=\"" + to_string(i) + "\", style=dashed, arrowhead=empty];\r\n";
+                   " [style=dashed, arrowhead=empty];\r\n";
         }
         if (node.get() == retNodePtr) {
             res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + exitId + ";\r\n";

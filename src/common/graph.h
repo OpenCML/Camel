@@ -231,6 +231,13 @@ class AccessNode : public Node {
 
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
+    std::string indexAsString() const {
+        if (std::holds_alternative<size_t>(index_)) {
+            return std::to_string(std::get<size_t>(index_));
+        } else {
+            return std::get<std::string>(index_);
+        }
+    }
 
     data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 
@@ -239,15 +246,20 @@ class AccessNode : public Node {
 };
 
 class StructNode : public Node {
+    type_ptr_t dataType_;
+
   public:
-    StructNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Struct, index) {}
+    StructNode(graph_ptr_t graph, const DataIndex &index, type_ptr_t type)
+        : Node(graph, NodeType::Struct, index), dataType_(type) {}
     ~StructNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
-        auto node = std::make_shared<StructNode>(graph, index);
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, type_ptr_t type) {
+        auto node = std::make_shared<StructNode>(graph, index, type);
         graph->addNode(node);
         return node;
     }
+
+    type_ptr_t dataType() const { return dataType_; }
 
     data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };

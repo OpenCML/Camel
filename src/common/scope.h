@@ -47,7 +47,8 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     mutable std::shared_mutex rwMutex_;
     std::unordered_map<Key, Val> map_;
     scope_ptr_t outer_;
-    std::unordered_map<Name, scope_ptr_t> innerScopes_;
+    std::vector<scope_ptr_t> innerScopes_;
+    std::unordered_map<Name, scope_ptr_t> innerScopeMap_;
 
   public:
     Scope() = default;
@@ -56,9 +57,10 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     Scope(scope_ptr_t outer) : map_(), outer_(std::move(outer)) {}
 
     scope_ptr_t &outer() { return outer_; }
-    std::vector<scope_ptr_t> innerScopes() const {
+    const std::vector<scope_ptr_t> &innerScopes() const { return innerScopes_; }
+    std::vector<scope_ptr_t> innerScopeMap() const {
         std::vector<scope_ptr_t> scopes;
-        for (const auto &pair : innerScopes_) {
+        for (const auto &pair : innerScopeMap_) {
             scopes.push_back(pair.second);
         }
         return scopes;
@@ -116,6 +118,14 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
         }
     }
 
+    scope_ptr_t root() {
+        // std::shared_lock<std::shared_mutex> lock(rwMutex_);
+        scope_ptr_t current = this->shared_from_this();
+        while (current->outer_) {
+            current = current->outer_;
+        }
+        return current;
+    }
     bool isRoot() const { return !outer_; }
 
     std::unordered_map<Key, Val> self() const { return map_; }
@@ -127,17 +137,19 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     }
 
     scope_ptr_t enter(Name name = Name()) {
+        scope_ptr_t newScope;
         if (!name.empty()) {
-            auto it = innerScopes_.find(name);
-            if (it != innerScopes_.end()) {
+            auto it = innerScopeMap_.find(name);
+            if (it != innerScopeMap_.end()) {
                 return it->second;
             }
-            auto newScope = std::make_shared<Scope<Key, Val, Name>>(this->shared_from_this());
-            innerScopes_[name] = newScope;
-            return newScope;
+            newScope = std::make_shared<Scope<Key, Val, Name>>(this->shared_from_this());
+            innerScopeMap_[name] = newScope;
         } else {
-            return std::make_shared<Scope<Key, Val, Name>>(this->shared_from_this());
+            newScope = std::make_shared<Scope<Key, Val, Name>>(this->shared_from_this());
         }
+        innerScopes_.push_back(newScope);
+        return newScope;
     }
 
     scope_ptr_t leave() {

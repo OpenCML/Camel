@@ -71,7 +71,7 @@ std::unordered_map<GIR::node_ptr_t, std::string> Context::buildNodeIdentsMap() c
             self(self, innerScope);
         }
     };
-    visit(visit, nodeScope_); // Recursive lambda to visit all inner scopes
+    visit(visit, nodeScope_->root()); // Recursive lambda to visit all inner scopes
     return identsMap;
 }
 

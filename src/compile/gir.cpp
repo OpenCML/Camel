@@ -141,7 +141,7 @@ node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
         node = SourceNode::create(context_->currGraph(), index);
     } else {
         DataIndex index = graph->addRuntimeConstant(data);
-        node = StructNode::create(context_->currGraph(), index);
+        node = StructNode::create(context_->currGraph(), index, data->type());
         for (const string &ref : data->refs()) {
             Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
         }
@@ -280,11 +280,19 @@ node_ptr_t Constructor::visitBindNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
     ENTER("ACCS");
+    any res = visit(gct->at(0));
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of ACCS node.");
+    node_ptr_t tgtNode = any_cast<node_ptr_t>(res);
+    if (tgtNode == nullptr) {
+        reportDiagnostic(Diagnostic::Severity::Error, "Access node target is null.");
+        throw BuildAbortException();
+    }
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     graph_ptr_t &graph = context_->currGraph();
     DataIndex index = graph->addRuntimeConstant(nullptr);
     // TODO: here may need inplace access to the data
     node_ptr_t accsNode = AccessNode::create(graph, index, accsLoad->index());
+    Node::link(LinkType::Norm, tgtNode, accsNode);
     LEAVE("ACCS");
     return accsNode;
 }
@@ -296,7 +304,7 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of BRCH node.");
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
     node_ptr_t brchNode = SelectNode::create(context_->currGraph(), condNode->index(), SelectNode::SelectType::Branch);
-    Node::link(LinkType::Ctrl, condNode, brchNode);
+    Node::link(LinkType::Norm, condNode, brchNode);
 
     graph_ptr_t tGraph = context_->enterScope();
     tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
