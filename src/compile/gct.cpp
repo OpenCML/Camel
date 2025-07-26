@@ -568,16 +568,16 @@ node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__strict_neq__");
     } break;
     case AST::BinaryDataOp::Less: {
-        opNode = createNodeAs<DRefLoad>("__less__");
+        opNode = createNodeAs<DRefLoad>("__lt__");
     } break;
     case AST::BinaryDataOp::LessEq: {
-        opNode = createNodeAs<DRefLoad>("__less_eq__");
+        opNode = createNodeAs<DRefLoad>("__le__");
     } break;
     case AST::BinaryDataOp::Greater: {
-        opNode = createNodeAs<DRefLoad>("__greater__");
+        opNode = createNodeAs<DRefLoad>("__gt__");
     } break;
     case AST::BinaryDataOp::GreaterEq: {
-        opNode = createNodeAs<DRefLoad>("__greater_eq__");
+        opNode = createNodeAs<DRefLoad>("__ge__");
     } break;
     case AST::BinaryDataOp::Add: {
         opNode = createNodeAs<DRefLoad>("__add__");
@@ -601,7 +601,7 @@ node_ptr_t Constructor::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__exp__");
     } break;
     case AST::BinaryDataOp::Index: {
-        opNode = createNodeAs<DRefLoad>("__index__");
+        opNode = createNodeAs<DRefLoad>("__idx__");
     } break;
     default:
         ASSERT(false, "Unknown binary operation");
@@ -1141,6 +1141,11 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
 
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+        bool isVar = paramLoad->isVar();
+        if (isVar && !typeLoad->modifiers().sync()) {
+            reportDiagnostic(Diagnostic::Severity::Warning, "Variable parameters are only allowed in sync functions",
+                             paramLoad->tokenRange());
+        }
         const Reference &paramRef = paramLoad->getRef();
         if (!paramRef.isAlone()) {
             reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
@@ -1160,7 +1165,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
         }
-        bool success = funcType->addIdent(name, paramLoad->isVar());
+        bool success = funcType->addIdent(name, isVar);
         if (!success) {
             reportDiagnostic(Diagnostic::Severity::Error, "Duplicate parameter detected: " + name,
                              paramLoad->tokenRange());
@@ -1171,6 +1176,11 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
 
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+        bool isVar = paramLoad->isVar();
+        if (isVar && !typeLoad->modifiers().sync()) {
+            reportDiagnostic(Diagnostic::Severity::Warning, "Variable parameters are only allowed in sync functions",
+                             paramLoad->tokenRange());
+        }
         const Reference &paramRef = paramLoad->getRef();
         if (!paramRef.isAlone()) {
             reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
@@ -1190,7 +1200,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
         }
-        bool success = funcType->addIdent(name, paramLoad->isVar());
+        bool success = funcType->addIdent(name, isVar);
         if (!success) {
             reportDiagnostic(Diagnostic::Severity::Error, "Duplicate parameter detected: " + name,
                              paramLoad->tokenRange());

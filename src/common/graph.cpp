@@ -67,7 +67,6 @@ node_ptr_t Graph::addPort() {
     DataIndex index = arena_->addConstant(nullptr, false);
     ports_.push_back(index);
     node_ptr_t portNode = SourceNode::create(shared_from_this(), index);
-    addNode(portNode);
     return portNode;
 }
 

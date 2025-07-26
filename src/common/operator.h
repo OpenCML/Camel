@@ -39,7 +39,7 @@ class Operator {
         : name_(name), type_(std::move(type)), func_(std::move(func)) {}
 
     const std::string &name() const { return name_; }
-    const func_type_ptr_t &type() const { return type_; }
+    const func_type_ptr_t &funcType() const { return type_; }
     const OperatorFunction &func() const { return func_; }
 };
 

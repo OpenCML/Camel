@@ -27,8 +27,8 @@
 #include "operator.h"
 #include "scope.h"
 
-using node_scope_t = Scope<std::string, std::pair<GIR::node_ptr_t, GIR::node_ptr_t>>;
-using node_scope_ptr_t = scope_ptr_t<std::string, std::pair<GIR::node_ptr_t, GIR::node_ptr_t>>; // pair<node, modifier>
+using node_scope_t = Scope<std::string, GIR::node_ptr_t>;
+using node_scope_ptr_t = scope_ptr_t<std::string, GIR::node_ptr_t>;
 using graph_scope_t = Scope<std::string, std::shared_ptr<GIR::graph_vec_t>>;
 using graph_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<GIR::graph_vec_t>>;
 using operator_scope_t = Scope<std::string, std::shared_ptr<operator_vec_t>>;
@@ -53,12 +53,12 @@ class Context {
     GIR::graph_ptr_t &rootGraph() { return rootGraph_; }
     GIR::graph_ptr_t &currGraph() { return currGraph_; }
 
-    GIR::graph_ptr_t enterScope(const std::string &name);
+    GIR::graph_ptr_t enterScope(const std::string &name = "");
     void leaveScope();
 
     std::unordered_map<GIR::node_ptr_t, std::string> buildNodeIdentsMap() const;
 
-    std::optional<std::pair<GIR::node_ptr_t, GIR::node_ptr_t>> nodeAt(const std::string &name) {
+    std::optional<GIR::node_ptr_t> nodeAt(const std::string &name) {
         return nodeScope_->get(name);
     }
     std::optional<std::shared_ptr<GIR::graph_vec_t>> graphAt(const std::string &name) { return graphScope_->get(name); }

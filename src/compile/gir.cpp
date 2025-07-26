@@ -33,8 +33,7 @@ node_ptr_t Constructor::resolveNodeByRef(const std::string &name) {
         reportDiagnostic(Diagnostic::Severity::Error, "Unresolved reference: " + name);
         throw BuildAbortException();
     }
-    auto [srcNode, modifier] = optSrcNode.value();
-    return modifier == nullptr ? srcNode : modifier;
+    return optSrcNode.value();
 }
 
 any Constructor::visit(const GCT::node_ptr_t &node) {
@@ -88,13 +87,13 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
     type_ptr_t type = typeNode->loadAs<GCT::TypeLoad>()->dataType();
     func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
-    const auto &withType = tt::as_shared<ParamsType>(funcType->withType());
-    const auto &linkType = tt::as_shared<ParamsType>(funcType->linkType());
+    const auto &withParamsType = tt::as_shared<ParamsType>(funcType->withParamsType());
+    const auto &normParamsType = tt::as_shared<ParamsType>(funcType->normParamsType());
 
     graph_ptr_t graph = context_->enterScope(declLoad->ref().ident());
     graph->setFuncType(funcType);
     arena_ptr_t arena = graph->arena();
-    for (const auto &[name, type, data] : withType->elements()) {
+    for (const auto &[name, type, data] : withParamsType->elements()) {
         // TODO: ignored type and default data here
         if (data != nullptr) {
             reportDiagnostic(Diagnostic::Severity::Warning,
@@ -102,7 +101,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
         }
         context_->insertNode(name, graph->addPort());
     }
-    for (const auto &[name, type, data] : linkType->elements()) {
+    for (const auto &[name, type, data] : normParamsType->elements()) {
         // TODO: ignored type and default data here
         if (data != nullptr) {
             reportDiagnostic(Diagnostic::Severity::Warning,
@@ -121,7 +120,10 @@ graph_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
     // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
     std::string name = gct->loadAs<GCT::FuncLoad>()->name();
     graph_ptr_t graph = context_->enterScope(name);
-    visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    if (graph->output() == nullptr && res != nullptr) {
+        graph->setOutput(res);
+    }
     context_->leaveScope();
     LEAVE("FUNC");
     return graph;
@@ -138,7 +140,7 @@ node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
         node = SourceNode::create(context_->currGraph(), index);
     } else {
         DataIndex index = graph->addRuntimeConstant(data);
-        node = StructNode::create(context_->currGraph(), index);
+        node = StructNode::create(context_->currGraph(), index, data->type());
         for (const string &ref : data->refs()) {
             Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
         }
@@ -174,9 +176,8 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
     auto optNode = context_->nodeAt(ident);
     if (optNode.has_value()) {
-        auto [srcNode, modifier] = optNode.value();
         LEAVE("DREF");
-        return modifier == nullptr ? srcNode : modifier;
+        return optNode.value();
     }
     graph_ptr_t &graph = context_->currGraph();
     auto optGraph = context_->graphAt(ident);
@@ -235,15 +236,55 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
     any funcNodeRes = visit(gct->at(0));
     ASSERT(funcNodeRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
     node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> params;
+    if (funcNode->type() == NodeType::Function) {
+        func_type_ptr_t funcType = tt::as_shared<FunctionNode>(funcNode)->funcType();
+        params = funcType->normParams();
+    } else if (funcNode->type() == NodeType::Operator) {
+        func_type_ptr_t funcType = tt::as_shared<OperatorNode>(funcNode)->funcType();
+        params = funcType->normParams();
+    } else {
+        ASSERT(false, "LINK node must be a function or operator node.");
+    }
+    // TODO: check if the number of parameters matches the number of inputs
+    vector<node_ptr_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
         ASSERT(dataRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
         node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
+        inputs.push_back(inputNode);
+    }
+    for (size_t i = 0; i < inputs.size(); i++) {
+        const node_ptr_t &inputNode = inputs[i];
+        bool isVar = false;
+        if (i < params.size()) {
+            isVar = std::get<2>(params[i]);
+        }
         Node::link(LinkType::Norm, inputNode, funcNode);
-        if (synced_ && lastCalledFuncNode_) {
-            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        if (nodeModifierMap_.count(inputNode.get())) {
+            node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
+            if (modifierNode) {
+                Node::link(LinkType::Ctrl, modifierNode, funcNode);
+            }
+        }
+        if (isVar) {
+            if (!waited_) {
+                reportDiagnostic(Diagnostic::Severity::Warning, "Function with side effects is called but not waited");
+            }
+            nodeModifierMap_[inputNode.get()] = funcNode; // Mark this node as a modifier for the input node
+        }
+        if (synced_) {
+            if (lastCalledFuncNode_) {
+                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+            }
             lastCalledFuncNode_ = funcNode;
         }
+    }
+    if (inputs.empty() && synced_) {
+        if (lastCalledFuncNode_) {
+            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        }
+        lastCalledFuncNode_ = funcNode;
     }
     LEAVE("LINK");
     return funcNode;
@@ -254,15 +295,55 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
     any funcNodeRes = visit(gct->at(0));
     ASSERT(funcNodeRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of WITH node.");
     node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> params;
+    if (funcNode->type() == NodeType::Function) {
+        func_type_ptr_t funcType = tt::as_shared<FunctionNode>(funcNode)->funcType();
+        params = funcType->withParams();
+    } else if (funcNode->type() == NodeType::Operator) {
+        func_type_ptr_t funcType = tt::as_shared<OperatorNode>(funcNode)->funcType();
+        params = funcType->withParams();
+    } else {
+        ASSERT(false, "LINK node must be a function or operator node.");
+    }
+    // TODO: check if the number of parameters matches the number of inputs
+    vector<node_ptr_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
-        ASSERT(dataRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of WITH node.");
+        ASSERT(dataRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
         node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
+        inputs.push_back(inputNode);
+    }
+    for (size_t i = 0; i < inputs.size(); i++) {
+        const node_ptr_t &inputNode = inputs[i];
+        bool isVar = false;
+        if (i < params.size()) {
+            isVar = std::get<2>(params[i]);
+        }
         Node::link(LinkType::With, inputNode, funcNode);
-        if (synced_ && lastCalledFuncNode_) {
-            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        if (nodeModifierMap_.count(inputNode.get())) {
+            node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
+            if (modifierNode) {
+                Node::link(LinkType::Ctrl, modifierNode, funcNode);
+            }
+        }
+        if (isVar) {
+            if (!waited_) {
+                reportDiagnostic(Diagnostic::Severity::Warning, "Function with side effects is called but not waited");
+            }
+            nodeModifierMap_[inputNode.get()] = funcNode; // Mark this node as a modifier for the input node
+        }
+        if (synced_) {
+            if (lastCalledFuncNode_) {
+                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+            }
             lastCalledFuncNode_ = funcNode;
         }
+    }
+    if (inputs.empty() && synced_) {
+        if (lastCalledFuncNode_) {
+            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        }
+        lastCalledFuncNode_ = funcNode;
     }
     LEAVE("WITH");
     return funcNode;
@@ -277,20 +358,61 @@ node_ptr_t Constructor::visitBindNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
     ENTER("ACCS");
+    any res = visit(gct->at(0));
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of ACCS node.");
+    node_ptr_t tgtNode = any_cast<node_ptr_t>(res);
+    if (tgtNode == nullptr) {
+        reportDiagnostic(Diagnostic::Severity::Error, "Access node target is null.");
+        throw BuildAbortException();
+    }
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     graph_ptr_t &graph = context_->currGraph();
     DataIndex index = graph->addRuntimeConstant(nullptr);
     // TODO: here may need inplace access to the data
     node_ptr_t accsNode = AccessNode::create(graph, index, accsLoad->index());
+    Node::link(LinkType::Norm, tgtNode, accsNode);
     LEAVE("ACCS");
     return accsNode;
 }
 
 node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
-    ASSERT(false, "Branch nodes are not supported in the current version of the compiler.");
+    graph_ptr_t graph = context_->currGraph();
+    const auto &res = visit(gct->at(0));
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of BRCH node.");
+    node_ptr_t condNode = any_cast<node_ptr_t>(res);
+    node_ptr_t brchNode = SelectNode::create(context_->currGraph(), condNode->index(), SelectNode::SelectType::Branch);
+    Node::link(LinkType::Norm, condNode, brchNode);
+
+    graph_ptr_t tGraph = context_->enterScope();
+    tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
+    node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    if (tGraph->output() == nullptr && tNode != nullptr) {
+        tGraph->setOutput(tNode);
+    }
+    context_->leaveScope();
+    func_ptr_t tData = FunctionData::create(tGraph);
+    node_ptr_t tFunc = FunctionNode::create(graph, tGraph->addRuntimeConstant(nullptr), tData);
+    Node::link(LinkType::Ctrl, brchNode, tFunc);
+
+    graph_ptr_t fGraph = context_->enterScope();
+    fGraph->setFuncType(std::make_shared<FunctionType>());
+    node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
+    if (fGraph->output() == nullptr && fNode != nullptr) {
+        fGraph->setOutput(fNode);
+    }
+    context_->leaveScope();
+    func_ptr_t fData = FunctionData::create(fGraph);
+    node_ptr_t fFunc = FunctionNode::create(graph, fGraph->addRuntimeConstant(nullptr), fData);
+    Node::link(LinkType::Ctrl, brchNode, fFunc);
+
+    DataIndex index = graph->addRuntimeConstant(nullptr);
+    node_ptr_t joinNode = SelectNode::create(graph, index, SelectNode::SelectType::Join);
+    Node::link(LinkType::Ctrl, tFunc, joinNode);
+    Node::link(LinkType::Ctrl, fFunc, joinNode);
+
     LEAVE("BRCH");
-    return nullptr;
+    return joinNode;
 }
 
 node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) {
@@ -304,8 +426,15 @@ void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
     auto res = visit(gct->at(0));
     ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter child of EXIT node.");
-    const auto &node = any_cast<node_ptr_t>(res);
-    context_->currGraph()->setOutput(node);
+    node_ptr_t node = any_cast<node_ptr_t>(res);
+    node_ptr_t exitNode = node;
+    if (nodeModifierMap_.count(node.get())) {
+        exitNode = nodeModifierMap_[node.get()].lock();
+    }
+    if (synced_ && lastCalledFuncNode_) {
+        exitNode = lastCalledFuncNode_;
+    }
+    context_->currGraph()->setOutput(exitNode);
     LEAVE("EXIT");
     return nullptr;
 }

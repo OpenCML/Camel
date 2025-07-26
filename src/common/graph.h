@@ -27,6 +27,7 @@
 #include "data.h"
 #include "data/other/func.h"
 #include "operator.h"
+#include "utils/type.h"
 
 namespace GraphIntermediateRepresentation {
 
@@ -74,6 +75,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
         return newGraph;
     }
 
+    bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     arena_ptr_t arena() const { return arena_; }
     graph_ptr_t outer() const {
@@ -119,7 +121,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
 class Node : public std::enable_shared_from_this<Node> {
   public:
-    Node(graph_ptr_t graph, NodeType type, DataIndex index) : graph_(graph), nodeType_(type), dataIndex_(index) {
+    Node(graph_ptr_t graph, NodeType type, const DataIndex index) : graph_(graph), nodeType_(type), dataIndex_(index) {
         ASSERT(graph, "Graph is not set for Node.");
     }
     virtual ~Node() = default;
@@ -127,12 +129,11 @@ class Node : public std::enable_shared_from_this<Node> {
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
 
-    bool isRoot() const { return !graph_.lock(); }
     graph_ptr_t graph() const {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
         return graph_.lock();
     }
-    const DataIndex &index() const { return dataIndex_; }
+    DataIndex index() const { return dataIndex_; }
 
     node_vec_t &normInputs() { return normInputs_; }
     node_vec_t &withInputs() { return withInputs_; }
@@ -155,7 +156,7 @@ class Node : public std::enable_shared_from_this<Node> {
     }
     size_t refCnt() const { return refs_; }
 
-    virtual data_ptr_t eval() = 0;
+    virtual data_ptr_t eval(arena_ptr_t arena) = 0;
 
     static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         switch (type) {
@@ -194,85 +195,138 @@ class Node : public std::enable_shared_from_this<Node> {
 
 class SelectNode : public Node {
   public:
-    SelectNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Select, index) {}
+    enum class SelectType {
+        Branch, // Split into two branches
+        Join,   // Join two branches
+    };
+
+    SelectNode(graph_ptr_t graph, const DataIndex &index, SelectType type = SelectType::Branch)
+        : Node(graph, NodeType::Select, index), selectType_(type) {}
     ~SelectNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<SelectNode>(graph, index); }
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, SelectType type = SelectType::Branch) {
+        auto node = std::make_shared<SelectNode>(graph, index, type);
+        graph->addNode(node);
+        return node;
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    SelectType selectType() const { return selectType_; }
+
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
+
+  private:
+    SelectType selectType_;
 };
 
 class AccessNode : public Node {
   public:
-    AccessNode(graph_ptr_t graph, DataIndex &data, const std::variant<std::string, size_t> &index)
+    AccessNode(graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index)
         : Node(graph, NodeType::Access, data), index_(index) {}
     ~AccessNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &data, const std::variant<std::string, size_t> &index) {
-        return std::make_shared<AccessNode>(graph, data, index);
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index) {
+        auto node = std::make_shared<AccessNode>(graph, data, index);
+        graph->addNode(node);
+        return node;
     }
 
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
+    std::string indexAsString() const {
+        if (std::holds_alternative<size_t>(index_)) {
+            return std::to_string(std::get<size_t>(index_));
+        } else {
+            return std::get<std::string>(index_);
+        }
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 
   private:
     std::variant<std::string, size_t> index_;
 };
 
 class StructNode : public Node {
+    type_ptr_t dataType_;
+
   public:
-    StructNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Struct, index) {}
+    StructNode(graph_ptr_t graph, const DataIndex &index, type_ptr_t type)
+        : Node(graph, NodeType::Struct, index), dataType_(type) {}
     ~StructNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<StructNode>(graph, index); }
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, type_ptr_t type) {
+        auto node = std::make_shared<StructNode>(graph, index, type);
+        graph->addNode(node);
+        return node;
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    type_ptr_t dataType() const { return dataType_; }
+
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
 
 class SourceNode : public Node {
   public:
-    SourceNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Source, index) {}
+    SourceNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Source, index) {}
     ~SourceNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) { return std::make_shared<SourceNode>(graph, index); }
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
+        auto node = std::make_shared<SourceNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override {
+        auto data = arena->get(dataIndex_);
+        ASSERT(data != nullptr, "Data not found in arena for SourceNode.");
+        return data;
+    }
 };
 
 class OperatorNode : public Node {
     operator_ptr_t operator_;
 
   public:
-    OperatorNode(graph_ptr_t graph, DataIndex &index, operator_ptr_t op)
+    OperatorNode(graph_ptr_t graph, const DataIndex &index, operator_ptr_t op)
         : Node(graph, NodeType::Operator, index), operator_(op) {}
     ~OperatorNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, operator_ptr_t op) {
-        return std::make_shared<OperatorNode>(graph, index, op);
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, operator_ptr_t op) {
+        auto node = std::make_shared<OperatorNode>(graph, index, op);
+        graph->addNode(node);
+        return node;
     }
 
     operator_ptr_t oper() const { return operator_; }
+    func_type_ptr_t funcType() const {
+        ASSERT(operator_, "Operator is not set for OperatorNode.");
+        return tt::as_shared<FunctionType>(operator_->funcType());
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
 
 class FunctionNode : public Node {
     func_ptr_t func_;
 
   public:
-    FunctionNode(graph_ptr_t graph, DataIndex &index, func_ptr_t func)
+    FunctionNode(graph_ptr_t graph, const DataIndex &index, func_ptr_t func)
         : Node(graph, NodeType::Function, index), func_(func) {}
     ~FunctionNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, func_ptr_t func) {
-        return std::make_shared<FunctionNode>(graph, index, func);
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, func_ptr_t func) {
+        auto node = std::make_shared<FunctionNode>(graph, index, func);
+        graph->addNode(node);
+        return node;
     }
 
     func_ptr_t func() const { return func_; }
+    func_type_ptr_t funcType() const {
+        ASSERT(func_, "Function is not set for FunctionNode.");
+        return tt::as_shared<FunctionType>(func_->type());
+    }
 
-    data_ptr_t eval() override { return nullptr; }
+    data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
 
 } // namespace GraphIntermediateRepresentation

@@ -75,7 +75,7 @@ string typeCodeToString(TypeCode code) {
         return "any";
     case TypeCode::VOID:
         return "void";
-    case TypeCode::FUNCTOR:
+    case TypeCode::FUNC:
         return "functor";
     case TypeCode::REF:
         return "REF";

@@ -53,7 +53,7 @@ enum class TypeCode {
     // special types
     ANY = 0b10'000000,
     VOID = 0b10'000001,
-    FUNCTOR = 0b10'000010,
+    FUNC = 0b10'000010,
     // for internal use
     REF = 0b11'000000,
 };
