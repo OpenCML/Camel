@@ -1,35 +1,26 @@
-func print() {return 0}
-func sleep() {return 0}
-func len() {return 0}
-func push(var input: any) {return 0}
-func head() {return 0}
-func tail() {return 0}
-func new() {return 0}
-func dense() {return 0}
+module main
 
-inner type Tensor = int
-
-type Model = (x: Tensor) => Tensor
-
-with <var weights: Tensor[], var biases: Tensor[]>
-macro sync func MLP(input: int, configs: (int, Model?)[]): Model {
-    return if configs.len() == 0 then {
-        return 0
-    } else {
-        let output, act = configs.head()
-        wait weights.push(new([input, output]))
-        wait biases.push(new([output]))
-        let layer = dense<act ?? relu, weights, biases>
-        let rest = wait MLP<weights, biases>(output, configs.tail())
-        // return layer..rest
-        return rest
-    }
+func print(s: string): void {
+    // Placeholder for print function
+}
+func sleep(s: int): void {
+    // Placeholder for print function
 }
 
-// with <var weights: Tensor[], var biases: Tensor[]>
-// macro sync func MLP(input: int, configs: (int, Model?)[]): Model {
-//     let output, act = configs.head()
-//     wait weights.push(new([input, output]))
-//     wait biases.push(new([output]))
-//     return rest
-// }
+sync func modify(var x: int) {
+    x = x + 1
+    print("modified x to " + x.sleep())
+}
+
+func fetch_data(): int sync {
+    let i = 0
+    wait modify(i)
+    return i
+}
+
+func main(): int sync {
+    print("before start")
+    sleep(1000)
+    print("after start")
+    return fetch_data()
+}

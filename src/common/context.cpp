@@ -62,9 +62,9 @@ std::unordered_map<GIR::node_ptr_t, std::string> Context::buildNodeIdentsMap() c
     auto visit = [&identsMap](auto self, node_scope_ptr_t scope) -> void {
         for (const auto &pair : scope->map()) {
             const auto &name = pair.first;
-            const auto &nodePair = pair.second;
-            if (nodePair.first) {
-                identsMap[nodePair.first] = name;
+            const auto &node = pair.second;
+            if (node) {
+                identsMap[node] = name;
             }
         }
         for (const auto &innerScope : scope->innerScopes()) {
@@ -79,7 +79,7 @@ bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
     if (nodeScope_->has(name, false)) {
         return false;
     }
-    nodeScope_->insert(name, {node, nullptr});
+    nodeScope_->insert(name, node);
     return true;
 }
 

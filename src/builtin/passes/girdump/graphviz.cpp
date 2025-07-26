@@ -48,53 +48,43 @@ std::string escape(const std::string &input) {
 
 std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) {
     std::vector<std::string> lines;
-    size_t len = text.length();
-    size_t maxTotalChars = maxWidth * maxLines;
+    std::istringstream stream(text);
+    std::string line;
 
-    // Case 1: Text fits in a single line
-    if (len <= maxWidth) {
-        return text;
+    // Step 1: Split input by existing '\n'
+    while (std::getline(stream, line)) {
+        size_t pos = 0;
+        while (pos < line.length()) {
+            size_t take = std::min(maxWidth, line.length() - pos);
+            lines.push_back(line.substr(pos, take));
+            pos += take;
+        }
     }
 
-    // Case 2: Text fits within maxLines * maxWidth, distribute evenly
-    if (len <= maxTotalChars) {
-        size_t baseLen = len / maxLines;
-        size_t extra = len % maxLines;
-        size_t pos = 0;
-
+    // Step 2: Handle maxLines limit
+    if (lines.size() > maxLines) {
+        std::vector<std::string> limitedLines;
         for (size_t i = 0; i < maxLines; ++i) {
-            size_t take = baseLen + (i < extra ? 1 : 0);
-            if (take > 0) {
-                lines.push_back(text.substr(pos, take));
-                pos += take;
-            } else {
-                lines.push_back(""); // Fill empty line if needed
-            }
-        }
-    }
-    // Case 3: Text too long, truncate and add ellipsis
-    else {
-        size_t pos = 0;
-        for (size_t line = 0; line < maxLines; ++line) {
-            size_t remaining = len - pos;
-            size_t take = std::min(maxWidth, remaining);
-
-            if (line == maxLines - 1 && remaining > maxWidth) {
-                // Add ellipsis if there's more text left
-                if (maxWidth > 3) {
-                    lines.push_back(text.substr(pos, maxWidth - 3) + "...");
-                } else {
-                    lines.push_back(std::string(maxWidth, '.')); // Fallback if width too small
+            if (i == maxLines - 1) {
+                // Last line: truncate and add ellipsis if needed
+                std::string lastLine = lines[i];
+                if (lastLine.length() > maxWidth) {
+                    lastLine = lastLine.substr(0, maxWidth);
                 }
-                break;
+                if (lastLine.length() > 3) {
+                    lastLine = lastLine.substr(0, maxWidth - 3) + "...";
+                } else {
+                    lastLine = std::string(maxWidth, '.');
+                }
+                limitedLines.push_back(lastLine);
             } else {
-                lines.push_back(text.substr(pos, take));
-                pos += take;
+                limitedLines.push_back(lines[i]);
             }
         }
+        lines = std::move(limitedLines);
     }
 
-    // Join lines with newline character
+    // Step 3: Join lines with '\n'
     std::string result;
     for (size_t i = 0; i < lines.size(); ++i) {
         result += lines[i];
@@ -207,7 +197,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         }
         case NodeType::Access: {
             auto accessNode = tt::as_shared<AccessNode>(node);
-            label = "$" + accessNode->indexAsString() + ": " + label;
+            label = "$" + accessNode->indexAsString() + "\n" + label;
             break;
         }
         case NodeType::Struct: {

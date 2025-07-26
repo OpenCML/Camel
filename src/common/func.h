@@ -102,6 +102,11 @@ class ModifierSet {
     bool has(Modifier mod) const { return mask & mod; }
     void clear() { mask = static_cast<ModifierMask>(Modifier::None); }
 
+    bool atomic() const { return has(Modifier::Atomic); }
+    bool shared() const { return has(Modifier::Shared); }
+    bool sync() const { return has(Modifier::Sync); }
+    bool macro() const { return has(Modifier::Macro); }
+
     bool empty() const { return mask == static_cast<ModifierMask>(Modifier::None); }
 
     operator std::string() const {

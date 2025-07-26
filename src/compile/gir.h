@@ -51,6 +51,7 @@ class Constructor {
     bool synced_;
     bool varied_;
 
+    std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastCalledFuncNode_;
 
     void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,

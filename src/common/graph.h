@@ -27,6 +27,7 @@
 #include "data.h"
 #include "data/other/func.h"
 #include "operator.h"
+#include "utils/type.h"
 
 namespace GraphIntermediateRepresentation {
 
@@ -297,6 +298,10 @@ class OperatorNode : public Node {
     }
 
     operator_ptr_t oper() const { return operator_; }
+    func_type_ptr_t funcType() const {
+        ASSERT(operator_, "Operator is not set for OperatorNode.");
+        return tt::as_shared<FunctionType>(operator_->funcType());
+    }
 
     data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
@@ -316,6 +321,10 @@ class FunctionNode : public Node {
     }
 
     func_ptr_t func() const { return func_; }
+    func_type_ptr_t funcType() const {
+        ASSERT(func_, "Function is not set for FunctionNode.");
+        return tt::as_shared<FunctionType>(func_->type());
+    }
 
     data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
 };
