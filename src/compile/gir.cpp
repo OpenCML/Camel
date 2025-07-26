@@ -273,10 +273,18 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             nodeModifierMap_[inputNode.get()] = funcNode; // Mark this node as a modifier for the input node
         }
-        if (synced_ && lastCalledFuncNode_) {
-            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        if (synced_) {
+            if (lastCalledFuncNode_) {
+                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+            }
             lastCalledFuncNode_ = funcNode;
         }
+    }
+    if (inputs.empty() && synced_) {
+        if (lastCalledFuncNode_) {
+            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        }
+        lastCalledFuncNode_ = funcNode;
     }
     LEAVE("LINK");
     return funcNode;
@@ -324,10 +332,18 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
             }
             nodeModifierMap_[inputNode.get()] = funcNode; // Mark this node as a modifier for the input node
         }
-        if (synced_ && lastCalledFuncNode_) {
-            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        if (synced_) {
+            if (lastCalledFuncNode_) {
+                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+            }
             lastCalledFuncNode_ = funcNode;
         }
+    }
+    if (inputs.empty() && synced_) {
+        if (lastCalledFuncNode_) {
+            Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
+        }
+        lastCalledFuncNode_ = funcNode;
     }
     LEAVE("WITH");
     return funcNode;
@@ -410,8 +426,15 @@ void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
     auto res = visit(gct->at(0));
     ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter child of EXIT node.");
-    const auto &node = any_cast<node_ptr_t>(res);
-    context_->currGraph()->setOutput(node);
+    node_ptr_t node = any_cast<node_ptr_t>(res);
+    node_ptr_t exitNode = node;
+    if (nodeModifierMap_.count(node.get())) {
+        exitNode = nodeModifierMap_[node.get()].lock();
+    }
+    if (synced_ && lastCalledFuncNode_) {
+        exitNode = lastCalledFuncNode_;
+    }
+    context_->currGraph()->setOutput(exitNode);
     LEAVE("EXIT");
     return nullptr;
 }
