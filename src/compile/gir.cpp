@@ -121,7 +121,10 @@ graph_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
     // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
     std::string name = gct->loadAs<GCT::FuncLoad>()->name();
     graph_ptr_t graph = context_->enterScope(name);
-    visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    if (graph->output() == nullptr && res != nullptr) {
+        graph->setOutput(res);
+    }
     context_->leaveScope();
     LEAVE("FUNC");
     return graph;
@@ -288,9 +291,42 @@ node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
-    ASSERT(false, "Branch nodes are not supported in the current version of the compiler.");
+    graph_ptr_t graph = context_->currGraph();
+    const auto &res = visit(gct->at(0));
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of BRCH node.");
+    node_ptr_t condNode = any_cast<node_ptr_t>(res);
+    node_ptr_t brchNode = SelectNode::create(context_->currGraph(), condNode->index(), SelectNode::SelectType::Branch);
+    Node::link(LinkType::Ctrl, condNode, brchNode);
+
+    graph_ptr_t tGraph = context_->enterScope();
+    tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
+    node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+    if (tGraph->output() == nullptr && tNode != nullptr) {
+        tGraph->setOutput(tNode);
+    }
+    context_->leaveScope();
+    func_ptr_t tData = FunctionData::create(tGraph);
+    node_ptr_t tFunc = FunctionNode::create(graph, tGraph->addRuntimeConstant(nullptr), tData);
+    Node::link(LinkType::Ctrl, brchNode, tFunc);
+
+    graph_ptr_t fGraph = context_->enterScope();
+    fGraph->setFuncType(std::make_shared<FunctionType>());
+    node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
+    if (fGraph->output() == nullptr && fNode != nullptr) {
+        fGraph->setOutput(fNode);
+    }
+    context_->leaveScope();
+    func_ptr_t fData = FunctionData::create(fGraph);
+    node_ptr_t fFunc = FunctionNode::create(graph, fGraph->addRuntimeConstant(nullptr), fData);
+    Node::link(LinkType::Ctrl, brchNode, fFunc);
+
+    DataIndex index = graph->addRuntimeConstant(nullptr);
+    node_ptr_t joinNode = SelectNode::create(graph, index, SelectNode::SelectType::Join);
+    Node::link(LinkType::Ctrl, tFunc, joinNode);
+    Node::link(LinkType::Ctrl, fFunc, joinNode);
+
     LEAVE("BRCH");
-    return nullptr;
+    return joinNode;
 }
 
 node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) {

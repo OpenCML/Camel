@@ -1,19 +1,27 @@
-func print() {}
-func sleep() {}
+func print() {return 0}
+func sleep() {return 0}
+func len() {return 0}
+func push() {return 0}
+func head() {return 0}
+func tail() {return 0}
+func new() {return 0}
+func dense() {return 0}
 
-sync func modify(var x: int) {
-    x = x + 1
-}
+inner type Tensor = int
 
-func fetch_data(): int sync {
-    let i = 0
-    wait modify(i)
-    return i
-}
+type Model = (x: Tensor) => Tensor
 
-func main(): int sync {
-    print("before start")
-    sleep(1000)
-    print("after start")
-    return fetch_data()
+with <var weights: Tensor[], var biases: Tensor[]>
+macro sync func MLP(input: int, configs: (int, Model?)[]): Model {
+    return if configs.len() == 0 then {
+        return 0
+    } else {
+        let output, act = configs.head()
+        wait weights.push(new([input, output]))
+        wait biases.push(new([output]))
+        let layer = dense<act ?? relu, weights, biases>
+        let rest = wait MLP<weights, biases>(output, configs.tail())
+        // return layer..rest
+        return rest
+    }
 }

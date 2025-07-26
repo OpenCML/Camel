@@ -53,7 +53,7 @@ class Context {
     GIR::graph_ptr_t &rootGraph() { return rootGraph_; }
     GIR::graph_ptr_t &currGraph() { return currGraph_; }
 
-    GIR::graph_ptr_t enterScope(const std::string &name);
+    GIR::graph_ptr_t enterScope(const std::string &name = "");
     void leaveScope();
 
     std::unordered_map<GIR::node_ptr_t, std::string> buildNodeIdentsMap() const;

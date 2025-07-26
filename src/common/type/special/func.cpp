@@ -25,6 +25,9 @@
 
 using namespace std;
 
+FunctionType::FunctionType()
+    : SpecialType(TypeCode::FUNCTOR), withType_(make_shared<ParamsType>()), linkType_(make_shared<ParamsType>()),
+      returnType_(voidTypePtr) {}
 FunctionType::FunctionType(const shared_ptr<ParamsType> &withType, const shared_ptr<ParamsType> &paramsType,
                            const type_ptr_t &returnType)
     : SpecialType(TypeCode::FUNCTOR), withType_(withType), linkType_(paramsType), returnType_(returnType) {}

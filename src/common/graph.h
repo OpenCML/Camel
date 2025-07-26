@@ -120,7 +120,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
 class Node : public std::enable_shared_from_this<Node> {
   public:
-    Node(graph_ptr_t graph, NodeType type, DataIndex index) : graph_(graph), nodeType_(type), dataIndex_(index) {
+    Node(graph_ptr_t graph, NodeType type, const DataIndex index) : graph_(graph), nodeType_(type), dataIndex_(index) {
         ASSERT(graph, "Graph is not set for Node.");
     }
     virtual ~Node() = default;
@@ -132,7 +132,7 @@ class Node : public std::enable_shared_from_this<Node> {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
         return graph_.lock();
     }
-    const DataIndex &index() const { return dataIndex_; }
+    DataIndex index() const { return dataIndex_; }
 
     node_vec_t &normInputs() { return normInputs_; }
     node_vec_t &withInputs() { return withInputs_; }
@@ -194,25 +194,36 @@ class Node : public std::enable_shared_from_this<Node> {
 
 class SelectNode : public Node {
   public:
-    SelectNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Select, index) {}
+    enum class SelectType {
+        Branch, // Split into two branches
+        Join,   // Join two branches
+    };
+
+    SelectNode(graph_ptr_t graph, const DataIndex &index, SelectType type = SelectType::Branch)
+        : Node(graph, NodeType::Select, index), selectType_(type) {}
     ~SelectNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
-        auto node = std::make_shared<SelectNode>(graph, index);
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, SelectType type = SelectType::Branch) {
+        auto node = std::make_shared<SelectNode>(graph, index, type);
         graph->addNode(node);
         return node;
     }
 
+    SelectType selectType() const { return selectType_; }
+
     data_ptr_t eval(arena_ptr_t arena) override { return nullptr; }
+
+  private:
+    SelectType selectType_;
 };
 
 class AccessNode : public Node {
   public:
-    AccessNode(graph_ptr_t graph, DataIndex &data, const std::variant<std::string, size_t> &index)
+    AccessNode(graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index)
         : Node(graph, NodeType::Access, data), index_(index) {}
     ~AccessNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &data, const std::variant<std::string, size_t> &index) {
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index) {
         auto node = std::make_shared<AccessNode>(graph, data, index);
         graph->addNode(node);
         return node;
@@ -229,10 +240,10 @@ class AccessNode : public Node {
 
 class StructNode : public Node {
   public:
-    StructNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Struct, index) {}
+    StructNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Struct, index) {}
     ~StructNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
         auto node = std::make_shared<StructNode>(graph, index);
         graph->addNode(node);
         return node;
@@ -243,10 +254,10 @@ class StructNode : public Node {
 
 class SourceNode : public Node {
   public:
-    SourceNode(graph_ptr_t graph, DataIndex &index) : Node(graph, NodeType::Source, index) {}
+    SourceNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Source, index) {}
     ~SourceNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index) {
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
         auto node = std::make_shared<SourceNode>(graph, index);
         graph->addNode(node);
         return node;
@@ -263,11 +274,11 @@ class OperatorNode : public Node {
     operator_ptr_t operator_;
 
   public:
-    OperatorNode(graph_ptr_t graph, DataIndex &index, operator_ptr_t op)
+    OperatorNode(graph_ptr_t graph, const DataIndex &index, operator_ptr_t op)
         : Node(graph, NodeType::Operator, index), operator_(op) {}
     ~OperatorNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, operator_ptr_t op) {
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, operator_ptr_t op) {
         auto node = std::make_shared<OperatorNode>(graph, index, op);
         graph->addNode(node);
         return node;
@@ -282,11 +293,11 @@ class FunctionNode : public Node {
     func_ptr_t func_;
 
   public:
-    FunctionNode(graph_ptr_t graph, DataIndex &index, func_ptr_t func)
+    FunctionNode(graph_ptr_t graph, const DataIndex &index, func_ptr_t func)
         : Node(graph, NodeType::Function, index), func_(func) {}
     ~FunctionNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, DataIndex &index, func_ptr_t func) {
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, func_ptr_t func) {
         auto node = std::make_shared<FunctionNode>(graph, index, func);
         graph->addNode(node);
         return node;

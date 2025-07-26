@@ -25,7 +25,7 @@
 
 class FunctionType : public SpecialType {
   public:
-    FunctionType() = delete;
+    FunctionType();
     FunctionType(const std::shared_ptr<ParamsType> &withType, const std::shared_ptr<ParamsType> &paramsType,
                  const type_ptr_t &returnType);
 
