@@ -58,9 +58,7 @@ template <Hashable Key, typename Val> class Namespace : public std::enable_share
         return current->insert(ref.ident(), std::move(v));
     };
 
-    bool insertNamespace(const Key &k, const namespace_ptr_t &ns) { return innerNamespaces_.emplace(k, ns).second; };
-
-    std::optional<Val> find(const Reference &ref)
+    std::optional<Val> get(const Reference &ref)
         requires std::is_same_v<Key, std::string>
     {
         if (!ref.empty())
@@ -79,18 +77,5 @@ template <Hashable Key, typename Val> class Namespace : public std::enable_share
             return valIt->second;
         }
         return std::nullopt;
-    }
-
-    std::optional<namespace_ptr_t> findNamespace(const Reference &ref)
-        requires std::is_same_v<Key, std::string>
-    {
-        namespace_ptr_t current = this->shared_from_this();
-        for (const auto &ns_name : ref.paths()) {
-            auto it = current->innerNamespaces_.find(ns_name);
-            if (it == current->innerNamespaces_.end())
-                return std::nullopt;
-            current = it->second;
-        }
-        return current;
     }
 };

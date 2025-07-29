@@ -12,20 +12,18 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 18, 2024
- * Updated: Mar. 10, 2025
+ * Created: Jul. 29, 2025
+ * Updated: Jul. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <memory>
+#include "common/module.h"
 
-class Context {
-
+class HttpBuiltinModule : public BuiltinModule {
   public:
-    Context() = default;
-    virtual ~Context() = default;
-};
+    HttpBuiltinModule() : BuiltinModule("") {}
 
-using context_ptr_t = std::shared_ptr<Context>;
+    static module_ptr_t create();
+};

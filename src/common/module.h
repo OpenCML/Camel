@@ -19,20 +19,44 @@
 
 #pragma once
 
-class Module {
+#include <string>
+#include <variant>
+#include <vector>
+
+#include "graph.h"
+#include "ns.h"
+#include "operator.h"
+#include "type.h"
+
+using entity = std::variant<GIR::node_ptr_t, GIR::graph_ptr_t, operator_ptr_t>;
+using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
+using type_ns_ptr_t = std::shared_ptr<Namespace<std::string, type_ptr_t>>;
+
+class Module;
+using module_ptr_t = std::shared_ptr<Module>;
+
+class Module : public std::enable_shared_from_this<Module> {
+    std::string name_;
+    type_ns_ptr_t typeSpace_;
+    entity_ns_ptr_t entitySpace_;
+
+    std::vector<module_ptr_t> imports_;
+
   public:
-    Module() = default;
+    Module(const std::string &name) : name_(name) {};
     virtual ~Module() = default;
 
-    // Initialize the module
-    virtual void init() = 0;
+    const std::string &name() const { return name_; }
 
-    // Finalize the module
-    virtual void finalize() = 0;
-
-    // Get the name of the module
-    virtual const char *name() const = 0;
-
-    // Get the version of the module
-    virtual const char *version() const = 0;
+    std::optional<entity> getEntity(const Reference &ref) const { return entitySpace_->get(ref); };
 };
+
+class BuiltinModule : public Module {
+  public:
+    BuiltinModule(const std::string &name) : Module(name) {}
+    virtual ~BuiltinModule() = default;
+};
+
+extern std::unordered_map<std::string, module_ptr_t> builtinModules;
+
+void initializeBuiltinModules();

@@ -18,3 +18,11 @@
  */
 
 #include "module.h"
+
+std::unordered_map<std::string, module_ptr_t> builtinModules;
+
+void initializeBuiltinModules() {
+    if (!builtinModules.empty()) {
+        return;
+    }
+}

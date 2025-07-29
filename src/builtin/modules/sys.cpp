@@ -12,20 +12,14 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 18, 2024
- * Updated: Mar. 10, 2025
+ * Created: Jul. 29, 2025
+ * Updated: Jul. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "sys.h"
 
-#include <memory>
-
-class Context {
-
-  public:
-    Context() = default;
-    virtual ~Context() = default;
-};
-
-using context_ptr_t = std::shared_ptr<Context>;
+module_ptr_t SysBuiltinModule::create() {
+    module_ptr_t module = std::make_shared<SysBuiltinModule>();
+    return module;
+}
