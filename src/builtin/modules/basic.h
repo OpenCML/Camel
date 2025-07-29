@@ -19,11 +19,11 @@
 
 #pragma once
 
-#include "common/module.h"
+#include "common/module/builtin.h"
 
 class BasicBuiltinModule : public BuiltinModule {
   public:
-    BasicBuiltinModule() : BuiltinModule("") {}
+    BasicBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<BasicBuiltinModule>(); }
 };

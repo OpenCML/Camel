@@ -35,9 +35,9 @@ template <Hashable Key, typename Val> class Namespace : public std::enable_share
   public:
     Namespace() = default;
 
-    bool insert(const Key &k, const Val &&v) { return map_.emplace(std::move(k), std::move(v)).second; };
+    bool insert(const Key &k, const Val &v) { return map_.emplace(k, v).second; };
 
-    bool insert(const Reference &ref, const Val &&v)
+    bool insert(const Reference &ref, const Val &v)
         requires std::is_same_v<Key, std::string>
     {
         if (ref.empty())
@@ -55,7 +55,7 @@ template <Hashable Key, typename Val> class Namespace : public std::enable_share
             }
         }
 
-        return current->insert(ref.ident(), std::move(v));
+        return current->insert(ref.ident(), v);
     };
 
     std::optional<Val> get(const Reference &ref)

@@ -19,11 +19,16 @@
 
 #pragma once
 
-#include "common/module/builtin.h"
+#include "userdef.h"
 
-class FileBuiltinModule : public BuiltinModule {
+class MainModule : public UserDefinedModule {
   public:
-    FileBuiltinModule() : BuiltinModule("") {}
+    MainModule(context_ptr_t ctx) : UserDefinedModule("main", ctx) {}
+    virtual ~MainModule() = default;
 
-    static module_ptr_t create();
+    static module_ptr_t create(context_ptr_t ctx) { return std::make_shared<MainModule>(ctx); }
+
+    GIR::graph_ptr_t entry() const {
+        return nullptr; // Placeholder
+    }
 };

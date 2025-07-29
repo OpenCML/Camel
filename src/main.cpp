@@ -28,7 +28,6 @@
 #include "parse/antlr/OpenCMLLexer.h"
 #include "parse/antlr/OpenCMLParser.h"
 
-#include "builtin/operators/init.h"
 #include "builtin/passes/girdump/graphviz.h"
 #include "common/error/base.h"
 #include "common/error/diagnostic.h"

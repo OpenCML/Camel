@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "common/module.h"
+#include "common/module/builtin.h"
 
 class OSBuiltinModule : public BuiltinModule {
   public:

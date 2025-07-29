@@ -30,12 +30,19 @@ namespace GraphIntermediateRepresentation {
 
 using void_ptr_t = void *;
 
+using node_scope_t = Scope<std::string, node_ptr_t>;
+using node_scope_ptr_t = std::shared_ptr<node_scope_t>;
+using graph_scope_t = Scope<std::string, std::shared_ptr<graph_vec_t>>;
+using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
+using operator_scope_t = Scope<std::string, std::shared_ptr<operator_vec_t>>;
+using operator_scope_ptr_t = std::shared_ptr<operator_scope_t>;
+
 class Constructor {
   public:
     Constructor(context_ptr_t &context) : context_(context) {
         nodeScope_ = node_scope_t::create();
         graphScope_ = graph_scope_t::create();
-        opScope_ = operator_scope_t::create(globalOperators);
+        opScope_ = operator_scope_t::create();
         rootGraph_ = GIR::Graph::create(nullptr, "__root__");
         currGraph_ = rootGraph_;
     }

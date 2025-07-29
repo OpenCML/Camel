@@ -23,10 +23,10 @@
 #include <variant>
 #include <vector>
 
-#include "graph.h"
-#include "ns.h"
-#include "operator.h"
-#include "type.h"
+#include "common/graph.h"
+#include "common/ns.h"
+#include "common/operator.h"
+#include "common/type.h"
 
 using entity = std::variant<GIR::node_ptr_t, GIR::graph_ptr_t, operator_ptr_t>;
 using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
@@ -43,33 +43,15 @@ class Module : public std::enable_shared_from_this<Module> {
 
     std::vector<module_ptr_t> imports_;
 
+    bool exportEntity(const std::string &name, const entity &ent) { return entitySpace_->insert(name, ent); }
+
   public:
-    Module(const std::string &name) : name_(name) {};
+    Module(const std::string &name)
+        : name_(name), typeSpace_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
+          entitySpace_(std::make_shared<Namespace<std::string, entity>>()) {};
     virtual ~Module() = default;
 
     const std::string &name() const { return name_; }
 
     std::optional<entity> getEntity(const Reference &ref) const { return entitySpace_->get(ref); };
 };
-
-class MainModule : public Module {
-  public:
-    MainModule() : Module("main") {}
-    virtual ~MainModule() = default;
-
-    static module_ptr_t create() { return std::make_shared<MainModule>(); }
-
-    void addImport(const module_ptr_t &module) { imports_.push_back(module); }
-
-    GIR::graph_ptr_t entry() const {
-        return nullptr; // Placeholder
-    }
-};
-
-class BuiltinModule : public Module {
-  public:
-    BuiltinModule(const std::string &name) : Module(name) {}
-    virtual ~BuiltinModule() = default;
-};
-
-std::optional<module_ptr_t> getBuiltinModule(const std::string &name);

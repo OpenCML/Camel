@@ -21,17 +21,22 @@
 
 #include <memory>
 
-#include "module.h"
+#include "module/main.h"
 
-class Context {
+class Context : public std::enable_shared_from_this<Context> {
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
 
-  public:
-    Context() {
-        mainModule_ = std::make_shared<MainModule>();
-    }
+    void setMainModule(const module_ptr_t &module) { mainModule_ = module; }
+    public:
+    Context() = default;
     virtual ~Context() = default;
+
+    static context_ptr_t create() {
+        auto ctx = std::make_shared<Context>();
+        ctx->setMainModule(MainModule::create(ctx));
+        return ctx;
+    }
 };
 
 using context_ptr_t = std::shared_ptr<Context>;

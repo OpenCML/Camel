@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "module.h"
+#include "builtin.h"
 
 #include "builtin/modules/basic.h"
 #include "builtin/modules/file.h"

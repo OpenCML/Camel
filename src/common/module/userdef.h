@@ -19,11 +19,23 @@
 
 #pragma once
 
-#include "common/module/builtin.h"
+#include "module.h"
 
-class FileBuiltinModule : public BuiltinModule {
+class Context;
+using context_ptr_t = std::shared_ptr<Context>;
+
+class UserDefinedModule : public Module {
+    bool built_ = false;
+    context_ptr_t context_;
+
   public:
-    FileBuiltinModule() : BuiltinModule("") {}
+    UserDefinedModule(const std::string &name, context_ptr_t ctx) : Module(name), context_(ctx) {}
+    virtual ~UserDefinedModule() = default;
 
-    static module_ptr_t create();
+    static module_ptr_t create(const std::string &name, context_ptr_t ctx) {
+        return std::make_shared<UserDefinedModule>(name, ctx);
+    }
+
+    bool ready() const { return built_; }
+    void build();
 };

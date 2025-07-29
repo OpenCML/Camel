@@ -19,11 +19,5 @@
 
 #pragma once
 
-#include "common/module/builtin.h"
-
-class FileBuiltinModule : public BuiltinModule {
-  public:
-    FileBuiltinModule() : BuiltinModule("") {}
-
-    static module_ptr_t create();
-};
+#include "common/operator.h"
+#include "common/type.h"

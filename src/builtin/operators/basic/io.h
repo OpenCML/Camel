@@ -12,13 +12,12 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 17, 2024
- * Updated: Oct. 18, 2024
+ * Created: Jul. 29, 2025
+ * Updated: Jul. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "common/operator.h"
-
-void initGlobalOperators();
+#include "common/type.h"

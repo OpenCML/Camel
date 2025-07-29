@@ -17,13 +17,10 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "userdef.h"
 
-#include "common/module/builtin.h"
-
-class FileBuiltinModule : public BuiltinModule {
-  public:
-    FileBuiltinModule() : BuiltinModule("") {}
-
-    static module_ptr_t create();
-};
+void UserDefinedModule::build() {
+    if (built_) {
+        return;
+    }
+}
