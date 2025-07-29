@@ -19,10 +19,42 @@
 
 #include "module.h"
 
+#include "builtin/modules/basic.h"
+#include "builtin/modules/file.h"
+#include "builtin/modules/io.h"
+#include "builtin/modules/json.h"
+#include "builtin/modules/math.h"
+#include "builtin/modules/os.h"
+#include "builtin/modules/random.h"
+#include "builtin/modules/re.h"
+#include "builtin/modules/sys.h"
+#include "builtin/modules/time.h"
+
+std::unordered_map<std::string, std::function<std::shared_ptr<Module>()>> builtinModuleFactories;
 std::unordered_map<std::string, module_ptr_t> builtinModules;
 
 void initializeBuiltinModules() {
-    if (!builtinModules.empty()) {
-        return;
+    builtinModuleFactories = {
+        {"", [] { return BasicBuiltinModule::create(); }},    {"io", [] { return IOBuiltinModule::create(); }},
+        {"os", [] { return OSBuiltinModule::create(); }},     {"re", [] { return REBuiltinModule::create(); }},
+        {"sys", [] { return SysBuiltinModule::create(); }},   {"math", [] { return MathBuiltinModule::create(); }},
+        {"time", [] { return TimeBuiltinModule::create(); }}, {"file", [] { return FileBuiltinModule::create(); }},
+        {"json", [] { return JsonBuiltinModule::create(); }}, {"random", [] { return RandomBuiltinModule::create(); }},
+    };
+}
+
+std::optional<module_ptr_t> getBuiltinModule(const std::string &name) {
+    auto it = builtinModules.find(name);
+    if (it != builtinModules.end()) {
+        return it->second;
     }
+
+    auto factoryIt = builtinModuleFactories.find(name);
+    if (factoryIt != builtinModuleFactories.end()) {
+        module_ptr_t module = factoryIt->second();
+        builtinModules[name] = module;
+        return module;
+    }
+
+    return std::nullopt;
 }

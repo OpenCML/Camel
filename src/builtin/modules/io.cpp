@@ -17,9 +17,9 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "http.h"
+#include "io.h"
 
-module_ptr_t HttpBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<HttpBuiltinModule>();
+module_ptr_t IOBuiltinModule::create() {
+    module_ptr_t module = std::make_shared<IOBuiltinModule>();
     return module;
 }

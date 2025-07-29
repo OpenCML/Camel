@@ -17,13 +17,9 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "file.h"
 
-#include "common/module.h"
-
-class HttpBuiltinModule : public BuiltinModule {
-  public:
-    HttpBuiltinModule() : BuiltinModule("") {}
-
-    static module_ptr_t create();
-};
+module_ptr_t FileBuiltinModule::create() {
+    module_ptr_t module = std::make_shared<FileBuiltinModule>();
+    return module;
+}

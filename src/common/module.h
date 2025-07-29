@@ -36,6 +36,7 @@ class Module;
 using module_ptr_t = std::shared_ptr<Module>;
 
 class Module : public std::enable_shared_from_this<Module> {
+  protected:
     std::string name_;
     type_ns_ptr_t typeSpace_;
     entity_ns_ptr_t entitySpace_;
@@ -51,12 +52,24 @@ class Module : public std::enable_shared_from_this<Module> {
     std::optional<entity> getEntity(const Reference &ref) const { return entitySpace_->get(ref); };
 };
 
+class MainModule : public Module {
+  public:
+    MainModule() : Module("main") {}
+    virtual ~MainModule() = default;
+
+    static module_ptr_t create() { return std::make_shared<MainModule>(); }
+
+    void addImport(const module_ptr_t &module) { imports_.push_back(module); }
+
+    GIR::graph_ptr_t entry() const {
+        return nullptr; // Placeholder
+    }
+};
+
 class BuiltinModule : public Module {
   public:
     BuiltinModule(const std::string &name) : Module(name) {}
     virtual ~BuiltinModule() = default;
 };
 
-extern std::unordered_map<std::string, module_ptr_t> builtinModules;
-
-void initializeBuiltinModules();
+std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
