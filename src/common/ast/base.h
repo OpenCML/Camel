@@ -122,7 +122,7 @@ class ModuleLoad : public Load {
 
     void setRef(const Reference &ref) { ref_ = ref; }
     const Reference &getRef() const {
-        if (ref_.isNull()) {
+        if (ref_.empty()) {
             throw std::runtime_error("ModuleLoad: Reference is not set");
         }
         return ref_;
@@ -155,7 +155,7 @@ class ImportLoad : public Load {
 
     void setAs(const Reference &as) { as_ = as; }
     const Reference &getAs() const {
-        if (as_.isNull()) {
+        if (as_.empty()) {
             throw std::runtime_error("ImportLoad: 'as' Reference is not set");
         }
         return as_;
@@ -182,7 +182,7 @@ class ExportLoad : public Load {
     bool isEmpty() const { return refs_.empty(); }
 
     void addRef(const Reference &ref) {
-        if (ref.isNull()) {
+        if (ref.empty()) {
             throw std::runtime_error("ExportLoad: Cannot add null Reference");
         }
         refs_.push_back(ref);

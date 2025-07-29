@@ -27,8 +27,61 @@ using namespace std;
 
 namespace GraphIntermediateRepresentation {
 
+graph_ptr_t Constructor::enterScope(const std::string &name) {
+    if (name.empty()) {
+        currGraph_ = Graph::create(currGraph_);
+    } else {
+        auto graphs = graphScope_->get(name);
+        if (graphs.has_value() && !graphs.value()->empty()) {
+            currGraph_ = graphs.value()->front();
+        } else {
+            currGraph_ = Graph::create(currGraph_, name);
+            insertGraph(name, currGraph_);
+        }
+    }
+    nodeScope_ = nodeScope_->enter(name);
+    graphScope_ = graphScope_->enter(name);
+    opScope_ = opScope_->enter(name);
+    return currGraph_;
+}
+
+void Constructor::leaveScope() {
+    nodeScope_ = nodeScope_->leave();
+    graphScope_ = graphScope_->leave();
+    opScope_ = opScope_->leave();
+    currGraph_ = currGraph_->outer();
+}
+
+bool Constructor::insertNode(const std::string &name, const node_ptr_t &node) {
+    if (nodeScope_->has(name, false)) {
+        return false;
+    }
+    nodeScope_->insert(name, node);
+    return true;
+}
+
+bool Constructor::insertGraph(const std::string &name, const graph_ptr_t &graph) {
+    if (graphScope_->has(name, false)) {
+        auto graphs = graphScope_->get(name).value();
+        // TODO: check if the graph is already in the list
+        graphs->push_back(graph);
+    }
+    graphScope_->insert(name, std::make_shared<graph_vec_t>(1, graph));
+    return true;
+}
+
+bool Constructor::insertOperator(const std::string &name, const operator_ptr_t &op) {
+    if (opScope_->has(name, false)) {
+        auto ops = opScope_->get(name).value();
+        // TODO: check if the operator is already in the list
+        ops->push_back(op);
+    }
+    opScope_->insert(name, std::make_shared<operator_vec_t>(1, op));
+    return true;
+}
+
 node_ptr_t Constructor::resolveNodeByRef(const std::string &name) {
-    auto optSrcNode = context_->nodeAt(name);
+    auto optSrcNode = nodeAt(name);
     if (!optSrcNode.has_value()) {
         reportDiagnostic(Diagnostic::Severity::Error, "Unresolved reference: " + name);
         throw BuildAbortException();
@@ -90,7 +143,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     const auto &withParamsType = tt::as_shared<ParamsType>(funcType->withParamsType());
     const auto &normParamsType = tt::as_shared<ParamsType>(funcType->normParamsType());
 
-    graph_ptr_t graph = context_->enterScope(declLoad->ref().ident());
+    graph_ptr_t graph = enterScope(declLoad->ref().ident());
     graph->setFuncType(funcType);
     arena_ptr_t arena = graph->arena();
     for (const auto &[name, type, data] : withParamsType->elements()) {
@@ -99,7 +152,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
             reportDiagnostic(Diagnostic::Severity::Warning,
                              "Default data is currently not supported in function parameters.");
         }
-        context_->insertNode(name, graph->addPort());
+        insertNode(name, graph->addPort());
     }
     for (const auto &[name, type, data] : normParamsType->elements()) {
         // TODO: ignored type and default data here
@@ -107,9 +160,9 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
             reportDiagnostic(Diagnostic::Severity::Warning,
                              "Default data is currently not supported in function parameters.");
         }
-        context_->insertNode(name, graph->addPort());
+        insertNode(name, graph->addPort());
     }
-    context_->leaveScope();
+    leaveScope();
 
     LEAVE("DECL");
     return nullptr;
@@ -119,12 +172,12 @@ graph_ptr_t Constructor::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
     // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
     std::string name = gct->loadAs<GCT::FuncLoad>()->name();
-    graph_ptr_t graph = context_->enterScope(name);
+    graph_ptr_t graph = enterScope(name);
     node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (graph->output() == nullptr && res != nullptr) {
         graph->setOutput(res);
     }
-    context_->leaveScope();
+    leaveScope();
     LEAVE("FUNC");
     return graph;
 }
@@ -133,14 +186,14 @@ node_ptr_t Constructor::visitDataNode(const GCT::node_ptr_t &gct) {
     ENTER("DATA");
     const auto &dataLoad = gct->loadAs<GCT::DataLoad>();
     const data_ptr_t &data = dataLoad->data();
-    graph_ptr_t &graph = context_->currGraph();
+    graph_ptr_t &graph = currGraph_;
     node_ptr_t node = nullptr;
     if (data->resolved()) {
         DataIndex index = graph->addSharedConstant(data);
-        node = SourceNode::create(context_->currGraph(), index);
+        node = SourceNode::create(currGraph_, index);
     } else {
         DataIndex index = graph->addRuntimeConstant(data);
-        node = StructNode::create(context_->currGraph(), index, data->type());
+        node = StructNode::create(currGraph_, index, data->type());
         for (const string &ref : data->refs()) {
             Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
         }
@@ -162,7 +215,7 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
     const auto &res = visit(gct->at(0));
     ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of NREF node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
-    bool success = context_->insertNode(ident, node);
+    bool success = insertNode(ident, node);
     if (!success) {
         reportDiagnostic(Diagnostic::Severity::Error, "Redeclaration of reference: " + ident);
         throw BuildAbortException();
@@ -174,13 +227,13 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
 node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
     const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
-    auto optNode = context_->nodeAt(ident);
+    auto optNode = nodeAt(ident);
     if (optNode.has_value()) {
         LEAVE("DREF");
         return optNode.value();
     }
-    graph_ptr_t &graph = context_->currGraph();
-    auto optGraph = context_->graphAt(ident);
+    graph_ptr_t &graph = currGraph_;
+    auto optGraph = graphAt(ident);
     if (optGraph.has_value()) {
         auto graphs = optGraph.value();
         if (!graphs->empty()) {
@@ -193,7 +246,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             return funcNode;
         }
     }
-    auto optOp = context_->operatorAt(ident);
+    auto optOp = operatorAt(ident);
     if (optOp.has_value()) {
         auto ops = optOp.value();
         if (!ops->empty()) {
@@ -366,7 +419,7 @@ node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
-    graph_ptr_t &graph = context_->currGraph();
+    graph_ptr_t &graph = currGraph_;
     DataIndex index = graph->addRuntimeConstant(nullptr);
     // TODO: here may need inplace access to the data
     node_ptr_t accsNode = AccessNode::create(graph, index, accsLoad->index());
@@ -377,31 +430,31 @@ node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
-    graph_ptr_t graph = context_->currGraph();
+    graph_ptr_t graph = currGraph_;
     const auto &res = visit(gct->at(0));
     ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of BRCH node.");
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
-    node_ptr_t brchNode = SelectNode::create(context_->currGraph(), condNode->index(), SelectNode::SelectType::Branch);
+    node_ptr_t brchNode = SelectNode::create(currGraph_, condNode->index(), SelectNode::SelectType::Branch);
     Node::link(LinkType::Norm, condNode, brchNode);
 
-    graph_ptr_t tGraph = context_->enterScope();
+    graph_ptr_t tGraph = enterScope();
     tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
     node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (tGraph->output() == nullptr && tNode != nullptr) {
         tGraph->setOutput(tNode);
     }
-    context_->leaveScope();
+    leaveScope();
     func_ptr_t tData = FunctionData::create(tGraph);
     node_ptr_t tFunc = FunctionNode::create(graph, tGraph->addRuntimeConstant(nullptr), tData);
     Node::link(LinkType::Ctrl, brchNode, tFunc);
 
-    graph_ptr_t fGraph = context_->enterScope();
+    graph_ptr_t fGraph = enterScope();
     fGraph->setFuncType(std::make_shared<FunctionType>());
     node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
     if (fGraph->output() == nullptr && fNode != nullptr) {
         fGraph->setOutput(fNode);
     }
-    context_->leaveScope();
+    leaveScope();
     func_ptr_t fData = FunctionData::create(fGraph);
     node_ptr_t fFunc = FunctionNode::create(graph, fGraph->addRuntimeConstant(nullptr), fData);
     Node::link(LinkType::Ctrl, brchNode, fFunc);
@@ -434,7 +487,7 @@ void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     if (synced_ && lastCalledFuncNode_) {
         exitNode = lastCalledFuncNode_;
     }
-    context_->currGraph()->setOutput(exitNode);
+    currGraph_->setOutput(exitNode);
     LEAVE("EXIT");
     return nullptr;
 }

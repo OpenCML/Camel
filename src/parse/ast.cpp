@@ -558,7 +558,7 @@ any Constructor::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
     ENTER("UseDecl");
     Reference ref;
     if (context->identDef()) {
-        ref.set(context->identDef()->getText());
+        ref.parse(context->identDef()->getText());
     }
     Reference alias(context->identRef()->getText());
     node_ptr_t nameDeclNode = createNodeAs<NameDeclLoad>(ref, alias);

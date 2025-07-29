@@ -1147,7 +1147,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
                              paramLoad->tokenRange());
         }
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.isAlone()) {
+        if (!paramRef.plain()) {
             reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
                              paramLoad->tokenRange());
             throw BuildAbortException();
@@ -1182,7 +1182,7 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
                              paramLoad->tokenRange());
         }
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.isAlone()) {
+        if (!paramRef.plain()) {
             reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
                              paramLoad->tokenRange());
             throw BuildAbortException();

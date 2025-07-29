@@ -177,10 +177,6 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     for (size_t i = 0; i < nodes.size(); i++) {
         string label;
         const node_ptr_t &node = nodes[i];
-        const auto &name = nodeIdents_.find(node);
-        if (name != nodeIdents_.end()) {
-            label = name->second;
-        }
         string shape = "circle";
         string style = "solid";
         string size = "";
@@ -197,7 +193,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         }
         case NodeType::Access: {
             auto accessNode = tt::as_shared<AccessNode>(node);
-            label = "$" + accessNode->indexAsString() + "\n" + label;
+            label = "$" + accessNode->indexAsString();
             break;
         }
         case NodeType::Struct: {

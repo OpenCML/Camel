@@ -27,10 +27,7 @@
 #include <string>
 #include <unordered_map>
 
-template <typename T>
-concept Hashable = requires(T t) {
-    { std::hash<T>{}(t) } -> std::convertible_to<std::size_t>;
-};
+#include "utils/template.h"
 
 template <typename T>
 concept HasEmpty = requires(T t) {

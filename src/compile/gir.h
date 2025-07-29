@@ -32,7 +32,13 @@ using void_ptr_t = void *;
 
 class Constructor {
   public:
-    Constructor(context_ptr_t &context) : context_(context) {}
+    Constructor(context_ptr_t &context) : context_(context) {
+        nodeScope_ = node_scope_t::create();
+        graphScope_ = graph_scope_t::create();
+        opScope_ = operator_scope_t::create(globalOperators);
+        rootGraph_ = GIR::Graph::create(nullptr, "__root__");
+        currGraph_ = rootGraph_;
+    }
 
     graph_ptr_t construct(GCT::node_ptr_t &gct, diagnostics_ptr_t diagnostics) {
         waited_ = false;
@@ -40,10 +46,17 @@ class Constructor {
         varied_ = false;
         diagnostics_ = diagnostics;
         visit(gct);
-        return context_->rootGraph();
+        return rootGraph_;
     }
 
   private:
+    graph_ptr_t rootGraph_;
+    graph_ptr_t currGraph_;
+
+    node_scope_ptr_t nodeScope_;
+    graph_scope_ptr_t graphScope_;
+    operator_scope_ptr_t opScope_;
+
     context_ptr_t context_;
     diagnostics_ptr_t diagnostics_;
 
@@ -53,6 +66,17 @@ class Constructor {
 
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastCalledFuncNode_;
+
+    std::optional<node_ptr_t> nodeAt(const std::string &name) { return nodeScope_->get(name); }
+    std::optional<std::shared_ptr<graph_vec_t>> graphAt(const std::string &name) { return graphScope_->get(name); }
+    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) { return opScope_->get(name); }
+
+    bool insertNode(const std::string &name, const node_ptr_t &node);
+    bool insertGraph(const std::string &name, const graph_ptr_t &graph);
+    bool insertOperator(const std::string &name, const operator_ptr_t &op);
+
+    graph_ptr_t enterScope(const std::string &name = "");
+    void leaveScope();
 
     void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
                           std::pair<size_t, size_t> tokenRange = {0, 0}) {

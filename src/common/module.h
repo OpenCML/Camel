@@ -12,9 +12,27 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 18, 2024
- * Updated: Mar. 10, 2025
+ * Created: Jul. 29, 2025
+ * Updated: Jul. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "context.h"
+#pragma once
+
+class Module {
+  public:
+    Module() = default;
+    virtual ~Module() = default;
+
+    // Initialize the module
+    virtual void init() = 0;
+
+    // Finalize the module
+    virtual void finalize() = 0;
+
+    // Get the name of the module
+    virtual const char *name() const = 0;
+
+    // Get the version of the module
+    virtual const char *version() const = 0;
+};
