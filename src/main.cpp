@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
         AST::node_ptr_t ast = nullptr;
         GCT::node_ptr_t gct = nullptr;
         GIR::graph_ptr_t gir = nullptr;
-        context_ptr_t ctx = make_shared<Context>();
+        context_ptr_t ctx = Context::create();
 
         try {
             if (!buildCST(cst, parser, os, errorFormat)) {

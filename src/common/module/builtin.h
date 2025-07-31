@@ -23,7 +23,7 @@
 
 class BuiltinModule : public Module {
   public:
-    BuiltinModule(const std::string &name) : Module(name) {}
+    BuiltinModule(const std::string &name) : Module(name, "") {}
     virtual ~BuiltinModule() = default;
 };
 

@@ -18,3 +18,31 @@
  */
 
 #include "context.h"
+
+std::string resolveModuleName(const std::string &currentModule, const std::string &importName) {
+    if (importName.empty() || importName[0] != '.') {
+        return importName;
+    }
+
+    int level = 0;
+    size_t i = 0;
+    while (i < importName.size() && importName[i] == '.') {
+        ++level;
+        ++i;
+    }
+
+    std::string remaining = importName.substr(i);
+
+    std::vector<std::string> base = split(currentModule, '.');
+    if (base.size() < level) {
+        throw std::runtime_error("Too many dots in relative import");
+    }
+
+    base.resize(base.size() - level); // 向上走 level 层
+    if (!remaining.empty()) {
+        std::vector<std::string> rest = split(remaining, '.');
+        base.insert(base.end(), rest.begin(), rest.end());
+    }
+
+    return join(base, '.'); // 返回逻辑模块名
+}
