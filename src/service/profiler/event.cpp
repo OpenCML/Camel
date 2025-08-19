@@ -12,23 +12,33 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Created: Aug. 20, 2025
+ * Updated: Aug. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "event.h"
 
-#include "userdef.h"
+nlohmann::json TraceEvent::to_json() const {
+    nlohmann::json j;
+    j["name"] = name;
+    j["cat"] = cat;
+    j["ph"] = ph;
+    j["ts"] = ts;
+    j["pid"] = pid;
+    j["tid"] = tid;
 
-class MainModule : public UserDefinedModule {
-  public:
-    MainModule(context_ptr_t ctx) : UserDefinedModule("main", "", ctx) {}
-    virtual ~MainModule() = default;
-
-    static module_ptr_t create(context_ptr_t ctx) { return std::make_shared<MainModule>(ctx); }
-
-    GIR::graph_ptr_t entry() const {
-        return nullptr; // Placeholder
+    if (!args.empty()) {
+        j["args"] = args;
     }
-};
+
+    if (ph == "i" && !scope.empty()) {
+        j["s"] = scope;
+    }
+
+    if (ph == "X") {
+        j["dur"] = dur;
+    }
+
+    return j;
+}

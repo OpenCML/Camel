@@ -39,6 +39,7 @@
 #include "parse/ast.h"
 #include "parse/cst-dump.h"
 #include "service/formatter/fmt.h"
+#include "service/profiler/trace.h"
 #include "utils/log.h"
 
 using namespace antlr4;

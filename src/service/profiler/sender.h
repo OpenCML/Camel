@@ -12,23 +12,29 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Created: Aug. 20, 2025
+ * Updated: Aug. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "userdef.h"
+#include "buffer.h"
+#include <atomic>
+#include <thread>
 
-class MainModule : public UserDefinedModule {
+class TraceSender {
   public:
-    MainModule(context_ptr_t ctx) : UserDefinedModule("main", "", ctx) {}
-    virtual ~MainModule() = default;
+    TraceSender(TraceBuffer &buffer);
+    ~TraceSender();
 
-    static module_ptr_t create(context_ptr_t ctx) { return std::make_shared<MainModule>(ctx); }
+    void start();
+    void stop();
 
-    GIR::graph_ptr_t entry() const {
-        return nullptr; // Placeholder
-    }
+  private:
+    void run();
+
+    TraceBuffer &buffer_;
+    std::thread thread_;
+    std::atomic<bool> running_;
 };

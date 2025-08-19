@@ -25,7 +25,7 @@
 #include "module/builtin.h"
 #include "module/main.h"
 
-bool fileExists(const std::string &path) {
+inline bool fileExists(const std::string &path) {
     std::ifstream file(path);
     return file.good();
 }

@@ -33,16 +33,18 @@ std::string resolveModuleName(const std::string &currentModule, const std::strin
 
     std::string remaining = importName.substr(i);
 
-    std::vector<std::string> base = split(currentModule, '.');
-    if (base.size() < level) {
-        throw std::runtime_error("Too many dots in relative import");
-    }
+    return "";
 
-    base.resize(base.size() - level); // 向上走 level 层
-    if (!remaining.empty()) {
-        std::vector<std::string> rest = split(remaining, '.');
-        base.insert(base.end(), rest.begin(), rest.end());
-    }
+    // std::vector<std::string> base = split(currentModule, '.');
+    // if (base.size() < level) {
+    //     throw std::runtime_error("Too many dots in relative import");
+    // }
 
-    return join(base, '.'); // 返回逻辑模块名
+    // base.resize(base.size() - level); // 向上走 level 层
+    // if (!remaining.empty()) {
+    //     std::vector<std::string> rest = split(remaining, '.');
+    //     base.insert(base.end(), rest.begin(), rest.end());
+    // }
+
+    // return join(base, '.'); // 返回逻辑模块名
 }
