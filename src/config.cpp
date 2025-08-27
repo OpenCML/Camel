@@ -77,22 +77,6 @@ bool dumpGIR = false;    // Whether to dump GIR
 int passUntil = -1;      // Pass until the given pass
 } // namespace Inspect
 
-namespace Build {
-bool optimize = false;       // Whether to optimize the code
-bool rollup = false;         // Whether to rollup the code
-bool verbose = false;        // Whether to show verbose information
-string warningSwitch = "on"; // Warning switch (default to on)
-string outputDir = "";       // Output directory
-} // namespace Build
-
-namespace Serve {
-string serverHost = "";  // Server host
-unsigned int serverPort; // Server port
-} // namespace Serve
-
-namespace Debug {
-string variable = ""; // Whether to optimize the code
-} // namespace Debug
 } // namespace CmdLineArgs
 
 using namespace CmdLineArgs;
@@ -100,9 +84,6 @@ using namespace CmdLineArgs::Run;
 using namespace CmdLineArgs::Format;
 using namespace CmdLineArgs::Check;
 using namespace CmdLineArgs::Inspect;
-using namespace CmdLineArgs::Build;
-using namespace CmdLineArgs::Debug;
-using namespace CmdLineArgs::Serve;
 
 void _printFormatArgs() {
     cout << "Format args: " << endl;
@@ -151,68 +132,6 @@ void _printInspectArgs() {
     cout << endl;
 }
 
-void _printBuildArgs() {
-    cout << "Build args: " << endl;
-    cout << "\toptimize:" << optimize << endl;
-    cout << "\trollup:" << rollup << endl;
-    cout << "\tverbose:" << verbose << endl;
-    cout << "\twarning-switch:" << warningSwitch << endl;
-    cout << "\toutput-dir:" << outputDir << endl;
-    cout << "\tstd-lib-path:" << stdLibPath << endl;
-    if (!includeDirs.empty()) {
-        cout << "\tinclude-dir:" << endl;
-        for (auto &dir : includeDirs) {
-            cout << dir << endl;
-        }
-    }
-    cout << "\ttarget-file:";
-    for (auto &file : targetFiles) {
-        cout << file << " ";
-    }
-    cout << endl;
-}
-
-void _printDebugArgs() {
-    cout << "Debug args: " << endl;
-    cout << "\tvariable:" << variable << endl;
-    if (!includeDirs.empty()) {
-        cout << "\tincludeDir:" << endl;
-        for (auto &dir : includeDirs) {
-            cout << dir << endl;
-        }
-    }
-    cout << "\tstd-lib-path:" << stdLibPath << endl;
-    cout << "\ttarget-file:";
-    for (auto &file : targetFiles) {
-        cout << file << " ";
-    }
-    cout << endl;
-}
-
-void _printServeArgs() {
-    cout << "Serve args: " << endl;
-    cout << "\tserver-host:" << serverHost << endl;
-    cout << "\tserver-port:" << serverPort << endl;
-}
-
-void _printHelpArgs() {
-    cout << "Help args: " << endl;
-    cout << "\tpackage:" << package << endl;
-    cout << "\tprofile:" << profile << endl;
-    cout << "\tscheduler:" << schedular << endl;
-    cout << "\tmax-threads:" << maxThreads << endl;
-    cout << "\tno-cache:" << noCache << endl;
-    cout << "\tsemantic-only:" << semanticOnly << endl;
-    cout << "\trepeat:" << repeat << endl;
-    if (!includeDirs.empty()) {
-        cout << "\tincludeDir:" << endl;
-        for (auto &dir : includeDirs) {
-            cout << dir << endl;
-        }
-    }
-    cout << "\tstd-lib-path:" << stdLibPath << endl;
-}
-
 void printCliArgs(Command selected) {
     switch (selected) {
     case Command::INFO:
@@ -226,15 +145,6 @@ void printCliArgs(Command selected) {
         break;
     case Command::INSPECT:
         _printInspectArgs();
-        break;
-    case Command::BUILD:
-        _printBuildArgs();
-        break;
-    case Command::DEBUG:
-        _printDebugArgs();
-        break;
-    case Command::SERVE:
-        _printServeArgs();
         break;
     default:
         cout << "Unknown command" << endl;
@@ -303,31 +213,7 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) % "pass until the given pass",
          values("input", targetFiles) % "input file");
 
-    auto build =
-        (command("build").set(selectedCommand, Command::BUILD) % "build the code",
-         option("-o", "-O", "--optimize").set(optimize) % "optimize the code",
-         option("-r", "-R", "-rollup").set(rollup) % "rollup the code",
-         option("-g", "--verbose").set(verbose) % "show verbose information",
-         (option("-W", "--warning") & value("warning switch", warningSwitch)) % "warning switch",
-         (option("--output") & (rollup ? value("output dirctary", outputDir) : value("output file", outputFile))) %
-             "output file or directory",
-         option("--include") & values("include dir", includeDirs) % "add include directory",
-         (option("--stdlib") & value("stdlib dir", stdLibPath)) % "add stdlib path",
-         values("input", targetFiles) % "input file");
-
-    auto serve =
-        (command("serve").set(selectedCommand, Command::SERVE) % "serve the code",
-         (option("--host") & value("host", serverHost)) % "host",
-         (option("--port") & integer("port", serverPort)) % "port", values("input", targetFiles) % "input file");
-
-    auto debug = (command("debug").set(selectedCommand, Command::DEBUG) % "debug the code",
-                  (option("--variable") & value("variable", variable)) % "variable", /*not finished yet*/
-                  option("--print") % "print debug information",                     /*not finished yet*/
-                  option("--include") & values("include dir", includeDirs) % "add include directory",
-                  (option("--stdlib") & value("stdlib dir", stdLibPath)) % "add stdlib path",
-                  values("input", targetFiles) % "input file");
-
-    auto cli = run | info | format | check | inspect | build | debug | serve;
+    auto cli = run | info | format | check | inspect;
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;
@@ -336,9 +222,9 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-// #ifndef NDEBUG
-//     printCliArgs(selectedCommand);
-// #endif
+    // #ifndef NDEBUG
+    //     printCliArgs(selectedCommand);
+    // #endif
 
     if (showVersion) {
 #ifdef NDEBUG

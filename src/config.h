@@ -25,7 +25,7 @@
 
 #include <string>
 
-enum class Command { RUN, INFO, FORMAT, CHECK, INSPECT, BUILD, SERVE, DEBUG }; // Modes of operation
+enum class Command { RUN, INFO, FORMAT, CHECK, INSPECT }; // Modes of operation
 
 bool parseArgs(int argc, char *argv[]);
 
@@ -74,22 +74,6 @@ extern bool dumpGIR;    // Whether to dump GIR
 extern int passUntil;   // Pass until the given pass
 } // namespace Inspect
 
-namespace Build {
-extern bool optimize;             // Whether to optimize the code
-extern bool rollup;               // Whether to rollup the code
-extern bool verbose;              // Whether to show verbose information
-extern std::string warningSwitch; // Warning switch (default to on)
-extern std::string outputDir;     // Output directory
-} // namespace Build
-
-namespace Serve {
-extern std::string serverHost;  // Server host
-extern unsigned int serverPort; // Server port
-} // namespace Serve
-
-namespace Debug {
-extern std::string variable; // Whether to optimize the code
-} // namespace Debug
 } // namespace CmdLineArgs
 
 namespace CLI = CmdLineArgs;
