@@ -75,8 +75,12 @@ class Constructor {
     node_ptr_t lastCalledFuncNode_;
 
     std::optional<node_ptr_t> nodeAt(const std::string &name) { return nodeScope_->get(name); }
-    std::optional<std::shared_ptr<graph_vec_t>> graphAt(const std::string &name) { return graphScope_->get(name); }
-    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) { return opScope_->get(name); }
+    std::optional<std::shared_ptr<graph_vec_t>> graphAt(const std::string &name) {
+        return graphScope_->get(name);
+    }
+    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) {
+        return opScope_->get(name);
+    }
 
     bool insertNode(const std::string &name, const node_ptr_t &node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
@@ -85,8 +89,9 @@ class Constructor {
     graph_ptr_t enterScope(const std::string &name = "");
     void leaveScope();
 
-    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
-                          std::pair<size_t, size_t> tokenRange = {0, 0}) {
+    void reportDiagnostic(
+        Diagnostic::Severity sev, const std::string &msg,
+        std::pair<size_t, size_t> tokenRange = {0, 0}) {
         diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 

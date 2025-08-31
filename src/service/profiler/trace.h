@@ -23,13 +23,15 @@
 
 #include <string>
 
-void trace_event_begin(const std::string& name, const std::string& cat = "default");
-void trace_event_end(const std::string& name = "");
-void trace_event_instant(const std::string& name, const std::string& cat = "default", const std::string& scope = "t");
-void trace_event_complete(const std::string& name, uint64_t start_ts, uint64_t dur, const std::string& cat = "default");
-void trace_event_counter(const std::string& name, int value, const std::string& cat = "default");
-void trace_event_metadata_thread_name(const std::string& name);
-void trace_event_metadata_process_name(const std::string& name);
+void trace_event_begin(const std::string &name, const std::string &cat = "default");
+void trace_event_end(const std::string &name = "");
+void trace_event_instant(
+    const std::string &name, const std::string &cat = "default", const std::string &scope = "t");
+void trace_event_complete(
+    const std::string &name, uint64_t start_ts, uint64_t dur, const std::string &cat = "default");
+void trace_event_counter(const std::string &name, int value, const std::string &cat = "default");
+void trace_event_metadata_thread_name(const std::string &name);
+void trace_event_metadata_process_name(const std::string &name);
 void trace_event_flush();
 
 #define TRACE_EVENT_BEGIN(name) trace_event_begin(name)

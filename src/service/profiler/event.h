@@ -19,9 +19,9 @@
 
 #pragma once
 
+#include "nlohmann/json.hpp"
 #include <string>
 #include <unordered_map>
-#include "nlohmann/json.hpp"
 
 struct TraceEvent {
     std::string name;

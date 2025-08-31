@@ -24,11 +24,11 @@
 #include <string>
 
 #include "common/ast/ast.h"
+#include "common/context.h"
 #include "common/error/abort.h"
 #include "common/error/diagnostic.h"
 #include "common/gct.h"
 #include "common/scope.h"
-#include "common/context.h"
 
 namespace GraphConstructTree {
 using void_ptr_t = void *;

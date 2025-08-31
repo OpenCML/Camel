@@ -35,11 +35,16 @@ std::unordered_map<std::string, module_ptr_t> builtinModules;
 
 void initializeBuiltinModules() {
     builtinModuleFactories = {
-        {"", [] { return BasicBuiltinModule::create(); }},    {"io", [] { return IOBuiltinModule::create(); }},
-        {"os", [] { return OSBuiltinModule::create(); }},     {"re", [] { return REBuiltinModule::create(); }},
-        {"sys", [] { return SysBuiltinModule::create(); }},   {"math", [] { return MathBuiltinModule::create(); }},
-        {"time", [] { return TimeBuiltinModule::create(); }}, {"file", [] { return FileBuiltinModule::create(); }},
-        {"json", [] { return JsonBuiltinModule::create(); }}, {"random", [] { return RandomBuiltinModule::create(); }},
+        {"", [] { return BasicBuiltinModule::create(); }},
+        {"io", [] { return IOBuiltinModule::create(); }},
+        {"os", [] { return OSBuiltinModule::create(); }},
+        {"re", [] { return REBuiltinModule::create(); }},
+        {"sys", [] { return SysBuiltinModule::create(); }},
+        {"math", [] { return MathBuiltinModule::create(); }},
+        {"time", [] { return TimeBuiltinModule::create(); }},
+        {"file", [] { return FileBuiltinModule::create(); }},
+        {"json", [] { return JsonBuiltinModule::create(); }},
+        {"random", [] { return RandomBuiltinModule::create(); }},
     };
 }
 

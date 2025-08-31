@@ -26,7 +26,8 @@
 
 class Context;
 
-using OperatorFunction = std::function<data_ptr_t(Context &, const data_vec_t &, const data_vec_t &)>;
+using OperatorFunction =
+    std::function<data_ptr_t(Context &, const data_vec_t &, const data_vec_t &)>;
 
 class Operator {
   private:

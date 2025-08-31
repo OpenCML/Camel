@@ -149,16 +149,18 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
     for (const auto &[name, type, data] : withParamsType->elements()) {
         // TODO: ignored type and default data here
         if (data != nullptr) {
-            reportDiagnostic(Diagnostic::Severity::Warning,
-                             "Default data is currently not supported in function parameters.");
+            reportDiagnostic(
+                Diagnostic::Severity::Warning,
+                "Default data is currently not supported in function parameters.");
         }
         insertNode(name, graph->addPort());
     }
     for (const auto &[name, type, data] : normParamsType->elements()) {
         // TODO: ignored type and default data here
         if (data != nullptr) {
-            reportDiagnostic(Diagnostic::Severity::Warning,
-                             "Default data is currently not supported in function parameters.");
+            reportDiagnostic(
+                Diagnostic::Severity::Warning,
+                "Default data is currently not supported in function parameters.");
         }
         insertNode(name, graph->addPort());
     }
@@ -213,7 +215,9 @@ void_ptr_t Constructor::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     const auto &res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of NREF node.");
+    ASSERT(
+        res.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter the child of NREF node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
     bool success = insertNode(ident, node);
     if (!success) {
@@ -266,7 +270,9 @@ node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
     bool old = varied_;
     varied_ = true;
     const auto &res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of VARI node.");
+    ASSERT(
+        res.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter the child of VARI node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
     varied_ = old;
     LEAVE("VARI");
@@ -277,7 +283,9 @@ node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) {
     bool old = waited_;
     waited_ = true;
     const auto &res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of WAIT node.");
+    ASSERT(
+        res.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter the child of WAIT node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
     waited_ = old;
     LEAVE("WAIT");
@@ -287,7 +295,9 @@ node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) {
 node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     any funcNodeRes = visit(gct->at(0));
-    ASSERT(funcNodeRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
+    ASSERT(
+        funcNodeRes.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter the child of LINK node.");
     node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
     std::vector<std::tuple<std::string, type_ptr_t, bool>> params;
     if (funcNode->type() == NodeType::Function) {
@@ -303,7 +313,9 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
     vector<node_ptr_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
-        ASSERT(dataRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
+        ASSERT(
+            dataRes.type() == typeid(node_ptr_t),
+            "Unexpected result type from Enter the child of LINK node.");
         node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
         inputs.push_back(inputNode);
     }
@@ -322,9 +334,12 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         if (isVar) {
             if (!waited_) {
-                reportDiagnostic(Diagnostic::Severity::Warning, "Function with side effects is called but not waited");
+                reportDiagnostic(
+                    Diagnostic::Severity::Warning,
+                    "Function with side effects is called but not waited");
             }
-            nodeModifierMap_[inputNode.get()] = funcNode; // Mark this node as a modifier for the input node
+            nodeModifierMap_[inputNode.get()] =
+                funcNode; // Mark this node as a modifier for the input node
         }
         if (synced_) {
             if (lastCalledFuncNode_) {
@@ -346,7 +361,9 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
 node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
     ENTER("WITH");
     any funcNodeRes = visit(gct->at(0));
-    ASSERT(funcNodeRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of WITH node.");
+    ASSERT(
+        funcNodeRes.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter the child of WITH node.");
     node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
     std::vector<std::tuple<std::string, type_ptr_t, bool>> params;
     if (funcNode->type() == NodeType::Function) {
@@ -362,7 +379,9 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
     vector<node_ptr_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
-        ASSERT(dataRes.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of LINK node.");
+        ASSERT(
+            dataRes.type() == typeid(node_ptr_t),
+            "Unexpected result type from Enter the child of LINK node.");
         node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
         inputs.push_back(inputNode);
     }
@@ -381,9 +400,12 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
         }
         if (isVar) {
             if (!waited_) {
-                reportDiagnostic(Diagnostic::Severity::Warning, "Function with side effects is called but not waited");
+                reportDiagnostic(
+                    Diagnostic::Severity::Warning,
+                    "Function with side effects is called but not waited");
             }
-            nodeModifierMap_[inputNode.get()] = funcNode; // Mark this node as a modifier for the input node
+            nodeModifierMap_[inputNode.get()] =
+                funcNode; // Mark this node as a modifier for the input node
         }
         if (synced_) {
             if (lastCalledFuncNode_) {
@@ -412,7 +434,9 @@ node_ptr_t Constructor::visitBindNode(const GCT::node_ptr_t &gct) {
 node_ptr_t Constructor::visitAccsNode(const GCT::node_ptr_t &gct) {
     ENTER("ACCS");
     any res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of ACCS node.");
+    ASSERT(
+        res.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter the child of ACCS node.");
     node_ptr_t tgtNode = any_cast<node_ptr_t>(res);
     if (tgtNode == nullptr) {
         reportDiagnostic(Diagnostic::Severity::Error, "Access node target is null.");
@@ -432,9 +456,12 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
     graph_ptr_t graph = currGraph_;
     const auto &res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter the child of BRCH node.");
+    ASSERT(
+        res.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter the child of BRCH node.");
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
-    node_ptr_t brchNode = SelectNode::create(currGraph_, condNode->index(), SelectNode::SelectType::Branch);
+    node_ptr_t brchNode =
+        SelectNode::create(currGraph_, condNode->index(), SelectNode::SelectType::Branch);
     Node::link(LinkType::Norm, condNode, brchNode);
 
     graph_ptr_t tGraph = enterScope();
@@ -478,7 +505,9 @@ node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) {
 void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
     auto res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from Enter child of EXIT node.");
+    ASSERT(
+        res.type() == typeid(node_ptr_t),
+        "Unexpected result type from Enter child of EXIT node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
     node_ptr_t exitNode = node;
     if (nodeModifierMap_.count(node.get())) {

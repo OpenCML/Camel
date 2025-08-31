@@ -69,7 +69,8 @@ class UserDefinedModule : public Module {
     GIR::graph_ptr_t gir() const { return gir_; }
     diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
-    static module_ptr_t loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx) {
+    static module_ptr_t
+    loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx) {
         return std::make_shared<UserDefinedModule>(name, path, ctx);
     }
 

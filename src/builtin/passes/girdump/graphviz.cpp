@@ -145,7 +145,8 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
 
     res += baseIndent_;
     if (depth_ == 0) {
-        res += string("digraph GraphIR {\r\n") + string("    graph [rankdir=LR, fontsize=18];\r\n") +
+        res += string("digraph GraphIR {\r\n") +
+               string("    graph [rankdir=LR, fontsize=18];\r\n") +
                string("    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n") +
                string("    edge [minlen=2];\r\n");
     } else {
@@ -171,7 +172,8 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
 
     vector<node_ptr_t> argNodes;
     if (!graph->isRoot()) {
-        res += baseIndent_ + indent_ + funcId + " [label=\"ARGS\", style=dashed, shape=circle];\r\n";
+        res +=
+            baseIndent_ + indent_ + funcId + " [label=\"ARGS\", style=dashed, shape=circle];\r\n";
     }
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); i++) {
@@ -232,11 +234,13 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         default:
             throw runtime_error("Unknown node type");
         }
-        res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" + escape(wrapText(label, 8, 2)) +
-               "\", shape=" + shape + ", style=" + style + (size.empty() ? ("") : (", " + size)) + "];\r\n";
+        res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" +
+               escape(wrapText(label, 8, 2)) + "\", shape=" + shape + ", style=" + style +
+               (size.empty() ? ("") : (", " + size)) + "];\r\n";
     }
     if (!graph->isRoot()) {
-        res += baseIndent_ + indent_ + exitId + " [label=\"RETN\", shape=doublecircle, width=0.9, height=0.9];\r\n";
+        res += baseIndent_ + indent_ + exitId +
+               " [label=\"RETN\", shape=doublecircle, width=0.9, height=0.9];\r\n";
     }
 
     for (const auto &node : argNodes) {
@@ -249,24 +253,25 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
             if (vec[i] == nullptr) {
                 continue;
             }
-            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
-                   " [label=\"" + to_string(i) + "\"];\r\n";
+            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
+                   pointerToIdent(node.get()) + " [label=\"" + to_string(i) + "\"];\r\n";
         }
         vec = node->withInputs();
         for (size_t i = 0; i < vec.size(); i++) {
             if (vec[i] == nullptr) {
                 continue;
             }
-            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
-                   " [label=\"" + to_string(i) + "\", style=dashed];\r\n";
+            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
+                   pointerToIdent(node.get()) + " [label=\"" + to_string(i) +
+                   "\", style=dashed];\r\n";
         }
         vec = node->ctrlInputs();
         for (size_t i = 0; i < vec.size(); i++) {
             if (vec[i] == nullptr) {
                 continue;
             }
-            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " + pointerToIdent(node.get()) +
-                   " [style=dashed, arrowhead=empty];\r\n";
+            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
+                   pointerToIdent(node.get()) + " [style=dashed, arrowhead=empty];\r\n";
         }
         if (node.get() == retNodePtr) {
             res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + exitId + ";\r\n";

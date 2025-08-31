@@ -38,7 +38,9 @@ using namespace std::chrono;
 static std::vector<TraceEvent> g_events;
 static std::mutex g_mutex;
 
-static uint64_t now_us() { return duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count(); }
+static uint64_t now_us() {
+    return duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
+}
 
 static int get_pid() {
 #ifdef _WIN32
@@ -82,7 +84,8 @@ void trace_event_end(const std::string &name) {
     g_events.push_back(e);
 }
 
-void trace_event_instant(const std::string &name, const std::string &cat, const std::string &scope) {
+void trace_event_instant(
+    const std::string &name, const std::string &cat, const std::string &scope) {
     TraceEvent e;
     e.name = name;
     e.cat = cat;
@@ -96,7 +99,8 @@ void trace_event_instant(const std::string &name, const std::string &cat, const 
     g_events.push_back(e);
 }
 
-void trace_event_complete(const std::string &name, uint64_t start_ts, uint64_t dur, const std::string &cat) {
+void trace_event_complete(
+    const std::string &name, uint64_t start_ts, uint64_t dur, const std::string &cat) {
     TraceEvent e;
     e.name = name;
     e.cat = cat;

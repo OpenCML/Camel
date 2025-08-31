@@ -93,7 +93,9 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
     template <typename T> node_ptr_t atAs(size_t index) const {
         ASSERT(index < children_.size(), "Index out of bounds");
         ASSERT(children_.at(index) != nullptr, "Child node is null");
-        ASSERT(std::dynamic_pointer_cast<T>(children_.at(index)->load()), "Dynamic pointer cast failed");
+        ASSERT(
+            std::dynamic_pointer_cast<T>(children_.at(index)->load()),
+            "Dynamic pointer cast failed");
         return children_.at(index);
     }
     template <typename T> node_ptr_t optAtAs(size_t index) const {
@@ -110,7 +112,9 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
     template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
-        ASSERT(std::dynamic_pointer_cast<LoadType>(load_), "Load type does not match requested type");
+        ASSERT(
+            std::dynamic_pointer_cast<LoadType>(load_),
+            "Load type does not match requested type");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
 };
@@ -205,7 +209,8 @@ class NamedDataLoad : public Load {
 
 class NamedTypeLoad : public Load {
   public:
-    NamedTypeLoad(const Reference &ref, bool isVar = false) : Load(LoadType::NamedType), ref_(ref), isVar_(isVar) {}
+    NamedTypeLoad(const Reference &ref, bool isVar = false)
+        : Load(LoadType::NamedType), ref_(ref), isVar_(isVar) {}
     const std::string toString() const override {
         return "NamedType: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }
@@ -219,7 +224,8 @@ class NamedTypeLoad : public Load {
 
 class NamedPairLoad : public Load {
   public:
-    NamedPairLoad(const Reference &ref, bool isVar = false) : Load(LoadType::NamedType), ref_(ref), isVar_(isVar) {}
+    NamedPairLoad(const Reference &ref, bool isVar = false)
+        : Load(LoadType::NamedType), ref_(ref), isVar_(isVar) {}
     const std::string toString() const override {
         return "NamedPair: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }

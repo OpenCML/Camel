@@ -23,15 +23,18 @@
 #include "common/impl.h"
 #include "special.h"
 
-using param_init_list = std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>;
+using param_init_list =
+    std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>;
 
 class FunctionType : public SpecialType {
   public:
     FunctionType();
-    FunctionType(const std::shared_ptr<ParamsType> &withParamsType, const std::shared_ptr<ParamsType> &paramsType,
-                 const type_ptr_t &returnType);
-    FunctionType(const param_init_list &withParamsList, const param_init_list &normParamsList,
-                 const type_ptr_t &returnType);
+    FunctionType(
+        const std::shared_ptr<ParamsType> &withParamsType,
+        const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
+    FunctionType(
+        const param_init_list &withParamsList, const param_init_list &normParamsList,
+        const type_ptr_t &returnType);
 
     const std::string &argNameAt(size_t idx) const;
 

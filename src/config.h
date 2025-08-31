@@ -51,8 +51,8 @@ extern std::string configFile;  // Configuration file path
 extern bool useTabs;            // Whether to use tabs for indentation
 extern bool inplace;            // Whether to modify the input file in place
 extern bool ignoreDefiFile;     // Whether to ignore the definition file
-extern unsigned int tabSize;  // Indentation size in spaces
-extern unsigned int maxWidth; // Max line width
+extern unsigned int tabSize;    // Indentation size in spaces
+extern unsigned int maxWidth;   // Max line width
 }; // namespace Format
 
 namespace Check {

@@ -17,7 +17,6 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-
 #include "parse.h"
 
 using namespace std;

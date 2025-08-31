@@ -33,7 +33,8 @@ VectorData::VectorData(type_ptr_t type, data_list_t data) : data_(data) {
         if (e->type()->code() == TypeCode::REF) {
             refs_.push_back(i);
         } else if (e->type()->convertibility(*type) != TypeConv::SAFE) {
-            throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type->toString());
+            throw DataConvError(
+                "Cannot convert " + e->type()->toString() + " to " + type->toString());
         }
         i++;
     }
@@ -125,11 +126,13 @@ data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
         }
         throw UnsupportedConvError();
     } catch (const UnsupportedConvError &e) {
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError(
+            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     } catch (const std::exception &e) {
         throw DataConvError(e.what());
     }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError(
+        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
 vector<string> VectorData::refs() const {

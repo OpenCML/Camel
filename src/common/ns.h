@@ -26,7 +26,8 @@
 #include "ref.h"
 #include "utils/template.h"
 
-template <Hashable Key, typename Val> class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
+template <Hashable Key, typename Val>
+class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
   protected:
     using namespace_ptr_t = std::shared_ptr<Namespace<Key, Val>>;
     std::unordered_map<Key, Val> map_;

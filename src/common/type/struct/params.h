@@ -29,7 +29,8 @@ class ParamsType : public StructType {
 
   public:
     ParamsType();
-    ParamsType(const std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>> &&elements);
+    ParamsType(
+        const std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t>> &&elements);
 
     std::string toString() const override;
 

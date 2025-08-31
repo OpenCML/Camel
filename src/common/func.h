@@ -124,7 +124,9 @@ inline ModifierMask operator|(Modifier a, Modifier b) {
     return static_cast<ModifierMask>(a) | static_cast<ModifierMask>(b);
 }
 
-inline ModifierMask operator&(ModifierMask a, Modifier b) { return a & static_cast<ModifierMask>(b); }
+inline ModifierMask operator&(ModifierMask a, Modifier b) {
+    return a & static_cast<ModifierMask>(b);
+}
 
 inline ModifierSet operator|(const ModifierSet &lhs, Modifier rhs) {
     return ModifierSet(lhs.mask | static_cast<ModifierMask>(rhs));

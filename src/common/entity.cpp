@@ -85,7 +85,8 @@ const entity_ptr_t Entity::convert(type_ptr_t target, bool inplace = false) {
 
 bool Entity::equals(const entity_ptr_t &other) const {
     // TODO: implement equals
-    return data_ == other->data_ || (data_ != nullptr && other->data_ != nullptr && data_->equals(other->data_));
+    return data_ == other->data_ ||
+           (data_ != nullptr && other->data_ != nullptr && data_->equals(other->data_));
 }
 
 void Entity::setMeta(data_ptr_t meta) { meta_ = meta; }

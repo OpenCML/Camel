@@ -111,11 +111,13 @@ data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
         }
         throw UnsupportedConvError();
     } catch (const UnsupportedConvError &e) {
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError(
+            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     } catch (const std::exception &e) {
         throw DataConvError(e.what());
     }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError(
+        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
 data_ptr_t ParamsData::clone(bool deep) const {
@@ -189,7 +191,8 @@ data_ptr_t ParamsData::convertToParams(const shared_ptr<ParamsType> &other, bool
             throw DataConvError("Missing value for key " + key);
         }
         // TODO: need to check type compatibility
-        // notice that we cannot check type compatibility here, because the ref of val may not be resolved yet
+        // notice that we cannot check type compatibility here, because the ref of val may not be
+        // resolved yet
         indexData.push_back(val);
         if (!key.empty()) {
             namedData[key] = val;

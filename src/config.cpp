@@ -54,8 +54,8 @@ string configFile = "";      // Configuration file path
 bool useTabs = false;        // Whether to use tabs for indentation
 bool inplace = false;        // Whether to modify the input file in place
 bool ignoreDefiFile = false; // Whether to ignore the definition file
-unsigned int tabSize = 4;   // Indentation size in spaces
-unsigned int maxWidth = 80; // Max line width
+unsigned int tabSize = 4;    // Indentation size in spaces
+unsigned int maxWidth = 80;  // Max line width
 }; // namespace Format
 
 namespace Check {
@@ -153,58 +153,71 @@ bool parseArgs(int argc, char *argv[]) {
     bool showAbout = false;   // About information
     bool showZen = false;     // Show Zen of Camel
 
-    auto run = (option("-P", "--profile").set(profile) % "profile the perf",
-                (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
-                (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
-                option("-n", "--no-cache").set(noCache) % "do not use cache",
-                (option("-r", "--repeat") & integer("repeat times", repeat)) % "repeat times",
-                (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
-                (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
-                (option("-E", "--error-format") & value("error format", errorFormat)) % "error format: text or json",
-                values("input", targetFiles) % "input file");
+    auto run =
+        (option("-P", "--profile").set(profile) % "profile the perf",
+         (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
+         (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
+         option("-n", "--no-cache").set(noCache) % "do not use cache",
+         (option("-r", "--repeat") & integer("repeat times", repeat)) % "repeat times",
+         (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
+         (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
+         (option("-E", "--error-format") & value("error format", errorFormat)) %
+             "error format: text or json",
+         values("input", targetFiles) % "input file");
 
-    auto info = (option("-v", "--version").set(showVersion).set(selectedCommand, Command::Info) % "show version",
-                 option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) % "show this help message",
-                 option("-d", "--docs").set(showDocs).set(selectedCommand, Command::Info) % "show documentation",
-                 option("-a", "--about").set(showAbout).set(selectedCommand, Command::Info) %
-                     "show copyright and related information",
-                 option("-z", "--zen").set(showZen).set(selectedCommand, Command::Info) % "show the Zen of Camel");
+    auto info =
+        (option("-v", "--version").set(showVersion).set(selectedCommand, Command::Info) %
+             "show version",
+         option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) %
+             "show this help message",
+         option("-d", "--docs").set(showDocs).set(selectedCommand, Command::Info) %
+             "show documentation",
+         option("-a", "--about").set(showAbout).set(selectedCommand, Command::Info) %
+             "show copyright and related information",
+         option("-z", "--zen").set(showZen).set(selectedCommand, Command::Info) %
+             "show the Zen of Camel");
 
-    auto format = (command("format").set(selectedCommand, Command::Format) % "format the code",
-                   (option("-t", "--tab-size") & integer("tabsize", tabSize)) % "indentation size in spaces",
-                   option("-u", "--use-tabs").set(useTabs) % "use tabs instead of spaces for indentation",
-                   (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single")) %
-                       "quote preference: single or double",
-                   (option("-m", "--max-width") & integer("max width", maxWidth)) % "max line width",
-                   (option("-c", "--config") & value("config file path", configFile)) % "config file path",
-                   option("--ignore").set(Format::ignoreDefiFile) % "ignore the definition file",
-                   option("-i", "--inplace").set(inplace) % "modify the input file in place",
-                   values("input", targetFiles) % "input file");
+    auto format =
+        (command("format").set(selectedCommand, Command::Format) % "format the code",
+         (option("-t", "--tab-size") & integer("tabsize", tabSize)) % "indentation size in spaces",
+         option("-u", "--use-tabs").set(useTabs) % "use tabs instead of spaces for indentation",
+         (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single")) %
+             "quote preference: single or double",
+         (option("-m", "--max-width") & integer("max width", maxWidth)) % "max line width",
+         (option("-c", "--config") & value("config file path", configFile)) % "config file path",
+         option("--ignore").set(Format::ignoreDefiFile) % "ignore the definition file",
+         option("-i", "--inplace").set(inplace) % "modify the input file in place",
+         values("input", targetFiles) % "input file");
 
     auto check =
         (command("check").set(selectedCommand, Command::Check) % "check the code",
          option("-i", "--lexical-only").set(lexical) % "indentation size in spaces",
          option("-s", "--syntax-only").set(syntaxOnly) % "syntax only",
-         (option("-O", "--output-format") & value("output format", outputFormat)) % "output format: text or json",
+         (option("-O", "--output-format") & value("output format", outputFormat)) %
+             "output format: text or json",
          (option("-N", "--max-warning") & integer("max warnings", maxWaring)) % "max warnings",
-         (option("-c", "--config") & value("config file path", configFilePath)) % "config file path",
+         (option("-c", "--config") & value("config file path", configFilePath)) %
+             "config file path",
          option("-e", "--ignore").set(Check::ignoreDefiFile) % "ignore the definition file",
          option("-o", "--output") & value("output file", outputFile = "stdout") % "output file",
          values("input", targetFiles) % "input file");
 
     auto inspect =
         (command("inspect").set(selectedCommand, Command::Inspect) % "inspect the code",
-         joinable(option("-t", "-T").set(dumpTokens) % "dump tokens",
-                  option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
-                  option("-a", "-A").set(dumpAST) % "dump abstract syntax tree",
-                  option("-c", "-C").set(dumpGCT) % "dump graph construct tree",
-                  option("-g", "-G").set(dumpGIR) % "dump graph intermediate representation"),
+         joinable(
+             option("-t", "-T").set(dumpTokens) % "dump tokens",
+             option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
+             option("-a", "-A").set(dumpAST) % "dump abstract syntax tree",
+             option("-c", "-C").set(dumpGCT) % "dump graph construct tree",
+             option("-g", "-G").set(dumpGIR) % "dump graph intermediate representation"),
          option("--tok", "--token-stream").set(dumpTokens) % "dump tokens",
          option("--cst", "--concrete-syntax-tree").set(dumpCST) % "dump concrete syntax tree",
          option("--ast", "--abstract-syntax-tree").set(dumpAST) % "dump abstract syntax tree",
          option("--gct", "--graph-construct-tree").set(dumpGCT) % "dump graph construct tree",
-         option("--gir", "--graph-intermediate-representation").set(dumpGIR) % "dump graph intermediate representation",
-         (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) % "pass until the given pass",
+         option("--gir", "--graph-intermediate-representation").set(dumpGIR) %
+             "dump graph intermediate representation",
+         (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
+             "pass until the given pass",
          values("input", targetFiles) % "input file");
 
     auto cli = run | info | format | check | inspect;

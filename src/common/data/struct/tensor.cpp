@@ -47,7 +47,8 @@ bool TensorData::equals(const data_ptr_t &other) const {
 
 data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
     // TODO
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError(
+        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
 data_ptr_t TensorData::clone(bool deep) const { throw runtime_error("Not implemented"); }

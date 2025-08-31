@@ -26,8 +26,10 @@
 #include "utils/assert.h"
 
 enum class DataTypeEnum {
-    StaticConstant = 0b00,  // Compile-time constant, shared among all copies of the graph and never changed
-    StaticVariable = 0b01,  // Compile-time variable, shared among graphs and may be changed during runtime
+    StaticConstant =
+        0b00, // Compile-time constant, shared among all copies of the graph and never changed
+    StaticVariable =
+        0b01, // Compile-time variable, shared among graphs and may be changed during runtime
     RuntimeConstant = 0b10, // Produced during runtime and never changed, not shared
     RuntimeVariable = 0b11, // Produced during runtime and may be changed, not shared
 };
@@ -58,7 +60,9 @@ struct DataType {
         }
     }
 
-    bool operator==(const DataType &other) const { return shared == other.shared && constant == other.constant; }
+    bool operator==(const DataType &other) const {
+        return shared == other.shared && constant == other.constant;
+    }
     DataType &operator=(DataTypeEnum type) {
         switch (type) {
         case DataTypeEnum::StaticConstant:
@@ -136,7 +140,9 @@ class ConstantArray : public DataArray {
         return {type_, dataArr_.size() - 1};
     }
 
-    void set(const data_ptr_t &data, size_t index) override { ASSERT(false, "Cannot set data in a constant array."); }
+    void set(const data_ptr_t &data, size_t index) override {
+        ASSERT(false, "Cannot set data in a constant array.");
+    }
     data_ptr_t get(size_t index) override {
         ASSERT(index < dataArr_.size(), "Data index out of bounds.");
         data_ptr_t data = dataArr_[index];
@@ -150,7 +156,8 @@ class ConstantArray : public DataArray {
 class VariableArray : public DataArray {
   public:
     VariableArray(bool shared) : DataArray(DataType(shared, false)) {}
-    VariableArray(bool shared, const array_wptr_t &refs) : DataArray(DataType(shared, false)), refs_(refs) {}
+    VariableArray(bool shared, const array_wptr_t &refs)
+        : DataArray(DataType(shared, false)), refs_(refs) {}
 
     DataIndex emplace(DataIndex constIndex) {
         ASSERT(refs_.lock(), "Cannot emplace data in a variable array without references.");
@@ -203,7 +210,8 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
         runtimeConstants_ = std::make_shared<ConstantArray>(false);
         runtimeVariables_ = std::make_shared<VariableArray>(false, runtimeConstants_);
     }
-    DataArena(std::shared_ptr<ConstantArray> sharedConsts, std::shared_ptr<VariableArray> sharedVars) {
+    DataArena(
+        std::shared_ptr<ConstantArray> sharedConsts, std::shared_ptr<VariableArray> sharedVars) {
         sharedConstants_ = sharedConsts;
         sharedVariables_ = sharedVars;
         runtimeConstants_ = std::make_shared<ConstantArray>(false);

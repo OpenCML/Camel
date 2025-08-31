@@ -44,11 +44,14 @@ class Module : public std::enable_shared_from_this<Module> {
 
     std::vector<module_ptr_t> imports_;
 
-    bool exportEntity(const std::string &name, const entity &ent) { return entitySpace_->insert(name, ent); }
+    bool exportEntity(const std::string &name, const entity &ent) {
+        return entitySpace_->insert(name, ent);
+    }
 
   public:
     Module(const std::string &name, const std::string &path)
-        : name_(name), path_(path), typeSpace_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
+        : name_(name), path_(path),
+          typeSpace_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
           entitySpace_(std::make_shared<Namespace<std::string, entity>>()) {};
     virtual ~Module() = default;
 

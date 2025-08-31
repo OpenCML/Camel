@@ -22,21 +22,27 @@
 #include "builtin/operators/basic/ops.h"
 #include "builtin/operators/basic/str.h"
 
-#define EXPORT_BINARY_OP(name_str, func_name)                                                                          \
-    exportEntity(name_str,                                                                                             \
-                 makeOperator(name_str,                                                                                \
-                              makeFuncType(param_init_list{},                                                          \
-                                           {{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}}, \
-                                           anyTypePtr),                                                                \
-                              __builtin__##func_name##__))
+#define EXPORT_BINARY_OP(name_str, func_name)                                                      \
+    exportEntity(                                                                                  \
+        name_str,                                                                                  \
+        makeOperator(                                                                              \
+            name_str,                                                                              \
+            makeFuncType(                                                                          \
+                param_init_list{},                                                                 \
+                {{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},        \
+                anyTypePtr),                                                                       \
+            __builtin__##func_name##__))
 
-#define EXPORT_ASSN_OP(name_str, func_name)                                                                            \
-    exportEntity(name_str, makeOperator(name_str,                                                                      \
-                                        makeFuncType(param_init_list{},                                                \
-                                                     {{"self", anyTypePtr, nullptr, true},                             \
-                                                      {"value", anyTypePtr, nullptr, false}},                          \
-                                                     anyTypePtr),                                                      \
-                                        __builtin__##func_name##__))
+#define EXPORT_ASSN_OP(name_str, func_name)                                                        \
+    exportEntity(                                                                                  \
+        name_str,                                                                                  \
+        makeOperator(                                                                              \
+            name_str,                                                                              \
+            makeFuncType(                                                                          \
+                param_init_list{},                                                                 \
+                {{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},      \
+                anyTypePtr),                                                                       \
+            __builtin__##func_name##__))
 
 BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
     EXPORT_ASSN_OP("__assn__", assn);

@@ -30,8 +30,11 @@ namespace AbstractSyntaxTree {
 
 class ParamDeclLoad : public Load {
   public:
-    ParamDeclLoad(const Reference &ref, bool isVar = false) : Load(LoadType::Type), ref_(ref), isVar_(isVar) {}
-    const std::string toString() const override { return "ParamDecl: " + (isVar_ ? std::string("var ") : "") + ref_.toString(); }
+    ParamDeclLoad(const Reference &ref, bool isVar = false)
+        : Load(LoadType::Type), ref_(ref), isVar_(isVar) {}
+    const std::string toString() const override {
+        return "ParamDecl: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
+    }
 
   private:
     Reference ref_;

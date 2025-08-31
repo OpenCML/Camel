@@ -127,7 +127,9 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
 
     std::unordered_map<Key, Val> self() const { return map_; }
 
-    static scope_ptr_t create(scope_ptr_t outer = nullptr) { return std::make_shared<Scope<Key, Val, Name>>(outer); }
+    static scope_ptr_t create(scope_ptr_t outer = nullptr) {
+        return std::make_shared<Scope<Key, Val, Name>>(outer);
+    }
 
     static scope_ptr_t create(std::unordered_map<Key, Val> map, scope_ptr_t outer = nullptr) {
         return std::make_shared<Scope<Key, Val, Name>>(map, outer);

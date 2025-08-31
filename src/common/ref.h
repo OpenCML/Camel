@@ -62,7 +62,9 @@ class Reference {
 
     operator std::string() const { return toString(); }
 
-    bool operator==(const Reference &other) const { return ident_ == other.ident_ && paths_ == other.paths_; }
+    bool operator==(const Reference &other) const {
+        return ident_ == other.ident_ && paths_ == other.paths_;
+    }
 
     bool operator<(const Reference &other) const {
         if (paths_ != other.paths_) {

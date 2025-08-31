@@ -19,9 +19,9 @@
 
 #pragma once
 
+#include <sstream>
 #include <string>
 #include <vector>
-#include <sstream>
 
 template <typename T>
 inline std::string join_list(const std::vector<T> &list, const std::string &separator) {

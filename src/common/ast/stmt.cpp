@@ -64,7 +64,8 @@ const std::string DataDeclLoad::toString() const {
             result += "(" + refs + ")";
             break;
         default:
-            throw std::runtime_error("Unknown UnpackType in DataDeclLoad: " + std::to_string(static_cast<int>(type_)));
+            throw std::runtime_error(
+                "Unknown UnpackType in DataDeclLoad: " + std::to_string(static_cast<int>(type_)));
         }
     }
     return result;

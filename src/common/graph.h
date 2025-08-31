@@ -86,7 +86,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
     DataIndex addSharedConstant(const data_ptr_t &data) { return arena_->addConstant(data, true); }
-    DataIndex addRuntimeConstant(const data_ptr_t &data) { return arena_->addConstant(data, false); }
+    DataIndex addRuntimeConstant(const data_ptr_t &data) {
+        return arena_->addConstant(data, false);
+    }
     DataIndex addVariable(DataIndex index) { return arena_->addVariable(index); }
 
     void setFuncType(const func_type_ptr_t &type);
@@ -121,7 +123,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
 class Node : public std::enable_shared_from_this<Node> {
   public:
-    Node(graph_ptr_t graph, NodeType type, const DataIndex index) : graph_(graph), nodeType_(type), dataIndex_(index) {
+    Node(graph_ptr_t graph, NodeType type, const DataIndex index)
+        : graph_(graph), nodeType_(type), dataIndex_(index) {
         ASSERT(graph, "Graph is not set for Node.");
     }
     virtual ~Node() = default;
@@ -204,7 +207,8 @@ class SelectNode : public Node {
         : Node(graph, NodeType::Select, index), selectType_(type) {}
     ~SelectNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, SelectType type = SelectType::Branch) {
+    static node_ptr_t
+    create(graph_ptr_t graph, const DataIndex &index, SelectType type = SelectType::Branch) {
         auto node = std::make_shared<SelectNode>(graph, index, type);
         graph->addNode(node);
         return node;
@@ -220,11 +224,13 @@ class SelectNode : public Node {
 
 class AccessNode : public Node {
   public:
-    AccessNode(graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index)
+    AccessNode(
+        graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index)
         : Node(graph, NodeType::Access, data), index_(index) {}
     ~AccessNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index) {
+    static node_ptr_t create(
+        graph_ptr_t graph, const DataIndex &data, const std::variant<std::string, size_t> &index) {
         auto node = std::make_shared<AccessNode>(graph, data, index);
         graph->addNode(node);
         return node;

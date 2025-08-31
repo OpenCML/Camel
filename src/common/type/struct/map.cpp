@@ -28,7 +28,9 @@ type_ptr_t MapType::keyType() const { return keyType_; }
 
 type_ptr_t MapType::valueType() const { return valueType_; }
 
-string MapType::toString() const { return "Map<" + keyType_->toString() + ", " + valueType_->toString() + ">"; }
+string MapType::toString() const {
+    return "Map<" + keyType_->toString() + ", " + valueType_->toString() + ">";
+}
 
 bool MapType::operator==(const Type &other) const {
     if (other.code() != TypeCode::MAP) {
