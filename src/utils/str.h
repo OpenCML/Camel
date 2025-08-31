@@ -21,8 +21,10 @@
 
 #include <string>
 #include <vector>
+#include <sstream>
 
-template <typename T> inline std::string join(const std::vector<T> &list, const std::string &separator) {
+template <typename T>
+inline std::string join_list(const std::vector<T> &list, const std::string &separator) {
     std::string result;
     for (size_t i = 0; i < list.size(); ++i) {
         result += list[i];
@@ -31,4 +33,25 @@ template <typename T> inline std::string join(const std::vector<T> &list, const 
         }
     }
     return result;
+}
+
+inline std::vector<std::string> split(const std::string &str, char delim) {
+    std::vector<std::string> result;
+    std::stringstream ss(str);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        if (!item.empty())
+            result.push_back(item);
+    }
+    return result;
+}
+
+inline std::string join(const std::vector<std::string> &parts, char delim) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0)
+            oss << delim;
+        oss << parts[i];
+    }
+    return oss.str();
 }

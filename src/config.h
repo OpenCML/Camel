@@ -25,7 +25,7 @@
 
 #include <string>
 
-enum class Command { RUN, INFO, FORMAT, CHECK, INSPECT }; // Modes of operation
+enum class Command { Run, Info, Format, Check, Inspect };
 
 bool parseArgs(int argc, char *argv[]);
 
@@ -51,7 +51,6 @@ extern std::string configFile;  // Configuration file path
 extern bool useTabs;            // Whether to use tabs for indentation
 extern bool inplace;            // Whether to modify the input file in place
 extern bool ignoreDefiFile;     // Whether to ignore the definition file
-extern bool formatCode;
 extern unsigned int tabSize;  // Indentation size in spaces
 extern unsigned int maxWidth; // Max line width
 }; // namespace Format

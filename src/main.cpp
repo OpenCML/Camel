@@ -1,20 +1,22 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
+ * You can use this software according to the terms and
+ * conditions of the MIT license. You may obtain a copy of
+ * the MIT license at: [https://opensource.org/license/mit]
  *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
  * Updated: Mar. 17, 2025
- * Supported by: National Key Research and Development Program of China
+ * Supported by: National Key Research and Development
+ * Program of China
  */
 
 #include <chrono>
@@ -40,6 +42,7 @@
 #include "service/profiler/trace.h"
 #include "utils/log.h"
 
+#include "common/module/userdef.h"
 #include "parse/parse.h"
 
 using namespace antlr4;
@@ -58,24 +61,24 @@ int main(int argc, char *argv[]) {
     ostream &os = cout;
 
     string errorFormat = Run::errorFormat;
-    if (selectedCommand == Command::CHECK) {
+    if (selectedCommand == Command::Check) {
         errorFormat = Check::outputFormat;
     }
 
-    ANTLRInputStream input;
+    istream *input;
 
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
-        input = ANTLRInputStream(cin);
+        input = &cin;
         targetFile = "stdin"; // for error reporting
     } else {
         targetFile = Run::targetFiles[0];
         auto src = ifstream();
         src.open(targetFile);
         if (!src.is_open()) {
-            error << "Error opening file " << targetFile << endl;
+            log_error << "Error opening file " << targetFile << endl;
             return 1;
         }
-        input = ANTLRInputStream(src);
+        input = &src;
     }
 
     chrono::high_resolution_clock::time_point startTime, endTime;
@@ -85,119 +88,110 @@ int main(int argc, char *argv[]) {
             startTime = chrono::high_resolution_clock::now();
         }
 
-        OpenCMLLexer lexer(&input);
-        CommonTokenStream tokens(&lexer);
-        OpenCMLParser parser(&tokens);
-
-        if (Inspect::dumpTokens) {
-            dumpTokens(tokens);
-        }
-
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
-        if (selectedCommand == Command::RUN | selectedCommand == Command::INSPECT) {
+        if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
             diagnostics->setLimit(Diagnostic::Severity::Error, 0);
         }
 
-        auto printDiagnostics = [&tokens, &diagnostics, &os, &errorFormat]() {
-            const auto &tokenVec = tokens.getTokens();
-            while (!diagnostics->end()) {
-                auto diagOpt = diagnostics->next();
-                if (diagOpt.has_value()) {
-                    auto &diag = diagOpt.value();
-                    os << diag.fetchRange(tokenVec).what(errorFormat == "json") << std::endl;
-                }
-            }
-        };
-
-        tree::ParseTree *cst = nullptr;
-        AST::node_ptr_t ast = nullptr;
-        GCT::node_ptr_t gct = nullptr;
-        GIR::graph_ptr_t gir = nullptr;
-        context_ptr_t ctx = Context::create();
+        bool useJsonFormat = (errorFormat == "json");
 
         try {
-            if (!buildCST(cst, parser, os, errorFormat)) {
-                return selectedCommand == Command::CHECK ? 0 : 2;
-            }
-            if (Inspect::dumpCST) {
-                auto visitor = CSTDumpVisitor(os);
-                visitor.visit(cst);
-                if (!Inspect::dumpAST && !Inspect::dumpGCT && !Inspect::dumpGIR) {
-                    return 0; // If only CST is requested, we can stop here
+            parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
+            try {
+                parser->parse(*input);
+            } catch (CamelBaseException &e) {
+                if (selectedCommand == Command::Check) {
+                    parser->dumpDiagnostics(os, useJsonFormat);
+                    return 0;
+                } else {
+                    os << e.what(useJsonFormat) << endl;
+                    return 1;
                 }
             }
-            if (Format::formatCode) {
-                auto formatter = Formatter(tokens.getTokens());
-                const string formattedCode = any_cast<string>(formatter.visit(cst));
+
+            if (selectedCommand == Command::Format) {
+                auto formatter = Formatter(parser->getTokens());
+                const string formattedCode = any_cast<string>(formatter.visit(parser->cst()));
                 os << formattedCode;
                 return 0;
             }
 
-            if (!buildAST(ast, cst, diagnostics)) {
-                return selectedCommand == Command::CHECK ? 0 : 3;
-            }
-            if (Inspect::dumpAST && ast) {
-                ast->print(os);
+            if (selectedCommand == Command::Inspect) {
+                if (Inspect::dumpTokens) {
+                    parser->dumpTokens(os);
+                }
+                if (Inspect::dumpCST) {
+                    auto cst = parser->cst();
+                    auto visitor = CSTDumpVisitor(os);
+                    visitor.visit(cst);
+                }
+                if (!Inspect::dumpAST) {
+                    auto ast = parser->ast();
+                    if (ast) {
+                        ast->print(os);
+                    }
+                }
                 if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
-                    return 0; // If only AST is requested, we can stop here
+                    // Inspect Command ends here if only
+                    // tokens, CST or AST is requested
+                    return 0;
                 }
             }
 
-            if (!buildGCT(gct, ast, diagnostics)) {
-                return selectedCommand == Command::CHECK ? 0 : 4;
-            }
-            if (Inspect::dumpGCT && gct) {
-                gct->print(os);
-                if (!Inspect::dumpGIR) {
-                    return 0; // If only GCT is requested, we can stop here
+            context_ptr_t ctx = std::make_shared<Context>(
+                EntryConfig{.root = ".", .searchPaths = {"", "lib"}, .entryFile = targetFile},
+                DiagnosticsConfig{
+                    .total_limit = -1,
+                    .per_severity_limits = {{Diagnostic::Severity::Error, 0}}});
+
+            auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
+            ctx->setMainModule(mainModule);
+
+            try {
+                mainModule->compile();
+            } catch (DiagnosticsLimitExceededException &e) {
+                if (selectedCommand == Command::Check) {
+                    os << e.lastDiagnostic().what(useJsonFormat) << endl;
+                    return 0;
+                } else {
+                    os << e.lastDiagnostic().what(useJsonFormat) << endl;
+                    return 1;
                 }
             }
 
-            if (!buildGIR(gir, gct, ctx, diagnostics)) {
-                return selectedCommand == Command::CHECK ? 0 : 5;
-            }
-            if (Inspect::dumpGIR) {
-                GraphVizDumpPass pass(ctx);
-                auto res = pass.apply(gir);
-                os << any_cast<string>(res);
+            if (selectedCommand == Command::Inspect) {
+                if (Inspect::dumpGCT && mainModule->gct()) {
+                    mainModule->gct()->print(os);
+                }
+                if (Inspect::dumpGIR && mainModule->gir()) {
+                    GraphVizDumpPass pass(ctx);
+                    auto gir = mainModule->gir();
+                    auto res = pass.apply(gir);
+                    os << any_cast<string>(res);
+                }
+                return 0;
             }
 
-        } catch (DiagnosticsLimitExceededException &e) {
-            if (selectedCommand == Command::CHECK) {
-                printDiagnostics();
-                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
-                return 0;
-            } else {
-                os << e.lastDiagnostic().fetchRange(tokens.getTokens()).what(errorFormat == "json") << endl;
-                return 1;
+            if (!mainModule->ready()) {
+                if (selectedCommand == Command::Check) {
+                    mainModule->diagnostics()->dump(os, useJsonFormat);
+                    return 0;
+                } else {
+                    mainModule->diagnostics()->dump(os, useJsonFormat);
+                    return 1;
+                }
             }
-        } catch (CamelBaseException &e) {
-            if (selectedCommand == Command::CHECK) {
-                printDiagnostics();
-                return 0;
-            } else {
-                os << e.what(errorFormat == "json") << endl;
-                return 1;
-            }
+
         } catch (exception &e) {
-            if (errorFormat != "json") {
-                os << "An error occurred: " << e.what() << endl;
-            } else {
-                os << "{"
-                   << "\"type\": \"error\", "
-                   << "\"filename\": \"" << targetFile << "\", "
-                   << "\"line\": 0, "
-                   << "\"column\": 0, "
-                   << "\"message\": \"An error occurred: " << e.what() << "\""
-                   << "}" << endl;
-            }
-            return selectedCommand == Command::CHECK ? 0 : 1;
+            os << e.what() << endl;
+            return 1;
         }
 
         if (Run::profile) {
             endTime = chrono::high_resolution_clock::now();
-            auto duration = chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            info << "Time used " << duration << " us" << endl;
+            auto duration =
+                chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
+            log_info << "Time used " << duration << " us" << endl;
         }
     }
 

@@ -30,7 +30,7 @@ using namespace clipp;
 using namespace std;
 
 namespace CmdLineArgs {
-Command selectedCommand = Command::RUN;
+Command selectedCommand = Command::Run;
 
 namespace Run {
 string outputFile = "";
@@ -54,7 +54,6 @@ string configFile = "";      // Configuration file path
 bool useTabs = false;        // Whether to use tabs for indentation
 bool inplace = false;        // Whether to modify the input file in place
 bool ignoreDefiFile = false; // Whether to ignore the definition file
-bool formatCode = false;
 unsigned int tabSize = 4;   // Indentation size in spaces
 unsigned int maxWidth = 80; // Max line width
 }; // namespace Format
@@ -94,7 +93,6 @@ void _printFormatArgs() {
     cout << "\tconfig-file:" << configFile << endl;
     cout << "\tignore:" << Format::ignoreDefiFile << endl;
     cout << "\tinplace:" << inplace << endl;
-    cout << "\tformat-code:" << formatCode << endl;
     cout << "\ttarget-file:";
     for (auto &file : targetFiles) {
         cout << file << " ";
@@ -134,20 +132,16 @@ void _printInspectArgs() {
 
 void printCliArgs(Command selected) {
     switch (selected) {
-    case Command::INFO:
-        _printHelpArgs();
-        break;
-    case Command::FORMAT:
+    case Command::Format:
         _printFormatArgs();
         break;
-    case Command::CHECK:
+    case Command::Check:
         _printCheckArgs();
         break;
-    case Command::INSPECT:
+    case Command::Inspect:
         _printInspectArgs();
         break;
     default:
-        cout << "Unknown command" << endl;
         break;
     }
 }
@@ -169,14 +163,14 @@ bool parseArgs(int argc, char *argv[]) {
                 (option("-E", "--error-format") & value("error format", errorFormat)) % "error format: text or json",
                 values("input", targetFiles) % "input file");
 
-    auto info = (option("-v", "--version").set(showVersion).set(selectedCommand, Command::INFO) % "show version",
-                 option("-h", "--help").set(showHelp).set(selectedCommand, Command::INFO) % "show this help message",
-                 option("-d", "--docs").set(showDocs).set(selectedCommand, Command::INFO) % "show documentation",
-                 option("-a", "--about").set(showAbout).set(selectedCommand, Command::INFO) %
+    auto info = (option("-v", "--version").set(showVersion).set(selectedCommand, Command::Info) % "show version",
+                 option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) % "show this help message",
+                 option("-d", "--docs").set(showDocs).set(selectedCommand, Command::Info) % "show documentation",
+                 option("-a", "--about").set(showAbout).set(selectedCommand, Command::Info) %
                      "show copyright and related information",
-                 option("-z", "--zen").set(showZen).set(selectedCommand, Command::INFO) % "show the Zen of Camel");
+                 option("-z", "--zen").set(showZen).set(selectedCommand, Command::Info) % "show the Zen of Camel");
 
-    auto format = (command("format").set(formatCode).set(selectedCommand, Command::FORMAT) % "format the code",
+    auto format = (command("format").set(selectedCommand, Command::Format) % "format the code",
                    (option("-t", "--tab-size") & integer("tabsize", tabSize)) % "indentation size in spaces",
                    option("-u", "--use-tabs").set(useTabs) % "use tabs instead of spaces for indentation",
                    (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single")) %
@@ -188,7 +182,7 @@ bool parseArgs(int argc, char *argv[]) {
                    values("input", targetFiles) % "input file");
 
     auto check =
-        (command("check").set(selectedCommand, Command::CHECK) % "check the code",
+        (command("check").set(selectedCommand, Command::Check) % "check the code",
          option("-i", "--lexical-only").set(lexical) % "indentation size in spaces",
          option("-s", "--syntax-only").set(syntaxOnly) % "syntax only",
          (option("-O", "--output-format") & value("output format", outputFormat)) % "output format: text or json",
@@ -199,7 +193,7 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto inspect =
-        (command("inspect").set(selectedCommand, Command::INSPECT) % "inspect the code",
+        (command("inspect").set(selectedCommand, Command::Inspect) % "inspect the code",
          joinable(option("-t", "-T").set(dumpTokens) % "dump tokens",
                   option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
                   option("-a", "-A").set(dumpAST) % "dump abstract syntax tree",
@@ -259,7 +253,7 @@ bool parseArgs(int argc, char *argv[]) {
             ;
     }
 
-    if (selectedCommand == Command::INFO || selectedCommand == Command::SERVE) {
+    if (selectedCommand == Command::Info) {
         return false;
     }
 

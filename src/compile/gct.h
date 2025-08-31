@@ -28,13 +28,16 @@
 #include "common/error/diagnostic.h"
 #include "common/gct.h"
 #include "common/scope.h"
+#include "common/context.h"
 
 namespace GraphConstructTree {
 using void_ptr_t = void *;
 
 class Constructor {
   public:
-    Constructor() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(); };
+    Constructor(context_ptr_t &context) : context_(context) {
+        typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>();
+    };
     virtual ~Constructor() = default;
 
     node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
@@ -51,16 +54,19 @@ class Constructor {
     scope_ptr_t<Reference, type_ptr_t> typeScope_;
     std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
+    context_ptr_t context_;
     diagnostics_ptr_t diagnostics_;
 
     void initInnerTypes();
 
     std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
-    std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
+    std::pair<data_ptr_t, bool>
+    extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
-    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
-                          std::pair<size_t, size_t> tokenRange = {0, 0}) {
+    void reportDiagnostic(
+        Diagnostic::Severity sev, const std::string &msg,
+        std::pair<size_t, size_t> tokenRange = {0, 0}) {
         diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 

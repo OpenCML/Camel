@@ -28,10 +28,10 @@
 #define _green(x) "\033[32m" << x << "\033[0m"
 #define _yellow(x) "\033[33m" << x << "\033[0m"
 
-#define info std::cout << _green("[info] ")
-#define warn std::cout << _yellow("[warn] ")
-#define error std::cout << _red("[error] ")
-#define fatal std::cout << _red("[fatal] ")
+#define log_info std::cout << _green("[info] ")
+#define log_warn std::cout << _yellow("[warn] ")
+#define log_error std::cout << _red("[error] ")
+#define log_fatal std::cout << _red("[fatal] ")
 
 extern size_t __depth__;
 

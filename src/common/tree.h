@@ -176,7 +176,7 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
                         visible.push_back(true);
                     if (depth > 0) {
                         if (node.parent_ == nullptr) {
-                            warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
+                            log_warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
                         } else if (index == node.parent_->size() - 1) {
                             isLast = true;
                             visible.at(depth - 1) = false;
