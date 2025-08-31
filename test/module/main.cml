@@ -1,0 +1,9 @@
+module main
+
+import { sleep } from os
+
+func main(): int sync {
+    // print("Hello, World!")
+    // sleep(1000)
+    return 0
+}

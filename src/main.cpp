@@ -65,20 +65,19 @@ int main(int argc, char *argv[]) {
         errorFormat = Check::outputFormat;
     }
 
-    istream *input;
+    std::unique_ptr<istream> input;
 
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
-        input = &cin;
+        input = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
     } else {
         targetFile = Run::targetFiles[0];
-        auto src = ifstream();
-        src.open(targetFile);
-        if (!src.is_open()) {
+        auto file = std::make_unique<std::ifstream>(targetFile);
+        if (!file->is_open()) {
             log_error << "Error opening file " << targetFile << endl;
             return 1;
         }
-        input = &src;
+        input = std::move(file);
     }
 
     chrono::high_resolution_clock::time_point startTime, endTime;
@@ -125,7 +124,7 @@ int main(int argc, char *argv[]) {
                     auto visitor = CSTDumpVisitor(os);
                     visitor.visit(cst);
                 }
-                if (!Inspect::dumpAST) {
+                if (Inspect::dumpAST) {
                     auto ast = parser->ast();
                     if (ast) {
                         ast->print(os);
