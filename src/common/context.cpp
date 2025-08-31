@@ -39,58 +39,48 @@ Context::Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf
 
 module_ptr_t
 Context::importModule(const std::string &rawModuleName, const std::string &currentModuleName) {
+    auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
-    // 1. 解析模块名
-    auto resolvedOpt = resolveModuleName(currentModuleName, rawModuleName);
-    if (!resolvedOpt.has_value()) {
-        throw std::runtime_error("Cannot resolve module: " + rawModuleName);
-    }
+    for (const auto &name : candidates) {
+        auto it = modules_.find(name);
+        if (it != modules_.end()) {
+            return it->second;
+        }
 
-    const std::string &resolvedName = resolvedOpt.value();
+        module_ptr_t module = tryLoadModule(name);
+        if (module) {
+            modules_[name] = module;
+            return module;
+        }
 
-    // 2. 缓存查找
-    auto it = modules_.find(resolvedName);
-    if (it != modules_.end()) {
-        return it->second;
-    }
-
-    // 3. 尝试加载用户模块
-    module_ptr_t module = tryLoadModule(resolvedName);
-    if (module) {
-        modules_[resolvedName] = module;
-        return module;
-    }
-
-    // 4. 尝试加载内建模块
-    auto builtin = getBuiltinModule(resolvedName);
-    if (builtin.has_value()) {
-        modules_[resolvedName] = builtin.value();
-        return builtin.value();
+        auto builtin = getBuiltinModule(name);
+        if (builtin.has_value()) {
+            modules_[name] = builtin.value();
+            return builtin.value();
+        }
     }
 
     throw std::runtime_error("Module not found: " + rawModuleName);
 }
 
-std::optional<std::string>
-Context::resolveModuleName(const std::string &currentModule, const std::string &rawImportName) {
-
+std::vector<std::string> Context::getModuleNameCandidates(
+    const std::string &currentModule, const std::string &rawImportName) {
     std::vector<std::string> candidates;
 
     if (rawImportName.empty())
-        return std::nullopt;
+        return candidates;
 
     if (rawImportName[0] == '.') {
-        // 相对导入
         try {
             std::string resolved = resolveRelativeModuleName(currentModule, rawImportName);
             candidates.push_back(resolved);
         } catch (...) {
-            return std::nullopt;
+            // ignore invalid relative import
         }
     } else {
-        // 非相对导入，尝试多种可能
-        candidates.push_back(rawImportName); // 顶层模块
+        candidates.push_back(rawImportName);
 
+        // relative-to-parent fallback
         std::vector<std::string> base = split(currentModule, '.');
         for (int i = base.size(); i >= 0; --i) {
             std::vector<std::string> prefix(base.begin(), base.begin() + i);
@@ -99,14 +89,7 @@ Context::resolveModuleName(const std::string &currentModule, const std::string &
         }
     }
 
-    // 遍历候选模块名，返回第一个存在的
-    for (const auto &name : candidates) {
-        if (moduleFileExists(name)) {
-            return name;
-        }
-    }
-
-    return std::nullopt;
+    return candidates;
 }
 
 std::string Context::resolveRelativeModuleName(
@@ -139,17 +122,21 @@ std::string Context::resolveRelativeModuleName(
 std::string Context::getModulePath(const std::string &moduleName) {
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
-    relativePath += ".cml"; // 假设模块文件后缀是 .cml
+    relativePath += ".cml";
 
-    // 1. 遍历 searchPaths
     for (const auto &dir : entryConfig_.searchPaths) {
-        fs::path fullPath = fs::path(entryConfig_.root) / dir / relativePath;
+        fs::path basePath = fs::path(dir);
+        if (!basePath.is_absolute()) {
+            basePath = fs::path(entryConfig_.root) / basePath;
+        }
+
+        fs::path fullPath = basePath / relativePath;
         if (fileExists(fullPath.string())) {
             return fullPath.string();
         }
     }
 
-    // 2. fallback: root + relativePath
+    // fallback: root/relativePath
     fs::path fallbackPath = fs::path(entryConfig_.root) / relativePath;
     if (fileExists(fallbackPath.string())) {
         return fallbackPath.string();

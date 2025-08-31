@@ -21,6 +21,7 @@
 
 #include <fstream>
 #include <memory>
+#include <unordered_map>
 
 #include "common/error/diagnostic.h"
 #include "module/builtin.h"
@@ -29,6 +30,7 @@ struct EntryConfig {
     std::string root;                     // root path of the context, used for loading modules
     std::vector<std::string> searchPaths; // search paths for modules
     std::string entryFile;                // entry module path
+    std::unordered_map<std::string, std::string> envs; // environment variables
 };
 
 class Context : public std::enable_shared_from_this<Context> {
@@ -38,13 +40,11 @@ class Context : public std::enable_shared_from_this<Context> {
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
 
+    std::vector<std::string> getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
+    std::string resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
     std::string getModulePath(const std::string &moduleName);
-    module_ptr_t tryLoadModule(const std::string &moduleName);
-    std::optional<std::string>
-    resolveModuleName(const std::string &currentModule, const std::string &rawImportName);
-    std::string
-    resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
     bool moduleFileExists(const std::string &moduleName);
+    module_ptr_t tryLoadModule(const std::string &moduleName);
 
   public:
     Context(
