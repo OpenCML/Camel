@@ -142,8 +142,8 @@ int main(int argc, char *argv[]) {
                 EntryConfig{
                     .root = ".",
                     .searchPaths = {"", "lib"},
-                    .entryFile = targetFile.envs =
-                        {{"CAMEL_STD_LIB", Run::stdLibPath.empty() ? "lib" : Run::stdLibPath}}},
+                    .entryFile = targetFile,
+                    .envs = {{"CAMEL_STD_LIB", Run::stdLibPath.empty() ? "lib" : Run::stdLibPath}}},
                 DiagnosticsConfig{
                     .total_limit = -1,
                     .per_severity_limits = {{Diagnostic::Severity::Error, 0}}});

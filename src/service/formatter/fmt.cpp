@@ -152,8 +152,8 @@ any Formatter::visitProgram(OpenCMLParser::ProgramContext *context) {
         [](pair<OpenCMLParser::DeclContext *, size_t> a,
            pair<OpenCMLParser::DeclContext *, size_t>
                b) {
-            return a.first->importDecl()->STRING()->getText() <
-                   b.first->importDecl()->STRING()->getText();
+            return a.first->importDecl()->moduleName()->getText() <
+                   b.first->importDecl()->moduleName()->getText();
         });
 
     if (!headWithIndex.empty()) {
@@ -243,6 +243,13 @@ any Formatter::visitStmtList(OpenCMLParser::StmtListContext *context) {
 }
 
 /*
+moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
+*/
+any Formatter::visitModuleName(OpenCMLParser::ModuleNameContext *context) {
+    return context->getText();
+}
+
+/*
 moduleDecl : MODULE identDef ;
 */
 any Formatter::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
@@ -250,11 +257,11 @@ any Formatter::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
 }
 
 /*
-importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
+importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 */
 any Formatter::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     string result = "import ";
-    const string path = context->STRING()->getText();
+    const string path = any_cast<string>(visitModuleName(context->moduleName()));
     const auto &identDef = context->identDef();
     const auto &bracedIdents = context->bracedIdents();
     if (context->FROM()) {
@@ -797,6 +804,13 @@ any Formatter::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
            any_cast<string>(visitAssignExpr(context->assignExpr()));
 }
 
+// TODO: MODIFIED
+/*
+assignExpr
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
+logicalOrExpr)?
+    ;
+*/
 /*
 assignExpr
     : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')

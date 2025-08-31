@@ -35,6 +35,7 @@ extern Command selectedCommand;
 namespace Run {
 extern std::string outputFile;
 extern std::string errorFormat;
+extern std::string stdLibPath;      
 extern std::vector<std::string> scriptsDirs;
 extern std::vector<std::string> targetFiles;
 

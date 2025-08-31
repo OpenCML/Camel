@@ -173,6 +173,16 @@ any Constructor::visitStmtList(OpenCMLParser::StmtListContext *context) {
 }
 
 /*
+moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
+*/
+any Constructor::visitModuleName(OpenCMLParser::ModuleNameContext *context) {
+    ENTER("ModuleName");
+    string result = context->getText();
+    LEAVE("ModuleName");
+    return result;
+}
+
+/*
 moduleDecl : MODULE identDef ;
 */
 any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
@@ -184,13 +194,13 @@ any Constructor::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
 }
 
 /*
-importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
+importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 */
 any Constructor::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     ENTER("ImportDecl");
     auto import_ = std::make_shared<ImportLoad>();
-    if (context->STRING()) {
-        import_->setPath(context->STRING()->getText());
+    if (context->moduleName()) {
+        import_->setPath(context->moduleName()->getText());
     }
     if (context->identDef()) {
         import_->setAs(Reference(context->identDef()->getText()));
@@ -968,6 +978,13 @@ any Constructor::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
     return dataNode;
 }
 
+// TODO: MODIFIED
+/*
+assignExpr
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
+logicalOrExpr)?
+    ;
+*/
 /*
 assignExpr
     : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')

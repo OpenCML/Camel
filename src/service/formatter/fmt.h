@@ -388,6 +388,8 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitStmtList(OpenCMLParser::StmtListContext *context);
 
+    std::any visitModuleName(OpenCMLParser::ModuleNameContext *context);
+
     std::any visitModuleDecl(OpenCMLParser::ModuleDeclContext *context);
 
     std::any visitImportDecl(OpenCMLParser::ImportDeclContext *context);

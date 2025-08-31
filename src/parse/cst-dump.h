@@ -50,6 +50,10 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpNode(context, "StmtList");
     };
 
+    std::any visitModuleName(OpenCMLParser::ModuleNameContext *context) {
+        return dumpNode(context, "ModuleName");
+    };
+
     std::any visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
         return dumpNode(context, "ModuleDecl");
     };

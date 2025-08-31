@@ -40,8 +40,10 @@ class Context : public std::enable_shared_from_this<Context> {
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
 
-    std::vector<std::string> getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
-    std::string resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
+    std::vector<std::string>
+    getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
+    std::string
+    resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
     std::string getModulePath(const std::string &moduleName);
     bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
