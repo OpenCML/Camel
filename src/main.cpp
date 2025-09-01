@@ -159,8 +159,7 @@ int main(int argc, char *argv[]) {
                                                          : Run::stdLibPath))
                              .string(),
                          getEnv("CAMEL_PACKAGES"),
-                         getEnv("CAMEL_HOME", camelPath.string())},
-                    .envs = {}},
+                         getEnv("CAMEL_HOME", camelPath.string())}},
                 DiagnosticsConfig{
                     .total_limit = -1,
                     .per_severity_limits = {{Diagnostic::Severity::Error, 0}}});

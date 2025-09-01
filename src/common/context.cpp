@@ -41,11 +41,6 @@ std::ostream &operator<<(std::ostream &os, const EntryConfig &config) {
             os << ", ";
     }
     os << "]\n";
-    os << "  envs: {\n";
-    for (const auto &[key, value] : config.envs) {
-        os << "    " << key << ": " << value << "\n";
-    }
-    os << "  }\n";
     os << "}";
     return os;
 }

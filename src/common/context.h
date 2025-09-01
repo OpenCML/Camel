@@ -30,7 +30,6 @@ struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path
     std::vector<std::string> searchPaths; // search paths for modules
-    std::unordered_map<std::string, std::string> envs; // environment variables
 };
 
 std::ostream &operator<<(std::ostream &os, const EntryConfig &config);
