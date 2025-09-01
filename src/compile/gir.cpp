@@ -545,4 +545,31 @@ node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {
     return res;
 }
 
+void_ptr_t Constructor::visitExptNode(const GCT::node_ptr_t &gct) {
+    ENTER("EXPT");
+    const auto &exptLoad = gct->loadAs<GCT::ExptLoad>();
+    const auto &exports = exptLoad->exports();
+    for (const Reference &ref : exports) {
+        auto optNode = nodeAt(ref);
+        if (optNode.has_value()) {
+            module_->exportEntity(ref, optNode.value());
+        }
+        auto optGraph = graphAt(ref);
+        if (optGraph.has_value()) {
+            module_->exportEntity(ref, optGraph.value());
+        }
+        auto optOp = operatorAt(ref);
+        if (optOp.has_value()) {
+            module_->exportEntity(ref, optOp.value());
+        } else {
+            reportDiagnostic(
+                Diagnostic::Severity::Error,
+                "Unresolved export reference: " + ref.toString());
+            throw BuildAbortException();
+        }
+    }
+    LEAVE("EXPT");
+    return nullptr;
+}
+
 } // namespace GraphIntermediateRepresentation

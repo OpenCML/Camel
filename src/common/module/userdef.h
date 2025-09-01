@@ -39,13 +39,13 @@ class UserDefinedModule : public Module {
 
     bool buildGCT(const AST::node_ptr_t &ast) {
         initTypes();
-        auto constructor = GCT::Constructor(context_);
+        auto constructor = GCT::Constructor(context_, shared_from_this());
         gct_ = constructor.construct(ast, diagnostics_);
         return gct_ != nullptr && !diagnostics_->hasErrors();
     }
 
     bool buildGIR() {
-        auto constructor = GIR::Constructor(context_);
+        auto constructor = GIR::Constructor(context_, shared_from_this());
         gir_ = constructor.construct(gct_, diagnostics_);
         return gir_ != nullptr && !diagnostics_->hasErrors();
     }

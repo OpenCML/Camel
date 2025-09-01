@@ -24,6 +24,8 @@
 #include "common/error/abort.h"
 #include "common/gct.h"
 #include "common/graph.h"
+#include "common/module/module.h"
+
 #include "gct.h"
 
 namespace GraphIntermediateRepresentation {
@@ -39,7 +41,8 @@ using operator_scope_ptr_t = std::shared_ptr<operator_scope_t>;
 
 class Constructor {
   public:
-    Constructor(context_ptr_t &context) : context_(context) {
+    Constructor(const context_ptr_t &context, const module_ptr_t &module)
+        : context_(context), module_(module) {
         nodeScope_ = node_scope_t::create();
         graphScope_ = graph_scope_t::create();
         opScope_ = operator_scope_t::create();
@@ -65,6 +68,7 @@ class Constructor {
     operator_scope_ptr_t opScope_;
 
     context_ptr_t context_;
+    module_ptr_t module_;
     diagnostics_ptr_t diagnostics_;
 
     bool waited_;
@@ -115,5 +119,6 @@ class Constructor {
     node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitExitNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitExecNode(const GCT::node_ptr_t &gct);
+    void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 } // namespace GraphIntermediateRepresentation

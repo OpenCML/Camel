@@ -129,7 +129,8 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     }
 
     if (!exportOptNode->empty()) {
-        visitExport(exportOptNode->front());
+        node_ptr_t exportNode = visitExport(exportOptNode->front());
+        *root_ << exportNode;
     }
 
     LEAVE("Module");
@@ -139,12 +140,37 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
 /*
 ImportDecl(string path, Ref[] refs, Ref as) ;
 */
-void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) { return nullptr; }
+void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {
+    ENTER("ImportDecl");
+    ASSERT(ast->type() == AST::LoadType::Import, "Expected ImportLoad type");
+    const auto &load = ast->loadAs<AST::ImportLoad>();
+    const auto &path = load->getPath();
+    const auto &refs = load->getRefs();
+    // const auto &as = load->getAs();
+    const module_ptr_t &mod = context_->importModule(path, module_->name());
+    if (!mod) {
+        reportDiagnostic(
+            Diagnostic::Severity::Error, "Failed to import module from path: " + path,
+            load->tokenRange());
+        throw BuildAbortException();
+    }
+    module_->importModule(mod, refs);
+    LEAVE("ImportDecl");
+    return nullptr;
+}
 
 /*
 ExportDecl(Ref[] refs) ;
 */
-void_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) { return nullptr; }
+node_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) {
+    ENTER("ExportDecl");
+    ASSERT(ast->type() == AST::LoadType::Export, "Expected ExportLoad type");
+    const auto &load = ast->loadAs<AST::ExportLoad>();
+    const auto &refs = load->getRefs();
+    node_ptr_t res = createNodeAs<ExptLoad>(refs);
+    LEAVE("ExportDecl");
+    return res;
+}
 
 node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
     ENTER("Stmt");

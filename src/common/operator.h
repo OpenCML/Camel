@@ -46,3 +46,4 @@ class Operator {
 
 using operator_ptr_t = std::shared_ptr<Operator>;
 using operator_vec_t = std::vector<operator_ptr_t>;
+using operator_vec_ptr_t = std::shared_ptr<operator_vec_t>;

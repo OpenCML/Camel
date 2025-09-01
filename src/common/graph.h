@@ -54,6 +54,7 @@ class Node;
 using graph_ptr_t = std::shared_ptr<Graph>;
 using graph_wptr_t = std::weak_ptr<Graph>;
 using graph_vec_t = std::vector<graph_ptr_t>;
+using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
 using node_ptr_t = std::shared_ptr<Node>;
 using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;

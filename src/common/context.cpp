@@ -42,19 +42,23 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
     for (const auto &name : candidates) {
+        std::cout << "Trying to import module: " << name << std::endl;
         auto it = modules_.find(name);
         if (it != modules_.end()) {
+            std::cout << "Module found in cache: " << name << std::endl;
             return it->second;
         }
 
         module_ptr_t module = tryLoadModule(name);
         if (module) {
+            std::cout << "Module loaded: " << name << " from " << module->path() << std::endl;
             modules_[name] = module;
             return module;
         }
 
         auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
+            std::cout << "Builtin module loaded: " << name << std::endl;
             modules_[name] = builtin.value();
             return builtin.value();
         }

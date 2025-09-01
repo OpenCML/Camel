@@ -53,6 +53,7 @@ enum class LoadType {
     ANNO,
     EXIT,
     EXEC,
+    EXPT,
 };
 
 std::string to_string(LoadType type);
@@ -294,6 +295,29 @@ class ExecLoad : public Load {
 
   private:
     bool synced_ = false;
+};
+
+class ExptLoad : public Load {
+  public:
+    ExptLoad(const std::vector<Reference> &exports) : Load(LoadType::EXPT), exports_(exports) {}
+
+    const std::string toString() const override {
+        std::string result = "EXPT: [";
+        for (const auto &exp : exports_) {
+            result += exp.toString() + ", ";
+        }
+        if (!exports_.empty()) {
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+        }
+        result += "]";
+        return result;
+    }
+
+    const std::vector<Reference> &exports() const { return exports_; }
+
+  private:
+    std::vector<Reference> exports_;
 };
 
 class AccsLoad : public Load {

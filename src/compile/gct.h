@@ -28,6 +28,7 @@
 #include "common/error/abort.h"
 #include "common/error/diagnostic.h"
 #include "common/gct.h"
+#include "common/module/module.h"
 #include "common/scope.h"
 
 namespace GraphConstructTree {
@@ -35,7 +36,8 @@ using void_ptr_t = void *;
 
 class Constructor {
   public:
-    Constructor(context_ptr_t &context) : context_(context) {
+    Constructor(const context_ptr_t &context, const module_ptr_t &module)
+        : context_(context), module_(module) {
         typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>();
     };
     virtual ~Constructor() = default;
@@ -55,6 +57,7 @@ class Constructor {
     std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
     context_ptr_t context_;
+    module_ptr_t module_;
     diagnostics_ptr_t diagnostics_;
 
     void initInnerTypes();
@@ -76,7 +79,7 @@ class Constructor {
     // ast/base.h
     node_ptr_t visitModule(const AST::node_ptr_t &ast);
     void_ptr_t visitImport(const AST::node_ptr_t &ast);
-    void_ptr_t visitExport(const AST::node_ptr_t &ast);
+    node_ptr_t visitExport(const AST::node_ptr_t &ast);
 
     // ast/stmt.h
     node_ptr_t visitStmt(const AST::node_ptr_t &ast);
