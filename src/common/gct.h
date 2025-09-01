@@ -191,7 +191,6 @@ class DRefLoad : public Load {
 
   public:
     DRefLoad(const Reference &ref) : Load(LoadType::DREF), ref_(ref) {}
-    DRefLoad(const std::string &str) : Load(LoadType::DREF), ref_(str) {}
 
     const Reference ref() const { return ref_; }
 

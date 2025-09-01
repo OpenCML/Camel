@@ -106,6 +106,11 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
         }
     }
 
+    bool empty() const {
+        // std::shared_lock<std::shared_mutex> lock(rwMutex_);
+        return map_.empty() && innerScopes_.empty();
+    }
+
     void clear() {
         // std::unique_lock<std::shared_mutex> lock(rwMutex_);
         map_.clear();
@@ -154,6 +159,34 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     scope_ptr_t leave() {
         // TODO: Shall we free the scope?
         return outer();
+    }
+
+    void dump(std::ostream &os, int indentLevel = 0) const {
+        std::string indent(indentLevel * 2, ' ');
+
+        os << indent << "Scope ";
+        os << (isRoot() ? "[Root]" : "") << " {\n";
+
+        if constexpr (HasEmpty<Name>) {
+            for (const auto &[name, scope] : innerScopeMap_) {
+                if (scope.get() == this) {
+                    os << "(named: " << name << ") ";
+                    break;
+                }
+            }
+        }
+
+        for (const auto &[key, value] : map_) {
+            os << indent << "  " << key << " : " << value << "\n";
+        }
+
+        for (const auto &child : innerScopes_) {
+            if (child && !child->empty()) {
+                child->dump(os, indentLevel + 1);
+            }
+        }
+
+        os << indent << "}\n";
     }
 };
 

@@ -22,56 +22,86 @@
 #include "builtin/operators/basic/ops.h"
 #include "builtin/operators/basic/str.h"
 
-#define EXPORT_BINARY_OP(name_str, func_name)                                                      \
-    exportEntity(                                                                                  \
-        name_str,                                                                                  \
-        makeOperator(                                                                              \
-            name_str,                                                                              \
-            makeFuncType(                                                                          \
-                param_init_list{},                                                                 \
-                {{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},        \
-                anyTypePtr),                                                                       \
-            __builtin__##func_name##__))
+void BasicBuiltinModule::exportBinaryOp(const std::string &name, operator_func_t func) {
+    auto op = makeOperator(
+        name,
+        makeFuncType(
+            param_init_list{},
+            {{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
+            anyTypePtr),
+        func);
 
-#define EXPORT_ASSN_OP(name_str, func_name)                                                        \
-    exportEntity(                                                                                  \
-        name_str,                                                                                  \
-        makeOperator(                                                                              \
-            name_str,                                                                              \
-            makeFuncType(                                                                          \
-                param_init_list{},                                                                 \
-                {{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},      \
-                anyTypePtr),                                                                       \
-            __builtin__##func_name##__))
+    auto ops = std::make_shared<std::vector<std::shared_ptr<Operator>>>();
+    ops->push_back(op);
+    exportEntity(name, ops);
+}
+
+void BasicBuiltinModule::exportAssnOp(const std::string &name, operator_func_t func) {
+    auto op = makeOperator(
+        name,
+        makeFuncType(
+            param_init_list{},
+            {{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
+            anyTypePtr),
+        func);
+
+    auto ops = std::make_shared<std::vector<std::shared_ptr<Operator>>>();
+    ops->push_back(op);
+    exportEntity(name, ops);
+}
+
+static const std::pair<std::string, operator_func_t> assnOps[] = {
+    {"__assn__", __builtin__assn__},
+    {"__assn_add__", __builtin__assn_add__},
+    {"__assn_sub__", __builtin__assn_sub__},
+    {"__assn_mul__", __builtin__assn_mul__},
+    {"__assn_div__", __builtin__assn_div__},
+    {"__assn_mod__", __builtin__assn_mod__},
+    {"__assn_mat__", __builtin__assn_mat__},
+    {"__assn_exp__", __builtin__assn_exp__},
+    {"__assn_and__", __builtin__assn_and__},
+    {"__assn_or__", __builtin__assn_or__}};
+
+static const std::pair<std::string, operator_func_t> binaryOps[] = {
+    {"__or__", __builtin__or__},
+    {"__and__", __builtin__and__},
+    {"__eq__", __builtin__eq__},
+    {"__neq__", __builtin__neq__},
+    {"__strict_eq__", __builtin__strict_eq__},
+    {"__strict_neq__", __builtin__strict_neq__},
+    {"__lt__", __builtin__lt__},
+    {"__le__", __builtin__le__},
+    {"__gt__", __builtin__gt__},
+    {"__ge__", __builtin__ge__},
+    {"__add__", __builtin__add__},
+    {"__sub__", __builtin__sub__},
+    {"__mul__", __builtin__mul__},
+    {"__div__", __builtin__div__},
+    {"__mod__", __builtin__mod__},
+    {"__mat__", __builtin__mat__},
+    {"__exp__", __builtin__exp__},
+    {"__idx__", __builtin__idx__}};
 
 BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
-    EXPORT_ASSN_OP("__assn__", assn);
-    EXPORT_ASSN_OP("__assn_add__", assn_add);
-    EXPORT_ASSN_OP("__assn_sub__", assn_sub);
-    EXPORT_ASSN_OP("__assn_mul__", assn_mul);
-    EXPORT_ASSN_OP("__assn_div__", assn_div);
-    EXPORT_ASSN_OP("__assn_mod__", assn_mod);
-    EXPORT_ASSN_OP("__assn_mat__", assn_mat);
-    EXPORT_ASSN_OP("__assn_exp__", assn_exp);
-    EXPORT_ASSN_OP("__assn_and__", assn_and);
-    EXPORT_ASSN_OP("__assn_or__", assn_or);
+    for (const auto &[name, func] : assnOps) {
+        exportAssnOp(name, func);
+    }
 
-    EXPORT_BINARY_OP("__or__", or);
-    EXPORT_BINARY_OP("__and__", and);
-    EXPORT_BINARY_OP("__eq__", eq);
-    EXPORT_BINARY_OP("__neq__", neq);
-    EXPORT_BINARY_OP("__strict_eq__", strict_eq);
-    EXPORT_BINARY_OP("__strict_neq__", strict_neq);
-    EXPORT_BINARY_OP("__lt__", lt);
-    EXPORT_BINARY_OP("__le__", le);
-    EXPORT_BINARY_OP("__gt__", gt);
-    EXPORT_BINARY_OP("__ge__", ge);
-    EXPORT_BINARY_OP("__add__", add);
-    EXPORT_BINARY_OP("__sub__", sub);
-    EXPORT_BINARY_OP("__mul__", mul);
-    EXPORT_BINARY_OP("__div__", div);
-    EXPORT_BINARY_OP("__mod__", mod);
-    EXPORT_BINARY_OP("__mat__", mat);
-    EXPORT_BINARY_OP("__exp__", exp);
-    EXPORT_BINARY_OP("__idx__", idx);
+    for (const auto &[name, func] : binaryOps) {
+        exportBinaryOp(name, func);
+    }
+
+    exportBuiltinOperator(
+        "print",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __print__);
+    exportBuiltinOperator(
+        "println",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __println__);
+    exportBuiltinOperator("input", param_init_list{}, param_init_list{}, voidTypePtr, __input__);
 }

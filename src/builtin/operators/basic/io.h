@@ -21,3 +21,7 @@
 
 #include "common/operator.h"
 #include "common/type.h"
+
+data_ptr_t __print__(Context &ctx, const data_vec_t &with, const data_vec_t &norm);
+data_ptr_t __println__(Context &ctx, const data_vec_t &with, const data_vec_t &norm);
+data_ptr_t __input__(Context &ctx, const data_vec_t &with, const data_vec_t &norm);

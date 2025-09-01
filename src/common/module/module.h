@@ -39,49 +39,41 @@ class Module : public std::enable_shared_from_this<Module> {
   protected:
     std::string name_;
     std::string path_;
-    type_ns_ptr_t importedTypeSpace_, exportedTypeSpace_;
-    entity_ns_ptr_t importedEntitySpace_, exportedEntitySpace_;
+    type_ns_ptr_t importedTypeNS_, exportedTypeNS_;
+    entity_ns_ptr_t importedEntityNS_, exportedEntityNS_;
     std::vector<module_ptr_t> imports_;
 
   public:
-    Module(const std::string &name, const std::string &path)
-        : name_(name), path_(path),
-          importedTypeSpace_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
-          exportedTypeSpace_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
-          importedEntitySpace_(std::make_shared<Namespace<std::string, entity>>()),
-          exportedEntitySpace_(std::make_shared<Namespace<std::string, entity>>()) {};
+    Module(const std::string &name, const std::string &path);
     virtual ~Module() = default;
 
     const std::string &name() const { return name_; }
     const std::string &path() const { return path_; }
 
-    void importModule(const module_ptr_t &mod, const std::vector<Reference> &refs) {
-        imports_.push_back(mod);
-        for (const auto &ref : refs) {
-            if (auto type = mod->getExportedType(ref); type.has_value()) {
-                importedTypeSpace_->insert(ref, type.value());
-            } else if (auto ent = mod->getExportedEntity(ref); ent.has_value()) {
-                importedEntitySpace_->insert(ref, ent.value());
-            }
-        }
-    }
+    void importEntities(const module_ptr_t &mod, const std::vector<Reference> &refs = {});
+
     bool exportType(const Reference &ref, const type_ptr_t &type) {
-        return exportedTypeSpace_->insert(ref, type);
+        return exportedTypeNS_->insert(ref, type);
     }
     bool exportEntity(const Reference &ref, const entity &ent) {
-        return exportedEntitySpace_->insert(ref, ent);
+        return exportedEntityNS_->insert(ref, ent);
     }
 
+    const type_ns_ptr_t &importedTypes() const { return importedTypeNS_; };
+    const type_ns_ptr_t &exportedTypes() const { return exportedTypeNS_; };
+    const entity_ns_ptr_t &importedEntities() const { return importedEntityNS_; };
+    const entity_ns_ptr_t &exportedEntitys() const { return exportedEntityNS_; };
+
     std::optional<type_ptr_t> getImportedType(const Reference &ref) const {
-        return importedTypeSpace_->get(ref);
+        return importedTypeNS_->get(ref);
     };
     std::optional<entity> getImportedEntity(const Reference &ref) const {
-        return importedEntitySpace_->get(ref);
+        return importedEntityNS_->get(ref);
     };
     std::optional<type_ptr_t> getExportedType(const Reference &ref) const {
-        return exportedTypeSpace_->get(ref);
+        return exportedTypeNS_->get(ref);
     };
     std::optional<entity> getExportedEntity(const Reference &ref) const {
-        return exportedEntitySpace_->get(ref);
+        return exportedEntityNS_->get(ref);
     };
 };

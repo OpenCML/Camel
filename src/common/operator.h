@@ -26,22 +26,22 @@
 
 class Context;
 
-using OperatorFunction =
+using operator_func_t =
     std::function<data_ptr_t(Context &, const data_vec_t &, const data_vec_t &)>;
 
 class Operator {
   private:
     std::string name_;
     func_type_ptr_t type_;
-    OperatorFunction func_;
+    operator_func_t func_;
 
   public:
-    Operator(const std::string &name, const func_type_ptr_t &&type, OperatorFunction &&func)
+    Operator(const std::string &name, const func_type_ptr_t &&type, operator_func_t &&func)
         : name_(name), type_(std::move(type)), func_(std::move(func)) {}
 
     const std::string &name() const { return name_; }
     const func_type_ptr_t &funcType() const { return type_; }
-    const OperatorFunction &func() const { return func_; }
+    const operator_func_t &func() const { return func_; }
 };
 
 using operator_ptr_t = std::shared_ptr<Operator>;

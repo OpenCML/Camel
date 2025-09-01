@@ -37,32 +37,13 @@ class UserDefinedModule : public Module {
     diagnostics_ptr_t diagnostics_;
     parser_ptr_t parser_;
 
-    bool buildGCT(const AST::node_ptr_t &ast) {
-        initTypes();
-        auto constructor = GCT::Constructor(context_, shared_from_this());
-        gct_ = constructor.construct(ast, diagnostics_);
-        return gct_ != nullptr && !diagnostics_->hasErrors();
-    }
-
-    bool buildGIR() {
-        auto constructor = GIR::Constructor(context_, shared_from_this());
-        gir_ = constructor.construct(gct_, diagnostics_);
-        return gir_ != nullptr && !diagnostics_->hasErrors();
-    }
+    bool buildGCT(const AST::node_ptr_t &ast);
+    bool buildGIR();
 
   public:
     UserDefinedModule(
         const std::string &name, const std::string &path, context_ptr_t ctx,
-        parser_ptr_t parser = nullptr)
-        : Module(name, path), context_(ctx) {
-        if (parser) {
-            parser_ = parser;
-            diagnostics_ = parser->diagnostics();
-        } else {
-            diagnostics_ = std::make_shared<Diagnostics>(ctx->diagConfig());
-            parser_ = std::make_shared<CamelParser>(diagnostics_);
-        }
-    }
+        parser_ptr_t parser = nullptr);
     virtual ~UserDefinedModule() = default;
 
     GCT::node_ptr_t gct() const { return gct_; }
@@ -75,18 +56,5 @@ class UserDefinedModule : public Module {
     }
 
     bool ready() const { return built_; }
-    bool compile() {
-        if (!parser_->ast()) {
-            std::ifstream ifs(path_);
-            if (!ifs.good()) {
-                throw CamelBaseException("Cannot open file: " + path_);
-            }
-            if (!parser_->parse(ifs)) {
-                throw CamelBaseException("Failed to parse file: " + path_);
-            }
-        }
-
-        this->built_ = buildGCT(parser_->ast()) && buildGIR();
-        return this->built_;
-    }
+    bool compile();
 };

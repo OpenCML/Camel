@@ -150,11 +150,12 @@ void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {
     const module_ptr_t &mod = context_->importModule(path, module_->name());
     if (!mod) {
         reportDiagnostic(
-            Diagnostic::Severity::Error, "Failed to import module from path: " + path,
+            Diagnostic::Severity::Error,
+            "Failed to import module from path: " + path,
             load->tokenRange());
         throw BuildAbortException();
     }
-    module_->importModule(mod, refs);
+    module_->importEntities(mod, refs);
     LEAVE("ImportDecl");
     return nullptr;
 }

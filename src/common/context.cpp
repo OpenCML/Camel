@@ -72,7 +72,7 @@ std::vector<std::string> Context::getModuleNameCandidates(
     std::vector<std::string> candidates;
 
     if (rawImportName.empty())
-        return candidates;
+        return std::vector<std::string>({""});
 
     if (rawImportName[0] == '.') {
         try {

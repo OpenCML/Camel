@@ -59,11 +59,34 @@ class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
         return current->insert(ref.ident(), v);
     };
 
+    void insertAllFrom(const Namespace<Key, Val> &other, bool deepCopy = true) {
+        for (const auto &[key, val] : other.map_) {
+            map_[key] = val;
+        }
+
+        for (const auto &[key, otherNsPtr] : other.innerNamespaces_) {
+            if (!otherNsPtr)
+                continue;
+
+            auto &targetNsPtr = innerNamespaces_[key];
+
+            if (deepCopy) {
+                if (!targetNsPtr) {
+                    targetNsPtr = std::make_shared<Namespace>();
+                }
+                targetNsPtr->insertAllFrom(*otherNsPtr, true);
+            } else {
+                targetNsPtr = otherNsPtr;
+            }
+        }
+    }
+
     std::optional<Val> get(const Reference &ref)
         requires std::is_same_v<Key, std::string>
     {
-        if (!ref.empty())
+        if (ref.empty()) {
             return std::nullopt;
+        }
 
         const Namespace *current = this;
         for (const auto &ns_name : ref.paths()) {

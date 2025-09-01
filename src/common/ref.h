@@ -27,6 +27,11 @@ class Reference {
   public:
     Reference() {}
     Reference(const std::string &str) { parse(str); }
+    Reference(const char *cstr) {
+        if (cstr) {
+            parse(std::string(cstr));
+        }
+    }
 
     const std::string &ident() const { return ident_; }
     const std::vector<std::string> &paths() const { return paths_; }

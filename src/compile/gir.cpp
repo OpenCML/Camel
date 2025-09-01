@@ -123,6 +123,8 @@ any Constructor::visit(const GCT::node_ptr_t &node) {
         return visitExitNode(node);
     case GCT::LoadType::EXEC:
         return visitExecNode(node);
+    case GCT::LoadType::EXPT:
+        return visitExptNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
     }
@@ -256,6 +258,31 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
         if (!ops->empty()) {
             DataIndex index = graph->addRuntimeConstant(nullptr);
             operator_ptr_t &op = ops->front();
+            node_ptr_t opNode = OperatorNode::create(graph, index, op);
+            LEAVE("DREF");
+            return opNode;
+        }
+    }
+    auto optEntity = module_->getImportedEntity(ident);
+    if (optEntity.has_value()) {
+        const auto &e = optEntity.value();
+        if (std::holds_alternative<GIR::node_ptr_t>(e)) {
+            LEAVE("DREF");
+            return std::get<GIR::node_ptr_t>(e);
+        } else if (std::holds_alternative<GIR::graph_vec_ptr_t>(e)) {
+            auto graphs = std::get<graph_vec_ptr_t>(e);
+            ASSERT(!graphs->empty(), "Imported graph list is empty.");
+            auto tgtGraph = graphs->front();
+            DataIndex index = graph->addRuntimeConstant(nullptr);
+            func_ptr_t funcData = FunctionData::create(tgtGraph);
+            node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
+            LEAVE("DREF");
+            return funcNode;
+        } else if (std::holds_alternative<operator_vec_ptr_t>(e)) {
+            auto ops = std::get<operator_vec_ptr_t>(e);
+            ASSERT(!ops->empty(), "Imported operator list is empty.");
+            operator_ptr_t op = ops->front();
+            DataIndex index = graph->addRuntimeConstant(nullptr);
             node_ptr_t opNode = OperatorNode::create(graph, index, op);
             LEAVE("DREF");
             return opNode;
@@ -553,20 +580,22 @@ void_ptr_t Constructor::visitExptNode(const GCT::node_ptr_t &gct) {
         auto optNode = nodeAt(ref);
         if (optNode.has_value()) {
             module_->exportEntity(ref, optNode.value());
+            continue;
         }
         auto optGraph = graphAt(ref);
         if (optGraph.has_value()) {
             module_->exportEntity(ref, optGraph.value());
+            continue;
         }
         auto optOp = operatorAt(ref);
         if (optOp.has_value()) {
             module_->exportEntity(ref, optOp.value());
-        } else {
-            reportDiagnostic(
-                Diagnostic::Severity::Error,
-                "Unresolved export reference: " + ref.toString());
-            throw BuildAbortException();
+            continue;
         }
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Unresolved export reference: " + ref.toString());
+        throw BuildAbortException();
     }
     LEAVE("EXPT");
     return nullptr;

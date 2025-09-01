@@ -21,16 +21,8 @@
 
 #include "module.h"
 
-class BuiltinModule : public Module {
-  public:
-    BuiltinModule(const std::string &name) : Module(name, "") {}
-    virtual ~BuiltinModule() = default;
-};
-
-std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
-
 inline operator_ptr_t
-makeOperator(const std::string &name, const func_type_ptr_t &&type, OperatorFunction &&func) {
+makeOperator(const std::string &name, const func_type_ptr_t &&type, operator_func_t &func) {
     return std::make_shared<Operator>(name, std::move(type), std::move(func));
 }
 
@@ -38,3 +30,20 @@ inline func_type_ptr_t makeFuncType(
     const param_init_list &with, const param_init_list &norm, const type_ptr_t &returnType) {
     return std::make_shared<FunctionType>(with, norm, returnType);
 }
+
+class BuiltinModule : public Module {
+  public:
+    BuiltinModule(const std::string &name) : Module(name, "") {}
+    virtual ~BuiltinModule() = default;
+
+    void exportBuiltinOperator(
+        const std::string &name, const param_init_list &with, const param_init_list &norm,
+        const type_ptr_t &retn, operator_func_t func) {
+        auto op = makeOperator(name, makeFuncType(with, norm, retn), func);
+        auto ops = std::make_shared<std::vector<std::shared_ptr<Operator>>>();
+        ops->push_back(op);
+        exportEntity(name, ops);
+    }
+};
+
+std::optional<module_ptr_t> getBuiltinModule(const std::string &name);

@@ -19,7 +19,4 @@
 
 #include "io.h"
 
-module_ptr_t IOBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<IOBuiltinModule>();
-    return module;
-}
+IOBuiltinModule::IOBuiltinModule() : BuiltinModule("") {}

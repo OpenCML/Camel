@@ -25,5 +25,8 @@ class BasicBuiltinModule : public BuiltinModule {
   public:
     BasicBuiltinModule();
 
+    void exportBinaryOp(const std::string &name, operator_func_t func);
+    void exportAssnOp(const std::string &name, operator_func_t func);
+
     static module_ptr_t create() { return std::make_shared<BasicBuiltinModule>(); }
 };

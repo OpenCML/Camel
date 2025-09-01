@@ -30,23 +30,19 @@
 #include "builtin/modules/sys.h"
 #include "builtin/modules/time.h"
 
-std::unordered_map<std::string, std::function<std::shared_ptr<Module>()>> builtinModuleFactories;
+std::unordered_map<std::string, std::function<std::shared_ptr<Module>()>> builtinModuleFactories = {
+    {"", [] { return BasicBuiltinModule::create(); }},
+    {"io", [] { return IOBuiltinModule::create(); }},
+    {"os", [] { return OSBuiltinModule::create(); }},
+    {"re", [] { return REBuiltinModule::create(); }},
+    {"sys", [] { return SysBuiltinModule::create(); }},
+    {"math", [] { return MathBuiltinModule::create(); }},
+    {"time", [] { return TimeBuiltinModule::create(); }},
+    {"file", [] { return FileBuiltinModule::create(); }},
+    {"json", [] { return JsonBuiltinModule::create(); }},
+    {"random", [] { return RandomBuiltinModule::create(); }},
+};
 std::unordered_map<std::string, module_ptr_t> builtinModules;
-
-void initializeBuiltinModules() {
-    builtinModuleFactories = {
-        {"", [] { return BasicBuiltinModule::create(); }},
-        {"io", [] { return IOBuiltinModule::create(); }},
-        {"os", [] { return OSBuiltinModule::create(); }},
-        {"re", [] { return REBuiltinModule::create(); }},
-        {"sys", [] { return SysBuiltinModule::create(); }},
-        {"math", [] { return MathBuiltinModule::create(); }},
-        {"time", [] { return TimeBuiltinModule::create(); }},
-        {"file", [] { return FileBuiltinModule::create(); }},
-        {"json", [] { return JsonBuiltinModule::create(); }},
-        {"random", [] { return RandomBuiltinModule::create(); }},
-    };
-}
 
 std::optional<module_ptr_t> getBuiltinModule(const std::string &name) {
     auto it = builtinModules.find(name);

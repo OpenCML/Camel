@@ -23,7 +23,7 @@
 
 class IOBuiltinModule : public BuiltinModule {
   public:
-    IOBuiltinModule() : BuiltinModule("") {}
+    IOBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<IOBuiltinModule>(); }
 };
