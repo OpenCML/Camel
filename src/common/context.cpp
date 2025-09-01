@@ -19,11 +19,36 @@
 
 #include "context.h"
 #include "common/module/userdef.h"
+#include "utils/log.h"
 #include "utils/str.h"
+
+#define DEBUG_LEVEL -1
 
 #include <filesystem>
 
 namespace fs = std::filesystem;
+
+std::ostream &operator<<(std::ostream &os, const EntryConfig &config) {
+    os << "{\n";
+    os << "  entryDir: " << config.entryDir << "\n";
+    os << "  entryFile: " << config.entryFile << "\n";
+    os << "  searchPaths: [";
+    for (size_t i = 0; i < config.searchPaths.size(); ++i) {
+        if (config.searchPaths[i].empty())
+            continue;
+        os << config.searchPaths[i];
+        if (i < config.searchPaths.size() - 1)
+            os << ", ";
+    }
+    os << "]\n";
+    os << "  envs: {\n";
+    for (const auto &[key, value] : config.envs) {
+        os << "    " << key << ": " << value << "\n";
+    }
+    os << "  }\n";
+    os << "}";
+    return os;
+}
 
 inline bool fileExists(const std::string &path) {
     std::ifstream file(path);
@@ -33,6 +58,7 @@ inline bool fileExists(const std::string &path) {
 Context::Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf) {
     if (auto builtin = getBuiltinModule(""); builtin.has_value()) {
+        debug(0) << "EntryConfig:\n" << entryConf << std::endl;
         modules_[""] = builtin.value();
     }
 }
@@ -129,9 +155,11 @@ std::string Context::getModulePath(const std::string &moduleName) {
     relativePath += ".cml";
 
     for (const auto &dir : entryConfig_.searchPaths) {
+        if (dir.empty())
+            continue; // skip empty search paths
         fs::path basePath = fs::path(dir);
         if (!basePath.is_absolute()) {
-            basePath = fs::path(entryConfig_.root) / basePath;
+            basePath = fs::path(entryConfig_.entryDir) / basePath;
         }
 
         fs::path fullPath = basePath / relativePath;
@@ -141,7 +169,7 @@ std::string Context::getModulePath(const std::string &moduleName) {
     }
 
     // fallback: root/relativePath
-    fs::path fallbackPath = fs::path(entryConfig_.root) / relativePath;
+    fs::path fallbackPath = fs::path(entryConfig_.entryDir) / relativePath;
     if (fileExists(fallbackPath.string())) {
         return fallbackPath.string();
     }

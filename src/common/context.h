@@ -27,11 +27,13 @@
 #include "module/builtin.h"
 
 struct EntryConfig {
-    std::string root;                     // root path of the context, used for loading modules
-    std::vector<std::string> searchPaths; // search paths for modules
+    std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path
+    std::vector<std::string> searchPaths; // search paths for modules
     std::unordered_map<std::string, std::string> envs; // environment variables
 };
+
+std::ostream &operator<<(std::ostream &os, const EntryConfig &config);
 
 class Context : public std::enable_shared_from_this<Context> {
     EntryConfig entryConfig_;
@@ -54,7 +56,7 @@ class Context : public std::enable_shared_from_this<Context> {
         const DiagnosticsConfig &diagConf = DiagnosticsConfig());
     virtual ~Context() = default;
 
-    const std::string &root() const { return entryConfig_.root; }
+    const std::string &root() const { return entryConfig_.entryDir; }
     DiagnosticsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
 

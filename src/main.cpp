@@ -20,6 +20,7 @@
  */
 
 #include <chrono>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <queue>
@@ -40,6 +41,7 @@
 #include "parse/cst-dump.h"
 #include "service/formatter/fmt.h"
 #include "service/profiler/trace.h"
+#include "utils/env.h"
 #include "utils/log.h"
 
 #include "common/module/userdef.h"
@@ -47,6 +49,8 @@
 
 using namespace antlr4;
 using namespace std;
+
+namespace fs = std::filesystem;
 
 using namespace CLI;
 
@@ -137,12 +141,26 @@ int main(int argc, char *argv[]) {
                 }
             }
 
+            fs::path camelPath = fs::current_path();
+            fs::path entryPath(targetFile);
+            // if targetFile is relative (or "stdin"), the entryDir is the current working directory
+            // if targetFile is absolute, the entryDir is the parent directory of targetFile
+            std::string entryDir = fs::absolute(entryPath).parent_path().string();
+
             context_ptr_t ctx = std::make_shared<Context>(
                 EntryConfig{
-                    .root = ".",
-                    .searchPaths = {"", "lib"},
+                    .entryDir = entryDir,
                     .entryFile = targetFile,
-                    .envs = {{"CAMEL_STD_LIB", Run::stdLibPath.empty() ? "lib" : Run::stdLibPath}}},
+                    .searchPaths =
+                        {entryDir,
+                         fs::absolute(
+                             fs::path(
+                                 Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                         : Run::stdLibPath))
+                             .string(),
+                         getEnv("CAMEL_PACKAGES"),
+                         getEnv("CAMEL_HOME", camelPath.string())},
+                    .envs = {}},
                 DiagnosticsConfig{
                     .total_limit = -1,
                     .per_severity_limits = {{Diagnostic::Severity::Error, 0}}});
