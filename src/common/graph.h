@@ -107,8 +107,6 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const std::vector<DataIndex> &ports() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
 
-    void fulfill(const data_vec_t &dataList);
-
   private:
     std::string name_;
     graph_wptr_t outer_;

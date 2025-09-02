@@ -59,6 +59,8 @@ class Constructor {
         return rootGraph_;
     }
 
+    graph_ptr_t rootGraph() const { return rootGraph_; }
+
   private:
     graph_ptr_t rootGraph_;
     graph_ptr_t currGraph_;

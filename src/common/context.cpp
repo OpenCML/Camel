@@ -21,6 +21,7 @@
 
 #include "common/module/userdef.h"
 #include "context.h"
+#include "module/userdef.h"
 #include "utils/log.h"
 #include "utils/str.h"
 
@@ -186,4 +187,11 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
         return UserDefinedModule::loadFromFile(moduleName, path, shared_from_this());
     }
     return nullptr;
+}
+
+GIR::graph_ptr_t Context::mainGraph() const {
+    ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
+    auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
+    ASSERT(gir != nullptr, "GIR of main module is not built yet.");
+    return gir;
 }

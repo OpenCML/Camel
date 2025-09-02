@@ -273,6 +273,8 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
+            // make imported graph a subgraph of the main graph
+            context_->mainGraph()->addSubGraph(tgtGraph);
             DataIndex index = graph->addRuntimeConstant(nullptr);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);

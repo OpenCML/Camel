@@ -50,19 +50,6 @@ UserDefinedModule::UserDefinedModule(
     importEntities(ctx->importModule(""));
 }
 
-bool UserDefinedModule::buildGCT(const AST::node_ptr_t &ast) {
-    initTypes();
-    auto constructor = GCT::Constructor(context_, shared_from_this());
-    gct_ = constructor.construct(ast, diagnostics_);
-    return gct_ != nullptr && !diagnostics_->hasErrors();
-}
-
-bool UserDefinedModule::buildGIR() {
-    auto constructor = GIR::Constructor(context_, shared_from_this());
-    gir_ = constructor.construct(gct_, diagnostics_);
-    return gir_ != nullptr && !diagnostics_->hasErrors();
-}
-
 bool UserDefinedModule::compile() {
     if (!parser_->ast()) {
         std::ifstream ifs(path_);
@@ -74,6 +61,16 @@ bool UserDefinedModule::compile() {
         }
     }
 
-    this->built_ = buildGCT(parser_->ast()) && buildGIR();
+    auto ast = parser_->ast();
+    auto gctConstructor = GCT::Constructor(context_, shared_from_this());
+    auto girConstructor = GIR::Constructor(context_, shared_from_this());
+
+    // get gir first because building gct may access gir information
+    gir_ = girConstructor.rootGraph();
+    gct_ = gctConstructor.construct(ast, diagnostics_);
+
+    girConstructor.construct(gct_, diagnostics_);
+
+    this->built_ = !diagnostics_->hasErrors();
     return this->built_;
 }

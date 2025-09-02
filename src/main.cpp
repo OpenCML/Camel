@@ -168,6 +168,7 @@ int main(int argc, char *argv[]) {
             ctx->setMainModule(mainModule);
 
             try {
+                initTypes();
                 mainModule->compile();
             } catch (DiagnosticsLimitExceededException &e) {
                 if (selectedCommand == Command::Check) {
@@ -185,7 +186,7 @@ int main(int argc, char *argv[]) {
                 }
                 if (Inspect::dumpGIR && mainModule->gir()) {
                     GraphVizDumpPass pass(ctx);
-                    auto gir = mainModule->gir();
+                    auto gir = ctx->mainGraph();
                     auto res = pass.apply(gir);
                     os << any_cast<string>(res);
                 }

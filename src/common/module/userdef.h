@@ -37,9 +37,6 @@ class UserDefinedModule : public Module {
     diagnostics_ptr_t diagnostics_;
     parser_ptr_t parser_;
 
-    bool buildGCT(const AST::node_ptr_t &ast);
-    bool buildGIR();
-
   public:
     UserDefinedModule(
         const std::string &name, const std::string &path, context_ptr_t ctx,
