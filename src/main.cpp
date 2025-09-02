@@ -202,8 +202,14 @@ int main(int argc, char *argv[]) {
                 }
             }
 
+        } catch (CamelBaseException &e) {
+            os << e.what(useJsonFormat) << endl;
+            return 1;
         } catch (exception &e) {
             os << e.what() << endl;
+            return 1;
+        } catch (...) {
+            os << "Unknown error occurred." << endl;
             return 1;
         }
 

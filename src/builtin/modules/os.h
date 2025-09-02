@@ -23,7 +23,7 @@
 
 class OSBuiltinModule : public BuiltinModule {
   public:
-    OSBuiltinModule() : BuiltinModule("") {}
+    OSBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<OSBuiltinModule>(); }
 };

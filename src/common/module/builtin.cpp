@@ -20,7 +20,7 @@
 #include "builtin.h"
 
 #include "builtin/modules/basic.h"
-#include "builtin/modules/file.h"
+#include "builtin/modules/fs.h"
 #include "builtin/modules/io.h"
 #include "builtin/modules/json.h"
 #include "builtin/modules/math.h"
@@ -30,15 +30,20 @@
 #include "builtin/modules/sys.h"
 #include "builtin/modules/time.h"
 
+data_ptr_t __not_implemented__(Context &ctx, const data_vec_t &with, const data_vec_t &norm) {
+    ASSERT(false, "Not implemented");
+    return nullptr;
+}
+
 std::unordered_map<std::string, std::function<std::shared_ptr<Module>()>> builtinModuleFactories = {
     {"", [] { return BasicBuiltinModule::create(); }},
     {"io", [] { return IOBuiltinModule::create(); }},
+    {"fs", [] { return FileBuiltinModule::create(); }},
     {"os", [] { return OSBuiltinModule::create(); }},
     {"re", [] { return REBuiltinModule::create(); }},
     {"sys", [] { return SysBuiltinModule::create(); }},
     {"math", [] { return MathBuiltinModule::create(); }},
     {"time", [] { return TimeBuiltinModule::create(); }},
-    {"file", [] { return FileBuiltinModule::create(); }},
     {"json", [] { return JsonBuiltinModule::create(); }},
     {"random", [] { return RandomBuiltinModule::create(); }},
 };

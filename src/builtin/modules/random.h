@@ -23,7 +23,7 @@
 
 class RandomBuiltinModule : public BuiltinModule {
   public:
-    RandomBuiltinModule() : BuiltinModule("") {}
+    RandomBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<RandomBuiltinModule>(); }
 };

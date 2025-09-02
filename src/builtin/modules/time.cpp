@@ -19,7 +19,11 @@
 
 #include "time.h"
 
-module_ptr_t TimeBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<TimeBuiltinModule>();
-    return module;
+TimeBuiltinModule::TimeBuiltinModule() : BuiltinModule("time") {
+    exportBuiltinOperator(
+        "now",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
 }

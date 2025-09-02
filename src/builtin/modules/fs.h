@@ -17,9 +17,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "file.h"
+#pragma once
 
-module_ptr_t FileBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<FileBuiltinModule>();
-    return module;
-}
+#include "common/module/builtin.h"
+
+class FileBuiltinModule : public BuiltinModule {
+  public:
+    FileBuiltinModule();
+
+    static module_ptr_t create() { return std::make_shared<FileBuiltinModule>(); }
+};

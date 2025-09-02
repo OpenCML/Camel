@@ -19,4 +19,11 @@
 
 #include "io.h"
 
-IOBuiltinModule::IOBuiltinModule() : BuiltinModule("") {}
+IOBuiltinModule::IOBuiltinModule() : BuiltinModule("io") {
+    exportBuiltinOperator(
+        "open",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
+}

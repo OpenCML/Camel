@@ -23,7 +23,7 @@
 
 class TimeBuiltinModule : public BuiltinModule {
   public:
-    TimeBuiltinModule() : BuiltinModule("") {}
+    TimeBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<TimeBuiltinModule>(); }
 };

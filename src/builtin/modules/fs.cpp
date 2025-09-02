@@ -17,13 +17,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "fs.h"
 
-#include "common/module/builtin.h"
-
-class FileBuiltinModule : public BuiltinModule {
-  public:
-    FileBuiltinModule() : BuiltinModule("") {}
-
-    static module_ptr_t create();
-};
+FileBuiltinModule::FileBuiltinModule() : BuiltinModule("fs") {
+    exportBuiltinOperator(
+        "stat",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
+}

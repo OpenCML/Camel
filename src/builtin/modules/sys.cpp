@@ -19,7 +19,11 @@
 
 #include "sys.h"
 
-module_ptr_t SysBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<SysBuiltinModule>();
-    return module;
+SysBuiltinModule::SysBuiltinModule() : BuiltinModule("sys") {
+    exportBuiltinOperator(
+        "platform",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
 }

@@ -19,7 +19,11 @@
 
 #include "math.h"
 
-module_ptr_t MathBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<MathBuiltinModule>();
-    return module;
+MathBuiltinModule::MathBuiltinModule() : BuiltinModule("math") {
+    exportBuiltinOperator(
+        "floor",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
 }

@@ -23,7 +23,7 @@
 
 class JsonBuiltinModule : public BuiltinModule {
   public:
-    JsonBuiltinModule() : BuiltinModule("") {}
+    JsonBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<JsonBuiltinModule>(); }
 };

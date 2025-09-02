@@ -23,7 +23,7 @@
 
 class REBuiltinModule : public BuiltinModule {
   public:
-    REBuiltinModule() : BuiltinModule("") {}
+    REBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<REBuiltinModule>(); }
 };

@@ -18,6 +18,7 @@
  */
 
 #include "module.h"
+#include "common/error/base.h"
 
 Module::Module(const std::string &name, const std::string &path)
     : name_(name), path_(path),
@@ -38,6 +39,10 @@ void Module::importEntities(const module_ptr_t &mod, const std::vector<Reference
                 importedTypeNS_->insert(ref, type.value());
             } else if (auto ent = mod->getExportedEntity(ref); ent.has_value()) {
                 importedEntityNS_->insert(ref, ent.value());
+            } else {
+                throw CamelBaseException(
+                    "Import error: cannot import '" + ref.ident() + "' from module '" +
+                    mod->name() + "'");
             }
         }
     }

@@ -23,7 +23,7 @@
 
 class MathBuiltinModule : public BuiltinModule {
   public:
-    MathBuiltinModule() : BuiltinModule("") {}
+    MathBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<MathBuiltinModule>(); }
 };

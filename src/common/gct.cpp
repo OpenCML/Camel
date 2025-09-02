@@ -63,6 +63,7 @@ std::string to_string(LoadType type) {
     default:
         ASSERT(false, "Unknown NodeType");
     }
+    return "UNKNOWN";
 }
 
 const string DataLoad::toString() const {

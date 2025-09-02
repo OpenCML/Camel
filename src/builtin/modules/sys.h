@@ -23,7 +23,7 @@
 
 class SysBuiltinModule : public BuiltinModule {
   public:
-    SysBuiltinModule() : BuiltinModule("") {}
+    SysBuiltinModule();
 
-    static module_ptr_t create();
+    static module_ptr_t create() { return std::make_shared<SysBuiltinModule>(); }
 };

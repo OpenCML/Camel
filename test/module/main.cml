@@ -1,6 +1,6 @@
 module main
 
-// import { sleep } from os
+import { sleep } from os
 
 export func main(): int sync {
     print("Hello, World!")

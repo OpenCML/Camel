@@ -19,7 +19,11 @@
 
 #include "random.h"
 
-module_ptr_t RandomBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<RandomBuiltinModule>();
-    return module;
+RandomBuiltinModule::RandomBuiltinModule() : BuiltinModule("random") {
+    exportBuiltinOperator(
+        "random",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
 }

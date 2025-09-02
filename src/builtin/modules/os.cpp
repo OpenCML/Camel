@@ -19,7 +19,11 @@
 
 #include "os.h"
 
-module_ptr_t OSBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<OSBuiltinModule>();
-    return module;
+OSBuiltinModule::OSBuiltinModule() : BuiltinModule("os") {
+    exportBuiltinOperator(
+        "sleep",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
 }

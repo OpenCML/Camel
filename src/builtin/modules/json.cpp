@@ -19,7 +19,11 @@
 
 #include "json.h"
 
-module_ptr_t JsonBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<JsonBuiltinModule>();
-    return module;
+JsonBuiltinModule::JsonBuiltinModule() : BuiltinModule("json") {
+    exportBuiltinOperator(
+        "load",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
 }

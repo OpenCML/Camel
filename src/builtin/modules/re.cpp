@@ -19,7 +19,11 @@
 
 #include "re.h"
 
-module_ptr_t REBuiltinModule::create() {
-    module_ptr_t module = std::make_shared<REBuiltinModule>();
-    return module;
+REBuiltinModule::REBuiltinModule() : BuiltinModule("re") {
+    exportBuiltinOperator(
+        "test",
+        param_init_list{},
+        {{"value", anyTypePtr, nullptr, false}},
+        voidTypePtr,
+        __not_implemented__);
 }
