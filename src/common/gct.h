@@ -53,6 +53,7 @@ enum class LoadType {
     ANNO,
     EXIT,
     EXEC,
+    EXPT,
 };
 
 std::string to_string(LoadType type);
@@ -90,7 +91,9 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
     template <typename T> node_ptr_t atAs(size_t index) const {
         ASSERT(index < children_.size(), "Index out of bounds");
         ASSERT(children_.at(index) != nullptr, "Child node is null");
-        ASSERT(std::dynamic_pointer_cast<T>(children_.at(index)->load()), "Dynamic pointer cast failed");
+        ASSERT(
+            std::dynamic_pointer_cast<T>(children_.at(index)->load()),
+            "Dynamic pointer cast failed");
         return children_.at(index);
     }
 
@@ -99,7 +102,9 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
     template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
-        ASSERT(std::dynamic_pointer_cast<LoadType>(load_), "Load type does not match requested type");
+        ASSERT(
+            std::dynamic_pointer_cast<LoadType>(load_),
+            "Load type does not match requested type");
         return std::dynamic_pointer_cast<LoadType>(load_);
     }
 };
@@ -147,8 +152,10 @@ class DeclLoad : public Load {
     Reference ref_;
 
   public:
-    DeclLoad(const Reference &ref, bool isFunc = false) : Load(LoadType::DECL), isFunc_(isFunc), ref_(ref) {}
-    DeclLoad(const std::string &str, bool isFunc = false) : Load(LoadType::DECL), isFunc_(isFunc), ref_(str) {}
+    DeclLoad(const Reference &ref, bool isFunc = false)
+        : Load(LoadType::DECL), isFunc_(isFunc), ref_(ref) {}
+    DeclLoad(const std::string &str, bool isFunc = false)
+        : Load(LoadType::DECL), isFunc_(isFunc), ref_(str) {}
 
     bool isFunc() const { return isFunc_; }
     const Reference ref() const { return ref_; }
@@ -184,7 +191,6 @@ class DRefLoad : public Load {
 
   public:
     DRefLoad(const Reference &ref) : Load(LoadType::DREF), ref_(ref) {}
-    DRefLoad(const std::string &str) : Load(LoadType::DREF), ref_(str) {}
 
     const Reference ref() const { return ref_; }
 
@@ -288,6 +294,29 @@ class ExecLoad : public Load {
 
   private:
     bool synced_ = false;
+};
+
+class ExptLoad : public Load {
+  public:
+    ExptLoad(const std::vector<Reference> &exports) : Load(LoadType::EXPT), exports_(exports) {}
+
+    const std::string toString() const override {
+        std::string result = "EXPT: [";
+        for (const auto &exp : exports_) {
+            result += exp.toString() + ", ";
+        }
+        if (!exports_.empty()) {
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+        }
+        result += "]";
+        return result;
+    }
+
+    const std::vector<Reference> &exports() const { return exports_; }
+
+  private:
+    std::vector<Reference> exports_;
 };
 
 class AccsLoad : public Load {

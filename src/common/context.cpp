@@ -17,88 +17,181 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <filesystem>
+
+#include "common/module/userdef.h"
 #include "context.h"
-#include "builtin/operators/init.h"
+#include "module/userdef.h"
+#include "utils/log.h"
+#include "utils/str.h"
 
-#include <set>
+#define DEBUG_LEVEL 0
 
-using namespace std;
+namespace fs = std::filesystem;
 
-Context::Context()
-    : rootGraph_(GIR::Graph::create(nullptr, "__root__")), nodeScope_(node_scope_t::create()),
-      graphScope_(graph_scope_t::create()) {
-    initGlobalOperators(); // Initialize global operators
-    opScope_ = operator_scope_t::create(globalOperators);
-    currGraph_ = rootGraph_;
+std::ostream &operator<<(std::ostream &os, const EntryConfig &config) {
+    os << "{\n";
+    os << "  entryDir: " << config.entryDir << "\n";
+    os << "  entryFile: " << config.entryFile << "\n";
+    os << "  searchPaths: [";
+    for (size_t i = 0; i < config.searchPaths.size(); ++i) {
+        if (config.searchPaths[i].empty())
+            continue;
+        os << config.searchPaths[i];
+        if (i < config.searchPaths.size() - 1)
+            os << ", ";
+    }
+    os << "]\n";
+    os << "}";
+    return os;
 }
 
-GIR::graph_ptr_t Context::enterScope(const std::string &name) {
-    if (name.empty()) {
-        currGraph_ = GIR::Graph::create(currGraph_);
+inline bool fileExists(const std::string &path) {
+    std::ifstream file(path);
+    return file.good();
+}
+
+Context::Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf)
+    : entryConfig_(entryConf), diagConfig_(diagConf) {
+    if (auto builtin = getBuiltinModule(""); builtin.has_value()) {
+        debug(0) << "EntryConfig:\n" << entryConf << std::endl;
+        modules_[""] = builtin.value();
+    }
+}
+
+module_ptr_t
+Context::importModule(const std::string &rawModuleName, const std::string &currentModuleName) {
+    debug(0) << "Trying to import module '" << rawModuleName << "' from current module '"
+             << currentModuleName << "'" << std::endl;
+    auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
+
+    for (const auto &name : candidates) {
+        debug(0) << "Checking candidate '" << name << "'" << std::endl;
+        auto it = modules_.find(name);
+        if (it != modules_.end()) {
+            debug(0) << "Candidate module '" << name << "' found in cache" << std::endl;
+            return it->second;
+        }
+
+        module_ptr_t module = tryLoadModule(name);
+        if (module) {
+            debug(0) << "Candidate module '" << name << "' loaded from file: " << module->path()
+                     << std::endl;
+            modules_[name] = module;
+            return module;
+        }
+
+        auto builtin = getBuiltinModule(name);
+        if (builtin.has_value()) {
+            debug(0) << "Candidate module '" << name << "' is a built-in module" << std::endl;
+            modules_[name] = builtin.value();
+            return builtin.value();
+        }
+        debug(0) << "Candidate module '" << name << "' not found" << std::endl;
+    }
+
+    throw CamelBaseException("Module not found '" + rawModuleName);
+}
+
+std::vector<std::string> Context::getModuleNameCandidates(
+    const std::string &currentModule, const std::string &rawImportName) {
+    std::vector<std::string> candidates;
+
+    if (rawImportName.empty())
+        return std::vector<std::string>({""});
+
+    if (rawImportName[0] == '.') {
+        try {
+            std::string resolved = resolveRelativeModuleName(currentModule, rawImportName);
+            candidates.push_back(resolved);
+        } catch (...) {
+            // ignore invalid relative import
+        }
     } else {
-        auto graphs = graphScope_->get(name);
-        if (graphs.has_value() && !graphs.value()->empty()) {
-            currGraph_ = graphs.value()->front();
-        } else {
-            currGraph_ = GIR::Graph::create(currGraph_, name);
-            insertGraph(name, currGraph_);
+        candidates.push_back(rawImportName);
+
+        // relative-to-parent fallback
+        std::vector<std::string> base = split(currentModule, '.');
+        for (int i = base.size(); i >= 0; --i) {
+            std::vector<std::string> prefix(base.begin(), base.begin() + i);
+            prefix.push_back(rawImportName);
+            candidates.push_back(join(prefix, '.'));
         }
     }
-    nodeScope_ = nodeScope_->enter(name);
-    graphScope_ = graphScope_->enter(name);
-    opScope_ = opScope_->enter(name);
-    return currGraph_;
+
+    return candidates;
 }
 
-void Context::leaveScope() {
-    nodeScope_ = nodeScope_->leave();
-    graphScope_ = graphScope_->leave();
-    opScope_ = opScope_->leave();
-    currGraph_ = currGraph_->outer();
+std::string Context::resolveRelativeModuleName(
+    const std::string &currentModule, const std::string &importName) {
+
+    int level = 0;
+    size_t i = 0;
+    while (i < importName.size() && importName[i] == '.') {
+        ++level;
+        ++i;
+    }
+
+    std::string remaining = importName.substr(i);
+    std::vector<std::string> base = split(currentModule, '.');
+
+    if (static_cast<size_t>(level) > base.size()) {
+        throw CamelBaseException("Too many dots in relative import: " + importName);
+    }
+
+    base.resize(base.size() - level);
+
+    if (!remaining.empty()) {
+        std::vector<std::string> rest = split(remaining, '.');
+        base.insert(base.end(), rest.begin(), rest.end());
+    }
+
+    return join(base, '.');
 }
 
-std::unordered_map<GIR::node_ptr_t, std::string> Context::buildNodeIdentsMap() const {
-    std::unordered_map<GIR::node_ptr_t, std::string> identsMap;
-    auto visit = [&identsMap](auto self, node_scope_ptr_t scope) -> void {
-        for (const auto &pair : scope->map()) {
-            const auto &name = pair.first;
-            const auto &node = pair.second;
-            if (node) {
-                identsMap[node] = name;
-            }
+std::string Context::getModulePath(const std::string &moduleName) {
+    std::string relativePath = moduleName;
+    std::replace(relativePath.begin(), relativePath.end(), '.', '/');
+    relativePath += ".cml";
+
+    for (const auto &dir : entryConfig_.searchPaths) {
+        if (dir.empty())
+            continue; // skip empty search paths
+        fs::path basePath = fs::path(dir);
+        if (!basePath.is_absolute()) {
+            basePath = fs::path(entryConfig_.entryDir) / basePath;
         }
-        for (const auto &innerScope : scope->innerScopes()) {
-            self(self, innerScope);
+
+        fs::path fullPath = basePath / relativePath;
+        if (fileExists(fullPath.string())) {
+            return fullPath.string();
         }
-    };
-    visit(visit, nodeScope_->root()); // Recursive lambda to visit all inner scopes
-    return identsMap;
+    }
+
+    // fallback: root/relativePath
+    fs::path fallbackPath = fs::path(entryConfig_.entryDir) / relativePath;
+    if (fileExists(fallbackPath.string())) {
+        return fallbackPath.string();
+    }
+
+    return "";
 }
 
-bool Context::insertNode(const std::string &name, const GIR::node_ptr_t &node) {
-    if (nodeScope_->has(name, false)) {
-        return false;
-    }
-    nodeScope_->insert(name, node);
-    return true;
+bool Context::moduleFileExists(const std::string &moduleName) {
+    return !getModulePath(moduleName).empty();
 }
 
-bool Context::insertGraph(const std::string &name, const GIR::graph_ptr_t &graph) {
-    if (graphScope_->has(name, false)) {
-        auto graphs = graphScope_->get(name).value();
-        // TODO: check if the graph is already in the list
-        graphs->push_back(graph);
+module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
+    std::string path = getModulePath(moduleName);
+    if (!path.empty()) {
+        return UserDefinedModule::loadFromFile(moduleName, path, shared_from_this());
     }
-    graphScope_->insert(name, std::make_shared<GIR::graph_vec_t>(1, graph));
-    return true;
+    return nullptr;
 }
 
-bool Context::insertOperator(const std::string &name, const operator_ptr_t &op) {
-    if (opScope_->has(name, false)) {
-        auto ops = opScope_->get(name).value();
-        // TODO: check if the operator is already in the list
-        ops->push_back(op);
-    }
-    opScope_->insert(name, std::make_shared<operator_vec_t>(1, op));
-    return true;
+GIR::graph_ptr_t Context::mainGraph() const {
+    ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
+    auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
+    ASSERT(gir != nullptr, "GIR of main module is not built yet.");
+    return gir;
 }

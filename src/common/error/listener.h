@@ -36,8 +36,9 @@ class CamelErrorListener : public antlr4::BaseErrorListener {
 
     bool hasErrors() { return hasError; }
 
-    virtual void syntaxError(antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
-                             size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
+    virtual void syntaxError(
+        antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
+        size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
         hasError = true;
         os << "line " << line << ", column " << charPositionInLine << ": " << msg << std::endl;
     }
@@ -74,8 +75,9 @@ class JSONErrorListener : public CamelErrorListener {
   public:
     JSONErrorListener(std::string filename, std::ostream &os) : CamelErrorListener(filename, os) {}
 
-    virtual void syntaxError(antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
-                             size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
+    virtual void syntaxError(
+        antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
+        size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
         hasError = true;
         os << "{"
            << "\"filename\": \"" << filename << "\", "

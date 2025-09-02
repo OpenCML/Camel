@@ -62,7 +62,8 @@ pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr
     }
 }
 
-pair<data_ptr_t, bool> Constructor::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling) {
+pair<data_ptr_t, bool>
+Constructor::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling) {
     auto [refData, dang] = extractData(node, execNode);
     if (dang) {
         dangling = true;
@@ -128,7 +129,8 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
     }
 
     if (!exportOptNode->empty()) {
-        visitExport(exportOptNode->front());
+        node_ptr_t exportNode = visitExport(exportOptNode->front());
+        *root_ << exportNode;
     }
 
     LEAVE("Module");
@@ -138,12 +140,38 @@ node_ptr_t Constructor::visitModule(const AST::node_ptr_t &ast) {
 /*
 ImportDecl(string path, Ref[] refs, Ref as) ;
 */
-void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) { return nullptr; }
+void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {
+    ENTER("ImportDecl");
+    ASSERT(ast->type() == AST::LoadType::Import, "Expected ImportLoad type");
+    const auto &load = ast->loadAs<AST::ImportLoad>();
+    const auto &path = load->getPath();
+    const auto &refs = load->getRefs();
+    // const auto &as = load->getAs();
+    const module_ptr_t &mod = context_->importModule(path, module_->name());
+    if (!mod) {
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Failed to import module from path: " + path,
+            load->tokenRange());
+        throw BuildAbortException();
+    }
+    module_->importEntities(mod, refs);
+    LEAVE("ImportDecl");
+    return nullptr;
+}
 
 /*
 ExportDecl(Ref[] refs) ;
 */
-void_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) { return nullptr; }
+node_ptr_t Constructor::visitExport(const AST::node_ptr_t &ast) {
+    ENTER("ExportDecl");
+    ASSERT(ast->type() == AST::LoadType::Export, "Expected ExportLoad type");
+    const auto &load = ast->loadAs<AST::ExportLoad>();
+    const auto &refs = load->getRefs();
+    node_ptr_t res = createNodeAs<ExptLoad>(refs);
+    LEAVE("ExportDecl");
+    return res;
+}
 
 node_ptr_t Constructor::visitStmt(const AST::node_ptr_t &ast) {
     ENTER("Stmt");
@@ -204,13 +232,17 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
 
     switch (dataDeclLoad->unpackType()) {
     case AST::UnpackType::Dict: {
-        reportDiagnostic(Diagnostic::Severity::Error, "Dict unpacking is not supported in DataDecl",
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Dict unpacking is not supported in DataDecl",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::UnpackType::List: {
-        reportDiagnostic(Diagnostic::Severity::Error, "List unpacking is not supported in DataDecl",
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "List unpacking is not supported in DataDecl",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::UnpackType::Tuple: {
@@ -219,14 +251,17 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
                 const auto &ref = refs[i];
                 const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
                 if (!validateIdent(ref.ident())) {
-                    reportDiagnostic(Diagnostic::Severity::Error,
-                                     "Identifiers starting and ending with '__' are reserved for internal use.",
-                                     dataDeclLoad->tokenRange());
+                    reportDiagnostic(
+                        Diagnostic::Severity::Error,
+                        "Identifiers starting and ending with '__' are reserved for internal use.",
+                        dataDeclLoad->tokenRange());
                     throw BuildAbortException();
                 }
                 if (dataNode->type() != AST::LoadType::Data) {
-                    reportDiagnostic(Diagnostic::Severity::Error, "Tuple unpacking requires Data type nodes",
-                                     dataNode->load()->tokenRange());
+                    reportDiagnostic(
+                        Diagnostic::Severity::Error,
+                        "Tuple unpacking requires Data type nodes",
+                        dataNode->load()->tokenRange());
                     throw BuildAbortException();
                 }
                 node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
@@ -245,9 +280,11 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
                 for (size_t i = 0; i < refs.size(); ++i) {
                     const auto &ref = refs[i];
                     if (!validateIdent(ref.ident())) {
-                        reportDiagnostic(Diagnostic::Severity::Error,
-                                         "Identifiers starting and ending with '__' are reserved for internal use.",
-                                         dataDeclLoad->tokenRange());
+                        reportDiagnostic(
+                            Diagnostic::Severity::Error,
+                            "Identifiers starting and ending with '__' are reserved for internal "
+                            "use.",
+                            dataDeclLoad->tokenRange());
                         throw BuildAbortException();
                     }
                     node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
@@ -259,7 +296,8 @@ node_ptr_t Constructor::visitDataDecl(const AST::node_ptr_t &ast) {
             } else {
                 reportDiagnostic(
                     Diagnostic::Severity::Error,
-                    "Tuple unpacking requires the same number of references and data nodes, or exactly one tuple data",
+                    "Tuple unpacking requires the same number of references and data nodes, or "
+                    "exactly one tuple data",
                     ast->load()->tokenRange());
                 throw BuildAbortException();
             }
@@ -303,7 +341,10 @@ node_ptr_t Constructor::visitTypeDecl(const AST::node_ptr_t &ast) {
     if (typeNode) {
         type = visitType(typeNode);
     } else {
-        reportDiagnostic(Diagnostic::Severity::Error, "Type declaration requires a type", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Type declaration requires a type",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     }
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
@@ -320,10 +361,11 @@ NameDecl(Ref ref, Ref alias) ;
 node_ptr_t Constructor::visitNameDecl(const AST::node_ptr_t &ast) {
     ENTER("NameDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for NameDecl");
-    reportDiagnostic(Diagnostic::Severity::Error,
-                     "NameDecl is not supported in the current version of the compiler. "
-                     "Please use DataDecl or TypeDecl instead.",
-                     ast->load()->tokenRange());
+    reportDiagnostic(
+        Diagnostic::Severity::Error,
+        "NameDecl is not supported in the current version of the compiler. "
+        "Please use DataDecl or TypeDecl instead.",
+        ast->load()->tokenRange());
     throw BuildAbortException();
     LEAVE("NameDecl");
     return nullptr;
@@ -646,15 +688,24 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
     switch (reservedExpr->op()) {
     case AST::ReservedDataOp::NullThen: {
-        reportDiagnostic(Diagnostic::Severity::Warning, "NullThen is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Warning,
+            "NullThen is not supported yet",
+            ast->load()->tokenRange());
         res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::ErrorThen: {
-        reportDiagnostic(Diagnostic::Severity::Warning, "ErrorThen is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Warning,
+            "ErrorThen is not supported yet",
+            ast->load()->tokenRange());
         res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::NotNullThen: {
-        reportDiagnostic(Diagnostic::Severity::Warning, "NotNullThen is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Warning,
+            "NotNullThen is not supported yet",
+            ast->load()->tokenRange());
         res = visitData(lhsASTNode);
     } break;
 
@@ -699,11 +750,17 @@ node_ptr_t Constructor::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::ReservedDataOp::As: {
-        reportDiagnostic(Diagnostic::Severity::Error, "As is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "As is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::ReservedDataOp::Is: {
-        reportDiagnostic(Diagnostic::Severity::Error, "Is is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Is is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
 
@@ -754,7 +811,10 @@ node_ptr_t Constructor::visitIfExpr(const AST::node_ptr_t &ast) {
 node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
     ENTER("MatchExpr");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
-    reportDiagnostic(Diagnostic::Severity::Error, "MatchExpr is not supported yet", ast->load()->tokenRange());
+    reportDiagnostic(
+        Diagnostic::Severity::Error,
+        "MatchExpr is not supported yet",
+        ast->load()->tokenRange());
     throw BuildAbortException();
     LEAVE("MatchExpr");
     return nullptr;
@@ -766,7 +826,10 @@ node_ptr_t Constructor::visitMatchExpr(const AST::node_ptr_t &ast) {
 node_ptr_t Constructor::visitTryExpr(const AST::node_ptr_t &ast) {
     ENTER("TryExpr");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TryExpr");
-    reportDiagnostic(Diagnostic::Severity::Error, "TryExpr is not supported yet", ast->load()->tokenRange());
+    reportDiagnostic(
+        Diagnostic::Severity::Error,
+        "TryExpr is not supported yet",
+        ast->load()->tokenRange());
     throw BuildAbortException();
     LEAVE("TryExpr");
     return nullptr;
@@ -799,7 +862,10 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
         data = tt::as_shared<Data>(make_shared<StringData>(str));
     } break;
     case LiteralType::FString: {
-        reportDiagnostic(Diagnostic::Severity::Error, "FString is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "FString is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
@@ -814,7 +880,10 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
         } else if (str == "false") {
             data = makeDataFromLiteral(false);
         } else {
-            reportDiagnostic(Diagnostic::Severity::Error, "Invalid boolean literal: " + str, ast->load()->tokenRange());
+            reportDiagnostic(
+                Diagnostic::Severity::Error,
+                "Invalid boolean literal: " + str,
+                ast->load()->tokenRange());
             throw BuildAbortException();
         }
     } break;
@@ -822,7 +891,10 @@ node_ptr_t Constructor::visitLiteral(const AST::node_ptr_t &ast) {
         data = tt::as_shared<Data>(make_shared<NullData>());
     } break;
     default: {
-        reportDiagnostic(Diagnostic::Severity::Error, "Unknown literal type", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Unknown literal type",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     }
     }
@@ -909,7 +981,8 @@ node_ptr_t Constructor::visitFuncData(const AST::node_ptr_t &ast) {
     ENTER("FuncData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
-    func_type_ptr_t funcType = tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    func_type_ptr_t funcType =
+        tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
     node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark(), funcType->uri());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode = createNodeAs<FuncLoad>(funcData->ref().ident());
@@ -1019,49 +1092,73 @@ type_ptr_t Constructor::visitTypeExpr(const AST::node_ptr_t &ast) {
         res = make_shared<UnionType>(lhsType, rhsType);
     } break;
     case AST::TypeOp::Inter: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::Inter is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::Inter is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Diff: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::Diff is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::Diff is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyUnion: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::KeyUnion is not supported yet",
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::KeyUnion is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyInter: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::KeyInter is not supported yet",
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::KeyInter is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyDiff: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::KeyDiff is not supported yet",
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::KeyDiff is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::ErrorThen: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::ErrorThen is not supported yet",
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::ErrorThen is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Specialize: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::Specialize is not supported yet",
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::Specialize is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeOf: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::TypeOf is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::TypeOf is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeAs: {
-        reportDiagnostic(Diagnostic::Severity::Error, "TypeOp::TypeAs is not supported yet", ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "TypeOp::TypeAs is not supported yet",
+            ast->load()->tokenRange());
         throw BuildAbortException();
     } break;
     default:
-        reportDiagnostic(Diagnostic::Severity::Error, "Unsupported TypeOp: " + AST::to_string(op),
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Unsupported TypeOp: " + AST::to_string(op),
+            ast->load()->tokenRange());
         throw BuildAbortException();
     }
     LEAVE("TypeExpr");
@@ -1094,7 +1191,10 @@ type_ptr_t Constructor::visitDictType(const AST::node_ptr_t &ast) {
         type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
         data_ptr_t data = nullptr;
         if (!res->add(name, type)) {
-            reportDiagnostic(Diagnostic::Severity::Error, "Duplicate key detected: " + name, namedPair->tokenRange());
+            reportDiagnostic(
+                Diagnostic::Severity::Error,
+                "Duplicate key detected: " + name,
+                namedPair->tokenRange());
             throw BuildAbortException();
         }
     }
@@ -1143,13 +1243,17 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar = paramLoad->isVar();
         if (isVar && !typeLoad->modifiers().sync()) {
-            reportDiagnostic(Diagnostic::Severity::Warning, "Variable parameters are only allowed in sync functions",
-                             paramLoad->tokenRange());
+            reportDiagnostic(
+                Diagnostic::Severity::Warning,
+                "Variable parameters are only allowed in sync functions",
+                paramLoad->tokenRange());
         }
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.isAlone()) {
-            reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
-                             paramLoad->tokenRange());
+        if (!paramRef.plain()) {
+            reportDiagnostic(
+                Diagnostic::Severity::Error,
+                "Parameter reference must be alone: " + paramRef.toString(),
+                paramLoad->tokenRange());
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
@@ -1159,16 +1263,19 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         if (dataNode) {
             data = extractStaticDataFromNode(visitData(dataNode));
             if (!data) {
-                reportDiagnostic(Diagnostic::Severity::Error,
-                                 "Data for parameter " + paramRef.toString() + " is not static",
-                                 dataNode->load()->tokenRange());
+                reportDiagnostic(
+                    Diagnostic::Severity::Error,
+                    "Data for parameter " + paramRef.toString() + " is not static",
+                    dataNode->load()->tokenRange());
                 throw BuildAbortException();
             }
         }
         bool success = funcType->addIdent(name, isVar);
         if (!success) {
-            reportDiagnostic(Diagnostic::Severity::Error, "Duplicate parameter detected: " + name,
-                             paramLoad->tokenRange());
+            reportDiagnostic(
+                Diagnostic::Severity::Error,
+                "Duplicate parameter detected: " + name,
+                paramLoad->tokenRange());
             throw BuildAbortException();
         }
         withParamsType->add(name, type, data);
@@ -1178,13 +1285,17 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar = paramLoad->isVar();
         if (isVar && !typeLoad->modifiers().sync()) {
-            reportDiagnostic(Diagnostic::Severity::Warning, "Variable parameters are only allowed in sync functions",
-                             paramLoad->tokenRange());
+            reportDiagnostic(
+                Diagnostic::Severity::Warning,
+                "Variable parameters are only allowed in sync functions",
+                paramLoad->tokenRange());
         }
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.isAlone()) {
-            reportDiagnostic(Diagnostic::Severity::Error, "Parameter reference must be alone: " + paramRef.toString(),
-                             paramLoad->tokenRange());
+        if (!paramRef.plain()) {
+            reportDiagnostic(
+                Diagnostic::Severity::Error,
+                "Parameter reference must be alone: " + paramRef.toString(),
+                paramLoad->tokenRange());
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
@@ -1194,16 +1305,19 @@ type_ptr_t Constructor::visitFuncType(const AST::node_ptr_t &ast) {
         if (dataNode) {
             data = extractStaticDataFromNode(visitData(dataNode));
             if (!data) {
-                reportDiagnostic(Diagnostic::Severity::Error,
-                                 "Data for parameter " + paramRef.toString() + " is not static",
-                                 dataNode->load()->tokenRange());
+                reportDiagnostic(
+                    Diagnostic::Severity::Error,
+                    "Data for parameter " + paramRef.toString() + " is not static",
+                    dataNode->load()->tokenRange());
                 throw BuildAbortException();
             }
         }
         bool success = funcType->addIdent(name, isVar);
         if (!success) {
-            reportDiagnostic(Diagnostic::Severity::Error, "Duplicate parameter detected: " + name,
-                             paramLoad->tokenRange());
+            reportDiagnostic(
+                Diagnostic::Severity::Error,
+                "Duplicate parameter detected: " + name,
+                paramLoad->tokenRange());
             throw BuildAbortException();
         }
         normParamsType->add(name, type, data);
@@ -1218,7 +1332,10 @@ UnitType(Ref ref) : Type type ;
 */
 type_ptr_t Constructor::visitUnitType(const AST::node_ptr_t &ast) {
     ENTER("UnitType");
-    reportDiagnostic(Diagnostic::Severity::Error, "UnitType is not supported yet", ast->load()->tokenRange());
+    reportDiagnostic(
+        Diagnostic::Severity::Error,
+        "UnitType is not supported yet",
+        ast->load()->tokenRange());
     throw BuildAbortException();
     LEAVE("UnitType");
     return nullptr;
@@ -1229,7 +1346,10 @@ InferType(Ref ref) ;
 */
 type_ptr_t Constructor::visitInferType(const AST::node_ptr_t &ast) {
     ENTER("InferType");
-    reportDiagnostic(Diagnostic::Severity::Error, "InferType is not supported yet", ast->load()->tokenRange());
+    reportDiagnostic(
+        Diagnostic::Severity::Error,
+        "InferType is not supported yet",
+        ast->load()->tokenRange());
     throw BuildAbortException();
     LEAVE("InferType");
     return nullptr;
@@ -1240,7 +1360,10 @@ DataType() : Data data ;
 */
 type_ptr_t Constructor::visitDataType(const AST::node_ptr_t &ast) {
     ENTER("DataType");
-    reportDiagnostic(Diagnostic::Severity::Error, "DataType is not supported yet", ast->load()->tokenRange());
+    reportDiagnostic(
+        Diagnostic::Severity::Error,
+        "DataType is not supported yet",
+        ast->load()->tokenRange());
     throw BuildAbortException();
     LEAVE("DataType");
     return nullptr;
@@ -1256,8 +1379,10 @@ type_ptr_t Constructor::visitRefType(const AST::node_ptr_t &ast) {
     const Reference &ref = typeLoad->ref();
     const auto &type = typeScope_->get(ref);
     if (!type.has_value()) {
-        reportDiagnostic(Diagnostic::Severity::Error, "Unresolved type reference: " + ref.toString(),
-                         ast->load()->tokenRange());
+        reportDiagnostic(
+            Diagnostic::Severity::Error,
+            "Unresolved type reference: " + ref.toString(),
+            ast->load()->tokenRange());
         throw BuildAbortException();
     }
     LEAVE("RefType");

@@ -28,7 +28,18 @@ namespace AbstractSyntaxTree {
 
 enum class TypeType { Null, Expr, List, Dict, Tuple, Func, Spec, Unit, Infer, Data, Ref };
 
-enum class TypeOp { Union, Inter, Diff, KeyUnion, KeyInter, KeyDiff, ErrorThen, Specialize, TypeOf, TypeAs };
+enum class TypeOp {
+    Union,
+    Inter,
+    Diff,
+    KeyUnion,
+    KeyInter,
+    KeyDiff,
+    ErrorThen,
+    Specialize,
+    TypeOf,
+    TypeAs
+};
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);
@@ -64,7 +75,9 @@ class TypeExprLoad : public TypeLoad {
 class ListTypeLoad : public TypeLoad {
   public:
     ListTypeLoad(size_t dims) : TypeLoad(TypeType::List), dims_(dims) {}
-    const std::string toString() const override { return "ListType: [" + std::to_string(dims_) + "]"; }
+    const std::string toString() const override {
+        return "ListType: [" + std::to_string(dims_) + "]";
+    }
 
     size_t dims() const { return dims_; }
 

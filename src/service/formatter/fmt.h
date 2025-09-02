@@ -70,12 +70,15 @@ class Formatter : public OpenCMLVisitor {
         return result + currentIndent;
     }
 
-    inline size_t countLines(const std::string &input) { return std::count(input.begin(), input.end(), '\n'); }
+    inline size_t countLines(const std::string &input) {
+        return std::count(input.begin(), input.end(), '\n');
+    }
 
     template <typename T>
-    std::string formatBiOpsList(const std::vector<T *> &list,
-                                std::vector<antlr4::tree::ParseTree *> &children, // children of the context
-                                bool padding = true                               // padding spaces
+    std::string formatBiOpsList(
+        const std::vector<T *> &list,
+        std::vector<antlr4::tree::ParseTree *> &children, // children of the context
+        bool padding = true                               // padding spaces
     ) {
         // expr (op expr)*
         std::string result = std::any_cast<std::string>(visit(list[0]));
@@ -84,11 +87,13 @@ class Formatter : public OpenCMLVisitor {
         }
         if (padding) {
             for (size_t i = 1; i < list.size(); i++) {
-                result += " " + children[i * 2 - 1]->getText() + " " + std::any_cast<std::string>(visit(list[i]));
+                result += " " + children[i * 2 - 1]->getText() + " " +
+                          std::any_cast<std::string>(visit(list[i]));
             }
         } else {
             for (size_t i = 1; i < list.size(); i++) {
-                result += children[i * 2 - 1]->getText() + std::any_cast<std::string>(visit(list[i]));
+                result +=
+                    children[i * 2 - 1]->getText() + std::any_cast<std::string>(visit(list[i]));
             }
         }
         return result;
@@ -106,12 +111,13 @@ class Formatter : public OpenCMLVisitor {
     };
 
     template <typename T>
-    std::string formatList(const std::vector<T *> &list, const antlr4::ParserRuleContext *context,
-                           const std::string iComma, // inline comma
-                           const std::string nComma, // new line comma
-                           int flags = 0,            // combined flags
-                           int maxSkips = 2,         // maximum number of line skips
-                           std::vector<std::pair<size_t, size_t>> tokenRanges = {}) {
+    std::string formatList(
+        const std::vector<T *> &list, const antlr4::ParserRuleContext *context,
+        const std::string iComma, // inline comma
+        const std::string nComma, // new line comma
+        int flags = 0,            // combined flags
+        int maxSkips = 2,         // maximum number of line skips
+        std::vector<std::pair<size_t, size_t>> tokenRanges = {}) {
         // Parse flags
         bool tComma = flags & TrailingC;
         bool paddingSP = flags & PaddingSP;
@@ -154,13 +160,17 @@ class Formatter : public OpenCMLVisitor {
         }
 
         // given a token index range, find the range of comments in the token stream
-        const auto findCmtRange = [&](size_t index, bool reverse = false) -> std::pair<size_t, size_t> {
-            ASSERT(!(reverse && index != 0), "Reverse lookup should always start from the last element");
+        const auto findCmtRange = [&](size_t index,
+                                      bool reverse = false) -> std::pair<size_t, size_t> {
+            ASSERT(
+                !(reverse && index != 0),
+                "Reverse lookup should always start from the last element");
             size_t start = 0, end = tokens.size() - 1;
             if (!tokenRanges.empty()) {
                 // the last pair of the tokenRanges is the range of the reverse lookup
-                ASSERT(tokenRanges.size() == list.size() + 1, 
-                       "Token ranges should match the list size plus one for reverse lookup");
+                ASSERT(
+                    tokenRanges.size() == list.size() + 1,
+                    "Token ranges should match the list size plus one for reverse lookup");
                 if (!reverse) {
                     start = tokenRanges[index].first;
                     end = tokenRanges[index].second;
@@ -377,6 +387,8 @@ class Formatter : public OpenCMLVisitor {
     std::any visitStmt(OpenCMLParser::StmtContext *context);
 
     std::any visitStmtList(OpenCMLParser::StmtListContext *context);
+
+    std::any visitModuleName(OpenCMLParser::ModuleNameContext *context);
 
     std::any visitModuleDecl(OpenCMLParser::ModuleDeclContext *context);
 

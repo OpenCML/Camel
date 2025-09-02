@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "base.h"
+#include "utils/assert.h"
 
 class Diagnostic : public CamelBaseException {
   public:
@@ -38,43 +39,65 @@ class Diagnostic : public CamelBaseException {
         size_t character = 0;
     };
 
-    struct Range {
+    struct CharRange {
         Position start;
         Position end;
     };
 
-    Diagnostic(Severity sev, const std::string &msg, size_t startIndex, size_t endIndex)
-        : CamelBaseException(msg), severity_(sev) {
-        rangeStoredAsIndex_ = true;
-        range_.start.line = startIndex;
-        range_.start.character = endIndex;
+    struct TokenRange {
+        size_t start = 0;
+        size_t end = 0;
+    };
+
+    Diagnostic(Severity sev, const std::string &msg, TokenRange range)
+        : CamelBaseException(msg), severity_(sev), rangeStoredAsTokenIndex_(true) {
+        range_.start.line = range.start;
+        range_.end.line = range.end;
     }
-    Diagnostic(Severity sev, const std::string &msg, antlr4::Token *startToken, antlr4::Token *endToken)
+    Diagnostic(Severity sev, const std::string &msg, Position pos)
         : CamelBaseException(msg), severity_(sev) {
-        rangeStoredAsIndex_ = false;
+        rangeStoredAsTokenIndex_ = false;
+        range_.start.line = pos.line;
+        range_.start.character = pos.character;
+        range_.end.line = pos.line;
+        range_.end.character = pos.character + 1;
+    }
+    Diagnostic(
+        Severity sev, const std::string &msg, antlr4::Token *startToken, antlr4::Token *endToken)
+        : CamelBaseException(msg), severity_(sev) {
+        rangeStoredAsTokenIndex_ = false;
         range_.start.line = startToken->getLine() - 1;
         range_.start.character = startToken->getCharPositionInLine();
+        if (endToken) {
+            range_.end.line = endToken->getLine() - 1;
+            range_.end.character = endToken->getCharPositionInLine() + endToken->getText().length();
+        } else {
+            range_.end = range_.start;
+        }
     }
 
     Diagnostic &fetchRange(const std::vector<antlr4::Token *> &tokens) {
-        if (rangeStoredAsIndex_) {
+        if (rangeStoredAsTokenIndex_) {
             size_t startIndex = range_.start.line;
             size_t endIndex = range_.end.line;
             range_ = getRange(tokens, startIndex, endIndex);
-            rangeStoredAsIndex_ = false;
+            rangeStoredAsTokenIndex_ = false;
         }
         return *this;
     }
 
     std::string what(bool json = false) const override {
-        ASSERT(!rangeStoredAsIndex_, "Diagnostic range is stored as index, call fetchRange() first");
+        // ASSERT(
+        //     !rangeStoredAsTokenIndex_,
+        //     "Diagnostic range is stored as index, call fetchRange() first");
         std::ostringstream oss;
         if (json) {
             oss << "{"
                 << "\"range\": {"
-                << "\"start\": {\"line\": " << range_.start.line << ", \"character\": " << range_.start.character
-                << "}, "
-                << "\"end\": {\"line\": " << range_.end.line << ", \"character\": " << range_.end.character << "}"
+                << "\"start\": {\"line\": " << range_.start.line
+                << ", \"character\": " << range_.start.character << "}, "
+                << "\"end\": {\"line\": " << range_.end.line
+                << ", \"character\": " << range_.end.character << "}"
                 << "}, "
                 << "\"message\": \"" << escapeJson(message_) << "\", "
                 << "\"severity\": " << static_cast<int>(severity_) << ", "
@@ -105,19 +128,22 @@ class Diagnostic : public CamelBaseException {
     }
 
   private:
-    bool rangeStoredAsIndex_ = false;
-    Range range_;
+    CharRange range_;
     Severity severity_;
+    bool rangeStoredAsTokenIndex_ = false;
 
     Position getPosition(const std::vector<antlr4::Token *> &tokens, size_t index) const {
         if (index < tokens.size()) {
             antlr4::Token *tok = tokens[index];
-            return Position{static_cast<size_t>(tok->getLine() - 1), static_cast<size_t>(tok->getCharPositionInLine())};
+            return Position{
+                static_cast<size_t>(tok->getLine() - 1),
+                static_cast<size_t>(tok->getCharPositionInLine())};
         }
         return Position{0, 0}; // 默认第一行第一列
     }
 
-    Range getRange(const std::vector<antlr4::Token *> &tokens, size_t startIndex, size_t endIndex) const {
+    CharRange
+    getRange(const std::vector<antlr4::Token *> &tokens, size_t startIndex, size_t endIndex) const {
         Position start = getPosition(tokens, startIndex);
         Position end = getPosition(tokens, endIndex);
 
@@ -130,7 +156,7 @@ class Diagnostic : public CamelBaseException {
             end.character += tok->getText().length();
         }
 
-        return Range{start, end};
+        return CharRange{start, end};
     }
 };
 
@@ -147,10 +173,12 @@ class DiagnosticsLimitExceededException : public CamelBaseException {
 
 class DiagnosticsExceededLimitException : public DiagnosticsLimitExceededException {
   public:
-    DiagnosticsExceededLimitException(Diagnostic::Severity sev, size_t limit, const Diagnostic &lastDiagnostic)
-        : DiagnosticsLimitExceededException("Too many " + Diagnostic::severityToString(sev) +
-                                                " diagnostics exceeded limit: " + std::to_string(limit),
-                                            lastDiagnostic),
+    DiagnosticsExceededLimitException(
+        Diagnostic::Severity sev, size_t limit, const Diagnostic &lastDiagnostic)
+        : DiagnosticsLimitExceededException(
+              "Too many " + Diagnostic::severityToString(sev) +
+                  " diagnostics exceeded limit: " + std::to_string(limit),
+              lastDiagnostic),
           severity_(sev), limit_(limit) {}
 
     Diagnostic::Severity severity() const { return severity_; }
@@ -164,8 +192,8 @@ class DiagnosticsExceededLimitException : public DiagnosticsLimitExceededExcepti
 class DiagnosticsExceededTotalLimitException : public DiagnosticsLimitExceededException {
   public:
     DiagnosticsExceededTotalLimitException(size_t total, const Diagnostic &lastDiagnostic)
-        : DiagnosticsLimitExceededException("Total diagnostic limit exceeded: " + std::to_string(total),
-                                            lastDiagnostic),
+        : DiagnosticsLimitExceededException(
+              "Total diagnostic limit exceeded: " + std::to_string(total), lastDiagnostic),
           total_limit_(total) {}
 
     size_t totalLimit() const { return total_limit_; }
@@ -174,24 +202,28 @@ class DiagnosticsExceededTotalLimitException : public DiagnosticsLimitExceededEx
     size_t total_limit_;
 };
 
+struct DiagnosticsConfig {
+    int total_limit = -1; // -1 means no limit
+    std::unordered_map<Diagnostic::Severity, int> per_severity_limits = {};
+};
+
 class Diagnostics {
   public:
     using Severity = Diagnostic::Severity;
-    Diagnostics(int totalLimit = -1, std::unordered_map<Severity, int> perSeverityLimits = {})
-        : total_limit_(totalLimit), per_severity_limits_(std::move(perSeverityLimits)), current_index_(0) {}
+    Diagnostics(DiagnosticsConfig config = {}) : config_(config), current_index_(0) {}
 
     void setLimit(Severity sev, int limit) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (limit < 0) {
-            per_severity_limits_.erase(sev);
+            config_.per_severity_limits.erase(sev);
         } else {
-            per_severity_limits_[sev] = limit;
+            config_.per_severity_limits[sev] = limit;
         }
     }
 
     void setTotalLimit(int limit) {
         std::lock_guard<std::mutex> lock(mutex_);
-        total_limit_ = limit;
+        config_.total_limit = limit;
     }
 
     void add(const Diagnostic &diag) {
@@ -199,12 +231,13 @@ class Diagnostics {
 
         Severity sev = diag.severity();
 
-        if (total_limit_ >= 0 && diagnostics_.size() >= static_cast<size_t>(total_limit_)) {
-            throw DiagnosticsExceededTotalLimitException(total_limit_, diag);
+        if (config_.total_limit >= 0 &&
+            diagnostics_.size() >= static_cast<size_t>(config_.total_limit)) {
+            throw DiagnosticsExceededTotalLimitException(config_.total_limit, diag);
         }
 
-        if (per_severity_limits_.count(sev)) {
-            int limit = per_severity_limits_[sev];
+        if (config_.per_severity_limits.count(sev)) {
+            int limit = config_.per_severity_limits[sev];
             if (limit >= 0 && severity_counts_[sev] >= static_cast<size_t>(limit)) {
                 throw DiagnosticsExceededLimitException(sev, limit, diag);
             }
@@ -215,7 +248,20 @@ class Diagnostics {
     }
 
     void emplace(Severity sev, const std::string &msg, size_t startIndex = 0, size_t endIndex = 0) {
-        add(Diagnostic(sev, msg, startIndex, endIndex));
+        add(Diagnostic(sev, msg, Diagnostic::TokenRange{startIndex, endIndex}));
+    }
+
+    void emplace(Severity sev, const std::string &msg, Diagnostic::TokenRange range) {
+        add(Diagnostic(sev, msg, range));
+    }
+
+    void emplace(Severity sev, const std::string &msg, Diagnostic::Position pos) {
+        add(Diagnostic(sev, msg, pos));
+    }
+
+    void emplace(
+        Severity sev, const std::string &msg, antlr4::Token *startToken, antlr4::Token *endToken) {
+        add(Diagnostic(sev, msg, startToken, endToken));
     }
 
     std::optional<Diagnostic> next() {
@@ -263,13 +309,22 @@ class Diagnostics {
         return severity_counts_.count(Severity::Error) && severity_counts_.at(Severity::Error) > 0;
     }
 
+    void dump(std::ostream &os, bool json = false) {
+        while (!this->end()) {
+            auto diagOpt = this->next();
+            if (diagOpt.has_value()) {
+                auto &diag = diagOpt.value();
+                os << diag.what(json) << std::endl;
+            }
+        }
+    }
+
   private:
     mutable std::mutex mutex_;
 
     std::vector<Diagnostic> diagnostics_;
     std::unordered_map<Severity, size_t> severity_counts_;
-    int total_limit_;
-    std::unordered_map<Severity, int> per_severity_limits_;
+    DiagnosticsConfig config_;
     size_t current_index_;
 };
 

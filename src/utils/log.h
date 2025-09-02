@@ -28,10 +28,10 @@
 #define _green(x) "\033[32m" << x << "\033[0m"
 #define _yellow(x) "\033[33m" << x << "\033[0m"
 
-#define info std::cout << _green("[info] ")
-#define warn std::cout << _yellow("[warn] ")
-#define error std::cout << _red("[error] ")
-#define fatal std::cout << _red("[fatal] ")
+#define log_info std::cout << _green("[info] ")
+#define log_warn std::cout << _yellow("[warn] ")
+#define log_error std::cout << _red("[error] ")
+#define log_fatal std::cout << _red("[fatal] ")
 
 extern size_t __depth__;
 
@@ -45,8 +45,8 @@ inline std::string repeatPattern(const std::string &pattern, int n) {
 
 inline std::string pointerToHex(const void *ptr) {
     std::stringstream ss;
-    ss << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0') << reinterpret_cast<uintptr_t>(ptr)
-       << std::dec << std::nouppercase;
+    ss << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
+       << reinterpret_cast<uintptr_t>(ptr) << std::dec << std::nouppercase;
     return ss.str();
 }
 
@@ -70,26 +70,26 @@ inline std::string rainbowPattern(int depth) {
 
 // #define DEBUG_LEVEL -1
 
-#define debug(level)                                                                                                   \
-    if (level <= DEBUG_LEVEL)                                                                                          \
+#define debug(level)                                                                               \
+    if (level <= DEBUG_LEVEL)                                                                      \
     std::cout << _blue("   [" #level "] ")
 
-#define debug_u(level)                                                                                                 \
-    if (level <= DEBUG_LEVEL)                                                                                          \
+#define debug_u(level)                                                                             \
+    if (level <= DEBUG_LEVEL)                                                                      \
     std::cout
 
-#define ENTER(target)                                                                                                  \
-    do {                                                                                                               \
-        if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << rainbowPattern(__depth__) << _blue("[enter] ") << target << std::endl;                        \
-        }                                                                                                              \
-        __depth__++;                                                                                                   \
+#define ENTER(target)                                                                              \
+    do {                                                                                           \
+        if (DEBUG_LEVEL > 0) {                                                                     \
+            std::cout << rainbowPattern(__depth__) << _blue("[enter] ") << target << std::endl;    \
+        }                                                                                          \
+        __depth__++;                                                                               \
     } while (false)
 
-#define LEAVE(target)                                                                                                  \
-    do {                                                                                                               \
-        __depth__--;                                                                                                   \
-        if (DEBUG_LEVEL > 0) {                                                                                         \
-            std::cout << rainbowPattern(__depth__) << _green("[leave] ") << target << std::endl;                       \
-        }                                                                                                              \
+#define LEAVE(target)                                                                              \
+    do {                                                                                           \
+        __depth__--;                                                                               \
+        if (DEBUG_LEVEL > 0) {                                                                     \
+            std::cout << rainbowPattern(__depth__) << _green("[leave] ") << target << std::endl;   \
+        }                                                                                          \
     } while (false)

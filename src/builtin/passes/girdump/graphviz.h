@@ -33,7 +33,6 @@ class GraphVizDumpPass : public GraphIRPass {
     size_t depth_ = 0;
     std::string baseIndent_;
     const std::string indent_ = "    ";
-    std::unordered_map<GIR::node_ptr_t, std::string> nodeIdents_;
 
     void pushIndent();
     void popIndent();
@@ -41,9 +40,7 @@ class GraphVizDumpPass : public GraphIRPass {
     std::string pointerToIdent(const void *ptr, const char *prefix = "N");
 
   public:
-    GraphVizDumpPass(const context_ptr_t &context) : context_(context) {
-        nodeIdents_ = context_->buildNodeIdentsMap();
-    };
+    GraphVizDumpPass(const context_ptr_t &context) : context_(context) {};
     virtual ~GraphVizDumpPass() = default;
 
     void reset() override;

@@ -28,7 +28,8 @@ using namespace std;
 
 DictData::DictData() : StructData(std::make_shared<DictType>()) {}
 
-DictData::DictData(initializer_list<pair<string, data_ptr_t>> data) : StructData(make_shared<DictType>()) {
+DictData::DictData(initializer_list<pair<string, data_ptr_t>> data)
+    : StructData(make_shared<DictType>()) {
     DictType &dictType = *static_cast<DictType *>(type_.get());
     for (const auto &e : data) {
         auto &[key, val] = e;
@@ -128,11 +129,13 @@ data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
         }
         throw UnsupportedConvError();
     } catch (const UnsupportedConvError &e) {
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError(
+            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     } catch (const std::exception &e) {
         throw DataConvError(e.what());
     }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError(
+        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
 vector<string> DictData::refs() const { return refs_; }

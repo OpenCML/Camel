@@ -25,7 +25,8 @@ template <typename T> class PrimaryData : public Data {
   private:
     T data_;
 
-    template <typename Dest, typename Src> std::shared_ptr<PrimaryData<Dest>> convertAndMakeShared(const Src &data) {
+    template <typename Dest, typename Src>
+    std::shared_ptr<PrimaryData<Dest>> convertAndMakeShared(const Src &data) {
         return std::make_shared<PrimaryData<Dest>>(static_cast<Dest>(data));
     }
 
@@ -65,8 +66,9 @@ template <typename T> class PrimaryData : public Data {
         }
         try {
             if (target->primary()) {
-                if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> || std::is_same_v<T, float> ||
-                              std::is_same_v<T, double>) {
+                if constexpr (
+                    std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
+                    std::is_same_v<T, float> || std::is_same_v<T, double>) {
                     switch (target->code()) {
                     case TypeCode::INT32:
                         return convertAndMakeShared<int32_t>(data_);
@@ -96,7 +98,8 @@ template <typename T> class PrimaryData : public Data {
                     case TypeCode::DOUBLE:
                         return std::make_shared<PrimaryData<double>>(static_cast<double>(b));
                     case TypeCode::STRING:
-                        return std::dynamic_pointer_cast<Data>(std::make_shared<StringData>(b ? "true" : "false"));
+                        return std::dynamic_pointer_cast<Data>(
+                            std::make_shared<StringData>(b ? "true" : "false"));
                     case TypeCode::CHAR:
                         return std::make_shared<PrimaryData<char>>(static_cast<char>(b));
 
@@ -115,7 +118,8 @@ template <typename T> class PrimaryData : public Data {
                     case TypeCode::DOUBLE:
                         return std::make_shared<PrimaryData<double>>(static_cast<double>(c));
                     case TypeCode::STRING:
-                        return std::dynamic_pointer_cast<Data>(std::make_shared<StringData>(std::string(1, c)));
+                        return std::dynamic_pointer_cast<Data>(
+                            std::make_shared<StringData>(std::string(1, c)));
                     case TypeCode::BOOL:
                         return std::make_shared<PrimaryData<bool>>(c != 0);
 
@@ -127,13 +131,17 @@ template <typename T> class PrimaryData : public Data {
                 }
             }
         } catch (const UnsupportedConvError &e) {
-            throw DataConvError("Cannot convert " + typeCodeToString(type_->code()) + " to " +
-                                typeCodeToString(target->code()));
+            throw DataConvError(
+                "Cannot convert " + typeCodeToString(type_->code()) + " to " +
+                typeCodeToString(target->code()));
         } catch (const std::exception &e) {
             throw DataConvError(e.what());
         }
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError(
+            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     }
-    virtual data_ptr_t clone(bool deep = false) const override { return std::make_shared<PrimaryData<T>>(data_); }
+    virtual data_ptr_t clone(bool deep = false) const override {
+        return std::make_shared<PrimaryData<T>>(data_);
+    }
     virtual const std::string toString() const override { return std::to_string(data_); }
 };

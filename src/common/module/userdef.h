@@ -1,0 +1,59 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Jul. 29, 2025
+ * Updated: Jul. 29, 2025
+ * Supported by: National Key Research and Development Program of China
+ */
+
+#pragma once
+
+#include "module.h"
+
+#include "compile/gct.h"
+#include "compile/gir.h"
+
+#include "parse/parse.h"
+
+class Context;
+using context_ptr_t = std::shared_ptr<Context>;
+
+class UserDefinedModule : public Module {
+    bool built_ = false;
+    context_ptr_t context_;
+    GCT::node_ptr_t gct_;
+    GIR::graph_ptr_t gir_;
+    diagnostics_ptr_t diagnostics_;
+    parser_ptr_t parser_;
+
+  public:
+    UserDefinedModule(
+        const std::string &name, const std::string &path, context_ptr_t ctx,
+        parser_ptr_t parser = nullptr);
+    virtual ~UserDefinedModule() = default;
+
+    GCT::node_ptr_t gct() const { return gct_; }
+    GIR::graph_ptr_t gir() const { return gir_; }
+    diagnostics_ptr_t diagnostics() const { return diagnostics_; }
+
+    static module_ptr_t
+    loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx) {
+        auto mod = std::make_shared<UserDefinedModule>(name, path, ctx);
+        mod->compile();
+        return mod;
+    }
+
+    bool ready() const { return built_; }
+    bool compile();
+};

@@ -12,13 +12,18 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 17, 2024
- * Updated: Oct. 18, 2024
+ * Created: Jul. 29, 2025
+ * Updated: Jul. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "common/operator.h"
+#include "common/module/builtin.h"
 
-void initGlobalOperators();
+class IOBuiltinModule : public BuiltinModule {
+  public:
+    IOBuiltinModule();
+
+    static module_ptr_t create() { return std::make_shared<IOBuiltinModule>(); }
+};

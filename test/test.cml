@@ -1,26 +1,8 @@
 module main
 
-func print(s: string): void {
-    // Placeholder for print function
-}
-func sleep(s: int): void {
-    // Placeholder for print function
-}
-
-sync func modify(var x: int) {
-    x = x + 1
-    print("modified x to " + x.sleep())
-}
-
-func fetch_data(): int sync {
-    let i = 0
-    wait modify(i)
-    return i
-}
-
 func main(): int sync {
     print("before start")
     sleep(1000)
     print("after start")
-    return fetch_data()
+    return 0
 }

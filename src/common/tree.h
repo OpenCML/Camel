@@ -101,8 +101,9 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
 
     // ------------------ Search ------------------
     std::optional<size_t> find(const load_t &load) const {
-        auto it = std::find_if(children_.begin(), children_.end(),
-                               [&](const node_ptr_t &node) { return node->load_ == load; });
+        auto it = std::find_if(children_.begin(), children_.end(), [&](const node_ptr_t &node) {
+            return node->load_ == load;
+        });
         if (it == children_.end())
             return std::nullopt;
         return std::distance(children_.begin(), it);
@@ -176,7 +177,8 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
                         visible.push_back(true);
                     if (depth > 0) {
                         if (node.parent_ == nullptr) {
-                            warn << "DumpTree: Node <" << node.toString() << "> has no parent!" << std::endl;
+                            log_warn << "DumpTree: Node <" << node.toString() << "> has no parent!"
+                                     << std::endl;
                         } else if (index == node.parent_->size() - 1) {
                             isLast = true;
                             visible.at(depth - 1) = false;
@@ -204,7 +206,8 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
                     os << "ERROR: " << e.what() << std::endl;
                 }
             },
-            depth, index);
+            depth,
+            index);
     }
 
     void print(std::ostream &os = std::cout) { dumpTree(os); }

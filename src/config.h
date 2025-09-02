@@ -21,11 +21,11 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.0.16"
+#define VERSION "0.0.17"
 
 #include <string>
 
-enum class Command { RUN, INFO, FORMAT, CHECK, INSPECT, BUILD, SERVE, DEBUG }; // Modes of operation
+enum class Command { Run, Info, Format, Check, Inspect };
 
 bool parseArgs(int argc, char *argv[]);
 
@@ -35,6 +35,7 @@ extern Command selectedCommand;
 namespace Run {
 extern std::string outputFile;
 extern std::string errorFormat;
+extern std::string stdLibPath;
 extern std::vector<std::string> scriptsDirs;
 extern std::vector<std::string> targetFiles;
 
@@ -51,9 +52,8 @@ extern std::string configFile;  // Configuration file path
 extern bool useTabs;            // Whether to use tabs for indentation
 extern bool inplace;            // Whether to modify the input file in place
 extern bool ignoreDefiFile;     // Whether to ignore the definition file
-extern bool formatCode;
-extern unsigned int tabSize;  // Indentation size in spaces
-extern unsigned int maxWidth; // Max line width
+extern unsigned int tabSize;    // Indentation size in spaces
+extern unsigned int maxWidth;   // Max line width
 }; // namespace Format
 
 namespace Check {
@@ -74,22 +74,6 @@ extern bool dumpGIR;    // Whether to dump GIR
 extern int passUntil;   // Pass until the given pass
 } // namespace Inspect
 
-namespace Build {
-extern bool optimize;             // Whether to optimize the code
-extern bool rollup;               // Whether to rollup the code
-extern bool verbose;              // Whether to show verbose information
-extern std::string warningSwitch; // Warning switch (default to on)
-extern std::string outputDir;     // Output directory
-} // namespace Build
-
-namespace Serve {
-extern std::string serverHost;  // Server host
-extern unsigned int serverPort; // Server port
-} // namespace Serve
-
-namespace Debug {
-extern std::string variable; // Whether to optimize the code
-} // namespace Debug
 } // namespace CmdLineArgs
 
 namespace CLI = CmdLineArgs;

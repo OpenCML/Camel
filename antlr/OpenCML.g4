@@ -58,8 +58,9 @@ stmt
 
 stmtList : stmt (SEP? stmt)* SEP? ;
 
+moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
 moduleDecl : MODULE identDef ;
-importDecl : IMPORT (STRING | (identDef | bracedIdents) FROM STRING) ;
+importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 
 blockStmt  : WAIT? stmtBlock ;

@@ -19,54 +19,51 @@
 
 #pragma once
 
-#include <iostream>
-#include <string>
+#include <fstream>
+#include <memory>
 #include <unordered_map>
 
-#include "graph.h"
-#include "operator.h"
-#include "scope.h"
+#include "common/error/diagnostic.h"
+#include "module/builtin.h"
 
-using node_scope_t = Scope<std::string, GIR::node_ptr_t>;
-using node_scope_ptr_t = scope_ptr_t<std::string, GIR::node_ptr_t>;
-using graph_scope_t = Scope<std::string, std::shared_ptr<GIR::graph_vec_t>>;
-using graph_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<GIR::graph_vec_t>>;
-using operator_scope_t = Scope<std::string, std::shared_ptr<operator_vec_t>>;
-using operator_scope_ptr_t = scope_ptr_t<std::string, std::shared_ptr<operator_vec_t>>;
+struct EntryConfig {
+    std::string entryDir;                 // root path of the context, used for loading modules
+    std::string entryFile;                // entry module path
+    std::vector<std::string> searchPaths; // search paths for modules
+};
 
-class Context {
-    GIR::graph_ptr_t rootGraph_;
-    GIR::graph_ptr_t currGraph_;
+std::ostream &operator<<(std::ostream &os, const EntryConfig &config);
 
-    node_scope_ptr_t nodeScope_;
-    graph_scope_ptr_t graphScope_;
-    operator_scope_ptr_t opScope_;
+class Context : public std::enable_shared_from_this<Context> {
+    EntryConfig entryConfig_;
+    DiagnosticsConfig diagConfig_;
+
+    module_ptr_t mainModule_;
+    std::unordered_map<std::string, module_ptr_t> modules_;
+
+    std::vector<std::string>
+    getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
+    std::string
+    resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
+    std::string getModulePath(const std::string &moduleName);
+    bool moduleFileExists(const std::string &moduleName);
+    module_ptr_t tryLoadModule(const std::string &moduleName);
 
   public:
-    Context();
+    Context(
+        const EntryConfig &entryConf = EntryConfig(),
+        const DiagnosticsConfig &diagConf = DiagnosticsConfig());
     virtual ~Context() = default;
 
-    node_scope_t &nodeScope() { return *nodeScope_; }
-    graph_scope_t &graphScope() { return *graphScope_; }
-    operator_scope_t &opScope() { return *opScope_; }
+    const std::string &entryDir() const { return entryConfig_.entryDir; }
+    DiagnosticsConfig diagConfig() const { return diagConfig_; }
+    module_ptr_t mainModule() const { return mainModule_; }
+    GIR::graph_ptr_t mainGraph() const;
 
-    GIR::graph_ptr_t &rootGraph() { return rootGraph_; }
-    GIR::graph_ptr_t &currGraph() { return currGraph_; }
+    void setMainModule(module_ptr_t module) { mainModule_ = module; }
 
-    GIR::graph_ptr_t enterScope(const std::string &name = "");
-    void leaveScope();
-
-    std::unordered_map<GIR::node_ptr_t, std::string> buildNodeIdentsMap() const;
-
-    std::optional<GIR::node_ptr_t> nodeAt(const std::string &name) {
-        return nodeScope_->get(name);
-    }
-    std::optional<std::shared_ptr<GIR::graph_vec_t>> graphAt(const std::string &name) { return graphScope_->get(name); }
-    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) { return opScope_->get(name); }
-
-    bool insertNode(const std::string &name, const GIR::node_ptr_t &node);
-    bool insertGraph(const std::string &name, const GIR::graph_ptr_t &graph);
-    bool insertOperator(const std::string &name, const operator_ptr_t &op);
+    module_ptr_t
+    importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");
 };
 
 using context_ptr_t = std::shared_ptr<Context>;

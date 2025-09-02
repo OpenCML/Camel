@@ -144,7 +144,7 @@ function updateCppProperties(depMap) {
             cfg.cppStandard = 'c++20'
             const newPaths = []
 
-            // 额外添加 ${workspaceFolder}/src, ${workspaceFolder}/third_party
+            newPaths.push('${workspaceFolder}')
             newPaths.push(path.join('${workspaceFolder}', 'src'))
             newPaths.push(path.join('${workspaceFolder}', 'vendor'))
             newPaths.push(path.join('${workspaceFolder}', 'third_party'))

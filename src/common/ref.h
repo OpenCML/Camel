@@ -19,29 +19,30 @@
 
 #pragma once
 
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <stdexcept>
 
 class Reference {
   public:
     Reference() {}
-    Reference(const std::string &str) { set(str); }
+    Reference(const std::string &str) { parse(str); }
+    Reference(const char *cstr) {
+        if (cstr) {
+            parse(std::string(cstr));
+        }
+    }
 
     const std::string &ident() const { return ident_; }
-    const std::vector<std::string> &scope() const { return scope_; }
+    const std::vector<std::string> &paths() const { return paths_; }
 
-    void setIdent(const std::string &ident) { ident_ = ident; }
-    void addScope(const std::string &scope) { scope_.push_back(scope); }
-    void clearScope() { scope_.clear(); }
-
-    void set(const std::string &str) {
-        scope_.clear();
+    void parse(const std::string &str, const std::string &delimiter = "::") {
+        paths_.clear();
         size_t pos = 0;
         size_t nextPos = 0;
-        while ((nextPos = str.find("::", pos)) != std::string::npos) {
-            scope_.push_back(str.substr(pos, nextPos - pos));
-            pos = nextPos + 2; // Skip over "::"
+        while ((nextPos = str.find(delimiter, pos)) != std::string::npos) {
+            paths_.push_back(str.substr(pos, nextPos - pos));
+            pos = nextPos + delimiter.size();
         }
         if (pos < str.size()) {
             ident_ = str.substr(pos);
@@ -50,13 +51,13 @@ class Reference {
         }
     }
 
-    bool isNull() const { return ident_.empty(); }
-    bool isAlone() const { return scope_.empty(); }
+    bool empty() const { return ident_.empty(); }
+    bool plain() const { return paths_.empty(); }
 
     const std::string toString() const {
         std::string result;
-        if (!scope_.empty()) {
-            for (const auto &s : scope_) {
+        if (!paths_.empty()) {
+            for (const auto &s : paths_) {
                 result += s + "::";
             }
         }
@@ -66,17 +67,19 @@ class Reference {
 
     operator std::string() const { return toString(); }
 
-    bool operator==(const Reference &other) const { return ident_ == other.ident_ && scope_ == other.scope_; }
+    bool operator==(const Reference &other) const {
+        return ident_ == other.ident_ && paths_ == other.paths_;
+    }
 
     bool operator<(const Reference &other) const {
-        if (scope_ != other.scope_) {
-            return scope_ < other.scope_;
+        if (paths_ != other.paths_) {
+            return paths_ < other.paths_;
         }
         return ident_ < other.ident_;
     }
 
   private:
-    std::vector<std::string> scope_;
+    std::vector<std::string> paths_;
     std::string ident_;
 };
 
@@ -86,7 +89,7 @@ template <> struct hash<Reference> {
         std::size_t h = 0;
         std::hash<std::string> hashStr;
 
-        for (const auto &s : ref.scope()) {
+        for (const auto &s : ref.paths()) {
             h ^= hashStr(s) + 0x9e3779b9 + (h << 6) + (h >> 2); // boost-style hash combine
         }
 

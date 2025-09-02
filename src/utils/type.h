@@ -24,7 +24,9 @@
 
 namespace TypeTraits {
 
-template <typename Base, typename Derived> constexpr bool is_base_of() { return std::is_base_of<Base, Derived>::value; }
+template <typename Base, typename Derived> constexpr bool is_base_of() {
+    return std::is_base_of<Base, Derived>::value;
+}
 
 template <typename Derived, typename Base> constexpr bool is_derived_of() {
     return std::is_base_of<Base, Derived>::value && !std::is_same<Base, Derived>::value;
@@ -44,15 +46,18 @@ template <typename Target, typename Source> Target *as(Source *ptr) {
     return dynamic_cast<Target *>(ptr);
 }
 
-template <typename Target, typename Source> bool is_shared_instance_of(const std::shared_ptr<Source> &ptr) {
+template <typename Target, typename Source>
+bool is_shared_instance_of(const std::shared_ptr<Source> &ptr) {
     return std::dynamic_pointer_cast<Target>(ptr) != nullptr;
 }
 
-template <typename Target, typename Source> std::shared_ptr<Target> as_shared(const std::shared_ptr<Source> &ptr) {
+template <typename Target, typename Source>
+std::shared_ptr<Target> as_shared(const std::shared_ptr<Source> &ptr) {
     return std::dynamic_pointer_cast<Target>(ptr);
 }
 
-template <template <typename...> class Template, typename T> struct is_instance_of_template : std::false_type {};
+template <template <typename...> class Template, typename T>
+struct is_instance_of_template : std::false_type {};
 
 template <template <typename...> class Template, typename... Args>
 struct is_instance_of_template<Template, Template<Args...>> : std::true_type {};
@@ -64,7 +69,9 @@ constexpr bool is_same_template(Template<Args1...> *, Template<Args2...> *) {
     return true;
 }
 
-template <typename T, typename... Types> constexpr bool is_any_of() { return (std::is_same<T, Types>::value || ...); }
+template <typename T, typename... Types> constexpr bool is_any_of() {
+    return (std::is_same<T, Types>::value || ...);
+}
 
 } // namespace TypeTraits
 

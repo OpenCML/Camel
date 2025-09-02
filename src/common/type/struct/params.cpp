@@ -54,7 +54,8 @@ TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
 
 ParamsType::ParamsType() : StructType(TypeCode::PARAMS) {}
 
-ParamsType::ParamsType(const std::initializer_list<std::tuple<string, type_ptr_t, data_ptr_t>> &&elements)
+ParamsType::ParamsType(
+    const std::initializer_list<std::tuple<string, type_ptr_t, data_ptr_t>> &&elements)
     : StructType(TypeCode::PARAMS), elements_(std::move(elements)) {}
 
 string ParamsType::toString() const {
@@ -118,7 +119,9 @@ const std::tuple<string, type_ptr_t, data_ptr_t> &ParamsType::elementAt(size_t i
     return elements_[idx];
 }
 
-const vector<tuple<string, type_ptr_t, data_ptr_t>> &ParamsType::elements() const { return elements_; }
+const vector<tuple<string, type_ptr_t, data_ptr_t>> &ParamsType::elements() const {
+    return elements_;
+}
 
 vector<type_ptr_t> ParamsType::indexElements() const {
     auto result = vector<type_ptr_t>();

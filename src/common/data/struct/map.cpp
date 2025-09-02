@@ -26,7 +26,8 @@
 
 using namespace std;
 
-MapData::MapData(type_ptr_t keyType, type_ptr_t dataType) : StructData(std::make_shared<MapType>(keyType, dataType)) {}
+MapData::MapData(type_ptr_t keyType, type_ptr_t dataType)
+    : StructData(std::make_shared<MapType>(keyType, dataType)) {}
 
 bool MapData::emplace(const data_ptr_t &key, const data_ptr_t &val) {
     bool res = data_.insert(std::make_pair(key, val)).second;
@@ -89,11 +90,13 @@ data_ptr_t MapData::convert(type_ptr_t target, bool inplace) {
         }
         throw UnsupportedConvError();
     } catch (const UnsupportedConvError &e) {
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError(
+            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     } catch (const std::exception &e) {
         throw DataConvError(e.what());
     }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError(
+        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
 vector<string> MapData::refs() const {

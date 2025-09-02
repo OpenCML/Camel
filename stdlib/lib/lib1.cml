@@ -1,0 +1,4 @@
+export func lib1(): int sync {
+    print("Hello from lib1!")
+    return 0
+}
