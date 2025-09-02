@@ -82,6 +82,17 @@ static const std::pair<std::string, operator_func_t> binaryOps[] = {
     {"__exp__", __builtin__exp__},
     {"__idx__", __builtin__idx__}};
 
+static const std::pair<std::string, operator_func_t> others[] = {
+    {"map", __not_implemented__},
+    {"filter", __not_implemented__},
+    {"reduce", __not_implemented__},
+    {"len", __not_implemented__},
+    {"range", __not_implemented__},
+    {"enumerate", __not_implemented__},
+    {"zip", __not_implemented__},
+    {"unzip", __not_implemented__},
+    {"exit", __not_implemented__}};
+
 BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
     for (const auto &[name, func] : assnOps) {
         exportAssnOp(name, func);
@@ -89,6 +100,10 @@ BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
 
     for (const auto &[name, func] : binaryOps) {
         exportBinaryOp(name, func);
+    }
+
+    for (const auto &[name, func] : others) {
+        exportBuiltinOperator(name, param_init_list{}, param_init_list{}, anyTypePtr, func);
     }
 
     exportBuiltinOperator(

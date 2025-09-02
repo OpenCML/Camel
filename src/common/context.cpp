@@ -17,14 +17,14 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "context.h"
+#include <filesystem>
+
 #include "common/module/userdef.h"
+#include "context.h"
 #include "utils/log.h"
 #include "utils/str.h"
 
-#define DEBUG_LEVEL -1
-
-#include <filesystem>
+#define DEBUG_LEVEL 0
 
 namespace fs = std::filesystem;
 
@@ -60,32 +60,36 @@ Context::Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf
 
 module_ptr_t
 Context::importModule(const std::string &rawModuleName, const std::string &currentModuleName) {
+    debug(0) << "Trying to import module '" << rawModuleName << "' from current module '"
+             << currentModuleName << "'" << std::endl;
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
     for (const auto &name : candidates) {
-        std::cout << "Trying to import module: " << name << std::endl;
+        debug(0) << "Checking candidate '" << name << "'" << std::endl;
         auto it = modules_.find(name);
         if (it != modules_.end()) {
-            std::cout << "Module found in cache: " << name << std::endl;
+            debug(0) << "Candidate module '" << name << "' found in cache" << std::endl;
             return it->second;
         }
 
         module_ptr_t module = tryLoadModule(name);
         if (module) {
-            std::cout << "Module loaded: " << name << " from " << module->path() << std::endl;
+            debug(0) << "Candidate module '" << name << "' loaded from file: " << module->path()
+                     << std::endl;
             modules_[name] = module;
             return module;
         }
 
         auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
-            std::cout << "Builtin module loaded: " << name << std::endl;
+            debug(0) << "Candidate module '" << name << "' is a built-in module" << std::endl;
             modules_[name] = builtin.value();
             return builtin.value();
         }
+        debug(0) << "Candidate module '" << name << "' not found" << std::endl;
     }
 
-    throw std::runtime_error("Module not found: " + rawModuleName);
+    throw CamelBaseException("Module not found '" + rawModuleName);
 }
 
 std::vector<std::string> Context::getModuleNameCandidates(
@@ -131,7 +135,7 @@ std::string Context::resolveRelativeModuleName(
     std::vector<std::string> base = split(currentModule, '.');
 
     if (static_cast<size_t>(level) > base.size()) {
-        throw std::runtime_error("Too many dots in relative import: " + importName);
+        throw CamelBaseException("Too many dots in relative import: " + importName);
     }
 
     base.resize(base.size() - level);

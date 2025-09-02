@@ -52,7 +52,9 @@ class UserDefinedModule : public Module {
 
     static module_ptr_t
     loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx) {
-        return std::make_shared<UserDefinedModule>(name, path, ctx);
+        auto mod = std::make_shared<UserDefinedModule>(name, path, ctx);
+        mod->compile();
+        return mod;
     }
 
     bool ready() const { return built_; }
