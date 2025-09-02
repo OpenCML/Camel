@@ -30,7 +30,9 @@ size_t ArrayType::size() const { return size_; }
 
 type_ptr_t ArrayType::elementType() const { return elementType_; }
 
-string ArrayType::toString() const { return "Array<" + elementType_->toString() + ", " + to_string(size_) + ">"; }
+string ArrayType::toString() const {
+    return "Array<" + elementType_->toString() + ", " + to_string(size_) + ">";
+}
 
 bool ArrayType::operator==(const Type &other) const {
     if (other.code() != TypeCode::ARRAY) {

@@ -46,6 +46,11 @@ NULL        : 'null';
 TRUE        : 'true';
 FALSE       : 'false';
 
+// 显示定义token顺序以保证最长匹配
+ELLIPSIS : '...';
+DOTDOT   : '..';
+DOT      : '.';
+
 INNER_ATOM_TYPE
     : 'int'
     | 'float'

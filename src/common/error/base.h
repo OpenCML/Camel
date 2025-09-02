@@ -20,6 +20,7 @@
 #pragma once
 
 #include <exception>
+#include <sstream>
 #include <string>
 
 class CamelBaseException : public std::exception {
@@ -32,7 +33,7 @@ class CamelBaseException : public std::exception {
         if (json) {
             return "{\"type\": \"error\", \"message\": \"" + message_ + "\"}";
         } else {
-            return "Error: " + message_;
+            return message_;
         }
     }
 

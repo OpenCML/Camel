@@ -24,9 +24,11 @@
 #include <string>
 
 #include "common/ast/ast.h"
+#include "common/context.h"
 #include "common/error/abort.h"
 #include "common/error/diagnostic.h"
 #include "common/gct.h"
+#include "common/module/module.h"
 #include "common/scope.h"
 
 namespace GraphConstructTree {
@@ -34,7 +36,10 @@ using void_ptr_t = void *;
 
 class Constructor {
   public:
-    Constructor() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(); };
+    Constructor(const context_ptr_t &context, const module_ptr_t &module)
+        : context_(context), module_(module) {
+        typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>();
+    };
     virtual ~Constructor() = default;
 
     node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
@@ -51,16 +56,20 @@ class Constructor {
     scope_ptr_t<Reference, type_ptr_t> typeScope_;
     std::unordered_map<void *, func_type_ptr_t> funcDecls_;
 
+    context_ptr_t context_;
+    module_ptr_t module_;
     diagnostics_ptr_t diagnostics_;
 
     void initInnerTypes();
 
     std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
-    std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
+    std::pair<data_ptr_t, bool>
+    extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
-    void reportDiagnostic(Diagnostic::Severity sev, const std::string &msg,
-                          std::pair<size_t, size_t> tokenRange = {0, 0}) {
+    void reportDiagnostic(
+        Diagnostic::Severity sev, const std::string &msg,
+        std::pair<size_t, size_t> tokenRange = {0, 0}) {
         diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
     }
 
@@ -70,7 +79,7 @@ class Constructor {
     // ast/base.h
     node_ptr_t visitModule(const AST::node_ptr_t &ast);
     void_ptr_t visitImport(const AST::node_ptr_t &ast);
-    void_ptr_t visitExport(const AST::node_ptr_t &ast);
+    node_ptr_t visitExport(const AST::node_ptr_t &ast);
 
     // ast/stmt.h
     node_ptr_t visitStmt(const AST::node_ptr_t &ast);

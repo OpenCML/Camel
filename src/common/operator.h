@@ -26,27 +26,24 @@
 
 class Context;
 
-using OperatorFunction = std::function<data_ptr_t(Context &, data_vec_t &&)>;
+using operator_func_t =
+    std::function<data_ptr_t(Context &, const data_vec_t &, const data_vec_t &)>;
 
 class Operator {
   private:
     std::string name_;
     func_type_ptr_t type_;
-    OperatorFunction func_;
+    operator_func_t func_;
 
   public:
-    Operator(const std::string &name, const func_type_ptr_t &&type, OperatorFunction &&func)
+    Operator(const std::string &name, const func_type_ptr_t &&type, operator_func_t &&func)
         : name_(name), type_(std::move(type)), func_(std::move(func)) {}
 
     const std::string &name() const { return name_; }
     const func_type_ptr_t &funcType() const { return type_; }
-    const OperatorFunction &func() const { return func_; }
+    const operator_func_t &func() const { return func_; }
 };
 
 using operator_ptr_t = std::shared_ptr<Operator>;
 using operator_vec_t = std::vector<operator_ptr_t>;
-
-extern bool globalOperatorsInitialized;
-extern std::unordered_map<std::string, std::shared_ptr<operator_vec_t>> globalOperators;
-
-void registerOperator(const operator_ptr_t &&op);
+using operator_vec_ptr_t = std::shared_ptr<operator_vec_t>;

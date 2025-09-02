@@ -86,8 +86,11 @@ class TypeDeclLoad : public StmtLoad {
 
 class NameDeclLoad : public StmtLoad {
   public:
-    NameDeclLoad(Reference ref, Reference alias) : StmtLoad(StmtType::Name), ref_(ref), alias_(alias) {}
-    const std::string toString() const override { return "NameDecl: " + ref_.toString() + " as " + alias_.toString(); }
+    NameDeclLoad(Reference ref, Reference alias)
+        : StmtLoad(StmtType::Name), ref_(ref), alias_(alias) {}
+    const std::string toString() const override {
+        return "NameDecl: " + ref_.toString() + " as " + alias_.toString();
+    }
 
     const Reference &ref() const { return ref_; }
     const Reference &alias() const { return alias_; }

@@ -23,9 +23,11 @@ using namespace std;
 
 TupleType::TupleType() : StructType(TypeCode::TUPLE) {}
 
-TupleType::TupleType(const initializer_list<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+TupleType::TupleType(const initializer_list<type_ptr_t> &types)
+    : StructType(TypeCode::TUPLE), types_(types) {}
 
-TupleType::TupleType(const vector<type_ptr_t> &types) : StructType(TypeCode::TUPLE), types_(types) {}
+TupleType::TupleType(const vector<type_ptr_t> &types)
+    : StructType(TypeCode::TUPLE), types_(types) {}
 
 string TupleType::toString() const {
     string result = "Tuple<";

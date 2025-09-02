@@ -29,13 +29,15 @@ FunctionType::FunctionType()
     : SpecialType(TypeCode::FUNC), withParamsType_(make_shared<ParamsType>()),
       normParamsType_(make_shared<ParamsType>()), returnType_(voidTypePtr) {}
 
-FunctionType::FunctionType(const shared_ptr<ParamsType> &withParamsType, const shared_ptr<ParamsType> &paramsType,
-                           const type_ptr_t &returnType)
+FunctionType::FunctionType(
+    const shared_ptr<ParamsType> &withParamsType, const shared_ptr<ParamsType> &paramsType,
+    const type_ptr_t &returnType)
     : SpecialType(TypeCode::FUNC), withParamsType_(withParamsType), normParamsType_(paramsType),
       returnType_(returnType) {}
 
-FunctionType::FunctionType(const param_init_list &withParamsList, const param_init_list &normParamsList,
-                           const type_ptr_t &returnType)
+FunctionType::FunctionType(
+    const param_init_list &withParamsList, const param_init_list &normParamsList,
+    const type_ptr_t &returnType)
     : SpecialType(TypeCode::FUNC) {
     withParamsType_ = make_shared<ParamsType>();
     normParamsType_ = make_shared<ParamsType>();
@@ -71,9 +73,13 @@ bool FunctionType::addIdent(const string &ident, bool isVar) {
 
 bool FunctionType::hasSideEffect() const { return hasSideEffect_; }
 
-type_ptr_t FunctionType::withParamsType() const { return dynamic_pointer_cast<Type>(withParamsType_); }
+type_ptr_t FunctionType::withParamsType() const {
+    return dynamic_pointer_cast<Type>(withParamsType_);
+}
 
-type_ptr_t FunctionType::normParamsType() const { return dynamic_pointer_cast<Type>(normParamsType_); }
+type_ptr_t FunctionType::normParamsType() const {
+    return dynamic_pointer_cast<Type>(normParamsType_);
+}
 
 type_ptr_t FunctionType::returnType() const { return dynamic_pointer_cast<Type>(returnType_); }
 
@@ -186,7 +192,8 @@ TypeConv FunctionType::convertibility(const Type &other) const {
         TypeConv result = TypeConv::SAFE;
         const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
         if (withParamsType_ && !otherFunctor.withParamsType_) {
-            const TypeConv withTypeConv = withParamsType_->convertibility(*otherFunctor.withParamsType_);
+            const TypeConv withTypeConv =
+                withParamsType_->convertibility(*otherFunctor.withParamsType_);
             if (withTypeConv == TypeConv::FORBIDDEN) {
                 return TypeConv::FORBIDDEN;
             }
@@ -195,7 +202,8 @@ TypeConv FunctionType::convertibility(const Type &other) const {
             }
         }
         if (normParamsType_ && !otherFunctor.normParamsType_) {
-            const TypeConv paramsTypeConv = normParamsType_->convertibility(*otherFunctor.normParamsType_);
+            const TypeConv paramsTypeConv =
+                normParamsType_->convertibility(*otherFunctor.normParamsType_);
             if (paramsTypeConv == TypeConv::FORBIDDEN) {
                 return TypeConv::FORBIDDEN;
             }

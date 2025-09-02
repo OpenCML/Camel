@@ -27,10 +27,7 @@
 #include <string>
 #include <unordered_map>
 
-template <typename T>
-concept Hashable = requires(T t) {
-    { std::hash<T>{}(t) } -> std::convertible_to<std::size_t>;
-};
+#include "utils/template.h"
 
 template <typename T>
 concept HasEmpty = requires(T t) {
@@ -109,6 +106,11 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
         }
     }
 
+    bool empty() const {
+        // std::shared_lock<std::shared_mutex> lock(rwMutex_);
+        return map_.empty() && innerScopes_.empty();
+    }
+
     void clear() {
         // std::unique_lock<std::shared_mutex> lock(rwMutex_);
         map_.clear();
@@ -130,7 +132,9 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
 
     std::unordered_map<Key, Val> self() const { return map_; }
 
-    static scope_ptr_t create(scope_ptr_t outer = nullptr) { return std::make_shared<Scope<Key, Val, Name>>(outer); }
+    static scope_ptr_t create(scope_ptr_t outer = nullptr) {
+        return std::make_shared<Scope<Key, Val, Name>>(outer);
+    }
 
     static scope_ptr_t create(std::unordered_map<Key, Val> map, scope_ptr_t outer = nullptr) {
         return std::make_shared<Scope<Key, Val, Name>>(map, outer);
@@ -155,6 +159,34 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     scope_ptr_t leave() {
         // TODO: Shall we free the scope?
         return outer();
+    }
+
+    void dump(std::ostream &os, int indentLevel = 0) const {
+        std::string indent(indentLevel * 2, ' ');
+
+        os << indent << "Scope ";
+        os << (isRoot() ? "[Root]" : "") << " {\n";
+
+        if constexpr (HasEmpty<Name>) {
+            for (const auto &[name, scope] : innerScopeMap_) {
+                if (scope.get() == this) {
+                    os << "(named: " << name << ") ";
+                    break;
+                }
+            }
+        }
+
+        for (const auto &[key, value] : map_) {
+            os << indent << "  " << key << " : " << value << "\n";
+        }
+
+        for (const auto &child : innerScopes_) {
+            if (child && !child->empty()) {
+                child->dump(os, indentLevel + 1);
+            }
+        }
+
+        os << indent << "}\n";
     }
 };
 

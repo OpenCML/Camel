@@ -50,12 +50,18 @@ bool Data::resolved() const { return true; }
 
 void Data::resolve(const data_vec_t &dataList) {}
 
-bool Data::equals(const data_ptr_t &other) const { throw runtime_error("Base Data::equals() not implemented"); }
+bool Data::equals(const data_ptr_t &other) const {
+    throw runtime_error("Base Data::equals() not implemented");
+}
 
-data_ptr_t Data::clone(bool deep) const { throw runtime_error("Base Data::clone() not implemented"); }
+data_ptr_t Data::clone(bool deep) const {
+    throw runtime_error("Base Data::clone() not implemented");
+}
 
 data_ptr_t Data::convert(type_ptr_t target, bool inplace) {
     throw runtime_error("Base Data::convert() not implemented");
 }
 
-const string Data::toString() const { throw runtime_error("Base Data::toString() not implemented"); }
+const string Data::toString() const {
+    throw runtime_error("Base Data::toString() not implemented");
+}

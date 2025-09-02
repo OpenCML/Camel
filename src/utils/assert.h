@@ -27,8 +27,9 @@
 
 namespace cml {
 
-inline void handle_assert_failure(const std::string &expression, const std::string &message,
-                                  const std::source_location location = std::source_location::current()) {
+inline void handle_assert_failure(
+    const std::string &expression, const std::string &message,
+    const std::source_location location = std::source_location::current()) {
     std::cerr << "Camel Debug Assertion Failed:\n"
               << "    Location   : " << location.file_name() << "(" << location.line() << ")\n"
               << "    Function   : " << location.function_name() << "\n"
@@ -59,18 +60,18 @@ inline void handle_assert_failure(const std::string &expression, const std::stri
 
 #else
 
-#define ASSERT1(cond)                                                                                                  \
-    do {                                                                                                               \
-        if (!(cond)) {                                                                                                 \
-            ::cml::handle_assert_failure(#cond, "");                                                                   \
-        }                                                                                                              \
+#define ASSERT1(cond)                                                                              \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            ::cml::handle_assert_failure(#cond, "");                                               \
+        }                                                                                          \
     } while (false)
 
-#define ASSERT2(cond, msg)                                                                                             \
-    do {                                                                                                               \
-        if (!(cond)) {                                                                                                 \
-            ::cml::handle_assert_failure(#cond, msg);                                                                  \
-        }                                                                                                              \
+#define ASSERT2(cond, msg)                                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            ::cml::handle_assert_failure(#cond, msg);                                              \
+        }                                                                                          \
     } while (false)
 
 #define GET_MACRO(_1, _2, NAME, ...) NAME

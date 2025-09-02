@@ -20,7 +20,8 @@
 #include "executor.h"
 #include "executors/inner.h"
 
-void ExecutorManager::registerExecutorCreator(std::string name, ExecutorManager::creator_t creator) {
+void ExecutorManager::registerExecutorCreator(
+    std::string name, ExecutorManager::creator_t creator) {
     executorCreators.emplace(name, std::move(creator));
 }
 
@@ -28,8 +29,9 @@ ExecutorManager::ExecutorManager() {
     registerExecutorCreator("inner", []() { return std::make_unique<InnerExecutor>(); });
 }
 
-Status ExecutorManager::executeOperator(std::string uri, std::vector<data_ptr_t> withArgs,
-                                        std::vector<data_ptr_t> normArgs, data_ptr_t &ret) {
+Status ExecutorManager::executeOperator(
+    std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
+    data_ptr_t &ret) {
     const size_t pos = uri.find("://");
     if (pos == std::string::npos) {
         return {RetCode::invalidURI, "Invalid URI format"};
@@ -49,7 +51,8 @@ Status ExecutorManager::executeOperator(std::string uri, std::vector<data_ptr_t>
     return status;
 }
 
-Status BaseExecutor::execute(std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-                             data_ptr_t &ret) {
+Status BaseExecutor::execute(
+    std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
+    data_ptr_t &ret) {
     return {RetCode::unknownError, "BaseExecutor: No implementation for execute"};
 }

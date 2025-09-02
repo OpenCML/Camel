@@ -28,7 +28,8 @@ using namespace std;
 
 SetData::SetData(type_ptr_t elType) : StructData(std::make_shared<SetType>(elType)) {}
 
-SetData::SetData(type_ptr_t elType, data_list_t data) : StructData(std::make_shared<SetType>(elType)), data_(data) {
+SetData::SetData(type_ptr_t elType, data_list_t data)
+    : StructData(std::make_shared<SetType>(elType)), data_(data) {
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::REF) {
             refs_.push_back(e);
@@ -85,11 +86,13 @@ data_ptr_t SetData::convert(type_ptr_t target, bool inplace) {
         }
         throw UnsupportedConvError();
     } catch (const UnsupportedConvError &e) {
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError(
+            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     } catch (const std::exception &e) {
         throw DataConvError(e.what());
     }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError(
+        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
 vector<string> SetData::refs() const {

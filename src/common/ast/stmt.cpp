@@ -28,7 +28,7 @@ const std::string ImportLoad::toString() const {
     }
     std::string result = "ImportDecl: ";
     if (!refs_.empty()) {
-        result += "{ " + join(refs_, std::string(", ")) + " }";
+        result += "{ " + join_list(refs_, std::string(", ")) + " }";
     } else {
         result += "*";
     }
@@ -43,7 +43,7 @@ const std::string ExportLoad::toString() const {
     if (refs_.empty()) {
         return std::string("ExportDecl: NULL");
     }
-    std::string result = "ExportDecl: " + join(refs_, std::string(", "));
+    std::string result = "ExportDecl: " + join_list(refs_, std::string(", "));
     return result;
 }
 
@@ -52,7 +52,7 @@ const std::string DataDeclLoad::toString() const {
     if (refs_.size() == 1) {
         result += refs_[0].toString();
     } else {
-        std::string refs = join(refs_, std::string(", "));
+        std::string refs = join_list(refs_, std::string(", "));
         switch (type_) {
         case UnpackType::Dict:
             result += "{" + refs + "}";
@@ -64,7 +64,8 @@ const std::string DataDeclLoad::toString() const {
             result += "(" + refs + ")";
             break;
         default:
-            throw std::runtime_error("Unknown UnpackType in DataDeclLoad: " + std::to_string(static_cast<int>(type_)));
+            throw std::runtime_error(
+                "Unknown UnpackType in DataDeclLoad: " + std::to_string(static_cast<int>(type_)));
         }
     }
     return result;

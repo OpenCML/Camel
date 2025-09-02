@@ -112,11 +112,13 @@ data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
         }
         throw UnsupportedConvError();
     } catch (const UnsupportedConvError &e) {
-        throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        throw DataConvError(
+            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
     } catch (const std::exception &e) {
         throw DataConvError(e.what());
     }
-    throw DataConvError("Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+    throw DataConvError(
+        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
 vector<string> ListData::refs() const {

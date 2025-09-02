@@ -25,7 +25,8 @@
 
 using namespace std;
 
-VectorType::VectorType(const type_ptr_t &elementType) : StructType(TypeCode::VECTOR), elementType_(elementType) {}
+VectorType::VectorType(const type_ptr_t &elementType)
+    : StructType(TypeCode::VECTOR), elementType_(elementType) {}
 
 type_ptr_t VectorType::elementType() const { return elementType_; }
 
