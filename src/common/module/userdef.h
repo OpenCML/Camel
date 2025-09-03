@@ -30,7 +30,6 @@ class Context;
 using context_ptr_t = std::shared_ptr<Context>;
 
 class UserDefinedModule : public Module {
-    bool built_ = false;
     context_ptr_t context_;
     GCT::node_ptr_t gct_;
     GIR::graph_ptr_t gir_;
@@ -48,12 +47,8 @@ class UserDefinedModule : public Module {
     diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
     static module_ptr_t
-    loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx) {
-        auto mod = std::make_shared<UserDefinedModule>(name, path, ctx);
-        mod->compile();
-        return mod;
-    }
+    loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
 
     bool ready() const { return built_; }
-    bool compile();
+    bool compile() override;
 };

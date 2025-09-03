@@ -31,7 +31,7 @@
 
 #include "utils/log.h"
 
-#define DEBUG_LEVEL -1
+#define DEBUG_LEVEL 0
 
 using namespace std;
 using namespace antlr4;
@@ -47,10 +47,21 @@ UserDefinedModule::UserDefinedModule(
         parser_ = std::make_shared<CamelParser>(diagnostics_);
     }
     // Automatically import the built-in module
-    importEntities(ctx->importModule(""));
+    importAllRefsFromMod(ctx->importModule(""));
+}
+
+module_ptr_t UserDefinedModule::loadFromFile(
+    const std::string &name, const std::string &path, context_ptr_t ctx) {
+    return std::make_shared<UserDefinedModule>(name, path, ctx);
 }
 
 bool UserDefinedModule::compile() {
+    debug(0) << "Compiling user-defined module: " << name_ << " from " << path_ << endl;
+    if (this->built_) {
+        debug(0) << "Module already built: " << name_ << endl;
+        return this->built_;
+    }
+
     if (!parser_->ast()) {
         std::ifstream ifs(path_);
         if (!ifs.good()) {
@@ -63,14 +74,12 @@ bool UserDefinedModule::compile() {
 
     auto ast = parser_->ast();
     auto gctConstructor = GCT::Constructor(context_, shared_from_this());
-    auto girConstructor = GIR::Constructor(context_, shared_from_this());
-
-    // get gir first because building gct may access gir information
-    gir_ = girConstructor.rootGraph();
     gct_ = gctConstructor.construct(ast, diagnostics_);
 
-    girConstructor.construct(gct_, diagnostics_);
+    auto girConstructor = GIR::Constructor(context_, shared_from_this());
+    gir_ = girConstructor.construct(gct_, diagnostics_);
 
     this->built_ = !diagnostics_->hasErrors();
+    debug(0) << "Module " << name_ << " built: " << (this->built_ ? "success" : "failed") << endl;
     return this->built_;
 }

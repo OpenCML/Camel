@@ -21,29 +21,87 @@
 #include "common/error/base.h"
 
 Module::Module(const std::string &name, const std::string &path)
-    : name_(name), path_(path),
-      importedTypeNS_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
+    : built_(false), name_(name), path_(path),
       exportedTypeNS_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
-      importedEntityNS_(std::make_shared<Namespace<std::string, entity>>()),
-      exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()) {};
+      exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()),
+      importedRefModMap_() {};
 
-void Module::importEntities(const module_ptr_t &mod, const std::vector<Reference> &refs) {
-    imports_.push_back(mod);
-    if (refs.empty()) {
-        // import * from module
-        importedTypeNS_->insertAllFrom(*mod->exportedTypes(), false);
-        importedEntityNS_->insertAllFrom(*mod->exportedEntitys(), false);
-    } else {
-        for (const auto &ref : refs) {
-            if (auto type = mod->getExportedType(ref); type.has_value()) {
-                importedTypeNS_->insert(ref, type.value());
-            } else if (auto ent = mod->getExportedEntity(ref); ent.has_value()) {
-                importedEntityNS_->insert(ref, ent.value());
-            } else {
-                throw CamelBaseException(
-                    "Import error: cannot import '" + ref.ident() + "' from module '" +
-                    mod->name() + "'");
-            }
-        }
+void Module::importAllRefsFromMod(const module_ptr_t &mod) {
+    if (!mod->built()) { // 立刻加载
+        mod->compile();
     }
+    // Types
+    auto typeNS = mod->exportedTypeNS();
+    typeNS->forEach([&](const Reference &ref, const type_ptr_t &type) {
+        importedRefModMap_[Reference(ref)] = mod;
+    });
+    // Entities
+    auto entNS = mod->exportedEntityNS();
+    entNS->forEach([&](const Reference &ref, const entity &entity) {
+        importedRefModMap_[Reference(ref)] = mod;
+    });
+}
+void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mod) {
+    importedRefModMap_[ref] = mod;
+}
+bool Module::hasImportedRef(const Reference &ref) const {
+    return importedRefModMap_.find(ref) != importedRefModMap_.end();
+}
+
+bool Module::exportType(const Reference &ref, const type_ptr_t &type) {
+    return exportedTypeNS_->insert(ref, type);
+}
+bool Module::exportEntity(const Reference &ref, const entity &ent) {
+    return exportedEntityNS_->insert(ref, ent);
+}
+
+type_ptr_t Module::getImportedType(const Reference &ref) const {
+    ASSERT(
+        importedRefModMap_.find(ref) != importedRefModMap_.end(),
+        "Imported type not found: " + ref.toString() + " in module " + name_);
+    auto &mod = importedRefModMap_.at(ref);
+    if (!mod->built()) { // 懒加载
+        mod->compile();
+    }
+    auto optType = mod->getExportedType(ref);
+    if (!optType.has_value()) {
+        throw CamelBaseException(
+            "Imported Error: cannot import type '" + ref.toString() + "' from module '" +
+            mod->name() + "'");
+    }
+    return optType.value();
+};
+entity Module::getImportedEntity(const Reference &ref) const {
+    ASSERT(
+        importedRefModMap_.find(ref) != importedRefModMap_.end(),
+        "Imported entity not found: " + ref.toString() + " in module " + name_);
+    auto &mod = importedRefModMap_.at(ref);
+    if (!mod->built()) { // 懒加载
+        mod->compile();
+    }
+    auto optEntity = mod->getExportedEntity(ref);
+    if (!optEntity.has_value()) {
+        throw CamelBaseException(
+            "Imported Error: cannot import entity '" + ref.toString() + "' from module '" +
+            mod->name() + "'");
+    }
+    return optEntity.value();
+};
+
+std::optional<type_ptr_t> Module::getExportedType(const Reference &ref) const {
+    ASSERT(built_, "Module not built: " + name_);
+    return exportedTypeNS_->get(ref);
+};
+std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
+    ASSERT(built_, "Module not built: " + name_);
+    return exportedEntityNS_->get(ref);
+};
+
+type_ns_ptr_t Module::exportedTypeNS() const {
+    ASSERT(built_, "Module not built: " + name_);
+    return exportedTypeNS_;
+}
+entity_ns_ptr_t Module::exportedEntityNS() const {
+    ASSERT(built_, "Module not built: " + name_);
+    return exportedEntityNS_;
 }

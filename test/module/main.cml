@@ -1,10 +1,15 @@
 module main
 
 import { sleep } from os
-import { lib0 } from lib0
+import { f0 } from lib0
+
+// func f0(): int sync {
+//     // lib1("Hello from lib0!")
+//     return 0
+// }
 
 export func main(): int sync {
-    lib0("Hello, World!")
-    // sleep(1000)
+    f0("Hello, World!")
+    sleep(1000)
     return 0
 }
