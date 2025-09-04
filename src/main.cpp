@@ -42,10 +42,11 @@
 #include "service/formatter/fmt.h"
 #include "service/profiler/trace.h"
 #include "utils/env.h"
-#include "utils/log.h"
 
 #include "common/module/userdef.h"
 #include "parse/parse.h"
+
+#include "utils/log.h"
 
 using namespace antlr4;
 using namespace std;
@@ -74,14 +75,16 @@ int main(int argc, char *argv[]) {
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
         input = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
+        l.in("Main").info("Reading from standard input.");
     } else {
         targetFile = Run::targetFiles[0];
         auto file = std::make_unique<std::ifstream>(targetFile);
         if (!file->is_open()) {
-            log_error << "Error opening file " << targetFile << endl;
+            std::cerr << "Error: Cannot open file " << targetFile << endl;
             return 1;
         }
         input = std::move(file);
+        l.in("Main").info("Reading from file '{}'.", targetFile);
     }
 
     chrono::high_resolution_clock::time_point startTime, endTime;
@@ -218,7 +221,7 @@ int main(int argc, char *argv[]) {
             endTime = chrono::high_resolution_clock::now();
             auto duration =
                 chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            log_info << "Time used " << duration << " us" << endl;
+            l.in("Main").info("Time used: {} us", duration);
         }
     }
 

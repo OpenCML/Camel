@@ -31,8 +31,6 @@
 
 #include "utils/log.h"
 
-#define DEBUG_LEVEL 0
-
 using namespace std;
 using namespace antlr4;
 
@@ -56,9 +54,9 @@ module_ptr_t UserDefinedModule::loadFromFile(
 }
 
 bool UserDefinedModule::compile() {
-    debug(0) << "Compiling user-defined module: " << name_ << " from " << path_ << endl;
+    l.in("Module").info("Compiling user-defined module '{}' from {}", name_, path_);
     if (this->built_) {
-        debug(0) << "Module already built: " << name_ << endl;
+        l.in("Module").info("Module '{}' already built", name_);
         return this->built_;
     }
 
@@ -80,6 +78,6 @@ bool UserDefinedModule::compile() {
     gir_ = girConstructor.construct(gct_, diagnostics_);
 
     this->built_ = !diagnostics_->hasErrors();
-    debug(0) << "Module " << name_ << " built: " << (this->built_ ? "success" : "failed") << endl;
+    l.in("Module").debug("Module '{}' built: {}", name_, this->built_ ? "success" : "failed");
     return this->built_;
 }

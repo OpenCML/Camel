@@ -18,10 +18,11 @@
  */
 
 #include "gir.h"
+#include "utils/scope.h"
 #include "utils/log.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL -1
 
 using namespace std;
 
@@ -273,8 +274,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
             currGraph_->addSubGraph(tgtGraph);
-            debug(0) << "Added sub-graph '" << tgtGraph->name() << "' from imported module."
-                     << endl;
+            l.in("GIR").debug("Added sub-graph '{}' from imported module.", tgtGraph->name());
             DataIndex index = graph->addRuntimeConstant(nullptr);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);

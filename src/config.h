@@ -32,6 +32,11 @@ bool parseArgs(int argc, char *argv[]);
 namespace CmdLineArgs {
 extern Command selectedCommand;
 
+namespace Global {
+extern bool verbose;         // Whether to enable verbose output
+extern std::string logLevel; // Log level: debug, info, warn, error, off
+} // namespace Global
+
 namespace Run {
 extern std::string outputFile;
 extern std::string errorFormat;

@@ -12,11 +12,11 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 04, 2025
- * Updated: Sep. 04, 2025
+ * Created: Oct. 19, 2024
+ * Updated: Oct. 19, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "log.h"
+#include "scope.h"
 
-Logger l("");
+size_t __depth__ = 0;

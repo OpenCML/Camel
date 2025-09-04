@@ -12,84 +12,194 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 01, 2024
- * Updated: Oct. 22, 2024
+ * Created: Sep. 04, 2025
+ * Updated: Sep. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <iomanip>
+#include <format>
+#include <string>
+
+#ifdef NDEBUG
+
+class Logger {
+  public:
+    enum class Level { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
+
+    static void SetLogLevel(Level) {}
+    static void SetLogFile(const std::string &) {}
+    static void SetVerbose(bool) {}
+
+    Logger(
+        const std::string & = "", std::shared_ptr<Logger> parent = nullptr,
+        std::optional<Level> localLevel = std::nullopt) {}
+
+    Logger in(const std::string &, std::optional<Level> = std::nullopt) const { return Logger{}; }
+
+    template <typename... Args> void info(std::format_string<Args...>, Args &&...) const {}
+
+    template <typename... Args> void warn(std::format_string<Args...>, Args &&...) const {}
+
+    template <typename... Args> void debug(std::format_string<Args...>, Args &&...) const {}
+
+    template <typename... Args> void error(std::format_string<Args...>, Args &&...) const {}
+};
+
+#else
+
+#include <algorithm>
+#include <chrono>
+#include <ctime>
+#include <fstream>
 #include <iostream>
-#include <sstream>
+#include <memory>
+#include <mutex>
+#include <optional>
 
-#define _red(x) "\033[31m" << x << "\033[0m"
-#define _blue(x) "\033[34m" << x << "\033[0m"
-#define _green(x) "\033[32m" << x << "\033[0m"
-#define _yellow(x) "\033[33m" << x << "\033[0m"
+class Logger {
+  public:
+    enum class Level { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
 
-#define log_info std::cout << _green("[info] ")
-#define log_warn std::cout << _yellow("[warn] ")
-#define log_error std::cout << _red("[error] ")
-#define log_fatal std::cout << _red("[fatal] ")
+    static void SetLogLevel(Level level) { globalLogLevel_ = level; }
 
-extern size_t __depth__;
-
-inline std::string repeatPattern(const std::string &pattern, int n) {
-    std::string result;
-    for (int i = 0; i < n; ++i) {
-        result.append(pattern);
+    static void SetLogFile(const std::string &filename) {
+        std::lock_guard<std::mutex> lock(logMutex_);
+        if (logFile_.is_open()) {
+            logFile_.close();
+        }
+        logFile_.open(filename, std::ios::app);
     }
-    return result;
-}
 
-inline std::string pointerToHex(const void *ptr) {
-    std::stringstream ss;
-    ss << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
-       << reinterpret_cast<uintptr_t>(ptr) << std::dec << std::nouppercase;
-    return ss.str();
-}
+    static void SetVerbose(bool enable) { verboseEnabled_ = enable; }
 
-inline std::string rainbowPattern(int depth) {
-    static const std::string colors[] = {
-        "\033[31m", // Red
-        "\033[33m", // Yellow
-        "\033[32m", // Green
-        "\033[36m", // Cyan
-        "\033[34m", // Blue
-        "\033[35m", // Magenta
-    };
-    const int colorCount = sizeof(colors) / sizeof(colors[0]);
-
-    std::stringstream ss;
-    for (int i = 0; i < depth; ++i) {
-        ss << colors[i % colorCount] << "| " << "\033[0m";
+    Logger(
+        const std::string &scope = "", std::shared_ptr<Logger> parent = nullptr,
+        std::optional<Level> localLevel = std::nullopt)
+        : scope_(scope), parent_(std::move(parent)), localLogLevel_(localLevel) {
+        if (localLogLevel_) {
+            if (parent_) {
+                effectiveLogLevel_ = std::min(*localLogLevel_, parent_->effectiveLogLevel_);
+            } else {
+                effectiveLogLevel_ = std::min(*localLogLevel_, globalLogLevel_);
+            }
+        } else {
+            if (parent_) {
+                effectiveLogLevel_ = parent_->effectiveLogLevel_;
+            } else {
+                effectiveLogLevel_ = globalLogLevel_;
+            }
+        }
     }
-    return ss.str();
-}
 
-// #define DEBUG_LEVEL -1
+    Logger in(const std::string &subScope, std::optional<Level> localLevel = std::nullopt) const {
+        return Logger(
+            scope_.empty() ? subScope : (scope_ + "." + subScope),
+            std::make_shared<Logger>(*this),
+            localLevel);
+    }
 
-#define debug(level)                                                                               \
-    if (level <= DEBUG_LEVEL)                                                                      \
-    std::cout << _blue("   [" #level "] ")
+    template <typename... Args> void info(std::format_string<Args...> fmt, Args &&...args) const {
+        if (verboseEnabled_) {
+            log(Level::Info, std::format(fmt, std::forward<Args>(args)...));
+        }
+    }
 
-#define debug_u(level)                                                                             \
-    if (level <= DEBUG_LEVEL)                                                                      \
-    std::cout
+    template <typename... Args> void warn(std::format_string<Args...> fmt, Args &&...args) const {
+        if (verboseEnabled_) {
+            log(Level::Warn, std::format(fmt, std::forward<Args>(args)...));
+        }
+    }
 
-#define ENTER(target)                                                                              \
-    do {                                                                                           \
-        if (DEBUG_LEVEL > 0) {                                                                     \
-            std::cout << rainbowPattern(__depth__) << _blue("[enter] ") << target << std::endl;    \
-        }                                                                                          \
-        __depth__++;                                                                               \
-    } while (false)
+    template <typename... Args> void debug(std::format_string<Args...> fmt, Args &&...args) const {
+        if (verboseEnabled_) {
+            log(Level::Debug, std::format(fmt, std::forward<Args>(args)...));
+        }
+    }
 
-#define LEAVE(target)                                                                              \
-    do {                                                                                           \
-        __depth__--;                                                                               \
-        if (DEBUG_LEVEL > 0) {                                                                     \
-            std::cout << rainbowPattern(__depth__) << _green("[leave] ") << target << std::endl;   \
-        }                                                                                          \
-    } while (false)
+    template <typename... Args> void error(std::format_string<Args...> fmt, Args &&...args) const {
+        if (verboseEnabled_) {
+            log(Level::Error, std::format(fmt, std::forward<Args>(args)...));
+        }
+    }
+
+  private:
+    std::string scope_;
+    std::shared_ptr<Logger> parent_;
+    std::optional<Level> localLogLevel_;
+    Level effectiveLogLevel_;
+
+    static inline Level globalLogLevel_ = Level::Debug;
+    static inline bool verboseEnabled_ = false;
+    static inline std::ofstream logFile_;
+    static inline std::mutex logMutex_;
+
+    static std::string getCurrentTime() {
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+
+        std::tm tm_buf{};
+#ifdef _WIN32
+        localtime_s(&tm_buf, &now_c);
+#else
+        localtime_r(&now_c, &tm_buf);
+#endif
+
+        char buf[20];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_buf);
+        return buf;
+    }
+
+    static std::string levelToTag(Level level) {
+        switch (level) {
+        case Level::Info:
+            return "\033[1;32mINFO\033[0m";
+        case Level::Warn:
+            return "\033[1;33mWARN\033[0m";
+        case Level::Debug:
+            return "\033[1;36mDEBUG\033[0m";
+        case Level::Error:
+            return "\033[1;31mERROR\033[0m";
+        default:
+            return "UNKNOWN";
+        }
+    }
+
+    static std::string levelToPlain(Level level) {
+        switch (level) {
+        case Level::Info:
+            return "INFO";
+        case Level::Warn:
+            return "WARN";
+        case Level::Debug:
+            return "DEBUG";
+        case Level::Error:
+            return "ERROR";
+        default:
+            return "UNKNOWN";
+        }
+    }
+
+    void log(Level level, const std::string &message) const {
+        if (level < effectiveLogLevel_)
+            return;
+
+        std::string time = getCurrentTime();
+        std::string tag = levelToTag(level);
+        std::string plainTag = levelToPlain(level);
+        std::string fullMessage = std::format("[{}] [{}] [{}] {}", time, plainTag, scope_, message);
+
+        std::lock_guard<std::mutex> lock(logMutex_);
+
+        std::cout << std::format("[{}] [{}] [{}] {}\n", time, tag, scope_, message);
+
+        if (logFile_.is_open()) {
+            logFile_ << fullMessage << std::endl;
+        }
+    }
+};
+
+#endif // NDEBUG
+
+extern Logger l;
