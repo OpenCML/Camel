@@ -54,9 +54,9 @@ module_ptr_t UserDefinedModule::loadFromFile(
 }
 
 bool UserDefinedModule::compile() {
-    l.in("Module").info("Compiling user-defined module '{}' from {}", name_, path_);
+    l.in("Module").info("Compiling module '{}' from file '{}'.", name_, path_);
     if (this->built_) {
-        l.in("Module").info("Module '{}' already built", name_);
+        l.in("Module").warn("Module '{}' already built", name_);
         return this->built_;
     }
 
@@ -78,6 +78,6 @@ bool UserDefinedModule::compile() {
     gir_ = girConstructor.construct(gct_, diagnostics_);
 
     this->built_ = !diagnostics_->hasErrors();
-    l.in("Module").debug("Module '{}' built: {}", name_, this->built_ ? "success" : "failed");
+    l.in("Module").info("Module '{}' built {}", name_, this->built_ ? "successfully." : "failed.");
     return this->built_;
 }

@@ -135,28 +135,12 @@ class Logger {
     static inline std::ofstream logFile_;
     static inline std::mutex logMutex_;
 
-    static std::string getCurrentTime() {
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-
-        std::tm tm_buf{};
-#ifdef _WIN32
-        localtime_s(&tm_buf, &now_c);
-#else
-        localtime_r(&now_c, &tm_buf);
-#endif
-
-        char buf[20];
-        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_buf);
-        return buf;
-    }
-
     static std::string levelToTag(Level level) {
         switch (level) {
         case Level::Info:
-            return "\033[1;32m INFO\033[0m";
+            return "\033[1;32mINFO \033[0m";
         case Level::Warn:
-            return "\033[1;33m WARN\033[0m";
+            return "\033[1;33mWARN \033[0m";
         case Level::Debug:
             return "\033[1;36mDEBUG\033[0m";
         case Level::Error:
@@ -185,14 +169,13 @@ class Logger {
         if (level < effectiveLogLevel_)
             return;
 
-        std::string time = getCurrentTime();
         std::string tag = levelToTag(level);
         std::string plainTag = levelToPlain(level);
-        std::string fullMessage = std::format("[{}] [{}] [{}] {}", time, plainTag, scope_, message);
+        std::string fullMessage = std::format("[{}] <{}> {}", plainTag, scope_, message);
 
         std::lock_guard<std::mutex> lock(logMutex_);
 
-        std::cout << std::format("[{}] [{}] [{}] {}\n", time, tag, scope_, message);
+        std::cout << std::format("[{}] <{}> {}\n", tag, scope_, message);
 
         if (logFile_.is_open()) {
             logFile_ << fullMessage << std::endl;
