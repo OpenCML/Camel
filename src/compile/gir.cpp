@@ -18,8 +18,8 @@
  */
 
 #include "gir.h"
-#include "utils/scope.h"
 #include "utils/log.h"
+#include "utils/scope.h"
 #include "utils/type.h"
 
 #define DEBUG_LEVEL -1
@@ -531,7 +531,7 @@ node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) {
     return nullptr;
 }
 
-void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
+node_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
     auto res = visit(gct->at(0));
     ASSERT(
@@ -543,11 +543,11 @@ void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
         exitNode = nodeModifierMap_[node.get()].lock();
     }
     if (synced_ && lastCalledFuncNode_) {
-        exitNode = lastCalledFuncNode_;
+        Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
     }
     currGraph_->setOutput(exitNode);
     LEAVE("EXIT");
-    return nullptr;
+    return exitNode;
 }
 
 node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {

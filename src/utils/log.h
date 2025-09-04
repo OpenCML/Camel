@@ -154,9 +154,9 @@ class Logger {
     static std::string levelToTag(Level level) {
         switch (level) {
         case Level::Info:
-            return "\033[1;32mINFO\033[0m";
+            return "\033[1;32m INFO\033[0m";
         case Level::Warn:
-            return "\033[1;33mWARN\033[0m";
+            return "\033[1;33m WARN\033[0m";
         case Level::Debug:
             return "\033[1;36mDEBUG\033[0m";
         case Level::Error:
