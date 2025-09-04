@@ -25,26 +25,7 @@
 #include "utils/log.h"
 #include "utils/str.h"
 
-#define DEBUG_LEVEL 0
-
 namespace fs = std::filesystem;
-
-std::ostream &operator<<(std::ostream &os, const EntryConfig &config) {
-    os << "{\n";
-    os << "  entryDir: " << config.entryDir << "\n";
-    os << "  entryFile: " << config.entryFile << "\n";
-    os << "  searchPaths: [";
-    for (size_t i = 0; i < config.searchPaths.size(); ++i) {
-        if (config.searchPaths[i].empty())
-            continue;
-        os << config.searchPaths[i];
-        if (i < config.searchPaths.size() - 1)
-            os << ", ";
-    }
-    os << "]\n";
-    os << "}";
-    return os;
-}
 
 inline bool fileExists(const std::string &path) {
     std::ifstream file(path);
@@ -54,40 +35,43 @@ inline bool fileExists(const std::string &path) {
 Context::Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf) {
     if (auto builtin = getBuiltinModule(""); builtin.has_value()) {
-        debug(0) << "EntryConfig:\n" << entryConf << std::endl;
+        l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
         modules_[""] = builtin.value();
     }
 }
 
 module_ptr_t
 Context::importModule(const std::string &rawModuleName, const std::string &currentModuleName) {
-    debug(0) << "Trying to import module '" << rawModuleName << "' from current module '"
-             << currentModuleName << "'" << std::endl;
+    if (rawModuleName.empty()) {
+        return modules_[""]; // builtin module already loaded
+    }
+
+    l.in("Context").info(
+        "Importing module '{}' from current module '{}'.",
+        rawModuleName,
+        currentModuleName);
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
     for (const auto &name : candidates) {
-        debug(0) << "Checking candidate '" << name << "'" << std::endl;
         auto it = modules_.find(name);
         if (it != modules_.end()) {
-            debug(0) << "Candidate module '" << name << "' found in cache" << std::endl;
+            l.in("Context").debug("Module '{}' found in cache.", name);
             return it->second;
         }
 
         module_ptr_t module = tryLoadModule(name);
         if (module) {
-            debug(0) << "Candidate module '" << name << "' loaded from file: " << module->path()
-                     << std::endl;
+            l.in("Context").debug("Module '{}' loaded from file '{}'.", name, module->path());
             modules_[name] = module;
             return module;
         }
 
         auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
-            debug(0) << "Candidate module '" << name << "' is a built-in module" << std::endl;
+            l.in("Context").debug("Module '{}' found in built-in modules.", name);
             modules_[name] = builtin.value();
             return builtin.value();
         }
-        debug(0) << "Candidate module '" << name << "' not found" << std::endl;
     }
 
     throw CamelBaseException("Module not found '" + rawModuleName);

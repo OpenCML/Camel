@@ -21,7 +21,7 @@
 #include "list.h"
 #include "map.h"
 #include "tuple.h"
-#include "utils/log.h"
+#include "utils/scope.h"
 
 #include "../other/any.h"
 #include "../other/null.h"

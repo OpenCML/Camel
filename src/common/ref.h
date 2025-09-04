@@ -32,6 +32,22 @@ class Reference {
             parse(std::string(cstr));
         }
     }
+    Reference(const std::vector<std::string> &paths, const std::string &ident)
+        : paths_(paths), ident_(ident) {
+        if (ident_.empty()) {
+            throw std::runtime_error("Identifier cannot be empty");
+        }
+    }
+    Reference(const std::vector<std::string> &parts) {
+        if (parts.empty()) {
+            throw std::runtime_error("Reference parts cannot be empty");
+        }
+        ident_ = parts.back();
+        if (ident_.empty()) {
+            throw std::runtime_error("Identifier cannot be empty");
+        }
+        paths_.assign(parts.begin(), parts.end() - 1);
+    }
 
     const std::string &ident() const { return ident_; }
     const std::vector<std::string> &paths() const { return paths_; }

@@ -19,9 +19,10 @@
 
 #include "gir.h"
 #include "utils/log.h"
+#include "utils/scope.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL -1
 
 using namespace std;
 
@@ -263,9 +264,8 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             return opNode;
         }
     }
-    auto optEntity = module_->getImportedEntity(ident);
-    if (optEntity.has_value()) {
-        const auto &e = optEntity.value();
+    if (module_->hasImportedRef(ident)) {
+        const auto &e = module_->getImportedEntity(ident);
         if (std::holds_alternative<GIR::node_ptr_t>(e)) {
             LEAVE("DREF");
             return std::get<GIR::node_ptr_t>(e);
@@ -273,8 +273,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
-            // make imported graph a subgraph of the main graph
-            context_->mainGraph()->addSubGraph(tgtGraph);
+            currGraph_->addSubGraph(tgtGraph);
             DataIndex index = graph->addRuntimeConstant(nullptr);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
@@ -531,7 +530,7 @@ node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) {
     return nullptr;
 }
 
-void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
+node_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
     auto res = visit(gct->at(0));
     ASSERT(
@@ -543,11 +542,11 @@ void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
         exitNode = nodeModifierMap_[node.get()].lock();
     }
     if (synced_ && lastCalledFuncNode_) {
-        exitNode = lastCalledFuncNode_;
+        Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
     }
     currGraph_->setOutput(exitNode);
     LEAVE("EXIT");
-    return nullptr;
+    return exitNode;
 }
 
 node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {

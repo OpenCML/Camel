@@ -1,4 +1,4 @@
-export func lib1(): int sync {
+export func f1(): int sync {
     print("Hello from lib1!")
     return 0
 }

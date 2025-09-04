@@ -18,7 +18,7 @@
  */
 
 #include "graphviz.h"
-#include "utils/log.h"
+#include "utils/scope.h"
 #include "utils/type.h"
 
 using namespace std;

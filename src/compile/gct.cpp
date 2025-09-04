@@ -21,6 +21,7 @@
 #include "common/type/init.h"
 #include "utils/token.h"
 #include "utils/type.h"
+#include "utils/scope.h"
 
 #define DEBUG_LEVEL 0
 
@@ -155,7 +156,13 @@ void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {
             load->tokenRange());
         throw BuildAbortException();
     }
-    module_->importEntities(mod, refs);
+    if (refs.empty()) {
+        module_->importAllRefsFromMod(mod);
+    } else {
+        for (const Reference &ref : refs) {
+            module_->markImportedRefFromMod(ref, mod);
+        }
+    }
     LEAVE("ImportDecl");
     return nullptr;
 }

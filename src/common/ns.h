@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -32,6 +33,38 @@ class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
     using namespace_ptr_t = std::shared_ptr<Namespace<Key, Val>>;
     std::unordered_map<Key, Val> map_;
     std::unordered_map<Key, namespace_ptr_t> innerNamespaces_;
+
+    void forEachImpl(
+        std::vector<std::string> &pathStack,
+        const std::function<void(const Reference &, const Val &)> &visitor) const {
+        for (const auto &[key, val] : map_) {
+            visitor(Reference(pathStack, key), val);
+        }
+
+        for (const auto &[nsName, nsPtr] : innerNamespaces_) {
+            if (nsPtr) {
+                pathStack.push_back(nsName);
+                nsPtr->forEachImpl(pathStack, visitor);
+                pathStack.pop_back();
+            }
+        }
+    }
+
+    void forEachImpl(
+        std::vector<std::string> &pathStack,
+        const std::function<void(const Reference &, Val &)> &visitor) {
+        for (auto &[key, val] : map_) {
+            visitor(Reference(pathStack, key), val);
+        }
+
+        for (auto &[nsName, nsPtr] : innerNamespaces_) {
+            if (nsPtr) {
+                pathStack.push_back(nsName);
+                nsPtr->forEachImpl(pathStack, visitor);
+                pathStack.pop_back();
+            }
+        }
+    }
 
   public:
     Namespace() = default;
@@ -101,5 +134,41 @@ class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
             return valIt->second;
         }
         return std::nullopt;
+    }
+
+    bool has(const Reference &ref)
+        requires std::is_same_v<Key, std::string>
+    {
+        if (ref.empty()) {
+            return false;
+        }
+
+        const Namespace *current = this;
+        for (const auto &ns_name : ref.paths()) {
+            auto it = current->innerNamespaces_.find(ns_name);
+            if (it == current->innerNamespaces_.end())
+                return false;
+            current = it->second.get();
+        }
+
+        if (current->map_.find(ref.ident()) != current->map_.end()) {
+            return true;
+        }
+
+        return false;
+    };
+
+    void forEach(const std::function<void(const Reference &, const Val &)> &visitor) const
+        requires std::is_same_v<Key, std::string>
+    {
+        std::vector<std::string> currentPath;
+        forEachImpl(currentPath, visitor);
+    }
+
+    void forEach(const std::function<void(const Reference &, Val &)> &visitor)
+        requires std::is_same_v<Key, std::string>
+    {
+        std::vector<std::string> currentPath;
+        forEachImpl(currentPath, visitor);
     }
 };

@@ -18,7 +18,7 @@
  */
 
 #include "graph.h"
-#include "utils/log.h"
+#include "utils/scope.h"
 
 using namespace std;
 
