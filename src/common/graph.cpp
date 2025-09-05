@@ -82,8 +82,9 @@ std::optional<graph_ptr_t> Graph::getSubGraph(const std::string &name) {
 void Graph::addSubGraph(const graph_ptr_t &graph) {
     if (graph.get() == this) {
         this->looped_ = true;
-        // Here we do not add it to subGraphs_ to avoid memory leaks caused by self-references
-        // but we mark it as a looped graph
+        // Here we do not add itself to subGraphs_ to
+        // avoid memory leaks caused by self-references
+        // but only mark it as a looped graph
         return;
     }
     // check if the graph to add is already in it

@@ -1,13 +1,13 @@
-with <weights: float, biases: float>
+with <weight: float, bias: float>
 func linear(x: float): float {
-    return weights * x + biases
+    return weight * x + bias
 }
 
 func activation(x: float): float {
     return if x > 0.0 then x else 0.0
 }
 
-with <weights: float, biases: float>
+with <weight: float, bias: float>
 export func dense(x: float): float {
-    return x->linear<weights, biases>
+    return x->linear<weight, bias>->activation
 }

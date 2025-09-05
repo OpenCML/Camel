@@ -27,6 +27,7 @@
 #include "data.h"
 #include "data/other/func.h"
 #include "operator.h"
+#include "utils/log.h"
 #include "utils/type.h"
 
 namespace GraphIntermediateRepresentation {
@@ -65,8 +66,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name) {
         outer_ = graph;
         arena_ = std::make_shared<DataArena>();
+        l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_);
     }
-    ~Graph() = default;
+    ~Graph() { l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_); };
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr, const std::string &name = "") {
         const auto newGraph = std::make_shared<Graph>(graph, name);
