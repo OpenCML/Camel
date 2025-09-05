@@ -19,9 +19,9 @@
 
 #include "gct.h"
 #include "common/type/init.h"
+#include "utils/scope.h"
 #include "utils/token.h"
 #include "utils/type.h"
-#include "utils/scope.h"
 
 #define DEBUG_LEVEL 0
 

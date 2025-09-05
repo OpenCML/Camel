@@ -22,11 +22,14 @@
 #include "common/context.h"
 #include "common/pass.h"
 
+#include <unordered_set>
+
 class GraphVizDumpPass : public GraphIRPass {
     bool showRawPtr = false;
     std::unordered_map<std::string, size_t> ptrCnt_;
     std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
     std::unordered_map<GIR::graph_ptr_t, std::string> lambdaFuncIdents_;
+    std::unordered_set<GIR::graph_ptr_t> visitedGraphs_;
 
     size_t depth_ = 0;
     std::string baseIndent_;

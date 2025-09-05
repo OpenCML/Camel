@@ -158,10 +158,10 @@ int main(int argc, char *argv[]) {
                     .entryFile = targetFile,
                     .searchPaths =
                         {entryDir,
-                         fs::absolute(
-                             fs::path(
-                                 Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                         : Run::stdLibPath))
+                         fs::absolute(fs::path(
+                                          Run::stdLibPath.empty()
+                                              ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                              : Run::stdLibPath))
                              .string(),
                          getEnv("CAMEL_PACKAGES"),
                          getEnv("CAMEL_HOME", camelPath.string())}},

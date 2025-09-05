@@ -136,6 +136,13 @@ void GraphVizDumpPass::reset() {}
 void GraphVizDumpPass::reset(context_ptr_t &context) { context_ = context; }
 
 any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
+    if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
+        // Already visited, skip to avoid duplication
+        return string("");
+    } else {
+        visitedGraphs_.insert(graph);
+    }
+
     string funcId = pointerToIdent(graph.get(), "F");
     string exitId = pointerToIdent(graph->arena().get(), "R");
     string funcName = graph->name().empty() ? lambdaFuncIdents_[graph] : graph->name();

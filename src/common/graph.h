@@ -78,6 +78,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
+    bool isLoop() const { return loop_; }
     arena_ptr_t arena() const { return arena_; }
     graph_ptr_t outer() const {
         if (outer_.expired()) {
@@ -111,6 +112,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
   private:
     std::string name_;
     graph_wptr_t outer_;
+    bool loop_ = false;
     std::vector<graph_ptr_t> subGraphs_;
 
     func_type_ptr_t funcType_;

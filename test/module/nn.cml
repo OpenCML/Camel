@@ -1,0 +1,13 @@
+with <weights: float, biases: float>
+func linear(x: float): float {
+    return weights * x + biases
+}
+
+func activation(x: float): float {
+    return if x > 0.0 then x else 0.0
+}
+
+with <weights: float, biases: float>
+export func dense(x: float): float {
+    return x->linear<weights, biases>
+}

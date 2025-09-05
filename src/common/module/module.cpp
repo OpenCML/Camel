@@ -66,7 +66,7 @@ type_ptr_t Module::getImportedType(const Reference &ref) const {
     auto optType = mod->getExportedType(ref);
     if (!optType.has_value()) {
         throw CamelBaseException(
-            "Imported Error: cannot import type '" + ref.toString() + "' from module '" +
+            "Import Error: cannot import type '" + ref.toString() + "' from module '" +
             mod->name() + "'");
     }
     return optType.value();
@@ -82,7 +82,7 @@ entity Module::getImportedEntity(const Reference &ref) const {
     auto optEntity = mod->getExportedEntity(ref);
     if (!optEntity.has_value()) {
         throw CamelBaseException(
-            "Imported Error: cannot import entity '" + ref.toString() + "' from module '" +
+            "Import Error: cannot import entity '" + ref.toString() + "' from module '" +
             mod->name() + "'");
     }
     return optEntity.value();

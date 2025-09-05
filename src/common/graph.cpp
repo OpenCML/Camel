@@ -80,7 +80,15 @@ std::optional<graph_ptr_t> Graph::getSubGraph(const std::string &name) {
 }
 
 void Graph::addSubGraph(const graph_ptr_t &graph) {
-    // here we assume that the subgraph is a new blank graph
+    if (graph.get() == this) {
+        this->loop_ = true;
+    }
+    // check if the graph to add is already in it
+    for (const auto &subGraph : subGraphs_) {
+        if (subGraph == graph) {
+            return;
+        }
+    }
     subGraphs_.push_back(graph);
 }
 
