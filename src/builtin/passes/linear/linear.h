@@ -12,23 +12,22 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 21, 2024
- * Updated: Mar. 10, 2025
+ * Created: Sep. 05, 2025
+ * Updated: Sep. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "graph.h"
+#include "common/context.h"
+#include "common/pass.h"
 
-class GraphIRPass {
-  protected:
-    context_ptr_t context_;
+class LinearPass : public GraphIRPass {
 
   public:
-    GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
-    virtual ~GraphIRPass() = default;
+    LinearPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~LinearPass() = default;
 
     virtual void reset() = 0;
-    virtual std::any apply(GIR::graph_ptr_t &graph) = 0;
+    virtual std::any apply(GIR::graph_ptr_t &graph) override = 0;
 };

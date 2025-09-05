@@ -46,6 +46,8 @@
 #include "common/module/userdef.h"
 #include "parse/parse.h"
 
+#include "builtin/passes/linear/topo.h"
+
 #include "utils/log.h"
 
 using namespace antlr4;
@@ -204,6 +206,14 @@ int main(int argc, char *argv[]) {
                     mainModule->diagnostics()->dump(os, useJsonFormat);
                     return 1;
                 }
+            }
+
+            if (selectedCommand == Command::Run) {
+                auto gir = ctx->mainGraph();
+                TopoSortLinearPass topoPass(ctx);
+                topoPass.apply(gir);
+                topoPass.dump(os);
+                return 0;
             }
 
         } catch (CamelBaseException &e) {

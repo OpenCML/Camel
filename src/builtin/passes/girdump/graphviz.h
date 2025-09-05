@@ -23,8 +23,6 @@
 #include "common/pass.h"
 
 class GraphVizDumpPass : public GraphIRPass {
-    context_ptr_t context_;
-
     bool showRawPtr = false;
     std::unordered_map<std::string, size_t> ptrCnt_;
     std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
@@ -40,7 +38,7 @@ class GraphVizDumpPass : public GraphIRPass {
     std::string pointerToIdent(const void *ptr, const char *prefix = "N");
 
   public:
-    GraphVizDumpPass(const context_ptr_t &context) : context_(context) {};
+    GraphVizDumpPass(const context_ptr_t &context) : GraphIRPass(context) {};
     virtual ~GraphVizDumpPass() = default;
 
     void reset() override;
