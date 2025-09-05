@@ -1,15 +1,28 @@
 module main
 
-import { sleep } from os
-import { f0 } from lib0
+// import { sleep } from os
+// import { f0 } from lib0
 
 // func f0(): int sync {
 //     // lib1("Hello from lib0!")
 //     return 0
 // }
 
+with <weights: float, biases: float>
+func linear(x: float): float {
+    return weights * x + biases
+}
+
+func activation(x: float): float {
+    return if x > 0.0 then x else 0.0
+}
+
+with <weights: float, biases: float>
+func dense(x: float): float {
+    return x->linear<weights, biases>
+}
+
 export func main(): int sync {
-    f0("Hello, World!")
-    sleep(1000)
+    dense<1, 2>(0)->print
     return 0
 }

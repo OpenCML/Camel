@@ -153,6 +153,20 @@ class Node : public std::enable_shared_from_this<Node> {
     node_vec_t &dataOutputs() { return dataOutputs_; }
     node_vec_t &ctrlOutputs() { return ctrlOutputs_; }
 
+    bool hasLinkedTo(const node_ptr_t &node) const {
+        for (const auto &out : dataOutputs_) {
+            if (out == node) {
+                return true;
+            }
+        }
+        for (const auto &out : ctrlOutputs_) {
+            if (out == node) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     size_t inDegree() const { return normInputs_.size() + withInputs_.size() + ctrlInputs_.size(); }
     size_t outDegree() const { return dataOutputs_.size() + ctrlOutputs_.size(); }
 
@@ -162,6 +176,8 @@ class Node : public std::enable_shared_from_this<Node> {
     virtual data_ptr_t eval(arena_ptr_t arena) const = 0;
 
     static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
+        ASSERT(from && to, "Cannot link null nodes.");
+        ASSERT(from != to, "Cannot link a node to itself.");
         switch (type) {
         case LinkType::Norm:
             from->dataOutputs().push_back(to);

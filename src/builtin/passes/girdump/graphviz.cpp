@@ -171,7 +171,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     }
 
     vector<node_ptr_t> argNodes;
-    if (!graph->isRoot()) {
+    if (!graph->isRoot() && graph->ports().size() > 0) {
         res +=
             baseIndent_ + indent_ + funcId + " [label=\"ARGS\", style=dashed, shape=circle];\r\n";
     }
@@ -276,6 +276,12 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         if (node.get() == retNodePtr) {
             res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + exitId + ";\r\n";
         }
+    }
+    if (graph->nodes().empty() && graph->output() != nullptr) {
+        // Sometimes there are no nodes in the graph, but there are
+        // output nodes captured by closures
+        res += baseIndent_ + indent_ + pointerToIdent(graph->output().get()) + " -> " + exitId +
+               ";\r\n";
     }
 
     res += baseIndent_ + "}\r\n";

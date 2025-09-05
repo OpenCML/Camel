@@ -22,6 +22,10 @@
 #include <string>
 
 template <typename T> T parseNumber(const std::string &input) {
+    static_assert(
+        std::is_integral_v<T> || std::is_floating_point_v<T>,
+        "parseNumber only supports integral and floating point types");
+
     bool isNegative = false;
     T result = 0;
     int base = 10;
@@ -117,7 +121,7 @@ template <typename T> T parseNumber(const std::string &input) {
     }
 
     // Check for overflow/underflow
-    if (result > std::numeric_limits<T>::max() || result < std::numeric_limits<T>::min()) {
+    if (result > std::numeric_limits<T>::max() || result < std::numeric_limits<T>::lowest()) {
         throw std::overflow_error("Number out of range");
     }
 

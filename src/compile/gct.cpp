@@ -81,6 +81,7 @@ void Constructor::initInnerTypes() {
     typeScope_->insert(Reference("string"), stringTypePtr);
     typeScope_->insert(Reference("any"), anyTypePtr);
     typeScope_->insert(Reference("void"), voidTypePtr);
+    typeScope_->insert(Reference("functor"), functorTypePtr);
 }
 
 /*
