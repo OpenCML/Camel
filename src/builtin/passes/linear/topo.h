@@ -30,6 +30,4 @@ class TopoSortLinearPass : public LinearPass {
 
     virtual void reset() override {};
     virtual std::any apply(GIR::graph_ptr_t &graph) override;
-
-    void dump(std::ostream &os);
 };

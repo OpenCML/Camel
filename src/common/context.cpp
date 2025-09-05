@@ -173,9 +173,20 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return nullptr;
 }
 
-GIR::graph_ptr_t Context::mainGraph() const {
+GIR::graph_ptr_t Context::rootGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GIR of main module is not built yet.");
     return gir;
+}
+
+GIR::graph_ptr_t Context::mainGraph() const {
+    ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
+    auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
+    ASSERT(gir != nullptr, "GIR of main module is not built yet.");
+    const auto optMainGraph = gir->getSubGraph("main");
+    if (!optMainGraph.has_value()) {
+        throw CamelBaseException("Main graph not found in GIR of main module.");
+    }
+    return optMainGraph.value();
 }

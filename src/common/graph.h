@@ -98,6 +98,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort();
 
+    std::optional<graph_ptr_t> getSubGraph(const std::string &name);
     void addSubGraph(const graph_ptr_t &graph);
     std::vector<graph_ptr_t> &subGraphs() { return subGraphs_; }
 
@@ -130,6 +131,11 @@ class Node : public std::enable_shared_from_this<Node> {
 
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
+    std::string toString() const {
+        return "Node(" + to_string(nodeType_) + ", " + std::string(dataIndex_.type) + ", " +
+               std::to_string(dataIndex_.index) + ")";
+    }
+    operator std::string() const { return toString(); }
 
     graph_ptr_t graph() const {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
@@ -149,14 +155,6 @@ class Node : public std::enable_shared_from_this<Node> {
 
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
-
-    void ref() { refs_++; }
-    void unref() {
-        if (refs_ > 0) {
-            refs_--;
-        }
-    }
-    size_t refCnt() const { return refs_; }
 
     virtual data_ptr_t eval(arena_ptr_t arena) = 0;
 
@@ -178,7 +176,6 @@ class Node : public std::enable_shared_from_this<Node> {
     }
 
   protected:
-    size_t refs_ = 0;
     bool macro_ = false;
     bool const_ = false;
 

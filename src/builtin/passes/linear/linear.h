@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include "common/context.h"
 #include "common/pass.h"
 
 class LinearPass : public GraphIRPass {
@@ -28,6 +27,6 @@ class LinearPass : public GraphIRPass {
     LinearPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~LinearPass() = default;
 
-    virtual void reset() = 0;
+    virtual void reset() override = 0;
     virtual std::any apply(GIR::graph_ptr_t &graph) override = 0;
 };

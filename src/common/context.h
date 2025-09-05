@@ -79,6 +79,7 @@ class Context : public std::enable_shared_from_this<Context> {
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     DiagnosticsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
+    GIR::graph_ptr_t rootGraph() const;
     GIR::graph_ptr_t mainGraph() const;
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }

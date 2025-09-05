@@ -70,6 +70,15 @@ node_ptr_t Graph::addPort() {
     return portNode;
 }
 
+std::optional<graph_ptr_t> Graph::getSubGraph(const std::string &name) {
+    for (const auto &subGraph : subGraphs_) {
+        if (subGraph->name_ == name) {
+            return subGraph;
+        }
+    }
+    return std::nullopt;
+}
+
 void Graph::addSubGraph(const graph_ptr_t &graph) {
     // here we assume that the subgraph is a new blank graph
     subGraphs_.push_back(graph);

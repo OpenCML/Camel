@@ -158,10 +158,10 @@ int main(int argc, char *argv[]) {
                     .entryFile = targetFile,
                     .searchPaths =
                         {entryDir,
-                         fs::absolute(fs::path(
-                                          Run::stdLibPath.empty()
-                                              ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                              : Run::stdLibPath))
+                         fs::absolute(
+                             fs::path(
+                                 Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                         : Run::stdLibPath))
                              .string(),
                          getEnv("CAMEL_PACKAGES"),
                          getEnv("CAMEL_HOME", camelPath.string())}},
@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
                 }
                 if (Inspect::dumpGIR && mainModule->gir()) {
                     GraphVizDumpPass pass(ctx);
-                    auto gir = ctx->mainGraph();
+                    auto gir = ctx->rootGraph();
                     auto res = pass.apply(gir);
                     os << any_cast<string>(res);
                 }
@@ -209,10 +209,13 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Run) {
-                auto gir = ctx->mainGraph();
+                auto entry = ctx->mainGraph();
                 TopoSortLinearPass topoPass(ctx);
-                topoPass.apply(gir);
-                topoPass.dump(os);
+                const auto &nodes =
+                    std::any_cast<std::vector<GIR::node_ptr_t>>(topoPass.apply(entry));
+                for (const auto &node : nodes) {
+                    os << node->toString() << std::endl;
+                }
                 return 0;
             }
 

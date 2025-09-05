@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "context.h"
 #include "graph.h"
 
 class GraphIRPass {
