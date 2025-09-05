@@ -28,7 +28,10 @@ class TopoNodeSeqDumpPass : public LinearSchedPass {
     TopoNodeSeqDumpPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
     virtual ~TopoNodeSeqDumpPass() = default;
 
-    virtual std::any apply(GIR::graph_ptr_t &graph) override;
+    virtual std::any apply(GIR::graph_ptr_t &graph) override {
+        return apply(const_cast<const GIR::graph_ptr_t &>(graph));
+    }
+    virtual std::any apply(const GIR::graph_ptr_t &graph) override;
 };
 
 class TopoExecLinearSchedPass : public LinearSchedPass {
@@ -38,4 +41,5 @@ class TopoExecLinearSchedPass : public LinearSchedPass {
     virtual ~TopoExecLinearSchedPass() = default;
 
     virtual std::any apply(GIR::graph_ptr_t &graph) override { return nullptr; };
+    virtual std::any apply(const GIR::graph_ptr_t &graph) override { return nullptr; };
 };

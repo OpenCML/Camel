@@ -24,4 +24,4 @@
 
 using namespace GIR;
 
-std::any TopoNodeSeqDumpPass::apply(GIR::graph_ptr_t &graph) { return nullptr; }
+std::any TopoNodeSeqDumpPass::apply(const GIR::graph_ptr_t &graph) { return nullptr; }

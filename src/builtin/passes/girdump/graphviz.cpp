@@ -131,7 +131,7 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
+any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         // Already visited, skip to avoid duplication
         return string("");
@@ -141,7 +141,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
 
     string funcId = pointerToIdent(graph.get(), "F");
     string exitId = pointerToIdent(graph->arena().get(), "R");
-    string funcName = graph->name().empty() ? lambdaFuncIdents_[graph] : graph->name();
+    string funcName = graph->name();
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
     void *retNodePtr = graph->output().get();
@@ -163,13 +163,18 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         res += baseIndent_ + indent_ + "label=\"" + funcName + "\";\r\n";
     }
 
-    size_t lambdaFuncCnt = 0;
-    for (auto &subGraph : graph->subGraphs()) {
+    for (auto &[_, subGraph] : graph->subGraphs()) {
+        l.in("GraphViz")
+            .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name());
         pushIndent();
-        if (subGraph->name().empty()) {
-            lambdaFuncIdents_[subGraph] = "__F" + to_string(lambdaFuncCnt++) + "__";
-        }
         res += any_cast<string>(apply(subGraph));
+        popIndent();
+    }
+    for (const auto &dep : graph->dependencies()) {
+        l.in("GraphViz")
+            .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name());
+        pushIndent();
+        res += any_cast<string>(apply(dep));
         popIndent();
     }
 
@@ -223,7 +228,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         }
         case NodeType::Function: {
             func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
-            label = func->name().empty() ? lambdaFuncIdents_[func->graph()] : func->name();
+            label = func->name().empty() ? func->graph()->name() : func->name();
             shape = "Mdiamond";
             size = "width=1.1, height=1.1";
             break;

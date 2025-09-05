@@ -259,9 +259,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             // TODO: generate data as the return value of a function
             DataIndex index = graph->addRuntimeConstant(nullptr);
             graph_ptr_t &tgtGraph = graphs->front();
-            // Ensure that all used graphs are subgraphs of the current graph
-            // addSubGraph will check and avoid duplicate additions
-            currGraph_->addSubGraph(tgtGraph);
+            currGraph_->addDependency(tgtGraph);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
             LEAVE("DREF");
@@ -288,9 +286,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
-            // Ensure that all imported graphs are subgraphs of the current graph
-            // addSubGraph will check and avoid duplicate additions
-            currGraph_->addSubGraph(tgtGraph);
+            currGraph_->addDependency(tgtGraph);
             DataIndex index = graph->addRuntimeConstant(nullptr);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);

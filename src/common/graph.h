@@ -61,6 +61,22 @@ using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;
 using node_vec_t = std::vector<node_ptr_t>;
 
+struct WeakPtrHash {
+    template <typename T> std::size_t operator()(const std::weak_ptr<T> &wp) const {
+        if (auto sp = wp.lock()) {
+            return std::hash<T *>()(sp.get());
+        }
+        return 0;
+    }
+};
+
+struct WeakPtrEqual {
+    template <typename T>
+    bool operator()(const std::weak_ptr<T> &lhs, const std::weak_ptr<T> &rhs) const {
+        return !lhs.owner_before(rhs) && !rhs.owner_before(lhs);
+    }
+};
+
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
     Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name) {
@@ -71,7 +87,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     ~Graph() { l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_); };
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr, const std::string &name = "") {
-        const auto newGraph = std::make_shared<Graph>(graph, name);
+        static int anonymousIdx = 0;
+        std::string graphName = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
+        const auto newGraph = std::make_shared<Graph>(graph, graphName);
         if (graph) {
             graph->addSubGraph(newGraph);
         }
@@ -98,12 +116,40 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void setFuncType(const func_type_ptr_t &type);
     func_type_ptr_t funcType() const;
 
+    std::optional<graph_ptr_t> getSubGraph(const std::string &name) {
+        if (subGraphs_.find(name) != subGraphs_.end()) {
+            return subGraphs_[name];
+        }
+        return std::nullopt;
+    }
+    void addSubGraph(const graph_ptr_t &graph) {
+        ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
+        ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
+        ASSERT(
+            subGraphs_.find(graph->name()) == subGraphs_.end(),
+            std::format("Graph '{}' already has a subgraph named '{}'.", name_, graph->name()));
+        subGraphs_[graph->name()] = graph;
+        graph->outer_ = shared_from_this();
+    }
+    std::unordered_map<std::string, graph_ptr_t> &subGraphs() { return subGraphs_; }
+
+    std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> &dependents() {
+        return dependents_;
+    }
+    std::unordered_set<graph_ptr_t> &dependencies() { return dependencies_; }
+    void addDependency(const graph_ptr_t &graph) {
+        if (graph.get() == this) {
+            this->looped_ = true;
+            // Here we do not add itself to dependencies_ to avoid self-references
+            // but only mark it as a looped graph
+            return;
+        }
+        dependencies_.insert(graph);
+        graph->dependents_.insert(shared_from_this());
+    }
+
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort();
-
-    std::optional<graph_ptr_t> getSubGraph(const std::string &name);
-    void addSubGraph(const graph_ptr_t &graph);
-    std::vector<graph_ptr_t> &subGraphs() { return subGraphs_; }
 
     const node_ptr_t &output() const { return output_; }
     void setOutput(const node_ptr_t &node);
@@ -112,10 +158,13 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_vec_t &nodes() { return nodes_; }
 
   private:
+    bool looped_ = false;
     std::string name_;
     graph_wptr_t outer_;
-    bool looped_ = false;
-    std::vector<graph_ptr_t> subGraphs_;
+
+    std::unordered_map<std::string, graph_ptr_t> subGraphs_;
+    std::unordered_set<graph_ptr_t> dependencies_;
+    std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> dependents_;
 
     func_type_ptr_t funcType_;
     arena_ptr_t arena_;

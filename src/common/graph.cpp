@@ -70,32 +70,6 @@ node_ptr_t Graph::addPort() {
     return portNode;
 }
 
-std::optional<graph_ptr_t> Graph::getSubGraph(const std::string &name) {
-    for (const auto &subGraph : subGraphs_) {
-        if (subGraph->name_ == name) {
-            return subGraph;
-        }
-    }
-    return std::nullopt;
-}
-
-void Graph::addSubGraph(const graph_ptr_t &graph) {
-    if (graph.get() == this) {
-        this->looped_ = true;
-        // Here we do not add itself to subGraphs_ to
-        // avoid memory leaks caused by self-references
-        // but only mark it as a looped graph
-        return;
-    }
-    // check if the graph to add is already in it
-    for (const auto &subGraph : subGraphs_) {
-        if (subGraph == graph) {
-            return;
-        }
-    }
-    subGraphs_.push_back(graph);
-}
-
 void Graph::setOutput(const node_ptr_t &node) {
     ASSERT(output_ == nullptr, "Output node has already been set.");
     output_ = node;

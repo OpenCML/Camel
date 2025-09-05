@@ -28,7 +28,6 @@ class GraphVizDumpPass : public GraphIRPass {
     bool showRawPtr = false;
     std::unordered_map<std::string, size_t> ptrCnt_;
     std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
-    std::unordered_map<GIR::graph_ptr_t, std::string> lambdaFuncIdents_;
     std::unordered_set<GIR::graph_ptr_t> visitedGraphs_;
 
     size_t depth_ = 0;
@@ -44,5 +43,8 @@ class GraphVizDumpPass : public GraphIRPass {
     GraphVizDumpPass(const context_ptr_t &context) : GraphIRPass(context) {};
     virtual ~GraphVizDumpPass() = default;
 
-    std::any apply(GIR::graph_ptr_t &graph) override;
+    std::any apply(GIR::graph_ptr_t &graph) override {
+        return apply(const_cast<const GIR::graph_ptr_t &>(graph));
+    }
+    std::any apply(const GIR::graph_ptr_t &graph) override;
 };
