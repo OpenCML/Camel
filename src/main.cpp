@@ -189,10 +189,16 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGCT && mainModule->gct()) {
                     mainModule->gct()->print(os);
                 }
-                if (Inspect::dumpGIR && mainModule->gir()) {
+                if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
-                    auto gir = ctx->rootGraph();
-                    auto res = pass.apply(gir);
+                    auto root = ctx->rootGraph();
+                    auto res = pass.apply(root);
+                    os << any_cast<string>(res);
+                }
+                if (Inspect::dumpTNS && ctx->mainGraph()) {
+                    auto entry = ctx->mainGraph();
+                    TopoNodeSeqDumpPass pass(ctx);
+                    auto res = pass.apply(entry);
                     os << any_cast<string>(res);
                 }
                 return 0;
@@ -206,17 +212,6 @@ int main(int argc, char *argv[]) {
                     mainModule->diagnostics()->dump(os, useJsonFormat);
                     return 1;
                 }
-            }
-
-            if (selectedCommand == Command::Run) {
-                auto entry = ctx->mainGraph();
-                TopoSortLinearPass topoPass(ctx);
-                const auto &nodes =
-                    std::any_cast<std::vector<GIR::node_ptr_t>>(topoPass.apply(entry));
-                for (const auto &node : nodes) {
-                    os << node->toString() << std::endl;
-                }
-                return 0;
             }
 
         } catch (CamelBaseException &e) {

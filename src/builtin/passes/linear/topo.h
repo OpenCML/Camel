@@ -22,12 +22,20 @@
 #include "linear.h"
 #include "ostream"
 
-class TopoSortLinearPass : public LinearPass {
+class TopoNodeSeqDumpPass : public LinearSchedPass {
 
   public:
-    TopoSortLinearPass(const context_ptr_t &ctx) : LinearPass(ctx) {};
-    virtual ~TopoSortLinearPass() = default;
+    TopoNodeSeqDumpPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
+    virtual ~TopoNodeSeqDumpPass() = default;
 
-    virtual void reset() override {};
     virtual std::any apply(GIR::graph_ptr_t &graph) override;
+};
+
+class TopoExecLinearSchedPass : public LinearSchedPass {
+
+  public:
+    TopoExecLinearSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
+    virtual ~TopoExecLinearSchedPass() = default;
+
+    virtual std::any apply(GIR::graph_ptr_t &graph) override { return nullptr; };
 };

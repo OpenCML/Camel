@@ -72,10 +72,11 @@ extern unsigned int maxWaring;     // Max warnings
 
 namespace Inspect {
 extern bool dumpTokens; // Whether to dump tokens
-extern bool dumpCST;    // Whether to dump CST
-extern bool dumpAST;    // Whether to dump AST
-extern bool dumpGCT;    // Whether to dump GCT
-extern bool dumpGIR;    // Whether to dump GIR
+extern bool dumpCST;    // Whether to dump Concrete Syntax Tree
+extern bool dumpAST;    // Whether to dump Abstract Syntax Tree
+extern bool dumpGCT;    // Whether to dump Graph Construction Tree
+extern bool dumpGIR;    // Whether to dump Graph Intermediate Representation
+extern bool dumpTNS;    // Whether to dump Topological Node Sequence
 extern int passUntil;   // Pass until the given pass
 } // namespace Inspect
 

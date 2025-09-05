@@ -76,10 +76,11 @@ unsigned int maxWaring = 1000; // Max warnings
 
 namespace Inspect {
 bool dumpTokens = false; // Whether to dump tokens
-bool dumpCST = false;    // Whether to dump CST
-bool dumpAST = false;    // Whether to dump AST
-bool dumpGCT = false;    // Whether to dump GCT
-bool dumpGIR = false;    // Whether to dump GIR
+bool dumpCST = false;    // Whether to dump Concrete Syntax Tree
+bool dumpAST = false;    // Whether to dump Abstract Syntax Tree
+bool dumpGCT = false;    // Whether to dump Graph Construction Tree
+bool dumpGIR = false;    // Whether to dump Graph Intermediate Representation
+bool dumpTNS = false;    // Whether to dump Topological Node Sequence
 int passUntil = -1;      // Pass until the given pass
 } // namespace Inspect
 
@@ -229,8 +230,8 @@ bool parseArgs(int argc, char *argv[]) {
          option("--cst", "--concrete-syntax-tree").set(dumpCST) % "dump concrete syntax tree",
          option("--ast", "--abstract-syntax-tree").set(dumpAST) % "dump abstract syntax tree",
          option("--gct", "--graph-construct-tree").set(dumpGCT) % "dump graph construct tree",
-         option("--gir", "--graph-intermediate-representation").set(dumpGIR) %
-             "dump graph intermediate representation",
+         option("--gir", "--graph-ir").set(dumpGIR) % "dump graph intermediate representation",
+         option("--tns", "--topo-node-seq").set(dumpTNS) % "dump topological sorted node sequence",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",
          globalOps,

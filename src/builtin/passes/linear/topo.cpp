@@ -24,47 +24,4 @@
 
 using namespace GIR;
 
-std::any TopoSortLinearPass::apply(GIR::graph_ptr_t &graph) {
-    const auto &nodes = graph->nodes();
-    l.in("Topo").info(
-        "Starting topological sort on graph '{}' with {} nodes.",
-        graph->name(),
-        nodes.size());
-
-    std::unordered_map<node_ptr_t, size_t> inDegrees;
-    std::queue<node_ptr_t> zeroInDegreeQueue;
-    std::vector<node_ptr_t> sortedNodes;
-
-    for (const auto &node : nodes) {
-        l.in("Topo").debug("Visiting node: {}", node->toString());
-        size_t indeg = node->inDegree();
-        inDegrees[node] = indeg;
-        if (indeg == 0) {
-            l.in("Topo").debug("Push zero in-degree node: {}", node->toString());
-            zeroInDegreeQueue.push(node);
-        }
-    }
-
-    while (!zeroInDegreeQueue.empty()) {
-        node_ptr_t current = zeroInDegreeQueue.front();
-        zeroInDegreeQueue.pop();
-        l.in("Topo").debug("Append node to sorted list: {}", current->toString());
-        sortedNodes.push_back(current);
-
-        for (const auto &neighbor : current->dataOutputs()) {
-            if (--inDegrees[neighbor] == 0) {
-                l.in("Topo").debug("New zero in-degree node: {}", neighbor->toString());
-                zeroInDegreeQueue.push(neighbor);
-            }
-        }
-
-        for (const auto &neighbor : current->ctrlOutputs()) {
-            if (--inDegrees[neighbor] == 0) {
-                l.in("Topo").debug("New zero in-degree node: {}", neighbor->toString());
-                zeroInDegreeQueue.push(neighbor);
-            }
-        }
-    }
-
-    return std::make_any<std::vector<node_ptr_t>>(sortedNodes);
-}
+std::any TopoNodeSeqDumpPass::apply(GIR::graph_ptr_t &graph) { return nullptr; }

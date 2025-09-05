@@ -44,7 +44,5 @@ class GraphVizDumpPass : public GraphIRPass {
     GraphVizDumpPass(const context_ptr_t &context) : GraphIRPass(context) {};
     virtual ~GraphVizDumpPass() = default;
 
-    void reset() override;
-    void reset(context_ptr_t &context);
     std::any apply(GIR::graph_ptr_t &graph) override;
 };

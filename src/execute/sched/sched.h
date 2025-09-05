@@ -19,8 +19,12 @@
 
 #pragma once
 
-class Scheduler {
+#include "common/pass.h"
+
+class SchedulePass : public GraphIRPass {
   public:
-    virtual void schedule() = 0;
-    virtual ~Scheduler() = default;
+    SchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~SchedulePass() = default;
+
+    virtual std::any apply(GIR::graph_ptr_t &graph) override = 0;
 };

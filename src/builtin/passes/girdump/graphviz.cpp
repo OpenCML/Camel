@@ -131,10 +131,6 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-void GraphVizDumpPass::reset() {}
-
-void GraphVizDumpPass::reset(context_ptr_t &context) { context_ = context; }
-
 any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         // Already visited, skip to avoid duplication
