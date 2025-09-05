@@ -195,7 +195,7 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
         }
         case NodeType::Access: {
             auto accessNode = tt::as_shared<AccessNode>(node);
-            label = "$" + accessNode->indexAsString();
+            label = "$" + accessNode->index2String();
             break;
         }
         case NodeType::Struct: {
