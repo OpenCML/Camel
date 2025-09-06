@@ -1,6 +1,6 @@
-import { lib1 } from lib.lib1
+import { f1 } from lib.lib1
 
-export func lib0(): int sync {
-    lib1("Hello from lib0!")
+export func f0(): int sync {
+    f1("Hello from lib0!")
     return 0
 }

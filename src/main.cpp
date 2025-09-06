@@ -42,10 +42,13 @@
 #include "service/formatter/fmt.h"
 #include "service/profiler/trace.h"
 #include "utils/env.h"
-#include "utils/log.h"
 
 #include "common/module/userdef.h"
 #include "parse/parse.h"
+
+#include "builtin/passes/linear/topo.h"
+
+#include "utils/log.h"
 
 using namespace antlr4;
 using namespace std;
@@ -74,14 +77,16 @@ int main(int argc, char *argv[]) {
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
         input = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
+        l.in("Main").info("Reading from standard input.");
     } else {
         targetFile = Run::targetFiles[0];
         auto file = std::make_unique<std::ifstream>(targetFile);
         if (!file->is_open()) {
-            log_error << "Error opening file " << targetFile << endl;
+            std::cerr << "Error: Cannot open file " << targetFile << endl;
             return 1;
         }
         input = std::move(file);
+        l.in("Main").info("Reading from file '{}'.", targetFile);
     }
 
     chrono::high_resolution_clock::time_point startTime, endTime;
@@ -134,7 +139,7 @@ int main(int argc, char *argv[]) {
                         ast->print(os);
                     }
                 }
-                if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
+                if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
                     // Inspect Command ends here if only
                     // tokens, CST or AST is requested
                     return 0;
@@ -153,10 +158,10 @@ int main(int argc, char *argv[]) {
                     .entryFile = targetFile,
                     .searchPaths =
                         {entryDir,
-                         fs::absolute(
-                             fs::path(
-                                 Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                         : Run::stdLibPath))
+                         fs::absolute(fs::path(
+                                          Run::stdLibPath.empty()
+                                              ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                              : Run::stdLibPath))
                              .string(),
                          getEnv("CAMEL_PACKAGES"),
                          getEnv("CAMEL_HOME", camelPath.string())}},
@@ -184,10 +189,16 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGCT && mainModule->gct()) {
                     mainModule->gct()->print(os);
                 }
-                if (Inspect::dumpGIR && mainModule->gir()) {
+                if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
-                    auto gir = ctx->mainGraph();
-                    auto res = pass.apply(gir);
+                    auto root = ctx->rootGraph();
+                    auto res = pass.apply(root);
+                    os << any_cast<string>(res);
+                }
+                if (Inspect::dumpTNS && ctx->mainGraph()) {
+                    auto entry = ctx->mainGraph();
+                    TopoNodeSeqDumpPass pass(ctx);
+                    auto res = pass.apply(entry);
                     os << any_cast<string>(res);
                 }
                 return 0;
@@ -218,7 +229,7 @@ int main(int argc, char *argv[]) {
             endTime = chrono::high_resolution_clock::now();
             auto duration =
                 chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            log_info << "Time used " << duration << " us" << endl;
+            l.in("Main").info("Time used: {} us", duration);
         }
     }
 

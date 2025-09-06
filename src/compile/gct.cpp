@@ -19,6 +19,7 @@
 
 #include "gct.h"
 #include "common/type/init.h"
+#include "utils/scope.h"
 #include "utils/token.h"
 #include "utils/type.h"
 
@@ -80,6 +81,7 @@ void Constructor::initInnerTypes() {
     typeScope_->insert(Reference("string"), stringTypePtr);
     typeScope_->insert(Reference("any"), anyTypePtr);
     typeScope_->insert(Reference("void"), voidTypePtr);
+    typeScope_->insert(Reference("functor"), functorTypePtr);
 }
 
 /*
@@ -155,7 +157,13 @@ void_ptr_t Constructor::visitImport(const AST::node_ptr_t &ast) {
             load->tokenRange());
         throw BuildAbortException();
     }
-    module_->importEntities(mod, refs);
+    if (refs.empty()) {
+        module_->importAllRefsFromMod(mod);
+    } else {
+        for (const Reference &ref : refs) {
+            module_->markImportedRefFromMod(ref, mod);
+        }
+    }
     LEAVE("ImportDecl");
     return nullptr;
 }

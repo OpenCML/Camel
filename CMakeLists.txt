@@ -29,6 +29,7 @@ file(GLOB_RECURSE SRC_FILES
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
+add_definitions(-DNOMINMAX)
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)

@@ -30,9 +30,30 @@ struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path
     std::vector<std::string> searchPaths; // search paths for modules
-};
 
-std::ostream &operator<<(std::ostream &os, const EntryConfig &config);
+    std::string toString() const {
+        std::ostringstream os;
+        os << "{\n";
+        os << "  entryDir: " << entryDir << "\n";
+        os << "  entryFile: " << entryFile << "\n";
+        os << "  searchPaths: [";
+
+        bool first = true;
+        for (const auto &path : searchPaths) {
+            if (path.empty())
+                continue;
+            if (!first) {
+                os << ", ";
+            }
+            os << path;
+            first = false;
+        }
+
+        os << "]\n";
+        os << "}";
+        return os.str();
+    }
+};
 
 class Context : public std::enable_shared_from_this<Context> {
     EntryConfig entryConfig_;
@@ -58,6 +79,7 @@ class Context : public std::enable_shared_from_this<Context> {
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     DiagnosticsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
+    GIR::graph_ptr_t rootGraph() const;
     GIR::graph_ptr_t mainGraph() const;
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }

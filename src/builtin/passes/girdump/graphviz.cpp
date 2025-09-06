@@ -18,7 +18,7 @@
  */
 
 #include "graphviz.h"
-#include "utils/log.h"
+#include "utils/scope.h"
 #include "utils/type.h"
 
 using namespace std;
@@ -131,71 +131,85 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-void GraphVizDumpPass::reset() {}
+any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
+    if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
+        // Skip if the graph has already been visited to avoid duplication
+        return string("");
+    } else {
+        visitedGraphs_.insert(graph);
+    }
 
-void GraphVizDumpPass::reset(context_ptr_t &context) { context_ = context; }
-
-any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
     string funcId = pointerToIdent(graph.get(), "F");
     string exitId = pointerToIdent(graph->arena().get(), "R");
-    string funcName = graph->name().empty() ? lambdaFuncIdents_[graph] : graph->name();
+    string funcName = graph->name();
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
     void *retNodePtr = graph->output().get();
 
     res += baseIndent_;
+
     if (depth_ == 0) {
-        res += string("digraph GraphIR {\r\n") +
-               string("    graph [rankdir=LR, fontsize=18];\r\n") +
-               string("    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n") +
-               string("    edge [minlen=2];\r\n");
+        res += std::format(
+            "digraph GraphIR {{\r\n"
+            "    graph [rankdir=LR, fontsize=18];\r\n"
+            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+            "    edge [minlen=2];\r\n");
     } else {
+        // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
         for (size_t i = 0; i < graph->ports().size(); i++) {
             const string name = type->argNameAt(i);
             bool isVar = type->variableMap().at(name);
             portsNameMap[i] = make_pair(name, isVar);
         }
-        res += "subgraph cluster_" + funcId + " {\r\n";
-        res += baseIndent_ + indent_ + "label=\"" + funcName + "\";\r\n";
+
+        res += std::format("subgraph cluster_{} {{\r\n", funcId);
+        res += std::format("{}{}label=\"{}\";\r\n", baseIndent_, indent_, funcName);
     }
 
-    size_t lambdaFuncCnt = 0;
-    for (auto &subGraph : graph->subGraphs()) {
+    // Recursively dump subgraphs first
+    for (auto &[_, subGraph] : graph->subGraphs()) {
+        l.in("GraphViz")
+            .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name());
         pushIndent();
-        if (subGraph->name().empty()) {
-            lambdaFuncIdents_[subGraph] = "__F" + to_string(lambdaFuncCnt++) + "__";
-        }
         res += any_cast<string>(apply(subGraph));
         popIndent();
     }
 
-    vector<node_ptr_t> argNodes;
-    if (!graph->isRoot()) {
-        res +=
-            baseIndent_ + indent_ + funcId + " [label=\"ARGS\", style=dashed, shape=circle];\r\n";
+    // Dump dependency graphs if any
+    for (const auto &dep : graph->dependencies()) {
+        l.in("GraphViz")
+            .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name());
+        pushIndent();
+        res += any_cast<string>(apply(dep));
+        popIndent();
     }
+
+    // Draw ARGS node to represent function arguments
+    if (!graph->isRoot() && !graph->ports().empty()) {
+        res += std::format(
+            "{}{}{} [label=\"ARGS\", style=dashed, shape=circle];\r\n",
+            baseIndent_,
+            indent_,
+            funcId);
+    }
+
+    // Draw nodes inside the graph
     const node_vec_t &nodes = graph->nodes();
-    for (size_t i = 0; i < nodes.size(); i++) {
-        string label;
-        const node_ptr_t &node = nodes[i];
-        string shape = "circle";
-        string style = "solid";
-        string size = "";
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        const auto &node = nodes[i];
+        string label, shape = "circle", style = "solid", size;
+
         switch (node->type()) {
         case NodeType::Select: {
             auto selectNode = tt::as_shared<SelectNode>(node);
-            if (selectNode->selectType() == SelectNode::SelectType::Branch) {
-                label = "BRCH";
-            } else {
-                label = "JOIN";
-            }
+            label = selectNode->selectType() == SelectNode::SelectType::Branch ? "BRCH" : "JOIN";
             shape = "diamond";
             break;
         }
         case NodeType::Access: {
             auto accessNode = tt::as_shared<AccessNode>(node);
-            label = "$" + accessNode->indexAsString();
+            label = "$" + accessNode->index2String();
             break;
         }
         case NodeType::Struct: {
@@ -206,21 +220,18 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
             break;
         }
         case NodeType::Source: {
-            if (portsNameMap.find(i) != portsNameMap.end()) {
+            if (portsNameMap.contains(i)) {
                 label = portsNameMap[i].first;
                 style = "dashed";
-                argNodes.push_back(node);
             } else {
-                if (node->type() == NodeType::Source) {
-                    data_ptr_t data = node->eval(graph->arena());
-                    label = data->toString();
-                }
+                data_ptr_t data = node->eval(graph->arena());
+                label = data->toString();
             }
             break;
         }
         case NodeType::Function: {
             func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
-            label = func->name().empty() ? lambdaFuncIdents_[func->graph()] : func->name();
+            label = func->name().empty() ? func->graph()->name() : func->name();
             shape = "Mdiamond";
             size = "width=1.1, height=1.1";
             break;
@@ -232,50 +243,102 @@ any GraphVizDumpPass::apply(GIR::graph_ptr_t &graph) {
             break;
         }
         default:
-            throw runtime_error("Unknown node type");
+            throw runtime_error("Unknown node type encountered during GraphViz generation.");
         }
-        res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " [label=\"" +
-               escape(wrapText(label, 8, 2)) + "\", shape=" + shape + ", style=" + style +
-               (size.empty() ? ("") : (", " + size)) + "];\r\n";
-    }
-    if (!graph->isRoot()) {
-        res += baseIndent_ + indent_ + exitId +
-               " [label=\"RETN\", shape=doublecircle, width=0.9, height=0.9];\r\n";
+
+        res += std::format(
+            "{}{}{} [label=\"{}\", shape={}, style={}{}];\r\n",
+            baseIndent_,
+            indent_,
+            pointerToIdent(node.get()),
+            escape(wrapText(label, 8, 2)),
+            shape,
+            style,
+            size.empty() ? "" : ", " + size);
     }
 
-    for (const auto &node : argNodes) {
-        res += baseIndent_ + indent_ + funcId + " -> " + pointerToIdent(node.get()) +
-               " [style=dashed, arrowhead=empty];\r\n";
+    // Draw return node if not root
+    if (!graph->isRoot()) {
+        res += std::format(
+            "{}{}{} [label=\"RETN\", shape=doublecircle, width=0.9, height=0.9];\r\n",
+            baseIndent_,
+            indent_,
+            exitId);
     }
+
+    // Connect ARGS node to port nodes
+    size_t withIdx = 0, normIdx = 0;
+    for (const auto &[_, portNode, isWithArg] : graph->ports()) {
+        string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
+        res += std::format(
+            "{}{}{} -> {} [label=\"{}\", style={}];\r\n",
+            baseIndent_,
+            indent_,
+            funcId,
+            pointerToIdent(portNode.get()),
+            isWithArg ? withIdx++ : normIdx++,
+            style);
+    }
+
+    // Connect nodes via input edges
     for (const auto &node : graph->nodes()) {
-        auto vec = node->normInputs();
-        for (size_t i = 0; i < vec.size(); i++) {
-            if (vec[i] == nullptr) {
-                continue;
+        auto withInputs = node->withInputs();
+        for (size_t i = 0; i < withInputs.size(); ++i) {
+            if (withInputs[i]) {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}\", style=dashed];\r\n",
+                    baseIndent_,
+                    indent_,
+                    pointerToIdent(withInputs[i].get()),
+                    pointerToIdent(node.get()),
+                    i);
             }
-            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
-                   pointerToIdent(node.get()) + " [label=\"" + to_string(i) + "\"];\r\n";
         }
-        vec = node->withInputs();
-        for (size_t i = 0; i < vec.size(); i++) {
-            if (vec[i] == nullptr) {
-                continue;
+
+        auto normInputs = node->normInputs();
+        for (size_t i = 0; i < normInputs.size(); ++i) {
+            if (normInputs[i]) {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}\"];\r\n",
+                    baseIndent_,
+                    indent_,
+                    pointerToIdent(normInputs[i].get()),
+                    pointerToIdent(node.get()),
+                    i);
             }
-            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
-                   pointerToIdent(node.get()) + " [label=\"" + to_string(i) +
-                   "\", style=dashed];\r\n";
         }
-        vec = node->ctrlInputs();
-        for (size_t i = 0; i < vec.size(); i++) {
-            if (vec[i] == nullptr) {
-                continue;
+
+        auto ctrlInputs = node->ctrlInputs();
+        for (size_t i = 0; i < ctrlInputs.size(); ++i) {
+            if (ctrlInputs[i]) {
+                res += std::format(
+                    "{}{}{} -> {} [style=dashed, arrowhead=empty];\r\n",
+                    baseIndent_,
+                    indent_,
+                    pointerToIdent(ctrlInputs[i].get()),
+                    pointerToIdent(node.get()));
             }
-            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
-                   pointerToIdent(node.get()) + " [style=dashed, arrowhead=empty];\r\n";
         }
+
+        // Connect return node
         if (node.get() == retNodePtr) {
-            res += baseIndent_ + indent_ + pointerToIdent(node.get()) + " -> " + exitId + ";\r\n";
+            res += std::format(
+                "{}{}{} -> {};\r\n",
+                baseIndent_,
+                indent_,
+                pointerToIdent(node.get()),
+                exitId);
         }
+    }
+
+    // Special case: graph has no nodes but has output set (closure capture)
+    if (graph->nodes().empty() && graph->output() != nullptr) {
+        res += std::format(
+            "{}{}{} -> {};\r\n",
+            baseIndent_,
+            indent_,
+            pointerToIdent(graph->output().get()),
+            exitId);
     }
 
     res += baseIndent_ + "}\r\n";

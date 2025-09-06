@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.0.17"
+#define VERSION "0.0.18"
 
 #include <string>
 
@@ -31,6 +31,11 @@ bool parseArgs(int argc, char *argv[]);
 
 namespace CmdLineArgs {
 extern Command selectedCommand;
+
+namespace Global {
+extern bool verbose;         // Whether to enable verbose output
+extern std::string logLevel; // Log level: debug, info, warn, error, off
+} // namespace Global
 
 namespace Run {
 extern std::string outputFile;
@@ -67,10 +72,11 @@ extern unsigned int maxWaring;     // Max warnings
 
 namespace Inspect {
 extern bool dumpTokens; // Whether to dump tokens
-extern bool dumpCST;    // Whether to dump CST
-extern bool dumpAST;    // Whether to dump AST
-extern bool dumpGCT;    // Whether to dump GCT
-extern bool dumpGIR;    // Whether to dump GIR
+extern bool dumpCST;    // Whether to dump Concrete Syntax Tree
+extern bool dumpAST;    // Whether to dump Abstract Syntax Tree
+extern bool dumpGCT;    // Whether to dump Graph Construction Tree
+extern bool dumpGIR;    // Whether to dump Graph Intermediate Representation
+extern bool dumpTNS;    // Whether to dump Topological Node Sequence
 extern int passUntil;   // Pass until the given pass
 } // namespace Inspect
 

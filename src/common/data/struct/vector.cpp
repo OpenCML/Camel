@@ -19,7 +19,7 @@
 
 #include "vector.h"
 #include "params.h"
-#include "utils/log.h"
+#include "utils/scope.h"
 
 #include "../other/any.h"
 #include "../other/null.h"

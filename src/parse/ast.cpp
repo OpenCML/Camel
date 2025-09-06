@@ -20,7 +20,7 @@
 #include "antlr/OpenCMLLexer.h"
 
 #include "ast.h"
-#include "utils/log.h"
+#include "utils/scope.h"
 #include "utils/token.h"
 #include "utils/type.h"
 

@@ -20,7 +20,7 @@
 #include <iterator>
 
 #include "gct.h"
-#include "utils/log.h"
+#include "utils/scope.h"
 
 using namespace std;
 
@@ -64,6 +64,13 @@ std::string to_string(LoadType type) {
         ASSERT(false, "Unknown NodeType");
     }
     return "UNKNOWN";
+}
+
+inline std::string pointerToHex(const void *ptr) {
+    std::stringstream ss;
+    ss << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
+       << reinterpret_cast<uintptr_t>(ptr) << std::dec << std::nouppercase;
+    return ss.str();
 }
 
 const string DataLoad::toString() const {

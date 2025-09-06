@@ -19,13 +19,26 @@
 
 #include "gir.h"
 #include "utils/log.h"
+#include "utils/scope.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL -1
 
 using namespace std;
 
 namespace GraphIntermediateRepresentation {
+
+inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
+    // prevent linking a node to itself
+    if (from.get() == to.get()) {
+        return false;
+    }
+    // prevent linking nodes that are already linked
+    if (from->hasLinkedTo(to)) {
+        return false;
+    }
+    return true;
+}
 
 graph_ptr_t Constructor::enterScope(const std::string &name) {
     if (name.empty()) {
@@ -155,7 +168,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
                 Diagnostic::Severity::Warning,
                 "Default data is currently not supported in function parameters.");
         }
-        insertNode(name, graph->addPort());
+        insertNode(name, graph->addPort(true));
     }
     for (const auto &[name, type, data] : normParamsType->elements()) {
         // TODO: ignored type and default data here
@@ -164,7 +177,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
                 Diagnostic::Severity::Warning,
                 "Default data is currently not supported in function parameters.");
         }
-        insertNode(name, graph->addPort());
+        insertNode(name, graph->addPort(false));
     }
     leaveScope();
 
@@ -246,6 +259,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             // TODO: generate data as the return value of a function
             DataIndex index = graph->addRuntimeConstant(nullptr);
             graph_ptr_t &tgtGraph = graphs->front();
+            currGraph_->addDependency(tgtGraph);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
             LEAVE("DREF");
@@ -263,9 +277,8 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             return opNode;
         }
     }
-    auto optEntity = module_->getImportedEntity(ident);
-    if (optEntity.has_value()) {
-        const auto &e = optEntity.value();
+    if (module_->hasImportedRef(ident)) {
+        const auto &e = module_->getImportedEntity(ident);
         if (std::holds_alternative<GIR::node_ptr_t>(e)) {
             LEAVE("DREF");
             return std::get<GIR::node_ptr_t>(e);
@@ -273,8 +286,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
-            // make imported graph a subgraph of the main graph
-            context_->mainGraph()->addSubGraph(tgtGraph);
+            currGraph_->addDependency(tgtGraph);
             DataIndex index = graph->addRuntimeConstant(nullptr);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
@@ -307,6 +319,7 @@ node_ptr_t Constructor::visitVariNode(const GCT::node_ptr_t &gct) {
     LEAVE("VARI");
     return node;
 }
+
 node_ptr_t Constructor::visitWaitNode(const GCT::node_ptr_t &gct) {
     ENTER("WAIT");
     bool old = waited_;
@@ -371,14 +384,14 @@ node_ptr_t Constructor::visitLinkNode(const GCT::node_ptr_t &gct) {
                 funcNode; // Mark this node as a modifier for the input node
         }
         if (synced_) {
-            if (lastCalledFuncNode_) {
+            if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
                 Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
             }
             lastCalledFuncNode_ = funcNode;
         }
     }
     if (inputs.empty() && synced_) {
-        if (lastCalledFuncNode_) {
+        if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
             Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
         }
         lastCalledFuncNode_ = funcNode;
@@ -437,14 +450,14 @@ node_ptr_t Constructor::visitWithNode(const GCT::node_ptr_t &gct) {
                 funcNode; // Mark this node as a modifier for the input node
         }
         if (synced_) {
-            if (lastCalledFuncNode_) {
+            if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
                 Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
             }
             lastCalledFuncNode_ = funcNode;
         }
     }
     if (inputs.empty() && synced_) {
-        if (lastCalledFuncNode_) {
+        if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
             Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
         }
         lastCalledFuncNode_ = funcNode;
@@ -500,6 +513,7 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
         tGraph->setOutput(tNode);
     }
     leaveScope();
+    currGraph_->addDependency(tGraph);
     func_ptr_t tData = FunctionData::create(tGraph);
     node_ptr_t tFunc = FunctionNode::create(graph, tGraph->addRuntimeConstant(nullptr), tData);
     Node::link(LinkType::Ctrl, brchNode, tFunc);
@@ -511,6 +525,7 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
         fGraph->setOutput(fNode);
     }
     leaveScope();
+    currGraph_->addDependency(fGraph);
     func_ptr_t fData = FunctionData::create(fGraph);
     node_ptr_t fFunc = FunctionNode::create(graph, fGraph->addRuntimeConstant(nullptr), fData);
     Node::link(LinkType::Ctrl, brchNode, fFunc);
@@ -531,7 +546,7 @@ node_ptr_t Constructor::visitAnnoNode(const GCT::node_ptr_t &gct) {
     return nullptr;
 }
 
-void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
+node_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
     auto res = visit(gct->at(0));
     ASSERT(
@@ -542,12 +557,12 @@ void_ptr_t Constructor::visitExitNode(const GCT::node_ptr_t &gct) {
     if (nodeModifierMap_.count(node.get())) {
         exitNode = nodeModifierMap_[node.get()].lock();
     }
-    if (synced_ && lastCalledFuncNode_) {
-        exitNode = lastCalledFuncNode_;
+    if (synced_ && lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, exitNode)) {
+        Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
     }
     currGraph_->setOutput(exitNode);
     LEAVE("EXIT");
-    return nullptr;
+    return exitNode;
 }
 
 node_ptr_t Constructor::visitExecNode(const GCT::node_ptr_t &gct) {

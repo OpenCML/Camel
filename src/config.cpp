@@ -21,6 +21,8 @@
 
 #include "clipp/clipp.h"
 #include "config.h"
+#include "utils/log.h"
+#include "utils/str.h"
 
 #ifndef BUILD_FOOTPRINT
 #define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
@@ -31,6 +33,11 @@ using namespace std;
 
 namespace CmdLineArgs {
 Command selectedCommand = Command::Run;
+
+namespace Global {
+bool verbose = false;
+string logLevel = "off";
+} // namespace Global
 
 namespace Run {
 string outputFile = "";
@@ -69,10 +76,11 @@ unsigned int maxWaring = 1000; // Max warnings
 
 namespace Inspect {
 bool dumpTokens = false; // Whether to dump tokens
-bool dumpCST = false;    // Whether to dump CST
-bool dumpAST = false;    // Whether to dump AST
-bool dumpGCT = false;    // Whether to dump GCT
-bool dumpGIR = false;    // Whether to dump GIR
+bool dumpCST = false;    // Whether to dump Concrete Syntax Tree
+bool dumpAST = false;    // Whether to dump Abstract Syntax Tree
+bool dumpGCT = false;    // Whether to dump Graph Construction Tree
+bool dumpGIR = false;    // Whether to dump Graph Intermediate Representation
+bool dumpTNS = false;    // Whether to dump Topological Node Sequence
 int passUntil = -1;      // Pass until the given pass
 } // namespace Inspect
 
@@ -153,6 +161,11 @@ bool parseArgs(int argc, char *argv[]) {
     bool showAbout = false;   // About information
     bool showZen = false;     // Show Zen of Camel
 
+    auto globalOps =
+        ((option("-v", "--verbose").set(Global::verbose) % "enable verbose output"),
+         ((option("-l", "--log-level") & value("level", Global::logLevel)) %
+          "set log level: debug, info, warn, error, off (default to info)"));
+
     auto run =
         (option("-P", "--profile").set(profile) % "profile the perf",
          (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
@@ -163,10 +176,11 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
          (option("-E", "--error-format") & value("error format", errorFormat)) %
              "error format: text or json",
+         globalOps,
          values("input", targetFiles) % "input file");
 
     auto info =
-        (option("-v", "--version").set(showVersion).set(selectedCommand, Command::Info) %
+        (option("-V", "--version").set(showVersion).set(selectedCommand, Command::Info) %
              "show version",
          option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) %
              "show this help message",
@@ -187,6 +201,7 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-c", "--config") & value("config file path", configFile)) % "config file path",
          option("--ignore").set(Format::ignoreDefiFile) % "ignore the definition file",
          option("-i", "--inplace").set(inplace) % "modify the input file in place",
+         globalOps,
          values("input", targetFiles) % "input file");
 
     auto check =
@@ -200,6 +215,7 @@ bool parseArgs(int argc, char *argv[]) {
              "config file path",
          option("-e", "--ignore").set(Check::ignoreDefiFile) % "ignore the definition file",
          option("-o", "--output") & value("output file", outputFile = "stdout") % "output file",
+         globalOps,
          values("input", targetFiles) % "input file");
 
     auto inspect =
@@ -214,10 +230,11 @@ bool parseArgs(int argc, char *argv[]) {
          option("--cst", "--concrete-syntax-tree").set(dumpCST) % "dump concrete syntax tree",
          option("--ast", "--abstract-syntax-tree").set(dumpAST) % "dump abstract syntax tree",
          option("--gct", "--graph-construct-tree").set(dumpGCT) % "dump graph construct tree",
-         option("--gir", "--graph-intermediate-representation").set(dumpGIR) %
-             "dump graph intermediate representation",
+         option("--gir", "--graph-ir").set(dumpGIR) % "dump graph intermediate representation",
+         option("--tns", "--topo-node-seq").set(dumpTNS) % "dump topological sorted node sequence",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",
+         globalOps,
          values("input", targetFiles) % "input file");
 
     auto cli = run | info | format | check | inspect;
@@ -229,9 +246,30 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-    // #ifndef NDEBUG
-    //     printCliArgs(selectedCommand);
-    // #endif
+    if (Global::verbose) {
+        Logger::SetVerbose(true);
+        if (!Global::logLevel.empty()) {
+            std::string level = trim(Global::logLevel);
+            std::transform(level.begin(), level.end(), level.begin(), ::tolower);
+
+            if (level == "debug")
+                Logger::SetLogLevel(Logger::Level::Debug);
+            else if (level == "info")
+                Logger::SetLogLevel(Logger::Level::Info);
+            else if (level == "warn")
+                Logger::SetLogLevel(Logger::Level::Warn);
+            else if (level == "error")
+                Logger::SetLogLevel(Logger::Level::Error);
+            else if (level == "off")
+                Logger::SetLogLevel(Logger::Level::Off);
+            else {
+                std::cerr << "Unknown log level: '" << level << "'" << std::endl;
+                std::exit(1);
+            }
+        } else {
+            Logger::SetLogLevel(Logger::Level::Info);
+        }
+    }
 
     if (showVersion) {
 #ifdef NDEBUG

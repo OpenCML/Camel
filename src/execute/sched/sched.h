@@ -12,11 +12,19 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 04, 2025
- * Updated: Sep. 04, 2025
+ * Created: Sep. 05, 2025
+ * Updated: Sep. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "log.h"
+#pragma once
 
-Logger l("");
+#include "common/pass.h"
+
+class SchedulePass : public GraphIRPass {
+  public:
+    SchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~SchedulePass() = default;
+
+    virtual std::any apply(GIR::graph_ptr_t &graph) override = 0;
+};

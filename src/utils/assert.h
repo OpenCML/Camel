@@ -49,6 +49,8 @@ inline void handle_assert_failure(
         }
     }
 
+    // 避免调用 abort() 时触发 Windows 错误报告对话框
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     std::abort();
 }
 

@@ -19,13 +19,17 @@
 
 #pragma once
 
+#include "context.h"
 #include "graph.h"
 
 class GraphIRPass {
+  protected:
+    context_ptr_t context_;
+
   public:
-    GraphIRPass() = default;
+    GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
     virtual ~GraphIRPass() = default;
 
-    virtual void reset() = 0;
     virtual std::any apply(GIR::graph_ptr_t &graph) = 0;
+    virtual std::any apply(const GIR::graph_ptr_t &graph) = 0;
 };

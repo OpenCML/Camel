@@ -35,7 +35,7 @@ inline func_type_ptr_t makeFuncType(
 
 class BuiltinModule : public Module {
   public:
-    BuiltinModule(const std::string &name) : Module(name, "") {}
+    BuiltinModule(const std::string &name) : Module(name, "") { built_ = true; }
     virtual ~BuiltinModule() = default;
 
     void exportBuiltinOperator(
