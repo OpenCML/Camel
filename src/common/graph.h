@@ -186,6 +186,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
+    virtual std::string data2str() const { return "<null>"; }
     virtual std::string toString() const {
         return std::format(
             "Node({}, {}, {})",
@@ -332,6 +333,7 @@ class AccessNode : public Node {
 
     data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
 
+    std::string data2str() const override { return std::format("#{}", index2String()); }
     std::string toString() const override {
         return std::format(
             "Node(Access, {}, {}): ${}",
@@ -362,6 +364,7 @@ class StructNode : public Node {
 
     data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
 
+    std::string data2str() const override { return std::format("{}", dataType()->toString()); }
     std::string toString() const override {
         return std::format(
             "Node(Struct, {}, {}): {}",
@@ -388,6 +391,10 @@ class SourceNode : public Node {
         return data;
     }
 
+    std::string data2str() const override {
+        const auto arena = graph_.lock()->arena();
+        return arena->has(dataIndex_) ? eval(arena)->toString() : "<null>";
+    }
     std::string toString() const override {
         const auto arena = graph_.lock()->arena();
         return std::format(
@@ -420,6 +427,7 @@ class OperatorNode : public Node {
 
     data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
 
+    std::string data2str() const override { return std::format("<{}>", operator_->name()); }
     std::string toString() const override {
         return std::format(
             "Node(Opera., {}, {}): {}",
@@ -451,12 +459,15 @@ class FunctionNode : public Node {
 
     data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
 
+    std::string data2str() const override {
+        return std::format("<{}>", func_->name().empty() ? func_->graph()->name() : func_->name());
+    }
     std::string toString() const override {
         return std::format(
             "Node(Funct., {}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
-            func_->name().empty() ? "<anonymous>" : func_->name());
+            func_->name().empty() ? func_->graph()->name() : func_->name());
     }
 };
 

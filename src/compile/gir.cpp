@@ -507,25 +507,25 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     Node::link(LinkType::Norm, condNode, brchNode);
 
     graph_ptr_t tGraph = enterScope();
-    currGraph_->addDependency(tGraph);
     tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
     node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (tGraph->output() == nullptr && tNode != nullptr) {
         tGraph->setOutput(tNode);
     }
     leaveScope();
+    currGraph_->addDependency(tGraph);
     func_ptr_t tData = FunctionData::create(tGraph);
     node_ptr_t tFunc = FunctionNode::create(graph, tGraph->addRuntimeConstant(nullptr), tData);
     Node::link(LinkType::Ctrl, brchNode, tFunc);
 
     graph_ptr_t fGraph = enterScope();
-    currGraph_->addDependency(fGraph);
     fGraph->setFuncType(std::make_shared<FunctionType>());
     node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
     if (fGraph->output() == nullptr && fNode != nullptr) {
         fGraph->setOutput(fNode);
     }
     leaveScope();
+    currGraph_->addDependency(fGraph);
     func_ptr_t fData = FunctionData::create(fGraph);
     node_ptr_t fFunc = FunctionNode::create(graph, fGraph->addRuntimeConstant(nullptr), fData);
     Node::link(LinkType::Ctrl, brchNode, fFunc);

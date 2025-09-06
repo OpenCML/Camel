@@ -89,7 +89,6 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
 
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {
-        l.in("TopoNodeSeqDumpPass").info("Graph: {}", g->name());
         // 对节点进行拓扑排序
         auto sortedNodes = topoSort(
             g->nodes().begin(),
@@ -108,32 +107,49 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             case NodeType::Function: {
                 func_ptr_t func = tt::as_shared<FunctionNode>(n)->func();
                 string name = func->name().empty() ? func->graph()->name() : func->name();
-                res = std::format("CALL: {}", name);
+                res = format("CALL: {}", name);
                 for (const auto &inputNode : n->dataInputs()) {
-                    res += std::format(", {}", pointerToIdent(inputNode.get()));
+                    res += format(", {}", pointerToIdent(inputNode.get()));
                 }
                 break;
             }
             case NodeType::Operator: {
                 auto oper = tt::as_shared<OperatorNode>(n);
                 string name = oper->oper()->name();
-                res = std::format("CALL: <{}>", name);
+                res = format("CALL: <{}>", name);
                 for (const auto &inputNode : n->dataInputs()) {
-                    res += std::format(", {}", pointerToIdent(inputNode.get()));
+                    res += format(", {}", pointerToIdent(inputNode.get()));
                 }
                 break;
             }
             case NodeType::Select: {
-                res = n->toString();
+                auto selectNode = tt::as_shared<SelectNode>(n);
+                if (selectNode->selectType() == SelectNode::SelectType::Branch) {
+                    const auto &ins = selectNode->dataInputs();
+                    const auto &outs = selectNode->ctrlOutputs();
+                    res = format(
+                        "BRCH: {}? {}: {}",
+                        pointerToIdent(ins[0].get()),
+                        pointerToIdent(outs[0].get()),
+                        pointerToIdent(outs[1].get()));
+                } else {
+                    const auto &ins = selectNode->ctrlInputs();
+                    res = format(
+                        "JOIN: {}, {}",
+                        pointerToIdent(ins[0].get()),
+                        pointerToIdent(ins[1].get()));
+                }
                 break;
             }
             default:
-                res = n->toString();
+                res = format("NODE: ({}) {}", string(n->dataType()), n->data2str());
             }
-            oss << "    " << pointerToIdent(n.get()) << ": " << res << "\n";
+            oss << "    [" << pointerToIdent(n.get()) << "] " << res << "\n";
         }
         oss << "RETN: " << pointerToIdent(g->output().get()) << "\n\n";
     }
+
+    oss << format("CALL: {}", graph->name()) << "\n";
 
     return oss.str();
 }
