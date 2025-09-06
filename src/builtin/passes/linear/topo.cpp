@@ -18,10 +18,122 @@
  */
 
 #include "topo.h"
+#include "builtin/algo/topo.h"
 #include "utils/log.h"
+#include "utils/type.h"
 
 #include <queue>
+#include <sstream>
 
+using namespace std;
 using namespace GIR;
 
-std::any TopoNodeSeqDumpPass::apply(const GIR::graph_ptr_t &graph) { return nullptr; }
+string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
+    uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
+    string prefixStr(prefix);
+
+    if (!showRawPtr) {
+        auto &mapForPrefix = ptrsMap_[prefixStr];
+        if (mapForPrefix.find(ptrVal) == mapForPrefix.end()) {
+            mapForPrefix[ptrVal] = ptrCnt_[prefixStr]++;
+        }
+        ptrVal = mapForPrefix[ptrVal];
+    }
+
+    int hexDigits = 1;
+    uintptr_t temp = ptrVal;
+    while (temp >>= 4) {
+        ++hexDigits;
+    }
+
+    int width = ((hexDigits + 1) / 2) * 2;
+
+    stringstream ss;
+    ss << prefix << hex << uppercase << setw(width) << setfill('0') << ptrVal << dec << nouppercase;
+    return ss.str();
+}
+
+any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
+    // 先对子图进行拓扑排序
+    // 收集所有被依赖的子图
+    unordered_set<graph_ptr_t> graphSet;
+    const auto visit = [&](const graph_ptr_t &g) {
+        auto visit_impl = [&](auto &&self, const graph_ptr_t &node) -> void {
+            if (graphSet.find(node) == graphSet.end()) {
+                graphSet.insert(node);
+                for (const auto &dep : node->dependencies()) {
+                    self(self, dep);
+                }
+            }
+        };
+        visit_impl(visit_impl, g);
+    };
+    visit(graph);
+
+    ostringstream oss;
+
+    // 对子图进行拓扑排序
+    auto sortedGraphs = topoSort(
+        graphSet.begin(),
+        graphSet.end(),
+        [](const auto &g) { return g->inDegree(); },
+        [](const auto &g) {
+            vector<graph_ptr_t> outs;
+            for (const auto &dep : g->dependents()) {
+                if (auto sp = dep.lock()) {
+                    outs.push_back(sp);
+                }
+            }
+            return outs;
+        });
+
+    // 依次打印节点序列
+    for (const auto &g : sortedGraphs) {
+        l.in("TopoNodeSeqDumpPass").info("Graph: {}", g->name());
+        // 对节点进行拓扑排序
+        auto sortedNodes = topoSort(
+            g->nodes().begin(),
+            g->nodes().end(),
+            [](const auto &n) { return n->inDegree(); },
+            [](const auto &n) {
+                vector<node_ptr_t> outs;
+                outs.insert(outs.end(), n->dataOutputs().begin(), n->dataOutputs().end());
+                outs.insert(outs.end(), n->ctrlOutputs().begin(), n->ctrlOutputs().end());
+                return outs;
+            });
+        oss << "FUNC: " << g->name() << "\n";
+        for (const auto &n : sortedNodes) {
+            string res;
+            switch (n->type()) {
+            case NodeType::Function: {
+                func_ptr_t func = tt::as_shared<FunctionNode>(n)->func();
+                string name = func->name().empty() ? func->graph()->name() : func->name();
+                res = std::format("CALL: {}", name);
+                for (const auto &inputNode : n->dataInputs()) {
+                    res += std::format(", {}", pointerToIdent(inputNode.get()));
+                }
+                break;
+            }
+            case NodeType::Operator: {
+                auto oper = tt::as_shared<OperatorNode>(n);
+                string name = oper->oper()->name();
+                res = std::format("CALL: <{}>", name);
+                for (const auto &inputNode : n->dataInputs()) {
+                    res += std::format(", {}", pointerToIdent(inputNode.get()));
+                }
+                break;
+            }
+            case NodeType::Select: {
+                res = n->toString();
+                break;
+            }
+            default:
+                res = n->toString();
+            }
+            oss << "    " << pointerToIdent(n.get()) << ": " << res << "\n";
+        }
+        oss << "RETN: " << pointerToIdent(g->output().get()) << "\n\n";
+    }
+
+    return oss.str();
+}

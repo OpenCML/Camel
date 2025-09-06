@@ -121,6 +121,9 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
 
     virtual void set(const data_ptr_t &data, size_t index) = 0;
     virtual data_ptr_t get(size_t index) = 0;
+    virtual bool has(size_t index) {
+        return index < dataArr_.size() && dataArr_[index] != nullptr;
+    }
 
     virtual array_ptr_t clone() = 0;
 
@@ -262,6 +265,21 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
                 return runtimeConstants_->get(index.index);
             } else {
                 return runtimeVariables_->get(index.index);
+            }
+        }
+    }
+    bool has(const DataIndex &index) {
+        if (index.type.shared) {
+            if (index.type.constant) {
+                return sharedConstants_->has(index.index);
+            } else {
+                return sharedVariables_->has(index.index);
+            }
+        } else {
+            if (index.type.constant) {
+                return runtimeConstants_->has(index.index);
+            } else {
+                return runtimeVariables_->has(index.index);
             }
         }
     }

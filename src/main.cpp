@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
                         ast->print(os);
                     }
                 }
-                if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
+                if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
                     // Inspect Command ends here if only
                     // tokens, CST or AST is requested
                     return 0;

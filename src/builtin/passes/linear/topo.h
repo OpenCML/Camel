@@ -23,6 +23,10 @@
 #include "ostream"
 
 class TopoNodeSeqDumpPass : public LinearSchedPass {
+    bool showRawPtr = false;
+    std::unordered_map<std::string, size_t> ptrCnt_;
+    std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
+    std::string pointerToIdent(const void *ptr, const char *prefix = "N");
 
   public:
     TopoNodeSeqDumpPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};

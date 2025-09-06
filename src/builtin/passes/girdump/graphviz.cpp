@@ -256,15 +256,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
                " [style=dashed, arrowhead=empty];\r\n";
     }
     for (const auto &node : graph->nodes()) {
-        auto vec = node->normInputs();
-        for (size_t i = 0; i < vec.size(); i++) {
-            if (vec[i] == nullptr) {
-                continue;
-            }
-            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
-                   pointerToIdent(node.get()) + " [label=\"" + to_string(i) + "\"];\r\n";
-        }
-        vec = node->withInputs();
+        auto vec = node->withInputs();
         for (size_t i = 0; i < vec.size(); i++) {
             if (vec[i] == nullptr) {
                 continue;
@@ -272,6 +264,14 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
             res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
                    pointerToIdent(node.get()) + " [label=\"" + to_string(i) +
                    "\", style=dashed];\r\n";
+        }
+        vec = node->normInputs();
+        for (size_t i = 0; i < vec.size(); i++) {
+            if (vec[i] == nullptr) {
+                continue;
+            }
+            res += baseIndent_ + indent_ + pointerToIdent(vec[i].get()) + " -> " +
+                   pointerToIdent(node.get()) + " [label=\"" + to_string(i) + "\"];\r\n";
         }
         vec = node->ctrlInputs();
         for (size_t i = 0; i < vec.size(); i++) {

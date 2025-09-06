@@ -106,6 +106,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
         }
         return outer_.lock();
     }
+    size_t inDegree() const { return dependencies_.size(); }
+    size_t outDegree() const { return dependents_.size(); }
 
     DataIndex addSharedConstant(const data_ptr_t &data) { return arena_->addConstant(data, true); }
     DataIndex addRuntimeConstant(const data_ptr_t &data) {
@@ -154,7 +156,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_ptr_t &output() const { return output_; }
     void setOutput(const node_ptr_t &node);
 
-    const std::vector<DataIndex> &ports() const { return ports_; }
+    const std::vector<std::pair<DataIndex, node_ptr_t>> &ports() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
 
   private:
@@ -171,7 +173,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     node_vec_t nodes_;
     node_ptr_t output_;
-    std::vector<DataIndex> ports_;
+    std::vector<std::pair<DataIndex, node_ptr_t>> ports_;
 };
 
 class Node : public std::enable_shared_from_this<Node> {
@@ -199,8 +201,14 @@ class Node : public std::enable_shared_from_this<Node> {
     }
     DataIndex index() const { return dataIndex_; }
 
-    node_vec_t &normInputs() { return normInputs_; }
+    node_vec_t dataInputs() const {
+        node_vec_t inputs;
+        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
+        inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
+        return inputs;
+    }
     node_vec_t &withInputs() { return withInputs_; }
+    node_vec_t &normInputs() { return normInputs_; }
     node_vec_t &ctrlInputs() { return ctrlInputs_; }
 
     node_vec_t &dataOutputs() { return dataOutputs_; }
@@ -220,7 +228,7 @@ class Node : public std::enable_shared_from_this<Node> {
         return false;
     }
 
-    size_t inDegree() const { return normInputs_.size() + withInputs_.size() + ctrlInputs_.size(); }
+    size_t inDegree() const { return withInputs_.size() + normInputs_.size() + ctrlInputs_.size(); }
     size_t outDegree() const { return dataOutputs_.size() + ctrlOutputs_.size(); }
 
     bool isSource() const { return inDegree() == 0; }
@@ -232,13 +240,13 @@ class Node : public std::enable_shared_from_this<Node> {
         ASSERT(from && to, "Cannot link null nodes.");
         ASSERT(from != to, "Cannot link a node to itself.");
         switch (type) {
-        case LinkType::Norm:
-            from->dataOutputs().push_back(to);
-            to->normInputs().push_back(from);
-            break;
         case LinkType::With:
             from->dataOutputs().push_back(to);
             to->withInputs().push_back(from);
+            break;
+        case LinkType::Norm:
+            from->dataOutputs().push_back(to);
+            to->normInputs().push_back(from);
             break;
         case LinkType::Ctrl:
             from->ctrlOutputs().push_back(to);
@@ -256,8 +264,8 @@ class Node : public std::enable_shared_from_this<Node> {
     NodeType nodeType_;
     DataIndex dataIndex_;
 
-    node_vec_t normInputs_;
     node_vec_t withInputs_;
+    node_vec_t normInputs_;
     node_vec_t ctrlInputs_;
 
     node_vec_t dataOutputs_;
@@ -381,11 +389,12 @@ class SourceNode : public Node {
     }
 
     std::string toString() const override {
+        const auto arena = graph_.lock()->arena();
         return std::format(
             "Node(Source, {}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
-            eval(graph_.lock()->arena())->toString());
+            arena->has(dataIndex_) ? eval(arena)->toString() : "<null>");
     }
 };
 

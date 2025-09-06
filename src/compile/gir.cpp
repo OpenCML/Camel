@@ -507,6 +507,7 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     Node::link(LinkType::Norm, condNode, brchNode);
 
     graph_ptr_t tGraph = enterScope();
+    currGraph_->addDependency(tGraph);
     tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
     node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (tGraph->output() == nullptr && tNode != nullptr) {
@@ -518,6 +519,7 @@ node_ptr_t Constructor::visitBrchNode(const GCT::node_ptr_t &gct) {
     Node::link(LinkType::Ctrl, brchNode, tFunc);
 
     graph_ptr_t fGraph = enterScope();
+    currGraph_->addDependency(fGraph);
     fGraph->setFuncType(std::make_shared<FunctionType>());
     node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
     if (fGraph->output() == nullptr && fNode != nullptr) {
