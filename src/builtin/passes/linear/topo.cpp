@@ -22,6 +22,7 @@
 #include "utils/log.h"
 #include "utils/type.h"
 
+#include <iomanip>
 #include <queue>
 #include <sstream>
 
@@ -100,7 +101,13 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
                 outs.insert(outs.end(), n->ctrlOutputs().begin(), n->ctrlOutputs().end());
                 return outs;
             });
-        oss << "FUNC: " << g->name() << "\n";
+        // 打印函数签名（含参数信息）
+        oss << "FUNC: " << g->name();
+        for (const auto &[_, portNode] : g->ports()) {
+            oss << ", " << pointerToIdent(portNode.get());
+        }
+        oss << "\n";
+        // 打印子图节点信息
         for (const auto &n : sortedNodes) {
             string res;
             switch (n->type()) {
@@ -142,10 +149,11 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
                 break;
             }
             default:
-                res = format("NODE: ({}) {}", string(n->dataType()), n->data2str());
+                res = format("NODE: {} ({})", n->data2str(), string(n->dataType()));
             }
             oss << "    [" << pointerToIdent(n.get()) << "] " << res << "\n";
         }
+        // 打印返回节点
         oss << "RETN: " << pointerToIdent(g->output().get()) << "\n\n";
     }
 
