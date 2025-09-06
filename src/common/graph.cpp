@@ -63,10 +63,10 @@ func_type_ptr_t Graph::funcType() const {
 
 void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
-node_ptr_t Graph::addPort() {
+node_ptr_t Graph::addPort(bool isWithArg) {
     DataIndex index = arena_->addConstant(nullptr, false);
     node_ptr_t portNode = SourceNode::create(shared_from_this(), index);
-    ports_.push_back({index, portNode});
+    ports_.push_back({index, portNode, isWithArg});
     return portNode;
 }
 

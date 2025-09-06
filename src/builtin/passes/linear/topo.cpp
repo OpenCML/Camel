@@ -103,7 +103,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             });
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
-        for (const auto &[_, portNode] : g->ports()) {
+        for (const auto &[_, portNode, __] : g->ports()) {
             oss << ", " << pointerToIdent(portNode.get());
         }
         oss << "\n";

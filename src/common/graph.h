@@ -151,12 +151,12 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
     void addNode(const node_ptr_t &node);
-    node_ptr_t addPort();
+    node_ptr_t addPort(bool isWithArg = false);
 
     const node_ptr_t &output() const { return output_; }
     void setOutput(const node_ptr_t &node);
 
-    const std::vector<std::pair<DataIndex, node_ptr_t>> &ports() const { return ports_; }
+    const std::vector<std::tuple<DataIndex, node_ptr_t, bool>> &ports() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
 
   private:
@@ -173,7 +173,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     node_vec_t nodes_;
     node_ptr_t output_;
-    std::vector<std::pair<DataIndex, node_ptr_t>> ports_;
+    std::vector<std::tuple<DataIndex, node_ptr_t, bool>> ports_;
 };
 
 class Node : public std::enable_shared_from_this<Node> {

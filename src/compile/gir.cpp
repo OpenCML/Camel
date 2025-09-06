@@ -168,7 +168,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
                 Diagnostic::Severity::Warning,
                 "Default data is currently not supported in function parameters.");
         }
-        insertNode(name, graph->addPort());
+        insertNode(name, graph->addPort(true));
     }
     for (const auto &[name, type, data] : normParamsType->elements()) {
         // TODO: ignored type and default data here
@@ -177,7 +177,7 @@ void_ptr_t Constructor::visitDeclNode(const GCT::node_ptr_t &gct) {
                 Diagnostic::Severity::Warning,
                 "Default data is currently not supported in function parameters.");
         }
-        insertNode(name, graph->addPort());
+        insertNode(name, graph->addPort(false));
     }
     leaveScope();
 
