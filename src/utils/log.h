@@ -21,6 +21,7 @@
 
 #include <format>
 #include <string>
+#include <optional>
 
 #ifdef NDEBUG
 
@@ -56,7 +57,6 @@ class Logger {
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <optional>
 
 class Logger {
   public:

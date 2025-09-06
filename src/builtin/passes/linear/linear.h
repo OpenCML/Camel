@@ -12,24 +12,21 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 21, 2024
- * Updated: Mar. 10, 2025
+ * Created: Sep. 05, 2025
+ * Updated: Sep. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "context.h"
-#include "graph.h"
+#include "execute/sched/sched.h"
 
-class GraphIRPass {
-  protected:
-    context_ptr_t context_;
+class LinearSchedPass : public SchedulePass {
 
   public:
-    GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
-    virtual ~GraphIRPass() = default;
+    LinearSchedPass(const context_ptr_t &ctx) : SchedulePass(ctx) {};
+    virtual ~LinearSchedPass() = default;
 
-    virtual std::any apply(GIR::graph_ptr_t &graph) = 0;
-    virtual std::any apply(const GIR::graph_ptr_t &graph) = 0;
+    virtual std::any apply(GIR::graph_ptr_t &graph) override = 0;
+    virtual std::any apply(const GIR::graph_ptr_t &graph) override = 0;
 };

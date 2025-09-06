@@ -63,16 +63,11 @@ func_type_ptr_t Graph::funcType() const {
 
 void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
-node_ptr_t Graph::addPort() {
+node_ptr_t Graph::addPort(bool isWithArg) {
     DataIndex index = arena_->addConstant(nullptr, false);
-    ports_.push_back(index);
     node_ptr_t portNode = SourceNode::create(shared_from_this(), index);
+    ports_.push_back({index, portNode, isWithArg});
     return portNode;
-}
-
-void Graph::addSubGraph(const graph_ptr_t &graph) {
-    // here we assume that the subgraph is a new blank graph
-    subGraphs_.push_back(graph);
 }
 
 void Graph::setOutput(const node_ptr_t &node) {

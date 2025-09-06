@@ -1,7 +1,7 @@
 module main
 
-import { dense, dropout, relu, softmax } from 'nn'
-import opt from 'opt'
+// import { dense, dropout, relu, softmax } from nn
+// import opt from opt
 
 inner type Tensor = int
 

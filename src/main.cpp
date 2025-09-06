@@ -46,6 +46,8 @@
 #include "common/module/userdef.h"
 #include "parse/parse.h"
 
+#include "builtin/passes/linear/topo.h"
+
 #include "utils/log.h"
 
 using namespace antlr4;
@@ -137,7 +139,7 @@ int main(int argc, char *argv[]) {
                         ast->print(os);
                     }
                 }
-                if (!Inspect::dumpGCT && !Inspect::dumpGIR) {
+                if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
                     // Inspect Command ends here if only
                     // tokens, CST or AST is requested
                     return 0;
@@ -187,10 +189,16 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGCT && mainModule->gct()) {
                     mainModule->gct()->print(os);
                 }
-                if (Inspect::dumpGIR && mainModule->gir()) {
+                if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
-                    auto gir = ctx->mainGraph();
-                    auto res = pass.apply(gir);
+                    auto root = ctx->rootGraph();
+                    auto res = pass.apply(root);
+                    os << any_cast<string>(res);
+                }
+                if (Inspect::dumpTNS && ctx->mainGraph()) {
+                    auto entry = ctx->mainGraph();
+                    TopoNodeSeqDumpPass pass(ctx);
+                    auto res = pass.apply(entry);
                     os << any_cast<string>(res);
                 }
                 return 0;
