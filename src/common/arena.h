@@ -121,9 +121,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
 
     virtual void set(const data_ptr_t &data, size_t index) = 0;
     virtual data_ptr_t get(size_t index) = 0;
-    virtual bool has(size_t index) {
-        return index < dataArr_.size() && dataArr_[index] != nullptr;
-    }
+    virtual bool has(size_t index) { return index < dataArr_.size() && dataArr_[index] != nullptr; }
 
     virtual array_ptr_t clone() = 0;
 
