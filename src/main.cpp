@@ -31,7 +31,8 @@
 #include "parse/antlr/OpenCMLLexer.h"
 #include "parse/antlr/OpenCMLParser.h"
 
-#include "builtin/passes/girdump/graphviz.h"
+#include "builtin/passes/sched/linear/dump/graphviz.h"
+#include "builtin/passes/sched/linear/dump/topo-node-seq.h"
 #include "common/error/base.h"
 #include "common/error/diagnostic.h"
 #include "common/error/listener.h"
@@ -45,8 +46,6 @@
 
 #include "common/module/userdef.h"
 #include "parse/parse.h"
-
-#include "builtin/passes/linear/topo.h"
 
 #include "utils/log.h"
 
@@ -158,10 +157,10 @@ int main(int argc, char *argv[]) {
                     .entryFile = targetFile,
                     .searchPaths =
                         {entryDir,
-                         fs::absolute(fs::path(
-                                          Run::stdLibPath.empty()
-                                              ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                              : Run::stdLibPath))
+                         fs::absolute(
+                             fs::path(
+                                 Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                         : Run::stdLibPath))
                              .string(),
                          getEnv("CAMEL_PACKAGES"),
                          getEnv("CAMEL_HOME", camelPath.string())}},
