@@ -83,13 +83,13 @@ bool Constructor::insertGraph(const std::string &name, const graph_ptr_t &graph)
     return true;
 }
 
-bool Constructor::insertOperator(const std::string &name, const operator_ptr_t &op) {
+bool Constructor::insertOperator(const std::string &name, const oper_idx_ptr_t &op) {
     if (opScope_->has(name, false)) {
         auto ops = opScope_->get(name).value();
         // TODO: check if the operator is already in the list
         ops->push_back(op);
     }
-    opScope_->insert(name, std::make_shared<operator_vec_t>(1, op));
+    opScope_->insert(name, std::make_shared<oper_idx_vec_t>(1, op));
     return true;
 }
 
@@ -271,7 +271,7 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
         auto ops = optOp.value();
         if (!ops->empty()) {
             DataIndex index = graph->addRuntimeConstant(nullptr);
-            operator_ptr_t &op = ops->front();
+            oper_idx_ptr_t &op = ops->front();
             node_ptr_t opNode = OperatorNode::create(graph, index, op);
             LEAVE("DREF");
             return opNode;
@@ -292,10 +292,10 @@ node_ptr_t Constructor::visitDRefNode(const GCT::node_ptr_t &gct) {
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
             LEAVE("DREF");
             return funcNode;
-        } else if (std::holds_alternative<operator_vec_ptr_t>(e)) {
-            auto ops = std::get<operator_vec_ptr_t>(e);
+        } else if (std::holds_alternative<oper_idx_vec_ptr_t>(e)) {
+            auto ops = std::get<oper_idx_vec_ptr_t>(e);
             ASSERT(!ops->empty(), "Imported operator list is empty.");
-            operator_ptr_t op = ops->front();
+            oper_idx_ptr_t op = ops->front();
             DataIndex index = graph->addRuntimeConstant(nullptr);
             node_ptr_t opNode = OperatorNode::create(graph, index, op);
             LEAVE("DREF");

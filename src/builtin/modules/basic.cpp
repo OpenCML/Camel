@@ -22,7 +22,7 @@
 #include "builtin/operators/basic/ops.h"
 #include "builtin/operators/basic/str.h"
 
-void BasicBuiltinModule::exportBinaryOp(const std::string &name, operator_func_t func) {
+void BasicBuiltinModule::exportBinaryOp(const std::string &name, operator_t func) {
     auto op = makeOperator(
         name,
         makeFuncType(
@@ -31,12 +31,12 @@ void BasicBuiltinModule::exportBinaryOp(const std::string &name, operator_func_t
             anyTypePtr),
         func);
 
-    auto ops = std::make_shared<std::vector<std::shared_ptr<Operator>>>();
+    auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
     ops->push_back(op);
     exportEntity(name, ops);
 }
 
-void BasicBuiltinModule::exportAssnOp(const std::string &name, operator_func_t func) {
+void BasicBuiltinModule::exportAssnOp(const std::string &name, operator_t func) {
     auto op = makeOperator(
         name,
         makeFuncType(
@@ -45,12 +45,12 @@ void BasicBuiltinModule::exportAssnOp(const std::string &name, operator_func_t f
             anyTypePtr),
         func);
 
-    auto ops = std::make_shared<std::vector<std::shared_ptr<Operator>>>();
+    auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
     ops->push_back(op);
     exportEntity(name, ops);
 }
 
-static const std::pair<std::string, operator_func_t> assnOps[] = {
+static const std::pair<std::string, operator_t> assnOps[] = {
     {"__assn__", __builtin__assn__},
     {"__assn_add__", __builtin__assn_add__},
     {"__assn_sub__", __builtin__assn_sub__},
@@ -62,7 +62,7 @@ static const std::pair<std::string, operator_func_t> assnOps[] = {
     {"__assn_and__", __builtin__assn_and__},
     {"__assn_or__", __builtin__assn_or__}};
 
-static const std::pair<std::string, operator_func_t> binaryOps[] = {
+static const std::pair<std::string, operator_t> binaryOps[] = {
     {"__or__", __builtin__or__},
     {"__and__", __builtin__and__},
     {"__eq__", __builtin__eq__},
@@ -82,7 +82,7 @@ static const std::pair<std::string, operator_func_t> binaryOps[] = {
     {"__exp__", __builtin__exp__},
     {"__idx__", __builtin__idx__}};
 
-static const std::pair<std::string, operator_func_t> others[] = {
+static const std::pair<std::string, operator_t> others[] = {
     {"map", __not_implemented__},
     {"filter", __not_implemented__},
     {"reduce", __not_implemented__},

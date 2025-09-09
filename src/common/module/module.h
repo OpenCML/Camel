@@ -28,7 +28,7 @@
 #include "common/operator.h"
 #include "common/type.h"
 
-using entity = std::variant<GIR::node_ptr_t, GIR::graph_vec_ptr_t, operator_vec_ptr_t>;
+using entity = std::variant<GIR::node_ptr_t, GIR::graph_vec_ptr_t, oper_idx_vec_ptr_t>;
 using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
 using type_ns_ptr_t = std::shared_ptr<Namespace<std::string, type_ptr_t>>;
 

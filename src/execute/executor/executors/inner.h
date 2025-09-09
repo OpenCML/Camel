@@ -24,14 +24,13 @@
 
 class InnerExecutor : public Executor {
   private:
-    using funcType = std::function<Status(data_vec_t , data_vec_t , data_ptr_t &)>;
+    using funcType = std::function<Status(data_vec_t, data_vec_t, data_ptr_t &)>;
     std::unordered_map<std::string, funcType> funcMap;
     void registerFunc(std::string name, funcType func);
     // functions define here, static
   public:
-    Status execute(
-        std::string uri, data_vec_t &withArgs, data_vec_t &normArgs,
-        data_ptr_t &ret) override;
+    Status
+    execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs, data_ptr_t &ret) override;
     InnerExecutor();
     ~InnerExecutor() = default;
 };

@@ -32,8 +32,7 @@
 class Executor {
   public:
     std::string executorName = "";
-    virtual data_ptr_t
-    execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
+    virtual data_ptr_t execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
     virtual ~Executor() = default;
 };
 
@@ -48,5 +47,5 @@ class ExecutorManager {
     ExecutorManager();
     ~ExecutorManager() = default;
 
-    data_ptr_t execute(std::string uri, data_vec_t withArgs, data_vec_t normArgs);
+    data_ptr_t execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
 };

@@ -19,12 +19,6 @@
 
 #include "io.h"
 
-data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
+data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }

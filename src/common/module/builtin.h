@@ -23,9 +23,9 @@
 
 data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm);
 
-inline operator_ptr_t
-makeOperator(const std::string &name, const func_type_ptr_t &&type, operator_func_t &func) {
-    return std::make_shared<Operator>(name, std::move(type), std::move(func));
+inline oper_idx_ptr_t
+makeOperator(const std::string &name, const func_type_ptr_t &&type, operator_t &func) {
+    return std::make_shared<OperatorIndex>(name, std::move(type), std::move(func));
 }
 
 inline func_type_ptr_t makeFuncType(
@@ -42,9 +42,9 @@ class BuiltinModule : public Module {
 
     void exportBuiltinOperator(
         const std::string &name, const param_init_list &with, const param_init_list &norm,
-        const type_ptr_t &retn, operator_func_t func) {
+        const type_ptr_t &retn, operator_t func) {
         auto op = makeOperator(name, makeFuncType(with, norm, retn), func);
-        auto ops = std::make_shared<std::vector<std::shared_ptr<Operator>>>();
+        auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
         ops->push_back(op);
         exportEntity(name, ops);
     }

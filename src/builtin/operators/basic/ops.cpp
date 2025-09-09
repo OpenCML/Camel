@@ -19,9 +19,7 @@
 
 #include "ops.h"
 
-data_ptr_t __builtin__assn__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
+data_ptr_t __builtin__assn__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
 data_ptr_t __builtin__assn_add__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return nullptr;
 }
@@ -50,58 +48,26 @@ data_ptr_t __builtin__assn_or__(Context &ctx, data_vec_t &with, data_vec_t &norm
     return nullptr;
 }
 
-data_ptr_t __builtin__or__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__and__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__eq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__neq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
+data_ptr_t __builtin__or__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__and__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__eq__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__neq__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
 data_ptr_t __builtin__strict_eq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return nullptr;
 }
 data_ptr_t __builtin__strict_neq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return nullptr;
 }
-data_ptr_t __builtin__lt__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__le__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__gt__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__ge__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
+data_ptr_t __builtin__lt__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__le__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__gt__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__ge__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
 
-data_ptr_t __builtin__add__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__sub__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__mul__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__div__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__mod__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__mat__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__exp__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
-data_ptr_t __builtin__idx__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    return nullptr;
-}
+data_ptr_t __builtin__add__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__sub__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__mul__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__div__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__mod__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__mat__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__exp__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+data_ptr_t __builtin__idx__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
