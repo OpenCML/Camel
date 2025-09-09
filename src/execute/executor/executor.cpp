@@ -18,7 +18,6 @@
  */
 
 #include "executor.h"
-#include "executors/inner.h"
 
 data_ptr_t ExecutorManager::execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) {
     const size_t pos = uri.find("://");

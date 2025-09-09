@@ -28,8 +28,8 @@ class BasicBuiltinModule : public BuiltinModule {
 
     virtual bool load() override;
 
-    void exportBinaryOp(const std::string &name, operator_t func);
-    void exportAssnOp(const std::string &name, operator_t func);
+    void exportBinaryOp(const std::string &name, const std::string &uri);
+    void exportAssnOp(const std::string &name, const std::string &uri);
 
     static module_ptr_t create() { return std::make_shared<BasicBuiltinModule>(); }
 };

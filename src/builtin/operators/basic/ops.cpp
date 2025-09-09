@@ -71,3 +71,33 @@ data_ptr_t __builtin__mod__(Context &ctx, data_vec_t &with, data_vec_t &norm) { 
 data_ptr_t __builtin__mat__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
 data_ptr_t __builtin__exp__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
 data_ptr_t __builtin__idx__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+
+const std::pair<std::string, operator_t> opsOpMap[] = {
+    {":op/assn", __builtin__assn__},
+    {":op/assn_add", __builtin__assn_add__},
+    {":op/assn_sub", __builtin__assn_sub__},
+    {":op/assn_mul", __builtin__assn_mul__},
+    {":op/assn_div", __builtin__assn_div__},
+    {":op/assn_mod", __builtin__assn_mod__},
+    {":op/assn_mat", __builtin__assn_mat__},
+    {":op/assn_exp", __builtin__assn_exp__},
+    {":op/assn_and", __builtin__assn_and__},
+    {":op/assn_or", __builtin__assn_or__},
+    {":op/or", __builtin__or__},
+    {":op/and", __builtin__and__},
+    {":op/eq", __builtin__eq__},
+    {":op/neq", __builtin__neq__},
+    {":op/strict_eq", __builtin__strict_eq__},
+    {":op/strict_neq", __builtin__strict_neq__},
+    {":op/lt", __builtin__lt__},
+    {":op/le", __builtin__le__},
+    {":op/gt", __builtin__gt__},
+    {":op/ge", __builtin__ge__},
+    {":op/add", __builtin__add__},
+    {":op/sub", __builtin__sub__},
+    {":op/mul", __builtin__mul__},
+    {":op/div", __builtin__div__},
+    {":op/mod", __builtin__mod__},
+    {":op/mat", __builtin__mat__},
+    {":op/exp", __builtin__exp__},
+    {":op/idx", __builtin__idx__}};

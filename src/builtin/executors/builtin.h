@@ -12,21 +12,19 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 16, 2025
- * Updated: Apr. 16, 2025
+ * Created: Sep. 09, 2025
+ * Updated: Sep. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "inner.h"
+#pragma once
 
-void InnerExecutor::registerFunc(std::string name, funcType func) { funcMap[name] = func; }
+#include "execute/executor/executor.h"
 
-InnerExecutor::InnerExecutor() {}
+class BuiltInExecutor : public Executor {
+  public:
+    BuiltInExecutor() = default;
+    virtual ~BuiltInExecutor() = default;
 
-Status InnerExecutor::execute(
-    std::string uri, data_vec_t &withArgs, data_vec_t &normArgs, data_ptr_t &ret) {
-    if (funcMap.find(uri) == funcMap.end()) {
-        return {RetCode::InvalidURI, "Invalid operator: " + uri};
-    }
-    return funcMap[uri](withArgs, normArgs, ret);
-}
+    virtual data_ptr_t execute(Context &ctx, data_vec_t &with, data_vec_t &norm) = 0;
+};

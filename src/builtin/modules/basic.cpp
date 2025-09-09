@@ -22,76 +22,76 @@
 #include "builtin/operators/basic/ops.h"
 #include "builtin/operators/basic/str.h"
 
-void BasicBuiltinModule::exportBinaryOp(const std::string &name, operator_t func) {
+void BasicBuiltinModule::exportBinaryOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(
         name,
         makeFuncType(
             param_init_list{},
             {{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
             anyTypePtr),
-        func);
+        uri);
 
     auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
     ops->push_back(op);
     exportEntity(name, ops);
 }
 
-void BasicBuiltinModule::exportAssnOp(const std::string &name, operator_t func) {
+void BasicBuiltinModule::exportAssnOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(
         name,
         makeFuncType(
             param_init_list{},
             {{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
             anyTypePtr),
-        func);
+        uri);
 
     auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
     ops->push_back(op);
     exportEntity(name, ops);
 }
 
-static const std::pair<std::string, operator_t> assnOps[] = {
-    {"__assn__", __builtin__assn__},
-    {"__assn_add__", __builtin__assn_add__},
-    {"__assn_sub__", __builtin__assn_sub__},
-    {"__assn_mul__", __builtin__assn_mul__},
-    {"__assn_div__", __builtin__assn_div__},
-    {"__assn_mod__", __builtin__assn_mod__},
-    {"__assn_mat__", __builtin__assn_mat__},
-    {"__assn_exp__", __builtin__assn_exp__},
-    {"__assn_and__", __builtin__assn_and__},
-    {"__assn_or__", __builtin__assn_or__}};
+static const std::pair<std::string, std::string> assnOps[] = {
+    {"__assn__", ":op/assn"},
+    {"__assn_add__", ":op/assn_add"},
+    {"__assn_sub__", ":op/assn_sub"},
+    {"__assn_mul__", ":op/assn_mul"},
+    {"__assn_div__", ":op/assn_div"},
+    {"__assn_mod__", ":op/assn_mod"},
+    {"__assn_mat__", ":op/assn_mat"},
+    {"__assn_exp__", ":op/assn_exp"},
+    {"__assn_and__", ":op/assn_and"},
+    {"__assn_or__", ":op/assn_or"}};
 
-static const std::pair<std::string, operator_t> binaryOps[] = {
-    {"__or__", __builtin__or__},
-    {"__and__", __builtin__and__},
-    {"__eq__", __builtin__eq__},
-    {"__neq__", __builtin__neq__},
-    {"__strict_eq__", __builtin__strict_eq__},
-    {"__strict_neq__", __builtin__strict_neq__},
-    {"__lt__", __builtin__lt__},
-    {"__le__", __builtin__le__},
-    {"__gt__", __builtin__gt__},
-    {"__ge__", __builtin__ge__},
-    {"__add__", __builtin__add__},
-    {"__sub__", __builtin__sub__},
-    {"__mul__", __builtin__mul__},
-    {"__div__", __builtin__div__},
-    {"__mod__", __builtin__mod__},
-    {"__mat__", __builtin__mat__},
-    {"__exp__", __builtin__exp__},
-    {"__idx__", __builtin__idx__}};
+static const std::pair<std::string, std::string> binaryOps[] = {
+    {"__or__", ":op/or"},
+    {"__and__", ":op/and"},
+    {"__eq__", ":op/eq"},
+    {"__neq__", ":op/neq"},
+    {"__strict_eq__", ":op/strict_eq"},
+    {"__strict_neq__", ":op/strict_neq"},
+    {"__lt__", ":op/lt"},
+    {"__le__", ":op/le"},
+    {"__gt__", ":op/gt"},
+    {"__ge__", ":op/ge"},
+    {"__add__", ":op/add"},
+    {"__sub__", ":op/sub"},
+    {"__mul__", ":op/mul"},
+    {"__div__", ":op/div"},
+    {"__mod__", ":op/mod"},
+    {"__mat__", ":op/mat"},
+    {"__exp__", ":op/exp"},
+    {"__idx__", ":op/idx"}};
 
-static const std::pair<std::string, operator_t> others[] = {
-    {"map", __not_implemented__},
-    {"filter", __not_implemented__},
-    {"reduce", __not_implemented__},
-    {"len", __not_implemented__},
-    {"range", __not_implemented__},
-    {"enumerate", __not_implemented__},
-    {"zip", __not_implemented__},
-    {"unzip", __not_implemented__},
-    {"exit", __not_implemented__}};
+static const std::pair<std::string, std::string> others[] = {
+    {"map", ":not-impl"},
+    {"filter", ":not-impl"},
+    {"reduce", ":not-impl"},
+    {"len", ":not-impl"},
+    {"range", ":not-impl"},
+    {"enumerate", ":not-impl"},
+    {"zip", ":not-impl"},
+    {"unzip", ":not-impl"},
+    {"exit", ":not-impl"}};
 
 BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
     for (const auto &[name, func] : assnOps) {
@@ -111,14 +111,14 @@ BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
         param_init_list{},
         {{"value", anyTypePtr, nullptr, false}},
         voidTypePtr,
-        __print__);
+        ":io/print");
     exportBuiltinOperator(
         "println",
         param_init_list{},
         {{"value", anyTypePtr, nullptr, false}},
         voidTypePtr,
-        __println__);
-    exportBuiltinOperator("input", param_init_list{}, param_init_list{}, voidTypePtr, __input__);
+        ":io/println");
+    exportBuiltinOperator("input", param_init_list{}, param_init_list{}, voidTypePtr, ":io/input");
 }
 
 bool BasicBuiltinModule::load() {
