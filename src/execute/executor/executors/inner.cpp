@@ -24,10 +24,9 @@ void InnerExecutor::registerFunc(std::string name, funcType func) { funcMap[name
 InnerExecutor::InnerExecutor() {}
 
 Status InnerExecutor::execute(
-    std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-    data_ptr_t &ret) {
+    std::string uri, const data_vec_t &withArgs, const data_vec_t &normArgs, data_ptr_t &ret) {
     if (funcMap.find(uri) == funcMap.end()) {
-        return {RetCode::invalidURI, "Invalid operator: " + uri};
+        return {RetCode::InvalidURI, "Invalid operator: " + uri};
     }
     return funcMap[uri](withArgs, normArgs, ret);
 }

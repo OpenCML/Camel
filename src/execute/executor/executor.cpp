@@ -29,12 +29,11 @@ ExecutorManager::ExecutorManager() {
     registerExecutorCreator("inner", []() { return std::make_unique<InnerExecutor>(); });
 }
 
-Status ExecutorManager::executeOperator(
-    std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-    data_ptr_t &ret) {
+data_ptr_t ExecutorManager::executeOperator(
+    std::string uri, const data_vec_t withArgs, const data_vec_t normArgs) {
     const size_t pos = uri.find("://");
     if (pos == std::string::npos) {
-        return {RetCode::invalidURI, "Invalid URI format"};
+        throw CamelRuntimeException(RetCode::InvalidURI, "Invalid URI format");
     }
     const std::string protocol = uri.substr(0, pos);
     auto it_loaded = loadedExecutors.find(protocol);
@@ -43,7 +42,8 @@ Status ExecutorManager::executeOperator(
     }
     auto it_creator = executorCreators.find(protocol);
     if (it_creator == executorCreators.end()) {
-        return {RetCode::invalidURI, "Unregistered protocol: " + protocol};
+        throw CamelRuntimeException(
+            RetCode::InvalidURI, "Unregistered protocol: " + protocol);
     }
     auto executor = it_creator->second();
     Status status = executor->execute(uri.substr(pos + 3), withArgs, normArgs, ret);
@@ -51,8 +51,7 @@ Status ExecutorManager::executeOperator(
     return status;
 }
 
-Status BaseExecutor::execute(
-    std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-    data_ptr_t &ret) {
-    return {RetCode::unknownError, "BaseExecutor: No implementation for execute"};
+data_ptr_t
+Executor::execute(std::string uri, const data_vec_t &withArgs, const data_vec_t &normArgs) {
+    return {RetCode::UnknownError, "BaseExecutor: No implementation for execute"};
 }

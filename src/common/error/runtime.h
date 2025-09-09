@@ -21,7 +21,19 @@
 
 #include "base.h"
 
-class RuntimeException : public CamelBaseException {
+enum class RetCode {
+    Success,
+    InvalidWithParameter,
+    InvalidnormParameter,
+    InvalidURI,
+    ErrorOnExecution,
+    UnknownError
+};
+
+class CamelRuntimeException : public CamelBaseException {
+    RetCode code_;
+
   public:
-    RuntimeException(const std::string &msg) : CamelBaseException(msg) {}
+    CamelRuntimeException(RetCode code, const std::string &msg)
+        : CamelBaseException(msg), code_(code) {}
 };

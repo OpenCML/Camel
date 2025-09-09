@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "common/error/runtime.h"
+#include "common/operator.h"
 #include "common/type.h"
 
 #include <functional>
@@ -27,40 +29,24 @@
 #include <unordered_map>
 #include <vector>
 
-enum class RetCode {
-    success,
-    invalidWithParameter,
-    invalidnormParameter,
-    invalidURI,
-    errorOnExecution,
-    unknownError
-};
-
-struct Status {
-    RetCode code;
-    std::string errorMessage;
-};
-
-class BaseExecutor {
+class Executor {
   public:
     std::string executorName = "";
-    virtual Status execute(
-        std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-        data_ptr_t &ret);
-    virtual ~BaseExecutor() = default;
+    virtual data_ptr_t
+    execute(std::string uri, const data_vec_t &withArgs, const data_vec_t &normArgs);
+    virtual ~Executor() = default;
 };
 
 class ExecutorManager {
   private:
-    using creator_t = std::function<std::unique_ptr<BaseExecutor>()>;
-    std::unordered_map<std::string, std::unique_ptr<BaseExecutor>> loadedExecutors;
+    using creator_t = std::function<std::unique_ptr<Executor>()>;
+    std::unordered_map<std::string, std::unique_ptr<Executor>> loadedExecutors;
     std::unordered_map<std::string, creator_t> executorCreators;
     void registerExecutorCreator(std::string name, creator_t creator);
 
   public:
-    Status executeOperator(
-        std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-        data_ptr_t &ret);
+    data_ptr_t
+    executeOperator(std::string uri, const data_vec_t withArgs, const data_vec_t normArgs);
     ExecutorManager();
     ~ExecutorManager() = default;
 };

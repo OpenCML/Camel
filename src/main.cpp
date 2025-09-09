@@ -28,16 +28,13 @@
 #include "nlohmann/json.hpp"
 
 #include "antlr4-runtime/antlr4-runtime.h"
-#include "parse/antlr/OpenCMLLexer.h"
-#include "parse/antlr/OpenCMLParser.h"
-
-#include "builtin/passes/sched/linear/dump/graphviz.h"
-#include "builtin/passes/sched/linear/dump/topo-node-seq.h"
 #include "common/error/base.h"
 #include "common/error/diagnostic.h"
 #include "common/error/listener.h"
 #include "common/type.h"
 #include "config.h"
+#include "parse/antlr/OpenCMLLexer.h"
+#include "parse/antlr/OpenCMLParser.h"
 #include "parse/ast.h"
 #include "parse/cst-dump.h"
 #include "service/formatter/fmt.h"
@@ -46,6 +43,10 @@
 
 #include "common/module/userdef.h"
 #include "parse/parse.h"
+
+#include "builtin/passes/sched/linear/dump/graphviz.h"
+#include "builtin/passes/sched/linear/dump/topo-node-seq.h"
+#include "builtin/passes/sched/linear/exec/fallback.h"
 
 #include "utils/log.h"
 
@@ -211,6 +212,12 @@ int main(int argc, char *argv[]) {
                     mainModule->diagnostics()->dump(os, useJsonFormat);
                     return 1;
                 }
+            }
+
+            if (selectedCommand == Command::Run) {
+                FallbackExecSchedPass pass(ctx);
+                pass.apply(ctx->mainGraph());
+                return 0;
             }
 
         } catch (CamelBaseException &e) {
