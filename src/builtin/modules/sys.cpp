@@ -27,3 +27,10 @@ SysBuiltinModule::SysBuiltinModule() : BuiltinModule("sys") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool SysBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

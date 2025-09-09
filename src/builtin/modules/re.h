@@ -24,6 +24,9 @@
 class REBuiltinModule : public BuiltinModule {
   public:
     REBuiltinModule();
+    virtual ~REBuiltinModule() = default;
+
+    virtual bool load() override;
 
     static module_ptr_t create() { return std::make_shared<REBuiltinModule>(); }
 };

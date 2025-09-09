@@ -24,6 +24,9 @@
 class MathBuiltinModule : public BuiltinModule {
   public:
     MathBuiltinModule();
+    virtual ~MathBuiltinModule() = default;
+
+    virtual bool load() override;
 
     static module_ptr_t create() { return std::make_shared<MathBuiltinModule>(); }
 };

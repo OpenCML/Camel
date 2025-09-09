@@ -37,7 +37,7 @@ using module_ptr_t = std::shared_ptr<Module>;
 
 class Module : public std::enable_shared_from_this<Module> {
   protected:
-    bool built_;
+    bool loaded_;
     std::string name_;
     std::string path_;
     type_ns_ptr_t exportedTypeNS_;
@@ -51,11 +51,8 @@ class Module : public std::enable_shared_from_this<Module> {
     const std::string &name() const { return name_; }
     const std::string &path() const { return path_; }
 
-    bool built() const { return built_; }
-    virtual bool compile() {
-        ASSERT(false, "Base Module cannot be compiled.");
-        return false;
-    };
+    virtual bool load() = 0;
+    bool loaded() const { return loaded_; }
 
     void markImportedRefFromMod(const Reference &ref, const module_ptr_t &mod);
     void importAllRefsFromMod(const module_ptr_t &mod);

@@ -27,3 +27,10 @@ MathBuiltinModule::MathBuiltinModule() : BuiltinModule("math") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool MathBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

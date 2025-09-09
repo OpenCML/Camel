@@ -24,6 +24,9 @@
 class TimeBuiltinModule : public BuiltinModule {
   public:
     TimeBuiltinModule();
+    virtual ~TimeBuiltinModule() = default;
+
+    virtual bool load() override;
 
     static module_ptr_t create() { return std::make_shared<TimeBuiltinModule>(); }
 };

@@ -24,6 +24,9 @@
 class FileBuiltinModule : public BuiltinModule {
   public:
     FileBuiltinModule();
+    virtual ~FileBuiltinModule() = default;
+
+    virtual bool load() override;
 
     static module_ptr_t create() { return std::make_shared<FileBuiltinModule>(); }
 };

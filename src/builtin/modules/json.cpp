@@ -27,3 +27,10 @@ JsonBuiltinModule::JsonBuiltinModule() : BuiltinModule("json") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool JsonBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

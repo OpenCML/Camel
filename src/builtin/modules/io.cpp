@@ -27,3 +27,10 @@ IOBuiltinModule::IOBuiltinModule() : BuiltinModule("io") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool IOBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

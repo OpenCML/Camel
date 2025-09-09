@@ -36,6 +36,8 @@ class UserDefinedModule : public Module {
     diagnostics_ptr_t diagnostics_;
     parser_ptr_t parser_;
 
+    bool compile();
+
   public:
     UserDefinedModule(
         const std::string &name, const std::string &path, context_ptr_t ctx,
@@ -47,8 +49,13 @@ class UserDefinedModule : public Module {
     diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
     static module_ptr_t
-    loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
+    fromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
 
-    bool ready() const { return built_; }
-    bool compile() override;
+    bool load() override {
+        if (this->loaded_) {
+            l.in("Module").warn("Module '{}' already loaded.", name_);
+            return true;
+        }
+        return compile();
+    }
 };

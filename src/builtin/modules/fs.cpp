@@ -27,3 +27,10 @@ FileBuiltinModule::FileBuiltinModule() : BuiltinModule("fs") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool FileBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

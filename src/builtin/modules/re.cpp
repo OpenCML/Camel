@@ -27,3 +27,10 @@ REBuiltinModule::REBuiltinModule() : BuiltinModule("re") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool REBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

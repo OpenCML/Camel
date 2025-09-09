@@ -24,6 +24,9 @@
 class BasicBuiltinModule : public BuiltinModule {
   public:
     BasicBuiltinModule();
+    virtual ~BasicBuiltinModule() = default;
+
+    virtual bool load() override;
 
     void exportBinaryOp(const std::string &name, operator_func_t func);
     void exportAssnOp(const std::string &name, operator_func_t func);

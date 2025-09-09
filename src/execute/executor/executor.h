@@ -37,16 +37,16 @@ class Executor {
     virtual ~Executor() = default;
 };
 
+using executor_ptr_t = std::shared_ptr<Executor>;
+
 class ExecutorManager {
   private:
-    using creator_t = std::function<std::unique_ptr<Executor>()>;
-    std::unordered_map<std::string, std::unique_ptr<Executor>> loadedExecutors;
-    std::unordered_map<std::string, creator_t> executorCreators;
-    void registerExecutorCreator(std::string name, creator_t creator);
+    std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
+    void registerExecutor(std::string name, executor_ptr_t exec);
 
   public:
-    data_ptr_t
-    executeOperator(std::string uri, const data_vec_t withArgs, const data_vec_t normArgs);
     ExecutorManager();
     ~ExecutorManager() = default;
+
+    data_ptr_t execute(std::string uri, const data_vec_t withArgs, const data_vec_t normArgs);
 };

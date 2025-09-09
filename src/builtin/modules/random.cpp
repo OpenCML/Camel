@@ -27,3 +27,10 @@ RandomBuiltinModule::RandomBuiltinModule() : BuiltinModule("random") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool RandomBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

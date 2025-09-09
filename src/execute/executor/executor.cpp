@@ -20,17 +20,8 @@
 #include "executor.h"
 #include "executors/inner.h"
 
-void ExecutorManager::registerExecutorCreator(
-    std::string name, ExecutorManager::creator_t creator) {
-    executorCreators.emplace(name, std::move(creator));
-}
-
-ExecutorManager::ExecutorManager() {
-    registerExecutorCreator("inner", []() { return std::make_unique<InnerExecutor>(); });
-}
-
-data_ptr_t ExecutorManager::executeOperator(
-    std::string uri, const data_vec_t withArgs, const data_vec_t normArgs) {
+data_ptr_t
+ExecutorManager::execute(std::string uri, const data_vec_t withArgs, const data_vec_t normArgs) {
     const size_t pos = uri.find("://");
     if (pos == std::string::npos) {
         throw CamelRuntimeException(RetCode::InvalidURI, "Invalid URI format");
@@ -42,8 +33,7 @@ data_ptr_t ExecutorManager::executeOperator(
     }
     auto it_creator = executorCreators.find(protocol);
     if (it_creator == executorCreators.end()) {
-        throw CamelRuntimeException(
-            RetCode::InvalidURI, "Unregistered protocol: " + protocol);
+        throw CamelRuntimeException(RetCode::InvalidURI, "Unregistered protocol: " + protocol);
     }
     auto executor = it_creator->second();
     Status status = executor->execute(uri.substr(pos + 3), withArgs, normArgs, ret);

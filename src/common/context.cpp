@@ -168,7 +168,7 @@ bool Context::moduleFileExists(const std::string &moduleName) {
 module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     std::string path = getModulePath(moduleName);
     if (!path.empty()) {
-        return UserDefinedModule::loadFromFile(moduleName, path, shared_from_this());
+        return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
     }
     return nullptr;
 }

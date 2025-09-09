@@ -27,3 +27,10 @@ TimeBuiltinModule::TimeBuiltinModule() : BuiltinModule("time") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool TimeBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

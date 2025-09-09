@@ -27,3 +27,10 @@ OSBuiltinModule::OSBuiltinModule() : BuiltinModule("os") {
         voidTypePtr,
         __not_implemented__);
 }
+
+bool OSBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}

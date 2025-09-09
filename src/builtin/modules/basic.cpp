@@ -120,3 +120,10 @@ BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
         __println__);
     exportBuiltinOperator("input", param_init_list{}, param_init_list{}, voidTypePtr, __input__);
 }
+
+bool BasicBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    return true;
+}
