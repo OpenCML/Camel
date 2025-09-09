@@ -21,7 +21,7 @@
 
 #include "module.h"
 
-data_ptr_t __not_implemented__(Context &ctx, const data_vec_t &with, const data_vec_t &norm);
+data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm);
 
 inline operator_ptr_t
 makeOperator(const std::string &name, const func_type_ptr_t &&type, operator_func_t &func) {

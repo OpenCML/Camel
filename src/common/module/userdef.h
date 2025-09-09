@@ -56,6 +56,8 @@ class UserDefinedModule : public Module {
             l.in("Module").warn("Module '{}' already loaded.", name_);
             return true;
         }
-        return compile();
+        bool success = compile();
+        this->loaded_ = success;
+        return success;
     }
 };

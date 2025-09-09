@@ -21,7 +21,7 @@
 #include "executors/inner.h"
 
 data_ptr_t
-ExecutorManager::execute(std::string uri, const data_vec_t withArgs, const data_vec_t normArgs) {
+ExecutorManager::execute(std::string uri, data_vec_t withArgs, data_vec_t normArgs) {
     const size_t pos = uri.find("://");
     if (pos == std::string::npos) {
         throw CamelRuntimeException(RetCode::InvalidURI, "Invalid URI format");
@@ -42,6 +42,6 @@ ExecutorManager::execute(std::string uri, const data_vec_t withArgs, const data_
 }
 
 data_ptr_t
-Executor::execute(std::string uri, const data_vec_t &withArgs, const data_vec_t &normArgs) {
+Executor::execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) {
     return {RetCode::UnknownError, "BaseExecutor: No implementation for execute"};
 }

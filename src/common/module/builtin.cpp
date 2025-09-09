@@ -30,7 +30,7 @@
 #include "builtin/modules/sys.h"
 #include "builtin/modules/time.h"
 
-data_ptr_t __not_implemented__(Context &ctx, const data_vec_t &with, const data_vec_t &norm) {
+data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     ASSERT(false, "Not implemented");
     return nullptr;
 }

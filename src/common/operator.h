@@ -27,7 +27,7 @@
 class Context;
 
 using operator_func_t =
-    std::function<data_ptr_t(Context &, const data_vec_t &, const data_vec_t &)>;
+    std::function<data_ptr_t(Context &, data_vec_t &, data_vec_t &)>;
 
 class Operator {
   private:

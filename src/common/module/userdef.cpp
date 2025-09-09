@@ -77,7 +77,7 @@ bool UserDefinedModule::compile() {
     auto girConstructor = GIR::Constructor(context_, shared_from_this());
     gir_ = girConstructor.construct(gct_, diagnostics_);
 
-    this->loaded_ = !diagnostics_->hasErrors();
-    l.in("Module").info("Module '{}' built {}", name_, this->loaded_ ? "successfully." : "failed.");
-    return this->loaded_;
+    bool success = !diagnostics_->hasErrors();
+    l.in("Module").info("Module '{}' built {}", name_, success ? "successfully." : "failed.");
+    return success;
 }
