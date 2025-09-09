@@ -32,5 +32,6 @@ bool FileBuiltinModule::load() {
     if (loaded_) {
         return true;
     }
+    loaded_ = true;
     return true;
 }

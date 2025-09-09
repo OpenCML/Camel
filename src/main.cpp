@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
 
             try {
                 initTypes();
-                mainModule->compile();
+                mainModule->load();
             } catch (DiagnosticsLimitExceededException &e) {
                 if (selectedCommand == Command::Check) {
                     os << e.lastDiagnostic().what(useJsonFormat) << endl;

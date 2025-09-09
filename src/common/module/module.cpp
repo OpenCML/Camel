@@ -28,7 +28,7 @@ Module::Module(const std::string &name, const std::string &path)
 
 void Module::importAllRefsFromMod(const module_ptr_t &mod) {
     if (!mod->loaded()) { // 立刻加载
-        mod->compile();
+        mod->load();
     }
     // Types
     auto typeNS = mod->exportedTypeNS();
@@ -61,7 +61,7 @@ type_ptr_t Module::getImportedType(const Reference &ref) const {
         "Imported type not found: " + ref.toString() + " in module " + name_);
     auto &mod = importedRefModMap_.at(ref);
     if (!mod->loaded()) { // 懒加载
-        mod->compile();
+        mod->load();
     }
     auto optType = mod->getExportedType(ref);
     if (!optType.has_value()) {
@@ -77,7 +77,7 @@ entity Module::getImportedEntity(const Reference &ref) const {
         "Imported entity not found: " + ref.toString() + " in module " + name_);
     auto &mod = importedRefModMap_.at(ref);
     if (!mod->loaded()) { // 懒加载
-        mod->compile();
+        mod->load();
     }
     auto optEntity = mod->getExportedEntity(ref);
     if (!optEntity.has_value()) {
