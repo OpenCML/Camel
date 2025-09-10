@@ -19,11 +19,19 @@
 
 #include "sys.h"
 
-SysBuiltinModule::SysBuiltinModule() : BuiltinModule("sys") {
+SysBuiltinModule::SysBuiltinModule(context_ptr_t ctx) : BuiltinModule("sys", ctx) {
     exportBuiltinOperator(
         "platform",
         param_init_list{},
         {{"value", anyTypePtr, nullptr, false}},
         voidTypePtr,
-        __not_implemented__);
+        ":not-impl");
+}
+
+bool SysBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    loaded_ = true;
+    return true;
 }

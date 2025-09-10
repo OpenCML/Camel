@@ -21,31 +21,34 @@
 
 #include "module.h"
 
-data_ptr_t __not_implemented__(Context &ctx, const data_vec_t &with, const data_vec_t &norm);
+extern std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
+    builtinModuleFactories;
 
-inline operator_ptr_t
-makeOperator(const std::string &name, const func_type_ptr_t &&type, operator_func_t &func) {
-    return std::make_shared<Operator>(name, std::move(type), std::move(func));
+inline func_type_ptr_t
+makeFuncType(const param_init_list &with, const param_init_list &norm, const type_ptr_t &ret) {
+    return std::make_shared<FunctionType>(with, norm, ret);
 }
 
-inline func_type_ptr_t makeFuncType(
-    const param_init_list &with, const param_init_list &norm, const type_ptr_t &returnType) {
-    return std::make_shared<FunctionType>(with, norm, returnType);
+inline oper_idx_ptr_t
+makeOperator(const std::string &name, const func_type_ptr_t &&type, const std::string &uri) {
+    return std::make_shared<OperatorIndex>(name, std::move(type), uri);
 }
 
 class BuiltinModule : public Module {
   public:
-    BuiltinModule(const std::string &name) : Module(name, "") { built_ = true; }
+    BuiltinModule(const std::string &name, context_ptr_t ctx) : Module(name, "", ctx) {
+        loaded_ = true;
+    }
     virtual ~BuiltinModule() = default;
+
+    virtual bool load() = 0;
 
     void exportBuiltinOperator(
         const std::string &name, const param_init_list &with, const param_init_list &norm,
-        const type_ptr_t &retn, operator_func_t func) {
-        auto op = makeOperator(name, makeFuncType(with, norm, retn), func);
-        auto ops = std::make_shared<std::vector<std::shared_ptr<Operator>>>();
+        const type_ptr_t &ret, const std::string &uri) {
+        auto op = makeOperator(name, makeFuncType(with, norm, ret), uri);
+        auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
         ops->push_back(op);
         exportEntity(name, ops);
     }
 };
-
-std::optional<module_ptr_t> getBuiltinModule(const std::string &name);

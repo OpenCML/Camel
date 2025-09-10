@@ -36,7 +36,7 @@ using node_scope_t = Scope<std::string, node_ptr_t>;
 using node_scope_ptr_t = std::shared_ptr<node_scope_t>;
 using graph_scope_t = Scope<std::string, std::shared_ptr<graph_vec_t>>;
 using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
-using operator_scope_t = Scope<std::string, std::shared_ptr<operator_vec_t>>;
+using operator_scope_t = Scope<std::string, std::shared_ptr<oper_idx_vec_t>>;
 using operator_scope_ptr_t = std::shared_ptr<operator_scope_t>;
 
 class Constructor {
@@ -84,13 +84,13 @@ class Constructor {
     std::optional<std::shared_ptr<graph_vec_t>> graphAt(const std::string &name) {
         return graphScope_->get(name);
     }
-    std::optional<std::shared_ptr<operator_vec_t>> operatorAt(const std::string &name) {
+    std::optional<std::shared_ptr<oper_idx_vec_t>> operatorAt(const std::string &name) {
         return opScope_->get(name);
     }
 
     bool insertNode(const std::string &name, const node_ptr_t &node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
-    bool insertOperator(const std::string &name, const operator_ptr_t &op);
+    bool insertOperator(const std::string &name, const oper_idx_ptr_t &op);
 
     graph_ptr_t enterScope(const std::string &name = "");
     void leaveScope();

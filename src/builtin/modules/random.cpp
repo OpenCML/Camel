@@ -19,11 +19,19 @@
 
 #include "random.h"
 
-RandomBuiltinModule::RandomBuiltinModule() : BuiltinModule("random") {
+RandomBuiltinModule::RandomBuiltinModule(context_ptr_t ctx) : BuiltinModule("random", ctx) {
     exportBuiltinOperator(
         "random",
         param_init_list{},
         {{"value", anyTypePtr, nullptr, false}},
         voidTypePtr,
-        __not_implemented__);
+        ":not-impl");
+}
+
+bool RandomBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    loaded_ = true;
+    return true;
 }

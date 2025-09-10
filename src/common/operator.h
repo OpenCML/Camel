@@ -25,25 +25,27 @@
 #include <unordered_map>
 
 class Context;
+class Operator;
+class OperatorIndex;
 
-using operator_func_t =
-    std::function<data_ptr_t(Context &, const data_vec_t &, const data_vec_t &)>;
+using operator_t = std::function<data_ptr_t(Context &, data_vec_t &, data_vec_t &)>;
 
-class Operator {
+using oper_idx_ptr_t = std::shared_ptr<OperatorIndex>;
+using oper_idx_vec_t = std::vector<oper_idx_ptr_t>;
+using oper_idx_vec_ptr_t = std::shared_ptr<oper_idx_vec_t>;
+
+class OperatorIndex {
   private:
     std::string name_;
     func_type_ptr_t type_;
-    operator_func_t func_;
+    std::string uri_;
 
   public:
-    Operator(const std::string &name, const func_type_ptr_t &&type, operator_func_t &&func)
-        : name_(name), type_(std::move(type)), func_(std::move(func)) {}
+    OperatorIndex(
+        const std::string &name, const func_type_ptr_t &&type, const std::string &uri = "")
+        : name_(name), type_(std::move(type)), uri_(uri) {}
 
     const std::string &name() const { return name_; }
+    const std::string &uri() const { return uri_; }
     const func_type_ptr_t &funcType() const { return type_; }
-    const operator_func_t &func() const { return func_; }
 };
-
-using operator_ptr_t = std::shared_ptr<Operator>;
-using operator_vec_t = std::vector<operator_ptr_t>;
-using operator_vec_ptr_t = std::shared_ptr<operator_vec_t>;

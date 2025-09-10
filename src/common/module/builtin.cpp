@@ -30,37 +30,16 @@
 #include "builtin/modules/sys.h"
 #include "builtin/modules/time.h"
 
-data_ptr_t __not_implemented__(Context &ctx, const data_vec_t &with, const data_vec_t &norm) {
-    ASSERT(false, "Not implemented");
-    return nullptr;
-}
-
-std::unordered_map<std::string, std::function<std::shared_ptr<Module>()>> builtinModuleFactories = {
-    {"", [] { return BasicBuiltinModule::create(); }},
-    {"io", [] { return IOBuiltinModule::create(); }},
-    {"fs", [] { return FileBuiltinModule::create(); }},
-    {"os", [] { return OSBuiltinModule::create(); }},
-    {"re", [] { return REBuiltinModule::create(); }},
-    {"sys", [] { return SysBuiltinModule::create(); }},
-    {"math", [] { return MathBuiltinModule::create(); }},
-    {"time", [] { return TimeBuiltinModule::create(); }},
-    {"json", [] { return JsonBuiltinModule::create(); }},
-    {"random", [] { return RandomBuiltinModule::create(); }},
+std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
+    builtinModuleFactories = {
+        {"", [](context_ptr_t ctx) { return BasicBuiltinModule::create(ctx); }},
+        {"io", [](context_ptr_t ctx) { return IOBuiltinModule::create(ctx); }},
+        {"fs", [](context_ptr_t ctx) { return FileBuiltinModule::create(ctx); }},
+        {"os", [](context_ptr_t ctx) { return OSBuiltinModule::create(ctx); }},
+        {"re", [](context_ptr_t ctx) { return REBuiltinModule::create(ctx); }},
+        {"sys", [](context_ptr_t ctx) { return SysBuiltinModule::create(ctx); }},
+        {"math", [](context_ptr_t ctx) { return MathBuiltinModule::create(ctx); }},
+        {"time", [](context_ptr_t ctx) { return TimeBuiltinModule::create(ctx); }},
+        {"json", [](context_ptr_t ctx) { return JsonBuiltinModule::create(ctx); }},
+        {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
 };
-std::unordered_map<std::string, module_ptr_t> builtinModules;
-
-std::optional<module_ptr_t> getBuiltinModule(const std::string &name) {
-    auto it = builtinModules.find(name);
-    if (it != builtinModules.end()) {
-        return it->second;
-    }
-
-    auto factoryIt = builtinModuleFactories.find(name);
-    if (factoryIt != builtinModuleFactories.end()) {
-        module_ptr_t module = factoryIt->second();
-        builtinModules[name] = module;
-        return module;
-    }
-
-    return std::nullopt;
-}

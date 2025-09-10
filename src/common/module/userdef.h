@@ -30,11 +30,12 @@ class Context;
 using context_ptr_t = std::shared_ptr<Context>;
 
 class UserDefinedModule : public Module {
-    context_ptr_t context_;
     GCT::node_ptr_t gct_;
     GIR::graph_ptr_t gir_;
     diagnostics_ptr_t diagnostics_;
     parser_ptr_t parser_;
+
+    bool compile();
 
   public:
     UserDefinedModule(
@@ -47,8 +48,15 @@ class UserDefinedModule : public Module {
     diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
     static module_ptr_t
-    loadFromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
+    fromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
 
-    bool ready() const { return built_; }
-    bool compile() override;
+    bool load() override {
+        if (this->loaded_) {
+            l.in("Module").warn("Module '{}' already loaded.", name_);
+            return true;
+        }
+        bool success = compile();
+        this->loaded_ = success;
+        return success;
+    }
 };

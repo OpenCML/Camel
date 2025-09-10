@@ -12,26 +12,23 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Created: Sep. 08, 2025
+ * Updated: Sep. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "common/module/builtin.h"
+#include "../linear.h"
 
-class BasicBuiltinModule : public BuiltinModule {
+class FallbackExecSchedPass : public LinearSchedPass {
+
   public:
-    BasicBuiltinModule(context_ptr_t ctx);
-    virtual ~BasicBuiltinModule() = default;
+    FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
+    virtual ~FallbackExecSchedPass() = default;
 
-    virtual bool load() override;
-
-    void exportBinaryOp(const std::string &name, const std::string &uri);
-    void exportAssnOp(const std::string &name, const std::string &uri);
-
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<BasicBuiltinModule>(ctx);
-    }
+    virtual std::any apply(GIR::graph_ptr_t &graph) override {
+        return apply(const_cast<const GIR::graph_ptr_t &>(graph));
+    };
+    virtual std::any apply(const GIR::graph_ptr_t &graph) override;
 };

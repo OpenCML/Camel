@@ -28,34 +28,35 @@
 #include "common/operator.h"
 #include "common/type.h"
 
-using entity = std::variant<GIR::node_ptr_t, GIR::graph_vec_ptr_t, operator_vec_ptr_t>;
+using entity = std::variant<GIR::node_ptr_t, GIR::graph_vec_ptr_t, oper_idx_vec_ptr_t>;
 using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
 using type_ns_ptr_t = std::shared_ptr<Namespace<std::string, type_ptr_t>>;
 
 class Module;
 using module_ptr_t = std::shared_ptr<Module>;
 
+class Context;
+using context_ptr_t = std::shared_ptr<Context>;
+
 class Module : public std::enable_shared_from_this<Module> {
   protected:
-    bool built_;
+    bool loaded_;
     std::string name_;
     std::string path_;
+    context_ptr_t context_;
     type_ns_ptr_t exportedTypeNS_;
     entity_ns_ptr_t exportedEntityNS_;
     std::unordered_map<Reference, module_ptr_t> importedRefModMap_;
 
   public:
-    Module(const std::string &name, const std::string &path);
+    Module(const std::string &name, const std::string &path, context_ptr_t ctx);
     virtual ~Module() = default;
 
     const std::string &name() const { return name_; }
     const std::string &path() const { return path_; }
 
-    bool built() const { return built_; }
-    virtual bool compile() {
-        ASSERT(false, "Base Module cannot be compiled.");
-        return false;
-    };
+    virtual bool load() = 0;
+    bool loaded() const { return loaded_; }
 
     void markImportedRefFromMod(const Reference &ref, const module_ptr_t &mod);
     void importAllRefsFromMod(const module_ptr_t &mod);

@@ -23,7 +23,10 @@
 
 class REBuiltinModule : public BuiltinModule {
   public:
-    REBuiltinModule();
+    REBuiltinModule(context_ptr_t ctx);
+    virtual ~REBuiltinModule() = default;
 
-    static module_ptr_t create() { return std::make_shared<REBuiltinModule>(); }
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx) { return std::make_shared<REBuiltinModule>(ctx); }
 };

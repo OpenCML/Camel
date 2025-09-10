@@ -406,20 +406,20 @@ class SourceNode : public Node {
 };
 
 class OperatorNode : public Node {
-    operator_ptr_t operator_;
+    oper_idx_ptr_t operator_;
 
   public:
-    OperatorNode(graph_ptr_t graph, const DataIndex &index, operator_ptr_t op)
+    OperatorNode(graph_ptr_t graph, const DataIndex &index, oper_idx_ptr_t op)
         : Node(graph, NodeType::Operator, index), operator_(op) {}
     ~OperatorNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, operator_ptr_t op) {
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, oper_idx_ptr_t op) {
         auto node = std::make_shared<OperatorNode>(graph, index, op);
         graph->addNode(node);
         return node;
     }
 
-    operator_ptr_t oper() const { return operator_; }
+    oper_idx_ptr_t oper() const { return operator_; }
     func_type_ptr_t funcType() const {
         ASSERT(operator_, "Operator is not set for OperatorNode.");
         return tt::as_shared<FunctionType>(operator_->funcType());

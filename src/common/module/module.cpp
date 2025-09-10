@@ -20,15 +20,15 @@
 #include "module.h"
 #include "common/error/base.h"
 
-Module::Module(const std::string &name, const std::string &path)
-    : built_(false), name_(name), path_(path),
+Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
+    : loaded_(false), name_(name), path_(path), context_(ctx),
       exportedTypeNS_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
       exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()),
       importedRefModMap_() {};
 
 void Module::importAllRefsFromMod(const module_ptr_t &mod) {
-    if (!mod->built()) { // 立刻加载
-        mod->compile();
+    if (!mod->loaded()) { // 立刻加载
+        mod->load();
     }
     // Types
     auto typeNS = mod->exportedTypeNS();
@@ -60,8 +60,8 @@ type_ptr_t Module::getImportedType(const Reference &ref) const {
         importedRefModMap_.find(ref) != importedRefModMap_.end(),
         "Imported type not found: " + ref.toString() + " in module " + name_);
     auto &mod = importedRefModMap_.at(ref);
-    if (!mod->built()) { // 懒加载
-        mod->compile();
+    if (!mod->loaded()) { // 懒加载
+        mod->load();
     }
     auto optType = mod->getExportedType(ref);
     if (!optType.has_value()) {
@@ -76,8 +76,8 @@ entity Module::getImportedEntity(const Reference &ref) const {
         importedRefModMap_.find(ref) != importedRefModMap_.end(),
         "Imported entity not found: " + ref.toString() + " in module " + name_);
     auto &mod = importedRefModMap_.at(ref);
-    if (!mod->built()) { // 懒加载
-        mod->compile();
+    if (!mod->loaded()) { // 懒加载
+        mod->load();
     }
     auto optEntity = mod->getExportedEntity(ref);
     if (!optEntity.has_value()) {
@@ -89,19 +89,19 @@ entity Module::getImportedEntity(const Reference &ref) const {
 };
 
 std::optional<type_ptr_t> Module::getExportedType(const Reference &ref) const {
-    ASSERT(built_, "Module not built: " + name_);
+    ASSERT(loaded_, "Module not built: " + name_);
     return exportedTypeNS_->get(ref);
 };
 std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
-    ASSERT(built_, "Module not built: " + name_);
+    ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_->get(ref);
 };
 
 type_ns_ptr_t Module::exportedTypeNS() const {
-    ASSERT(built_, "Module not built: " + name_);
+    ASSERT(loaded_, "Module not built: " + name_);
     return exportedTypeNS_;
 }
 entity_ns_ptr_t Module::exportedEntityNS() const {
-    ASSERT(built_, "Module not built: " + name_);
+    ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_;
 }

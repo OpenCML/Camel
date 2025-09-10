@@ -32,12 +32,28 @@ inline bool fileExists(const std::string &path) {
     return file.good();
 }
 
-Context::Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf)
-    : entryConfig_(entryConf), diagConfig_(diagConf) {
-    if (auto builtin = getBuiltinModule(""); builtin.has_value()) {
-        l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
-        modules_[""] = builtin.value();
+std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
+    auto it = builtinModules_.find(name);
+    if (it != builtinModules_.end()) {
+        return it->second;
     }
+
+    auto factoryIt = builtinModuleFactories.find(name);
+    if (factoryIt != builtinModuleFactories.end()) {
+        module_ptr_t module = factoryIt->second(shared_from_this());
+        builtinModules_[name] = module;
+        return module;
+    }
+
+    return std::nullopt;
+}
+
+context_ptr_t Context::create(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf) {
+    context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
+    ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
+    ctx->modules_[""] = ctx->getBuiltinModule("").value();
+    l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
+    return ctx;
 }
 
 module_ptr_t
@@ -168,7 +184,7 @@ bool Context::moduleFileExists(const std::string &moduleName) {
 module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     std::string path = getModulePath(moduleName);
     if (!path.empty()) {
-        return UserDefinedModule::loadFromFile(moduleName, path, shared_from_this());
+        return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
     }
     return nullptr;
 }

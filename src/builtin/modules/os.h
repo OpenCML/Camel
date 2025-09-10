@@ -23,7 +23,10 @@
 
 class OSBuiltinModule : public BuiltinModule {
   public:
-    OSBuiltinModule();
+    OSBuiltinModule(context_ptr_t ctx);
+    virtual ~OSBuiltinModule() = default;
 
-    static module_ptr_t create() { return std::make_shared<OSBuiltinModule>(); }
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx) { return std::make_shared<OSBuiltinModule>(ctx); }
 };

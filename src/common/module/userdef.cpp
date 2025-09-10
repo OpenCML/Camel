@@ -36,7 +36,7 @@ using namespace antlr4;
 
 UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)
-    : Module(name, path), context_(ctx) {
+    : Module(name, path, ctx) {
     if (parser) {
         parser_ = parser;
         diagnostics_ = parser->diagnostics();
@@ -48,16 +48,16 @@ UserDefinedModule::UserDefinedModule(
     importAllRefsFromMod(ctx->importModule(""));
 }
 
-module_ptr_t UserDefinedModule::loadFromFile(
-    const std::string &name, const std::string &path, context_ptr_t ctx) {
+module_ptr_t
+UserDefinedModule::fromFile(const std::string &name, const std::string &path, context_ptr_t ctx) {
     return std::make_shared<UserDefinedModule>(name, path, ctx);
 }
 
 bool UserDefinedModule::compile() {
     l.in("Module").info("Compiling module '{}' from file '{}'.", name_, path_);
-    if (this->built_) {
+    if (this->loaded_) {
         l.in("Module").warn("Module '{}' already built", name_);
-        return this->built_;
+        return this->loaded_;
     }
 
     if (!parser_->ast()) {
@@ -77,7 +77,7 @@ bool UserDefinedModule::compile() {
     auto girConstructor = GIR::Constructor(context_, shared_from_this());
     gir_ = girConstructor.construct(gct_, diagnostics_);
 
-    this->built_ = !diagnostics_->hasErrors();
-    l.in("Module").info("Module '{}' built {}", name_, this->built_ ? "successfully." : "failed.");
-    return this->built_;
+    bool success = !diagnostics_->hasErrors();
+    l.in("Module").info("Module '{}' built {}", name_, success ? "successfully." : "failed.");
+    return success;
 }

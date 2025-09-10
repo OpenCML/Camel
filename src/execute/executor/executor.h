@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "common/error/runtime.h"
+#include "common/operator.h"
 #include "common/type.h"
 
 #include <functional>
@@ -27,40 +29,37 @@
 #include <unordered_map>
 #include <vector>
 
-enum class RetCode {
-    success,
-    invalidWithParameter,
-    invalidnormParameter,
-    invalidURI,
-    errorOnExecution,
-    unknownError
-};
+class Context;
+using context_ptr_t = std::shared_ptr<Context>;
 
-struct Status {
-    RetCode code;
-    std::string errorMessage;
-};
-
-class BaseExecutor {
+class Executor : public std::enable_shared_from_this<Executor> {
+  protected:
+    context_ptr_t context_;
+    
+    std::unordered_map<std::string, operator_t> opsMap_;
   public:
-    std::string executorName = "";
-    virtual Status execute(
-        std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-        data_ptr_t &ret);
-    virtual ~BaseExecutor() = default;
+    Executor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
+        : context_(ctx), opsMap_(ops) {};
+    virtual ~Executor() = default;
+
+    virtual data_ptr_t eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) = 0;
 };
+
+using executor_ptr_t = std::shared_ptr<Executor>;
+using executor_factory_t = std::function<executor_ptr_t()>;
 
 class ExecutorManager {
   private:
-    using creator_t = std::function<std::unique_ptr<BaseExecutor>()>;
-    std::unordered_map<std::string, std::unique_ptr<BaseExecutor>> loadedExecutors;
-    std::unordered_map<std::string, creator_t> executorCreators;
-    void registerExecutorCreator(std::string name, creator_t creator);
+    context_ptr_t context_;
+    std::unordered_map<std::string, executor_factory_t> executorFactories;
+    std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
 
   public:
-    Status executeOperator(
-        std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-        data_ptr_t &ret);
-    ExecutorManager();
+    ExecutorManager(context_ptr_t ctx) : context_(ctx) {};
     ~ExecutorManager() = default;
+    void registerExecutorFactory(std::string name, executor_factory_t fact);
+
+    data_ptr_t eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
 };
+
+using exec_mgr_ptr_t = std::unique_ptr<ExecutorManager>;

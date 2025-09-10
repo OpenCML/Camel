@@ -23,7 +23,12 @@
 
 class MathBuiltinModule : public BuiltinModule {
   public:
-    MathBuiltinModule();
+    MathBuiltinModule(context_ptr_t ctx);
+    virtual ~MathBuiltinModule() = default;
 
-    static module_ptr_t create() { return std::make_shared<MathBuiltinModule>(); }
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<MathBuiltinModule>(ctx);
+    }
 };

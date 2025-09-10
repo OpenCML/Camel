@@ -19,11 +19,19 @@
 
 #include "math.h"
 
-MathBuiltinModule::MathBuiltinModule() : BuiltinModule("math") {
+MathBuiltinModule::MathBuiltinModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
     exportBuiltinOperator(
         "floor",
         param_init_list{},
         {{"value", anyTypePtr, nullptr, false}},
         voidTypePtr,
-        __not_implemented__);
+        ":not-impl");
+}
+
+bool MathBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    loaded_ = true;
+    return true;
 }

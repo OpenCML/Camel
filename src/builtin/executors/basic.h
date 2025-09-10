@@ -12,26 +12,24 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 16, 2025
- * Updated: Apr. 16, 2025
+ * Created: Sep. 09, 2025
+ * Updated: Sep. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "../executor.h"
-
 #pragma once
 
-class InnerExecutor : public BaseExecutor {
-  private:
-    using funcType =
-        std::function<Status(std::vector<data_ptr_t>, std::vector<data_ptr_t>, data_ptr_t &)>;
-    std::unordered_map<std::string, funcType> funcMap;
-    void registerFunc(std::string name, funcType func);
-    // functions define here, static
+#include "common/error/runtime.h"
+#include "execute/executor/executor.h"
+
+class BasicBuiltinExecutor : public Executor {
   public:
-    Status execute(
-        std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-        data_ptr_t &ret) override;
-    InnerExecutor();
-    ~InnerExecutor() = default;
+    BasicBuiltinExecutor(context_ptr_t ctx);
+    virtual ~BasicBuiltinExecutor() = default;
+
+    static executor_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<BasicBuiltinExecutor>(ctx);
+    }
+
+    virtual data_ptr_t eval(std::string uri, data_vec_t &with, data_vec_t &norm) override;
 };
