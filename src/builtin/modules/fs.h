@@ -23,10 +23,12 @@
 
 class FileBuiltinModule : public BuiltinModule {
   public:
-    FileBuiltinModule();
+    FileBuiltinModule(context_ptr_t ctx);
     virtual ~FileBuiltinModule() = default;
 
     virtual bool load() override;
 
-    static module_ptr_t create() { return std::make_shared<FileBuiltinModule>(); }
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<FileBuiltinModule>(ctx);
+    }
 };

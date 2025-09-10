@@ -19,12 +19,23 @@
 
 #pragma once
 
+#include "common/error/runtime.h"
 #include "execute/executor/executor.h"
 
-class BuiltInExecutor : public Executor {
+class BasicBuiltinExecutor : public Executor {
   public:
-    BuiltInExecutor() = default;
-    virtual ~BuiltInExecutor() = default;
+    BasicBuiltinExecutor(context_ptr_t ctx);
+    virtual ~BasicBuiltinExecutor() = default;
 
-    virtual data_ptr_t execute(Context &ctx, data_vec_t &with, data_vec_t &norm) = 0;
+    static executor_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<BasicBuiltinExecutor>(ctx);
+    }
+
+    virtual data_ptr_t eval(std::string uri, data_vec_t &with, data_vec_t &norm) override {
+        auto it = opsMap_.find(uri);
+        if (it == opsMap_.end()) {
+            throw CamelRuntimeException(RetCode::InvalidURI, std::format("Invalid URI: {}", uri));
+        }
+        return it->second(*context_, with, norm);
+    };
 };

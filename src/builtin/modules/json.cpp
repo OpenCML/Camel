@@ -19,13 +19,13 @@
 
 #include "json.h"
 
-JsonBuiltinModule::JsonBuiltinModule() : BuiltinModule("json") {
+JsonBuiltinModule::JsonBuiltinModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     exportBuiltinOperator(
         "load",
         param_init_list{},
         {{"value", anyTypePtr, nullptr, false}},
         voidTypePtr,
-        __not_implemented__);
+        ":not-impl");
 }
 
 bool JsonBuiltinModule::load() {

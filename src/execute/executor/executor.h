@@ -29,23 +29,37 @@
 #include <unordered_map>
 #include <vector>
 
-class Executor {
+class Context;
+using context_ptr_t = std::shared_ptr<Context>;
+
+class Executor : public std::enable_shared_from_this<Executor> {
+  protected:
+    context_ptr_t context_;
+    
+    std::unordered_map<std::string, operator_t> opsMap_;
   public:
-    std::string executorName = "";
-    virtual data_ptr_t execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
+    Executor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
+        : context_(ctx), opsMap_(ops) {};
     virtual ~Executor() = default;
+
+    virtual data_ptr_t eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) = 0;
 };
 
 using executor_ptr_t = std::shared_ptr<Executor>;
+using executor_factory_t = std::function<executor_ptr_t()>;
 
 class ExecutorManager {
   private:
+    context_ptr_t context_;
+    std::unordered_map<std::string, executor_factory_t> executorFactories;
     std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
-    void registerExecutor(std::string name, executor_ptr_t exec);
 
   public:
-    ExecutorManager();
+    ExecutorManager(context_ptr_t ctx) : context_(ctx) {};
     ~ExecutorManager() = default;
+    void registerExecutorFactory(std::string name, executor_factory_t fact);
 
-    data_ptr_t execute(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
+    data_ptr_t eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
 };
+
+using exec_mgr_ptr_t = std::unique_ptr<ExecutorManager>;

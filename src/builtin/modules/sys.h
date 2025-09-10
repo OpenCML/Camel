@@ -23,10 +23,12 @@
 
 class SysBuiltinModule : public BuiltinModule {
   public:
-    SysBuiltinModule();
+    SysBuiltinModule(context_ptr_t ctx);
     virtual ~SysBuiltinModule() = default;
 
     virtual bool load() override;
 
-    static module_ptr_t create() { return std::make_shared<SysBuiltinModule>(); }
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<SysBuiltinModule>(ctx);
+    }
 };

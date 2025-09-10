@@ -23,10 +23,10 @@
 
 class IOBuiltinModule : public BuiltinModule {
   public:
-    IOBuiltinModule();
+    IOBuiltinModule(context_ptr_t ctx);
     virtual ~IOBuiltinModule() = default;
 
     virtual bool load() override;
 
-    static module_ptr_t create() { return std::make_shared<IOBuiltinModule>(); }
+    static module_ptr_t create(context_ptr_t ctx) { return std::make_shared<IOBuiltinModule>(ctx); }
 };

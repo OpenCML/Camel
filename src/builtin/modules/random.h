@@ -23,10 +23,12 @@
 
 class RandomBuiltinModule : public BuiltinModule {
   public:
-    RandomBuiltinModule();
+    RandomBuiltinModule(context_ptr_t ctx);
     virtual ~RandomBuiltinModule() = default;
 
     virtual bool load() override;
 
-    static module_ptr_t create() { return std::make_shared<RandomBuiltinModule>(); }
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<RandomBuiltinModule>(ctx);
+    }
 };

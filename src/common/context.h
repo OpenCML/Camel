@@ -24,6 +24,7 @@
 #include <unordered_map>
 
 #include "common/error/diagnostic.h"
+#include "execute/executor/executor.h"
 #include "module/builtin.h"
 
 struct EntryConfig {
@@ -62,6 +63,8 @@ class Context : public std::enable_shared_from_this<Context> {
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
 
+    exec_mgr_ptr_t exeMgr_;
+
     std::vector<std::string>
     getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
     std::string
@@ -70,11 +73,15 @@ class Context : public std::enable_shared_from_this<Context> {
     bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
 
+    Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf)
+        : entryConfig_(entryConf), diagConfig_(diagConf) {}
+
   public:
-    Context(
+    virtual ~Context() = default;
+
+    static context_ptr_t create(
         const EntryConfig &entryConf = EntryConfig(),
         const DiagnosticsConfig &diagConf = DiagnosticsConfig());
-    virtual ~Context() = default;
 
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     DiagnosticsConfig diagConfig() const { return diagConfig_; }
@@ -83,6 +90,12 @@ class Context : public std::enable_shared_from_this<Context> {
     GIR::graph_ptr_t mainGraph() const;
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
+    void registerExecutorFactory(std::string name, executor_factory_t fact) {
+        exeMgr_->registerExecutorFactory(name, fact);
+    }
+    data_ptr_t eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) {
+        return exeMgr_->eval(uri, withArgs, normArgs);
+    }
 
     module_ptr_t
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");

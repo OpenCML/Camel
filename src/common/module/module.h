@@ -35,17 +35,21 @@ using type_ns_ptr_t = std::shared_ptr<Namespace<std::string, type_ptr_t>>;
 class Module;
 using module_ptr_t = std::shared_ptr<Module>;
 
+class Context;
+using context_ptr_t = std::shared_ptr<Context>;
+
 class Module : public std::enable_shared_from_this<Module> {
   protected:
     bool loaded_;
     std::string name_;
     std::string path_;
+    context_ptr_t context_;
     type_ns_ptr_t exportedTypeNS_;
     entity_ns_ptr_t exportedEntityNS_;
     std::unordered_map<Reference, module_ptr_t> importedRefModMap_;
 
   public:
-    Module(const std::string &name, const std::string &path);
+    Module(const std::string &name, const std::string &path, context_ptr_t ctx);
     virtual ~Module() = default;
 
     const std::string &name() const { return name_; }

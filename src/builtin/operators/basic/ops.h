@@ -22,8 +22,6 @@
 #include "common/operator.h"
 #include "common/type.h"
 
-extern const std::pair<std::string, operator_t> opsOpMap;
-
 data_ptr_t __builtin__assn__(Context &ctx, data_vec_t &with, data_vec_t &norm);
 data_ptr_t __builtin__assn_add__(Context &ctx, data_vec_t &with, data_vec_t &norm);
 data_ptr_t __builtin__assn_sub__(Context &ctx, data_vec_t &with, data_vec_t &norm);

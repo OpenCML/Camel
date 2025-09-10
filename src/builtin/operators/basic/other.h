@@ -19,19 +19,10 @@
 
 #pragma once
 
-#include "common/module/builtin.h"
+#include "common/operator.h"
+#include "common/type.h"
 
-class BasicBuiltinModule : public BuiltinModule {
-  public:
-    BasicBuiltinModule(context_ptr_t ctx);
-    virtual ~BasicBuiltinModule() = default;
-
-    virtual bool load() override;
-
-    void exportBinaryOp(const std::string &name, const std::string &uri);
-    void exportAssnOp(const std::string &name, const std::string &uri);
-
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<BasicBuiltinModule>(ctx);
-    }
-};
+data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    ASSERT(false, "Not implemented");
+    return nullptr;
+}

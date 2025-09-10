@@ -27,6 +27,8 @@ class FallbackExecSchedPass : public LinearSchedPass {
     FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
     virtual ~FallbackExecSchedPass() = default;
 
-    virtual std::any apply(GIR::graph_ptr_t &graph) override { return nullptr; };
-    virtual std::any apply(const GIR::graph_ptr_t &graph) override { return nullptr; };
+    virtual std::any apply(GIR::graph_ptr_t &graph) override {
+        return apply(const_cast<const GIR::graph_ptr_t &>(graph));
+    };
+    virtual std::any apply(const GIR::graph_ptr_t &graph) override;
 };

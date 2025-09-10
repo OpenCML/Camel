@@ -32,12 +32,14 @@ inline bool fileExists(const std::string &path) {
     return file.good();
 }
 
-Context::Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf)
-    : entryConfig_(entryConf), diagConfig_(diagConf) {
-    if (auto builtin = getBuiltinModule(""); builtin.has_value()) {
+context_ptr_t Context::create(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf) {
+    context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
+    ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
+    if (auto builtin = getBuiltinModule("", ctx); builtin.has_value()) {
         l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
-        modules_[""] = builtin.value();
+        ctx->modules_[""] = builtin.value();
     }
+    return ctx;
 }
 
 module_ptr_t
@@ -66,7 +68,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             return module;
         }
 
-        auto builtin = getBuiltinModule(name);
+        auto builtin = getBuiltinModule(name, shared_from_this());
         if (builtin.has_value()) {
             l.in("Context").debug("Module '{}' found in built-in modules.", name);
             modules_[name] = builtin.value();

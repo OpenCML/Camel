@@ -152,22 +152,25 @@ int main(int argc, char *argv[]) {
             // if targetFile is absolute, the entryDir is the parent directory of targetFile
             std::string entryDir = fs::absolute(entryPath).parent_path().string();
 
-            context_ptr_t ctx = std::make_shared<Context>(
+            context_ptr_t ctx = Context::create(
                 EntryConfig{
                     .entryDir = entryDir,
                     .entryFile = targetFile,
                     .searchPaths =
-                        {entryDir,
-                         fs::absolute(fs::path(
-                                          Run::stdLibPath.empty()
-                                              ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                              : Run::stdLibPath))
-                             .string(),
-                         getEnv("CAMEL_PACKAGES"),
-                         getEnv("CAMEL_HOME", camelPath.string())}},
+                        {
+                            entryDir,
+                            fs::absolute(fs::path(
+                                             Run::stdLibPath.empty()
+                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                 : Run::stdLibPath))
+                                .string(),
+                            getEnv("CAMEL_PACKAGES"),
+                            getEnv("CAMEL_HOME", camelPath.string()),
+                        }},
                 DiagnosticsConfig{
                     .total_limit = -1,
-                    .per_severity_limits = {{Diagnostic::Severity::Error, 0}}});
+                    .per_severity_limits = {{Diagnostic::Severity::Error, 0}},
+                });
 
             auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
             ctx->setMainModule(mainModule);

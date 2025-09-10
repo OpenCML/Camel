@@ -19,13 +19,13 @@
 
 #include "io.h"
 
-IOBuiltinModule::IOBuiltinModule() : BuiltinModule("io") {
+IOBuiltinModule::IOBuiltinModule(context_ptr_t ctx) : BuiltinModule("io", ctx) {
     exportBuiltinOperator(
         "open",
         param_init_list{},
         {{"value", anyTypePtr, nullptr, false}},
         voidTypePtr,
-        __not_implemented__);
+        ":not-impl");
 }
 
 bool IOBuiltinModule::load() {

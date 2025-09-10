@@ -36,7 +36,7 @@ using namespace antlr4;
 
 UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)
-    : Module(name, path), context_(ctx) {
+    : Module(name, path, ctx) {
     if (parser) {
         parser_ = parser;
         diagnostics_ = parser->diagnostics();

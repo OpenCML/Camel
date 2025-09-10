@@ -20,8 +20,8 @@
 #include "module.h"
 #include "common/error/base.h"
 
-Module::Module(const std::string &name, const std::string &path)
-    : loaded_(false), name_(name), path_(path),
+Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
+    : loaded_(false), name_(name), path_(path), context_(ctx),
       exportedTypeNS_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
       exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()),
       importedRefModMap_() {};

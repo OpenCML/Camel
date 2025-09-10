@@ -30,7 +30,6 @@ class Context;
 using context_ptr_t = std::shared_ptr<Context>;
 
 class UserDefinedModule : public Module {
-    context_ptr_t context_;
     GCT::node_ptr_t gct_;
     GIR::graph_ptr_t gir_;
     diagnostics_ptr_t diagnostics_;

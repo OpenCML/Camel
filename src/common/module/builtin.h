@@ -23,8 +23,8 @@
 
 data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm);
 
-inline func_type_ptr_t makeFuncType(
-    const param_init_list &with, const param_init_list &norm, const type_ptr_t &ret) {
+inline func_type_ptr_t
+makeFuncType(const param_init_list &with, const param_init_list &norm, const type_ptr_t &ret) {
     return std::make_shared<FunctionType>(with, norm, ret);
 }
 
@@ -35,7 +35,9 @@ makeOperator(const std::string &name, const func_type_ptr_t &&type, const std::s
 
 class BuiltinModule : public Module {
   public:
-    BuiltinModule(const std::string &name) : Module(name, "") { loaded_ = true; }
+    BuiltinModule(const std::string &name, context_ptr_t ctx) : Module(name, "", ctx) {
+        loaded_ = true;
+    }
     virtual ~BuiltinModule() = default;
 
     virtual bool load() = 0;
@@ -50,4 +52,4 @@ class BuiltinModule : public Module {
     }
 };
 
-std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
+std::optional<module_ptr_t> getBuiltinModule(const std::string &name, context_ptr_t ctx);

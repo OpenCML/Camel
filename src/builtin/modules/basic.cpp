@@ -18,9 +18,8 @@
  */
 
 #include "basic.h"
-#include "builtin/operators/basic/io.h"
-#include "builtin/operators/basic/ops.h"
-#include "builtin/operators/basic/str.h"
+#include "builtin/executors/basic.h"
+#include "common/context.h"
 
 void BasicBuiltinModule::exportBinaryOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(
@@ -93,7 +92,7 @@ static const std::pair<std::string, std::string> others[] = {
     {"unzip", ":not-impl"},
     {"exit", ":not-impl"}};
 
-BasicBuiltinModule::BasicBuiltinModule() : BuiltinModule("") {
+BasicBuiltinModule::BasicBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     for (const auto &[name, func] : assnOps) {
         exportAssnOp(name, func);
     }
@@ -125,5 +124,6 @@ bool BasicBuiltinModule::load() {
     if (loaded_) {
         return true;
     }
+    context_->registerExecutorFactory("", [&]() { return BasicBuiltinExecutor::create(context_); });
     return true;
 }
