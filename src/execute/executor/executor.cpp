@@ -28,6 +28,7 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
 }
 
 data_ptr_t ExecutorManager::eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) {
+    l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri);
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {
         throw CamelRuntimeException(RetCode::InvalidURI, "Invalid URI format");
@@ -41,6 +42,7 @@ data_ptr_t ExecutorManager::eval(std::string uri, data_vec_t &withArgs, data_vec
     if (itFact == executorFactories.end()) {
         throw CamelRuntimeException(RetCode::InvalidURI, "Unregistered protocol: " + protocol);
     }
+    l.in("ExecMgr").info("Loading executor for protocol: {}", protocol);
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, std::move(executor));
     return executor->eval(uri.substr(pos + 1), withArgs, normArgs);

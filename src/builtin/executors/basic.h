@@ -31,11 +31,5 @@ class BasicBuiltinExecutor : public Executor {
         return std::make_shared<BasicBuiltinExecutor>(ctx);
     }
 
-    virtual data_ptr_t eval(std::string uri, data_vec_t &with, data_vec_t &norm) override {
-        auto it = opsMap_.find(uri);
-        if (it == opsMap_.end()) {
-            throw CamelRuntimeException(RetCode::InvalidURI, std::format("Invalid URI: {}", uri));
-        }
-        return it->second(*context_, with, norm);
-    };
+    virtual data_ptr_t eval(std::string uri, data_vec_t &with, data_vec_t &norm) override;
 };

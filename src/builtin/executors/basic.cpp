@@ -21,6 +21,7 @@
 #include "../operators/basic/io.h"
 #include "../operators/basic/ops.h"
 #include "../operators/basic/other.h"
+#include "utils/log.h"
 
 const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
     static const std::unordered_map<std::string, operator_t> map = {
@@ -61,3 +62,12 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsOpMap()) {};
+
+data_ptr_t BasicBuiltinExecutor::eval(std::string uri, data_vec_t &with, data_vec_t &norm) {
+    l.in("BasicExec").debug("Evaluating operator of URI: {}", uri);
+    auto it = opsMap_.find(uri);
+    if (it == opsMap_.end()) {
+        throw CamelRuntimeException(RetCode::InvalidURI, std::format("Invalid URI: {}", uri));
+    }
+    return it->second(*context_, with, norm);
+};
