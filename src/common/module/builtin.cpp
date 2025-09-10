@@ -43,21 +43,3 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"json", [](context_ptr_t ctx) { return JsonBuiltinModule::create(ctx); }},
         {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
 };
-std::unordered_map<std::string, module_ptr_t> builtinModules;
-
-std::optional<module_ptr_t> getBuiltinModule(const std::string &name, context_ptr_t ctx) {
-    auto it = builtinModules.find(name);
-    if (it != builtinModules.end()) {
-        return it->second;
-    }
-
-    // TODO: 这里假设全局只有一个 Context，如果有多个 Context 可能会有问题
-    auto factoryIt = builtinModuleFactories.find(name);
-    if (factoryIt != builtinModuleFactories.end()) {
-        module_ptr_t module = factoryIt->second(ctx);
-        builtinModules[name] = module;
-        return module;
-    }
-
-    return std::nullopt;
-}

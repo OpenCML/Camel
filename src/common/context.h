@@ -62,9 +62,11 @@ class Context : public std::enable_shared_from_this<Context> {
 
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
+    std::unordered_map<std::string, module_ptr_t> builtinModules_;
 
     exec_mgr_ptr_t exeMgr_;
 
+    std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
     getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
     std::string

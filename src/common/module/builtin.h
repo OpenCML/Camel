@@ -21,7 +21,8 @@
 
 #include "module.h"
 
-data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm);
+extern std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
+    builtinModuleFactories;
 
 inline func_type_ptr_t
 makeFuncType(const param_init_list &with, const param_init_list &norm, const type_ptr_t &ret) {
@@ -51,5 +52,3 @@ class BuiltinModule : public Module {
         exportEntity(name, ops);
     }
 };
-
-std::optional<module_ptr_t> getBuiltinModule(const std::string &name, context_ptr_t ctx);

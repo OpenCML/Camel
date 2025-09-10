@@ -32,13 +32,27 @@ inline bool fileExists(const std::string &path) {
     return file.good();
 }
 
+std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
+    auto it = builtinModules_.find(name);
+    if (it != builtinModules_.end()) {
+        return it->second;
+    }
+
+    auto factoryIt = builtinModuleFactories.find(name);
+    if (factoryIt != builtinModuleFactories.end()) {
+        module_ptr_t module = factoryIt->second(shared_from_this());
+        builtinModules_[name] = module;
+        return module;
+    }
+
+    return std::nullopt;
+}
+
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf) {
     context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
-    if (auto builtin = getBuiltinModule("", ctx); builtin.has_value()) {
-        l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
-        ctx->modules_[""] = builtin.value();
-    }
+    ctx->modules_[""] = ctx->getBuiltinModule("").value();
+    l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
     return ctx;
 }
 
@@ -68,7 +82,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             return module;
         }
 
-        auto builtin = getBuiltinModule(name, shared_from_this());
+        auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
             l.in("Context").debug("Module '{}' found in built-in modules.", name);
             modules_[name] = builtin.value();
