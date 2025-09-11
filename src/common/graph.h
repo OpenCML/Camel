@@ -99,6 +99,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     bool looped() const { return looped_; }
+    bool empty() const { return nodes_.empty(); }
     arena_ptr_t arena() const { return arena_; }
     graph_ptr_t outer() const {
         if (outer_.expired()) {
