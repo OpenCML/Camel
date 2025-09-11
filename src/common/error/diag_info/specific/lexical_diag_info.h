@@ -24,14 +24,14 @@
 #include "../diag_type.h"
 
 enum class LexicalDiag : uint32_t {
-  // severity = 0 (Error)
-  IllegalCharacter = 0x000000,
-  InvalidNumberFormat = 0x000001,
-  UnclosedStringLiteral = 0x000002,
-  UnterminatedComment = 0x000003,
+    // severity = 0 (Error)
+    IllegalCharacter = 0x000000,
+    InvalidNumberFormat = 0x000001,
+    UnclosedStringLiteral = 0x000002,
+    UnterminatedComment = 0x000003,
 
-  // severity = 1 (Warning)
-  InvalidEscapeSequence = 0x010000,
+    // severity = 1 (Warning)
+    InvalidEscapeSequence = 0x010000,
 };
 
 constexpr DiagType diagTypeOf(LexicalDiag) { return DiagType::LexicalDiag; }

@@ -36,29 +36,22 @@
  */
 
 enum class DiagType : uint8_t {
-  InternalDiag = 0x00,
-  LexicalDiag = 0x01,
-  SyntaxDiag = 0x02,
-  SemanticDiag = 0x03,
-  RuntimeDiag = 0x04,
-  OptimizationDiag = 0x05,
+    InternalDiag = 0x00,
+    LexicalDiag = 0x01,
+    SyntaxDiag = 0x02,
+    SemanticDiag = 0x03,
+    RuntimeDiag = 0x04,
+    OptimizationDiag = 0x05,
 };
 
-enum class Severity : uint8_t {
-  Error = 0,
-  Warning = 1,
-  Info = 2,
-  Hint = 3,
-  Unknown = 0xF
-};
+enum class Severity : uint8_t { Error = 0, Warning = 1, Info = 2, Hint = 3, Unknown = 0xF };
 
 struct DiagInfo {
-  std::string name;
-  std::string message;
-  std::string suggestion;
+    std::string name;
+    std::string message;
+    std::string suggestion;
 
-  DiagInfo() = default;
-  DiagInfo(const std::string &name, const std::string &msg,
-           const std::string &sug)
-      : name(name), message(msg), suggestion(sug) {}
+    DiagInfo() = default;
+    DiagInfo(const std::string &name, const std::string &msg, const std::string &sug)
+        : name(name), message(msg), suggestion(sug) {}
 };

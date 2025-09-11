@@ -24,37 +24,37 @@
 #include "specific/syntax_diag_info.h"
 
 inline DiagInfo getDiagInfo(DiagType type, uint32_t specific) {
-  switch (type) {
-  case DiagType::LexicalDiag: {
-    const auto &map = getLexicalDiagInfoMap();
-    auto it = map.find(static_cast<LexicalDiag>(specific));
-    if (it != map.end()) {
-      return it->second;
+    switch (type) {
+    case DiagType::LexicalDiag: {
+        const auto &map = getLexicalDiagInfoMap();
+        auto it = map.find(static_cast<LexicalDiag>(specific));
+        if (it != map.end()) {
+            return it->second;
+        }
+        break;
     }
-    break;
-  }
-  case DiagType::SyntaxDiag: {
-    const auto &map = getSyntaxDiagInfoMap();
-    auto it = map.find(static_cast<SyntaxDiag>(specific));
-    if (it != map.end()) {
-      return it->second;
+    case DiagType::SyntaxDiag: {
+        const auto &map = getSyntaxDiagInfoMap();
+        auto it = map.find(static_cast<SyntaxDiag>(specific));
+        if (it != map.end()) {
+            return it->second;
+        }
+        break;
     }
-    break;
-  }
-  default:
-    break;
-  }
-  return DiagInfo{"Unknown", "Unknown diagnostic", ""};
+    default:
+        break;
+    }
+    return DiagInfo{"Unknown", "Unknown diagnostic", ""};
 }
 
 inline DiagInfo getDiagInfo(uint32_t diagCode) {
-  DiagType type = extractDiagType(diagCode);
-  uint32_t specific = extractSpecific(diagCode);
-  return getDiagInfo(type, specific);
+    DiagType type = extractDiagType(diagCode);
+    uint32_t specific = extractSpecific(diagCode);
+    return getDiagInfo(type, specific);
 }
 
 template <typename ErrorEnum> DiagInfo getDiagInfo(ErrorEnum err) {
-  DiagType type = diagTypeOf(err);
-  uint32_t specific = static_cast<uint32_t>(err);
-  return getDiagInfo(type, specific);
+    DiagType type = diagTypeOf(err);
+    uint32_t specific = static_cast<uint32_t>(err);
+    return getDiagInfo(type, specific);
 }

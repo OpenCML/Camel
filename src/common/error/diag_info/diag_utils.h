@@ -27,47 +27,47 @@
 #include "diag_type.h"
 
 inline uint32_t makeDiagCode(DiagType type, uint32_t specificCode) {
-  return (static_cast<uint32_t>(type) << 24) | (specificCode & 0xFFFFFF);
+    return (static_cast<uint32_t>(type) << 24) | (specificCode & 0xFFFFFF);
 }
 
 inline DiagType extractDiagType(uint32_t nonModuleKey) {
-  return static_cast<DiagType>((nonModuleKey >> 24) & 0xFF);
+    return static_cast<DiagType>((nonModuleKey >> 24) & 0xFF);
 }
 
 inline uint32_t extractSpecific(uint32_t nonModuleKey) {
-  return static_cast<uint32_t>(nonModuleKey & 0xFFFFFF);
+    return static_cast<uint32_t>(nonModuleKey & 0xFFFFFF);
 }
 
 inline Severity extractSeverity(uint32_t nonModuleKey) {
-  return static_cast<Severity>((nonModuleKey >> 20) & 0xF);
+    return static_cast<Severity>((nonModuleKey >> 20) & 0xF);
 }
 
 inline int severityToDiagnosticInt(Severity s) {
-  switch (s) {
-  case Severity::Error:
-    return 1;
-  case Severity::Warning:
-    return 2;
-  case Severity::Info:
-    return 3;
-  case Severity::Hint:
-    return 4;
-  default:
-    return 0xF;
-  }
+    switch (s) {
+    case Severity::Error:
+        return 1;
+    case Severity::Warning:
+        return 2;
+    case Severity::Info:
+        return 3;
+    case Severity::Hint:
+        return 4;
+    default:
+        return 0xF;
+    }
 }
 
 inline const char *severityToString(Severity s) {
-  switch (s) {
-  case Severity::Error:
-    return "Error";
-  case Severity::Warning:
-    return "Warning";
-  case Severity::Info:
-    return "Info";
-  case Severity::Hint:
-    return "Hint";
-  default:
-    return "Unknown";
-  }
+    switch (s) {
+    case Severity::Error:
+        return "Error";
+    case Severity::Warning:
+        return "Warning";
+    case Severity::Info:
+        return "Info";
+    case Severity::Hint:
+        return "Hint";
+    default:
+        return "Unknown";
+    }
 }
