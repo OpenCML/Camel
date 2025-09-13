@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "../data.h"
+#include "../base.h"
 #include "core/context/arena.h"
 
 namespace GraphIntermediateRepresentation {

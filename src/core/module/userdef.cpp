@@ -33,6 +33,10 @@
 
 #include "utils/log.h"
 
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
 using namespace std;
 using namespace antlr4;
 
@@ -43,7 +47,10 @@ UserDefinedModule::UserDefinedModule(
         parser_ = parser;
         diagnostics_ = parser->diagnostics();
     } else {
-        diagnostics_ = std::make_shared<Diagnostics>(ctx->diagConfig());
+        diagnostics_ = std::make_shared<Diagnostics>(
+            name,
+            path.empty() ? "<in-memory>" : fs::absolute(path).string());
+        diagnostics_->setConfig(ctx->diagConfig());
         parser_ = std::make_shared<CamelParser>(diagnostics_);
     }
     // Automatically import the built-in module

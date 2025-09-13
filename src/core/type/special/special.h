@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "../type.h"
+#include "../base.h"
 
 class SpecialType : public Type {
   public:

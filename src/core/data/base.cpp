@@ -19,7 +19,7 @@
 
 #include "base.h"
 
-#include "common/entity.h"
+#include "core/data/entity.h"
 
 using namespace std;
 

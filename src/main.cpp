@@ -19,8 +19,10 @@
  * Program of China
  */
 
-#include "antlr4-runtime/antlr4-runtime.h"
+// json 需要早于 antlr4-runtime 引入
 #include "nlohmann/json.hpp"
+
+#include "antlr4-runtime/antlr4-runtime.h"
 
 #include "builtin/passes/sched/linear/dump/graphviz.h"
 #include "builtin/passes/sched/linear/dump/topo-node-seq.h"
@@ -95,10 +97,11 @@ int main(int argc, char *argv[]) {
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setConfig(DiagsConfig{
-                .total_limit = -1,
-                .per_severity_limits = {{Severity::Error, 0}},
-            });
+            diagnostics->setConfig(
+                DiagsConfig{
+                    .total_limit = -1,
+                    .per_severity_limits = {{Severity::Error, 0}},
+                });
         }
 
         bool useJsonFormat = (errorFormat == "json");
@@ -159,10 +162,10 @@ int main(int argc, char *argv[]) {
                     .searchPaths =
                         {
                             entryDir,
-                            fs::absolute(fs::path(
-                                             Run::stdLibPath.empty()
-                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                 : Run::stdLibPath))
+                            fs::absolute(
+                                fs::path(
+                                    Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                            : Run::stdLibPath))
                                 .string(),
                             getEnv("CAMEL_PACKAGES"),
                             getEnv("CAMEL_HOME", camelPath.string()),

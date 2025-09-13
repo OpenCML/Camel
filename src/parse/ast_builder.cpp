@@ -39,7 +39,7 @@ template <typename LoadType> std::shared_ptr<LoadType> unwrapNodeAs(std::shared_
     return std::dynamic_pointer_cast<LoadType>(node->load());
 }
 
-inline std::pair<size_t, size_t>
+inline TokenRange
 extractTokenRangeFromContext(const antlr4::ParserRuleContext *context) {
     if (context && context->getStart() && context->getStop()) {
         return {context->getStart()->getTokenIndex(), context->getStop()->getTokenIndex() + 1};
@@ -48,7 +48,7 @@ extractTokenRangeFromContext(const antlr4::ParserRuleContext *context) {
     }
 }
 
-inline void setNodeTokenRange(node_ptr_t node, pair<size_t, size_t> range) {
+inline void setNodeTokenRange(node_ptr_t node, TokenRange range) {
     node->load()->setTokenRange(range);
 }
 inline void setNodeTokenRange(node_ptr_t node, size_t start, size_t end) {
@@ -375,7 +375,7 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     ENTER("FuncDecl");
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
-    pair<size_t, size_t> typeRange = {
+    TokenRange typeRange = {
         context->getStart()->getTokenIndex(),
         context->stmtBlock()->getStart()->getTokenIndex() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);

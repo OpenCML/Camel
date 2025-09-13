@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include "common/operator.h"
-#include "common/type.h"
+#include "core/operator.h"
+#include "core/type/type.h"
 
 data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     ASSERT(false, "Not implemented");

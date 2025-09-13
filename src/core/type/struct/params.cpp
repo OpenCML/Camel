@@ -18,7 +18,7 @@
  */
 
 #include "params.h"
-#include "common/data.h"
+#include "core/data/data.h"
 
 using namespace std;
 

@@ -48,7 +48,7 @@ size_t RuleTagToken::getLine() const {
   return 0;
 }
 
-size_t RuleTagToken::getCharPosInLine() const {
+size_t RuleTagToken::getCharPositionInLine() const {
   return INVALID_INDEX;
 }
 

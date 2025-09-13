@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "../data.h"
+#include "../base.h"
 
 class StructData : public Data {
   public:

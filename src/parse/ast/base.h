@@ -28,7 +28,7 @@
 #include "core/func.h"
 #include "core/impl.h"
 #include "core/literal.h"
-#include "error/diagnostics/base.h"
+#include "error/diagnostics/range.h"
 #include "utils/assert.h"
 
 namespace AbstractSyntaxTree {

@@ -18,7 +18,7 @@
  */
 
 #include "func.h"
-#include "common/graph.h"
+#include "compile/gir.h"
 
 using namespace std;
 using namespace GIR;

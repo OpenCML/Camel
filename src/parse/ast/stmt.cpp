@@ -28,7 +28,9 @@ const std::string ImportLoad::toString() const {
     }
     std::string result = "ImportDecl: ";
     if (!refs_.empty()) {
-        result += "{ " + join_list(refs_, std::string(", ")) + " }";
+        result += "{ " +
+                  strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); }) +
+                  " }";
     } else {
         result += "*";
     }
@@ -43,7 +45,9 @@ const std::string ExportLoad::toString() const {
     if (refs_.empty()) {
         return std::string("ExportDecl: NULL");
     }
-    std::string result = "ExportDecl: " + join_list(refs_, std::string(", "));
+    std::string result = "ExportDecl: " + strutil::join(refs_, ", ", [](const Reference &ref) {
+                             return ref.toString();
+                         });
     return result;
 }
 
@@ -52,7 +56,8 @@ const std::string DataDeclLoad::toString() const {
     if (refs_.size() == 1) {
         result += refs_[0].toString();
     } else {
-        std::string refs = join_list(refs_, std::string(", "));
+        std::string refs =
+            strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); });
         switch (type_) {
         case UnpackType::Dict:
             result += "{" + refs + "}";

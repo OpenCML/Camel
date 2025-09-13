@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include "common/operator.h"
-#include "common/type.h"
+#include "core/operator.h"
+#include "core/type/type.h"
 
 data_ptr_t __builtin__assn__(Context &ctx, data_vec_t &with, data_vec_t &norm);
 data_ptr_t __builtin__assn_add__(Context &ctx, data_vec_t &with, data_vec_t &norm);

@@ -24,16 +24,16 @@ CharRange CharRange::fromTokens(antlr4::Token *start, antlr4::Token *end) {
     if (start) {
         r.start = {
             static_cast<size_t>(start->getLine() - 1),
-            static_cast<size_t>(start->getCharPosInLine())};
+            static_cast<size_t>(start->getCharPositionInLine())};
     }
     if (end) {
         r.end = {
             static_cast<size_t>(end->getLine() - 1),
-            static_cast<size_t>(end->getCharPosInLine() + end->getText().length())};
+            static_cast<size_t>(end->getCharPositionInLine() + end->getText().length())};
     } else if (start) {
         r.end = {
             static_cast<size_t>(start->getLine() - 1),
-            static_cast<size_t>(start->getCharPosInLine() + start->getText().length())};
+            static_cast<size_t>(start->getCharPositionInLine() + start->getText().length())};
     }
     return r;
 }

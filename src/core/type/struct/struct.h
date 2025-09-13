@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "../type.h"
+#include "core/type/base.h"
 
 class StructType : public Type {
   public:

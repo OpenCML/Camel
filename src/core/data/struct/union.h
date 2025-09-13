@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "../data.h"
+#include "../base.h"
 
 class UnionData : public Data {
     data_ptr_t data_;

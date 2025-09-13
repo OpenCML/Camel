@@ -276,14 +276,14 @@ void ParserInterpreter::recover(RecognitionException &e) {
       size_t expectedTokenType = ime.getExpectedTokens().getMinElement(); // get any element
       _errorToken = getTokenFactory()->create({ tok->getTokenSource(), tok->getTokenSource()->getInputStream() },
         expectedTokenType, tok->getText(), Token::DEFAULT_CHANNEL, INVALID_INDEX, INVALID_INDEX, // invalid start/stop
-        tok->getLine(), tok->getCharPosInLine());
+        tok->getLine(), tok->getCharPositionInLine());
       _ctx->addChild(createErrorNode(_errorToken.get()));
     }
     else { // NoViableAlt
       Token *tok = e.getOffendingToken();
       _errorToken = getTokenFactory()->create({ tok->getTokenSource(), tok->getTokenSource()->getInputStream() },
         Token::INVALID_TYPE, tok->getText(), Token::DEFAULT_CHANNEL, INVALID_INDEX, INVALID_INDEX, // invalid start/stop
-        tok->getLine(), tok->getCharPosInLine());
+        tok->getLine(), tok->getCharPositionInLine());
       _ctx->addChild(createErrorNode(_errorToken.get()));
     }
   }
