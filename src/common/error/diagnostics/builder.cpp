@@ -12,23 +12,25 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Created: Sep. 06, 2025
+ * Updated: Sep. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
-#include <cstdint>
-#include <unordered_map>
+#include "builder.h"
 
-#include "../diag_type.h"
+// ---- DiagnosticBuilder implementation ----
+DiagnosticBuilder &DiagnosticBuilder::at(const TokenRange &range) {
+    tokenRange_ = range;
+    return *this;
+}
 
-enum class SyntaxDiag : uint32_t {
-    UnmatchedParenthesis = 0x000000,
-    MissingSemicolon = 0x000001,
-    UnexpectedToken = 0x000002,
-};
+DiagnosticBuilder &DiagnosticBuilder::at(size_t start, size_t end) {
+    tokenRange_ = {start, end};
+    return *this;
+}
 
-constexpr DiagType diagTypeOf(SyntaxDiag) { return DiagType::SyntaxDiag; }
-
-const std::unordered_map<SyntaxDiag, DiagInfo> getSyntaxDiagInfoMap();
+DiagnosticBuilder &DiagnosticBuilder::at(size_t token) {
+    tokenRange_ = {token, token};
+    return *this;
+}

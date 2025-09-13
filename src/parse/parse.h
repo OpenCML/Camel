@@ -149,7 +149,7 @@ class CamelParser {
             }
             os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3)
                << std::right << token->getLine() << ":" << std::setw(3) << std::left
-               << token->getCharPositionInLine() << "] (" << token->getChannel()
+               << token->getCharPosInLine() << "] (" << token->getChannel()
                << ") : " << token->getText() << std::endl;
             tokens_->consume();
         }

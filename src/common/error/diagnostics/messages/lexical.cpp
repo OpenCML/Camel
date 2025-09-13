@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "lexical_diag_info.h"
+#include "lexical.h"
 
 const std::unordered_map<LexicalDiag, DiagInfo> getLexicalDiagInfoMap() {
     return {

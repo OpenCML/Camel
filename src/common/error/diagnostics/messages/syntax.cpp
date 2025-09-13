@@ -17,23 +17,21 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
-#include <cstdint>
-#include <unordered_map>
+#include "syntax.h"
 
-#include "../diag_type.h"
-
-enum class LexicalDiag : uint32_t {
-    // severity = 0 (Error)
-    IllegalCharacter = 0x000000,
-    InvalidNumberFormat = 0x000001,
-    UnclosedStringLiteral = 0x000002,
-    UnterminatedComment = 0x000003,
-
-    // severity = 1 (Warning)
-    InvalidEscapeSequence = 0x010000,
-};
-
-constexpr DiagType diagTypeOf(LexicalDiag) { return DiagType::LexicalDiag; }
-
-const std::unordered_map<LexicalDiag, DiagInfo> getLexicalDiagInfoMap();
+const std::unordered_map<SyntaxDiag, DiagInfo> getSyntaxDiagInfoMap() {
+    return {
+        {SyntaxDiag::UnmatchedParenthesis,
+         {"UnmatchedParenthesis",
+          "There is an unmatched parenthesis: {0}.",
+          "Check for missing or extra parentheses."}},
+        {SyntaxDiag::MissingSemicolon,
+         {"MissingSemicolon",
+          "A semicolon is missing at the end of the statement: {0}.",
+          "Add a semicolon at the end of the statement."}},
+        {SyntaxDiag::UnexpectedToken,
+         {"UnexpectedToken",
+          "An unexpected token was encountered: {0}.",
+          "Check the syntax near the unexpected token."}},
+    };
+}

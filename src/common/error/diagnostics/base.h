@@ -18,6 +18,7 @@
  */
 
 #pragma once
+
 #include <cstdint>
 #include <string>
 
@@ -26,7 +27,7 @@
  *  0x TT SSSSSS
  *      |   \---- specificCode (24 bits) high nibble = severity (0..3 used)
  *      |
- *      \--------- error type (8 bits)
+ *      \-------- error type (8 bits)
  *
  * Severity nibble (specificCode high 4 bits):
  *   0x0 = Error
@@ -41,10 +42,27 @@ enum class DiagType : uint8_t {
     SyntaxDiag = 0x02,
     SemanticDiag = 0x03,
     RuntimeDiag = 0x04,
-    OptimizationDiag = 0x05,
 };
 
 enum class Severity : uint8_t { Error = 0, Warning = 1, Info = 2, Hint = 3, Unknown = 0xF };
+
+std::string to_string(Severity s);
+
+inline uint32_t makeDiagCode(DiagType type, uint32_t specificCode) {
+    return (static_cast<uint32_t>(type) << 24) | (specificCode & 0xFFFFFF);
+}
+
+inline DiagType extractDiagType(uint32_t nonModuleKey) {
+    return static_cast<DiagType>((nonModuleKey >> 24) & 0xFF);
+}
+
+inline uint32_t extractSpecific(uint32_t nonModuleKey) {
+    return static_cast<uint32_t>(nonModuleKey & 0xFFFFFF);
+}
+
+inline Severity extractSeverity(uint32_t nonModuleKey) {
+    return static_cast<Severity>((nonModuleKey >> 20) & 0xF);
+}
 
 struct DiagInfo {
     std::string name;
@@ -55,3 +73,13 @@ struct DiagInfo {
     DiagInfo(const std::string &name, const std::string &msg, const std::string &sug)
         : name(name), message(msg), suggestion(sug) {}
 };
+
+DiagInfo getDiagInfo(DiagType type, uint32_t specific);
+
+DiagInfo getDiagInfo(uint32_t diagCode);
+
+template <typename ErrorEnum> DiagInfo getDiagInfo(ErrorEnum err) {
+    DiagType type = diagTypeOf(err);
+    uint32_t specific = static_cast<uint32_t>(err);
+    return getDiagInfo(type, specific);
+}

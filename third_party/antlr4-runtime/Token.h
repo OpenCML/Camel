@@ -57,7 +57,7 @@ namespace antlr4 {
 
     /// The index of the first character of this token relative to the
     /// beginning of the line at which it occurs, 0..n-1
-    virtual size_t getCharPositionInLine() const = 0;
+    virtual size_t getCharPosInLine() const = 0;
 
     /// Return the channel this token. Each token can arrive at the parser
     /// on a different channel, but the parser only "tunes" to a single channel.

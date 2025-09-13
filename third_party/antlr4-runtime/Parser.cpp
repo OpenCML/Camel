@@ -311,7 +311,7 @@ void Parser::notifyErrorListeners(const std::string &msg) {
 void Parser::notifyErrorListeners(Token *offendingToken, const std::string &msg, std::exception_ptr e) {
   _syntaxErrors++;
   size_t line = offendingToken->getLine();
-  size_t charPositionInLine = offendingToken->getCharPositionInLine();
+  size_t charPositionInLine = offendingToken->getCharPosInLine();
 
   ProxyErrorListener &listener = getErrorListenerDispatch();
   listener.syntaxError(this, offendingToken, line, charPositionInLine, msg, e);

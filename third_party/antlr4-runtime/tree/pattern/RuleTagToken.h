@@ -91,7 +91,7 @@ namespace pattern {
     virtual size_t getLine() const override;
 
     /// The implementation for <seealso cref="RuleTagToken"/> always returns INVALID_INDEX.
-    virtual size_t getCharPositionInLine() const override;
+    virtual size_t getCharPosInLine() const override;
 
     /// The implementation for <seealso cref="RuleTagToken"/> always returns INVALID_INDEX.
     virtual size_t getTokenIndex() const override;

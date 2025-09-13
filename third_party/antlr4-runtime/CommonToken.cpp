@@ -53,7 +53,7 @@ CommonToken::CommonToken(Token *oldToken) {
   _type = oldToken->getType();
   _line = oldToken->getLine();
   _index = oldToken->getTokenIndex();
-  _charPositionInLine = oldToken->getCharPositionInLine();
+  _charPositionInLine = oldToken->getCharPosInLine();
   _channel = oldToken->getChannel();
   _start = oldToken->getStartIndex();
   _stop = oldToken->getStopIndex();

@@ -96,7 +96,7 @@ std::string Recognizer::getErrorHeader(RecognitionException *e) {
   // We're having issues with cross header dependencies, these two classes will need to be
   // rewritten to remove that.
   size_t line = e->getOffendingToken()->getLine();
-  size_t charPositionInLine = e->getOffendingToken()->getCharPositionInLine();
+  size_t charPositionInLine = e->getOffendingToken()->getCharPosInLine();
   return std::string("line ") + std::to_string(line) + ":" + std::to_string(charPositionInLine);
 
 }

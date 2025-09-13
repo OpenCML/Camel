@@ -17,13 +17,27 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
-#include "diag_type.h"
-#include "diag_utils.h"
-#include "specific/lexical_diag_info.h"
-#include "specific/syntax_diag_info.h"
+#include "base.h"
 
-inline DiagInfo getDiagInfo(DiagType type, uint32_t specific) {
+#include "lexical.h"
+#include "syntax.h"
+
+std::string to_string(Severity s) {
+    switch (s) {
+    case Severity::Error:
+        return "Error";
+    case Severity::Warning:
+        return "Warning";
+    case Severity::Info:
+        return "Info";
+    case Severity::Hint:
+        return "Hint";
+    default:
+        return "Unknown";
+    }
+}
+
+DiagInfo getDiagInfo(DiagType type, uint32_t specific) {
     switch (type) {
     case DiagType::LexicalDiag: {
         const auto &map = getLexicalDiagInfoMap();
@@ -47,14 +61,8 @@ inline DiagInfo getDiagInfo(DiagType type, uint32_t specific) {
     return DiagInfo{"Unknown", "Unknown diagnostic", ""};
 }
 
-inline DiagInfo getDiagInfo(uint32_t diagCode) {
+DiagInfo getDiagInfo(uint32_t diagCode) {
     DiagType type = extractDiagType(diagCode);
     uint32_t specific = extractSpecific(diagCode);
-    return getDiagInfo(type, specific);
-}
-
-template <typename ErrorEnum> DiagInfo getDiagInfo(ErrorEnum err) {
-    DiagType type = diagTypeOf(err);
-    uint32_t specific = static_cast<uint32_t>(err);
     return getDiagInfo(type, specific);
 }

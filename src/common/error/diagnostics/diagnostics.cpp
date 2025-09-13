@@ -17,31 +17,31 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "diagnostic.h"
+#include "diagnostics.h"
 
-// ---- SourceRangeManager implementation ----
-void SourceRangeManager::setTokens(const std::vector<antlr4::Token *> *toks) {
+// ---- RangeConverter implementation ----
+void RangeConverter::setTokens(const std::vector<antlr4::Token *> *toks) {
     tokenPassed = true;
     tokens_ = toks;
 }
 
-ErrorRange SourceRangeManager::fromTokenIndices(size_t startIdx, size_t endIdx) const {
-    ErrorRange r{{0, 0}, {0, 0}};
+CharRange RangeConverter::fromTokenIndices(size_t startIdx, size_t endIdx) const {
+    CharRange r{{0, 0}, {0, 0}};
     if (!tokens_ || tokens_->empty())
         return r;
 
-    auto conv = [&](size_t i) -> ErrorPosition {
+    auto conv = [&](size_t i) -> CharPos {
         if (i < tokens_->size()) {
             auto *t = (*tokens_)[i];
             return {
                 static_cast<size_t>(t->getLine() - 1),
-                static_cast<size_t>(t->getCharPositionInLine())};
+                static_cast<size_t>(t->getCharPosInLine())};
         }
-        return ErrorPosition{0, 0};
+        return CharPos{0, 0};
     };
 
-    ErrorPosition s = conv(startIdx);
-    ErrorPosition e = conv(endIdx);
+    CharPos s = conv(startIdx);
+    CharPos e = conv(endIdx);
     if (e.line < s.line || (e.line == s.line && e.character < s.character))
         e = s;
     else if (endIdx < tokens_->size()) {
@@ -53,16 +53,15 @@ ErrorRange SourceRangeManager::fromTokenIndices(size_t startIdx, size_t endIdx) 
     return r;
 }
 
-ErrorRange SourceRangeManager::fromTokenPointers(antlr4::Token *start, antlr4::Token *end) const {
-    ErrorRange r{{0, 0}, {0, 0}};
+CharRange RangeConverter::fromTokenPointers(antlr4::Token *start, antlr4::Token *end) const {
+    CharRange r{{0, 0}, {0, 0}};
     if (start) {
         r.start.line = static_cast<size_t>(start->getLine() - 1);
-        r.start.character = static_cast<size_t>(start->getCharPositionInLine());
+        r.start.character = static_cast<size_t>(start->getCharPosInLine());
     }
     if (end) {
         r.end.line = static_cast<size_t>(end->getLine() - 1);
-        r.end.character =
-            static_cast<size_t>(end->getCharPositionInLine() + end->getText().length());
+        r.end.character = static_cast<size_t>(end->getCharPosInLine() + end->getText().length());
     } else {
         r.end = r.start;
     }
@@ -70,14 +69,14 @@ ErrorRange SourceRangeManager::fromTokenPointers(antlr4::Token *start, antlr4::T
 }
 
 // ---- Diagnostic implementation ----
-Diagnostic &Diagnostic::fetchRange(const SourceRangeManager &mgr) {
+Diagnostic &Diagnostic::fetchRange(const RangeConverter &mgr) {
     range = mgr.fromTokenIndices(tokenRange.start, tokenRange.end);
     return *this;
 }
 
 std::string Diagnostic::toText() const {
     std::ostringstream oss;
-    oss << '[' << severityToString(severity) << "]: " << moduleName << " (" << modulePath << "), "
+    oss << '[' << to_string(severity) << "]: " << moduleName << " (" << modulePath << "), "
         << "line " << (range.start.line + 1) << ", char " << (range.start.character + 1) << ": \n"
         << message << "(name=" << name << ", code=0x" << hex8(diagCode()) << ")\n";
 
@@ -93,7 +92,7 @@ std::string Diagnostic::toJson() const {
         << ",\"character\":" << range.start.character << "},"
         << "\"end\":{\"line\":" << range.end.line << ",\"character\":" << range.end.character << "}"
         << "},"
-        << "\"severity\":" << severityToDiagnosticInt(severity) << ","
+        << "\"severity\":" << to_string(severity) << ","
         << "\"code\":\"0x" << hex8(diagCode()) << "\","
         << "\"source\":\"Camel\","
         << "\"message\":\"" << escapeJson(message) << "\","
@@ -165,13 +164,13 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
 
 void Diagnostics::setTokens(const std::vector<antlr4::Token *> *tokens) {
     std::lock_guard<std::mutex> lk(mtx_);
-    rangeManager_.setTokens(tokens);
+    rangeConv_.setTokens(tokens);
 }
 
 void Diagnostics::fetchAll() {
     std::lock_guard<std::mutex> lk(mtx_);
     for (auto &d : storage_)
-        d.fetchRange(rangeManager_);
+        d.fetchRange(rangeConv_);
 }
 
 void Diagnostics::outputAll(std::ostream &os) const {
@@ -307,30 +306,4 @@ size_t Diagnostics::countBySeverityInternal(Severity severity) const {
         }
     }
     return result;
-}
-
-// ---- DiagnosticBuilder implementation ----
-DiagnosticBuilder &DiagnosticBuilder::at(const TokenIndexRange &range) {
-    tokenRange_ = range;
-    return *this;
-}
-
-DiagnosticBuilder &DiagnosticBuilder::at(size_t start, size_t end) {
-    tokenRange_ = {start, end};
-    return *this;
-}
-
-DiagnosticBuilder &DiagnosticBuilder::at(size_t token) {
-    tokenRange_ = {token, token};
-    return *this;
-}
-
-DiagnosticBuilder &DiagnosticBuilder::modName(const std::string &name) {
-    moduleName_ = name;
-    return *this;
-}
-
-DiagnosticBuilder &DiagnosticBuilder::modPath(const std::string &path) {
-    modulePath_ = path;
-    return *this;
 }
