@@ -19,7 +19,7 @@
 
 #include "basic.h"
 #include "builtin/executors/basic.h"
-#include "common/context.h"
+#include "core/context/context.h"
 
 void BasicBuiltinModule::exportBinaryOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(

@@ -12,18 +12,24 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 09, 2024
- * Updated: Oct. 17, 2024
+ * Created: Oct. 21, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <string>
+#include "compile/gir.h"
+#include "core/context/context.h"
 
-#include "common/scope.h"
-#include "core/data/data.h"
+class GraphIRPass {
+  protected:
+    context_ptr_t context_;
 
-extern Scope<std::string, data_ptr_t> globalRootScope;
+  public:
+    GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
+    virtual ~GraphIRPass() = default;
 
-void initGlobalRootScope();
+    virtual std::any apply(GIR::graph_ptr_t &graph) = 0;
+    virtual std::any apply(const GIR::graph_ptr_t &graph) = 0;
+};

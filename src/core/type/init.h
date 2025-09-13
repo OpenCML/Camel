@@ -12,18 +12,33 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 09, 2024
- * Updated: Oct. 17, 2024
+ * Created: Oct. 06, 2024
+ * Updated: Oct. 15, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <string>
+#include "base.h"
 
-#include "common/scope.h"
-#include "core/data/data.h"
+extern type_ptr_t int32TypePtr;
+extern type_ptr_t int64TypePtr;
+extern type_ptr_t floatTypePtr;
+extern type_ptr_t doubleTypePtr;
+extern type_ptr_t stringTypePtr;
+extern type_ptr_t boolTypePtr;
+extern type_ptr_t charTypePtr;
 
-extern Scope<std::string, data_ptr_t> globalRootScope;
+extern type_ptr_t intTypePtr;
+extern type_ptr_t realTypePtr;
+extern type_ptr_t numberTypePtr;
 
-void initGlobalRootScope();
+extern type_ptr_t listTypePtr;
+
+extern type_ptr_t anyTypePtr;
+extern type_ptr_t voidTypePtr;
+extern type_ptr_t functorTypePtr;
+
+extern type_ptr_t refTypePtr;
+
+void initTypes();

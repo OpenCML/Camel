@@ -19,11 +19,17 @@
 
 #pragma once
 
-#include <string>
-
-#include "common/scope.h"
-#include "core/data/data.h"
-
-extern Scope<std::string, data_ptr_t> globalRootScope;
-
-void initGlobalRootScope();
+#include "base.h"
+#include "other/null.h"
+#include "other/ref.h"
+#include "other/string.h"
+#include "primary.h"
+#include "struct/array.h"
+#include "struct/dict.h"
+#include "struct/list.h"
+#include "struct/map.h"
+#include "struct/params.h"
+#include "struct/set.h"
+#include "struct/tensor.h"
+#include "struct/tuple.h"
+#include "struct/vector.h"

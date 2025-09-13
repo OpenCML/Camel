@@ -117,9 +117,9 @@ function generateParserCode() {
     let geneCode = ''
 
     logStep('Modifying CSTDumpVisitor...')
-    srcCode = fs.readFileSync('./src/parse/cst-dump.h', 'utf-8')
+    srcCode = fs.readFileSync('./src/parse/cst_dumper.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules, geneCSTDumperDeclByRuleName)
-    fs.writeFileSync('./src/parse/cst-dump.h', geneCode)
+    fs.writeFileSync('./src/parse/cst_dumper.h', geneCode)
     logDone('Modified CSTDumpVisitor')
 
     logStep('Modifying Formatter header code...')
@@ -134,17 +134,17 @@ function generateParserCode() {
     fs.writeFileSync('./src/service/formatter/fmt.tmp.cpp', geneCode)
     logDone('Generated Formatter code')
 
-    logStep('Modifying AST Constructor header code...')
-    srcCode = fs.readFileSync('./src/parse/ast.h', 'utf-8')
+    logStep('Modifying AST Builder header code...')
+    srcCode = fs.readFileSync('./src/parse/ast_builder.h', 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
-    fs.writeFileSync('./src/parse/ast.h', geneCode)
-    logDone('Modified AST Constructor header')
+    fs.writeFileSync('./src/parse/ast_builder.h', geneCode)
+    logDone('Modified AST Builder header')
 
-    logStep('Generating AST Constructor cpp code...')
-    srcCode = fs.readFileSync('./src/parse/ast.cpp', 'utf-8')
-    geneCode = generateTmpCppCode(srcCode, rules, 'Constructor')
-    fs.writeFileSync('./src/parse/ast.tmp.cpp', geneCode)
-    logDone('Generated AST Constructor code')
+    logStep('Generating AST Builder cpp code...')
+    srcCode = fs.readFileSync('./src/parse/ast_builder.cpp', 'utf-8')
+    geneCode = generateTmpCppCode(srcCode, rules, 'Builder')
+    fs.writeFileSync('./src/parse/ast_builder.tmp.cpp', geneCode)
+    logDone('Generated AST Builder code')
 }
 
 generateParserCode()

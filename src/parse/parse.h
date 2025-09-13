@@ -26,10 +26,10 @@
 #include "antlr/OpenCMLLexer.h"
 #include "antlr/OpenCMLParser.h"
 
-#include "ast.h"
-#include "cst-dump.h"
+#include "ast_builder.h"
+#include "cst_dumper.h"
 
-#include "common/error/diagnostic.h"
+#include "error/diagnostics/diagnostics.h"
 
 class ParserErrorListener : public antlr4::BaseErrorListener {
   protected:
@@ -104,7 +104,7 @@ class CamelParser {
 
     bool buildAST() {
         try {
-            auto constructor = AST::Constructor();
+            auto constructor = AST::Builder();
             ast_ = constructor.construct(cst_, diagnostics_);
 
             if (diagnostics_->hasErrors()) {

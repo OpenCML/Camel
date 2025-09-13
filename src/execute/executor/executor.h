@@ -19,9 +19,9 @@
 
 #pragma once
 
-#include "common/error/runtime.h"
-#include "common/operator.h"
-#include "common/type.h"
+#include "core/operator.h"
+#include "core/type/type.h"
+#include "error/runtime.h"
 
 #include <functional>
 #include <memory>
