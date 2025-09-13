@@ -21,6 +21,8 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
+#include <variant>
+
 // ---- Basic structures ----
 struct CharPos {
     size_t line = 0;
@@ -30,6 +32,8 @@ struct CharPos {
 struct CharRange {
     CharPos start;
     CharPos end;
+
+    static CharRange fromTokens(antlr4::Token *start, antlr4::Token *end);
 };
 
 struct TokenRange {
@@ -37,14 +41,14 @@ struct TokenRange {
     size_t end = 0;
 };
 
+using SourceRange = std::variant<std::monostate, CharRange, TokenRange>;
+
 // ---- RangeConverter ----
 class RangeConverter {
   public:
-    void setTokens(const std::vector<antlr4::Token *> *toks);
-    CharRange fromTokenIndices(size_t startIdx, size_t endIdx) const;
-    CharRange fromTokenPointers(antlr4::Token *start, antlr4::Token *end) const;
+    RangeConverter(const std::vector<antlr4::Token *> &toks) : tokens_(toks) {}
+    CharRange conv(const TokenRange &tr) const;
 
   private:
-    bool tokenPassed = false;
-    const std::vector<antlr4::Token *> *tokens_ = nullptr;
+    const std::vector<antlr4::Token *> &tokens_;
 };

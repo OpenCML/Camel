@@ -19,66 +19,30 @@
 
 #include "diagnostics.h"
 
-// ---- RangeConverter implementation ----
-void RangeConverter::setTokens(const std::vector<antlr4::Token *> *toks) {
-    tokenPassed = true;
-    tokens_ = toks;
-}
-
-CharRange RangeConverter::fromTokenIndices(size_t startIdx, size_t endIdx) const {
-    CharRange r{{0, 0}, {0, 0}};
-    if (!tokens_ || tokens_->empty())
-        return r;
-
-    auto conv = [&](size_t i) -> CharPos {
-        if (i < tokens_->size()) {
-            auto *t = (*tokens_)[i];
-            return {
-                static_cast<size_t>(t->getLine() - 1),
-                static_cast<size_t>(t->getCharPosInLine())};
-        }
-        return CharPos{0, 0};
-    };
-
-    CharPos s = conv(startIdx);
-    CharPos e = conv(endIdx);
-    if (e.line < s.line || (e.line == s.line && e.character < s.character))
-        e = s;
-    else if (endIdx < tokens_->size()) {
-        auto *t = (*tokens_)[endIdx];
-        e.character += t->getText().length();
-    }
-    r.start = s;
-    r.end = e;
-    return r;
-}
-
-CharRange RangeConverter::fromTokenPointers(antlr4::Token *start, antlr4::Token *end) const {
-    CharRange r{{0, 0}, {0, 0}};
-    if (start) {
-        r.start.line = static_cast<size_t>(start->getLine() - 1);
-        r.start.character = static_cast<size_t>(start->getCharPosInLine());
-    }
-    if (end) {
-        r.end.line = static_cast<size_t>(end->getLine() - 1);
-        r.end.character = static_cast<size_t>(end->getCharPosInLine() + end->getText().length());
-    } else {
-        r.end = r.start;
-    }
-    return r;
-}
+#include "utils/assert.h"
+#include "utils/str.h"
 
 // ---- Diagnostic implementation ----
-Diagnostic &Diagnostic::fetchRange(const RangeConverter &mgr) {
-    range = mgr.fromTokenIndices(tokenRange.start, tokenRange.end);
+Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
+    if (std::holds_alternative<TokenRange>(range)) {
+        TokenRange tr = std::get<TokenRange>(range);
+        range = conv.conv(tr);
+    }
     return *this;
 }
 
 std::string Diagnostic::toText() const {
     std::ostringstream oss;
-    oss << '[' << to_string(severity) << "]: " << moduleName << " (" << modulePath << "), "
-        << "line " << (range.start.line + 1) << ", char " << (range.start.character + 1) << ": \n"
-        << message << "(name=" << name << ", code=0x" << hex8(diagCode()) << ")\n";
+    oss << '[' << to_string(severity) << "]: " << moduleName << " (" << modulePath << "), ";
+    if (std::holds_alternative<TokenRange>(range)) {
+        ASSERT(false, "TokenRange should be converted to CharRange before toText()");
+    } else if (std::holds_alternative<std::monostate>(range)) {
+        oss << "line ?, char ?";
+    } else if (std::holds_alternative<CharRange>(range)) {
+        CharRange r = std::get<CharRange>(range);
+        oss << "line " << (r.start.line + 1) << ", char " << (r.start.character + 1) << "";
+    }
+    oss << ": \n" << message << "(name=" << name << ", code=0x" << hex8(diagCode()) << ")\n";
 
     if (!suggestion.empty())
         oss << "suggestion: " << suggestion;
@@ -87,10 +51,16 @@ std::string Diagnostic::toText() const {
 
 std::string Diagnostic::toJson() const {
     std::ostringstream oss;
+    CharRange r{{0, 0}, {0, 0}};
+    if (std::holds_alternative<CharRange>(range)) {
+        r = std::get<CharRange>(range);
+    } else if (std::holds_alternative<TokenRange>(range)) {
+        ASSERT(false, "TokenRange should be converted to CharRange before toJson()");
+    }
     oss << "{"
-        << "\"range\":{\"start\":{\"line\":" << range.start.line
-        << ",\"character\":" << range.start.character << "},"
-        << "\"end\":{\"line\":" << range.end.line << ",\"character\":" << range.end.character << "}"
+        << "\"range\":{\"start\":{\"line\":" << r.start.line
+        << ",\"character\":" << r.start.character << "},"
+        << "\"end\":{\"line\":" << r.end.line << ",\"character\":" << r.end.character << "}"
         << "},"
         << "\"severity\":" << to_string(severity) << ","
         << "\"code\":\"0x" << hex8(diagCode()) << "\","
@@ -162,38 +132,20 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
     return storage_.back();
 }
 
-void Diagnostics::setTokens(const std::vector<antlr4::Token *> *tokens) {
+void Diagnostics::fetchAll(const std::vector<antlr4::Token *> &tokens) {
     std::lock_guard<std::mutex> lk(mtx_);
-    rangeConv_.setTokens(tokens);
-}
-
-void Diagnostics::fetchAll() {
-    std::lock_guard<std::mutex> lk(mtx_);
+    RangeConverter conv(tokens);
     for (auto &d : storage_)
-        d.fetchRange(rangeConv_);
+        d.fetchRange(conv);
 }
 
-void Diagnostics::outputAll(std::ostream &os) const {
+void Diagnostics::dump(std::ostream &os, bool json) const {
     std::lock_guard<std::mutex> lk(mtx_);
-    for (const auto &d : storage_) {
-        os << d.toText() << '\n';
-    }
-}
-
-std::string Diagnostics::toJson() const {
-    std::ostringstream oss;
-    std::lock_guard<std::mutex> lk(mtx_);
-
-    oss << "[";
-    bool first = true;
-    for (const auto &d : storage_) {
-        if (!first)
-            oss << ",";
-        oss << d.toJson();
-        first = false;
-    }
-    oss << "]";
-    return oss.str();
+    os << "[";
+    os << strutil::join(storage_, ",\n", [json](const Diagnostic &d) {
+        return json ? d.toJson() : d.toText();
+    });
+    os << "]";
 }
 
 void Diagnostics::clear() {
@@ -279,6 +231,16 @@ std::unordered_map<DiagType, size_t> Diagnostics::countByType() const {
         result[d.type]++;
     }
     return result;
+}
+
+bool Diagnostics::hasErrors() const {
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (const auto &d : storage_) {
+        if (d.severity == Severity::Error) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ---- Helper implementations ----

@@ -58,7 +58,7 @@ struct EntryConfig {
 
 class Context : public std::enable_shared_from_this<Context> {
     EntryConfig entryConfig_;
-    DiagnosticsConfig diagConfig_;
+    DiagsConfig diagConfig_;
 
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
@@ -75,7 +75,7 @@ class Context : public std::enable_shared_from_this<Context> {
     bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
 
-    Context(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf)
+    Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
         : entryConfig_(entryConf), diagConfig_(diagConf) {}
 
   public:
@@ -83,10 +83,10 @@ class Context : public std::enable_shared_from_this<Context> {
 
     static context_ptr_t create(
         const EntryConfig &entryConf = EntryConfig(),
-        const DiagnosticsConfig &diagConf = DiagnosticsConfig());
+        const DiagsConfig &diagConf = DiagsConfig());
 
     const std::string &entryDir() const { return entryConfig_.entryDir; }
-    DiagnosticsConfig diagConfig() const { return diagConfig_; }
+    DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
     GIR::graph_ptr_t rootGraph() const;
     GIR::graph_ptr_t mainGraph() const;

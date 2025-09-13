@@ -25,9 +25,7 @@
 #include "../base.h"
 
 enum class SyntaxDiag : uint32_t {
-    UnmatchedParenthesis = 0x000000,
-    MissingSemicolon = 0x000001,
-    UnexpectedToken = 0x000002,
+    UnknownSyntaxError = 0x000000,
 };
 
 constexpr DiagType diagTypeOf(SyntaxDiag) { return DiagType::SyntaxDiag; }

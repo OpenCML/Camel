@@ -21,17 +21,9 @@
 
 const std::unordered_map<SyntaxDiag, DiagInfo> getSyntaxDiagInfoMap() {
     return {
-        {SyntaxDiag::UnmatchedParenthesis,
-         {"UnmatchedParenthesis",
-          "There is an unmatched parenthesis: {0}.",
-          "Check for missing or extra parentheses."}},
-        {SyntaxDiag::MissingSemicolon,
-         {"MissingSemicolon",
-          "A semicolon is missing at the end of the statement: {0}.",
-          "Add a semicolon at the end of the statement."}},
-        {SyntaxDiag::UnexpectedToken,
-         {"UnexpectedToken",
-          "An unexpected token was encountered: {0}.",
-          "Check the syntax near the unexpected token."}},
+        {SyntaxDiag::UnknownSyntaxError,
+         {"UnknownSyntaxError",
+          "An unknown syntax error has occurred: {0}.",
+          "Check the surrounding code for possible syntax issues."}},
     };
 }

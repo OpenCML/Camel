@@ -32,9 +32,11 @@ class DiagnosticBuilder {
     DiagnosticBuilder(Diagnostics &diag) : diagnostics_(diag) {}
 
     // Position setting methods
+    DiagnosticBuilder &at(const CharRange &range);
     DiagnosticBuilder &at(const TokenRange &range);
-    DiagnosticBuilder &at(size_t start, size_t end);
     DiagnosticBuilder &at(size_t token);
+    DiagnosticBuilder &at(antlr4::Token *start, antlr4::Token *end);
+    DiagnosticBuilder &at(antlr4::Token *token);
 
     // Message substitution + commit
     template <typename... Args> Diagnostic &commit(Args &&...args);
@@ -43,7 +45,7 @@ class DiagnosticBuilder {
     friend class Diagnostics; // 允许 Diagnostics 访问私有成员
 
     Diagnostics &diagnostics_;
-    TokenRange tokenRange_{0, 0};
+    SourceRange range_{};
     Severity severity_ = Severity::Error;
 
     DiagType type_{};
@@ -57,7 +59,7 @@ class DiagnosticBuilder {
 
 template <typename... Args> Diagnostic &DiagnosticBuilder::commit(Args &&...args) {
     Diagnostic d;
-    d.tokenRange = tokenRange_;
+    d.range = range_;
     d.severity = severity_;
     d.type = type_;
     d.specific = specific_;

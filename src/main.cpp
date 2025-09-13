@@ -19,15 +19,9 @@
  * Program of China
  */
 
-#include <chrono>
-#include <filesystem>
-#include <iomanip>
-#include <iostream>
-#include <queue>
-
+#include "antlr4-runtime/antlr4-runtime.h"
 #include "nlohmann/json.hpp"
 
-#include "antlr4-runtime/antlr4-runtime.h"
 #include "builtin/passes/sched/linear/dump/graphviz.h"
 #include "builtin/passes/sched/linear/dump/topo-node-seq.h"
 #include "builtin/passes/sched/linear/exec/fallback.h"
@@ -46,6 +40,12 @@
 #include "service/profiler/trace.h"
 #include "utils/env.h"
 #include "utils/log.h"
+
+#include <chrono>
+#include <filesystem>
+#include <iomanip>
+#include <iostream>
+#include <queue>
 
 using namespace antlr4;
 using namespace std;
@@ -95,7 +95,11 @@ int main(int argc, char *argv[]) {
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setLimit(Diagnostic::Severity::Error, 0);
+            diagnostics->setConfig(
+                DiagsConfig{
+                    .total_limit = -1,
+                    .per_severity_limits = {{Severity::Error, 0}},
+                });
         }
 
         bool useJsonFormat = (errorFormat == "json");
@@ -156,17 +160,17 @@ int main(int argc, char *argv[]) {
                     .searchPaths =
                         {
                             entryDir,
-                            fs::absolute(fs::path(
-                                             Run::stdLibPath.empty()
-                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                 : Run::stdLibPath))
+                            fs::absolute(
+                                fs::path(
+                                    Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                            : Run::stdLibPath))
                                 .string(),
                             getEnv("CAMEL_PACKAGES"),
                             getEnv("CAMEL_HOME", camelPath.string()),
                         }},
-                DiagnosticsConfig{
+                DiagsConfig{
                     .total_limit = -1,
-                    .per_severity_limits = {{Diagnostic::Severity::Error, 0}},
+                    .per_severity_limits = {{Severity::Error, 0}},
                 });
 
             auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
@@ -176,13 +180,9 @@ int main(int argc, char *argv[]) {
                 initTypes();
                 mainModule->load();
             } catch (DiagnosticsLimitExceededException &e) {
-                if (selectedCommand == Command::Check) {
-                    os << e.lastDiagnostic().what(useJsonFormat) << endl;
-                    return 0;
-                } else {
-                    os << e.lastDiagnostic().what(useJsonFormat) << endl;
-                    return 1;
-                }
+                auto lastDiag = e.lastDiagnostic();
+                os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
+                return selectedCommand == Command::Check ? 0 : 1;
             }
 
             if (selectedCommand == Command::Inspect) {

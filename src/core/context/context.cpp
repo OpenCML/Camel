@@ -25,6 +25,7 @@
 #include "utils/str.h"
 
 namespace fs = std::filesystem;
+using namespace strutil;
 
 inline bool fileExists(const std::string &path) {
     std::ifstream file(path);
@@ -47,7 +48,7 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
     return std::nullopt;
 }
 
-context_ptr_t Context::create(const EntryConfig &entryConf, const DiagnosticsConfig &diagConf) {
+context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
@@ -110,11 +111,11 @@ std::vector<std::string> Context::getModuleNameCandidates(
         candidates.push_back(rawImportName);
 
         // relative-to-parent fallback
-        std::vector<std::string> base = split(currentModule, '.');
+        auto base = split(currentModule, '.');
         for (int i = base.size(); i >= 0; --i) {
             std::vector<std::string> prefix(base.begin(), base.begin() + i);
             prefix.push_back(rawImportName);
-            candidates.push_back(join(prefix, '.'));
+            candidates.push_back(join(prefix, "."));
         }
     }
 
@@ -132,7 +133,7 @@ std::string Context::resolveRelativeModuleName(
     }
 
     std::string remaining = importName.substr(i);
-    std::vector<std::string> base = split(currentModule, '.');
+    auto base = split(currentModule, '.');
 
     if (static_cast<size_t>(level) > base.size()) {
         throw CamelBaseException("Too many dots in relative import: " + importName);
@@ -141,11 +142,11 @@ std::string Context::resolveRelativeModuleName(
     base.resize(base.size() - level);
 
     if (!remaining.empty()) {
-        std::vector<std::string> rest = split(remaining, '.');
+        auto rest = split(remaining, '.');
         base.insert(base.end(), rest.begin(), rest.end());
     }
 
-    return join(base, '.');
+    return join(base, ".");
 }
 
 std::string Context::getModulePath(const std::string &moduleName) {

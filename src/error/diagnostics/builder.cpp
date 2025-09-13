@@ -20,17 +20,27 @@
 #include "builder.h"
 
 // ---- DiagnosticBuilder implementation ----
-DiagnosticBuilder &DiagnosticBuilder::at(const TokenRange &range) {
-    tokenRange_ = range;
+DiagnosticBuilder &DiagnosticBuilder::at(const CharRange &range) {
+    range_ = range;
     return *this;
 }
 
-DiagnosticBuilder &DiagnosticBuilder::at(size_t start, size_t end) {
-    tokenRange_ = {start, end};
+DiagnosticBuilder &DiagnosticBuilder::at(const TokenRange &range) {
+    range_ = range;
     return *this;
 }
 
 DiagnosticBuilder &DiagnosticBuilder::at(size_t token) {
-    tokenRange_ = {token, token};
+    range_ = TokenRange{token, token};
+    return *this;
+}
+
+DiagnosticBuilder &DiagnosticBuilder::at(antlr4::Token *start, antlr4::Token *end) {
+    range_ = CharRange::fromTokens(start, end);
+    return *this;
+}
+
+DiagnosticBuilder &DiagnosticBuilder::at(antlr4::Token *token) {
+    range_ = CharRange::fromTokens(token, token);
     return *this;
 }

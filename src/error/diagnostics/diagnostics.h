@@ -36,10 +36,9 @@ struct Diagnostic {
     std::string message;
     std::string suggestion;
 
-    CharRange range{};
-    TokenRange tokenRange{};
+    SourceRange range{};
 
-    Diagnostic &fetchRange(const RangeConverter &mgr);
+    Diagnostic &fetchRange(const RangeConverter &conv);
     std::string toText() const;
     std::string toJson() const;
     uint32_t diagCode() const;
@@ -93,7 +92,7 @@ class DiagnosticsExceededTotalLimitException : public DiagnosticsLimitExceededEx
 };
 
 // ---- Configuration ----
-struct DiagnosticsConfig {
+struct DiagsConfig {
     int total_limit = -1; // -1 means no limit
     std::unordered_map<Severity, int> per_severity_limits = {};
 
@@ -117,14 +116,12 @@ class Diagnostics {
         : moduleName_(std::move(modName)), modulePath_(std::move(modPath)) {}
 
     // Configuration
-    void setConfig(const DiagnosticsConfig &config) { config_ = config; }
-    const DiagnosticsConfig &getConfig() const { return config_; }
+    void setConfig(const DiagsConfig &config) { config_ = config; }
+    const DiagsConfig &getConfig() const { return config_; }
 
     Diagnostic &add(Diagnostic &&d);
-    void setTokens(const std::vector<antlr4::Token *> *tokens);
-    void fetchAll(); // Fetch char index ranges for all token index ranges
-    void outputAll(std::ostream &os) const;
-    std::string toJson() const;
+    void fetchAll(const std::vector<antlr4::Token *> &tokens);
+    void dump(std::ostream &os, bool json = false) const;
     void clear();
 
     // Return a builder + Set the diagCode for builder (could infer severity from diagCode)
@@ -161,14 +158,14 @@ class Diagnostics {
     size_t count(DiagType type) const;
     std::unordered_map<Severity, size_t> countBySeverity() const;
     std::unordered_map<DiagType, size_t> countByType() const;
+    bool hasErrors() const;
 
   private:
     std::string moduleName_;
     std::string modulePath_;
     mutable std::mutex mtx_;
     std::deque<Diagnostic> storage_;
-    RangeConverter rangeConv_;
-    DiagnosticsConfig config_;
+    DiagsConfig config_;
 
     // Helper methods for limit checking
     void checkLimits(const Diagnostic &d);
