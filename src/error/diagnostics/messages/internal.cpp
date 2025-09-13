@@ -17,14 +17,14 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "syntax.h"
+#include "internal.h"
 
-const std::unordered_map<SyntaxDiag, DiagInfo> getSyntaxDiagInfoMap() {
+const std::unordered_map<InternalDiag, DiagInfo> getInternalDiagInfoMap() {
     return {
         {
-            SyntaxDiag::UnknownSyntaxError,
+            InternalDiag::UnknownInternalError,
             {
-                "UnknownSyntaxError",
+                "UnknownInternalError",
                 "An error has occurred: {0}.",
                 "",
             },

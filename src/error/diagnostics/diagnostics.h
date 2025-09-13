@@ -187,4 +187,17 @@ template <typename DiagEnum> DiagnosticBuilder Diagnostics::of(DiagEnum err) {
     return builder;
 }
 
+template <typename... Args> Diagnostic &DiagnosticBuilder::commit(Args &&...args) {
+    Diagnostic d;
+    d.range = range_;
+    d.severity = severity_;
+    d.type = type_;
+    d.specific = specific_;
+    d.name = name_;
+    d.message = std::vformat(rawMessage_, std::make_format_args(std::forward<Args>(args)...));
+    d.suggestion = std::vformat(rawSuggestion_, std::make_format_args(std::forward<Args>(args)...));
+
+    return diagnostics_.add(std::move(d));
+}
+
 using diagnostics_ptr_t = std::shared_ptr<Diagnostics>;

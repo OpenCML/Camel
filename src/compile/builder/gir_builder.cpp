@@ -97,7 +97,7 @@ bool Builder::insertOperator(const std::string &name, const oper_idx_ptr_t &op) 
 node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
     auto optSrcNode = nodeAt(name);
     if (!optSrcNode.has_value()) {
-        reportDiagnostic(Diagnostic::Severity::Error, "Unresolved reference: " + name);
+        diags_->of(SemanticDiag::UnresolvedReference).commit(name);
         throw BuildAbortException();
     }
     return optSrcNode.value();
@@ -165,18 +165,16 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     for (const auto &[name, type, data] : withParamsType->elements()) {
         // TODO: ignored type and default data here
         if (data != nullptr) {
-            reportDiagnostic(
-                Diagnostic::Severity::Warning,
-                "Default data is currently not supported in function parameters.");
+            diags_->of(SemanticDiag::FeatureNotSupported)
+                .commit("Default data in function parameters");
         }
         insertNode(name, graph->addPort(true));
     }
     for (const auto &[name, type, data] : normParamsType->elements()) {
         // TODO: ignored type and default data here
         if (data != nullptr) {
-            reportDiagnostic(
-                Diagnostic::Severity::Warning,
-                "Default data is currently not supported in function parameters.");
+            diags_->of(SemanticDiag::FeatureNotSupported)
+                .commit("Default data in function parameters");
         }
         insertNode(name, graph->addPort(false));
     }
@@ -237,7 +235,7 @@ void_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     node_ptr_t node = any_cast<node_ptr_t>(res);
     bool success = insertNode(ident, node);
     if (!success) {
-        reportDiagnostic(Diagnostic::Severity::Error, "Redeclaration of reference: " + ident);
+        diags_->of(SemanticDiag::Redeclaration).commit(ident);
         throw BuildAbortException();
     }
     LEAVE("NREF");
@@ -303,7 +301,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return opNode;
         }
     }
-    reportDiagnostic(Diagnostic::Severity::Error, "Unresolved reference: " + ident);
+    diags_->of(SemanticDiag::UnresolvedReference).commit(ident);
     throw BuildAbortException();
 }
 
@@ -377,9 +375,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         if (isVar) {
             if (!waited_) {
-                reportDiagnostic(
-                    Diagnostic::Severity::Warning,
-                    "Function with side effects is called but not waited");
+                diags_->of(SemanticDiag::IgnoredSideEffect).commit();
             }
             nodeModifierMap_[inputNode.get()] =
                 funcNode; // Mark this node as a modifier for the input node
@@ -443,9 +439,7 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         }
         if (isVar) {
             if (!waited_) {
-                reportDiagnostic(
-                    Diagnostic::Severity::Warning,
-                    "Function with side effects is called but not waited");
+                diags_->of(SemanticDiag::IgnoredSideEffect).commit();
             }
             nodeModifierMap_[inputNode.get()] =
                 funcNode; // Mark this node as a modifier for the input node
@@ -481,10 +475,7 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of ACCS node.");
     node_ptr_t tgtNode = any_cast<node_ptr_t>(res);
-    if (tgtNode == nullptr) {
-        reportDiagnostic(Diagnostic::Severity::Error, "Access node target is null.");
-        throw BuildAbortException();
-    }
+    ASSERT(tgtNode != nullptr, "Access node target is null.");
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     graph_ptr_t &graph = currGraph_;
     DataIndex index = graph->addRuntimeConstant(nullptr);
@@ -610,9 +601,7 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
             module_->exportEntity(ref, optOp.value());
             continue;
         }
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Unresolved export reference: " + ref.toString());
+        diags_->of(SemanticDiag::UnresolvedReference).commit(ref.toString());
         throw BuildAbortException();
     }
     LEAVE("EXPT");

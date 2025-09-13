@@ -1,0 +1,151 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Sep. 11, 2025
+ * Updated: Sep. 11, 2025
+ * Supported by: National Key Research and Development Program of China
+ */
+
+#include "semantic.h"
+
+const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
+    return {
+        {
+            SemanticDiag::UnknownSemanticError,
+            {
+                "UnknownSemanticError",
+                "An error has occurred: {0}.",
+                "",
+            },
+        },
+        {
+            SemanticDiag::Redeclaration,
+            {
+                "Redeclaration",
+                "Redeclaration of reference: '{0}'.",
+                "Each identifier must be declared only once in its scope.",
+            },
+        },
+        {
+            SemanticDiag::ModuleNotFound,
+            {
+                "ModuleNotFound",
+                "Module not found at path: {0}.",
+                "Check if the module path is correct.",
+            },
+        },
+        {
+            SemanticDiag::ReservedIdentifier,
+            {
+                "ReservedIdentifier",
+                "Identifiers starting and ending with double underscores are reserved for internal "
+                "use.",
+                "Avoid using names like '__example__'; choose different identifiers.",
+            },
+        },
+        {
+            SemanticDiag::TupleUnpackingCountMismatch,
+            {
+                "TupleUnpackingCountMismatch",
+                "Tuple unpacking requires the same number of references and data nodes, or exactly "
+                "one tuple data.",
+                "Ensure the number of variables matches the number of unpacked data elements, or "
+                "use a single tuple value.",
+            },
+        },
+        {
+            SemanticDiag::InvalidLiteral,
+            {
+                "InvalidLiteral",
+                "Invalid {0} literal: '{1}'.",
+                "Ensure the literal '{1}' is valid and supported by the language.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateDictKey,
+            {
+                "DuplicateDictKey",
+                "Duplicate key in dict: '{0}'.",
+                "Make sure all keys in a dictionary are unique.",
+            },
+        },
+        {
+            SemanticDiag::ParamRefMustBeUnqualified,
+            {
+                "ParamRefMustBeUnqualified",
+                "Parameter reference must be unqualified: '{0}'.",
+                "Use the parameter name without namespace or scope qualifiers.",
+            },
+        },
+        {
+            SemanticDiag::ParamDataMustBeStatic,
+            {
+                "ParamDataMustBeStatic",
+                "Data for parameter '{0}' must be static.",
+                "Ensure the parameter data is a compile-time constant or literal.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateParameter,
+            {
+                "DuplicateParameter",
+                "Duplicate parameter detected: '{0}'.",
+                "Remove or rename the duplicated parameter.",
+            },
+        },
+        {
+            SemanticDiag::UnresolvedTypeReference,
+            {
+                "UnresolvedTypeReference",
+                "Unresolved type reference: '{0}'.",
+                "Ensure the type is defined and visible in the current scope.",
+            },
+        },
+        {
+            SemanticDiag::UnresolvedReference,
+            {
+                "UnresolvedReference",
+                "Unresolved reference: '{0}'.",
+                "Make sure the name is declared and in scope.",
+            },
+        },
+
+        // Warnings
+        {
+            SemanticDiag::FeatureNotSupported,
+            {
+                "FeatureNotSupported",
+                "The feature '{0}' is not supported yet.",
+                "Check the documentation for supported features.",
+            },
+        },
+        {
+            SemanticDiag::VarParamInAsyncFunction,
+            {
+                "VarParamInAsyncFunction",
+                "Variable parameters are only allowed in sync functions.",
+                "Remove the variable parameter or make the function synchronous.",
+            },
+        },
+        {
+            SemanticDiag::IgnoredSideEffect,
+            {
+                "IgnoredSideEffect",
+                "Function with side effects is called but not waited.",
+                "Consider waiting the function using the 'wait' keyword.",
+            },
+        },
+
+    };
+};

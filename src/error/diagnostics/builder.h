@@ -22,7 +22,7 @@
 #include "base.h"
 #include "range.h"
 
-class Diagnostic;
+struct Diagnostic;
 class Diagnostics;
 
 // ---- DiagnosticBuilder ----
@@ -56,16 +56,3 @@ class DiagnosticBuilder {
     std::string message_;
     std::string suggestion_;
 };
-
-template <typename... Args> Diagnostic &DiagnosticBuilder::commit(Args &&...args) {
-    Diagnostic d;
-    d.range = range_;
-    d.severity = severity_;
-    d.type = type_;
-    d.specific = specific_;
-    d.name = name_;
-    d.message = std::vformat(rawMessage_, std::make_format_args(std::forward<Args>(args)...));
-    d.suggestion = std::vformat(rawSuggestion_, std::make_format_args(std::forward<Args>(args)...));
-
-    return diagnostics_.add(std::move(d));
-}

@@ -82,8 +82,7 @@ class Context : public std::enable_shared_from_this<Context> {
     virtual ~Context() = default;
 
     static context_ptr_t create(
-        const EntryConfig &entryConf = EntryConfig(),
-        const DiagsConfig &diagConf = DiagsConfig());
+        const EntryConfig &entryConf = EntryConfig(), const DiagsConfig &diagConf = DiagsConfig());
 
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     DiagsConfig diagConfig() const { return diagConfig_; }

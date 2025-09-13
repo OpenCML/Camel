@@ -63,7 +63,7 @@ split(std::string_view str, char delim, bool skip_empty = true) {
 
 template <std::ranges::input_range Range, typename Formatter = std::identity, typename CharT = char>
     requires requires(Formatter f, std::ranges::range_value_t<Range> v) {
-        { f(v) } -> std::convertible_to<std::basic_string<CharT>>;
+        { f(v) } -> std::convertible_to<std::basic_string_view<CharT>>;
     }
 std::basic_string<CharT>
 join(const Range &range, std::basic_string_view<CharT> delimiter, Formatter formatter = {}) {
@@ -82,6 +82,9 @@ join(const Range &range, std::basic_string_view<CharT> delimiter, Formatter form
 }
 
 template <std::ranges::input_range Range, typename Formatter = std::identity, typename CharT = char>
+    requires requires(Formatter f, std::ranges::range_value_t<Range> v) {
+        { f(v) } -> std::convertible_to<std::basic_string_view<CharT>>;
+    }
 std::basic_string<CharT>
 join(const Range &range, const CharT *delimiter, Formatter formatter = {}) {
     return join<Range, Formatter, CharT>(
@@ -91,6 +94,9 @@ join(const Range &range, const CharT *delimiter, Formatter formatter = {}) {
 }
 
 template <std::ranges::input_range Range, typename Formatter = std::identity, typename CharT = char>
+    requires requires(Formatter f, std::ranges::range_value_t<Range> v) {
+        { f(v) } -> std::convertible_to<std::basic_string_view<CharT>>;
+    }
 void join(
     std::basic_ostream<CharT> &os, const Range &range, std::basic_string_view<CharT> delimiter,
     Formatter formatter = {}) {
@@ -107,6 +113,9 @@ void join(
 }
 
 template <std::ranges::input_range Range, typename Formatter = std::identity, typename CharT = char>
+    requires requires(Formatter f, std::ranges::range_value_t<Range> v) {
+        { f(v) } -> std::convertible_to<std::basic_string_view<CharT>>;
+    }
 void join(
     std::basic_ostream<CharT> &os, const Range &range, const CharT *delimiter,
     Formatter formatter = {}) {

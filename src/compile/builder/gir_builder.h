@@ -23,6 +23,7 @@
 #include "core/context/context.h"
 #include "core/module/module.h"
 #include "error/abort.h"
+#include "common/scope.h"
 
 #include "../gct.h"
 #include "../gir.h"
@@ -49,11 +50,11 @@ class Builder {
         currGraph_ = rootGraph_;
     }
 
-    graph_ptr_t construct(GCT::node_ptr_t &gct, diagnostics_ptr_t diagnostics) {
+    graph_ptr_t build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
         waited_ = false;
         synced_ = false;
         varied_ = false;
-        diagnostics_ = diagnostics;
+        diags_ = diags;
         visit(gct);
         return rootGraph_;
     }
@@ -70,7 +71,7 @@ class Builder {
 
     context_ptr_t context_;
     module_ptr_t module_;
-    diagnostics_ptr_t diagnostics_;
+    diagnostics_ptr_t diags_;
 
     bool waited_;
     bool synced_;
@@ -93,12 +94,6 @@ class Builder {
 
     graph_ptr_t enterScope(const std::string &name = "");
     void leaveScope();
-
-    void reportDiagnostic(
-        Diagnostic::Severity sev, const std::string &msg,
-        std::pair<size_t, size_t> tokenRange = {0, 0}) {
-        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
-    }
 
     node_ptr_t resolveNodeByRef(const std::string &name);
 

@@ -21,23 +21,45 @@
 
 const std::unordered_map<LexicalDiag, DiagInfo> getLexicalDiagInfoMap() {
     return {
-        {LexicalDiag::IllegalCharacter,
-         {"LEX_ILLEGAL_CHAR",
-          "Illegal character encountered: {0}",
-          "Remove or replace the unsupported character"}},
-        {LexicalDiag::InvalidNumberFormat,
-         {"LEX_INVALID_NUMBER", "Invalid number format: {0}", "Check numeric literal syntax"}},
-        {LexicalDiag::UnclosedStringLiteral,
-         {"LEX_UNCLOSED_STRING",
-          "Unclosed string literal: {0}",
-          "Ensure all string literals are properly closed"}},
-        {LexicalDiag::UnterminatedComment,
-         {"LEX_UNTERMINATED_COMMENT",
-          "Unterminated comment: {0}",
-          "Ensure all comments are properly closed"}},
-        {LexicalDiag::InvalidEscapeSequence,
-         {"LEX_INVALID_ESCAPE",
-          "Invalid escape sequence in string: {0}",
-          "Check and correct the escape sequences"}},
+        {
+            LexicalDiag::IllegalCharacter,
+            {
+                "LEX_ILLEGAL_CHAR",
+                "Illegal character encountered: {0}",
+                "Remove or replace the unsupported character",
+            },
+        },
+        {
+            LexicalDiag::InvalidNumberFormat,
+            {
+                "LEX_INVALID_NUMBER",
+                "Invalid number format: {0}",
+                "Check numeric literal syntax",
+            },
+        },
+        {
+            LexicalDiag::UnclosedStringLiteral,
+            {
+                "LEX_UNCLOSED_STRING",
+                "Unclosed string literal: {0}",
+                "Ensure all string literals are properly closed",
+            },
+        },
+        {
+            LexicalDiag::UnterminatedComment,
+            {
+                "LEX_UNTERMINATED_COMMENT",
+                "Unterminated comment: {0}",
+                "Ensure all comments are properly closed",
+            },
+        },
+        {
+            LexicalDiag::InvalidEscapeSequence,
+            {
+                "LEX_INVALID_ESCAPE",
+                "Invalid escape sequence in string: {0}",
+                "Check and correct the escape sequences",
+            },
+        },
     };
 }

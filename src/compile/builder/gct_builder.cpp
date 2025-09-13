@@ -152,10 +152,7 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // const auto &as = load->getAs();
     const module_ptr_t &mod = context_->importModule(path, module_->name());
     if (!mod) {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Failed to import module from path: " + path,
-            load->tokenRange());
+        diags_->of(SemanticDiag::ModuleNotFound).at(load->tokenRange()).commit(path);
         throw BuildAbortException();
     }
     if (refs.empty()) {
@@ -241,17 +238,15 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 
     switch (dataDeclLoad->unpackType()) {
     case AST::UnpackType::Dict: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Dict unpacking is not supported in DataDecl",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("Dict Unpacking");
         throw BuildAbortException();
     } break;
     case AST::UnpackType::List: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "List unpacking is not supported in DataDecl",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("List Unpacking");
         throw BuildAbortException();
     } break;
     case AST::UnpackType::Tuple: {
@@ -260,19 +255,14 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 const auto &ref = refs[i];
                 const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
                 if (!validateIdent(ref.ident())) {
-                    reportDiagnostic(
-                        Diagnostic::Severity::Error,
-                        "Identifiers starting and ending with '__' are reserved for internal use.",
-                        dataDeclLoad->tokenRange());
+                    diags_->of(SemanticDiag::ReservedIdentifier)
+                        .at(dataDeclLoad->tokenRange())
+                        .commit();
                     throw BuildAbortException();
                 }
-                if (dataNode->type() != AST::LoadType::Data) {
-                    reportDiagnostic(
-                        Diagnostic::Severity::Error,
-                        "Tuple unpacking requires Data type nodes",
-                        dataNode->load()->tokenRange());
-                    throw BuildAbortException();
-                }
+                ASSERT(
+                    dataNode->type() == AST::LoadType::Data,
+                    "Tuple unpacking requires Data type nodes");
                 node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
                 *nRefNode << visitData(dataNode);
                 res = nRefNode;
@@ -289,11 +279,9 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 for (size_t i = 0; i < refs.size(); ++i) {
                     const auto &ref = refs[i];
                     if (!validateIdent(ref.ident())) {
-                        reportDiagnostic(
-                            Diagnostic::Severity::Error,
-                            "Identifiers starting and ending with '__' are reserved for internal "
-                            "use.",
-                            dataDeclLoad->tokenRange());
+                        diags_->of(SemanticDiag::ReservedIdentifier)
+                            .at(dataDeclLoad->tokenRange())
+                            .commit();
                         throw BuildAbortException();
                     }
                     node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
@@ -303,11 +291,9 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     *res << nRefNode;
                 }
             } else {
-                reportDiagnostic(
-                    Diagnostic::Severity::Error,
-                    "Tuple unpacking requires the same number of references and data nodes, or "
-                    "exactly one tuple data",
-                    ast->load()->tokenRange());
+                diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                    .at(ast->load()->tokenRange())
+                    .commit();
                 throw BuildAbortException();
             }
         }
@@ -347,15 +333,8 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     type_ptr_t type;
-    if (typeNode) {
-        type = visitType(typeNode);
-    } else {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Type declaration requires a type",
-            ast->load()->tokenRange());
-        throw BuildAbortException();
-    }
+    ASSERT(typeNode, "TypeDecl must have a type");
+    type = visitType(typeNode);
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     typeScope_->insert(typeLoad->ref(), type);
     node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
@@ -370,11 +349,9 @@ NameDecl(Ref ref, Ref alias) ;
 node_ptr_t Builder::visitNameDecl(const AST::node_ptr_t &ast) {
     ENTER("NameDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for NameDecl");
-    reportDiagnostic(
-        Diagnostic::Severity::Error,
-        "NameDecl is not supported in the current version of the compiler. "
-        "Please use DataDecl or TypeDecl instead.",
-        ast->load()->tokenRange());
+    diags_->of(SemanticDiag::FeatureNotSupported)
+        .at(ast->load()->tokenRange())
+        .commit("Name Redeclaration");
     throw BuildAbortException();
     LEAVE("NameDecl");
     return nullptr;
@@ -697,24 +674,21 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
     switch (reservedExpr->op()) {
     case AST::ReservedDataOp::NullThen: {
-        reportDiagnostic(
-            Diagnostic::Severity::Warning,
-            "NullThen is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("NullThen Operator");
         res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::ErrorThen: {
-        reportDiagnostic(
-            Diagnostic::Severity::Warning,
-            "ErrorThen is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("ErrorThen Operator");
         res = visitData(lhsASTNode);
     } break;
     case AST::ReservedDataOp::NotNullThen: {
-        reportDiagnostic(
-            Diagnostic::Severity::Warning,
-            "NotNullThen is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("NotNullThen Operator");
         res = visitData(lhsASTNode);
     } break;
 
@@ -759,17 +733,15 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::ReservedDataOp::As: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "As is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("AS Operator");
         throw BuildAbortException();
     } break;
     case AST::ReservedDataOp::Is: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Is is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("IS Operator");
         throw BuildAbortException();
     } break;
 
@@ -820,10 +792,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     ENTER("MatchExpr");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
-    reportDiagnostic(
-        Diagnostic::Severity::Error,
-        "MatchExpr is not supported yet",
-        ast->load()->tokenRange());
+    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("MatchExpr");
     throw BuildAbortException();
     LEAVE("MatchExpr");
     return nullptr;
@@ -835,10 +804,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitTryExpr(const AST::node_ptr_t &ast) {
     ENTER("TryExpr");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TryExpr");
-    reportDiagnostic(
-        Diagnostic::Severity::Error,
-        "TryExpr is not supported yet",
-        ast->load()->tokenRange());
+    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("TryExpr");
     throw BuildAbortException();
     LEAVE("TryExpr");
     return nullptr;
@@ -871,10 +837,9 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         data = tt::as_shared<Data>(make_shared<StringData>(str));
     } break;
     case LiteralType::FString: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "FString is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("FString");
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
@@ -889,10 +854,9 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         } else if (str == "false") {
             data = makeDataFromLiteral(false);
         } else {
-            reportDiagnostic(
-                Diagnostic::Severity::Error,
-                "Invalid boolean literal: " + str,
-                ast->load()->tokenRange());
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("boolean", str);
             throw BuildAbortException();
         }
     } break;
@@ -900,10 +864,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         data = tt::as_shared<Data>(make_shared<NullData>());
     } break;
     default: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Unknown literal type",
-            ast->load()->tokenRange());
+        ASSERT(false, "Unknown literal type");
         throw BuildAbortException();
     }
     }
@@ -1101,74 +1062,61 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         res = make_shared<UnionType>(lhsType, rhsType);
     } break;
     case AST::TypeOp::Inter: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::Inter is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::Inter");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Diff: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::Diff is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::Diff");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyUnion: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::KeyUnion is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::KeyUnion");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyInter: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::KeyInter is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::KeyInter");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::KeyDiff: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::KeyDiff is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::KeyDiff");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::ErrorThen: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::ErrorThen is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::ErrorThen");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Specialize: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::Specialize is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::Specialize");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeOf: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::TypeOf is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::TypeOf");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeAs: {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "TypeOp::TypeAs is not supported yet",
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("TypeOp::TypeAs");
         throw BuildAbortException();
     } break;
     default:
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Unsupported TypeOp: " + AST::to_string(op),
-            ast->load()->tokenRange());
-        throw BuildAbortException();
+        ASSERT(false, "Unknown TypeOp");
     }
     LEAVE("TypeExpr");
     return res;
@@ -1200,10 +1148,7 @@ type_ptr_t Builder::visitDictType(const AST::node_ptr_t &ast) {
         type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
         data_ptr_t data = nullptr;
         if (!res->add(name, type)) {
-            reportDiagnostic(
-                Diagnostic::Severity::Error,
-                "Duplicate key detected: " + name,
-                namedPair->tokenRange());
+            diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
             throw BuildAbortException();
         }
     }
@@ -1252,17 +1197,13 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar = paramLoad->isVar();
         if (isVar && !typeLoad->modifiers().sync()) {
-            reportDiagnostic(
-                Diagnostic::Severity::Warning,
-                "Variable parameters are only allowed in sync functions",
-                paramLoad->tokenRange());
+            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
         }
         const Reference &paramRef = paramLoad->getRef();
         if (!paramRef.plain()) {
-            reportDiagnostic(
-                Diagnostic::Severity::Error,
-                "Parameter reference must be alone: " + paramRef.toString(),
-                paramLoad->tokenRange());
+            diags_->of(SemanticDiag::ParamRefMustBeUnqualified)
+                .at(paramLoad->tokenRange())
+                .commit(paramRef.toString());
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
@@ -1272,19 +1213,15 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
         if (dataNode) {
             data = extractStaticDataFromNode(visitData(dataNode));
             if (!data) {
-                reportDiagnostic(
-                    Diagnostic::Severity::Error,
-                    "Data for parameter " + paramRef.toString() + " is not static",
-                    dataNode->load()->tokenRange());
+                diags_->of(SemanticDiag::ParamDataMustBeStatic)
+                    .at(dataNode->load()->tokenRange())
+                    .commit(paramRef.toString());
                 throw BuildAbortException();
             }
         }
         bool success = funcType->addIdent(name, isVar);
         if (!success) {
-            reportDiagnostic(
-                Diagnostic::Severity::Error,
-                "Duplicate parameter detected: " + name,
-                paramLoad->tokenRange());
+            diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
         withParamsType->add(name, type, data);
@@ -1294,17 +1231,13 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar = paramLoad->isVar();
         if (isVar && !typeLoad->modifiers().sync()) {
-            reportDiagnostic(
-                Diagnostic::Severity::Warning,
-                "Variable parameters are only allowed in sync functions",
-                paramLoad->tokenRange());
+            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
         }
         const Reference &paramRef = paramLoad->getRef();
         if (!paramRef.plain()) {
-            reportDiagnostic(
-                Diagnostic::Severity::Error,
-                "Parameter reference must be alone: " + paramRef.toString(),
-                paramLoad->tokenRange());
+            diags_->of(SemanticDiag::ParamRefMustBeUnqualified)
+                .at(paramLoad->tokenRange())
+                .commit(paramRef.toString());
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
@@ -1314,19 +1247,15 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
         if (dataNode) {
             data = extractStaticDataFromNode(visitData(dataNode));
             if (!data) {
-                reportDiagnostic(
-                    Diagnostic::Severity::Error,
-                    "Data for parameter " + paramRef.toString() + " is not static",
-                    dataNode->load()->tokenRange());
+                diags_->of(SemanticDiag::ParamDataMustBeStatic)
+                    .at(dataNode->load()->tokenRange())
+                    .commit(paramRef.toString());
                 throw BuildAbortException();
             }
         }
         bool success = funcType->addIdent(name, isVar);
         if (!success) {
-            reportDiagnostic(
-                Diagnostic::Severity::Error,
-                "Duplicate parameter detected: " + name,
-                paramLoad->tokenRange());
+            diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
         normParamsType->add(name, type, data);
@@ -1341,10 +1270,7 @@ UnitType(Ref ref) : Type type ;
 */
 type_ptr_t Builder::visitUnitType(const AST::node_ptr_t &ast) {
     ENTER("UnitType");
-    reportDiagnostic(
-        Diagnostic::Severity::Error,
-        "UnitType is not supported yet",
-        ast->load()->tokenRange());
+    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("UnitType");
     throw BuildAbortException();
     LEAVE("UnitType");
     return nullptr;
@@ -1355,10 +1281,7 @@ InferType(Ref ref) ;
 */
 type_ptr_t Builder::visitInferType(const AST::node_ptr_t &ast) {
     ENTER("InferType");
-    reportDiagnostic(
-        Diagnostic::Severity::Error,
-        "InferType is not supported yet",
-        ast->load()->tokenRange());
+    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("InferType");
     throw BuildAbortException();
     LEAVE("InferType");
     return nullptr;
@@ -1369,10 +1292,7 @@ DataType() : Data data ;
 */
 type_ptr_t Builder::visitDataType(const AST::node_ptr_t &ast) {
     ENTER("DataType");
-    reportDiagnostic(
-        Diagnostic::Severity::Error,
-        "DataType is not supported yet",
-        ast->load()->tokenRange());
+    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("DataType");
     throw BuildAbortException();
     LEAVE("DataType");
     return nullptr;
@@ -1388,10 +1308,9 @@ type_ptr_t Builder::visitRefType(const AST::node_ptr_t &ast) {
     const Reference &ref = typeLoad->ref();
     const auto &type = typeScope_->get(ref);
     if (!type.has_value()) {
-        reportDiagnostic(
-            Diagnostic::Severity::Error,
-            "Unresolved type reference: " + ref.toString(),
-            ast->load()->tokenRange());
+        diags_->of(SemanticDiag::UnresolvedTypeReference)
+            .at(ast->load()->tokenRange())
+            .commit(ref.toString());
         throw BuildAbortException();
     }
     LEAVE("RefType");

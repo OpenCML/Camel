@@ -19,5 +19,8 @@
 
 #pragma once
 
+#include "internal.h"
 #include "lexical.h"
+#include "runtime.h"
+#include "semantic.h"
 #include "syntax.h"

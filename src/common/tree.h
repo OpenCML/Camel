@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "utils/log.h"
+#include "utils/assert.h"
 
 template <typename load_t, typename node_t> // node_t is a derived class of AbstractTreeNode (CRTP)
 class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<load_t, node_t>> {

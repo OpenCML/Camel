@@ -36,8 +36,8 @@ class Builder : public OpenCMLVisitor {
     Builder() {};
     virtual ~Builder() = default;
 
-    node_ptr_t construct(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diagnostics) {
-        diagnostics_ = diagnostics;
+    node_ptr_t build(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diags) {
+        diags_ = diags;
         root_ = nullptr;
         visit(tree);
         return root_;
@@ -46,17 +46,11 @@ class Builder : public OpenCMLVisitor {
   private:
     node_ptr_t root_;
 
-    diagnostics_ptr_t diagnostics_;
+    diagnostics_ptr_t diags_;
 
     std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
     std::vector<std::shared_ptr<ImportLoad>> imports_;
     std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
-
-    void reportDiagnostic(
-        Diagnostic::Severity sev, const std::string &msg,
-        std::pair<size_t, size_t> tokenRange = {0, 0}) {
-        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
-    }
 
     // Auto-generated visitor methods
 

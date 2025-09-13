@@ -17,17 +17,17 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "syntax.h"
+#pragma once
 
-const std::unordered_map<SyntaxDiag, DiagInfo> getSyntaxDiagInfoMap() {
-    return {
-        {
-            SyntaxDiag::UnknownSyntaxError,
-            {
-                "UnknownSyntaxError",
-                "An error has occurred: {0}.",
-                "",
-            },
-        },
-    };
-}
+#include <cstdint>
+#include <unordered_map>
+
+#include "../base.h"
+
+enum class RuntimeDiag : uint32_t {
+    UnknownRuntimeError = 0x000000,
+};
+
+constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }
+
+const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap();

@@ -17,14 +17,14 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "syntax.h"
+#include "runtime.h"
 
-const std::unordered_map<SyntaxDiag, DiagInfo> getSyntaxDiagInfoMap() {
+const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap() {
     return {
         {
-            SyntaxDiag::UnknownSyntaxError,
+            RuntimeDiag::UnknownRuntimeError,
             {
-                "UnknownSyntaxError",
+                "UnknownRuntimeError",
                 "An error has occurred: {0}.",
                 "",
             },

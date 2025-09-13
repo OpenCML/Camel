@@ -116,7 +116,7 @@ class ModifierSet {
                 result.emplace_back(to_string(mod));
             }
         }
-        return join_list(result, " ");
+        return strutil::join(result, " ");
     }
 };
 

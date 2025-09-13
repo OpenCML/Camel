@@ -28,6 +28,7 @@
 #include "core/func.h"
 #include "core/impl.h"
 #include "core/literal.h"
+#include "error/diagnostics/base.h"
 #include "utils/assert.h"
 
 namespace AbstractSyntaxTree {
@@ -64,14 +65,13 @@ class Load {
     virtual ~Load() = default;
 
     void setTokenRange(size_t start, size_t end) {
-        tokenRange_.first = start;
-        tokenRange_.second = end;
+        tokenRange_.start = start;
+        tokenRange_.end = end;
     }
-    void setTokenRange(std::pair<size_t, size_t> range) { tokenRange_ = range; }
-    const std::string geneCode() const;
+    void setTokenRange(TokenRange range) { tokenRange_ = range; }
 
     LoadType type() const { return type_; }
-    std::pair<size_t, size_t> tokenRange() const { return tokenRange_; }
+    TokenRange tokenRange() const { return tokenRange_; }
     const std::string typeStr() const { return to_string(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
@@ -79,7 +79,7 @@ class Load {
 
   protected:
     LoadType type_;
-    std::pair<size_t, size_t> tokenRange_ = {0, 0};
+    TokenRange tokenRange_ = {0, 0};
 };
 
 class Node : public AbstractTreeNode<load_ptr_t, Node> {

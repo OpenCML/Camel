@@ -42,9 +42,9 @@ class Builder {
     };
     virtual ~Builder() = default;
 
-    node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
+    node_ptr_t build(AST::node_ptr_t node, diagnostics_ptr_t diags) {
         idIndex_ = 0;
-        diagnostics_ = diagnostics;
+        diags_ = diags;
         initInnerTypes();
         root_ = visitModule(node);
         return root_;
@@ -58,7 +58,7 @@ class Builder {
 
     context_ptr_t context_;
     module_ptr_t module_;
-    diagnostics_ptr_t diagnostics_;
+    diagnostics_ptr_t diags_;
 
     void initInnerTypes();
 
@@ -66,12 +66,6 @@ class Builder {
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
-
-    void reportDiagnostic(
-        Diagnostic::Severity sev, const std::string &msg,
-        std::pair<size_t, size_t> tokenRange = {0, 0}) {
-        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
-    }
 
     void pushScope() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?

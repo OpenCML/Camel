@@ -103,7 +103,7 @@ class CamelParser {
     bool buildAST() {
         try {
             auto constructor = AST::Builder();
-            ast_ = constructor.construct(cst_, diagnostics_);
+            ast_ = constructor.build(cst_, diagnostics_);
 
             if (diagnostics_->hasErrors()) {
                 ast_ = nullptr;
