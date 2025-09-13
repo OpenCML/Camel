@@ -19,36 +19,35 @@
  * Program of China
  */
 
+// json 需要早于 antlr4-runtime 引入
+#include "nlohmann/json.hpp"
+
+#include "antlr4-runtime/antlr4-runtime.h"
+
+#include "builtin/passes/sched/linear/dump/graphviz.h"
+#include "builtin/passes/sched/linear/dump/topo-node-seq.h"
+#include "builtin/passes/sched/linear/exec/fallback.h"
+#include "config.h"
+#include "core/module/userdef.h"
+#include "core/type/type.h"
+#include "error/base.h"
+#include "error/diagnostics/diagnostics.h"
+#include "error/listener.h"
+#include "parse/antlr/OpenCMLLexer.h"
+#include "parse/antlr/OpenCMLParser.h"
+#include "parse/ast_builder.h"
+#include "parse/cst_dumper.h"
+#include "parse/parse.h"
+#include "service/formatter/fmt.h"
+#include "service/profiler/trace.h"
+#include "utils/env.h"
+#include "utils/log.h"
+
 #include <chrono>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <queue>
-
-#include "nlohmann/json.hpp"
-
-#include "antlr4-runtime/antlr4-runtime.h"
-#include "common/error/base.h"
-#include "common/error/diagnostic.h"
-#include "common/error/listener.h"
-#include "common/type.h"
-#include "config.h"
-#include "parse/antlr/OpenCMLLexer.h"
-#include "parse/antlr/OpenCMLParser.h"
-#include "parse/ast.h"
-#include "parse/cst-dump.h"
-#include "service/formatter/fmt.h"
-#include "service/profiler/trace.h"
-#include "utils/env.h"
-
-#include "common/module/userdef.h"
-#include "parse/parse.h"
-
-#include "builtin/passes/sched/linear/dump/graphviz.h"
-#include "builtin/passes/sched/linear/dump/topo-node-seq.h"
-#include "builtin/passes/sched/linear/exec/fallback.h"
-
-#include "utils/log.h"
 
 using namespace antlr4;
 using namespace std;
@@ -98,7 +97,11 @@ int main(int argc, char *argv[]) {
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setLimit(Diagnostic::Severity::Error, 0);
+            diagnostics->setConfig(
+                DiagsConfig{
+                    .total_limit = -1,
+                    .per_severity_limits = {{Severity::Error, 0}},
+                });
         }
 
         bool useJsonFormat = (errorFormat == "json");
@@ -159,17 +162,17 @@ int main(int argc, char *argv[]) {
                     .searchPaths =
                         {
                             entryDir,
-                            fs::absolute(fs::path(
-                                             Run::stdLibPath.empty()
-                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                 : Run::stdLibPath))
+                            fs::absolute(
+                                fs::path(
+                                    Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                            : Run::stdLibPath))
                                 .string(),
                             getEnv("CAMEL_PACKAGES"),
                             getEnv("CAMEL_HOME", camelPath.string()),
                         }},
-                DiagnosticsConfig{
+                DiagsConfig{
                     .total_limit = -1,
-                    .per_severity_limits = {{Diagnostic::Severity::Error, 0}},
+                    .per_severity_limits = {{Severity::Error, 0}},
                 });
 
             auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
@@ -179,13 +182,9 @@ int main(int argc, char *argv[]) {
                 initTypes();
                 mainModule->load();
             } catch (DiagnosticsLimitExceededException &e) {
-                if (selectedCommand == Command::Check) {
-                    os << e.lastDiagnostic().what(useJsonFormat) << endl;
-                    return 0;
-                } else {
-                    os << e.lastDiagnostic().what(useJsonFormat) << endl;
-                    return 1;
-                }
+                auto lastDiag = e.lastDiagnostic();
+                os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
+                return selectedCommand == Command::Check ? 0 : 1;
             }
 
             if (selectedCommand == Command::Inspect) {

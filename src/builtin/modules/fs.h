@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "common/module/builtin.h"
+#include "core/module/builtin.h"
 
 class FileBuiltinModule : public BuiltinModule {
   public:

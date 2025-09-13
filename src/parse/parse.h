@@ -26,10 +26,10 @@
 #include "antlr/OpenCMLLexer.h"
 #include "antlr/OpenCMLParser.h"
 
-#include "ast.h"
-#include "cst-dump.h"
+#include "ast_builder.h"
+#include "cst_dumper.h"
 
-#include "common/error/diagnostic.h"
+#include "error/diagnostics/diagnostics.h"
 
 class ParserErrorListener : public antlr4::BaseErrorListener {
   protected:
@@ -47,13 +47,11 @@ class ParserErrorListener : public antlr4::BaseErrorListener {
         size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
         hasErrors_ = true;
         if (offendingSymbol) {
-            diagnostics_
-                ->emplace(Diagnostic::Severity::Error, msg, offendingSymbol, offendingSymbol);
+            diagnostics_->of(SyntaxDiag::UnknownSyntaxError).at(offendingSymbol).commit(msg);
         } else {
-            diagnostics_->emplace(
-                Diagnostic::Severity::Error,
-                msg,
-                Diagnostic::Position{line, charPositionInLine});
+            diagnostics_->of(SyntaxDiag::UnknownSyntaxError)
+                .at(CharRange{{line, charPositionInLine}, {line, charPositionInLine}})
+                .commit(msg);
         }
     }
 };
@@ -104,8 +102,8 @@ class CamelParser {
 
     bool buildAST() {
         try {
-            auto constructor = AST::Constructor();
-            ast_ = constructor.construct(cst_, diagnostics_);
+            auto constructor = AST::Builder();
+            ast_ = constructor.build(cst_, diagnostics_);
 
             if (diagnostics_->hasErrors()) {
                 ast_ = nullptr;
@@ -158,13 +156,8 @@ class CamelParser {
 
     void dumpDiagnostics(std::ostream &os, bool json = false) {
         const auto &tokenVec = tokens_->getTokens();
-        while (!diagnostics_->end()) {
-            auto diagOpt = diagnostics_->next();
-            if (diagOpt.has_value()) {
-                auto &diag = diagOpt.value();
-                os << diag.fetchRange(tokenVec).what(json) << std::endl;
-            }
-        }
+        diagnostics_->fetchAll(tokenVec);
+        diagnostics_->dump(os, json);
     }
 };
 

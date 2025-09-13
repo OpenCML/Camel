@@ -22,6 +22,10 @@
 #include "../linear.h"
 
 class FallbackExecSchedPass : public LinearSchedPass {
+    std::unordered_map<GIR::Graph *, std::shared_ptr<GIR::node_vec_t>> graphTNS_;
+
+    data_ptr_t evalGraph(const GIR::graph_ptr_t &graph, arena_ptr_t &arena);
+    void evalNode(const GIR::node_ptr_t &node);
 
   public:
     FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};

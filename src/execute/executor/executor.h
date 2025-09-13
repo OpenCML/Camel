@@ -19,9 +19,9 @@
 
 #pragma once
 
-#include "common/error/runtime.h"
-#include "common/operator.h"
-#include "common/type.h"
+#include "core/operator.h"
+#include "core/type/type.h"
+#include "error/runtime.h"
 
 #include <functional>
 #include <memory>
@@ -35,8 +35,9 @@ using context_ptr_t = std::shared_ptr<Context>;
 class Executor : public std::enable_shared_from_this<Executor> {
   protected:
     context_ptr_t context_;
-    
+
     std::unordered_map<std::string, operator_t> opsMap_;
+
   public:
     Executor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : context_(ctx), opsMap_(ops) {};

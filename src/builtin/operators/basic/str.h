@@ -19,5 +19,5 @@
 
 #pragma once
 
-#include "common/operator.h"
-#include "common/type.h"
+#include "core/operator.h"
+#include "core/type/type.h"
