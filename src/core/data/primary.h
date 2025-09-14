@@ -20,6 +20,7 @@
 #pragma once
 
 #include "data.h"
+#include "utils/assert.h"
 
 template <typename T> class PrimaryData : public Data {
   private:
@@ -60,6 +61,7 @@ template <typename T> class PrimaryData : public Data {
     }
 
     virtual data_ptr_t as(type_ptr_t target, bool inplace = false) override {
+        ASSERT(inplace == false, "In-place conversion not supported for PrimaryData");
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
             return shared_from_this();

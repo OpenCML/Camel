@@ -22,7 +22,4 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    ASSERT(false, "Not implemented");
-    return Data::null();
-}
+data_ptr_t __sleep__(Context &ctx, data_vec_t &with, data_vec_t &norm);

@@ -32,21 +32,22 @@ Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
 }
 
 std::string Diagnostic::toText() const {
-    std::ostringstream oss;
-    oss << '[' << to_string(severity) << "]: " << moduleName << " (" << modulePath << "), ";
+    std::string result =
+        std::format("[{}]: <{}> ({}), ", to_string(severity), moduleName, modulePath);
+
     if (std::holds_alternative<TokenRange>(range)) {
         ASSERT(false, "TokenRange should be converted to CharRange before toText()");
     } else if (std::holds_alternative<std::monostate>(range)) {
-        oss << "line ?, char ?";
+        result += "line ?, char ?";
     } else if (std::holds_alternative<CharRange>(range)) {
         CharRange r = std::get<CharRange>(range);
-        oss << "line " << (r.start.line + 1) << ", char " << (r.start.character + 1) << "";
+        result += std::format("line {}, char {}", r.start.line + 1, r.start.character + 1);
     }
-    oss << ": \n" << message << "(name=" << name << ", code=0x" << hex8(diagCode()) << ")\n";
 
-    if (!suggestion.empty())
-        oss << "suggestion: " << suggestion;
-    return oss.str();
+    result +=
+        std::format(": {} {} (name={}, code=0x{})\n", message, suggestion, name, hex8(diagCode()));
+
+    return result;
 }
 
 std::string Diagnostic::toJson() const {
@@ -141,11 +142,13 @@ void Diagnostics::fetchAll(const std::vector<antlr4::Token *> &tokens) {
 
 void Diagnostics::dump(std::ostream &os, bool json) const {
     std::lock_guard<std::mutex> lk(mtx_);
-    os << "[";
-    os << strutil::join(storage_, ",\n", [json](const Diagnostic &d) {
+    if (json)
+        os << "[\n";
+    os << strutil::join(storage_, (json ? ",\n" : "\n"), [json](const Diagnostic &d) {
         return json ? d.toJson() : d.toText();
     });
-    os << "]";
+    if (json)
+        os << "\n]";
 }
 
 void Diagnostics::clear() {

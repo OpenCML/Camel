@@ -23,6 +23,7 @@
 #include "builder.h"
 #include "messages/index.h"
 #include "range.h"
+#include <fmt/core.h>
 
 // ---- Diagnostic structure ----
 struct Diagnostic {
@@ -194,8 +195,8 @@ template <typename... Args> Diagnostic &DiagnosticBuilder::commit(Args &&...args
     d.type = type_;
     d.specific = specific_;
     d.name = name_;
-    d.message = std::vformat(rawMessage_, std::make_format_args(std::forward<Args>(args)...));
-    d.suggestion = std::vformat(rawSuggestion_, std::make_format_args(std::forward<Args>(args)...));
+    d.message = fmt::format(fmt::runtime(rawMessage_), std::forward<Args>(args)...);
+    d.suggestion = fmt::format(fmt::runtime(rawSuggestion_), std::forward<Args>(args)...);
 
     return diagnostics_.add(std::move(d));
 }

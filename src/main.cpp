@@ -218,7 +218,12 @@ int main(int argc, char *argv[]) {
             if (selectedCommand == Command::Run) {
                 FallbackExecSchedPass pass(ctx);
                 pass.apply(ctx->mainGraph());
-                return 0;
+                // int exitCode = ctx->getExitCode();
+                const auto &diags = ctx->rtmDiags();
+                if (diags->hasErrors()) {
+                    diags->dump(os, useJsonFormat);
+                    return 1;
+                }
             }
 
         } catch (CamelBaseException &e) {

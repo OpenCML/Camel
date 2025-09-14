@@ -20,6 +20,7 @@
 #include "basic.h"
 #include "../operators/basic/io.h"
 #include "../operators/basic/ops.h"
+#include "../operators/basic/os.h"
 #include "../operators/basic/other.h"
 #include "utils/log.h"
 
@@ -57,6 +58,7 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"io/print", __print__},
         {"io/println", __println__},
         {"io/input", __input__},
+        {"os/sleep", __sleep__},
     };
     return map;
 }

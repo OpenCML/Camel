@@ -118,6 +118,7 @@ BasicBuiltinModule::BasicBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ct
         voidTypePtr,
         ":io/println");
     exportBuiltinOperator("input", param_init_list{}, param_init_list{}, voidTypePtr, ":io/input");
+    exportBuiltinOperator("sleep", param_init_list{}, param_init_list{}, voidTypePtr, ":os/sleep");
 }
 
 bool BasicBuiltinModule::load() {

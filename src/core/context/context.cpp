@@ -54,6 +54,8 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
+    ctx->rtmDiags_ = std::make_shared<Diagnostics>("main", entryConf.entryFile);
+    ctx->rtmDiags_->setConfig(diagConf);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
     l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
     return ctx;

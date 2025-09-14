@@ -22,11 +22,53 @@
 const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap() {
     return {
         {
-            RuntimeDiag::UnknownRuntimeError,
+            RuntimeDiag::RuntimeError,
             {
-                "UnknownRuntimeError",
+                "RuntimeError",
                 "An error has occurred: {0}.",
-                "",
+                "Check the runtime environment and input data for unexpected issues.",
+            },
+        },
+        {
+            RuntimeDiag::DivisionByZero,
+            {
+                "DivisionByZero",
+                "Attempted division by zero.",
+                "Ensure the denominator is not zero before performing division.",
+            },
+        },
+        {
+            RuntimeDiag::IndexOutOfRange,
+            {
+                "IndexOutOfRange",
+                "Index out of range: {0}.",
+                "Ensure the index is within the valid range of the collection.",
+            },
+        },
+        {
+            RuntimeDiag::KeyNotFound,
+            {
+                "KeyNotFound",
+                "Key not found in map or dictionary: '{0}'.",
+                "Verify the key exists before accessing it.",
+            },
+        },
+        {
+            RuntimeDiag::IncompatibleArgType,
+            {
+                "IncompatibleArgType",
+                "Argument {0} to function/operator {1} has incompatible type: expected '{2}', but "
+                "got '{3}'.",
+                "Check that the argument types match the function or operator signature.",
+            },
+        },
+        {
+            RuntimeDiag::IncompatibleArgCount,
+            {
+                "IncompatibleArgCount",
+                "Incorrect number of arguments passed to function/operator {0}: expected {1}, but "
+                "got {2}.",
+                "Ensure the number of arguments matches the function definition.",
             },
         },
     };
