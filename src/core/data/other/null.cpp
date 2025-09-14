@@ -35,5 +35,5 @@ data_ptr_t NullData::as(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert null to " + typeCodeToString(target->code()));
 }
 
-data_ptr_t NullData::clone(bool deep) const { return std::make_shared<NullData>(); }
+data_ptr_t NullData::clone(bool deep) const { return Data::null(); }
 const std::string NullData::toString() const { return "null"; }

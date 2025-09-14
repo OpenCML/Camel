@@ -118,7 +118,7 @@ data_ptr_t VectorData::as(type_ptr_t target, bool inplace) {
                 return make_shared<AnyData>(shared_from_this());
                 break;
             case TypeCode::Void:
-                return make_shared<NullData>();
+                return Data::null();
                 break;
             default:
                 throw UnsupportedConvError();

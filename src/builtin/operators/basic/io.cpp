@@ -19,6 +19,63 @@
 
 #include "io.h"
 
-data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
-data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
-data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+#include <iostream>
+
+data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    for (size_t i = 0; i < with.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        std::cout << with[i]->toString();
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        std::cout << norm[i]->toString();
+    }
+    return Data::null();
+}
+
+data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    for (size_t i = 0; i < with.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        std::cout << with[i]->toString();
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        std::cout << norm[i]->toString();
+    }
+    std::cout << std::endl;
+    return Data::null();
+}
+
+data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    std::string prompt;
+
+    for (size_t i = 0; i < with.size(); i++) {
+        if (i > 0) {
+            prompt += " ";
+        }
+        prompt += with[i]->toString();
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        if (i > 0 || !prompt.empty()) {
+            prompt += " ";
+        }
+        prompt += norm[i]->toString();
+    }
+
+    if (!prompt.empty()) {
+        std::cout << prompt;
+    }
+
+    std::string input;
+    std::getline(std::cin, input);
+
+    return std::make_shared<StringData>(input);
+}

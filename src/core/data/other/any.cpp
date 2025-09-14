@@ -24,7 +24,7 @@ AnyData::AnyData(const data_ptr_t &data) : Data(anyTypePtr) {
     if (data) {
         data_ = data;
     } else {
-        data_ = std::make_shared<NullData>();
+        data_ = Data::null();
     }
 }
 

@@ -113,24 +113,41 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
         }
         case NodeType::Struct: {
             auto structNode = tt::as_shared<StructNode>(n);
+            const auto &dataInputs = n->dataInputs();
+            data_ptr_t data = frame->get(n->index());
+            ASSERT(data != nullptr, "Struct data is null.");
+            data_vec_t inputs;
+            inputs.reserve(dataInputs.size());
+            for (const auto &input : dataInputs) {
+                inputs.push_back(frame->get(input->index()));
+            }
+            data->resolve(inputs);
+            frame->set(n->index(), data);
             break;
         }
         case NodeType::Access: {
             auto accessNode = tt::as_shared<AccessNode>(n);
+            data_ptr_t source = frame->get(n->dataInputs().front()->index());
+            data_ptr_t res;
+            ASSERT(false, "Access node evaluation not implemented yet.");
             break;
         }
         case NodeType::Source: {
             auto sourceNode = tt::as_shared<SourceNode>(n);
+            data_ptr_t data = sourceNode->dataOf(frame);
+            ASSERT(data != nullptr, "Source data is null.");
             break;
         }
         }
     }
-}
 
-void FallbackExecSchedPass::evalNode(const node_ptr_t &node) {}
+    // 返回图的返回节点数据
+    auto retNode = graph->output();
+    ASSERT(retNode != nullptr, "Graph has no return node.");
+    return frame->get(retNode->index());
+}
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
     auto arena = graph->arena()->clone();
-    evalGraph(graph, arena);
-    return nullptr;
+    return evalGraph(graph, arena);
 }

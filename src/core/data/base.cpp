@@ -20,6 +20,8 @@
 #include "base.h"
 
 #include "core/data/entity.h"
+#include "other/null.h"
+#include "utils/assert.h"
 
 using namespace std;
 
@@ -44,24 +46,38 @@ bool Data::variable() const { return mutable_; }
 
 void Data::setVariable() { mutable_ = true; }
 
+data_ptr_t Data::null() {
+    static data_ptr_t nullData = nullptr;
+    if (nullData == nullptr) {
+        nullData = make_shared<NullData>();
+    }
+    return nullData;
+}
+
 vector<string> Data::refs() const { return vector<string>(); }
 
 bool Data::resolved() const { return true; }
 
-void Data::resolve(const data_vec_t &dataList) {}
+void Data::resolve(const data_vec_t &dataList) {
+    ASSERT(false, "Base Data::resolve() not implemented");
+}
 
 bool Data::equals(const data_ptr_t &other) const {
-    throw runtime_error("Base Data::equals() not implemented");
+    ASSERT(false, "Base Data::equals() not implemented");
+    return false;
 }
 
 data_ptr_t Data::clone(bool deep) const {
-    throw runtime_error("Base Data::clone() not implemented");
+    ASSERT(false, "Base Data::clone() not implemented");
+    return nullptr;
 }
 
 data_ptr_t Data::as(type_ptr_t target, bool inplace) {
-    throw runtime_error("Base Data::convert() not implemented");
+    ASSERT(false, "Base Data::as() not implemented");
+    return nullptr;
 }
 
 const string Data::toString() const {
-    throw runtime_error("Base Data::toString() not implemented");
+    ASSERT(false, "Base Data::toString() not implemented");
+    return "<Data>";
 }
