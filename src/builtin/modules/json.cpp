@@ -23,8 +23,8 @@ JsonBuiltinModule::JsonBuiltinModule(context_ptr_t ctx) : BuiltinModule("json", 
     exportBuiltinOperator(
         "load",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
         ":not-impl");
 }
 

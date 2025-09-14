@@ -19,6 +19,11 @@
 
 #include "base.h"
 
+#include "primary.h"
+#include "special/func.h"
+#include "struct/list.h"
+#include "utils/type.h"
+
 using namespace std;
 
 const signed char primeTypeConvMatrix[7][7] = {
@@ -101,9 +106,122 @@ bool Type::operator!=(const Type &other) const { return code_ != other.code_; }
 
 bool Type::equals(const type_ptr_t &type) const { return type && *type == *this; }
 
-TypeConv Type::convertibility(const Type &other) const {
+CastSafety Type::castSafetyTo(const Type &other) const {
     if (code_ == other.code_) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
+}
+
+bool Type::castSafetyCheck(const Type &from, const Type &to, CastSafety required) {
+    CastSafety safety = from.castSafetyTo(to);
+    if (required == CastSafety::Safe) {
+        return safety == CastSafety::Safe;
+    } else if (required == CastSafety::Unsafe) {
+        return safety != CastSafety::Forbidden;
+    } else { // required == CastSafety::Forbidden
+        return safety == CastSafety::Forbidden;
+    }
+}
+
+type_ptr_t Type::Int32() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Int32));
+    }
+    return type;
+}
+
+type_ptr_t Type::Int64() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Int64));
+    }
+    return type;
+}
+
+type_ptr_t Type::Float() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Float));
+    }
+    return type;
+}
+
+type_ptr_t Type::Double() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Double));
+    }
+    return type;
+}
+
+type_ptr_t Type::String() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::String));
+    }
+    return type;
+}
+
+type_ptr_t Type::Bool() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Bool));
+    }
+    return type;
+}
+
+type_ptr_t Type::Char() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Char));
+    }
+    return type;
+}
+
+type_ptr_t Type::Int() { return Int32(); }
+
+type_ptr_t Type::Real() { return Float(); }
+
+type_ptr_t Type::Number() { return Double(); }
+
+type_ptr_t Type::List() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<ListType>());
+    }
+    return type;
+}
+
+type_ptr_t Type::Any() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Any));
+    }
+    return type;
+}
+
+type_ptr_t Type::Void() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Void));
+    }
+    return type;
+}
+
+type_ptr_t Type::Func() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<FunctionType>(nullptr, nullptr, Any()));
+    }
+    return type;
+}
+
+type_ptr_t Type::Ref() {
+    static type_ptr_t type = nullptr;
+    if (type == nullptr) {
+        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Ref));
+    }
+    return type;
 }

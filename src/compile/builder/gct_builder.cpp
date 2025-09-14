@@ -19,7 +19,6 @@
 
 #include "gct_builder.h"
 
-#include "core/type/init.h"
 #include "utils/scope.h"
 #include "utils/token.h"
 #include "utils/type.h"
@@ -75,14 +74,14 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
 
 void Builder::initInnerTypes() {
     typeScope_->clear();
-    typeScope_->insert(Reference("int"), int32TypePtr);
-    typeScope_->insert(Reference("float"), floatTypePtr);
-    typeScope_->insert(Reference("bool"), boolTypePtr);
-    typeScope_->insert(Reference("char"), charTypePtr);
-    typeScope_->insert(Reference("string"), stringTypePtr);
-    typeScope_->insert(Reference("any"), anyTypePtr);
-    typeScope_->insert(Reference("void"), voidTypePtr);
-    typeScope_->insert(Reference("functor"), functorTypePtr);
+    typeScope_->insert(Reference("int"), Type::Int32());
+    typeScope_->insert(Reference("float"), Type::Float());
+    typeScope_->insert(Reference("bool"), Type::Bool());
+    typeScope_->insert(Reference("char"), Type::Char());
+    typeScope_->insert(Reference("string"), Type::String());
+    typeScope_->insert(Reference("any"), Type::Any());
+    typeScope_->insert(Reference("void"), Type::Void());
+    typeScope_->insert(Reference("functor"), Type::Func());
 }
 
 /*
@@ -1182,7 +1181,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
 
     const auto withParamsType = make_shared<ParamsType>();
     const auto normParamsType = make_shared<ParamsType>();
-    type_ptr_t exitType = voidTypePtr;
+    type_ptr_t exitType = Type::Void();
 
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {

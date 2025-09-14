@@ -26,8 +26,8 @@ void BasicBuiltinModule::exportBinaryOp(const std::string &name, const std::stri
         name,
         makeFuncType(
             param_init_list{},
-            {{"lhs", anyTypePtr, nullptr, false}, {"rhs", anyTypePtr, nullptr, false}},
-            anyTypePtr),
+            {{"lhs", Type::Any(), nullptr, false}, {"rhs", Type::Any(), nullptr, false}},
+            Type::Any()),
         uri);
 
     auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
@@ -40,8 +40,8 @@ void BasicBuiltinModule::exportAssnOp(const std::string &name, const std::string
         name,
         makeFuncType(
             param_init_list{},
-            {{"self", anyTypePtr, nullptr, true}, {"value", anyTypePtr, nullptr, false}},
-            anyTypePtr),
+            {{"self", Type::Any(), nullptr, true}, {"value", Type::Any(), nullptr, false}},
+            Type::Any()),
         uri);
 
     auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
@@ -102,23 +102,23 @@ BasicBuiltinModule::BasicBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ct
     }
 
     for (const auto &[name, func] : others) {
-        exportBuiltinOperator(name, param_init_list{}, param_init_list{}, anyTypePtr, func);
+        exportBuiltinOperator(name, param_init_list{}, param_init_list{}, Type::Any(), func);
     }
 
     exportBuiltinOperator(
         "print",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
         ":io/print");
     exportBuiltinOperator(
         "println",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
         ":io/println");
-    exportBuiltinOperator("input", param_init_list{}, param_init_list{}, voidTypePtr, ":io/input");
-    exportBuiltinOperator("sleep", param_init_list{}, param_init_list{}, voidTypePtr, ":os/sleep");
+    exportBuiltinOperator("input", param_init_list{}, param_init_list{}, Type::Void(), ":io/input");
+    exportBuiltinOperator("sleep", param_init_list{}, param_init_list{}, Type::Void(), ":os/sleep");
 }
 
 bool BasicBuiltinModule::load() {

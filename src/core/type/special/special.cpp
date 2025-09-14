@@ -19,18 +19,18 @@
 
 #include "special.h"
 
-TypeConv SpecialType::convertibility(const Type &other) const {
+CastSafety SpecialType::castSafetyTo(const Type &other) const {
     if (other.code() == code_) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     if (other.primary() || other.structured()) {
-        return TypeConv::FORBIDDEN;
+        return CastSafety::Forbidden;
     }
     if (other.code() == TypeCode::Void) {
-        return TypeConv::UNSAFE;
+        return CastSafety::Unsafe;
     }
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

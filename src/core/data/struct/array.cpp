@@ -32,7 +32,7 @@ ArrayData::ArrayData(type_ptr_t type, size_t length, data_list_t data) : data_(d
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::Ref) {
             refs_.push_back(i);
-        } else if (e->type()->convertibility(*type) != TypeConv::SAFE) {
+        } else if (e->type()->castSafetyTo(*type) != CastSafety::Safe) {
             throw DataConvError(
                 "Cannot convert " + e->type()->toString() + " to " + type->toString());
         }

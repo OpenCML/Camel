@@ -20,7 +20,7 @@
 #include "ref.h"
 #include "utils/assert.h"
 
-RefData::RefData(const std::string &ref) : Data(refTypePtr), ref_(ref) {}
+RefData::RefData(const std::string &ref) : Data(Type::Ref()), ref_(ref) {}
 
 const std::string &RefData::ref() const { return ref_; }
 

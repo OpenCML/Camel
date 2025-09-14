@@ -20,7 +20,7 @@
 #include "any.h"
 #include "null.h"
 
-AnyData::AnyData(const data_ptr_t &data) : Data(anyTypePtr) {
+AnyData::AnyData(const data_ptr_t &data) : Data(Type::Any()) {
     if (data) {
         data_ = data;
     } else {

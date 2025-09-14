@@ -22,7 +22,7 @@
 
 #include "../struct/list.h"
 
-StringData::StringData(const std::string &data) : Data(stringTypePtr), data_(data) {}
+StringData::StringData(const std::string &data) : Data(Type::String()), data_(data) {}
 
 const std::string &StringData::data() const { return data_; }
 

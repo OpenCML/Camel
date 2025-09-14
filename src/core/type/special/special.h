@@ -31,5 +31,5 @@ class SpecialType : public Type {
     virtual bool operator==(const Type &other) const override { return code_ == other.code(); }
     virtual bool operator!=(const Type &other) const override { return code_ != other.code(); }
 
-    virtual TypeConv convertibility(const Type &other) const override;
+    virtual CastSafety castSafetyTo(const Type &other) const override;
 };

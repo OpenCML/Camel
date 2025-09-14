@@ -27,9 +27,9 @@
 
 using namespace std;
 
-ListData::ListData() : StructData(listTypePtr), data_() {}
+ListData::ListData() : StructData(Type::List()), data_() {}
 
-ListData::ListData(data_list_t data) : StructData(listTypePtr), data_(data) {
+ListData::ListData(data_list_t data) : StructData(Type::List()), data_(data) {
     size_t i = 0;
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::Ref) {

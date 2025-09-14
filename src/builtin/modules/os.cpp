@@ -23,8 +23,8 @@ OSBuiltinModule::OSBuiltinModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
     exportBuiltinOperator(
         "sleep",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
         ":not-impl");
 }
 

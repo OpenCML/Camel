@@ -178,7 +178,6 @@ int main(int argc, char *argv[]) {
             ctx->setMainModule(mainModule);
 
             try {
-                initTypes();
                 mainModule->load();
             } catch (DiagnosticsLimitExceededException &e) {
                 auto lastDiag = e.lastDiagnostic();

@@ -58,10 +58,10 @@ enum class TypeCode {
     Ref = 0b11'000000,
 };
 
-enum class TypeConv {
-    SAFE = 1,
-    UNSAFE = -1,
-    FORBIDDEN = 0,
+enum class CastSafety {
+    Safe = 1,
+    Unsafe = -1,
+    Forbidden = 0,
 };
 
 std::string typeCodeToString(TypeCode code);
@@ -124,5 +124,28 @@ class Type {
 
     bool equals(const type_ptr_t &type) const;
 
-    virtual TypeConv convertibility(const Type &other) const;
+    virtual CastSafety castSafetyTo(const Type &other) const;
+
+    static bool
+    castSafetyCheck(const Type &from, const Type &to, CastSafety required = CastSafety::Safe);
+
+    static type_ptr_t Int32();
+    static type_ptr_t Int64();
+    static type_ptr_t Float();
+    static type_ptr_t Double();
+    static type_ptr_t String();
+    static type_ptr_t Bool();
+    static type_ptr_t Char();
+
+    static type_ptr_t Int();
+    static type_ptr_t Real();
+    static type_ptr_t Number();
+
+    static type_ptr_t List();
+
+    static type_ptr_t Any();
+    static type_ptr_t Void();
+    static type_ptr_t Func();
+
+    static type_ptr_t Ref();
 };

@@ -32,7 +32,7 @@ VectorData::VectorData(type_ptr_t type, data_list_t data) : data_(data) {
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::Ref) {
             refs_.push_back(i);
-        } else if (e->type()->convertibility(*type) != TypeConv::SAFE) {
+        } else if (e->type()->castSafetyTo(*type) != CastSafety::Safe) {
             throw DataConvError(
                 "Cannot convert " + e->type()->toString() + " to " + type->toString());
         }
@@ -44,7 +44,7 @@ VectorData::VectorData(type_ptr_t type, data_list_t data) : data_(data) {
 void VectorData::emplace(const data_ptr_t &e) {
     if (e->type()->code() == TypeCode::Ref) {
         refs_.push_back(data_.size());
-    } else if (e->type()->convertibility(*type_) != TypeConv::SAFE) {
+    } else if (e->type()->castSafetyTo(*type_) != CastSafety::Safe) {
         throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
     }
     data_.push_back(e);
@@ -52,7 +52,7 @@ void VectorData::emplace(const data_ptr_t &e) {
 
 void VectorData::pushBack(const data_ptr_t &e) {
     ASSERT(resolved(), "Cannot push data to unresolved VectorData");
-    if (e->type()->convertibility(*type_) != TypeConv::SAFE) {
+    if (e->type()->castSafetyTo(*type_) != CastSafety::Safe) {
         throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
     }
     data_.push_back(e);
@@ -81,7 +81,7 @@ bool VectorData::set(size_t index, const data_ptr_t &e) {
     if (index >= data_.size()) {
         return false;
     }
-    if (e->type()->convertibility(*type_) != TypeConv::SAFE) {
+    if (e->type()->castSafetyTo(*type_) != CastSafety::Safe) {
         throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
     }
     data_[index] = e;

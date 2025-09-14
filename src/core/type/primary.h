@@ -26,5 +26,5 @@ class PrimaryType : public Type {
     PrimaryType() = delete;
     PrimaryType(TypeCode code) : Type(code) {}
 
-    TypeConv convertibility(const Type &other) const override;
+    CastSafety castSafetyTo(const Type &other) const override;
 };

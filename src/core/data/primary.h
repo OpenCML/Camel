@@ -35,17 +35,17 @@ template <typename T> class PrimaryData : public Data {
     PrimaryData() = delete;
     PrimaryData(const T &data) : Data(), data_(data) {
         if constexpr (std::is_same_v<T, int32_t>) {
-            type_ = int32TypePtr;
+            type_ = Type::Int32();
         } else if constexpr (std::is_same_v<T, int64_t>) {
-            type_ = int64TypePtr;
+            type_ = Type::Int64();
         } else if constexpr (std::is_same_v<T, float>) {
-            type_ = floatTypePtr;
+            type_ = Type::Float();
         } else if constexpr (std::is_same_v<T, double>) {
-            type_ = doubleTypePtr;
+            type_ = Type::Double();
         } else if constexpr (std::is_same_v<T, bool>) {
-            type_ = boolTypePtr;
+            type_ = Type::Bool();
         } else if constexpr (std::is_same_v<T, char>) {
-            type_ = charTypePtr;
+            type_ = Type::Char();
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }

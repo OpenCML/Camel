@@ -93,7 +93,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
                     "Branch node must have exactly one data input.");
                 ASSERT(n->ctrlOutputs().size() == 2, "Branch node must have exactly two outputs.");
                 auto condDataRaw = frame->get(n->dataInputs().front()->index());
-                auto condData = tt::as_shared<PrimaryData<bool>>(condDataRaw->as(boolTypePtr));
+                auto condData = tt::as_shared<PrimaryData<bool>>(condDataRaw->as(Type::Bool()));
                 bool cond = condData->data();
                 if (cond) {
                     // True branch, skip the second output

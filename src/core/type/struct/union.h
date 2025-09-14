@@ -41,5 +41,5 @@ class UnionType : public StructType {
     void add(const type_ptr_t &type);
     bool has(const type_ptr_t &type) const;
 
-    TypeConv convertibility(const Type &other) const override;
+    CastSafety castSafetyTo(const Type &other) const override;
 };

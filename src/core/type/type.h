@@ -20,7 +20,6 @@
 #pragma once
 
 #include "base.h"
-#include "init.h"
 #include "primary.h"
 #include "special/func.h"
 #include "struct/array.h"

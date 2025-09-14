@@ -19,15 +19,15 @@
 
 #include "primary.h"
 
-TypeConv PrimaryType::convertibility(const Type &other) const {
+CastSafety PrimaryType::castSafetyTo(const Type &other) const {
     const TypeCode otherCode = other.code();
     if (otherCode == code_) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     if (other.primary()) {
         const int thisIndex = static_cast<int>(code_) & 0b00'000111;
         const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
-        return static_cast<TypeConv>(primeTypeConvMatrix[thisIndex][otherIndex]);
+        return static_cast<CastSafety>(primeTypeConvMatrix[thisIndex][otherIndex]);
     }
     if (other.structured()) {
         switch (otherCode) {
@@ -42,20 +42,20 @@ TypeConv PrimaryType::convertibility(const Type &other) const {
         case TypeCode::Tensor:
             [[fallthrough]];
         case TypeCode::Set:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.special()) {
         switch (otherCode) {
         case TypeCode::Any:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Void:
-            return TypeConv::UNSAFE;
+            return CastSafety::Unsafe;
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

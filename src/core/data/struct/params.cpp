@@ -151,10 +151,10 @@ const string ParamsData::toString() const {
 void ParamsData::print(std::ostream &os) const { os << toString(); }
 
 data_ptr_t ParamsData::convertToMap() {
-    auto mapData = make_shared<MapData>(stringTypePtr, anyTypePtr);
+    auto mapData = make_shared<MapData>(Type::String(), Type::Any());
     for (const auto &e : namedData_) {
         const auto &key = dynamic_pointer_cast<Data>(make_shared<StringData>(e.first));
-        const auto &val = e.second->as(anyTypePtr);
+        const auto &val = e.second->as(Type::Any());
         mapData->emplace(key, val);
     }
     return mapData;

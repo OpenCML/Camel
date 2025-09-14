@@ -27,17 +27,13 @@ data_ptr_t __sleep__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
     data_ptr_t arg = norm[0];
     auto argType = arg->type();
-    if (!argType->primary() ||
-        (argType->code() != TypeCode::Int32 && argType->code() != TypeCode::Int64)) {
+    if (!argType->primary() || Type::castSafetyCheck(*argType, *Type::Int64())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<__sleep__>", "int32/64", arg->type()->toString());
         return Data::null();
     }
-    if (argType->code() == TypeCode::Int64) {
-        // convert to int32
-        arg = arg->as(int32TypePtr);
-    }
+    arg = arg->as(Type::Int64());
     auto pd = tt::as_shared<PrimaryData<int32_t>>(arg);
     if (pd->data() < 0) {
         ctx.rtmDiags()

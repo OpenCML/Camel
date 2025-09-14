@@ -23,8 +23,8 @@ SysBuiltinModule::SysBuiltinModule(context_ptr_t ctx) : BuiltinModule("sys", ctx
     exportBuiltinOperator(
         "platform",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
         ":not-impl");
 }
 
