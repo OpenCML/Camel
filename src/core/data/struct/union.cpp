@@ -50,7 +50,7 @@ bool UnionData::equals(const data_ptr_t &other) const {
     throw std::runtime_error("UnionData::equals() not implemented");
 }
 
-data_ptr_t UnionData::as(type_ptr_t target, bool inplace) {
+data_ptr_t UnionData::convert(type_ptr_t target, bool inplace) {
     throw std::runtime_error("UnionData::convert() not implemented");
 }
 

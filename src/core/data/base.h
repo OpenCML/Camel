@@ -20,6 +20,7 @@
 #pragma once
 
 #include "core/type/type.h"
+#include "utils/type.h"
 
 #include <ostream>
 
@@ -62,7 +63,13 @@ class Data : public std::enable_shared_from_this<Data> {
 
     virtual bool equals(const data_ptr_t &other) const;
     virtual data_ptr_t clone(bool deep = false) const;
-    virtual data_ptr_t as(type_ptr_t target, bool inplace = false);
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false);
+
+    template <typename Target> std::shared_ptr<Target> as(type_ptr_t target, bool inplace = false) {
+        const data_ptr_t newData = convert(target, inplace);
+        ASSERT(tt::as_shared<Target>(newData), "type cast failed");
+        return tt::as_shared<Target>(newData);
+    }
 
     virtual const std::string toString() const;
     virtual void print(std::ostream &os) const;

@@ -30,7 +30,7 @@ AnyData::AnyData(const data_ptr_t &data) : Data(Type::Any()) {
 
 bool AnyData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t AnyData::as(type_ptr_t target, bool inplace) {
+data_ptr_t AnyData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();

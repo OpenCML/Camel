@@ -74,7 +74,7 @@ bool ParamsData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t ParamsData::as(type_ptr_t target, bool inplace) {
+data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -154,7 +154,7 @@ data_ptr_t ParamsData::convertToMap() {
     auto mapData = make_shared<MapData>(Type::String(), Type::Any());
     for (const auto &e : namedData_) {
         const auto &key = dynamic_pointer_cast<Data>(make_shared<StringData>(e.first));
-        const auto &val = e.second->as(Type::Any());
+        const auto &val = e.second->convert(Type::Any());
         mapData->emplace(key, val);
     }
     return mapData;

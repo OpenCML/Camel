@@ -22,19 +22,17 @@
 
 data_ptr_t __sleep__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     if (norm.size() != 1) {
-        ctx.rtmDiags()->of(RuntimeDiag::IncompatibleArgCount).commit("<__sleep__>", 1, norm.size());
+        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<__sleep__>", 1, norm.size());
         return Data::null();
     }
     data_ptr_t arg = norm[0];
-    auto argType = arg->type();
-    if (!argType->primary() || Type::castSafetyCheck(*argType, *Type::Int64())) {
+    if (!Type::castSafetyCheck(arg->type(), Type::Int64())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<__sleep__>", "int32/64", arg->type()->toString());
+            .commit(0, "<__sleep__>", "int64", arg->type()->toString());
         return Data::null();
     }
-    arg = arg->as(Type::Int64());
-    auto pd = tt::as_shared<PrimaryData<int32_t>>(arg);
+    auto pd = arg->as<Int64Data>(Type::Int64());
     if (pd->data() < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)

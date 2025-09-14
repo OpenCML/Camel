@@ -124,6 +124,10 @@ bool Type::castSafetyCheck(const Type &from, const Type &to, CastSafety required
     }
 }
 
+bool Type::castSafetyCheck(const type_ptr_t &from, const type_ptr_t &to, CastSafety required) {
+    return castSafetyCheck(*from, *to, required);
+}
+
 type_ptr_t Type::Int32() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {

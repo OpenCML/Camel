@@ -78,7 +78,7 @@ bool ArrayData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t ArrayData::as(type_ptr_t target, bool inplace) {
+data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();

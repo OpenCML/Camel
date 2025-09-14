@@ -72,7 +72,7 @@ string Entity::dataStr() const {
 }
 
 const entity_ptr_t Entity::convert(type_ptr_t target, bool inplace = false) {
-    const data_ptr_t newData = data_->as(target, inplace);
+    const data_ptr_t newData = data_->convert(target, inplace);
     if (inplace) {
         data_ = newData;
         return shared_from_this();

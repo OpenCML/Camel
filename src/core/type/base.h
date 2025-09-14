@@ -128,6 +128,8 @@ class Type {
 
     static bool
     castSafetyCheck(const Type &from, const Type &to, CastSafety required = CastSafety::Safe);
+    static bool castSafetyCheck(
+        const type_ptr_t &from, const type_ptr_t &to, CastSafety required = CastSafety::Safe);
 
     static type_ptr_t Int32();
     static type_ptr_t Int64();

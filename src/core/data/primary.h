@@ -60,7 +60,7 @@ template <typename T> class PrimaryData : public Data {
         return false;
     }
 
-    virtual data_ptr_t as(type_ptr_t target, bool inplace = false) override {
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         ASSERT(inplace == false, "In-place conversion not supported for PrimaryData");
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
@@ -148,3 +148,10 @@ template <typename T> class PrimaryData : public Data {
     virtual const std::string toString() const override { return std::to_string(data_); }
     virtual void print(std::ostream &os) const override { os << std::to_string(data_); }
 };
+
+using Int32Data = PrimaryData<int32_t>;
+using Int64Data = PrimaryData<int64_t>;
+using FloatData = PrimaryData<float>;
+using DoubleData = PrimaryData<double>;
+using BoolData = PrimaryData<bool>;
+using CharData = PrimaryData<char>;
