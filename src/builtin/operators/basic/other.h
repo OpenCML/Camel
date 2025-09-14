@@ -24,5 +24,5 @@
 
 data_ptr_t __not_implemented__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     ASSERT(false, "Not implemented");
-    return nullptr;
+    return Data::null();
 }

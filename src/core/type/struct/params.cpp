@@ -52,11 +52,11 @@ TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
     return result;
 }
 
-ParamsType::ParamsType() : StructType(TypeCode::PARAMS) {}
+ParamsType::ParamsType() : StructType(TypeCode::Params) {}
 
 ParamsType::ParamsType(
     const std::initializer_list<std::tuple<string, type_ptr_t, data_ptr_t>> &&elements)
-    : StructType(TypeCode::PARAMS), elements_(std::move(elements)) {}
+    : StructType(TypeCode::Params), elements_(std::move(elements)) {}
 
 string ParamsType::toString() const {
     string result = "Params<";
@@ -77,7 +77,7 @@ string ParamsType::toString() const {
 }
 
 bool ParamsType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::PARAMS) {
+    if (other.code() != TypeCode::Params) {
         return false;
     }
     const ParamsType &otherParam = dynamic_cast<const ParamsType &>(other);
@@ -152,7 +152,7 @@ TypeConv ParamsType::convertibility(const Type &other) const {
     // TODO: others' convertibility should be checked
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::PARAMS: {
+        case TypeCode::Params: {
             const ParamsType &otherParam = dynamic_cast<const ParamsType &>(other);
             if (elements_.size() != otherParam.elements_.size()) {
                 return TypeConv::FORBIDDEN;
@@ -172,28 +172,28 @@ TypeConv ParamsType::convertibility(const Type &other) const {
             }
             return result;
         }
-        case TypeCode::UNION:
+        case TypeCode::Union:
             return TypeConv::SAFE;
-        case TypeCode::LIST:
+        case TypeCode::List:
             return TypeConv::SAFE;
-        case TypeCode::SET:
+        case TypeCode::Set:
             return TypeConv::SAFE;
-        case TypeCode::ARRAY:
+        case TypeCode::Array:
             return TypeConv::SAFE;
-        case TypeCode::VECTOR:
+        case TypeCode::Vector:
             return TypeConv::SAFE;
-        case TypeCode::TENSOR:
+        case TypeCode::Tensor:
             return TypeConv::SAFE;
-        case TypeCode::MAP:
+        case TypeCode::Map:
             return TypeConv::SAFE;
-        case TypeCode::DICT:
+        case TypeCode::Dict:
             return TypeConv::SAFE;
 
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primary types and special types are forbidden

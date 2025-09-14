@@ -861,7 +861,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         }
     } break;
     case LiteralType::Null: {
-        data = tt::as_shared<Data>(make_shared<NullData>());
+        data = Data::null();
     } break;
     default: {
         ASSERT(false, "Unknown literal type");

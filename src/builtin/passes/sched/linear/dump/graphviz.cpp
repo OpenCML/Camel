@@ -223,7 +223,8 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
                 label = portsNameMap[i].first;
                 style = "dashed";
             } else {
-                data_ptr_t data = node->eval(graph->arena());
+                auto sourceNode = tt::as_shared<SourceNode>(node);
+                data_ptr_t data = sourceNode->dataOf(graph->arena());
                 label = data->toString();
             }
             break;
@@ -284,12 +285,20 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
         auto withInputs = node->withInputs();
         for (size_t i = 0; i < withInputs.size(); ++i) {
             if (withInputs[i]) {
+                size_t outIdx = 0;
+                for (const auto &out : withInputs[i]->dataOutputs()) {
+                    if (out == node) {
+                        break;
+                    }
+                    outIdx++;
+                }
                 res += std::format(
-                    "{}{}{} -> {} [label=\"{}\", style=dashed];\r\n",
+                    "{}{}{} -> {} [label=\"{}|{}\", style=dashed];\r\n",
                     baseIndent_,
                     indent_,
                     pointerToIdent(withInputs[i].get()),
                     pointerToIdent(node.get()),
+                    outIdx,
                     i);
             }
         }
@@ -297,12 +306,20 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
         auto normInputs = node->normInputs();
         for (size_t i = 0; i < normInputs.size(); ++i) {
             if (normInputs[i]) {
+                size_t outIdx = 0;
+                for (const auto &out : normInputs[i]->dataOutputs()) {
+                    if (out == node) {
+                        break;
+                    }
+                    outIdx++;
+                }
                 res += std::format(
-                    "{}{}{} -> {} [label=\"{}\"];\r\n",
+                    "{}{}{} -> {} [label=\"{}|{}\"];\r\n",
                     baseIndent_,
                     indent_,
                     pointerToIdent(normInputs[i].get()),
                     pointerToIdent(node.get()),
+                    outIdx,
                     i);
             }
         }
@@ -310,12 +327,21 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
         auto ctrlInputs = node->ctrlInputs();
         for (size_t i = 0; i < ctrlInputs.size(); ++i) {
             if (ctrlInputs[i]) {
+                size_t outIdx = 0;
+                for (const auto &out : ctrlInputs[i]->ctrlOutputs()) {
+                    if (out == node) {
+                        break;
+                    }
+                    outIdx++;
+                }
                 res += std::format(
-                    "{}{}{} -> {} [style=dashed, arrowhead=empty];\r\n",
+                    "{}{}{} -> {} [label=\"{}|{}\", style=dashed, arrowhead=empty];\r\n",
                     baseIndent_,
                     indent_,
                     pointerToIdent(ctrlInputs[i].get()),
-                    pointerToIdent(node.get()));
+                    pointerToIdent(node.get()),
+                    outIdx,
+                    i);
             }
         }
 

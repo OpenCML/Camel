@@ -30,7 +30,7 @@ using namespace std;
 ArrayData::ArrayData(type_ptr_t type, size_t length, data_list_t data) : data_(data) {
     size_t i = 0;
     for (const auto &e : data) {
-        if (e->type()->code() == TypeCode::REF) {
+        if (e->type()->code() == TypeCode::Ref) {
             refs_.push_back(i);
         } else if (e->type()->convertibility(*type) != TypeConv::SAFE) {
             throw DataConvError(
@@ -47,7 +47,7 @@ bool ArrayData::emplace(const data_ptr_t &e, size_t index) {
         return false;
     }
     data_[index] = e;
-    if (e->type()->code() == TypeCode::REF) {
+    if (e->type()->code() == TypeCode::Ref) {
         refs_.push_back(index);
     }
     return true;
@@ -78,7 +78,7 @@ bool ArrayData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t ArrayData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -87,7 +87,7 @@ data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
         if (target->structured()) {
             switch (target->code()) {
                 // TODO: implement conversion to other structured types
-            case TypeCode::PARAMS: {
+            case TypeCode::Params: {
                 auto res = dynamic_pointer_cast<ParamsType>(target);
                 return convertToParams(res);
             } break;
@@ -96,11 +96,11 @@ data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
             }
         } else if (target->special()) {
             switch (target->code()) {
-            case TypeCode::ANY:
+            case TypeCode::Any:
                 return make_shared<AnyData>(shared_from_this());
                 break;
-            case TypeCode::VOID:
-                return make_shared<NullData>();
+            case TypeCode::Void:
+                return Data::null();
                 break;
             default:
                 throw UnsupportedConvError();
@@ -159,6 +159,8 @@ const string ArrayData::toString() const {
     str += "]";
     return str;
 }
+
+void ArrayData::print(std::ostream &os) const { os << toString(); }
 
 data_ptr_t ArrayData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();

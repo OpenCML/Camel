@@ -21,6 +21,8 @@
 
 #include "core/type/type.h"
 
+#include <ostream>
+
 class UnsupportedConvError : public std::exception {};
 
 class DataConvError : public std::exception {
@@ -52,15 +54,18 @@ class Data : public std::enable_shared_from_this<Data> {
     bool variable() const;
     void setVariable();
 
+    static data_ptr_t null();
+
     virtual std::vector<std::string> refs() const;
     virtual bool resolved() const;                    // check if all data references are resolved
     virtual void resolve(const data_vec_t &dataList); // resolve data references by dataList
 
     virtual bool equals(const data_ptr_t &other) const;
     virtual data_ptr_t clone(bool deep = false) const;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false);
+    virtual data_ptr_t as(type_ptr_t target, bool inplace = false);
 
     virtual const std::string toString() const;
+    virtual void print(std::ostream &os) const;
 };
 
 class AnyData;

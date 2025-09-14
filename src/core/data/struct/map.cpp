@@ -31,10 +31,10 @@ MapData::MapData(type_ptr_t keyType, type_ptr_t dataType)
 
 bool MapData::emplace(const data_ptr_t &key, const data_ptr_t &val) {
     bool res = data_.insert(std::make_pair(key, val)).second;
-    if (res && key->type()->code() == TypeCode::REF) {
+    if (res && key->type()->code() == TypeCode::Ref) {
         refs_.push_back(std::make_pair(key, true));
     }
-    if (res && val->type()->code() == TypeCode::REF) {
+    if (res && val->type()->code() == TypeCode::Ref) {
         refs_.push_back(std::make_pair(key, false));
     }
     return res;
@@ -64,7 +64,7 @@ bool MapData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t MapData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t MapData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -78,11 +78,11 @@ data_ptr_t MapData::convert(type_ptr_t target, bool inplace) {
             }
         } else if (target->special()) {
             switch (target->code()) {
-            case TypeCode::ANY:
+            case TypeCode::Any:
                 return make_shared<AnyData>(shared_from_this());
                 break;
-            case TypeCode::VOID:
-                return make_shared<NullData>();
+            case TypeCode::Void:
+                return Data::null();
                 break;
             default:
                 throw UnsupportedConvError();
@@ -143,3 +143,5 @@ const string MapData::toString() const {
     str += " }";
     return str;
 }
+
+void MapData::print(std::ostream &os) const { os << toString(); }

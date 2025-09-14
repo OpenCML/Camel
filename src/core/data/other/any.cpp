@@ -24,13 +24,13 @@ AnyData::AnyData(const data_ptr_t &data) : Data(anyTypePtr) {
     if (data) {
         data_ = data;
     } else {
-        data_ = std::make_shared<NullData>();
+        data_ = Data::null();
     }
 }
 
 bool AnyData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t AnyData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t AnyData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();
@@ -41,3 +41,5 @@ data_ptr_t AnyData::convert(type_ptr_t target, bool inplace) {
 data_ptr_t AnyData::clone(bool deep) const { return std::make_shared<AnyData>(data_->clone(deep)); }
 
 const std::string AnyData::toString() const { return data_->toString(); }
+
+void AnyData::print(std::ostream &os) const { os << toString(); }

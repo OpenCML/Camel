@@ -33,6 +33,7 @@ inline bool fileExists(const std::string &path) {
 }
 
 std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
+    l.in("Context").debug("Looking for built-in module: <{}>", name);
     auto it = builtinModules_.find(name);
     if (it != builtinModules_.end()) {
         return it->second;
@@ -40,7 +41,9 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
     auto factoryIt = builtinModuleFactories.find(name);
     if (factoryIt != builtinModuleFactories.end()) {
+        l.in("Context").debug("Loading built-in module: <{}>", name);
         module_ptr_t module = factoryIt->second(shared_from_this());
+        module->load(); // instantly load the builtin module
         builtinModules_[name] = module;
         return module;
     }
@@ -51,6 +54,8 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
+    ctx->rtmDiags_ = std::make_shared<Diagnostics>("main", entryConf.entryFile);
+    ctx->rtmDiags_->setConfig(diagConf);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
     l.in("Context").info("Context initialized using entry config {}", entryConf.toString());
     return ctx;

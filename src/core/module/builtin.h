@@ -36,9 +36,7 @@ makeOperator(const std::string &name, const func_type_ptr_t &&type, const std::s
 
 class BuiltinModule : public Module {
   public:
-    BuiltinModule(const std::string &name, context_ptr_t ctx) : Module(name, "", ctx) {
-        loaded_ = true;
-    }
+    BuiltinModule(const std::string &name, context_ptr_t ctx) : Module(name, "", ctx) {}
     virtual ~BuiltinModule() = default;
 
     virtual bool load() = 0;

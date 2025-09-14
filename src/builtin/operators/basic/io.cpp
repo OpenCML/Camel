@@ -19,6 +19,62 @@
 
 #include "io.h"
 
-data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
-data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
-data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) { return nullptr; }
+#include <iostream>
+#include <sstream>
+
+data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    for (size_t i = 0; i < with.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        with[i]->print(std::cout);
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        norm[i]->print(std::cout);
+    }
+    return Data::null();
+}
+
+data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    for (size_t i = 0; i < with.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        with[i]->print(std::cout);
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        if (i > 0) {
+            std::cout << " ";
+        }
+        norm[i]->print(std::cout);
+    }
+    std::cout << std::endl;
+    return Data::null();
+}
+
+data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    std::stringstream oss;
+
+    for (size_t i = 0; i < with.size(); i++) {
+        if (i > 0) {
+            oss << " ";
+        }
+        with[i]->print(oss);
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        if (i > 0) {
+            oss << " ";
+        }
+        norm[i]->print(oss);
+    }
+
+    std::cout << oss.str();
+
+    std::string input;
+    std::getline(std::cin, input);
+
+    return std::make_shared<StringData>(input);
+}

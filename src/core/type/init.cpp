@@ -47,13 +47,13 @@ type_ptr_t refTypePtr;
 
 void initTypes() {
     // initialize primitive types
-    int32TypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::INT32));
-    int64TypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::INT64));
-    floatTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::FLOAT));
-    doubleTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::DOUBLE));
-    stringTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::STRING));
-    boolTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::BOOL));
-    charTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::CHAR));
+    int32TypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::Int32));
+    int64TypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::Int64));
+    floatTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::Float));
+    doubleTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::Double));
+    stringTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::String));
+    boolTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::Bool));
+    charTypePtr = dynamic_pointer_cast<Type>(make_shared<PrimaryType>(TypeCode::Char));
 
     // initialize alias types
     intTypePtr = int32TypePtr;
@@ -64,11 +64,11 @@ void initTypes() {
     listTypePtr = dynamic_pointer_cast<Type>(make_shared<ListType>());
 
     // initialize special types
-    anyTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::ANY));
-    voidTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::VOID));
+    anyTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::Any));
+    voidTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::Void));
     functorTypePtr =
         dynamic_pointer_cast<Type>(make_shared<FunctionType>(nullptr, nullptr, anyTypePtr));
 
     // initialize unknown type
-    refTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::REF));
+    refTypePtr = dynamic_pointer_cast<Type>(make_shared<SpecialType>(TypeCode::Ref));
 }

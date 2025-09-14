@@ -32,7 +32,7 @@ ListData::ListData() : StructData(listTypePtr), data_() {}
 ListData::ListData(data_list_t data) : StructData(listTypePtr), data_(data) {
     size_t i = 0;
     for (const auto &e : data) {
-        if (e->type()->code() == TypeCode::REF) {
+        if (e->type()->code() == TypeCode::Ref) {
             refs_.push_back(i);
         }
         i++;
@@ -41,7 +41,7 @@ ListData::ListData(data_list_t data) : StructData(listTypePtr), data_(data) {
 
 void ListData::emplace(const data_ptr_t &e) {
     data_.push_back(e);
-    if (e->type()->code() == TypeCode::REF) {
+    if (e->type()->code() == TypeCode::Ref) {
         refs_.push_back(data_.size() - 1);
     }
 }
@@ -83,7 +83,7 @@ bool ListData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t ListData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -92,7 +92,7 @@ data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
         if (target->structured()) {
             switch (target->code()) {
             // TODO: implement conversion to other structured types
-            case TypeCode::PARAMS:
+            case TypeCode::Params:
                 return convertToParams(dynamic_pointer_cast<ParamsType>(target));
                 break;
             default:
@@ -100,11 +100,11 @@ data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
             }
         } else if (target->special()) {
             switch (target->code()) {
-            case TypeCode::ANY:
+            case TypeCode::Any:
                 return make_shared<AnyData>(shared_from_this());
                 break;
-            case TypeCode::VOID:
-                return make_shared<NullData>();
+            case TypeCode::Void:
+                return Data::null();
                 break;
             default:
                 throw UnsupportedConvError();
@@ -162,6 +162,8 @@ const string ListData::toString() const {
     str += "]";
     return str;
 }
+
+void ListData::print(std::ostream &os) const { os << toString(); }
 
 data_ptr_t ListData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();

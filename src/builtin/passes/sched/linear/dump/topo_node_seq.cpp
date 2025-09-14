@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "topo-node-seq.h"
+#include "topo_node_seq.h"
 #include "builtin/algo/topo.h"
 #include "utils/log.h"
 #include "utils/type.h"

@@ -158,6 +158,13 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void setOutput(const node_ptr_t &node);
 
     const std::vector<std::tuple<DataIndex, node_ptr_t, bool>> &ports() const { return ports_; }
+    const std::vector<DataIndex> portIndices() const {
+        std::vector<DataIndex> indices;
+        for (const auto &[index, _, __] : ports_) {
+            indices.push_back(index);
+        }
+        return indices;
+    }
     const node_vec_t &nodes() { return nodes_; }
 
   private:
@@ -236,8 +243,6 @@ class Node : public std::enable_shared_from_this<Node> {
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
 
-    virtual data_ptr_t eval(arena_ptr_t arena) const = 0;
-
     static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         ASSERT(from && to, "Cannot link null nodes.");
         ASSERT(from != to, "Cannot link a node to itself.");
@@ -294,8 +299,6 @@ class SelectNode : public Node {
 
     SelectType selectType() const { return selectType_; }
 
-    data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
-
     std::string toString() const override {
         return std::format(
             "Node(Select, {}, {}): {}",
@@ -332,8 +335,6 @@ class AccessNode : public Node {
         }
     }
 
-    data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
-
     std::string data2str() const override { return std::format("#{}", index2String()); }
     std::string toString() const override {
         return std::format(
@@ -363,8 +364,6 @@ class StructNode : public Node {
 
     type_ptr_t dataType() const { return dataType_; }
 
-    data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
-
     std::string data2str() const override { return std::format("{}", dataType()->toString()); }
     std::string toString() const override {
         return std::format(
@@ -386,15 +385,14 @@ class SourceNode : public Node {
         return node;
     }
 
-    data_ptr_t eval(arena_ptr_t arena) const override {
-        auto data = arena->get(dataIndex_);
-        ASSERT(data != nullptr, "Data not found in arena for SourceNode.");
-        return data;
+    data_ptr_t dataOf(arena_ptr_t arena) const {
+        ASSERT(arena->has(dataIndex_), "Source data not found in arena.");
+        return arena->get(dataIndex_);
     }
 
     std::string data2str() const override {
         const auto arena = graph_.lock()->arena();
-        return arena->has(dataIndex_) ? eval(arena)->toString() : "<null>";
+        return arena->has(dataIndex_) ? dataOf(arena)->toString() : "<null>";
     }
     std::string toString() const override {
         const auto arena = graph_.lock()->arena();
@@ -402,7 +400,7 @@ class SourceNode : public Node {
             "Node(Source, {}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
-            arena->has(dataIndex_) ? eval(arena)->toString() : "<null>");
+            arena->has(dataIndex_) ? dataOf(arena)->toString() : "<null>");
     }
 };
 
@@ -425,8 +423,6 @@ class OperatorNode : public Node {
         ASSERT(operator_, "Operator is not set for OperatorNode.");
         return tt::as_shared<FunctionType>(operator_->funcType());
     }
-
-    data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
 
     std::string data2str() const override { return std::format("<{}>", operator_->name()); }
     std::string toString() const override {
@@ -457,8 +453,6 @@ class FunctionNode : public Node {
         ASSERT(func_, "Function is not set for FunctionNode.");
         return tt::as_shared<FunctionType>(func_->type());
     }
-
-    data_ptr_t eval(arena_ptr_t arena) const override { return nullptr; }
 
     std::string data2str() const override {
         return std::format("<{}>", func_->name().empty() ? func_->graph()->name() : func_->name());
