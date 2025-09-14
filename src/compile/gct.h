@@ -9,115 +9,346 @@
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the the MIT license for more details
+ * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 09, 2025
- * Updated: Jul. 09, 2025
+ * Created: May. 05, 2024
+ * Updated: Mar. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <iostream>
-#include <regex>
-#include <string>
+#include <variant>
 
-#include "common/ast/ast.h"
-#include "common/context.h"
-#include "common/error/abort.h"
-#include "common/error/diagnostic.h"
-#include "common/gct.h"
-#include "common/module/module.h"
-#include "common/scope.h"
+#include "common/ref.h"
+#include "common/tree.h"
+#include "core/data/data.h"
+#include "core/data/entity.h"
+#include "core/func.h"
+#include "utils/assert.h"
 
 namespace GraphConstructTree {
-using void_ptr_t = void *;
 
-class Constructor {
+class Node;
+using node_ptr_t = std::shared_ptr<Node>;
+
+class Load;
+using load_ptr_t = std::shared_ptr<Load>;
+
+enum class LoadType {
+    DECL, //
+    FUNC,
+    DATA,
+    TYPE,
+    NREF,
+    DREF,
+    VARI,
+    WAIT,
+    LINK,
+    WITH,
+    BIND,
+    ACCS,
+    BRCH,
+    ANNO,
+    EXIT,
+    EXEC,
+    EXPT,
+};
+
+std::string to_string(LoadType type);
+
+class Load {
+  protected:
+    LoadType type_;
+    size_t tokenStart_;
+    size_t tokenEnd_;
+
   public:
-    Constructor(const context_ptr_t &context, const module_ptr_t &module)
-        : context_(context), module_(module) {
-        typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>();
-    };
-    virtual ~Constructor() = default;
+    Load(LoadType type) : type_(type) {}
+    virtual ~Load() = default;
 
-    node_ptr_t construct(AST::node_ptr_t node, diagnostics_ptr_t diagnostics) {
-        idIndex_ = 0;
-        diagnostics_ = diagnostics;
-        initInnerTypes();
-        root_ = visitModule(node);
-        return root_;
+    void setToken(size_t start, size_t end) {
+        tokenStart_ = start;
+        tokenEnd_ = end;
+    }
+
+    LoadType type() const { return type_; }
+    std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
+
+    virtual const std::string toString() const { return to_string(type_); }
+    virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
+};
+
+class Node : public AbstractTreeNode<load_ptr_t, Node> {
+  public:
+    Node(load_ptr_t load) : AbstractTreeNode(load) {}
+    virtual ~Node() = default;
+
+    LoadType type() const { return load_->type(); }
+    std::string toString() const { return load_->toString(); }
+
+    template <typename T> node_ptr_t atAs(size_t index) const {
+        ASSERT(index < children_.size(), "Index out of bounds");
+        ASSERT(children_.at(index) != nullptr, "Child node is null");
+        ASSERT(
+            std::dynamic_pointer_cast<T>(children_.at(index)->load()),
+            "Dynamic pointer cast failed");
+        return children_.at(index);
+    }
+
+    template <typename LoadType> std::shared_ptr<LoadType> loadAs() {
+        ASSERT(std::dynamic_pointer_cast<LoadType>(load_), "Load type cast failed");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+    template <typename LoadType> const std::shared_ptr<LoadType> loadAs() const {
+        ASSERT(
+            std::dynamic_pointer_cast<LoadType>(load_),
+            "Load type does not match requested type");
+        return std::dynamic_pointer_cast<LoadType>(load_);
+    }
+};
+
+class DataLoad : public Load {
+    data_ptr_t data_;
+
+  public:
+    DataLoad(data_ptr_t data) : Load(LoadType::DATA), data_(data) {
+        ASSERT(data != nullptr, "DataLoad cannot be constructed with a null data pointer");
+    }
+
+    data_ptr_t data() { return data_; }
+
+    const std::string toString() const override;
+};
+
+class VariLoad : public Load {
+  public:
+    VariLoad() : Load(LoadType::VARI) {}
+
+    // const std::string toString() const override;
+};
+
+class TypeLoad : public Load {
+    type_ptr_t dataType_;
+
+  public:
+    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri)
+        : Load(LoadType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
+    type_ptr_t dataType() const { return dataType_; }
+
+    ImplMark implMark() const { return implMark_; }
+    const std::string &uri() const { return uri_; }
+
+    const std::string toString() const override;
+
+  private:
+    ImplMark implMark_ = ImplMark::Graph;
+    std::string uri_;
+};
+
+class DeclLoad : public Load {
+    bool isFunc_;
+    Reference ref_;
+
+  public:
+    DeclLoad(const Reference &ref, bool isFunc = false)
+        : Load(LoadType::DECL), isFunc_(isFunc), ref_(ref) {}
+    DeclLoad(const std::string &str, bool isFunc = false)
+        : Load(LoadType::DECL), isFunc_(isFunc), ref_(str) {}
+
+    bool isFunc() const { return isFunc_; }
+    const Reference ref() const { return ref_; }
+
+    const std::string toString() const override;
+};
+
+class FuncLoad : public Load {
+    std::string name_;
+
+  public:
+    FuncLoad(const std::string name) : Load(LoadType::FUNC), name_(name) {}
+
+    std::string name() const { return name_; }
+
+    const std::string toString() const override;
+};
+
+class NRefLoad : public Load {
+    Reference ref_;
+
+  public:
+    NRefLoad(const Reference &ref) : Load(LoadType::NREF), ref_(ref) {}
+    NRefLoad(const std::string &str) : Load(LoadType::NREF), ref_(str) {}
+
+    const Reference ref() const { return ref_; }
+
+    const std::string toString() const override;
+};
+
+class DRefLoad : public Load {
+    Reference ref_;
+
+  public:
+    DRefLoad(const Reference &ref) : Load(LoadType::DREF), ref_(ref) {}
+
+    const Reference ref() const { return ref_; }
+
+    const std::string toString() const override;
+};
+
+class WaitLoad : public Load {
+  public:
+    WaitLoad() : Load(LoadType::WAIT) {}
+
+    // const std::string toString() const override;
+};
+
+class AnnoLoad : public Load {
+    std::string annotation_;
+
+  public:
+    AnnoLoad(const std::string &annotation) : Load(LoadType::ANNO), annotation_(annotation) {}
+
+    // const std::string toString() const override;
+};
+
+class LinkLoad : public Load {
+  public:
+    LinkLoad(size_t args = 0) : Load(LoadType::LINK), args_(args) {}
+
+    void setArgs(size_t args) { args_ = args; }
+    void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
+
+    const std::string toString() const override {
+        std::string result = "LINK: argcnt=" + std::to_string(args_);
+        if (!kwargs_.empty()) {
+            result += ", kwargs=[";
+            for (const auto &kwarg : kwargs_) {
+                result += kwarg + ", ";
+            }
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+            result += "]";
+        }
+        return result;
     }
 
   private:
-    node_ptr_t root_;
-    size_t idIndex_ = 0;
-    scope_ptr_t<Reference, type_ptr_t> typeScope_;
-    std::unordered_map<void *, func_type_ptr_t> funcDecls_;
+    size_t args_;
+    std::vector<std::string> kwargs_;
+};
 
-    context_ptr_t context_;
-    module_ptr_t module_;
-    diagnostics_ptr_t diagnostics_;
+class WithLoad : public Load {
+  public:
+    WithLoad(size_t args = 0) : Load(LoadType::WITH), args_(args) {}
 
-    void initInnerTypes();
+    void setArgs(size_t args) { args_ = args; }
+    void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
 
-    std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
-    std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
-    std::pair<data_ptr_t, bool>
-    extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
-
-    void reportDiagnostic(
-        Diagnostic::Severity sev, const std::string &msg,
-        std::pair<size_t, size_t> tokenRange = {0, 0}) {
-        diagnostics_->emplace(sev, msg, tokenRange.first, tokenRange.second);
+    const std::string toString() const override {
+        std::string result = "WITH: argcnt=" + std::to_string(args_);
+        if (!kwargs_.empty()) {
+            result += ", kwargs=[";
+            for (const auto &kwarg : kwargs_) {
+                result += kwarg + ", ";
+            }
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+            result += "]";
+        }
+        return result;
     }
 
-    void pushScope() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(typeScope_); }
-    void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
+  private:
+    size_t args_;
+    std::vector<std::string> kwargs_;
+};
 
-    // ast/base.h
-    node_ptr_t visitModule(const AST::node_ptr_t &ast);
-    void_ptr_t visitImport(const AST::node_ptr_t &ast);
-    node_ptr_t visitExport(const AST::node_ptr_t &ast);
+class BindLoad : public Load {
+  public:
+    BindLoad() : Load(LoadType::BIND) {}
 
-    // ast/stmt.h
-    node_ptr_t visitStmt(const AST::node_ptr_t &ast);
-    node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
-    node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
-    node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
-    node_ptr_t visitNameDecl(const AST::node_ptr_t &ast);
-    node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);
-    node_ptr_t visitExitStmt(const AST::node_ptr_t &ast);
-    node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast);
+    // const std::string toString() const override;
+};
 
-    // ast/data.h
-    node_ptr_t visitData(const AST::node_ptr_t &ast);
-    node_ptr_t visitUnaryExpr(const AST::node_ptr_t &ast);
-    node_ptr_t visitBinaryExpr(const AST::node_ptr_t &ast);
-    node_ptr_t visitReservedExpr(const AST::node_ptr_t &ast);
-    node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
-    node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
-    node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
-    node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
-    node_ptr_t visitListData(const AST::node_ptr_t &ast);
-    node_ptr_t visitDictData(const AST::node_ptr_t &ast);
-    node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
-    node_ptr_t visitFuncData(const AST::node_ptr_t &ast);
-    node_ptr_t visitRefData(const AST::node_ptr_t &ast);
+class ExitLoad : public Load {
+  public:
+    ExitLoad(ExitType type = ExitType::Return) : Load(LoadType::EXIT), exitType_(type) {}
 
-    // ast/type.h
-    type_ptr_t visitType(const AST::node_ptr_t &ast);
-    type_ptr_t visitNullableType(const AST::node_ptr_t &ast);
-    type_ptr_t visitTypeExpr(const AST::node_ptr_t &ast);
-    type_ptr_t visitListType(const AST::node_ptr_t &ast);
-    type_ptr_t visitDictType(const AST::node_ptr_t &ast);
-    type_ptr_t visitTupleType(const AST::node_ptr_t &ast);
-    type_ptr_t visitFuncType(const AST::node_ptr_t &ast);
-    type_ptr_t visitUnitType(const AST::node_ptr_t &ast);
-    type_ptr_t visitInferType(const AST::node_ptr_t &ast);
-    type_ptr_t visitDataType(const AST::node_ptr_t &ast);
-    type_ptr_t visitRefType(const AST::node_ptr_t &ast);
+    ExitType exitType() const { return exitType_; }
+
+    const std::string toString() const override { return "EXIT: " + to_string(exitType_); }
+
+  private:
+    ExitType exitType_ = ExitType::Return;
+};
+
+class ExecLoad : public Load {
+  public:
+    ExecLoad(bool sync = false) : Load(LoadType::EXEC), synced_(sync) {}
+
+    bool synced() const { return synced_; }
+
+    const std::string toString() const override { return synced_ ? "SYNC" : "EXEC"; }
+
+  private:
+    bool synced_ = false;
+};
+
+class ExptLoad : public Load {
+  public:
+    ExptLoad(const std::vector<Reference> &exports) : Load(LoadType::EXPT), exports_(exports) {}
+
+    const std::string toString() const override {
+        std::string result = "EXPT: [";
+        for (const auto &exp : exports_) {
+            result += exp.toString() + ", ";
+        }
+        if (!exports_.empty()) {
+            result.pop_back(); // Remove last comma
+            result.pop_back(); // Remove last space
+        }
+        result += "]";
+        return result;
+    }
+
+    const std::vector<Reference> &exports() const { return exports_; }
+
+  private:
+    std::vector<Reference> exports_;
+};
+
+class AccsLoad : public Load {
+  public:
+    AccsLoad(const std::string &index) : Load(LoadType::ACCS), index_(index) {}
+    AccsLoad(size_t index) : Load(LoadType::ACCS), index_(index) {}
+
+    bool isNum() const { return std::holds_alternative<size_t>(index_); }
+    template <typename T> T index() const { return std::get<T>(index_); }
+    std::variant<std::string, size_t> index() const { return index_; }
+
+    const std::string toString() const override {
+        std::string result = "ACCS: ";
+        if (std::holds_alternative<size_t>(index_)) {
+            result += std::to_string(std::get<size_t>(index_));
+        } else {
+            result += std::get<std::string>(index_);
+        }
+        return result;
+    }
+
+  private:
+    std::variant<std::string, size_t> index_;
+};
+
+class BrchLoad : public Load {
+  public:
+    BrchLoad() : Load(LoadType::BRCH) {}
+
+    // const std::string toString() const override;
 };
 
 } // namespace GraphConstructTree
+
+namespace GCT = GraphConstructTree;

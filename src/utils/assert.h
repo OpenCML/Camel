@@ -28,15 +28,16 @@
 namespace cml {
 
 inline void handle_assert_failure(
-    const std::string &expression, const std::string &message,
+    const std::string &expression, const std::string &suggestion,
     const std::source_location location = std::source_location::current()) {
-    std::cerr << "Camel Debug Assertion Failed:\n"
-              << "    Location   : " << location.file_name() << "(" << location.line() << ")\n"
-              << "    Function   : " << location.function_name() << "\n"
-              << "    Expression : " << expression << "\n"
-              << "    Message    : " << message << "\n";
+    std::cerr << "\n\033[1;31mCamel Debug Assertion Failed:\033[0m\n"
+              << "\033[1;32m    Location   : \033[0m" << location.file_name() << "("
+              << location.line() << ")\n"
+              << "\033[1;32m    Function   : \033[0m" << location.function_name() << "\n"
+              << "\033[1;32m    Expression : \033[0m" << expression << "\n"
+              << "\033[1;32m    Suggestion : \033[0m" << suggestion << "\n";
 
-    std::cerr << "\nStack trace:\n";
+    std::cerr << "\n\033[1;31mStack Trace:\033[0m\n";
     auto trace = std::stacktrace::current();
     constexpr size_t skip_front = 1;
 
@@ -45,7 +46,7 @@ inline void handle_assert_failure(
         std::cerr << "(stack trace too short)\n";
     } else {
         for (size_t i = skip_front; i < frame_count; ++i) {
-            std::cerr << "<" << i << "> " << trace[i] << "\n";
+            std::cerr << "<\033[1;36m" << i << "\033[0m> " << trace[i] << "\n";
         }
     }
 

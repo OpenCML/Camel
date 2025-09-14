@@ -19,11 +19,16 @@
 
 #pragma once
 
-#include "common/module/builtin.h"
+#include "core/module/builtin.h"
 
 class SysBuiltinModule : public BuiltinModule {
   public:
-    SysBuiltinModule();
+    SysBuiltinModule(context_ptr_t ctx);
+    virtual ~SysBuiltinModule() = default;
 
-    static module_ptr_t create() { return std::make_shared<SysBuiltinModule>(); }
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<SysBuiltinModule>(ctx);
+    }
 };

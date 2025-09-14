@@ -19,11 +19,19 @@
 
 #include "time.h"
 
-TimeBuiltinModule::TimeBuiltinModule() : BuiltinModule("time") {
+TimeBuiltinModule::TimeBuiltinModule(context_ptr_t ctx) : BuiltinModule("time", ctx) {
     exportBuiltinOperator(
         "now",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
-        __not_implemented__);
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
+        ":not-impl");
+}
+
+bool TimeBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    loaded_ = true;
+    return true;
 }

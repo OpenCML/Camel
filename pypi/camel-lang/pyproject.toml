@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camel-lang"
-version = "0.0.18"
+version = "0.0.19"
 description = "Camel: A Next-Generation Language for AI and High-Performance Computing"
 keywords = ["language", "camel", "ai", "dsl", "graph", "opencml"]
 authors = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]

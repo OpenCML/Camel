@@ -19,11 +19,19 @@
 
 #include "fs.h"
 
-FileBuiltinModule::FileBuiltinModule() : BuiltinModule("fs") {
+FileBuiltinModule::FileBuiltinModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
     exportBuiltinOperator(
         "stat",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
-        __not_implemented__);
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
+        ":not-impl");
+}
+
+bool FileBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    loaded_ = true;
+    return true;
 }

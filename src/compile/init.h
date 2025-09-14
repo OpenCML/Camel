@@ -21,8 +21,8 @@
 
 #include <string>
 
-#include "common/data.h"
 #include "common/scope.h"
+#include "core/data/data.h"
 
 extern Scope<std::string, data_ptr_t> globalRootScope;
 

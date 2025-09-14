@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "common/pass.h"
+#include "../pass.h"
 
 class SchedulePass : public GraphIRPass {
   public:

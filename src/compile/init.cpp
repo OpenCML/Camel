@@ -18,7 +18,7 @@
  */
 
 #include "init.h"
-#include "common/type.h"
+#include "core/type/type.h"
 
 using namespace std;
 

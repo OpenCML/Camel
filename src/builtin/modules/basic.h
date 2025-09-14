@@ -19,14 +19,19 @@
 
 #pragma once
 
-#include "common/module/builtin.h"
+#include "core/module/builtin.h"
 
 class BasicBuiltinModule : public BuiltinModule {
   public:
-    BasicBuiltinModule();
+    BasicBuiltinModule(context_ptr_t ctx);
+    virtual ~BasicBuiltinModule() = default;
 
-    void exportBinaryOp(const std::string &name, operator_func_t func);
-    void exportAssnOp(const std::string &name, operator_func_t func);
+    virtual bool load() override;
 
-    static module_ptr_t create() { return std::make_shared<BasicBuiltinModule>(); }
+    void exportBinaryOp(const std::string &name, const std::string &uri);
+    void exportAssnOp(const std::string &name, const std::string &uri);
+
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<BasicBuiltinModule>(ctx);
+    }
 };

@@ -4,7 +4,9 @@ func linear(x: float): float {
 }
 
 func activation(x: float): float {
-    return if x > 0.0 then x else 0.0
+    // return if x > 0.0 then 1.0 else 0.0
+    // return if x > 0.0 then x else 0.0
+    return x
 }
 
 with <weight: float, bias: float>

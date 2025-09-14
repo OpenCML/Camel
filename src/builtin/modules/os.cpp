@@ -19,11 +19,19 @@
 
 #include "os.h"
 
-OSBuiltinModule::OSBuiltinModule() : BuiltinModule("os") {
+OSBuiltinModule::OSBuiltinModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
     exportBuiltinOperator(
         "sleep",
         param_init_list{},
-        {{"value", anyTypePtr, nullptr, false}},
-        voidTypePtr,
-        __not_implemented__);
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
+        ":not-impl");
+}
+
+bool OSBuiltinModule::load() {
+    if (loaded_) {
+        return true;
+    }
+    loaded_ = true;
+    return true;
 }

@@ -249,7 +249,7 @@ bool parseArgs(int argc, char *argv[]) {
     if (Global::verbose) {
         Logger::SetVerbose(true);
         if (!Global::logLevel.empty()) {
-            std::string level = trim(Global::logLevel);
+            std::string level{strutil::trim(Global::logLevel)};
             std::transform(level.begin(), level.end(), level.begin(), ::tolower);
 
             if (level == "debug")

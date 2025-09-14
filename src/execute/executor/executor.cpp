@@ -18,41 +18,35 @@
  */
 
 #include "executor.h"
-#include "executors/inner.h"
+#include "utils/log.h"
 
-void ExecutorManager::registerExecutorCreator(
-    std::string name, ExecutorManager::creator_t creator) {
-    executorCreators.emplace(name, std::move(creator));
+void ExecutorManager::registerExecutorFactory(std::string name, executor_factory_t fact) {
+    l.in("ExecMgr").debug("Registering executor factory for protocol: <{}>", name);
+    ASSERT(
+        executorFactories.find(name) == executorFactories.end(),
+        "Executor factory for protocol '" + name + "' is already registered.");
+    executorFactories[name] = fact;
 }
 
-ExecutorManager::ExecutorManager() {
-    registerExecutorCreator("inner", []() { return std::make_unique<InnerExecutor>(); });
-}
-
-Status ExecutorManager::executeOperator(
-    std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-    data_ptr_t &ret) {
-    const size_t pos = uri.find("://");
+data_ptr_t ExecutorManager::eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) {
+    l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri);
+    const size_t pos = uri.find(":");
     if (pos == std::string::npos) {
-        return {RetCode::invalidURI, "Invalid URI format"};
+        throw CamelRuntimeException(RetCode::InvalidURI, "Invalid URI format");
     }
     const std::string protocol = uri.substr(0, pos);
-    auto it_loaded = loadedExecutors.find(protocol);
-    if (it_loaded != loadedExecutors.end()) {
-        return it_loaded->second->execute(uri.substr(pos + 3), withArgs, normArgs, ret);
+    auto itExec = loadedExecutors.find(protocol);
+    if (itExec != loadedExecutors.end()) {
+        return itExec->second->eval(uri.substr(pos + 1), withArgs, normArgs);
     }
-    auto it_creator = executorCreators.find(protocol);
-    if (it_creator == executorCreators.end()) {
-        return {RetCode::invalidURI, "Unregistered protocol: " + protocol};
+    auto itFact = executorFactories.find(protocol);
+    if (itFact == executorFactories.end()) {
+        throw CamelRuntimeException(
+            RetCode::InvalidURI,
+            std::format("Protocol <{}> not found.", protocol));
     }
-    auto executor = it_creator->second();
-    Status status = executor->execute(uri.substr(pos + 3), withArgs, normArgs, ret);
-    loadedExecutors.emplace(protocol, std::move(executor));
-    return status;
-}
-
-Status BaseExecutor::execute(
-    std::string uri, std::vector<data_ptr_t> withArgs, std::vector<data_ptr_t> normArgs,
-    data_ptr_t &ret) {
-    return {RetCode::unknownError, "BaseExecutor: No implementation for execute"};
+    l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol);
+    auto executor = itFact->second();
+    loadedExecutors.emplace(protocol, executor);
+    return executor->eval(uri.substr(pos + 1), withArgs, normArgs);
 }

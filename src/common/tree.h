@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include "utils/assert.h"
 #include "utils/log.h"
 
 template <typename load_t, typename node_t> // node_t is a derived class of AbstractTreeNode (CRTP)
