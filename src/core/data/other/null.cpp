@@ -24,12 +24,12 @@ NullData::NullData() : Data(voidTypePtr) {}
 
 bool NullData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t NullData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t NullData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();
     }
-    if (target->code() == TypeCode::ANY) {
+    if (target->code() == TypeCode::Any) {
         return std::make_shared<AnyData>(shared_from_this());
     }
     throw DataConvError("Cannot convert null to " + typeCodeToString(target->code()));

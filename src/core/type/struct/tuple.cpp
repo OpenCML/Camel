@@ -21,13 +21,13 @@
 
 using namespace std;
 
-TupleType::TupleType() : StructType(TypeCode::TUPLE) {}
+TupleType::TupleType() : StructType(TypeCode::Tuple) {}
 
 TupleType::TupleType(const initializer_list<type_ptr_t> &types)
-    : StructType(TypeCode::TUPLE), types_(types) {}
+    : StructType(TypeCode::Tuple), types_(types) {}
 
 TupleType::TupleType(const vector<type_ptr_t> &types)
-    : StructType(TypeCode::TUPLE), types_(types) {}
+    : StructType(TypeCode::Tuple), types_(types) {}
 
 string TupleType::toString() const {
     string result = "Tuple<";
@@ -47,7 +47,7 @@ string TupleType::toString() const {
 }
 
 bool TupleType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::TUPLE) {
+    if (other.code() != TypeCode::Tuple) {
         return false;
     }
     const TupleType &otherTuple = dynamic_cast<const TupleType &>(other);
@@ -76,28 +76,28 @@ TypeConv TupleType::convertibility(const Type &other) const {
     // TODO: not fully implemented
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::TENSOR:
+        case TypeCode::Tensor:
             return TypeConv::SAFE;
-        case TypeCode::LIST:
+        case TypeCode::List:
             return TypeConv::SAFE;
-        case TypeCode::SET:
+        case TypeCode::Set:
             return TypeConv::SAFE;
-        case TypeCode::ARRAY:
+        case TypeCode::Array:
             return TypeConv::SAFE;
-        case TypeCode::VECTOR:
+        case TypeCode::Vector:
             return TypeConv::SAFE;
-        case TypeCode::MAP:
+        case TypeCode::Map:
             return TypeConv::SAFE;
-        case TypeCode::DICT:
+        case TypeCode::Dict:
             return TypeConv::SAFE;
-        case TypeCode::UNION:
+        case TypeCode::Union:
             return TypeConv::SAFE;
 
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primary types and special types are forbidden

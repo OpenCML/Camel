@@ -23,7 +23,7 @@
 using namespace std;
 using namespace GIR;
 
-data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_t &arena) {
+data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_t &frame) {
     shared_ptr<node_vec_t> sortedNodesPtr;
     if (graphTNS_.find(graph.get()) == graphTNS_.end()) {
         auto sortedNodes = topoSort(
@@ -43,23 +43,86 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
     }
     // 按拓扑序执行
     for (const auto &n : *sortedNodesPtr) {
+        // 用于跳过被标记为不执行的节点（分支功能）
+        if (!brInfoStack_.empty() && n == brInfoStack_.top().second) {
+            continue;
+        }
         switch (n->type()) {
         case NodeType::Function: {
-            func_ptr_t func = tt::as_shared<FunctionNode>(n)->func();
-            auto arena = func->arena()->clone();
+            auto func = tt::as_shared<FunctionNode>(n)->func();
+            auto newFrame = func->arena()->clone();
             auto subGraph = func->graph();
-            data_ptr_t res = evalGraph(subGraph, arena);
+            const auto &dataInputs = n->dataInputs();
+            const auto &portIndices = subGraph->portIndices();
+            ASSERT(
+                dataInputs.size() == portIndices.size(),
+                "Function node input size does not match function graph port size.");
+            for (size_t i = 0; i < portIndices.size(); ++i) {
+                newFrame->set(portIndices[i], frame->get(dataInputs[i]->index()));
+            }
+            data_ptr_t res = evalGraph(subGraph, newFrame);
+            frame->set(n->index(), res);
             break;
         }
         case NodeType::Operator: {
-            auto oper = tt::as_shared<OperatorNode>(n);
+            auto opNode = tt::as_shared<OperatorNode>(n);
+            const auto &uri = opNode->oper()->uri();
+
+            data_vec_t withArgs, normArgs;
+            withArgs.reserve(n->withInputs().size());
+            normArgs.reserve(n->normInputs().size());
+
+            for (const auto &input : n->withInputs()) {
+                withArgs.push_back(frame->get(input->index()));
+            }
+            for (const auto &input : n->normInputs()) {
+                normArgs.push_back(frame->get(input->index()));
+            }
+
+            data_ptr_t res = context_->eval(uri, withArgs, normArgs);
+            frame->set(n->index(), res);
             break;
         }
         case NodeType::Select: {
             auto selectNode = tt::as_shared<SelectNode>(n);
+            auto selectType = selectNode->selectType();
+            if (selectType == SelectNode::SelectType::Branch) {
+                // 判断输入条件，并将不执行的节点放入跳过栈
+                ASSERT(
+                    n->dataInputs().size() == 1,
+                    "Branch node must have exactly one data input.");
+                ASSERT(n->ctrlOutputs().size() == 2, "Branch node must have exactly two outputs.");
+                auto condDataRaw = frame->get(n->dataInputs().front()->index());
+                auto condData = tt::as_shared<PrimaryData<bool>>(condDataRaw->as(boolTypePtr));
+                bool cond = condData->data();
+                if (cond) {
+                    // True branch, skip the second output
+                    brInfoStack_.push({0, n->ctrlOutputs().back()});
+                } else {
+                    // False branch, skip the first output
+                    brInfoStack_.push({1, n->ctrlOutputs().front()});
+                }
+            } else {
+                ASSERT(n->dataInputs().size() == 2, "Join node must have exactly two data inputs.");
+                size_t idx = brInfoStack_.top().first;
+                brInfoStack_.pop();
+                auto data = frame->get(n->dataInputs()[idx]->index());
+                frame->set(n->index(), data);
+            }
             break;
         }
-        default:
+        case NodeType::Struct: {
+            auto structNode = tt::as_shared<StructNode>(n);
+            break;
+        }
+        case NodeType::Access: {
+            auto accessNode = tt::as_shared<AccessNode>(n);
+            break;
+        }
+        case NodeType::Source: {
+            auto sourceNode = tt::as_shared<SourceNode>(n);
+            break;
+        }
         }
     }
 }
@@ -67,6 +130,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
 void FallbackExecSchedPass::evalNode(const node_ptr_t &node) {}
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
-    // evalGraph(graph);
+    auto arena = graph->arena()->clone();
+    evalGraph(graph, arena);
     return nullptr;
 }

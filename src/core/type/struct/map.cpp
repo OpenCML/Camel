@@ -22,7 +22,7 @@
 using namespace std;
 
 MapType::MapType(const type_ptr_t &keyType, const type_ptr_t &valueType)
-    : StructType(TypeCode::MAP), keyType_(keyType), valueType_(valueType) {}
+    : StructType(TypeCode::Map), keyType_(keyType), valueType_(valueType) {}
 
 type_ptr_t MapType::keyType() const { return keyType_; }
 
@@ -33,7 +33,7 @@ string MapType::toString() const {
 }
 
 bool MapType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::MAP) {
+    if (other.code() != TypeCode::Map) {
         return false;
     }
     const MapType &otherMap = dynamic_cast<const MapType &>(other);
@@ -42,7 +42,7 @@ bool MapType::operator==(const Type &other) const {
 }
 
 bool MapType::operator!=(const Type &other) const {
-    if (other.code() != TypeCode::MAP) {
+    if (other.code() != TypeCode::Map) {
         return true;
     }
     const MapType &otherMap = dynamic_cast<const MapType &>(other);
@@ -53,7 +53,7 @@ bool MapType::operator!=(const Type &other) const {
 TypeConv MapType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::MAP: {
+        case TypeCode::Map: {
             const MapType &otherMap = dynamic_cast<const MapType &>(other);
             const TypeConv keyConv = keyType_->convertibility(*otherMap.keyType_);
             const TypeConv valueConv = valueType_->convertibility(*otherMap.valueType_);
@@ -65,26 +65,26 @@ TypeConv MapType::convertibility(const Type &other) const {
             }
             return TypeConv::UNSAFE;
         }
-        case TypeCode::SET:
+        case TypeCode::Set:
             [[fallthrough]];
-        case TypeCode::ARRAY:
+        case TypeCode::Array:
             [[fallthrough]];
-        case TypeCode::LIST:
+        case TypeCode::List:
             [[fallthrough]];
-        case TypeCode::DICT:
+        case TypeCode::Dict:
             [[fallthrough]];
-        case TypeCode::UNION:
+        case TypeCode::Union:
             [[fallthrough]];
-        case TypeCode::VECTOR:
+        case TypeCode::Vector:
             [[fallthrough]];
-        case TypeCode::TENSOR:
+        case TypeCode::Tensor:
             return TypeConv::FORBIDDEN;
 
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primary types and special types are forbidden

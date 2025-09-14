@@ -58,7 +58,7 @@ data_ptr_t Data::clone(bool deep) const {
     throw runtime_error("Base Data::clone() not implemented");
 }
 
-data_ptr_t Data::convert(type_ptr_t target, bool inplace) {
+data_ptr_t Data::as(type_ptr_t target, bool inplace) {
     throw runtime_error("Base Data::convert() not implemented");
 }
 

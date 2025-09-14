@@ -22,7 +22,7 @@
 
 UnionData::UnionData(const type_ptr_t &type, const data_ptr_t &data) : Data(type) {
     data_ = data;
-    if (data->type()->code() == TypeCode::REF) {
+    if (data->type()->code() == TypeCode::Ref) {
         ref_ = std::dynamic_pointer_cast<RefData>(data)->ref();
     }
 }
@@ -50,7 +50,7 @@ bool UnionData::equals(const data_ptr_t &other) const {
     throw std::runtime_error("UnionData::equals() not implemented");
 }
 
-data_ptr_t UnionData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t UnionData::as(type_ptr_t target, bool inplace) {
     throw std::runtime_error("UnionData::convert() not implemented");
 }
 

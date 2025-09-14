@@ -21,7 +21,7 @@
 
 using namespace std;
 
-DictType::DictType() : StructType(TypeCode::DICT) {}
+DictType::DictType() : StructType(TypeCode::Dict) {}
 
 string DictType::toString() const {
     if (fields_.empty()) {
@@ -43,7 +43,7 @@ string DictType::toString() const {
 }
 
 bool DictType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::DICT) {
+    if (other.code() != TypeCode::Dict) {
         return false;
     }
     const DictType &otherDict = dynamic_cast<const DictType &>(other);
@@ -118,7 +118,7 @@ type_ptr_t DictType::operator&(const DictType &other) const {
 TypeConv DictType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::DICT: {
+        case TypeCode::Dict: {
             const DictType &otherDict = dynamic_cast<const DictType &>(other);
             TypeConv result = TypeConv::SAFE;
             for (const auto &field : otherDict.fields_) {
@@ -138,26 +138,26 @@ TypeConv DictType::convertibility(const Type &other) const {
             }
             return result;
         }
-        case TypeCode::SET:
+        case TypeCode::Set:
             [[fallthrough]];
-        case TypeCode::MAP:
+        case TypeCode::Map:
             [[fallthrough]];
-        case TypeCode::ARRAY:
+        case TypeCode::Array:
             [[fallthrough]];
-        case TypeCode::LIST:
+        case TypeCode::List:
             [[fallthrough]];
-        case TypeCode::UNION:
+        case TypeCode::Union:
             [[fallthrough]];
-        case TypeCode::VECTOR:
+        case TypeCode::Vector:
             [[fallthrough]];
-        case TypeCode::TENSOR:
+        case TypeCode::Tensor:
             return TypeConv::FORBIDDEN;
 
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primary types and special types are forbidden

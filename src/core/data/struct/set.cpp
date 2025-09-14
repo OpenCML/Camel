@@ -31,7 +31,7 @@ SetData::SetData(type_ptr_t elType) : StructData(std::make_shared<SetType>(elTyp
 SetData::SetData(type_ptr_t elType, data_list_t data)
     : StructData(std::make_shared<SetType>(elType)), data_(data) {
     for (const auto &e : data) {
-        if (e->type()->code() == TypeCode::REF) {
+        if (e->type()->code() == TypeCode::Ref) {
             refs_.push_back(e);
         }
     }
@@ -39,7 +39,7 @@ SetData::SetData(type_ptr_t elType, data_list_t data)
 
 bool SetData::emplace(const data_ptr_t &e) {
     bool res = data_.insert(e).second;
-    if (res && e->type()->code() == TypeCode::REF) {
+    if (res && e->type()->code() == TypeCode::Ref) {
         refs_.push_back(e);
     }
     return res;
@@ -60,7 +60,7 @@ bool SetData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t SetData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t SetData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -74,10 +74,10 @@ data_ptr_t SetData::convert(type_ptr_t target, bool inplace) {
             }
         } else if (target->special()) {
             switch (target->code()) {
-            case TypeCode::ANY:
+            case TypeCode::Any:
                 return make_shared<AnyData>(shared_from_this());
                 break;
-            case TypeCode::VOID:
+            case TypeCode::Void:
                 return make_shared<NullData>();
                 break;
             default:

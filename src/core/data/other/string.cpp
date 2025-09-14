@@ -33,7 +33,7 @@ bool StringData::equals(const data_ptr_t &other) const {
     return false;
 }
 
-data_ptr_t StringData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t StringData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->code() == target->code()) {
         // same type, no need to convert
         return shared_from_this();
@@ -41,7 +41,7 @@ data_ptr_t StringData::convert(type_ptr_t target, bool inplace) {
     try {
         if (target->primary()) {
             switch (target->code()) {
-            case TypeCode::BOOL: {
+            case TypeCode::Bool: {
                 return std::make_shared<PrimaryData<bool>>(data_.length() > 0);
             }
             default:
@@ -50,7 +50,7 @@ data_ptr_t StringData::convert(type_ptr_t target, bool inplace) {
 
         } else if (target->special()) {
             switch (target->code()) {
-            case TypeCode::ANY: {
+            case TypeCode::Any: {
                 return std::make_shared<AnyData>(shared_from_this());
             }
             default:

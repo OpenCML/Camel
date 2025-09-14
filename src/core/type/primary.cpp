@@ -31,17 +31,17 @@ TypeConv PrimaryType::convertibility(const Type &other) const {
     }
     if (other.structured()) {
         switch (otherCode) {
-        case TypeCode::UNION:
+        case TypeCode::Union:
             [[fallthrough]];
-        case TypeCode::LIST:
+        case TypeCode::List:
             [[fallthrough]];
-        case TypeCode::ARRAY:
+        case TypeCode::Array:
             [[fallthrough]];
-        case TypeCode::VECTOR:
+        case TypeCode::Vector:
             [[fallthrough]];
-        case TypeCode::TENSOR:
+        case TypeCode::Tensor:
             [[fallthrough]];
-        case TypeCode::SET:
+        case TypeCode::Set:
             return TypeConv::SAFE;
         default:
             return TypeConv::FORBIDDEN;
@@ -49,9 +49,9 @@ TypeConv PrimaryType::convertibility(const Type &other) const {
     }
     if (other.special()) {
         switch (otherCode) {
-        case TypeCode::ANY:
+        case TypeCode::Any:
             return TypeConv::SAFE;
-        case TypeCode::VOID:
+        case TypeCode::Void:
             return TypeConv::UNSAFE;
         default:
             return TypeConv::FORBIDDEN;

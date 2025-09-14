@@ -26,7 +26,7 @@
 using namespace std;
 
 TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shape)
-    : StructType(TypeCode::TENSOR), elementType_(elementType), shape_(shape) {
+    : StructType(TypeCode::Tensor), elementType_(elementType), shape_(shape) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
     }
@@ -54,7 +54,7 @@ string TensorType::toString() const {
 }
 
 bool TensorType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::TENSOR) {
+    if (other.code() != TypeCode::Tensor) {
         return false;
     }
     const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
@@ -62,7 +62,7 @@ bool TensorType::operator==(const Type &other) const {
 }
 
 bool TensorType::operator!=(const Type &other) const {
-    if (other.code() != TypeCode::TENSOR) {
+    if (other.code() != TypeCode::Tensor) {
         return true;
     }
     const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
@@ -72,39 +72,39 @@ bool TensorType::operator!=(const Type &other) const {
 TypeConv TensorType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::TENSOR: {
+        case TypeCode::Tensor: {
             const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             if (shape_ == otherMatrix.shape()) {
                 return elementType_->convertibility(*otherMatrix.elementType());
             }
             return TypeConv::FORBIDDEN;
         }
-        case TypeCode::LIST:
+        case TypeCode::List:
             return TypeConv::SAFE;
-        case TypeCode::VECTOR: {
+        case TypeCode::Vector: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
             return elementType_->convertibility(*otherVector.elementType());
         }
-        case TypeCode::ARRAY: {
+        case TypeCode::Array: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
             return elementType_->convertibility(*otherArray.elementType());
         }
-        case TypeCode::SET: {
+        case TypeCode::Set: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
             return elementType_->convertibility(*otherSet.valueType());
         }
-        case TypeCode::MAP:
+        case TypeCode::Map:
             [[fallthrough]];
-        case TypeCode::DICT:
+        case TypeCode::Dict:
             [[fallthrough]];
-        case TypeCode::UNION:
+        case TypeCode::Union:
             return TypeConv::FORBIDDEN;
 
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primitive types and special types are forbidden

@@ -22,62 +22,62 @@
 using namespace std;
 
 const signed char primeTypeConvMatrix[7][7] = {
-    // INT32, INT64, FLOAT, DOUBLE, STRING, BOOL, CHAR
-    {01, 01, 01, 01, 00, 01, -1}, // INT32
-    {-1, 01, -1, 01, 00, 01, -1}, // INT64
-    {-1, -1, 01, 01, 00, 01, -1}, // FLOAT
-    {-1, -1, -1, 01, 00, 01, -1}, // DOUBLE
-    {00, 00, 00, 00, 01, 01, 00}, // STRING
-    {01, 01, 01, 01, 01, 01, 01}, // BOOL
-    {01, 01, 01, 01, 01, 01, 01}  // CHAR
+    // Int32, Int64, Float, Double, String, Bool, Char
+    {01, 01, 01, 01, 00, 01, -1}, // Int32
+    {-1, 01, -1, 01, 00, 01, -1}, // Int64
+    {-1, -1, 01, 01, 00, 01, -1}, // Float
+    {-1, -1, -1, 01, 00, 01, -1}, // Double
+    {00, 00, 00, 00, 01, 01, 00}, // String
+    {01, 01, 01, 01, 01, 01, 01}, // Bool
+    {01, 01, 01, 01, 01, 01, 01}  // Char
 };
 
 string typeCodeToString(TypeCode code) {
     switch (code) {
         // primitive types
-    case TypeCode::INT32:
+    case TypeCode::Int32:
         return "int32";
-    case TypeCode::INT64:
+    case TypeCode::Int64:
         return "int64";
-    case TypeCode::FLOAT:
+    case TypeCode::Float:
         return "float";
-    case TypeCode::DOUBLE:
+    case TypeCode::Double:
         return "double";
-    case TypeCode::STRING:
+    case TypeCode::String:
         return "string";
-    case TypeCode::BOOL:
+    case TypeCode::Bool:
         return "bool";
-    case TypeCode::CHAR:
+    case TypeCode::Char:
         return "char";
         // structured types
-    case TypeCode::SET:
+    case TypeCode::Set:
         return "Set";
-    case TypeCode::MAP:
+    case TypeCode::Map:
         return "Map";
-    case TypeCode::DICT:
+    case TypeCode::Dict:
         return "Dict";
-    case TypeCode::LIST:
+    case TypeCode::List:
         return "List";
-    case TypeCode::UNION:
+    case TypeCode::Union:
         return "Union";
-    case TypeCode::ARRAY:
+    case TypeCode::Array:
         return "Array";
-    case TypeCode::TUPLE:
+    case TypeCode::Tuple:
         return "Tuple";
-    case TypeCode::VECTOR:
+    case TypeCode::Vector:
         return "Vector";
-    case TypeCode::PARAMS:
+    case TypeCode::Params:
         return "Params";
-    case TypeCode::TENSOR:
+    case TypeCode::Tensor:
         return "Tensor";
         // special types
-    case TypeCode::ANY:
+    case TypeCode::Any:
         return "any";
-    case TypeCode::VOID:
+    case TypeCode::Void:
         return "void";
-    case TypeCode::FUNC:
+    case TypeCode::Func:
         return "functor";
-    case TypeCode::REF:
+    case TypeCode::Ref:
         return "REF";
     }
     return "Unknown";

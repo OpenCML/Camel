@@ -158,6 +158,13 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void setOutput(const node_ptr_t &node);
 
     const std::vector<std::tuple<DataIndex, node_ptr_t, bool>> &ports() const { return ports_; }
+    const std::vector<DataIndex> portIndices() const {
+        std::vector<DataIndex> indices;
+        for (const auto &[index, _, __] : ports_) {
+            indices.push_back(index);
+        }
+        return indices;
+    }
     const node_vec_t &nodes() { return nodes_; }
 
   private:

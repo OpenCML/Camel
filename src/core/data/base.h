@@ -58,7 +58,7 @@ class Data : public std::enable_shared_from_this<Data> {
 
     virtual bool equals(const data_ptr_t &other) const;
     virtual data_ptr_t clone(bool deep = false) const;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false);
+    virtual data_ptr_t as(type_ptr_t target, bool inplace = false);
 
     virtual const std::string toString() const;
 };

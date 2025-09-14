@@ -20,10 +20,10 @@
 #include <fstream>
 #include <iostream>
 
+#include "common/scope.h"
 #include "core/context/context.h"
 #include "core/module/module.h"
 #include "error/abort.h"
-#include "common/scope.h"
 
 #include "../gct.h"
 #include "../gir.h"

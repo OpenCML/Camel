@@ -26,19 +26,19 @@
 using namespace std;
 
 FunctionType::FunctionType()
-    : SpecialType(TypeCode::FUNC), withParamsType_(make_shared<ParamsType>()),
+    : SpecialType(TypeCode::Func), withParamsType_(make_shared<ParamsType>()),
       normParamsType_(make_shared<ParamsType>()), returnType_(voidTypePtr) {}
 
 FunctionType::FunctionType(
     const shared_ptr<ParamsType> &withParamsType, const shared_ptr<ParamsType> &paramsType,
     const type_ptr_t &returnType)
-    : SpecialType(TypeCode::FUNC), withParamsType_(withParamsType), normParamsType_(paramsType),
+    : SpecialType(TypeCode::Func), withParamsType_(withParamsType), normParamsType_(paramsType),
       returnType_(returnType) {}
 
 FunctionType::FunctionType(
     const param_init_list &withParamsList, const param_init_list &normParamsList,
     const type_ptr_t &returnType)
-    : SpecialType(TypeCode::FUNC) {
+    : SpecialType(TypeCode::Func) {
     withParamsType_ = make_shared<ParamsType>();
     normParamsType_ = make_shared<ParamsType>();
     for (const auto &tuple : withParamsList) {
@@ -168,7 +168,7 @@ string FunctionType::toString() const {
 }
 
 bool FunctionType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::FUNC) {
+    if (other.code() != TypeCode::Func) {
         return false;
     }
     const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
@@ -188,7 +188,7 @@ bool FunctionType::operator!=(const Type &other) const { return !(*this == other
 
 TypeConv FunctionType::convertibility(const Type &other) const {
     // TODO: not fully implemented
-    if (other.code() == TypeCode::FUNC) {
+    if (other.code() == TypeCode::Func) {
         TypeConv result = TypeConv::SAFE;
         const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
         if (withParamsType_ && !otherFunctor.withParamsType_) {
@@ -222,7 +222,7 @@ TypeConv FunctionType::convertibility(const Type &other) const {
         }
         return result;
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primary types and special types are forbidden

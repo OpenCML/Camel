@@ -149,10 +149,11 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format("digraph GraphIR {{\r\n"
-                           "    graph [rankdir=LR, fontsize=18];\r\n"
-                           "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-                           "    edge [minlen=2];\r\n");
+        res += std::format(
+            "digraph GraphIR {{\r\n"
+            "    graph [rankdir=LR, fontsize=18];\r\n"
+            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+            "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
@@ -310,12 +311,21 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
         auto ctrlInputs = node->ctrlInputs();
         for (size_t i = 0; i < ctrlInputs.size(); ++i) {
             if (ctrlInputs[i]) {
+                size_t outIdx = 0;
+                for (const auto &out : ctrlInputs[i]->ctrlOutputs()) {
+                    if (out == node) {
+                        break;
+                    }
+                    outIdx++;
+                }
                 res += std::format(
-                    "{}{}{} -> {} [style=dashed, arrowhead=empty];\r\n",
+                    "{}{}{} -> {} [label=\"{}|{}\", style=dashed, arrowhead=empty];\r\n",
                     baseIndent_,
                     indent_,
                     pointerToIdent(ctrlInputs[i].get()),
-                    pointerToIdent(node.get()));
+                    pointerToIdent(node.get()),
+                    outIdx,
+                    i);
             }
         }
 

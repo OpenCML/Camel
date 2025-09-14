@@ -32,7 +32,7 @@ class RefData : public Data {
     const std::string &ref() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t as(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
 };

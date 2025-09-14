@@ -26,14 +26,14 @@
 using namespace std;
 
 VectorType::VectorType(const type_ptr_t &elementType)
-    : StructType(TypeCode::VECTOR), elementType_(elementType) {}
+    : StructType(TypeCode::Vector), elementType_(elementType) {}
 
 type_ptr_t VectorType::elementType() const { return elementType_; }
 
 string VectorType::toString() const { return "Vector<" + elementType_->toString() + ">"; }
 
 bool VectorType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::VECTOR) {
+    if (other.code() != TypeCode::Vector) {
         return false;
     }
     const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
@@ -41,7 +41,7 @@ bool VectorType::operator==(const Type &other) const {
 }
 
 bool VectorType::operator!=(const Type &other) const {
-    if (other.code() != TypeCode::VECTOR) {
+    if (other.code() != TypeCode::Vector) {
         return true;
     }
     const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
@@ -51,37 +51,37 @@ bool VectorType::operator!=(const Type &other) const {
 TypeConv VectorType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::VECTOR: {
+        case TypeCode::Vector: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
             return elementType_->convertibility(*otherVector.elementType());
         }
-        case TypeCode::LIST:
+        case TypeCode::List:
             return TypeConv::SAFE;
-        case TypeCode::ARRAY: {
+        case TypeCode::Array: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
             return elementType_->convertibility(*otherArray.elementType());
         }
-        case TypeCode::TENSOR: {
+        case TypeCode::Tensor: {
             const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             const auto &shape = otherMatrix.shape();
             return elementType_->convertibility(*otherMatrix.elementType());
         }
-        case TypeCode::SET: {
+        case TypeCode::Set: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
             return elementType_->convertibility(*otherSet.valueType());
         }
-        case TypeCode::MAP:
+        case TypeCode::Map:
             [[fallthrough]];
-        case TypeCode::DICT:
+        case TypeCode::Dict:
             [[fallthrough]];
-        case TypeCode::UNION:
+        case TypeCode::Union:
             return TypeConv::FORBIDDEN;
 
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primary types and special types are forbidden

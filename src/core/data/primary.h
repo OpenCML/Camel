@@ -59,7 +59,7 @@ template <typename T> class PrimaryData : public Data {
         return false;
     }
 
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
+    virtual data_ptr_t as(type_ptr_t target, bool inplace = false) override {
         if (target == type_ || type_->code() == target->code()) {
             // same type, no need to convert
             return shared_from_this();
@@ -70,17 +70,17 @@ template <typename T> class PrimaryData : public Data {
                     std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
                     std::is_same_v<T, float> || std::is_same_v<T, double>) {
                     switch (target->code()) {
-                    case TypeCode::INT32:
+                    case TypeCode::Int32:
                         return convertAndMakeShared<int32_t>(data_);
-                    case TypeCode::INT64:
+                    case TypeCode::Int64:
                         return convertAndMakeShared<int64_t>(data_);
-                    case TypeCode::FLOAT:
+                    case TypeCode::Float:
                         return convertAndMakeShared<float>(data_);
-                    case TypeCode::DOUBLE:
+                    case TypeCode::Double:
                         return convertAndMakeShared<double>(data_);
-                    case TypeCode::BOOL:
+                    case TypeCode::Bool:
                         return convertAndMakeShared<bool>(data_);
-                    case TypeCode::CHAR:
+                    case TypeCode::Char:
                         return convertAndMakeShared<char>(data_);
 
                     default:
@@ -89,18 +89,18 @@ template <typename T> class PrimaryData : public Data {
                 } else if constexpr (std::is_same_v<T, bool>) {
                     const bool &b = data_;
                     switch (target->code()) {
-                    case TypeCode::INT32:
+                    case TypeCode::Int32:
                         return std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(b));
-                    case TypeCode::INT64:
+                    case TypeCode::Int64:
                         return std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(b));
-                    case TypeCode::FLOAT:
+                    case TypeCode::Float:
                         return std::make_shared<PrimaryData<float>>(static_cast<float>(b));
-                    case TypeCode::DOUBLE:
+                    case TypeCode::Double:
                         return std::make_shared<PrimaryData<double>>(static_cast<double>(b));
-                    case TypeCode::STRING:
+                    case TypeCode::String:
                         return std::dynamic_pointer_cast<Data>(
                             std::make_shared<StringData>(b ? "true" : "false"));
-                    case TypeCode::CHAR:
+                    case TypeCode::Char:
                         return std::make_shared<PrimaryData<char>>(static_cast<char>(b));
 
                     default:
@@ -109,18 +109,18 @@ template <typename T> class PrimaryData : public Data {
                 } else if constexpr (std::is_same_v<T, char>) {
                     const char &c = data_;
                     switch (target->code()) {
-                    case TypeCode::INT32:
+                    case TypeCode::Int32:
                         return std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(c));
-                    case TypeCode::INT64:
+                    case TypeCode::Int64:
                         return std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(c));
-                    case TypeCode::FLOAT:
+                    case TypeCode::Float:
                         return std::make_shared<PrimaryData<float>>(static_cast<float>(c));
-                    case TypeCode::DOUBLE:
+                    case TypeCode::Double:
                         return std::make_shared<PrimaryData<double>>(static_cast<double>(c));
-                    case TypeCode::STRING:
+                    case TypeCode::String:
                         return std::dynamic_pointer_cast<Data>(
                             std::make_shared<StringData>(std::string(1, c)));
-                    case TypeCode::BOOL:
+                    case TypeCode::Bool:
                         return std::make_shared<PrimaryData<bool>>(c != 0);
 
                     default:

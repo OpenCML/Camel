@@ -21,7 +21,7 @@
 
 using namespace std;
 
-ListType::ListType() : StructType(TypeCode::LIST) {}
+ListType::ListType() : StructType(TypeCode::List) {}
 
 string ListType::toString() const { return "List"; }
 
@@ -32,28 +32,28 @@ bool ListType::operator!=(const Type &other) const { return false; }
 TypeConv ListType::convertibility(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
-        case TypeCode::LIST:
+        case TypeCode::List:
             return TypeConv::SAFE;
-        case TypeCode::SET:
+        case TypeCode::Set:
             [[fallthrough]];
-        case TypeCode::MAP:
+        case TypeCode::Map:
             [[fallthrough]];
-        case TypeCode::ARRAY:
+        case TypeCode::Array:
             [[fallthrough]];
-        case TypeCode::DICT:
+        case TypeCode::Dict:
             [[fallthrough]];
-        case TypeCode::UNION:
+        case TypeCode::Union:
             [[fallthrough]];
-        case TypeCode::VECTOR:
+        case TypeCode::Vector:
             [[fallthrough]];
-        case TypeCode::TENSOR:
+        case TypeCode::Tensor:
             return TypeConv::FORBIDDEN;
 
         default:
             return TypeConv::FORBIDDEN;
         }
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     // primary types and special types are forbidden

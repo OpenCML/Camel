@@ -32,7 +32,7 @@ TupleData::TupleData(data_list_t data) : data_(data) {
     size_t i = 0;
     for (const auto &e : data) {
         types.push_back(e->type());
-        if (e->type()->code() == TypeCode::REF) {
+        if (e->type()->code() == TypeCode::Ref) {
             refs_.push_back(i);
         }
         i++;
@@ -44,7 +44,7 @@ void TupleData::emplace(const data_ptr_t &e) {
     data_.push_back(e);
     TupleType &tupleType = *static_cast<TupleType *>(type_.get());
     tupleType.add(e->type());
-    if (e->type()->code() == TypeCode::REF) {
+    if (e->type()->code() == TypeCode::Ref) {
         refs_.push_back(data_.size() - 1);
     }
 }
@@ -62,7 +62,7 @@ bool TupleData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t TupleData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t TupleData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -76,10 +76,10 @@ data_ptr_t TupleData::convert(type_ptr_t target, bool inplace) {
             }
         } else if (target->special()) {
             switch (target->code()) {
-            case TypeCode::ANY:
+            case TypeCode::Any:
                 return make_shared<AnyData>(shared_from_this());
                 break;
-            case TypeCode::VOID:
+            case TypeCode::Void:
                 return make_shared<NullData>();
                 break;
             default:

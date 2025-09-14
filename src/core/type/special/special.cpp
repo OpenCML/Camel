@@ -23,13 +23,13 @@ TypeConv SpecialType::convertibility(const Type &other) const {
     if (other.code() == code_) {
         return TypeConv::SAFE;
     }
-    if (other.code() == TypeCode::ANY) {
+    if (other.code() == TypeCode::Any) {
         return TypeConv::SAFE;
     }
     if (other.primary() || other.structured()) {
         return TypeConv::FORBIDDEN;
     }
-    if (other.code() == TypeCode::VOID) {
+    if (other.code() == TypeCode::Void) {
         return TypeConv::UNSAFE;
     }
     return TypeConv::FORBIDDEN;

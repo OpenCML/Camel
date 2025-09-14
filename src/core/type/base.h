@@ -32,30 +32,30 @@
 
 enum class TypeCode {
     // primitive types
-    INT32 = 0b00'000000,
-    INT64 = 0b00'000001,
-    FLOAT = 0b00'000010,
-    DOUBLE = 0b00'000011,
-    STRING = 0b00'000100,
-    BOOL = 0b00'000101,
-    CHAR = 0b00'000110,
+    Int32 = 0b00'000000,
+    Int64 = 0b00'000001,
+    Float = 0b00'000010,
+    Double = 0b00'000011,
+    String = 0b00'000100,
+    Bool = 0b00'000101,
+    Char = 0b00'000110,
     // structured types
-    SET = 0b01'000000,
-    MAP = 0b01'000001,
-    DICT = 0b01'000010,
-    LIST = 0b01'000011,
-    UNION = 0b01'000100,
-    ARRAY = 0b01'000101,
-    TUPLE = 0b01'000110,
-    VECTOR = 0b01'000111,
-    PARAMS = 0b01'001000,
-    TENSOR = 0b01'001001,
+    Set = 0b01'000000,
+    Map = 0b01'000001,
+    Dict = 0b01'000010,
+    List = 0b01'000011,
+    Union = 0b01'000100,
+    Array = 0b01'000101,
+    Tuple = 0b01'000110,
+    Vector = 0b01'000111,
+    Params = 0b01'001000,
+    Tensor = 0b01'001001,
     // special types
-    ANY = 0b10'000000,
-    VOID = 0b10'000001,
-    FUNC = 0b10'000010,
+    Any = 0b10'000000,
+    Void = 0b10'000001,
+    Func = 0b10'000010,
     // for internal use
-    REF = 0b11'000000,
+    Ref = 0b11'000000,
 };
 
 enum class TypeConv {

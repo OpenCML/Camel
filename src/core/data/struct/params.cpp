@@ -39,7 +39,7 @@ bool ParamsData::emplace(const data_ptr_t &val, const std::string &key) {
         namedData_[key] = val;
     }
     paramsType.add(key, val->type());
-    if (val->type()->code() == TypeCode::REF) {
+    if (val->type()->code() == TypeCode::Ref) {
         refs_.emplace_back(indexData_.size() - 1, key);
     }
     return true;
@@ -74,7 +74,7 @@ bool ParamsData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t ParamsData::as(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -82,16 +82,16 @@ data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
     try {
         if (target->structured()) {
             switch (target->code()) {
-            case TypeCode::MAP:
+            case TypeCode::Map:
                 return convertToMap();
                 break;
-            case TypeCode::LIST:
+            case TypeCode::List:
                 return convertToList();
                 break;
-            case TypeCode::TUPLE:
+            case TypeCode::Tuple:
                 return convertToTuple();
                 break;
-            case TypeCode::PARAMS:
+            case TypeCode::Params:
                 return convertToParams(dynamic_pointer_cast<ParamsType>(target), inplace);
                 break;
             default:
@@ -99,10 +99,10 @@ data_ptr_t ParamsData::convert(type_ptr_t target, bool inplace) {
             }
         } else if (target->special()) {
             switch (target->code()) {
-            case TypeCode::ANY:
+            case TypeCode::Any:
                 return make_shared<AnyData>(shared_from_this());
                 break;
-            case TypeCode::VOID:
+            case TypeCode::Void:
                 return make_shared<NullData>();
                 break;
             default:
@@ -152,7 +152,7 @@ data_ptr_t ParamsData::convertToMap() {
     auto mapData = make_shared<MapData>(stringTypePtr, anyTypePtr);
     for (const auto &e : namedData_) {
         const auto &key = dynamic_pointer_cast<Data>(make_shared<StringData>(e.first));
-        const auto &val = e.second->convert(anyTypePtr);
+        const auto &val = e.second->as(anyTypePtr);
         mapData->emplace(key, val);
     }
     return mapData;
@@ -197,7 +197,7 @@ data_ptr_t ParamsData::convertToParams(const shared_ptr<ParamsType> &other, bool
         if (!key.empty()) {
             namedData[key] = val;
         }
-        if (val->type()->code() == TypeCode::REF) {
+        if (val->type()->code() == TypeCode::Ref) {
             refs.emplace_back(i, key);
         }
     }

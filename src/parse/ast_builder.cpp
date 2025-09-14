@@ -39,8 +39,7 @@ template <typename LoadType> std::shared_ptr<LoadType> unwrapNodeAs(std::shared_
     return std::dynamic_pointer_cast<LoadType>(node->load());
 }
 
-inline TokenRange
-extractTokenRangeFromContext(const antlr4::ParserRuleContext *context) {
+inline TokenRange extractTokenRangeFromContext(const antlr4::ParserRuleContext *context) {
     if (context && context->getStart() && context->getStop()) {
         return {context->getStart()->getTokenIndex(), context->getStop()->getTokenIndex() + 1};
     } else {
