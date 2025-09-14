@@ -30,7 +30,7 @@ enum class RuntimeDiag : uint32_t {
     IndexOutOfRange = 0x000002,
     KeyNotFound = 0x000003,
     IncompatibleArgType = 0x000004,
-    IncompatibleArgCount = 0x000005,
+    IncorrectArgsCount = 0x000005,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

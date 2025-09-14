@@ -31,5 +31,5 @@ class StructType : public Type {
     virtual bool operator==(const Type &other) const override = 0;
     virtual bool operator!=(const Type &other) const override = 0;
 
-    virtual TypeConv convertibility(const Type &other) const override = 0;
+    virtual CastSafety castSafetyTo(const Type &other) const override = 0;
 };

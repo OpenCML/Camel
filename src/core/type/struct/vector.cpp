@@ -48,42 +48,42 @@ bool VectorType::operator!=(const Type &other) const {
     return !elementType_->equals(otherVector.elementType_);
 }
 
-TypeConv VectorType::convertibility(const Type &other) const {
+CastSafety VectorType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Vector: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            return elementType_->convertibility(*otherVector.elementType());
+            return elementType_->castSafetyTo(*otherVector.elementType());
         }
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Array: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            return elementType_->convertibility(*otherArray.elementType());
+            return elementType_->castSafetyTo(*otherArray.elementType());
         }
         case TypeCode::Tensor: {
             const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             const auto &shape = otherMatrix.shape();
-            return elementType_->convertibility(*otherMatrix.elementType());
+            return elementType_->castSafetyTo(*otherMatrix.elementType());
         }
         case TypeCode::Set: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
-            return elementType_->convertibility(*otherSet.valueType());
+            return elementType_->castSafetyTo(*otherSet.valueType());
         }
         case TypeCode::Map:
             [[fallthrough]];
         case TypeCode::Dict:
             [[fallthrough]];
         case TypeCode::Union:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

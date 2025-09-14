@@ -115,25 +115,25 @@ type_ptr_t DictType::operator&(const DictType &other) const {
     return result;
 }
 
-TypeConv DictType::convertibility(const Type &other) const {
+CastSafety DictType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Dict: {
             const DictType &otherDict = dynamic_cast<const DictType &>(other);
-            TypeConv result = TypeConv::SAFE;
+            CastSafety result = CastSafety::Safe;
             for (const auto &field : otherDict.fields_) {
                 const auto &ident = field.first;
                 const auto &type = field.second;
                 if (!fields_.count(ident)) {
-                    return TypeConv::FORBIDDEN;
+                    return CastSafety::Forbidden;
                 }
                 const auto &fieldType = fields_.at(ident);
-                const TypeConv fieldConv = fieldType->convertibility(*type);
-                if (fieldConv == TypeConv::FORBIDDEN) {
-                    return TypeConv::FORBIDDEN;
+                const CastSafety fieldConv = fieldType->castSafetyTo(*type);
+                if (fieldConv == CastSafety::Forbidden) {
+                    return CastSafety::Forbidden;
                 }
-                if (fieldConv == TypeConv::UNSAFE) {
-                    result = TypeConv::UNSAFE;
+                if (fieldConv == CastSafety::Unsafe) {
+                    result = CastSafety::Unsafe;
                 }
             }
             return result;
@@ -151,15 +151,15 @@ TypeConv DictType::convertibility(const Type &other) const {
         case TypeCode::Vector:
             [[fallthrough]];
         case TypeCode::Tensor:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

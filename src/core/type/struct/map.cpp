@@ -50,20 +50,20 @@ bool MapType::operator!=(const Type &other) const {
     return !keyType_->equals(otherMap.keyType_) || !valueType_->equals(otherMap.valueType_);
 }
 
-TypeConv MapType::convertibility(const Type &other) const {
+CastSafety MapType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Map: {
             const MapType &otherMap = dynamic_cast<const MapType &>(other);
-            const TypeConv keyConv = keyType_->convertibility(*otherMap.keyType_);
-            const TypeConv valueConv = valueType_->convertibility(*otherMap.valueType_);
-            if (keyConv == TypeConv::FORBIDDEN || valueConv == TypeConv::FORBIDDEN) {
-                return TypeConv::FORBIDDEN;
+            const CastSafety keyConv = keyType_->castSafetyTo(*otherMap.keyType_);
+            const CastSafety valueConv = valueType_->castSafetyTo(*otherMap.valueType_);
+            if (keyConv == CastSafety::Forbidden || valueConv == CastSafety::Forbidden) {
+                return CastSafety::Forbidden;
             }
-            if (keyConv == TypeConv::SAFE && valueConv == TypeConv::SAFE) {
-                return TypeConv::SAFE;
+            if (keyConv == CastSafety::Safe && valueConv == CastSafety::Safe) {
+                return CastSafety::Safe;
             }
-            return TypeConv::UNSAFE;
+            return CastSafety::Unsafe;
         }
         case TypeCode::Set:
             [[fallthrough]];
@@ -78,15 +78,15 @@ TypeConv MapType::convertibility(const Type &other) const {
         case TypeCode::Vector:
             [[fallthrough]];
         case TypeCode::Tensor:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

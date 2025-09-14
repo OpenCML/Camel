@@ -27,9 +27,9 @@
 
 using namespace std;
 
-ListData::ListData() : StructData(listTypePtr), data_() {}
+ListData::ListData() : StructData(Type::List()), data_() {}
 
-ListData::ListData(data_list_t data) : StructData(listTypePtr), data_(data) {
+ListData::ListData(data_list_t data) : StructData(Type::List()), data_(data) {
     size_t i = 0;
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::Ref) {
@@ -83,7 +83,7 @@ bool ListData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t ListData::as(type_ptr_t target, bool inplace) {
+data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();

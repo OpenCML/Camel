@@ -20,13 +20,13 @@
 #include "ref.h"
 #include "utils/assert.h"
 
-RefData::RefData(const std::string &ref) : Data(refTypePtr), ref_(ref) {}
+RefData::RefData(const std::string &ref) : Data(Type::Ref()), ref_(ref) {}
 
 const std::string &RefData::ref() const { return ref_; }
 
 bool RefData::equals(const data_ptr_t &other) const { return false; }
 
-data_ptr_t RefData::as(type_ptr_t target, bool inplace) {
+data_ptr_t RefData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert RefData to " + typeCodeToString(target->code()));
 }
 

@@ -72,7 +72,7 @@ data_ptr_t Data::clone(bool deep) const {
     return nullptr;
 }
 
-data_ptr_t Data::as(type_ptr_t target, bool inplace) {
+data_ptr_t Data::convert(type_ptr_t target, bool inplace) {
     ASSERT(false, "Base Data::as() not implemented");
     return nullptr;
 }

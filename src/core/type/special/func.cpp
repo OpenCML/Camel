@@ -27,7 +27,7 @@ using namespace std;
 
 FunctionType::FunctionType()
     : SpecialType(TypeCode::Func), withParamsType_(make_shared<ParamsType>()),
-      normParamsType_(make_shared<ParamsType>()), returnType_(voidTypePtr) {}
+      normParamsType_(make_shared<ParamsType>()), returnType_(Type::Void()) {}
 
 FunctionType::FunctionType(
     const shared_ptr<ParamsType> &withParamsType, const shared_ptr<ParamsType> &paramsType,
@@ -186,45 +186,45 @@ bool FunctionType::operator==(const Type &other) const {
 
 bool FunctionType::operator!=(const Type &other) const { return !(*this == other); }
 
-TypeConv FunctionType::convertibility(const Type &other) const {
+CastSafety FunctionType::castSafetyTo(const Type &other) const {
     // TODO: not fully implemented
     if (other.code() == TypeCode::Func) {
-        TypeConv result = TypeConv::SAFE;
+        CastSafety result = CastSafety::Safe;
         const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
         if (withParamsType_ && !otherFunctor.withParamsType_) {
-            const TypeConv withTypeConv =
-                withParamsType_->convertibility(*otherFunctor.withParamsType_);
-            if (withTypeConv == TypeConv::FORBIDDEN) {
-                return TypeConv::FORBIDDEN;
+            const CastSafety withTypeConv =
+                withParamsType_->castSafetyTo(*otherFunctor.withParamsType_);
+            if (withTypeConv == CastSafety::Forbidden) {
+                return CastSafety::Forbidden;
             }
-            if (withTypeConv == TypeConv::UNSAFE) {
-                result = TypeConv::UNSAFE;
+            if (withTypeConv == CastSafety::Unsafe) {
+                result = CastSafety::Unsafe;
             }
         }
         if (normParamsType_ && !otherFunctor.normParamsType_) {
-            const TypeConv paramsTypeConv =
-                normParamsType_->convertibility(*otherFunctor.normParamsType_);
-            if (paramsTypeConv == TypeConv::FORBIDDEN) {
-                return TypeConv::FORBIDDEN;
+            const CastSafety paramsTypeConv =
+                normParamsType_->castSafetyTo(*otherFunctor.normParamsType_);
+            if (paramsTypeConv == CastSafety::Forbidden) {
+                return CastSafety::Forbidden;
             }
-            if (paramsTypeConv == TypeConv::UNSAFE) {
-                result = TypeConv::UNSAFE;
+            if (paramsTypeConv == CastSafety::Unsafe) {
+                result = CastSafety::Unsafe;
             }
         }
         if (returnType_ && !otherFunctor.returnType_) {
-            const TypeConv returnTypeConv = returnType_->convertibility(*otherFunctor.returnType_);
-            if (returnTypeConv == TypeConv::FORBIDDEN) {
-                return TypeConv::FORBIDDEN;
+            const CastSafety returnTypeConv = returnType_->castSafetyTo(*otherFunctor.returnType_);
+            if (returnTypeConv == CastSafety::Forbidden) {
+                return CastSafety::Forbidden;
             }
-            if (returnTypeConv == TypeConv::UNSAFE) {
-                result = TypeConv::UNSAFE;
+            if (returnTypeConv == CastSafety::Unsafe) {
+                result = CastSafety::Unsafe;
             }
         }
         return result;
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

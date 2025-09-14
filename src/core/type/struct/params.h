@@ -25,7 +25,7 @@ class ParamsType : public StructType {
   private:
     std::vector<std::tuple<std::string, type_ptr_t, data_ptr_t>> elements_;
 
-    TypeConv convertibilityToParams(const ParamsType &other) const;
+    CastSafety convertibilityToParams(const ParamsType &other) const;
 
   public:
     ParamsType();
@@ -48,5 +48,5 @@ class ParamsType : public StructType {
 
     void clear();
 
-    TypeConv convertibility(const Type &other) const override;
+    CastSafety castSafetyTo(const Type &other) const override;
 };

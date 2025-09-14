@@ -24,6 +24,7 @@ using namespace std;
 using namespace GIR;
 
 data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_t &frame) {
+    l.in("Eval").debug("Evaluating graph: {}", graph->name());
     shared_ptr<node_vec_t> sortedNodesPtr;
     if (graphTNS_.find(graph.get()) == graphTNS_.end()) {
         auto sortedNodes = topoSort(
@@ -93,7 +94,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
                     "Branch node must have exactly one data input.");
                 ASSERT(n->ctrlOutputs().size() == 2, "Branch node must have exactly two outputs.");
                 auto condDataRaw = frame->get(n->dataInputs().front()->index());
-                auto condData = tt::as_shared<PrimaryData<bool>>(condDataRaw->as(boolTypePtr));
+                auto condData = condDataRaw->as<BoolData>(Type::Bool());
                 bool cond = condData->data();
                 if (cond) {
                     // True branch, skip the second output
@@ -144,6 +145,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
     // 返回图的返回节点数据
     auto retNode = graph->output();
     ASSERT(retNode != nullptr, "Graph has no return node.");
+    l.in("Eval").debug("Graph {} evaluation completed.", graph->name());
     return frame->get(retNode->index());
 }
 

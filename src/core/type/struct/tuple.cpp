@@ -72,34 +72,34 @@ size_t TupleType::size() const { return types_.size(); }
 
 const vector<type_ptr_t> &TupleType::types() const { return types_; }
 
-TypeConv TupleType::convertibility(const Type &other) const {
+CastSafety TupleType::castSafetyTo(const Type &other) const {
     // TODO: not fully implemented
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Tensor:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Set:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Array:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Vector:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Map:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Dict:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Union:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

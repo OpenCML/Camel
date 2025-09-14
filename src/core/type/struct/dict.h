@@ -45,5 +45,5 @@ class DictType : public StructType {
     type_ptr_t operator|(const DictType &other) const;
     type_ptr_t operator&(const DictType &other) const;
 
-    TypeConv convertibility(const Type &other) const override;
+    CastSafety castSafetyTo(const Type &other) const override;
 };

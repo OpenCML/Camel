@@ -39,7 +39,7 @@ func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<Fun
 
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t FunctionData::as(type_ptr_t target, bool inplace) {
+data_ptr_t FunctionData::convert(type_ptr_t target, bool inplace) {
     throw DataConvError("Cannot convert functor to " + typeCodeToString(target->code()));
 }
 

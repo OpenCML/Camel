@@ -63,9 +63,9 @@ const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::IncompatibleArgCount,
+            RuntimeDiag::IncorrectArgsCount,
             {
-                "IncompatibleArgCount",
+                "IncorrectArgsCount",
                 "Incorrect number of arguments passed to function/operator {0}: expected {1}, but "
                 "got {2}.",
                 "Ensure the number of arguments matches the function definition.",

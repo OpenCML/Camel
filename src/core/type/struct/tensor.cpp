@@ -69,44 +69,44 @@ bool TensorType::operator!=(const Type &other) const {
     return shape_ != otherMatrix.shape_ || !elementType_->equals(otherMatrix.elementType_);
 }
 
-TypeConv TensorType::convertibility(const Type &other) const {
+CastSafety TensorType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Tensor: {
             const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
             if (shape_ == otherMatrix.shape()) {
-                return elementType_->convertibility(*otherMatrix.elementType());
+                return elementType_->castSafetyTo(*otherMatrix.elementType());
             }
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Vector: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            return elementType_->convertibility(*otherVector.elementType());
+            return elementType_->castSafetyTo(*otherVector.elementType());
         }
         case TypeCode::Array: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            return elementType_->convertibility(*otherArray.elementType());
+            return elementType_->castSafetyTo(*otherArray.elementType());
         }
         case TypeCode::Set: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
-            return elementType_->convertibility(*otherSet.valueType());
+            return elementType_->castSafetyTo(*otherSet.valueType());
         }
         case TypeCode::Map:
             [[fallthrough]];
         case TypeCode::Dict:
             [[fallthrough]];
         case TypeCode::Union:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primitive types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

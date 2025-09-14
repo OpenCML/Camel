@@ -46,19 +46,19 @@ bool SetType::operator!=(const Type &other) const {
     return !valueType_->equals(otherMap.valueType_);
 }
 
-TypeConv SetType::convertibility(const Type &other) const {
+CastSafety SetType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Set:
-            return valueType_->convertibility(*(dynamic_cast<const SetType &>(other).valueType_));
+            return valueType_->castSafetyTo(*(dynamic_cast<const SetType &>(other).valueType_));
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Array: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
             if (otherArray.size() == 1) {
-                return valueType_->convertibility(*otherArray.elementType());
+                return valueType_->castSafetyTo(*otherArray.elementType());
             }
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::Map:
             [[fallthrough]];
@@ -68,18 +68,18 @@ TypeConv SetType::convertibility(const Type &other) const {
             [[fallthrough]];
         case TypeCode::Vector: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
-            return valueType_->convertibility(*otherVector.elementType());
+            return valueType_->castSafetyTo(*otherVector.elementType());
         }
         case TypeCode::Tensor:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

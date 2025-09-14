@@ -42,5 +42,5 @@ class TupleType : public StructType {
 
     const std::vector<type_ptr_t> &types() const;
 
-    TypeConv convertibility(const Type &other) const override;
+    CastSafety castSafetyTo(const Type &other) const override;
 };

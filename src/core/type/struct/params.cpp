@@ -22,10 +22,10 @@
 
 using namespace std;
 
-TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
+CastSafety ParamsType::convertibilityToParams(const ParamsType &other) const {
     const auto &indexEls = indexElements();
     const auto &namedEls = namedElements();
-    TypeConv result = TypeConv::SAFE;
+    CastSafety result = CastSafety::Safe;
     size_t idx = 0;
     for (size_t i = 0; i < other.elements_.size(); i++) {
         const auto &[name, type, value] = other.elements_[i];
@@ -33,7 +33,7 @@ TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
         if (name.empty() || namedEls.find(name) == namedEls.end()) {
             if (idx >= indexEls.size()) {
                 if (!value) {
-                    return TypeConv::FORBIDDEN;
+                    return CastSafety::Forbidden;
                 }
                 continue;
             }
@@ -42,11 +42,11 @@ TypeConv ParamsType::convertibilityToParams(const ParamsType &other) const {
         } else {
             elType = namedEls.at(name);
         }
-        TypeConv elConv = elType->convertibility(*type);
-        if (elConv == TypeConv::FORBIDDEN) {
-            return TypeConv::FORBIDDEN;
-        } else if (elConv == TypeConv::UNSAFE) {
-            result = TypeConv::UNSAFE;
+        CastSafety elConv = elType->castSafetyTo(*type);
+        if (elConv == CastSafety::Forbidden) {
+            return CastSafety::Forbidden;
+        } else if (elConv == CastSafety::Unsafe) {
+            result = CastSafety::Unsafe;
         }
     }
     return result;
@@ -147,7 +147,7 @@ std::unordered_map<string, type_ptr_t> ParamsType::namedElements() const {
 
 void ParamsType::clear() { elements_.clear(); }
 
-TypeConv ParamsType::convertibility(const Type &other) const {
+CastSafety ParamsType::castSafetyTo(const Type &other) const {
     // TODO: not fully implemented
     // TODO: others' convertibility should be checked
     if (other.structured()) {
@@ -155,47 +155,47 @@ TypeConv ParamsType::convertibility(const Type &other) const {
         case TypeCode::Params: {
             const ParamsType &otherParam = dynamic_cast<const ParamsType &>(other);
             if (elements_.size() != otherParam.elements_.size()) {
-                return TypeConv::FORBIDDEN;
+                return CastSafety::Forbidden;
             }
-            TypeConv result = TypeConv::SAFE;
+            CastSafety result = CastSafety::Safe;
             for (size_t i = 0; i < elements_.size(); i++) {
                 const auto &[name, type, value] = elements_[i];
                 if (name != name) {
-                    return TypeConv::FORBIDDEN;
+                    return CastSafety::Forbidden;
                 }
-                TypeConv paramConv = type->convertibility(*type);
-                if (paramConv == TypeConv::FORBIDDEN) {
-                    return TypeConv::FORBIDDEN;
-                } else if (paramConv == TypeConv::UNSAFE) {
-                    result = TypeConv::UNSAFE;
+                CastSafety paramConv = type->castSafetyTo(*type);
+                if (paramConv == CastSafety::Forbidden) {
+                    return CastSafety::Forbidden;
+                } else if (paramConv == CastSafety::Unsafe) {
+                    result = CastSafety::Unsafe;
                 }
             }
             return result;
         }
         case TypeCode::Union:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Set:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Array:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Vector:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Tensor:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Map:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Dict:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

@@ -29,11 +29,11 @@ bool ListType::operator==(const Type &other) const { return true; }
 
 bool ListType::operator!=(const Type &other) const { return false; }
 
-TypeConv ListType::convertibility(const Type &other) const {
+CastSafety ListType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Set:
             [[fallthrough]];
         case TypeCode::Map:
@@ -47,15 +47,15 @@ TypeConv ListType::convertibility(const Type &other) const {
         case TypeCode::Vector:
             [[fallthrough]];
         case TypeCode::Tensor:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

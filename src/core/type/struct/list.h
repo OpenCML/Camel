@@ -30,5 +30,5 @@ class ListType : public StructType {
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
-    TypeConv convertibility(const Type &other) const override;
+    CastSafety castSafetyTo(const Type &other) const override;
 };

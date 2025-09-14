@@ -50,41 +50,41 @@ bool ArrayType::operator!=(const Type &other) const {
     return size_ != otherArray.size_ || !elementType_->equals(otherArray.elementType_);
 }
 
-TypeConv ArrayType::convertibility(const Type &other) const {
+CastSafety ArrayType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Array: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
-            return elementType_->convertibility(*otherArray.elementType());
+            return elementType_->castSafetyTo(*otherArray.elementType());
         }
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Set: {
             const SetType &otherSet = dynamic_cast<const SetType &>(other);
-            return elementType_->convertibility(*otherSet.valueType());
+            return elementType_->castSafetyTo(*otherSet.valueType());
         }
         case TypeCode::Vector: {
             // we cannot know the size of the array
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::Tensor: {
             // we cannot know the size of the array
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::Map:
             [[fallthrough]];
         case TypeCode::Dict:
             [[fallthrough]];
         case TypeCode::Union:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }

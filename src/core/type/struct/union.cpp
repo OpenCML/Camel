@@ -104,88 +104,88 @@ void UnionType::add(const type_ptr_t &type) { types_.insert(type); }
 
 bool UnionType::has(const type_ptr_t &type) const { return types_.find(type) != types_.end(); }
 
-TypeConv UnionType::convertibility(const Type &other) const {
+CastSafety UnionType::castSafetyTo(const Type &other) const {
     if (other.structured()) {
         switch (other.code()) {
         case TypeCode::Union: {
             const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
-            TypeConv result = TypeConv::SAFE;
+            CastSafety result = CastSafety::Safe;
             for (const auto &type : types_) {
-                TypeConv typeConv = TypeConv::FORBIDDEN;
+                CastSafety typeConv = CastSafety::Forbidden;
                 for (const auto &otherType : otherUnion.types_) {
-                    TypeConv tempConv = type->convertibility(*otherType);
-                    if (tempConv == TypeConv::SAFE) {
-                        typeConv = TypeConv::SAFE;
+                    CastSafety tempConv = type->castSafetyTo(*otherType);
+                    if (tempConv == CastSafety::Safe) {
+                        typeConv = CastSafety::Safe;
                         break;
-                    } else if (tempConv == TypeConv::UNSAFE) {
-                        typeConv = TypeConv::UNSAFE;
+                    } else if (tempConv == CastSafety::Unsafe) {
+                        typeConv = CastSafety::Unsafe;
                     }
                 }
-                if (typeConv == TypeConv::FORBIDDEN) {
-                    return TypeConv::FORBIDDEN;
-                } else if (typeConv == TypeConv::UNSAFE) {
-                    result = TypeConv::UNSAFE;
+                if (typeConv == CastSafety::Forbidden) {
+                    return CastSafety::Forbidden;
+                } else if (typeConv == CastSafety::Unsafe) {
+                    result = CastSafety::Unsafe;
                 }
             }
             return result;
         }
         case TypeCode::List:
-            return TypeConv::SAFE;
+            return CastSafety::Safe;
         case TypeCode::Set: {
             const type_ptr_t &otherType = dynamic_cast<const SetType &>(other).valueType();
             if (otherType->code() == TypeCode::Union) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
-                return convertibility(otherUnion);
+                return castSafetyTo(otherUnion);
             }
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::Array: {
             const ArrayType &otherArray = dynamic_cast<const ArrayType &>(other);
             const type_ptr_t &otherType = otherArray.elementType();
             if (otherArray.size() > 1) {
                 // 0 or 1 size array is allowed
-                return TypeConv::FORBIDDEN;
+                return CastSafety::Forbidden;
             }
             if (otherType->code() == TypeCode::Union) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
-                return convertibility(otherUnion);
+                return castSafetyTo(otherUnion);
             }
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::Vector: {
             const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
             const type_ptr_t &otherType = otherVector.elementType();
             if (otherType->code() == TypeCode::Union) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
-                return convertibility(otherUnion);
+                return castSafetyTo(otherUnion);
             }
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::Tensor: {
             const TensorType &otherTensor = dynamic_cast<const TensorType &>(other);
             const auto &shape = otherTensor.shape();
             if (shape.size() != 1 || shape.front() > 1) {
-                return TypeConv::FORBIDDEN;
+                return CastSafety::Forbidden;
             }
             const type_ptr_t &otherType = otherTensor.elementType();
             if (otherType->code() == TypeCode::Union) {
                 const UnionType &otherUnion = dynamic_cast<const UnionType &>(*otherType);
-                return convertibility(otherUnion);
+                return castSafetyTo(otherUnion);
             }
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
         case TypeCode::Map:
             [[fallthrough]];
         case TypeCode::Dict:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
 
         default:
-            return TypeConv::FORBIDDEN;
+            return CastSafety::Forbidden;
         }
     }
     if (other.code() == TypeCode::Any) {
-        return TypeConv::SAFE;
+        return CastSafety::Safe;
     }
     // primary types and special types are forbidden
-    return TypeConv::FORBIDDEN;
+    return CastSafety::Forbidden;
 }
