@@ -22,21 +22,21 @@
 
 data_ptr_t __sleep__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     if (norm.size() != 1) {
-        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<__sleep__>", 1, norm.size());
+        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<sleep>", 1, norm.size());
         return Data::null();
     }
     data_ptr_t arg = norm[0];
     if (!Type::castSafetyCheck(arg->type(), Type::Int64())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<__sleep__>", "int64", arg->type()->toString());
+            .commit(0, "<sleep>", "int64", arg->type()->toString());
         return Data::null();
     }
     auto pd = arg->as<Int64Data>(Type::Int64());
     if (pd->data() < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<__sleep__> requires a non-negative integer");
+            .commit("<sleep> requires a non-negative integer");
         return Data::null();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
