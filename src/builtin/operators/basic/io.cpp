@@ -20,19 +20,20 @@
 #include "io.h"
 
 #include <iostream>
+#include <sstream>
 
 data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     for (size_t i = 0; i < with.size(); i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        std::cout << with[i]->toString();
+        with[i]->print(std::cout);
     }
     for (size_t i = 0; i < norm.size(); i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        std::cout << norm[i]->toString();
+        norm[i]->print(std::cout);
     }
     return Data::null();
 }
@@ -42,37 +43,35 @@ data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
         if (i > 0) {
             std::cout << " ";
         }
-        std::cout << with[i]->toString();
+        with[i]->print(std::cout);
     }
     for (size_t i = 0; i < norm.size(); i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        std::cout << norm[i]->toString();
+        norm[i]->print(std::cout);
     }
     std::cout << std::endl;
     return Data::null();
 }
 
 data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    std::string prompt;
+    std::stringstream oss;
 
     for (size_t i = 0; i < with.size(); i++) {
         if (i > 0) {
-            prompt += " ";
+            oss << " ";
         }
-        prompt += with[i]->toString();
+        with[i]->print(oss);
     }
     for (size_t i = 0; i < norm.size(); i++) {
-        if (i > 0 || !prompt.empty()) {
-            prompt += " ";
+        if (i > 0) {
+            oss << " ";
         }
-        prompt += norm[i]->toString();
+        norm[i]->print(oss);
     }
 
-    if (!prompt.empty()) {
-        std::cout << prompt;
-    }
+    std::cout << oss.str();
 
     std::string input;
     std::getline(std::cin, input);

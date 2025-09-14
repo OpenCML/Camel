@@ -54,3 +54,5 @@ data_ptr_t TensorData::as(type_ptr_t target, bool inplace) {
 data_ptr_t TensorData::clone(bool deep) const { throw runtime_error("Not implemented"); }
 
 const string TensorData::toString() const { return string("TensorData"); }
+
+void TensorData::print(std::ostream &os) const { os << toString(); }

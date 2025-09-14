@@ -143,3 +143,5 @@ const string MapData::toString() const {
     str += " }";
     return str;
 }
+
+void MapData::print(std::ostream &os) const { os << toString(); }

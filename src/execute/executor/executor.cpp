@@ -21,6 +21,7 @@
 #include "utils/log.h"
 
 void ExecutorManager::registerExecutorFactory(std::string name, executor_factory_t fact) {
+    l.in("ExecMgr").debug("Registering executor factory for protocol: <{}>", name);
     ASSERT(
         executorFactories.find(name) == executorFactories.end(),
         "Executor factory for protocol '" + name + "' is already registered.");
@@ -40,10 +41,12 @@ data_ptr_t ExecutorManager::eval(std::string uri, data_vec_t &withArgs, data_vec
     }
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
-        throw CamelRuntimeException(RetCode::InvalidURI, "Unregistered protocol: " + protocol);
+        throw CamelRuntimeException(
+            RetCode::InvalidURI,
+            std::format("Protocol <{}> not found.", protocol));
     }
-    l.in("ExecMgr").info("Loading executor for protocol: {}", protocol);
+    l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol);
     auto executor = itFact->second();
-    loadedExecutors.emplace(protocol, std::move(executor));
+    loadedExecutors.emplace(protocol, executor);
     return executor->eval(uri.substr(pos + 1), withArgs, normArgs);
 }

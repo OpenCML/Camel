@@ -160,6 +160,8 @@ const string ArrayData::toString() const {
     return str;
 }
 
+void ArrayData::print(std::ostream &os) const { os << toString(); }
+
 data_ptr_t ArrayData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();
     for (const auto &e : data_) {

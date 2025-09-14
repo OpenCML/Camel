@@ -144,4 +144,5 @@ template <typename T> class PrimaryData : public Data {
         return std::make_shared<PrimaryData<T>>(data_);
     }
     virtual const std::string toString() const override { return std::to_string(data_); }
+    virtual void print(std::ostream &os) const override { os << std::to_string(data_); }
 };

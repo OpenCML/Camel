@@ -59,3 +59,5 @@ data_ptr_t UnionData::clone(bool deep) const {
 }
 
 const std::string UnionData::toString() const { return data_->toString(); }
+
+void UnionData::print(std::ostream &os) const { os << toString(); }

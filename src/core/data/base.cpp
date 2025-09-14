@@ -81,3 +81,5 @@ const string Data::toString() const {
     ASSERT(false, "Base Data::toString() not implemented");
     return "<Data>";
 }
+
+void Data::print(ostream &os) const { ASSERT(false, "Base Data::print() not implemented"); }

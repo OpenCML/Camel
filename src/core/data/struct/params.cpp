@@ -148,6 +148,8 @@ const string ParamsData::toString() const {
     return str;
 }
 
+void ParamsData::print(std::ostream &os) const { os << toString(); }
+
 data_ptr_t ParamsData::convertToMap() {
     auto mapData = make_shared<MapData>(stringTypePtr, anyTypePtr);
     for (const auto &e : namedData_) {

@@ -63,4 +63,4 @@ class ExecutorManager {
     data_ptr_t eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs);
 };
 
-using exec_mgr_ptr_t = std::unique_ptr<ExecutorManager>;
+using exec_mgr_uptr_t = std::unique_ptr<ExecutorManager>;

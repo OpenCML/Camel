@@ -44,6 +44,7 @@ class ParamsData : public StructData {
     virtual data_ptr_t as(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
+    virtual void print(std::ostream &os) const override;
 
     data_ptr_t convertToMap();
     data_ptr_t convertToList();

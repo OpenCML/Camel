@@ -41,3 +41,5 @@ data_ptr_t AnyData::as(type_ptr_t target, bool inplace) {
 data_ptr_t AnyData::clone(bool deep) const { return std::make_shared<AnyData>(data_->clone(deep)); }
 
 const std::string AnyData::toString() const { return data_->toString(); }
+
+void AnyData::print(std::ostream &os) const { os << toString(); }

@@ -177,6 +177,8 @@ const string VectorData::toString() const {
     return str;
 }
 
+void VectorData::print(std::ostream &os) const { os << toString(); }
+
 data_ptr_t VectorData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();
     for (const auto &e : data_) {

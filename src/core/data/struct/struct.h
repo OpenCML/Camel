@@ -37,4 +37,5 @@ class StructData : public Data {
     virtual data_ptr_t as(type_ptr_t target, bool inplace = false) override = 0;
     virtual data_ptr_t clone(bool deep = false) const override = 0;
     virtual const std::string toString() const override = 0;
+    virtual void print(std::ostream &os) const override = 0;
 };

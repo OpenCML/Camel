@@ -163,6 +163,8 @@ const string ListData::toString() const {
     return str;
 }
 
+void ListData::print(std::ostream &os) const { os << toString(); }
+
 data_ptr_t ListData::convertToParams(const std::shared_ptr<ParamsType> &target) {
     auto params = make_shared<ParamsData>();
     for (const auto &e : data_) {

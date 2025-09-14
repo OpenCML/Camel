@@ -118,6 +118,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
 
     DataType type() const { return type_; }
     size_t size() const { return dataArr_.size(); }
+    void resize(size_t size) { dataArr_.resize(size); }
 
     virtual void set(const data_ptr_t &data, size_t index) = 0;
     virtual data_ptr_t get(size_t index) = 0;
@@ -142,10 +143,18 @@ class ConstantArray : public DataArray {
     }
 
     void set(const data_ptr_t &data, size_t index) override {
-        ASSERT(false, "Cannot set data in a constant array.");
+        ASSERT(
+            index < dataArr_.size(),
+            std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
+        data_ptr_t oldData = dataArr_[index];
+        ASSERT(oldData == nullptr, "Cannot set data in a constant array twice.");
+        ASSERT(data != nullptr, "Cannot set null data in a constant array.");
+        dataArr_[index] = data;
     }
     data_ptr_t get(size_t index) override {
-        ASSERT(index < dataArr_.size(), "Data index out of bounds.");
+        ASSERT(
+            index < dataArr_.size(),
+            std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
         data_ptr_t data = dataArr_[index];
         ASSERT(data != nullptr, "Accessing not-initialized data in a constant array.");
         return data;
@@ -173,11 +182,16 @@ class VariableArray : public DataArray {
     }
 
     void set(const data_ptr_t &data, size_t index) override {
+        ASSERT(
+            index < dataArr_.size(),
+            std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
         ASSERT(data != nullptr, "Cannot set null data in a variable array.");
         dataArr_[index] = data;
     }
     data_ptr_t get(size_t index) override {
-        ASSERT(index < dataArr_.size(), "Data index out of bounds.");
+        ASSERT(
+            index < dataArr_.size(),
+            std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
         data_ptr_t data = dataArr_[index];
         if (data == nullptr) {
             array_ptr_t refs = refs_.lock();
@@ -211,11 +225,12 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
         runtimeConstants_ = std::make_shared<ConstantArray>(false);
         runtimeVariables_ = std::make_shared<VariableArray>(false, runtimeConstants_);
     }
-    DataArena(
-        std::shared_ptr<ConstantArray> sharedConsts, std::shared_ptr<VariableArray> sharedVars) {
-        sharedConstants_ = sharedConsts;
-        sharedVariables_ = sharedVars;
+    // copy constructor for cloning
+    DataArena(const DataArena &other) {
+        sharedConstants_ = other.sharedConstants_;
+        sharedVariables_ = other.sharedVariables_;
         runtimeConstants_ = std::make_shared<ConstantArray>(false);
+        runtimeConstants_->resize(other.runtimeConstants_->size());
         runtimeVariables_ = std::make_shared<VariableArray>(false, runtimeConstants_);
     }
 
@@ -282,7 +297,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
         }
     }
 
-    arena_ptr_t clone() { return std::make_shared<DataArena>(sharedConstants_, sharedVariables_); }
+    arena_ptr_t clone() { return std::make_shared<DataArena>(*this); }
 
   private:
     std::shared_ptr<ConstantArray> sharedConstants_;

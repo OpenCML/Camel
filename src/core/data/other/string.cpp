@@ -73,3 +73,5 @@ const std::string StringData::toString() const {
     std::regex re("\\n");
     return "\"" + std::regex_replace(data_, re, "\\n") + "\"";
 }
+
+void StringData::print(std::ostream &os) const { os << data_; }

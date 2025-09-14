@@ -121,9 +121,11 @@ BasicBuiltinModule::BasicBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ct
 }
 
 bool BasicBuiltinModule::load() {
+    l.in("BasicBuiltinModule").info("Loading basic built-in module.");
     if (loaded_) {
         return true;
     }
     context_->registerExecutorFactory("", [&]() { return BasicBuiltinExecutor::create(context_); });
+    loaded_ = true;
     return true;
 }

@@ -37,3 +37,5 @@ data_ptr_t NullData::as(type_ptr_t target, bool inplace) {
 
 data_ptr_t NullData::clone(bool deep) const { return Data::null(); }
 const std::string NullData::toString() const { return "null"; }
+
+void NullData::print(std::ostream &os) const { os << toString(); }

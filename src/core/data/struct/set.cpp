@@ -138,3 +138,5 @@ const string SetData::toString() const {
     str += " }";
     return str;
 }
+
+void SetData::print(std::ostream &os) const { os << toString(); }

@@ -21,6 +21,8 @@
 
 #include "core/type/type.h"
 
+#include <ostream>
+
 class UnsupportedConvError : public std::exception {};
 
 class DataConvError : public std::exception {
@@ -63,6 +65,7 @@ class Data : public std::enable_shared_from_this<Data> {
     virtual data_ptr_t as(type_ptr_t target, bool inplace = false);
 
     virtual const std::string toString() const;
+    virtual void print(std::ostream &os) const;
 };
 
 class AnyData;

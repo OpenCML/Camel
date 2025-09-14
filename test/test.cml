@@ -1,7 +1,7 @@
 module main
 
 func main(): int sync {
-    print("before start")
+    println("before start")
     // sleep(1000)
     print("after start")
     return 0
