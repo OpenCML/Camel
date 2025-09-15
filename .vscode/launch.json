@@ -1,0 +1,145 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "RUN (build)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Release/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": false
+            }
+        },
+        {
+            "name": "RUN (debug)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["-v", "--log-level debug", "--profile", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": true,
+                "trace": true
+            }
+        },
+        {
+            "name": "RUN (debug/clear)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["-v", "--log-level debug", "--profile", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": true,
+                "trace": true
+            }
+        },
+        {
+            "name": "Format (Build)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Release/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["format", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": false
+            }
+        },
+        {
+            "name": "Inspect TOK",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["inspect", "-v", "--log-level debug", "--tok", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
+            "name": "Inspect CST",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["inspect", "-v", "--log-level debug", "--cst", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
+            "name": "Inspect AST",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["inspect", "-v", "--log-level debug", "--ast", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
+            "name": "Inspect GCT",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["inspect", "-v", "--log-level debug", "--gct", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
+            "name": "Inspect GIR",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["inspect", "-v", "--log-level debug", "--gir", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
+            "name": "Inspect TNS",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["inspect", "-v", "--log-level debug", "--tns", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        }
+    ]
+}

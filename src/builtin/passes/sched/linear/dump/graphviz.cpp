@@ -251,7 +251,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
             baseIndent_,
             indent_,
             pointerToIdent(node.get()),
-            escape(wrapText(label, 8, 2)),
+            escape(wrapText(label, 7, 2)),
             shape,
             style,
             size.empty() ? "" : ", " + size);
