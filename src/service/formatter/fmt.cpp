@@ -755,10 +755,18 @@ any Formatter::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     switch (context->getAltNumber()) {
     case 1: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     {
-        string result = "if " + any_cast<string>(visitLogicalOrExpr(context->logicalOrExpr())) +
-                        " then " + any_cast<string>(visitBlockExpr(context->blockExpr(0)));
+        string condition = any_cast<string>(visitLogicalOrExpr(context->logicalOrExpr()));
+        string thenBlock = any_cast<string>(visitBlockExpr(context->blockExpr(0)));
+        string result = "if " + condition + " then " + thenBlock;
         if (context->ELSE()) {
-            result += " else " + any_cast<string>(visitBlockExpr(context->blockExpr(1)));
+            string elseBlock = any_cast<string>(visitBlockExpr(context->blockExpr(1)));
+            if (elseBlock.starts_with("if ") && !thenBlock.ends_with("}")) {
+                // else if
+                result += lineEnd() + "else ";
+            } else {
+                result += " else ";
+            }
+            result += elseBlock;
         }
         return result;
         break;

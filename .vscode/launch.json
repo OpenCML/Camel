@@ -51,7 +51,7 @@
             "program": "${workspaceFolder}/build/Release/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
             "args": ["format", "${file}"],
-            "console": "externalTerminal",
+            "console": "integratedTerminal",
             "logging": {
                 "moduleLoad": false,
                 "trace": false
