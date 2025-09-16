@@ -156,14 +156,18 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
     }
 
     // 返回图的返回节点数据
-    auto retNode = graph->output();
-    ASSERT(retNode != nullptr, "Graph has no return node.");
-    auto res = frame->get(retNode);
-    l.in("Eval").debug(
-        "Graph {} evaluation completed with returned value {}.",
-        graph->name(),
-        res->toString());
-    return res;
+    if (graph->hasOutput()) {
+        auto retNode = graph->output();
+        auto res = frame->get(retNode);
+        l.in("Eval").debug(
+            "Graph {} evaluation completed with returned value {}.",
+            graph->name(),
+            res->toString());
+        return res;
+    } else {
+        l.in("Eval").debug("Graph {} evaluation completed with no return value.", graph->name());
+        return Data::null();
+    }
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {

@@ -8,6 +8,6 @@ func fibonacci(n: int): int {
 }
 
 export func main(): int sync {
-    fibonacci(3)->print
+    fibonacci(10)->println
     return 0
 }

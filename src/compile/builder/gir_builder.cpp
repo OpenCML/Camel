@@ -190,7 +190,7 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     std::string name = gct->loadAs<GCT::FuncLoad>()->name();
     graph_ptr_t graph = enterScope(name);
     node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (graph->output() == nullptr && res != nullptr) {
+    if (!graph->hasOutput() && res != nullptr) {
         graph->setOutput(res);
     }
     leaveScope();
@@ -513,7 +513,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     graph_ptr_t fGraph = enterScope();
     fGraph->setFuncType(std::make_shared<FunctionType>());
     node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
-    if (!tGraph->hasOutput() && fNode != nullptr) {
+    if (!fGraph->hasOutput() && fNode != nullptr) {
         fGraph->setOutput(fNode);
     }
     leaveScope();

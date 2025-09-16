@@ -3,6 +3,6 @@ module main
 import { dense } from nn
 
 export func main(): int sync {
-    0->dense<1, 2>->print
+    0->dense<1, 2>->println
     return 0
 }

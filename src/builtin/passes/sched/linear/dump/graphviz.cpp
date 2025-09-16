@@ -144,7 +144,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     string funcName = graph->name();
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
-    void *retNodePtr = graph->output().get();
+    void *retNodePtr = graph->hasOutput() ? graph->output().get() : nullptr;
 
     res += baseIndent_;
 
@@ -358,8 +358,8 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
         }
     }
 
-    // Special case: graph has no nodes but has output set (closure capture)
-    if (graph->nodes().empty() && graph->output() != nullptr) {
+    // Special case: graph has no nodes but has output set (outer entity capture)
+    if (graph->nodes().empty() && graph->hasOutput()) {
         res += std::format(
             "{}{}{} -> {};\r\n",
             baseIndent_,
