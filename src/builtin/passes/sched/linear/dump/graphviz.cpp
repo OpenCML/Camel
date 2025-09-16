@@ -197,7 +197,8 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
-        string label, shape = "circle", style = "solid", size;
+        string label, tooltip, shape = "circle", style = "solid", size;
+        tooltip = node->toString();
 
         switch (node->type()) {
         case NodeType::Select: {
@@ -224,7 +225,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
                 style = "dashed";
             } else {
                 auto sourceNode = tt::as_shared<SourceNode>(node);
-                data_ptr_t data = sourceNode->dataOf(graph->arena());
+                data_ptr_t data = sourceNode->dataOf(*graph->arena());
                 label = data->toString();
             }
             break;
@@ -247,14 +248,15 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
         }
 
         res += std::format(
-            "{}{}{} [label=\"{}\", shape={}, style={}{}];\r\n",
+            "{}{}{} [label=\"{}\", shape={}, style={}{}, tooltip=\"{}\"];\r\n",
             baseIndent_,
             indent_,
             pointerToIdent(node.get()),
-            escape(wrapText(label, 8, 2)),
+            escape(wrapText(label, 7, 2)),
             shape,
             style,
-            size.empty() ? "" : ", " + size);
+            size.empty() ? "" : ", " + size,
+            std::format("{}\\n{}", label, tooltip));
     }
 
     // Draw return node if not root
@@ -268,7 +270,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
 
     // Connect ARGS node to port nodes
     size_t withIdx = 0, normIdx = 0;
-    for (const auto &[_, portNode, isWithArg] : graph->ports()) {
+    for (const auto &[portNode, isWithArg] : graph->ports()) {
         string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", style={}];\r\n",

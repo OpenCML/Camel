@@ -23,9 +23,7 @@
 using namespace std;
 using namespace GIR;
 
-FunctionData::FunctionData(GIR::graph_ptr_t graph) : Data(graph->funcType()), graph_(graph) {
-    arena_ = graph->arena()->clone();
-}
+FunctionData::FunctionData(GIR::graph_ptr_t graph) : Data(graph->funcType()), graph_(graph) {}
 
 func_ptr_t FunctionData::create(GIR::graph_ptr_t graph) {
     ASSERT(graph != nullptr, "Graph cannot be null for FunctionData.");

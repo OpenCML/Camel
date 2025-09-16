@@ -80,11 +80,11 @@ bool UserDefinedModule::compile() {
     }
 
     auto ast = parser_->ast();
-    auto gctConstructor = GCT::Builder(context_, shared_from_this());
-    gct_ = gctConstructor.build(ast, diagnostics_);
+    auto gctBuilder = GCT::Builder(context_, shared_from_this());
+    gct_ = gctBuilder.build(ast, diagnostics_);
 
-    auto girConstructor = GIR::Builder(context_, shared_from_this());
-    gir_ = girConstructor.build(gct_, diagnostics_);
+    auto girBuilder = GIR::Builder(context_, shared_from_this());
+    gir_ = girBuilder.build(gct_, diagnostics_);
 
     bool success = !diagnostics_->hasErrors();
     l.in("Module").info("Module '{}' built {}", name_, success ? "successfully." : "failed.");

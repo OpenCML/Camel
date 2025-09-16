@@ -91,19 +91,23 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
-        auto sortedNodes = topoSort(
-            g->nodes().begin(),
-            g->nodes().end(),
-            [](const auto &n) { return n->inDegree(); },
-            [](const auto &n) {
-                vector<node_ptr_t> outs;
-                outs.insert(outs.end(), n->dataOutputs().begin(), n->dataOutputs().end());
-                outs.insert(outs.end(), n->ctrlOutputs().begin(), n->ctrlOutputs().end());
-                return outs;
-            });
+        node_ptr_t retNode = g->output();
+        auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
+            vector<node_ptr_t> ins;
+            ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
+            for (const auto &in : n->dataInputs()) {
+                if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    ins.push_back(in);
+            }
+            for (const auto &in : n->ctrlInputs()) {
+                if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    ins.push_back(in);
+            }
+            return ins;
+        });
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
-        for (const auto &[_, portNode, __] : g->ports()) {
+        for (const auto &[portNode, __] : g->ports()) {
             oss << ", " << pointerToIdent(portNode.get());
         }
         oss << "\n";

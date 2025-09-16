@@ -1,0 +1,13 @@
+module fib
+
+func fibonacci(n: int): int {
+    return if n == 0 then 0
+    else if n == 1 then 1 else {
+        fibonacci(n - 1) + fibonacci(n - 2)
+    }
+}
+
+export func main(): int sync {
+    fibonacci(3)->print
+    return 0
+}
