@@ -23,7 +23,8 @@
 #include "builder.h"
 #include "messages/index.h"
 #include "range.h"
-#include <fmt/core.h>
+
+#include "fmt/core.h"
 
 // ---- Diagnostic structure ----
 struct Diagnostic {

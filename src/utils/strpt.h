@@ -9,29 +9,17 @@
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the the MIT license for more details.
+ * See the the MIT license for more details
  *
  * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Created: Sep. 16, 2025
+ * Updated: Sep. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/module/builtin.h"
+#include <ctime>
+#include <string>
 
-class BasicBuiltinModule : public BuiltinModule {
-  public:
-    BasicBuiltinModule(context_ptr_t ctx);
-    virtual ~BasicBuiltinModule() = default;
-
-    virtual bool load() override;
-
-    void exportBinaryOp(const std::string &name, const std::string &uri);
-    void exportAssnOp(const std::string &name, const std::string &uri);
-
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<BasicBuiltinModule>(ctx);
-    }
-};
+bool myStrptime(const std::string &datetime, const std::string &format, std::tm &out_tm);
