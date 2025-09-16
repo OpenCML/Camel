@@ -24,6 +24,7 @@
 
 #include "core/data/data.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 
 enum class DataTypeEnum {
     StaticConstant =
@@ -101,6 +102,10 @@ struct DataType {
 struct DataIndex {
     DataType type;
     size_t index;
+
+    std::string toString() const {
+        return std::format("DataIndex(type: {}, index: {})", std::string(type), index);
+    }
 };
 
 class DataArray;
@@ -126,6 +131,35 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
 
     virtual array_ptr_t clone() = 0;
 
+    std::string toString() const {
+        std::string dataPreview;
+        if (dataArr_.empty()) {
+            dataPreview = "[]";
+        } else {
+            dataPreview = "[";
+            size_t previewCount = std::min(dataArr_.size(), static_cast<size_t>(10));
+            for (size_t i = 0; i < previewCount; ++i) {
+                if (dataArr_[i]) {
+                    dataPreview += dataArr_[i]->toString();
+                } else {
+                    dataPreview += "null";
+                }
+                if (i < previewCount - 1) {
+                    dataPreview += ", ";
+                }
+            }
+            if (dataArr_.size() > previewCount) {
+                dataPreview += ", ...";
+            }
+            dataPreview += "]";
+        }
+        return std::format(
+            "DataArray({})[{}]: {}",
+            std::string(type_),
+            dataArr_.size(),
+            dataPreview);
+    }
+
   protected:
     DataType type_;
     data_vec_t dataArr_;
@@ -143,6 +177,8 @@ class ConstantArray : public DataArray {
     }
 
     void set(const data_ptr_t &data, size_t index) override {
+        l.in("DataArray")
+            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -182,6 +218,8 @@ class VariableArray : public DataArray {
     }
 
     void set(const data_ptr_t &data, size_t index) override {
+        l.in("DataArray")
+            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));

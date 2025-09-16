@@ -270,9 +270,9 @@ any Formatter::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
         } else {
             result += any_cast<string>(visitBracedIdents(bracedIdents));
         }
-        result += " from " + formatStringLiteral(path);
+        result += " from " + path;
     } else {
-        result += formatStringLiteral(path);
+        result += path;
     }
     return result;
 }

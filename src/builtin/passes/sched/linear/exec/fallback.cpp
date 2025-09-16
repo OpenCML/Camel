@@ -104,10 +104,10 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
                     brInfoStack_.push({1, n->ctrlOutputs().front()});
                 }
             } else {
-                ASSERT(n->dataInputs().size() == 2, "Join node must have exactly two data inputs.");
+                ASSERT(n->ctrlInputs().size() == 2, "Join node must have exactly two ctrl inputs.");
                 size_t idx = brInfoStack_.top().first;
                 brInfoStack_.pop();
-                auto data = frame->get(n->dataInputs()[idx]->index());
+                auto data = frame->get(n->ctrlInputs()[idx]->index());
                 frame->set(n->index(), data);
             }
             break;
@@ -145,8 +145,12 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
     // 返回图的返回节点数据
     auto retNode = graph->output();
     ASSERT(retNode != nullptr, "Graph has no return node.");
-    l.in("Eval").debug("Graph {} evaluation completed.", graph->name());
-    return frame->get(retNode->index());
+    auto res = frame->get(retNode->index());
+    l.in("Eval").debug(
+        "Graph {} evaluation completed with returned value {}.",
+        graph->name(),
+        res->toString());
+    return res;
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {

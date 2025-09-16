@@ -507,7 +507,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     leaveScope();
     currGraph_->addDependency(tGraph);
     func_ptr_t tData = FunctionData::create(tGraph);
-    node_ptr_t tFunc = FunctionNode::create(graph, tGraph->addRuntimeConstant(nullptr), tData);
+    node_ptr_t tFunc = FunctionNode::create(graph, graph->addRuntimeConstant(nullptr), tData);
     Node::link(LinkType::Ctrl, brchNode, tFunc);
 
     graph_ptr_t fGraph = enterScope();
@@ -519,7 +519,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     leaveScope();
     currGraph_->addDependency(fGraph);
     func_ptr_t fData = FunctionData::create(fGraph);
-    node_ptr_t fFunc = FunctionNode::create(graph, fGraph->addRuntimeConstant(nullptr), fData);
+    node_ptr_t fFunc = FunctionNode::create(graph, graph->addRuntimeConstant(nullptr), fData);
     Node::link(LinkType::Ctrl, brchNode, fFunc);
 
     DataIndex index = graph->addRuntimeConstant(nullptr);

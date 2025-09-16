@@ -149,10 +149,11 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format("digraph GraphIR {{\r\n"
-                           "    graph [rankdir=LR, fontsize=18];\r\n"
-                           "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-                           "    edge [minlen=2];\r\n");
+        res += std::format(
+            "digraph GraphIR {{\r\n"
+            "    graph [rankdir=LR, fontsize=18];\r\n"
+            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+            "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
@@ -197,7 +198,8 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
-        string label, shape = "circle", style = "solid", size;
+        string label, tooltip, shape = "circle", style = "solid", size;
+        tooltip = node->toString();
 
         switch (node->type()) {
         case NodeType::Select: {
@@ -247,14 +249,15 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
         }
 
         res += std::format(
-            "{}{}{} [label=\"{}\", shape={}, style={}{}];\r\n",
+            "{}{}{} [label=\"{}\", shape={}, style={}{}, tooltip=\"{}\"];\r\n",
             baseIndent_,
             indent_,
             pointerToIdent(node.get()),
             escape(wrapText(label, 7, 2)),
             shape,
             style,
-            size.empty() ? "" : ", " + size);
+            size.empty() ? "" : ", " + size,
+            std::format("{}\\n{}", label, tooltip));
     }
 
     // Draw return node if not root
