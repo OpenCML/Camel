@@ -1,0 +1,68 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Jul. 29, 2025
+ * Updated: Jul. 29, 2025
+ * Supported by: National Key Research and Development Program of China
+ */
+
+#include "str.h"
+#include "core/context/context.h"
+#include "fmt/args.h"
+#include "fmt/core.h"
+
+#include <sstream>
+
+std::string format_vector(const std::string &fmtStr, const std::vector<std::string> &args) {
+    fmt::dynamic_format_arg_store<fmt::format_context> store;
+    for (const auto &arg : args) {
+        store.push_back(fmt::string_view(arg));
+    }
+    return fmt::vformat(fmtStr, store);
+}
+
+data_ptr_t __format__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+    if (with.size() == 0) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<format>", "at least 1 with arg", std::to_string(norm.size()));
+        return Data::null();
+    }
+    if (norm.size() == 0) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<format>", "at least 1 norm arg", std::to_string(norm.size()));
+        return Data::null();
+    }
+    auto fmtStrData = with.front();
+    if (!Type::castSafetyCheck(fmtStrData->type(), Type::String())) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<format>", "string", fmtStrData->type()->toString());
+        return Data::null();
+    }
+    std::string fmtStr = fmtStrData->as<StringData>(Type::String())->data();
+    auto args = std::vector<std::string>();
+    for (const auto &arg : norm) {
+        std::ostringstream oss;
+        arg->print(oss);
+        args.push_back(oss.str());
+    }
+    try {
+        return std::make_shared<StringData>(format_vector(fmtStr, args));
+    } catch (const fmt::format_error &e) {
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<format>", e.what());
+        return Data::null();
+    }
+}

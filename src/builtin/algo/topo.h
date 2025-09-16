@@ -38,7 +38,9 @@ auto topoSort(
     std::queue<NodeType> zeroInDegreeQueue;
     std::vector<NodeType> sortedNodes;
 
+#ifndef NDEBUG
     size_t count = std::distance(first, last);
+#endif
 
     for (auto it = first; it != last; ++it) {
         NodeType node = *it;

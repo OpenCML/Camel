@@ -157,6 +157,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_ptr_t &output() const {
         // In the usage phase, the graph is assumed to be fully constructed,
         // thus output_ should not be null.
+        // except the "__root__" graph
         ASSERT(output_, "Graph has no output node.");
         return output_;
     }

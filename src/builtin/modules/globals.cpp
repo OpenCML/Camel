@@ -17,11 +17,11 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "basic.h"
-#include "builtin/executors/basic.h"
+#include "globals.h"
+#include "builtin/executors/builtin.h"
 #include "core/context/context.h"
 
-void BasicBuiltinModule::exportBinaryOp(const std::string &name, const std::string &uri) {
+void GlobalsBuiltinModule::exportBinaryOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(
         name,
         makeFuncType(
@@ -35,7 +35,7 @@ void BasicBuiltinModule::exportBinaryOp(const std::string &name, const std::stri
     exportEntity(name, ops);
 }
 
-void BasicBuiltinModule::exportAssnOp(const std::string &name, const std::string &uri) {
+void GlobalsBuiltinModule::exportAssnOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(
         name,
         makeFuncType(
@@ -92,7 +92,7 @@ static const std::pair<std::string, std::string> others[] = {
     {"unzip", ":not-impl"},
     {"exit", ":not-impl"}};
 
-BasicBuiltinModule::BasicBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
+GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     for (const auto &[name, func] : assnOps) {
         exportAssnOp(name, func);
     }
@@ -119,10 +119,16 @@ BasicBuiltinModule::BasicBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ct
         ":io/println");
     exportBuiltinOperator("input", param_init_list{}, param_init_list{}, Type::Void(), ":io/input");
     exportBuiltinOperator("sleep", param_init_list{}, param_init_list{}, Type::Void(), ":os/sleep");
+    exportBuiltinOperator(
+        "format",
+        param_init_list{},
+        param_init_list{},
+        Type::Void(),
+        ":str/format");
 }
 
-bool BasicBuiltinModule::load() {
-    l.in("BasicBuiltinModule").info("Loading basic built-in module.");
+bool GlobalsBuiltinModule::load() {
+    l.in("GlobalsBuiltinModule").info("Loading basic built-in module.");
     if (loaded_) {
         return true;
     }

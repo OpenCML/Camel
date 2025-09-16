@@ -17,16 +17,22 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "basic.h"
-#include "../operators/basic/io.h"
-#include "../operators/basic/ops.h"
-#include "../operators/basic/os.h"
-#include "../operators/basic/other.h"
+#include "builtin.h"
 #include "utils/log.h"
+
+#include "../operators/io.h"
+#include "../operators/math.h"
+#include "../operators/ops.h"
+#include "../operators/os.h"
+#include "../operators/other.h"
+#include "../operators/str.h"
+#include "../operators/time.h"
 
 const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
     static const std::unordered_map<std::string, operator_t> map = {
         {"not-impl", __not_implemented__},
+
+        // ops
         {"op/assn", __builtin__assn__},
         {"op/assn_add", __builtin__assn_add__},
         {"op/assn_sub", __builtin__assn_sub__},
@@ -58,7 +64,26 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"io/print", __print__},
         {"io/println", __println__},
         {"io/input", __input__},
+
+        // os
         {"os/sleep", __sleep__},
+
+        // str
+        {"str/format", __format__},
+
+        // math
+        {"str/abs", __abs__},
+        {"str/round", __round__},
+        {"str/ceil", __ceil__},
+        {"str/floor", __floor__},
+        {"str/bin", __bin__},
+        {"str/oct", __oct__},
+        {"str/hex", __hex__},
+
+        // time
+        {"time/now", __now__},
+        {"time/strftime", __strftime__},
+        {"time/strptime", __strptime__},
     };
     return map;
 }

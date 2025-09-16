@@ -1,5 +1,7 @@
 module fib
 
+import { now } from time
+
 func fibonacci(n: int): int {
     return if n == 0 then 0
     else if n == 1 then 1 else {
@@ -8,6 +10,11 @@ func fibonacci(n: int): int {
 }
 
 export func main(): int sync {
-    fibonacci(3)->print
+    let idx = 10
+    println("Start computing fibonacci({})...".format(idx))
+    let start = now()
+    let res = fibonacci(30)
+    let duration = now() - start
+    println("Fibonacci({}) = {} (computed in {} seconds)".format(idx, res, duration))
     return 0
 }

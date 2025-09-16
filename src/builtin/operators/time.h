@@ -17,4 +17,11 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "str.h"
+#pragma once
+
+#include "core/operator.h"
+#include "core/type/type.h"
+
+data_ptr_t __now__(Context &ctx, data_vec_t &with, data_vec_t &norm);
+data_ptr_t __strftime__(Context &ctx, data_vec_t &with, data_vec_t &norm);
+data_ptr_t __strptime__(Context &ctx, data_vec_t &with, data_vec_t &norm);
