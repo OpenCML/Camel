@@ -56,7 +56,7 @@ class Module : public std::enable_shared_from_this<Module> {
     const std::string &path() const { return path_; }
 
     virtual bool load() = 0;
-    bool loaded() const { return loaded_; }
+    virtual bool loaded() const { return loaded_; }
 
     void markImportedRefFromMod(const Reference &ref, const module_ptr_t &mod);
     void importAllRefsFromMod(const module_ptr_t &mod);

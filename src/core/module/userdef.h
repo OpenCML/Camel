@@ -29,13 +29,14 @@
 class Context;
 using context_ptr_t = std::shared_ptr<Context>;
 
+enum class CompileStage { None, AST, GCT, GIR, Done };
+
 class UserDefinedModule : public Module {
     GCT::node_ptr_t gct_;
     GIR::graph_ptr_t gir_;
     diagnostics_ptr_t diagnostics_;
     parser_ptr_t parser_;
-
-    bool compile();
+    CompileStage stage_ = CompileStage::None;
 
   public:
     UserDefinedModule(
@@ -46,17 +47,14 @@ class UserDefinedModule : public Module {
     GCT::node_ptr_t gct() const { return gct_; }
     GIR::graph_ptr_t gir() const { return gir_; }
     diagnostics_ptr_t diagnostics() const { return diagnostics_; }
+    parser_ptr_t parser() const { return parser_; }
+    virtual bool loaded() const override { return stage_ == CompileStage::Done; }
+    CompileStage stage() const { return stage_; }
+
+    bool compile(CompileStage till = CompileStage::Done);
 
     static module_ptr_t
     fromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
 
-    bool load() override {
-        if (this->loaded_) {
-            l.in("Module").warn("Module '{}' already loaded.", name_);
-            return true;
-        }
-        bool success = compile();
-        this->loaded_ = success;
-        return success;
-    }
+    bool load() override { return compile(); }
 };

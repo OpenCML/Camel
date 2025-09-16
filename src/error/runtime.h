@@ -36,4 +36,6 @@ class CamelRuntimeException : public CamelBaseException {
   public:
     CamelRuntimeException(RetCode code, const std::string &msg)
         : CamelBaseException(msg), code_(code) {}
+
+    RetCode code() const { return code_; }
 };
