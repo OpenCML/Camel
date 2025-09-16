@@ -79,7 +79,7 @@ struct WeakPtrEqual {
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
-    Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name) {
+    Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name), arena_() {
         outer_ = graph;
         arena_ = std::make_shared<DataArena>();
         l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_);
@@ -100,7 +100,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const std::string &name() const { return name_; }
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
-    arena_ptr_t arena() const { return arena_; }
+    arena_ptr_t arena() { return arena_; }
     graph_ptr_t outer() const {
         if (outer_.expired()) {
             return nullptr;
@@ -154,17 +154,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isWithArg = false);
 
-    const node_ptr_t &output() const { return output_; }
+    const node_ptr_t &output() const {
+        // In the usage phase, the graph is assumed to be fully constructed,
+        // thus output_ should not be null.
+        ASSERT(output_, "Graph has no output node.");
+        return output_;
+    }
+    bool hasOutput() const { return output_ != nullptr; }
     void setOutput(const node_ptr_t &node);
 
-    const std::vector<std::tuple<DataIndex, node_ptr_t, bool>> &ports() const { return ports_; }
-    const std::vector<DataIndex> portIndices() const {
-        std::vector<DataIndex> indices;
-        for (const auto &[index, _, __] : ports_) {
-            indices.push_back(index);
-        }
-        return indices;
-    }
+    const std::vector<std::pair<node_ptr_t, bool>> &ports() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
 
   private:
@@ -181,7 +180,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     node_vec_t nodes_;
     node_ptr_t output_;
-    std::vector<std::tuple<DataIndex, node_ptr_t, bool>> ports_;
+    std::vector<std::pair<node_ptr_t, bool>> ports_;
 };
 
 class Node : public std::enable_shared_from_this<Node> {
@@ -385,22 +384,24 @@ class SourceNode : public Node {
         return node;
     }
 
-    data_ptr_t dataOf(arena_ptr_t arena) const {
-        ASSERT(arena->has(dataIndex_), "Source data not found in arena.");
-        return arena->get(dataIndex_);
+    data_ptr_t dataOf(const DataArena &arena) const {
+        ASSERT(arena.has(dataIndex_), "Source data not found in arena.");
+        return arena.get(dataIndex_);
     }
 
     std::string data2str() const override {
-        const auto arena = graph_.lock()->arena();
-        return arena->has(dataIndex_) ? dataOf(arena)->toString() : "<null>";
+        ASSERT(graph_.lock(), "Graph is not set for Node.");
+        const auto &arena = graph_.lock()->arena();
+        return arena->has(dataIndex_) ? dataOf(*arena)->toString() : "<null>";
     }
     std::string toString() const override {
-        const auto arena = graph_.lock()->arena();
+        ASSERT(graph_.lock(), "Graph is not set for Node.");
+        const auto &arena = graph_.lock()->arena();
         return std::format(
             "Node(Source, {}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
-            arena->has(dataIndex_) ? dataOf(arena)->toString() : "<null>");
+            arena->has(dataIndex_) ? dataOf(*arena)->toString() : "<null>");
     }
 };
 

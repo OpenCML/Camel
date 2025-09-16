@@ -126,8 +126,10 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
     void resize(size_t size) { dataArr_.resize(size); }
 
     virtual void set(const data_ptr_t &data, size_t index) = 0;
-    virtual data_ptr_t get(size_t index) = 0;
-    virtual bool has(size_t index) { return index < dataArr_.size() && dataArr_[index] != nullptr; }
+    virtual data_ptr_t get(size_t index) const = 0;
+    virtual bool has(size_t index) const {
+        return index < dataArr_.size() && dataArr_[index] != nullptr;
+    }
 
     virtual array_ptr_t clone() = 0;
 
@@ -142,7 +144,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
                 if (dataArr_[i]) {
                     dataPreview += dataArr_[i]->toString();
                 } else {
-                    dataPreview += "null";
+                    dataPreview += "none";
                 }
                 if (i < previewCount - 1) {
                     dataPreview += ", ";
@@ -162,7 +164,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
 
   protected:
     DataType type_;
-    data_vec_t dataArr_;
+    mutable data_vec_t dataArr_;
 };
 
 class ConstantArray : public DataArray {
@@ -187,7 +189,7 @@ class ConstantArray : public DataArray {
         ASSERT(data != nullptr, "Cannot set null data in a constant array.");
         dataArr_[index] = data;
     }
-    data_ptr_t get(size_t index) override {
+    data_ptr_t get(size_t index) const override {
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -226,7 +228,7 @@ class VariableArray : public DataArray {
         ASSERT(data != nullptr, "Cannot set null data in a variable array.");
         dataArr_[index] = data;
     }
-    data_ptr_t get(size_t index) override {
+    data_ptr_t get(size_t index) const override {
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -304,7 +306,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
             }
         }
     }
-    data_ptr_t get(const DataIndex &index) {
+    data_ptr_t get(const DataIndex &index) const {
         if (index.type.shared) {
             if (index.type.constant) {
                 return sharedConstants_->get(index.index);
@@ -319,7 +321,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
             }
         }
     }
-    bool has(const DataIndex &index) {
+    bool has(const DataIndex &index) const {
         if (index.type.shared) {
             if (index.type.constant) {
                 return sharedConstants_->has(index.index);

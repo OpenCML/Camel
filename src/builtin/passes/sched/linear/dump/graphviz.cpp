@@ -149,11 +149,10 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format(
-            "digraph GraphIR {{\r\n"
-            "    graph [rankdir=LR, fontsize=18];\r\n"
-            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-            "    edge [minlen=2];\r\n");
+        res += std::format("digraph GraphIR {{\r\n"
+                           "    graph [rankdir=LR, fontsize=18];\r\n"
+                           "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+                           "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
@@ -226,7 +225,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
                 style = "dashed";
             } else {
                 auto sourceNode = tt::as_shared<SourceNode>(node);
-                data_ptr_t data = sourceNode->dataOf(graph->arena());
+                data_ptr_t data = sourceNode->dataOf(*graph->arena());
                 label = data->toString();
             }
             break;
@@ -271,7 +270,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
 
     // Connect ARGS node to port nodes
     size_t withIdx = 0, normIdx = 0;
-    for (const auto &[_, portNode, isWithArg] : graph->ports()) {
+    for (const auto &[portNode, isWithArg] : graph->ports()) {
         string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", style={}];\r\n",

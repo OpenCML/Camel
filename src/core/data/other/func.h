@@ -20,7 +20,9 @@
 #pragma once
 
 #include "../base.h"
-#include "core/context/arena.h"
+
+class Frame;
+using frame_ptr_t = std::shared_ptr<Frame>;
 
 namespace GraphIntermediateRepresentation {
 class Graph;
@@ -39,7 +41,7 @@ using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public Data {
     GIR::graph_ptr_t graph_;
-    arena_ptr_t arena_;
+    // frame_ptr_t closure_;
 
   public:
     FunctionData(GIR::graph_ptr_t graph);
@@ -49,7 +51,7 @@ class FunctionData : public Data {
 
     std::string name() const;
     GIR::graph_ptr_t graph() const { return graph_; }
-    arena_ptr_t arena() const { return arena_; }
+    // frame_ptr_t closure() const { return closure_; }
     func_type_ptr_t funcType() const;
 
     virtual bool equals(const data_ptr_t &other) const override;

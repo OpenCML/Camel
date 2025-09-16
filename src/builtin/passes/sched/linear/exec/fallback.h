@@ -20,14 +20,16 @@
 #pragma once
 
 #include "../linear.h"
+#include "core/context/frame.h"
 
 #include <stack>
 
 class FallbackExecSchedPass : public LinearSchedPass {
     std::stack<std::pair<size_t, GIR::node_ptr_t>> brInfoStack_;
-    std::unordered_map<GIR::Graph *, std::shared_ptr<GIR::node_vec_t>> graphTNS_;
+    std::unordered_map<GIR::Graph *, std::shared_ptr<GIR::node_vec_t>> graphTopoNodesCache_;
 
-    data_ptr_t evalGraph(const GIR::graph_ptr_t &graph, arena_ptr_t &arena);
+    data_ptr_t evalGraph(const GIR::graph_ptr_t &graph, frame_ptr_t &frame);
+    std::shared_ptr<GIR::node_vec_t> getTopoNodes(const GIR::graph_ptr_t &graph);
 
   public:
     FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};

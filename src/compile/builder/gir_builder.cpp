@@ -501,7 +501,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     graph_ptr_t tGraph = enterScope();
     tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
     node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (tGraph->output() == nullptr && tNode != nullptr) {
+    if (!tGraph->hasOutput() && tNode != nullptr) {
         tGraph->setOutput(tNode);
     }
     leaveScope();
@@ -513,7 +513,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     graph_ptr_t fGraph = enterScope();
     fGraph->setFuncType(std::make_shared<FunctionType>());
     node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
-    if (fGraph->output() == nullptr && fNode != nullptr) {
+    if (!tGraph->hasOutput() && fNode != nullptr) {
         fGraph->setOutput(fNode);
     }
     leaveScope();

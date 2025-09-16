@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "utils/assert.h"
+
 #include <functional>
 #include <iterator>
 #include <queue>
@@ -26,13 +28,17 @@
 #include <vector>
 
 template <typename InputIt, typename GetInDegreeFunc, typename GetOutputsFunc>
-auto topoSort(InputIt first, InputIt last, GetInDegreeFunc getInDegree, GetOutputsFunc getOutputs)
+auto topoSort(
+    InputIt first, InputIt last, GetInDegreeFunc getInDegree, GetOutputsFunc getOutputs,
+    bool allowUnreachable = false)
     -> std::vector<typename std::iterator_traits<InputIt>::value_type> {
     using NodeType = typename std::iterator_traits<InputIt>::value_type;
 
     std::unordered_map<NodeType, size_t> inDegrees;
     std::queue<NodeType> zeroInDegreeQueue;
     std::vector<NodeType> sortedNodes;
+
+    size_t count = std::distance(first, last);
 
     for (auto it = first; it != last; ++it) {
         NodeType node = *it;
@@ -55,5 +61,37 @@ auto topoSort(InputIt first, InputIt last, GetInDegreeFunc getInDegree, GetOutpu
         }
     }
 
+    ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
+    ASSERT(
+        allowUnreachable || sortedNodes.size() == count,
+        "Unreachable nodes detected in the graph.");
+
     return sortedNodes;
+}
+
+template <typename NodeType, typename GetInputsFunc>
+std::vector<NodeType>
+findReachable(const NodeType &startNode, GetInputsFunc getInputs, bool reverse = false) {
+    std::unordered_set<NodeType> visited;
+    std::vector<NodeType> reachableNodes;
+
+    // DFS to find all upstream nodes
+    std::function<void(const NodeType &)> dfs = [&](const NodeType &node) {
+        for (const auto &input : getInputs(node)) {
+            if (visited.insert(input).second) {
+                dfs(input);
+            }
+        }
+        // Add to result after processing dependencies
+        reachableNodes.push_back(node);
+    };
+
+    visited.insert(startNode);
+    dfs(startNode);
+
+    if (reverse) {
+        std::reverse(reachableNodes.begin(), reachableNodes.end());
+    }
+
+    return reachableNodes;
 }
