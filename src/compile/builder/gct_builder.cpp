@@ -75,7 +75,11 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
 void Builder::initInnerTypes() {
     typeScope_->clear();
     typeScope_->insert(Reference("int"), Type::Int32());
+    typeScope_->insert(Reference("int32"), Type::Int32());
+    typeScope_->insert(Reference("int64"), Type::Int64());
     typeScope_->insert(Reference("float"), Type::Float());
+    typeScope_->insert(Reference("double"), Type::Double());
+    typeScope_->insert(Reference("number"), Type::Double());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("char"), Type::Char());
     typeScope_->insert(Reference("string"), Type::String());
