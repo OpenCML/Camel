@@ -1,0 +1,356 @@
+/**
+Built-in global function signatures.
+For reference only; these are implemented in the runtime.
+*/
+
+// io
+
+inner func print(args: any...): void {
+    return ':io/print'
+}
+
+inner func println(args: any...): void {
+    return ':io/println'
+}
+
+inner func input(prompt: string): string {
+    return ':io/input'
+}
+
+// os
+
+inner func exit(code: int): void {
+    return ':os/exit'
+}
+
+inner func sleep(seconds: number): void {
+    return ':os/sleep'
+}
+
+// str
+
+with <s: string>
+inner func len(): int {
+    return ':str/len'
+}
+
+with <s: string>
+inner func to_upper(): string {
+    return ':str/to_upper'
+}
+
+with <s: string>
+inner func to_lower(): string {
+    return ':str/to_lower'
+}
+
+with <s: string>
+inner func trim(): string {
+    return ':str/trim'
+}
+
+with <s: string>
+inner func split(separator: string): string[] {
+    return ':str/split'
+}
+
+with <s: string>
+inner func replace(old: string, new: string): string {
+    return ':str/replace'
+}
+
+with <s: string>
+inner func contains(substr: string): bool {
+    return ':str/contains'
+}
+
+with <s: string>
+inner func starts_with(prefix: string): bool {
+    return ':str/starts_with'
+}
+
+with <s: string>
+inner func ends_with(suffix: string): bool {
+    return ':str/ends_with'
+}
+
+with <s: string>
+inner func substr(start: int, end: int): string {
+    return ':str/substr'
+}
+
+with <s: string>
+inner func char_at(index: int): string {
+    return ':str/char_at'
+}
+
+with <s: string>
+inner func index_of(substr: string): int {
+    return ':str/index_of'
+}
+
+with <s: string>
+inner func last_index_of(substr: string): int {
+    return ':str/last_index_of'
+}
+
+with <s: string>
+inner func repeat(count: int): string {
+    return ':str/repeat'
+}
+
+with <s: string>
+inner func format(args: any...): string {
+    return ':str/format'
+}
+
+// math
+
+inner func abs(value: number): number {
+    return ':math/abs'
+}
+
+inner func sqrt(value: number): number {
+    return ':math/sqrt'
+}
+
+inner func pow(base: number, exponent: number): number {
+    return ':math/pow'
+}
+
+inner func sin(value: number): number {
+    return ':math/sin'
+}
+
+inner func cos(value: number): number {
+    return ':math/cos'
+}
+
+inner func tan(value: number): number {
+    return ':math/tan'
+}
+
+inner func log(value: number): number {
+    return ':math/log'
+}
+
+inner func exp(value: number): number {
+    return ':math/exp'
+}
+
+inner func round(value: number): int {
+    return ':math/round'
+}
+
+inner func floor(value: number): int {
+    return ':math/floor'
+}
+
+inner func ceil(value: number): int {
+    return ':math/ceil'
+}
+
+inner func random(min: int, max: int): int {
+    return ':math/random'
+}
+
+// list
+
+with <lst: any[]>
+inner func append(item: any): void {
+    return ':list/append'
+}
+
+with <lst: any[]>
+inner func remove(index: int): void {
+    return ':list/remove'
+}
+
+with <lst: any[]>
+inner func insert(index: int, item: any): void {
+    return ':list/insert'
+}
+
+with <lst: any[]>
+inner func index_of(item: any): int {
+    return ':list/index_of'
+}
+
+with <lst: any[]>
+inner func contains(item: any): bool {
+    return ':list/contains'
+}
+
+with <lst: any[]>
+inner func len(): int {
+    return ':list/len'
+}
+
+with <lst: any[]>
+inner func clear(): void {
+    return ':list/clear'
+}
+
+with <lst: any[]>
+inner func sort(): void {
+    return ':list/sort'
+}
+
+with <lst: any[]>
+inner func reverse(): void {
+    return ':list/reverse'
+}
+
+with <lst: any[]>
+inner func extend(items: any[]): void {
+    return ':list/extend'
+}
+
+// map
+
+with <d: Map<string, any>>
+inner func keys(): string[] {
+    return ':dict/keys'
+}
+
+with <d: Map<string, any>>
+inner func values(): any[] {
+    return ':dict/values'
+}
+
+with <d: Map<string, any>>
+inner func items(): (string, any)[] {
+    return ':dict/items'
+}
+
+with <d: Map<string, any>>
+inner func contains(key: string): bool {
+    return ':dict/contains'
+}
+
+with <d: Map<string, any>>
+inner func len(): int {
+    return ':dict/len'
+}
+
+with <d: Map<string, any>>
+inner func clear(): void {
+    return ':dict/clear'
+}
+
+with <d: Map<string, any>>
+inner func remove(key: string): void {
+    return ':dict/remove'
+}
+
+with <d: Map<string, any>>
+inner func update(other: Map<string, any>): void {
+    return ':dict/update'
+}
+
+// set
+
+with <s: Set<any>>
+inner func insert(item: any): void {
+    return ':set/insert'
+}
+
+with <s: Set<any>>
+inner func remove(item: any): void {
+    return ':set/remove'
+}
+
+with <s: Set<any>>
+inner func contains(item: any): bool {
+    return ':set/contains'
+}
+
+with <s: Set<any>>
+inner func len(): int {
+    return ':set/len'
+}
+
+with <s: Set<any>>
+inner func clear(): void {
+    return ':set/clear'
+}
+
+with <s: Set<any>>
+inner func union(other: Set<any>): Set<any> {
+    return ':set/union'
+}
+
+with <s: Set<any>>
+inner func intersection(other: Set<any>): Set<any> {
+    return ':set/intersection'
+}
+
+with <s: Set<any>>
+inner func difference(other: Set<any>): Set<any> {
+    return ':set/difference'
+}
+
+// time
+
+inner func now(): string {
+    return ':time/now'
+}
+
+with <time: number>
+inner func strftime(format_str: string): string {
+    return ':time/strftime'
+}
+
+inner func strptime(format_str: string, time_str: string): number {
+    return ':time/strptime'
+}
+
+// sys
+
+inner func get_env(var_name: string): string {
+    return ':sys/get_env'
+}
+
+inner func set_env(var_name: string, value: string): void {
+    return ':sys/set_env'
+}
+
+inner func unset_env(var_name: string): void {
+    return ':sys/unset_env'
+}
+
+inner func get_cwd(): string {
+    return ':sys/get_cwd'
+}
+
+// re
+
+namespace re {
+
+inner func test(pattern: string, text: string): bool {
+    return ':re/match'
+}
+
+inner func search(pattern: string, text: string): (int, int) {
+    return ':re/search'
+}
+
+inner func replace(pattern: string, repl: string, text: string): string {
+    return ':re/replace'
+}
+
+}
+
+// json
+
+namespace json {
+
+inner func encode(value: any): string {
+    return ':json/encode'
+}
+
+inner func decode(json_str: string): any {
+    return ':json/decode'
+}
+
+}

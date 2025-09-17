@@ -40,6 +40,13 @@ FallbackExecSchedPass::getTopoNodes(const GIR::graph_ptr_t &graph) {
             }
             return ins;
         });
+        if (sortedNodes.size() != graph->nodes().size()) {
+            l.in("Topo").warn(
+                "Topological sort found {} reachable nodes, but graph {} has {} nodes.",
+                sortedNodes.size(),
+                graph->name(),
+                graph->nodes().size());
+        }
         l.in("Topo")
             .debug("Topological order for graph {}, {} nodes:", graph->name(), sortedNodes.size());
         for (auto &n : sortedNodes) {
@@ -140,15 +147,14 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             break;
         }
         case NodeType::Access: {
+            ASSERT(false, "Access node evaluation not implemented yet.");
             auto accessNode = tt::as_shared<AccessNode>(n);
             data_ptr_t source = frame->get(n->dataInputs().front());
             data_ptr_t res;
-            ASSERT(false, "Access node evaluation not implemented yet.");
             break;
         }
         case NodeType::Source: {
-            auto sourceNode = tt::as_shared<SourceNode>(n);
-            data_ptr_t data = sourceNode->dataOf(frame->arena());
+            data_ptr_t data = frame->get(n);
             ASSERT(data != nullptr, "Source data is null.");
             break;
         }
