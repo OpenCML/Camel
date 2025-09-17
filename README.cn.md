@@ -6,7 +6,7 @@
 ![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
 
 <p align="center">
-  <img src='https://www.github.com/OpenCML/Camel/raw/develop/assets/logo_text.png' width=800>
+  <img src='https://www.github.com/OpenCML/ImagesHosting/raw/main/camel_logo_text.png' width=800>
 </p>
 
 Camel是一个基于图的、多阶段的、类型驱动的特定领域语言（DSL），旨在弥合AI研究与生产部署之间的差距。它结合了函数式编程的优雅和声明式编程的表达力。它提供了天生的异步语义和高度可定制的图操作，使开发者能够编写高级代码，该代码编译后具有接近原生的性能。
