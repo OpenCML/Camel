@@ -39,7 +39,9 @@ enum class DiagType : uint8_t {
     RuntimeDiag = 0x04,
 };
 
-enum class Severity : uint8_t { Error = 0x0, Warning = 0x1, Info = 0x2, Hint = 0x3, Unknown = 0xF };
+std::string to_string(DiagType type);
+
+enum class Severity : uint8_t { Error = 0x0, Warn = 0x1, Info = 0x2, Hint = 0x3, Unknown = 0xF };
 
 std::string to_string(Severity s);
 

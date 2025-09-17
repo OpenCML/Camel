@@ -26,12 +26,29 @@
 #include "messages/semantic.h"
 #include "messages/syntax.h"
 
+std::string to_string(DiagType type) {
+    switch (type) {
+    case DiagType::InternalDiag:
+        return "InternalDiag";
+    case DiagType::LexicalDiag:
+        return "LexicalDiag";
+    case DiagType::SyntaxDiag:
+        return "SyntaxDiag";
+    case DiagType::SemanticDiag:
+        return "SemanticDiag";
+    case DiagType::RuntimeDiag:
+        return "RuntimeDiag";
+    default:
+        return "Unknown";
+    }
+}
+
 std::string to_string(Severity s) {
     switch (s) {
     case Severity::Error:
         return "Error";
-    case Severity::Warning:
-        return "Warning";
+    case Severity::Warn:
+        return "Warn";
     case Severity::Info:
         return "Info";
     case Severity::Hint:

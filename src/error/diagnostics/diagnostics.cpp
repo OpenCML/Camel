@@ -34,20 +34,27 @@ Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
 }
 
 std::string Diagnostic::toText() const {
-    std::string result =
-        std::format("[{}]: <{}> ({}), ", to_string(severity), moduleName, modulePath);
+    int ln = -1, ch = -1;
 
     if (std::holds_alternative<TokenRange>(range)) {
         ASSERT(false, "TokenRange should be converted to CharRange before toText()");
-    } else if (std::holds_alternative<std::monostate>(range)) {
-        result += "line ?, char ?";
     } else if (std::holds_alternative<CharRange>(range)) {
         CharRange r = std::get<CharRange>(range);
-        result += std::format("line {}, char {}", r.start.line + 1, r.start.character + 1);
+        ln = static_cast<int>(r.start.line + 1);
+        ch = static_cast<int>(r.start.character + 1);
     }
 
-    result +=
-        std::format(": {} {} (name={}, code=0x{})\n", message, suggestion, name, hex8(diagCode()));
+    std::string result = std::format(
+        "{}({}):{}:{}: {}: {} {} (name={}, code=0x{})",
+        modulePath,
+        moduleName,
+        (ln >= 0 ? std::to_string(ln) : "?"),
+        (ch >= 0 ? std::to_string(ch) : "?"),
+        to_string(severity),
+        message,
+        suggestion,
+        name,
+        hex8(diagCode()));
 
     return result;
 }
@@ -151,6 +158,7 @@ void Diagnostics::dump(std::ostream &os, bool json) const {
     });
     if (json)
         os << "\n]";
+    os << "\n" << std::flush;
 }
 
 void Diagnostics::clear() {

@@ -117,6 +117,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     DataIndex addVariable(DataIndex index) { return arena_->addVariable(index); }
 
     void setFuncType(const func_type_ptr_t &type);
+    bool hasFuncType() const { return funcType_ != nullptr; }
     func_type_ptr_t funcType() const;
 
     std::optional<graph_ptr_t> getSubGraph(const std::string &name) {

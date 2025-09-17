@@ -55,4 +55,6 @@ class DiagnosticBuilder {
     std::string rawSuggestion_;
     std::string message_;
     std::string suggestion_;
+    std::string moduleName_;
+    std::string modulePath_;
 };

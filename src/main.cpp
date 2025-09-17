@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
             startTime = chrono::high_resolution_clock::now();
         }
 
-        diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
+        diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
             diagnostics->setConfig(
                 DiagsConfig{

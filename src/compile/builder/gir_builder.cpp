@@ -188,7 +188,15 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
     // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
     std::string name = gct->loadAs<GCT::FuncLoad>()->name();
+    GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
     graph_ptr_t graph = enterScope(name);
+    if (!graph->hasFuncType()) {
+        // TODO: 非全局函数不会生成前置DECL节点，因此不会预设函数类型信息，需要从FUNC节点中获取
+        type_ptr_t type = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
+        func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
+        graph->setFuncType(funcType);
+    }
+    ASSERT(graph->hasFuncType(), "Function graph must have a function type.");
     node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (!graph->hasOutput() && res != nullptr) {
         graph->setOutput(res);
