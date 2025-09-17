@@ -22,6 +22,8 @@
 #include "utils/assert.h"
 #include "utils/str.h"
 
+#include <format>
+
 // ---- Diagnostic implementation ----
 Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
     if (std::holds_alternative<TokenRange>(range)) {

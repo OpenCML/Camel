@@ -178,10 +178,11 @@ template <typename DiagEnum> DiagnosticBuilder Diagnostics::of(DiagEnum err) {
     DiagnosticBuilder builder(*this);
 
     static_assert(std::is_enum_v<DiagEnum>, "Must be an enum type");
-    builder.specific_ = static_cast<uint32_t>(err);
-
-    DiagInfo info = getDiagInfo(err);
     builder.type_ = diagTypeOf(err);
+    uint32_t key = static_cast<uint32_t>(err);
+    builder.severity_ = extractSeverity(key);
+    builder.specific_ = extractSpecific(key);
+    DiagInfo info = getDiagInfo(err);
     builder.name_ = info.name;
     builder.rawMessage_ = info.message;
     builder.rawSuggestion_ = info.suggestion;
