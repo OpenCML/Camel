@@ -19,6 +19,7 @@
 
 #include "diagnostics.h"
 
+#include "utils/ascii.h"
 #include "utils/assert.h"
 #include "utils/str.h"
 
@@ -45,12 +46,12 @@ std::string Diagnostic::toText() const {
     }
 
     std::string result = std::format(
-        "{}({}):{}:{}: {}: {} {} (name={}, code=0x{})",
-        modulePath,
+        "{}({}):{}:{}: [{}]: {} {} (name={}, code=0x{})",
+        ascii::underline(modulePath),
         moduleName,
         (ln >= 0 ? std::to_string(ln) : "?"),
         (ch >= 0 ? std::to_string(ch) : "?"),
-        to_string(severity),
+        to_colorful_string(severity),
         message,
         suggestion,
         name,

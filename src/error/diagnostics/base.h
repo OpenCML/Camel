@@ -44,6 +44,7 @@ std::string to_string(DiagType type);
 enum class Severity : uint8_t { Error = 0x0, Warn = 0x1, Info = 0x2, Hint = 0x3, Unknown = 0xF };
 
 std::string to_string(Severity s);
+std::string to_colorful_string(Severity s);
 
 inline uint32_t makeDiagCode(DiagType type, uint32_t specificCode) {
     return (static_cast<uint32_t>(type) << 24) | (specificCode & 0xFFFFFF);

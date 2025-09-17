@@ -58,6 +58,21 @@ std::string to_string(Severity s) {
     }
 }
 
+std::string to_colorful_string(Severity s) {
+    switch (s) {
+    case Severity::Error:
+        return "\033[1;31mError\033[0m";
+    case Severity::Warn:
+        return "\033[1;33mWarn\033[0m";
+    case Severity::Info:
+        return "\033[1;32mInfo\033[0m";
+    case Severity::Hint:
+        return "\033[1;36mHint\033[0m";
+    default:
+        return "\033[1;35mUnknown\033[0m";
+    }
+}
+
 DiagInfo getDiagInfo(DiagType type, uint32_t specific) {
     switch (type) {
     case DiagType::InternalDiag: {
