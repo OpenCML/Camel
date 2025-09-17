@@ -1,6 +1,0 @@
-import { f1 } from lib.lib1
-
-export func f0(): int sync {
-    f1("Hello from lib0!")
-    return 0
-}

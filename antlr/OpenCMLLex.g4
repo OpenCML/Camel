@@ -20,6 +20,7 @@ IMPORT      : 'import';
 EXPORT      : 'export';
 TYPEAS      : 'typeas';
 TYPEOF      : 'typeof';
+NAMESPACE   : 'namespace';
 
 IF          : 'if';
 THEN        : 'then';
