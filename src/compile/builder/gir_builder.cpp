@@ -225,7 +225,7 @@ type_ptr_t Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     return type;
 }
 
-void_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
+node_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     const auto &res = visit(gct->at(0));
@@ -239,7 +239,7 @@ void_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     LEAVE("NREF");
-    return nullptr;
+    return node;
 }
 
 node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {

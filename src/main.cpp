@@ -184,7 +184,7 @@ int main(int argc, char *argv[]) {
                         mainModule->compile(CompileStage::GCT);
                     }
                     if (Inspect::dumpGIR || Inspect::dumpTNS) {
-                        mainModule->compile(CompileStage::GIR);
+                        mainModule->compile(CompileStage::Done);
                     }
                 } else {
                     mainModule->compile(CompileStage::Done);
@@ -226,7 +226,7 @@ int main(int argc, char *argv[]) {
 
             if (selectedCommand == Command::Run) {
                 FallbackExecSchedPass pass(ctx);
-                pass.apply(ctx->mainGraph());
+                pass.apply(ctx->rootGraph());
                 // int exitCode = ctx->getExitCode();
                 const auto &diags = ctx->rtmDiags();
                 if (diags->hasErrors()) {

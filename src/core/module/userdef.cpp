@@ -95,7 +95,7 @@ bool UserDefinedModule::compile(CompileStage till) {
         }
     }
 
-    if (stage_ < CompileStage::AST && till > CompileStage::AST) {
+    if (stage_ < CompileStage::AST && till >= CompileStage::AST) {
         if (!gct_) {
             auto ast = parser_->ast();
             auto gctBuilder = GCT::Builder(context_, shared_from_this());
@@ -112,7 +112,7 @@ bool UserDefinedModule::compile(CompileStage till) {
         }
     }
 
-    if (stage_ < CompileStage::GIR && till > CompileStage::GIR) {
+    if (stage_ < CompileStage::GIR && till >= CompileStage::GIR) {
         if (!gir_) {
             auto girBuilder = GIR::Builder(context_, shared_from_this());
             gir_ = girBuilder.build(gct_, diagnostics_);

@@ -171,6 +171,10 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
-    auto frame = Frame::create(nullptr, graph);
-    return evalGraph(graph, frame);
+    auto rootFrame = Frame::create(nullptr, graph);
+    auto optMainGraph = graph->getSubGraph("main");
+    ASSERT(optMainGraph.has_value(), "Main graph not found.");
+    auto mainGraph = optMainGraph.value();
+    auto mainFrame = Frame::create(rootFrame, mainGraph);
+    return evalGraph(mainGraph, mainFrame);
 }

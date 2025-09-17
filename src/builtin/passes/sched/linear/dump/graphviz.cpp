@@ -149,10 +149,11 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format("digraph GraphIR {{\r\n"
-                           "    graph [rankdir=LR, fontsize=18];\r\n"
-                           "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-                           "    edge [minlen=2];\r\n");
+        res += std::format(
+            "digraph GraphIR {{\r\n"
+            "    graph [rankdir=LR, fontsize=18];\r\n"
+            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+            "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
@@ -256,7 +257,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
             shape,
             style,
             size.empty() ? "" : ", " + size,
-            std::format("{}\\n{}", label, tooltip));
+            std::format("{}\\n{}", escape(label), escape(tooltip)));
     }
 
     // Draw return node if not root
