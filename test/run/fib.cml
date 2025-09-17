@@ -10,10 +10,10 @@ func fibonacci(n: int): int {
 }
 
 export func main(): int sync {
-    let idx = 10
+    let idx = 30
     println("Start computing fibonacci({})...".format(idx))
     let start = now()
-    let res = fibonacci(30)
+    let res = fibonacci(idx)
     let duration = now() - start
     println("Fibonacci({}) = {} (computed in {} seconds)".format(idx, res, duration))
     return 0

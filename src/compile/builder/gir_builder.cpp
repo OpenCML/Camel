@@ -38,6 +38,14 @@ inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     if (from->hasLinkedTo(to)) {
         return false;
     }
+    // prevent linking nodes that are already deeply linked
+    if (to->hasDeepLinkedTo(from)) {
+        l.in("GIR").warn(
+            "Prevent linking deeply linked nodes: {} -> {}",
+            from->toString(),
+            to->toString());
+        return false;
+    }
     return true;
 }
 
@@ -188,7 +196,34 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
     // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
     std::string name = gct->loadAs<GCT::FuncLoad>()->name();
+    GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
     graph_ptr_t graph = enterScope(name);
+    if (!graph->hasFuncType()) {
+        // TODO: 非全局函数不会生成前置DECL节点，因此不会预设函数类型信息，需要从FUNC节点中获取
+        type_ptr_t type = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
+        func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
+        const auto &withParamsType = tt::as_shared<ParamsType>(funcType->withParamsType());
+        const auto &normParamsType = tt::as_shared<ParamsType>(funcType->normParamsType());
+        graph->setFuncType(funcType);
+        arena_ptr_t arena = graph->arena();
+        for (const auto &[name, type, data] : withParamsType->elements()) {
+            // TODO: ignored type and default data here
+            if (data != nullptr) {
+                diags_->of(SemanticDiag::FeatureNotSupported)
+                    .commit("Default data in function parameters");
+            }
+            insertNode(name, graph->addPort(true));
+        }
+        for (const auto &[name, type, data] : normParamsType->elements()) {
+            // TODO: ignored type and default data here
+            if (data != nullptr) {
+                diags_->of(SemanticDiag::FeatureNotSupported)
+                    .commit("Default data in function parameters");
+            }
+            insertNode(name, graph->addPort(false));
+        }
+    }
+    ASSERT(graph->hasFuncType(), "Function graph must have a function type.");
     node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (!graph->hasOutput() && res != nullptr) {
         graph->setOutput(res);
@@ -225,7 +260,7 @@ type_ptr_t Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     return type;
 }
 
-void_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
+node_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     const auto &res = visit(gct->at(0));
@@ -239,7 +274,7 @@ void_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     LEAVE("NREF");
-    return nullptr;
+    return node;
 }
 
 node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {

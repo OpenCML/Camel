@@ -117,6 +117,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     DataIndex addVariable(DataIndex index) { return arena_->addVariable(index); }
 
     void setFuncType(const func_type_ptr_t &type);
+    bool hasFuncType() const { return funcType_ != nullptr; }
     func_type_ptr_t funcType() const;
 
     std::optional<graph_ptr_t> getSubGraph(const std::string &name) {
@@ -223,19 +224,8 @@ class Node : public std::enable_shared_from_this<Node> {
     node_vec_t &dataOutputs() { return dataOutputs_; }
     node_vec_t &ctrlOutputs() { return ctrlOutputs_; }
 
-    bool hasLinkedTo(const node_ptr_t &node) const {
-        for (const auto &out : dataOutputs_) {
-            if (out == node) {
-                return true;
-            }
-        }
-        for (const auto &out : ctrlOutputs_) {
-            if (out == node) {
-                return true;
-            }
-        }
-        return false;
-    }
+    bool hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps = 99) const;
+    bool hasLinkedTo(const node_ptr_t &node) const;
 
     size_t inDegree() const { return withInputs_.size() + normInputs_.size() + ctrlInputs_.size(); }
     size_t outDegree() const { return dataOutputs_.size() + ctrlOutputs_.size(); }
@@ -243,24 +233,7 @@ class Node : public std::enable_shared_from_this<Node> {
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
 
-    static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
-        ASSERT(from && to, "Cannot link null nodes.");
-        ASSERT(from != to, "Cannot link a node to itself.");
-        switch (type) {
-        case LinkType::With:
-            from->dataOutputs().push_back(to);
-            to->withInputs().push_back(from);
-            break;
-        case LinkType::Norm:
-            from->dataOutputs().push_back(to);
-            to->normInputs().push_back(from);
-            break;
-        case LinkType::Ctrl:
-            from->ctrlOutputs().push_back(to);
-            to->ctrlInputs().push_back(from);
-            break;
-        }
-    }
+    static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to);
 
   protected:
     bool macro_ = false;

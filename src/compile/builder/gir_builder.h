@@ -103,7 +103,7 @@ class Builder {
     graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
     type_ptr_t visitTypeNode(const GCT::node_ptr_t &gct);
-    void_ptr_t visitNRefNode(const GCT::node_ptr_t &gct);
+    node_ptr_t visitNRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitVariNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitWaitNode(const GCT::node_ptr_t &gct);

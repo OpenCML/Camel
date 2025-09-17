@@ -47,6 +47,99 @@ std::string to_string(NodeType type) {
 Node
 */
 
+bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
+    if (maxJumps == 0) {
+        return false;
+    }
+
+    // 使用 DFS 进行递归检查
+    std::unordered_set<const void *> visited; // 用于避免重复访问
+    std::function<bool(const node_ptr_t &, size_t)> dfs;
+
+    dfs = [&](const node_ptr_t &current, size_t jumpsLeft) -> bool {
+        ASSERT(current, "Current node is null in DFS.");
+        if (jumpsLeft == 0) {
+            l.in("GIR").warn("Deep link check reached max jumps at node: {}.", node->toString());
+            return false;
+        }
+
+        // 标记当前节点为已访问
+        visited.insert(current.get());
+
+        // 检查当前节点的所有输出
+        for (const auto &out : current->dataOutputs_) {
+            if (out == node) {
+                return true;
+            }
+            if (visited.find(out.get()) == visited.end()) {
+                if (dfs(out, jumpsLeft - 1)) {
+                    return true;
+                }
+            }
+        }
+
+        for (const auto &out : current->ctrlOutputs_) {
+            if (out == node) {
+                return true;
+            }
+            if (visited.find(out.get()) == visited.end()) {
+                if (dfs(out, jumpsLeft - 1)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    };
+
+    // 从当前节点出发进行递归搜索
+    for (const auto &out : dataOutputs_) {
+        if (dfs(out, maxJumps - 1)) {
+            return true;
+        }
+    }
+    for (const auto &out : ctrlOutputs_) {
+        if (dfs(out, maxJumps - 1)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool Node::hasLinkedTo(const node_ptr_t &node) const {
+    for (const auto &out : dataOutputs_) {
+        if (out == node) {
+            return true;
+        }
+    }
+    for (const auto &out : ctrlOutputs_) {
+        if (out == node) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
+    ASSERT(from && to, "Cannot link null nodes.");
+    ASSERT(from != to, "Cannot link a node to itself.");
+    switch (type) {
+    case LinkType::With:
+        from->dataOutputs().push_back(to);
+        to->withInputs().push_back(from);
+        break;
+    case LinkType::Norm:
+        from->dataOutputs().push_back(to);
+        to->normInputs().push_back(from);
+        break;
+    case LinkType::Ctrl:
+        from->ctrlOutputs().push_back(to);
+        to->ctrlInputs().push_back(from);
+        break;
+    }
+}
+
 /*
 Graph
 */

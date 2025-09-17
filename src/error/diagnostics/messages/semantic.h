@@ -40,9 +40,9 @@ enum class SemanticDiag : uint32_t {
     UnresolvedReference = 0x00000B,
 
     // Warnings
-    FeatureNotSupported = 0x010000,
-    VarParamInAsyncFunction = 0x010001,
-    IgnoredSideEffect = 0x010002,
+    FeatureNotSupported = 0x100000,
+    VarParamInAsyncFunction = 0x100001,
+    IgnoredSideEffect = 0x100002,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

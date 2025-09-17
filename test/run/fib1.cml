@@ -1,0 +1,24 @@
+module fib
+
+import { now } from time
+
+var cnt = 0
+
+func fibonacci(n: int): int {
+    wait cnt += 1
+    return if n == 0 then 0
+    else if n == 1 then 1 else {
+        fibonacci(n - 1) + fibonacci(n - 2)
+    }
+}
+
+export func main(): int sync {
+    let idx = 10
+    println("Start computing fibonacci({})...".format(idx))
+    let start = now()
+    let res = fibonacci(idx)
+    let duration = now() - start
+    println("Total calls made: {}".format(cnt))
+    println("Fibonacci({}) = {} (computed in {} seconds)".format(idx, res, duration))
+    return 0
+}
