@@ -4,14 +4,14 @@ import { now } from time
 
 func fib(idx: int): int sync {
     var cnt = 0    
-    func fibonacci(n: int): int {
+    func fibonacci(n: int): int sync {
         wait cnt += 1
         return if n == 0 then 0
         else if n == 1 then 1 else {
             fibonacci(n - 1) + fibonacci(n - 2)
         }
     }
-    res = fibonacci(idx)
+    let res = fibonacci(idx)
     println("Total calls made: {}".format(cnt))
     return res
 }

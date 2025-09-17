@@ -199,7 +199,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
         string label, tooltip, shape = "circle", style = "solid", size;
-        tooltip = node->toString();
+        tooltip = graph->name() + "::" + node->toString();
 
         switch (node->type()) {
         case NodeType::Select: {

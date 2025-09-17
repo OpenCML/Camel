@@ -544,6 +544,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for BinaryExpr");
     const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
+    bool waited = binaryExpr->waited();
     node_ptr_t opNode;
     switch (binaryExpr->op()) {
     case AST::BinaryDataOp::Assign: {
@@ -634,19 +635,24 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         ASSERT(false, "Unknown binary operation");
         return nullptr;
     }
-    node_ptr_t linkNode = createNodeAs<LinkLoad>(2);
-    *linkNode << opNode << visitData(lhsASTNode);
+    node_ptr_t res = createNodeAs<LinkLoad>(2);
+    *res << opNode << visitData(lhsASTNode);
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         auto indices = ast->atAs<AST::RepeatedLoad>(1);
         for (const auto &index : *indices) {
-            *linkNode << visitData(index);
+            *res << visitData(index);
         }
     } else {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        *linkNode << visitData(rhsASTNode);
+        *res << visitData(rhsASTNode);
+    }
+    if (waited) {
+        node_ptr_t waitNode = createNodeAs<WaitLoad>();
+        *waitNode << res;
+        res = waitNode;
     }
     LEAVE("BinaryExpr");
-    return linkNode;
+    return res;
 }
 
 /*
