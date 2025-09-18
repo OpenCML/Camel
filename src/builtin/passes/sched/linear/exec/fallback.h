@@ -20,21 +20,23 @@
 #pragma once
 
 #include "../linear.h"
+#include "core/context/frame.h"
 
 #include <stack>
 
 class FallbackExecSchedPass : public LinearSchedPass {
-    std::stack<std::pair<size_t, GIR::node_ptr_t>> brInfoStack_;
-    std::unordered_map<GIR::Graph *, std::shared_ptr<GIR::node_vec_t>> graphTNS_;
+    std::stack<std::pair<size_t, GraphIR::node_ptr_t>> brInfoStack_;
+    std::unordered_map<GraphIR::Graph *, std::shared_ptr<GraphIR::node_vec_t>> graphTopoNodesCache_;
 
-    data_ptr_t evalGraph(const GIR::graph_ptr_t &graph, arena_ptr_t &arena);
+    data_ptr_t evalGraph(const GraphIR::graph_ptr_t &graph, frame_ptr_t &frame);
+    std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(const GraphIR::graph_ptr_t &graph);
 
   public:
     FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
     virtual ~FallbackExecSchedPass() = default;
 
-    virtual std::any apply(GIR::graph_ptr_t &graph) override {
-        return apply(const_cast<const GIR::graph_ptr_t &>(graph));
+    virtual std::any apply(GraphIR::graph_ptr_t &graph) override {
+        return apply(const_cast<const GraphIR::graph_ptr_t &>(graph));
     };
-    virtual std::any apply(const GIR::graph_ptr_t &graph) override;
+    virtual std::any apply(const GraphIR::graph_ptr_t &graph) override;
 };

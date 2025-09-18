@@ -19,8 +19,8 @@
 
 #include "builtin.h"
 
-#include "builtin/modules/basic.h"
 #include "builtin/modules/fs.h"
+#include "builtin/modules/globals.h"
 #include "builtin/modules/io.h"
 #include "builtin/modules/json.h"
 #include "builtin/modules/math.h"
@@ -32,7 +32,7 @@
 
 std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories = {
-        {"", [](context_ptr_t ctx) { return BasicBuiltinModule::create(ctx); }},
+        {"", [](context_ptr_t ctx) { return GlobalsBuiltinModule::create(ctx); }},
         {"io", [](context_ptr_t ctx) { return IOBuiltinModule::create(ctx); }},
         {"fs", [](context_ptr_t ctx) { return FileBuiltinModule::create(ctx); }},
         {"os", [](context_ptr_t ctx) { return OSBuiltinModule::create(ctx); }},

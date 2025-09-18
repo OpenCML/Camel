@@ -54,6 +54,13 @@ data_ptr_t Data::null() {
     return nullData;
 }
 
+bool Data::isNull() const { return type_->code() == TypeCode::Void; }
+
+bool Data::isZero() const {
+    ASSERT(false, "Base Data::isZero() not implemented");
+    return false;
+}
+
 vector<string> Data::refs() const { return vector<string>(); }
 
 bool Data::resolved() const { return true; }

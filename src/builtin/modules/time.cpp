@@ -25,7 +25,19 @@ TimeBuiltinModule::TimeBuiltinModule(context_ptr_t ctx) : BuiltinModule("time", 
         param_init_list{},
         {{"value", Type::Any(), nullptr, false}},
         Type::Void(),
-        ":not-impl");
+        ":time/now");
+    exportBuiltinOperator(
+        "strftime",
+        param_init_list{},
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
+        ":time/strftime");
+    exportBuiltinOperator(
+        "strptime",
+        param_init_list{},
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
+        ":time/strptime");
 }
 
 bool TimeBuiltinModule::load() {

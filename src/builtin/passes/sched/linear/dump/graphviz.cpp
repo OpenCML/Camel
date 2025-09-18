@@ -22,7 +22,7 @@
 #include "utils/type.h"
 
 using namespace std;
-using namespace GIR;
+using namespace GraphIR;
 
 std::string escape(const std::string &input) {
     std::string result;
@@ -131,7 +131,7 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
+any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         // Skip if the graph has already been visited to avoid duplication
         return string("");
@@ -140,11 +140,9 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     }
 
     string funcId = pointerToIdent(graph.get(), "F");
-    string exitId = pointerToIdent(graph->arena().get(), "R");
     string funcName = graph->name();
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
-    void *retNodePtr = graph->output().get();
 
     res += baseIndent_;
 
@@ -156,7 +154,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
-        for (size_t i = 0; i < graph->ports().size(); i++) {
+        for (size_t i = 0; i < graph->portNodes().size(); i++) {
             const string name = type->argNameAt(i);
             bool isVar = type->variableMap().at(name);
             portsNameMap[i] = make_pair(name, isVar);
@@ -185,7 +183,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     }
 
     // Draw ARGS node to represent function arguments
-    if (!graph->isRoot() && !graph->ports().empty()) {
+    if (!graph->isRoot() && !graph->portNodes().empty()) {
         res += std::format(
             "{}{}{} [label=\"ARGS\", style=dashed, shape=circle];\r\n",
             baseIndent_,
@@ -197,7 +195,8 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
-        string label, shape = "circle", style = "solid", size;
+        string label, tooltip, shape = "circle", style = "solid", size;
+        tooltip = graph->name() + "::" + node->toString();
 
         switch (node->type()) {
         case NodeType::Select: {
@@ -224,7 +223,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
                 style = "dashed";
             } else {
                 auto sourceNode = tt::as_shared<SourceNode>(node);
-                data_ptr_t data = sourceNode->dataOf(graph->arena());
+                data_ptr_t data = sourceNode->dataOf(*graph->arena());
                 label = data->toString();
             }
             break;
@@ -242,33 +241,31 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
             shape = "diamond";
             break;
         }
+        case NodeType::Return: {
+            label = "RETN";
+            shape = "doublecircle";
+            size = "width=0.9, height=0.9";
+            break;
+        }
         default:
             throw runtime_error("Unknown node type encountered during GraphViz generation.");
         }
 
         res += std::format(
-            "{}{}{} [label=\"{}\", shape={}, style={}{}];\r\n",
+            "{}{}{} [label=\"{}\", shape={}, style={}{}, tooltip=\"{}\"];\r\n",
             baseIndent_,
             indent_,
             pointerToIdent(node.get()),
-            escape(wrapText(label, 8, 2)),
+            escape(wrapText(label, 7, 2)),
             shape,
             style,
-            size.empty() ? "" : ", " + size);
-    }
-
-    // Draw return node if not root
-    if (!graph->isRoot()) {
-        res += std::format(
-            "{}{}{} [label=\"RETN\", shape=doublecircle, width=0.9, height=0.9];\r\n",
-            baseIndent_,
-            indent_,
-            exitId);
+            size.empty() ? "" : ", " + size,
+            std::format("{}\\n{}", escape(label), escape(tooltip)));
     }
 
     // Connect ARGS node to port nodes
     size_t withIdx = 0, normIdx = 0;
-    for (const auto &[_, portNode, isWithArg] : graph->ports()) {
+    for (const auto &[portNode, isWithArg] : graph->portNodes()) {
         string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", style={}];\r\n",
@@ -344,26 +341,6 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
                     i);
             }
         }
-
-        // Connect return node
-        if (node.get() == retNodePtr) {
-            res += std::format(
-                "{}{}{} -> {};\r\n",
-                baseIndent_,
-                indent_,
-                pointerToIdent(node.get()),
-                exitId);
-        }
-    }
-
-    // Special case: graph has no nodes but has output set (closure capture)
-    if (graph->nodes().empty() && graph->output() != nullptr) {
-        res += std::format(
-            "{}{}{} -> {};\r\n",
-            baseIndent_,
-            indent_,
-            pointerToIdent(graph->output().get()),
-            exitId);
     }
 
     res += baseIndent_ + "}\r\n";

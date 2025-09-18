@@ -34,6 +34,7 @@ class StmtLoad : public Load {
     StmtLoad(StmtType type_) : Load(LoadType::Stmt), StmtType_(type_) {}
 
     StmtType stmtType() const { return StmtType_; }
+    const std::string geneCode() const override;
 
   private:
     StmtType StmtType_;
@@ -48,6 +49,7 @@ class DataDeclLoad : public StmtLoad {
     bool isVar() const { return isVar_; }
     UnpackType unpackType() const { return type_; }
     const std::vector<Reference> &refs() const { return refs_; }
+    const std::string geneCode() const override;
 
   private:
     bool isVar_;
@@ -62,6 +64,7 @@ class FuncDeclLoad : public StmtLoad {
     const Reference &ref() const { return ref_; }
 
     const std::string toString() const override { return "FuncDecl: " + ref_.toString(); }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -77,6 +80,7 @@ class TypeDeclLoad : public StmtLoad {
     const std::string &uri() const { return uri_; }
 
     const std::string toString() const override;
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -94,6 +98,7 @@ class NameDeclLoad : public StmtLoad {
 
     const Reference &ref() const { return ref_; }
     const Reference &alias() const { return alias_; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -110,6 +115,7 @@ class ExitStmtLoad : public StmtLoad {
   public:
     ExitStmtLoad(ExitType type) : StmtLoad(StmtType::Exit), type_(type) {}
     const std::string toString() const override;
+    const std::string geneCode() const override;
 
   private:
     ExitType type_;
@@ -128,6 +134,7 @@ class StmtBlockLoad : public StmtLoad {
     const std::string toString() const override {
         return std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
     }
+    const std::string geneCode() const override;
 
   private:
     bool synced_ = false;

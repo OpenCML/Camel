@@ -27,6 +27,6 @@ class LinearSchedPass : public SchedulePass {
     LinearSchedPass(const context_ptr_t &ctx) : SchedulePass(ctx) {};
     virtual ~LinearSchedPass() = default;
 
-    virtual std::any apply(GIR::graph_ptr_t &graph) override = 0;
-    virtual std::any apply(const GIR::graph_ptr_t &graph) override = 0;
+    virtual std::any apply(GraphIR::graph_ptr_t &graph) override = 0;
+    virtual std::any apply(const GraphIR::graph_ptr_t &graph) override = 0;
 };

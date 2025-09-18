@@ -30,13 +30,14 @@
 #include "utils/log.h"
 #include "utils/type.h"
 
-namespace GraphIntermediateRepresentation {
+namespace GraphIR {
 
 enum class NodeType {
     Select,
     Access,   // Element accessed during runtime
     Struct,   // Runtime constructed data structure
     Source,   // Compile-time constant or port
+    Return,   // Final output node
     Operator, // Atomic operation
     Function, // (Sub)-Graph, function
 };
@@ -79,7 +80,7 @@ struct WeakPtrEqual {
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
-    Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name) {
+    Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name), arena_() {
         outer_ = graph;
         arena_ = std::make_shared<DataArena>();
         l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_);
@@ -100,7 +101,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const std::string &name() const { return name_; }
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
-    arena_ptr_t arena() const { return arena_; }
+    arena_ptr_t arena() { return arena_; }
     graph_ptr_t outer() const {
         if (outer_.expired()) {
             return nullptr;
@@ -110,6 +111,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
     size_t inDegree() const { return dependencies_.size(); }
     size_t outDegree() const { return dependents_.size(); }
 
+    std::string toString() const {
+        return std::format(
+            "Graph({}, nodes: {}, subgraphs: {}, deps: {}, outs: {})",
+            name_.empty() ? "<anonymous>" : name_,
+            nodes_.size(),
+            subGraphs_.size(),
+            dependencies_.size(),
+            dependents_.size());
+    }
+
     DataIndex addSharedConstant(const data_ptr_t &data) { return arena_->addConstant(data, true); }
     DataIndex addRuntimeConstant(const data_ptr_t &data) {
         return arena_->addConstant(data, false);
@@ -117,6 +128,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     DataIndex addVariable(DataIndex index) { return arena_->addVariable(index); }
 
     void setFuncType(const func_type_ptr_t &type);
+    bool hasFuncType() const { return funcType_ != nullptr; }
     func_type_ptr_t funcType() const;
 
     std::optional<graph_ptr_t> getSubGraph(const std::string &name) {
@@ -154,17 +166,14 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isWithArg = false);
 
-    const node_ptr_t &output() const { return output_; }
+    const node_ptr_t &returnNode() const {
+        ASSERT(output_ != nullptr, "Graph has no output node.");
+        return output_;
+    }
+    bool hasOutput() const { return output_ != nullptr; }
     void setOutput(const node_ptr_t &node);
 
-    const std::vector<std::tuple<DataIndex, node_ptr_t, bool>> &ports() const { return ports_; }
-    const std::vector<DataIndex> portIndices() const {
-        std::vector<DataIndex> indices;
-        for (const auto &[index, _, __] : ports_) {
-            indices.push_back(index);
-        }
-        return indices;
-    }
+    const std::vector<std::pair<node_ptr_t, bool>> &portNodes() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
 
   private:
@@ -181,7 +190,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     node_vec_t nodes_;
     node_ptr_t output_;
-    std::vector<std::tuple<DataIndex, node_ptr_t, bool>> ports_;
+    std::vector<std::pair<node_ptr_t, bool>> ports_;
 };
 
 class Node : public std::enable_shared_from_this<Node> {
@@ -194,7 +203,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
-    virtual std::string data2str() const { return "<null>"; }
+    virtual std::string data2str() const { return "null"; }
     virtual std::string toString() const {
         return std::format(
             "Node({}, {}, {})",
@@ -223,19 +232,8 @@ class Node : public std::enable_shared_from_this<Node> {
     node_vec_t &dataOutputs() { return dataOutputs_; }
     node_vec_t &ctrlOutputs() { return ctrlOutputs_; }
 
-    bool hasLinkedTo(const node_ptr_t &node) const {
-        for (const auto &out : dataOutputs_) {
-            if (out == node) {
-                return true;
-            }
-        }
-        for (const auto &out : ctrlOutputs_) {
-            if (out == node) {
-                return true;
-            }
-        }
-        return false;
-    }
+    bool hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps = 99) const;
+    bool hasLinkedTo(const node_ptr_t &node) const;
 
     size_t inDegree() const { return withInputs_.size() + normInputs_.size() + ctrlInputs_.size(); }
     size_t outDegree() const { return dataOutputs_.size() + ctrlOutputs_.size(); }
@@ -243,24 +241,7 @@ class Node : public std::enable_shared_from_this<Node> {
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
 
-    static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
-        ASSERT(from && to, "Cannot link null nodes.");
-        ASSERT(from != to, "Cannot link a node to itself.");
-        switch (type) {
-        case LinkType::With:
-            from->dataOutputs().push_back(to);
-            to->withInputs().push_back(from);
-            break;
-        case LinkType::Norm:
-            from->dataOutputs().push_back(to);
-            to->normInputs().push_back(from);
-            break;
-        case LinkType::Ctrl:
-            from->ctrlOutputs().push_back(to);
-            to->ctrlInputs().push_back(from);
-            break;
-        }
-    }
+    static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to);
 
   protected:
     bool macro_ = false;
@@ -301,7 +282,7 @@ class SelectNode : public Node {
 
     std::string toString() const override {
         return std::format(
-            "Node(Select, {}, {}): {}",
+            "Select({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             selectType_ == SelectType::Branch ? "BRCH" : "JOIN");
@@ -338,7 +319,7 @@ class AccessNode : public Node {
     std::string data2str() const override { return std::format("#{}", index2String()); }
     std::string toString() const override {
         return std::format(
-            "Node(Access, {}, {}): ${}",
+            "Access({}, {}): ${}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             index2String());
@@ -367,7 +348,7 @@ class StructNode : public Node {
     std::string data2str() const override { return std::format("{}", dataType()->toString()); }
     std::string toString() const override {
         return std::format(
-            "Node(Struct, {}, {}): {}",
+            "Struct({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             dataType()->toString());
@@ -385,23 +366,39 @@ class SourceNode : public Node {
         return node;
     }
 
-    data_ptr_t dataOf(arena_ptr_t arena) const {
-        ASSERT(arena->has(dataIndex_), "Source data not found in arena.");
-        return arena->get(dataIndex_);
+    data_ptr_t dataOf(const DataArena &arena) const {
+        ASSERT(arena.has(dataIndex_), "Source data not found in arena.");
+        return arena.get(dataIndex_);
     }
 
     std::string data2str() const override {
-        const auto arena = graph_.lock()->arena();
-        return arena->has(dataIndex_) ? dataOf(arena)->toString() : "<null>";
+        ASSERT(graph_.lock(), "Graph is not set for Node.");
+        const auto &arena = graph_.lock()->arena();
+        return arena->has(dataIndex_) ? dataOf(*arena)->toString() : "null";
     }
     std::string toString() const override {
-        const auto arena = graph_.lock()->arena();
+        ASSERT(graph_.lock(), "Graph is not set for Node.");
+        const auto &arena = graph_.lock()->arena();
         return std::format(
-            "Node(Source, {}, {}): {}",
+            "Source({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
-            arena->has(dataIndex_) ? dataOf(arena)->toString() : "<null>");
+            arena->has(dataIndex_) ? dataOf(*arena)->toString() : "null");
     }
+};
+
+class ReturnNode : public Node {
+  public:
+    ReturnNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Return, index) {}
+    ~ReturnNode() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
+        auto node = std::make_shared<ReturnNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
+
+    std::string toString() const override { return std::string("Node(Return)"); }
 };
 
 class OperatorNode : public Node {
@@ -427,7 +424,7 @@ class OperatorNode : public Node {
     std::string data2str() const override { return std::format("<{}>", operator_->name()); }
     std::string toString() const override {
         return std::format(
-            "Node(Opera., {}, {}): {}",
+            "Opera.({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             operator_->name());
@@ -459,13 +456,11 @@ class FunctionNode : public Node {
     }
     std::string toString() const override {
         return std::format(
-            "Node(Funct., {}, {}): {}",
+            "Funct.({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             func_->name().empty() ? func_->graph()->name() : func_->name());
     }
 };
 
-} // namespace GraphIntermediateRepresentation
-
-namespace GIR = GraphIntermediateRepresentation;
+} // namespace GraphIR

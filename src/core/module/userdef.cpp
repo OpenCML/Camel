@@ -40,6 +40,8 @@ namespace fs = std::filesystem;
 using namespace std;
 using namespace antlr4;
 
+namespace GIR = GraphIR;
+
 UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)
     : Module(name, path, ctx) {
@@ -62,31 +64,73 @@ UserDefinedModule::fromFile(const std::string &name, const std::string &path, co
     return std::make_shared<UserDefinedModule>(name, path, ctx);
 }
 
-bool UserDefinedModule::compile() {
-    l.in("Module").info("Compiling module '{}' from file '{}'.", name_, path_);
-    if (this->loaded_) {
+bool UserDefinedModule::compile(CompileStage till) {
+    if (till <= stage_) {
+        return true;
+    }
+    if (stage_ == CompileStage::Done) {
         l.in("Module").warn("Module '{}' already built", name_);
-        return this->loaded_;
+        return true;
+    }
+    if (stage_ == CompileStage::None) {
+        l.in("Module").info("Start compiling module '{}' from file '{}'.", name_, path_);
     }
 
-    if (!parser_->ast()) {
-        std::ifstream ifs(path_);
-        if (!ifs.good()) {
-            throw CamelBaseException("Cannot open file: " + path_);
+    if (stage_ == CompileStage::None && till > CompileStage::None) {
+        if (!parser_->ast()) {
+            std::ifstream ifs(path_);
+            if (!ifs.good()) {
+                throw CamelBaseException("Cannot open file: " + path_);
+            }
+            if (!parser_->parse(ifs)) {
+                throw CamelBaseException("Failed to parse file: " + path_);
+            }
         }
-        if (!parser_->parse(ifs)) {
-            throw CamelBaseException("Failed to parse file: " + path_);
+        if (diagnostics_->hasErrors()) {
+            l.in("Module").error("Module '{}' failed to parse", name_);
+            return false;
+        }
+        if (till == CompileStage::AST) {
+            stage_ = CompileStage::AST;
+            l.in("Module").info("Module '{}' built successfully.", name_);
+            return true;
         }
     }
 
-    auto ast = parser_->ast();
-    auto gctConstructor = GCT::Builder(context_, shared_from_this());
-    gct_ = gctConstructor.build(ast, diagnostics_);
+    if (stage_ < CompileStage::AST && till >= CompileStage::AST) {
+        if (!gct_) {
+            auto ast = parser_->ast();
+            auto gctBuilder = GCT::Builder(context_, shared_from_this());
+            gct_ = gctBuilder.build(ast, diagnostics_);
+            if (diagnostics_->hasErrors()) {
+                l.in("Module").error("Module '{}' failed to build GCT", name_);
+                return false;
+            }
+        }
+        if (till == CompileStage::GCT) {
+            stage_ = CompileStage::GCT;
+            l.in("Module").info("Module '{}' built successfully.", name_);
+            return true;
+        }
+    }
 
-    auto girConstructor = GIR::Builder(context_, shared_from_this());
-    gir_ = girConstructor.build(gct_, diagnostics_);
+    if (stage_ < CompileStage::GIR && till >= CompileStage::GIR) {
+        if (!gir_) {
+            auto girBuilder = GIR::Builder(context_, shared_from_this());
+            gir_ = girBuilder.build(gct_, diagnostics_);
+            if (diagnostics_->hasErrors()) {
+                l.in("Module").error("Module '{}' failed to build GIR", name_);
+                return false;
+            }
+        }
+        if (till == CompileStage::GIR) {
+            stage_ = CompileStage::GIR;
+            l.in("Module").info("Module '{}' built successfully.", name_);
+            return true;
+        }
+    }
 
-    bool success = !diagnostics_->hasErrors();
-    l.in("Module").info("Module '{}' built {}", name_, success ? "successfully." : "failed.");
-    return success;
+    stage_ = CompileStage::Done;
+    l.in("Module").info("Module '{}' built successfully.", name_);
+    return true;
 }

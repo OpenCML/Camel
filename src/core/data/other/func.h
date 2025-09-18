@@ -20,14 +20,14 @@
 #pragma once
 
 #include "../base.h"
-#include "core/context/arena.h"
 
-namespace GraphIntermediateRepresentation {
+class Frame;
+using frame_ptr_t = std::shared_ptr<Frame>;
+
+namespace GraphIR {
 class Graph;
 using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace GraphIntermediateRepresentation
-
-namespace GIR = GraphIntermediateRepresentation;
+} // namespace GraphIR
 
 class FunctionData;
 
@@ -38,18 +38,18 @@ using func_vec_t = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public Data {
-    GIR::graph_ptr_t graph_;
-    arena_ptr_t arena_;
+    GraphIR::graph_ptr_t graph_;
+    // frame_ptr_t closure_;
 
   public:
-    FunctionData(GIR::graph_ptr_t graph);
+    FunctionData(GraphIR::graph_ptr_t graph);
     virtual ~FunctionData() = default;
 
-    static func_ptr_t create(GIR::graph_ptr_t graph);
+    static func_ptr_t create(GraphIR::graph_ptr_t graph);
 
     std::string name() const;
-    GIR::graph_ptr_t graph() const { return graph_; }
-    arena_ptr_t arena() const { return arena_; }
+    GraphIR::graph_ptr_t graph() const { return graph_; }
+    // frame_ptr_t closure() const { return closure_; }
     func_type_ptr_t funcType() const;
 
     virtual bool equals(const data_ptr_t &other) const override;

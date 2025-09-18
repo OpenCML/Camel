@@ -24,6 +24,7 @@
 
 #include "core/data/data.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 
 enum class DataTypeEnum {
     StaticConstant =
@@ -101,6 +102,10 @@ struct DataType {
 struct DataIndex {
     DataType type;
     size_t index;
+
+    std::string toString() const {
+        return std::format("DataIndex(type: {}, index: {})", std::string(type), index);
+    }
 };
 
 class DataArray;
@@ -121,14 +126,43 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
     void resize(size_t size) { dataArr_.resize(size); }
 
     virtual void set(const data_ptr_t &data, size_t index) = 0;
-    virtual data_ptr_t get(size_t index) = 0;
-    virtual bool has(size_t index) { return index < dataArr_.size() && dataArr_[index] != nullptr; }
+    virtual data_ptr_t get(size_t index) const = 0;
+    virtual bool has(size_t index) const = 0;
 
     virtual array_ptr_t clone() = 0;
 
+    std::string toString() const {
+        std::string dataPreview;
+        if (dataArr_.empty()) {
+            dataPreview = "[]";
+        } else {
+            dataPreview = "[";
+            size_t previewCount = std::min(dataArr_.size(), static_cast<size_t>(10));
+            for (size_t i = 0; i < previewCount; ++i) {
+                if (dataArr_[i]) {
+                    dataPreview += dataArr_[i]->toString();
+                } else {
+                    dataPreview += "none";
+                }
+                if (i < previewCount - 1) {
+                    dataPreview += ", ";
+                }
+            }
+            if (dataArr_.size() > previewCount) {
+                dataPreview += ", ...";
+            }
+            dataPreview += "]";
+        }
+        return std::format(
+            "DataArray({}, {}): {}",
+            std::string(type_),
+            dataArr_.size(),
+            dataPreview);
+    }
+
   protected:
     DataType type_;
-    data_vec_t dataArr_;
+    mutable data_vec_t dataArr_;
 };
 
 class ConstantArray : public DataArray {
@@ -142,7 +176,12 @@ class ConstantArray : public DataArray {
         return {type_, dataArr_.size() - 1};
     }
 
+    virtual bool has(size_t index) const override {
+        return index < dataArr_.size() && dataArr_[index] != nullptr;
+    }
     void set(const data_ptr_t &data, size_t index) override {
+        l.in("DataArray")
+            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -151,7 +190,7 @@ class ConstantArray : public DataArray {
         ASSERT(data != nullptr, "Cannot set null data in a constant array.");
         dataArr_[index] = data;
     }
-    data_ptr_t get(size_t index) override {
+    data_ptr_t get(size_t index) const override {
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -170,8 +209,10 @@ class VariableArray : public DataArray {
         : DataArray(DataType(shared, false)), refs_(refs) {}
 
     DataIndex emplace(DataIndex constIndex) {
+        if (!indices_) {
+            indices_ = std::make_shared<std::vector<size_t>>();
+        }
         ASSERT(refs_.lock(), "Cannot emplace data in a variable array without references.");
-        ASSERT(indices_, "Indices vector is not initialized.");
         ASSERT(constIndex.type.constant, "Cannot emplace non-constant data in a variable array.");
         ASSERT(constIndex.type.shared == type_.shared, "Data type mismatch in variable array.");
 
@@ -181,14 +222,17 @@ class VariableArray : public DataArray {
         return {type_, index};
     }
 
+    virtual bool has(size_t index) const override { return index < dataArr_.size(); }
     void set(const data_ptr_t &data, size_t index) override {
+        l.in("DataArray")
+            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
         ASSERT(data != nullptr, "Cannot set null data in a variable array.");
         dataArr_[index] = data;
     }
-    data_ptr_t get(size_t index) override {
+    data_ptr_t get(size_t index) const override {
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -266,7 +310,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
             }
         }
     }
-    data_ptr_t get(const DataIndex &index) {
+    data_ptr_t get(const DataIndex &index) const {
         if (index.type.shared) {
             if (index.type.constant) {
                 return sharedConstants_->get(index.index);
@@ -281,7 +325,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
             }
         }
     }
-    bool has(const DataIndex &index) {
+    bool has(const DataIndex &index) const {
         if (index.type.shared) {
             if (index.type.constant) {
                 return sharedConstants_->has(index.index);

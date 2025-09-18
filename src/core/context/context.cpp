@@ -19,6 +19,7 @@
 
 #include <filesystem>
 
+#include "compile/gir.h"
 #include "context.h"
 #include "core/module/userdef.h"
 #include "utils/log.h"
@@ -26,6 +27,29 @@
 
 namespace fs = std::filesystem;
 using namespace strutil;
+
+std::string EntryConfig::toString() const {
+    std::ostringstream os;
+    os << "{\n";
+    os << "  entryDir: " << entryDir << "\n";
+    os << "  entryFile: " << entryFile << "\n";
+    os << "  searchPaths: [";
+
+    bool first = true;
+    for (const auto &path : searchPaths) {
+        if (path.empty())
+            continue;
+        if (!first) {
+            os << ", ";
+        }
+        os << path;
+        first = false;
+    }
+
+    os << "]\n";
+    os << "}";
+    return os.str();
+}
 
 inline bool fileExists(const std::string &path) {
     std::ifstream file(path);
@@ -194,20 +218,28 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return nullptr;
 }
 
-GIR::graph_ptr_t Context::rootGraph() const {
+GraphIR::graph_ptr_t Context::rootGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
-    ASSERT(gir != nullptr, "GIR of main module is not built yet.");
+    ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
     return gir;
 }
 
-GIR::graph_ptr_t Context::mainGraph() const {
+GraphIR::graph_ptr_t Context::mainGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
-    ASSERT(gir != nullptr, "GIR of main module is not built yet.");
+    ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
     const auto optMainGraph = gir->getSubGraph("main");
     if (!optMainGraph.has_value()) {
-        throw CamelBaseException("Main graph not found in GIR of main module.");
+        throw CamelBaseException("Main graph not found in GraphIR of main module.");
     }
     return optMainGraph.value();
+}
+
+void Context::registerExecutorFactory(std::string name, executor_factory_t fact) {
+    exeMgr_->registerExecutorFactory(name, fact);
+}
+
+EvalResultCode Context::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
+    return exeMgr_->eval(uri, self, frame);
 }

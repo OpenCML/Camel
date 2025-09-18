@@ -1,0 +1,6 @@
+module main
+
+func main(): int sync {
+    println("Hello, Camel!")
+    return 0
+}

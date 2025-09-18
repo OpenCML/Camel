@@ -27,6 +27,7 @@
 #include "builtin/passes/sched/linear/dump/graphviz.h"
 #include "builtin/passes/sched/linear/dump/topo_node_seq.h"
 #include "builtin/passes/sched/linear/exec/fallback.h"
+#include "codegen/source/generator.h"
 #include "config.h"
 #include "core/module/userdef.h"
 #include "core/type/type.h"
@@ -95,7 +96,7 @@ int main(int argc, char *argv[]) {
             startTime = chrono::high_resolution_clock::now();
         }
 
-        diagnostics_ptr_t diagnostics = make_shared<Diagnostics>();
+        diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
             diagnostics->setConfig(DiagsConfig{
                 .total_limit = -1,
@@ -141,6 +142,13 @@ int main(int argc, char *argv[]) {
                         ast->print(os);
                     }
                 }
+                if (Inspect::geneCode) {
+                    auto ast = parser->ast();
+                    if (ast) {
+                        ASTCodeGen::Generator generator = ASTCodeGen::Generator();
+                        os << generator.generate(ast);
+                    }
+                }
                 if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
                     // Inspect Command ends here if only
                     // tokens, CST or AST is requested
@@ -178,7 +186,16 @@ int main(int argc, char *argv[]) {
             ctx->setMainModule(mainModule);
 
             try {
-                mainModule->load();
+                if (selectedCommand == Command::Inspect) {
+                    if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
+                        mainModule->compile(CompileStage::GCT);
+                    }
+                    if (Inspect::dumpGIR || Inspect::dumpTNS) {
+                        mainModule->compile(CompileStage::Done);
+                    }
+                } else {
+                    mainModule->compile(CompileStage::Done);
+                }
             } catch (DiagnosticsLimitExceededException &e) {
                 auto lastDiag = e.lastDiagnostic();
                 os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
@@ -216,7 +233,7 @@ int main(int argc, char *argv[]) {
 
             if (selectedCommand == Command::Run) {
                 FallbackExecSchedPass pass(ctx);
-                pass.apply(ctx->mainGraph());
+                pass.apply(ctx->rootGraph());
                 // int exitCode = ctx->getExitCode();
                 const auto &diags = ctx->rtmDiags();
                 if (diags->hasErrors()) {

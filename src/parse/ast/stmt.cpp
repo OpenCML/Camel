@@ -22,6 +22,8 @@
 
 namespace AbstractSyntaxTree {
 
+const std::string StmtLoad::geneCode() const { return ""; }
+
 const std::string ImportLoad::toString() const {
     if (path_.empty()) {
         return std::string("ImportDecl: NULL");
@@ -101,6 +103,71 @@ const std::string ExitStmtLoad::toString() const {
     default:
         throw std::runtime_error("Unknown ExitType");
     }
+}
+
+const std::string DataDeclLoad::geneCode() const {
+    std::string result = isVar_ ? "var " : "let ";
+
+    if (refs_.size() == 1) {
+        result += refs_[0].toString();
+    } else {
+        std::string refs =
+            strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); });
+        switch (type_) {
+        case UnpackType::Dict:
+            result += "{" + refs + "}";
+            break;
+        case UnpackType::List:
+            result += "[" + refs + "]";
+            break;
+        case UnpackType::Tuple:
+            result += "(" + refs + ")";
+            break;
+        default:
+            result += "Unknown";
+        }
+    }
+    return result;
+}
+
+const std::string FuncDeclLoad::geneCode() const { return "func " + ref_.toString(); }
+
+const std::string TypeDeclLoad::geneCode() const {
+    std::string result = "type ";
+    if (implMark_ != ImplMark::Graph) {
+        result += to_string(implMark_) + " ";
+    }
+    result += ref_.toString();
+    return result;
+}
+
+const std::string NameDeclLoad::geneCode() const {
+    return "name " + ref_.toString() + " as " + alias_.toString();
+}
+
+const std::string ExitStmtLoad::geneCode() const {
+    switch (type_) {
+    case ExitType::Yield:
+        return "yield";
+    case ExitType::Raise:
+        return "raise";
+    case ExitType::Return:
+        return "return";
+    case ExitType::Throw:
+        return "throw";
+    default:
+        return "exit";
+    }
+}
+const std::string StmtBlockLoad::geneCode() const {
+    std::string result = "block";
+    if (synced_) {
+        result += " sync";
+    }
+    if (waited_) {
+        result += " wait";
+    }
+    return result;
 }
 
 } // namespace AbstractSyntaxTree

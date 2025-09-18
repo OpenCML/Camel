@@ -1,7 +1,9 @@
 .idea/
 .venv/
 .vs/
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .VSCodeCounter/
 **/.cache/
 

@@ -23,7 +23,8 @@
 #include "builder.h"
 #include "messages/index.h"
 #include "range.h"
-#include <fmt/core.h>
+
+#include "fmt/core.h"
 
 // ---- Diagnostic structure ----
 struct Diagnostic {
@@ -112,8 +113,7 @@ struct DiagsConfig {
 // ---- Diagnostics manager ----
 class Diagnostics {
   public:
-    Diagnostics() = default;
-    Diagnostics(std::string modName, std::string modPath = "")
+    Diagnostics(std::string modName, std::string modPath)
         : moduleName_(std::move(modName)), modulePath_(std::move(modPath)) {}
 
     // Configuration
@@ -135,7 +135,7 @@ class Diagnostics {
 
     // Severity shortcut functions
     std::vector<const Diagnostic *> errors() const { return findBySeverity(Severity::Error); }
-    std::vector<const Diagnostic *> warnings() const { return findBySeverity(Severity::Warning); }
+    std::vector<const Diagnostic *> warnings() const { return findBySeverity(Severity::Warn); }
     std::vector<const Diagnostic *> infos() const { return findBySeverity(Severity::Info); }
     std::vector<const Diagnostic *> hints() const { return findBySeverity(Severity::Hint); }
 
@@ -144,7 +144,7 @@ class Diagnostics {
         return findByTypeAndSeverity(type, Severity::Error);
     }
     std::vector<const Diagnostic *> warnings(DiagType type) const {
-        return findByTypeAndSeverity(type, Severity::Warning);
+        return findByTypeAndSeverity(type, Severity::Warn);
     }
     std::vector<const Diagnostic *> infos(DiagType type) const {
         return findByTypeAndSeverity(type, Severity::Info);
@@ -177,13 +177,16 @@ template <typename DiagEnum> DiagnosticBuilder Diagnostics::of(DiagEnum err) {
     DiagnosticBuilder builder(*this);
 
     static_assert(std::is_enum_v<DiagEnum>, "Must be an enum type");
-    builder.specific_ = static_cast<uint32_t>(err);
-
-    DiagInfo info = getDiagInfo(err);
     builder.type_ = diagTypeOf(err);
-    builder.name_ = info.name;
+    uint32_t key = static_cast<uint32_t>(err);
+    builder.severity_ = extractSeverity(key);
+    builder.specific_ = extractSpecific(key);
+    DiagInfo info = getDiagInfo(err);
+    builder.name_ = to_string(builder.type_) + "::" + info.name;
     builder.rawMessage_ = info.message;
     builder.rawSuggestion_ = info.suggestion;
+    builder.moduleName_ = moduleName_;
+    builder.modulePath_ = modulePath_;
 
     return builder;
 }
@@ -197,6 +200,8 @@ template <typename... Args> Diagnostic &DiagnosticBuilder::commit(Args &&...args
     d.name = name_;
     d.message = fmt::format(fmt::runtime(rawMessage_), std::forward<Args>(args)...);
     d.suggestion = fmt::format(fmt::runtime(rawSuggestion_), std::forward<Args>(args)...);
+    d.moduleName = moduleName_;
+    d.modulePath = modulePath_;
 
     return diagnostics_.add(std::move(d));
 }

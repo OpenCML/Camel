@@ -19,31 +19,58 @@
 
 #include "fallback.h"
 #include "builtin/algo/topo.h"
+#include "utils/debug.h"
 
 using namespace std;
-using namespace GIR;
+using namespace GraphIR;
 
-data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_t &frame) {
-    l.in("Eval").debug("Evaluating graph: {}", graph->name());
-    shared_ptr<node_vec_t> sortedNodesPtr;
-    if (graphTNS_.find(graph.get()) == graphTNS_.end()) {
-        auto sortedNodes = topoSort(
-            graph->nodes().begin(),
-            graph->nodes().end(),
-            [](const auto &n) { return n->inDegree(); },
-            [](const auto &n) {
-                vector<node_ptr_t> outs;
-                outs.insert(outs.end(), n->dataOutputs().begin(), n->dataOutputs().end());
-                outs.insert(outs.end(), n->ctrlOutputs().begin(), n->ctrlOutputs().end());
-                return outs;
-            });
-        sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
-        graphTNS_[graph.get()] = sortedNodesPtr;
+std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_t &graph) {
+    if (graphTopoNodesCache_.find(graph.get()) == graphTopoNodesCache_.end()) {
+        node_ptr_t retNode = graph->returnNode();
+        auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
+            vector<node_ptr_t> ins;
+            ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
+            for (const auto &in : n->dataInputs()) {
+                if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    ins.push_back(in);
+            }
+            for (const auto &in : n->ctrlInputs()) {
+                if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    ins.push_back(in);
+            }
+            return ins;
+        });
+        EXEC_WHEN_DEBUG([&]() {
+            if (sortedNodes.size() != graph->nodes().size()) {
+                GraphIR::node_vec_t unreachableNodes;
+                for (const auto &n : graph->nodes()) {
+                    if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
+                        unreachableNodes.push_back(n);
+                    }
+                }
+                std::string nodeStrs;
+                for (const auto &node : unreachableNodes) {
+                    nodeStrs += node->toString() + ", ";
+                }
+                l.in("Topo").warn(
+                    "Unreachable nodes in graph {} detected: {}",
+                    graph->name(),
+                    nodeStrs);
+            }
+        }());
+        const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
+        graphTopoNodesCache_[graph.get()] = sortedNodesPtr;
+        return sortedNodesPtr;
     } else {
-        sortedNodesPtr = graphTNS_[graph.get()];
+        return graphTopoNodesCache_[graph.get()];
     }
+}
+
+data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_t &frame) {
+    l.in("Eval").debug("Evaluating graph: {}", graph->name());
+    data_ptr_t result;
     // 按拓扑序执行
-    for (const auto &n : *sortedNodesPtr) {
+    for (auto &n : *getTopoNodes(graph)) {
         // 用于跳过被标记为不执行的节点（分支功能）
         if (!brInfoStack_.empty() && n == brInfoStack_.top().second) {
             continue;
@@ -51,18 +78,18 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
         switch (n->type()) {
         case NodeType::Function: {
             auto func = tt::as_shared<FunctionNode>(n)->func();
-            auto newFrame = func->arena()->clone();
             auto subGraph = func->graph();
-            const auto &dataInputs = n->dataInputs();
-            const auto &portIndices = subGraph->portIndices();
+            auto newFrame = Frame::create(frame, subGraph);
+            const auto &inNodes = n->dataInputs();
+            const auto &ports = subGraph->portNodes();
             ASSERT(
-                dataInputs.size() == portIndices.size(),
+                inNodes.size() == ports.size(),
                 "Function node input size does not match function graph port size.");
-            for (size_t i = 0; i < portIndices.size(); ++i) {
-                newFrame->set(portIndices[i], frame->get(dataInputs[i]->index()));
+            for (size_t i = 0; i < ports.size(); ++i) {
+                newFrame->set(ports[i].first, frame->get(inNodes[i]));
             }
             data_ptr_t res = evalGraph(subGraph, newFrame);
-            frame->set(n->index(), res);
+            frame->set(n, res);
             break;
         }
         case NodeType::Operator: {
@@ -73,15 +100,14 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
             withArgs.reserve(n->withInputs().size());
             normArgs.reserve(n->normInputs().size());
 
-            for (const auto &input : n->withInputs()) {
-                withArgs.push_back(frame->get(input->index()));
+            for (const auto &inNode : n->withInputs()) {
+                withArgs.push_back(frame->get(inNode));
             }
-            for (const auto &input : n->normInputs()) {
-                normArgs.push_back(frame->get(input->index()));
+            for (const auto &inNode : n->normInputs()) {
+                normArgs.push_back(frame->get(inNode));
             }
 
-            data_ptr_t res = context_->eval(uri, withArgs, normArgs);
-            frame->set(n->index(), res);
+            context_->eval(uri, n, *frame);
             break;
         }
         case NodeType::Select: {
@@ -93,7 +119,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
                     n->dataInputs().size() == 1,
                     "Branch node must have exactly one data input.");
                 ASSERT(n->ctrlOutputs().size() == 2, "Branch node must have exactly two outputs.");
-                auto condDataRaw = frame->get(n->dataInputs().front()->index());
+                auto condDataRaw = frame->get(n->dataInputs().front());
                 auto condData = condDataRaw->as<BoolData>(Type::Bool());
                 bool cond = condData->data();
                 if (cond) {
@@ -104,52 +130,66 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, arena_ptr_
                     brInfoStack_.push({1, n->ctrlOutputs().front()});
                 }
             } else {
-                ASSERT(n->dataInputs().size() == 2, "Join node must have exactly two data inputs.");
+                ASSERT(n->ctrlInputs().size() == 2, "Join node must have exactly two ctrl inputs.");
                 size_t idx = brInfoStack_.top().first;
                 brInfoStack_.pop();
-                auto data = frame->get(n->dataInputs()[idx]->index());
-                frame->set(n->index(), data);
+                auto data = frame->get(n->ctrlInputs()[idx]);
+                frame->set(n, data);
             }
             break;
         }
         case NodeType::Struct: {
             auto structNode = tt::as_shared<StructNode>(n);
             const auto &dataInputs = n->dataInputs();
-            data_ptr_t data = frame->get(n->index());
+            data_ptr_t data = frame->get(n);
             ASSERT(data != nullptr, "Struct data is null.");
             data_vec_t inputs;
             inputs.reserve(dataInputs.size());
             for (const auto &input : dataInputs) {
-                inputs.push_back(frame->get(input->index()));
+                inputs.push_back(frame->get(input));
             }
             data->resolve(inputs);
-            frame->set(n->index(), data);
+            frame->set(n, data);
             break;
         }
         case NodeType::Access: {
-            auto accessNode = tt::as_shared<AccessNode>(n);
-            data_ptr_t source = frame->get(n->dataInputs().front()->index());
-            data_ptr_t res;
             ASSERT(false, "Access node evaluation not implemented yet.");
+            auto accessNode = tt::as_shared<AccessNode>(n);
+            data_ptr_t source = frame->get(n->dataInputs().front());
+            data_ptr_t res;
             break;
         }
         case NodeType::Source: {
-            auto sourceNode = tt::as_shared<SourceNode>(n);
-            data_ptr_t data = sourceNode->dataOf(frame);
+            data_ptr_t data = frame->get(n);
             ASSERT(data != nullptr, "Source data is null.");
+            break;
+        }
+        case NodeType::Return: {
+            ASSERT(n->withInputs().size() == 0, "Return node cannot have with inputs.");
+            const auto &input = n->dataInputs();
+            if (input.empty()) {
+                result = Data::null();
+            } else {
+                result = frame->get(input.front());
+            }
             break;
         }
         }
     }
 
-    // 返回图的返回节点数据
-    auto retNode = graph->output();
-    ASSERT(retNode != nullptr, "Graph has no return node.");
-    l.in("Eval").debug("Graph {} evaluation completed.", graph->name());
-    return frame->get(retNode->index());
+    ASSERT(result != nullptr, "Graph evaluation did not produce a result.");
+    l.in("Eval").debug(
+        "Graph {} evaluation completed with returned value {}.",
+        graph->name(),
+        result->toString());
+    return result;
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
-    auto arena = graph->arena()->clone();
-    return evalGraph(graph, arena);
+    auto rootFrame = Frame::create(nullptr, graph);
+    auto optMainGraph = graph->getSubGraph("main");
+    ASSERT(optMainGraph.has_value(), "Main graph not found.");
+    auto mainGraph = optMainGraph.value();
+    auto mainFrame = Frame::create(rootFrame, mainGraph);
+    return evalGraph(mainGraph, mainFrame);
 }

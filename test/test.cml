@@ -1,7 +1,0 @@
-module main
-
-func main(): int sync {
-    sleep(2000)
-    print("Hello, Camel!")
-    return 0
-}
