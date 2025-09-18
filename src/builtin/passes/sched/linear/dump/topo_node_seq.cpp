@@ -56,9 +56,8 @@ string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) 
 
 any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
     // 收集所有被依赖的子图
-    auto sortedGraphs = findReachable(graph, [](const graph_ptr_t &g) {
-        return g->dependencies();
-    });
+    auto sortedGraphs =
+        findReachable(graph, [](const graph_ptr_t &g) { return g->dependencies(); });
 
     ostringstream oss;
 
@@ -79,6 +78,19 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             }
             return ins;
         });
+        if (sortedNodes.size() != g->nodes().size()) {
+            GraphIR::node_vec_t unreachableNodes;
+            for (const auto &n : g->nodes()) {
+                if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
+                    unreachableNodes.push_back(n);
+                }
+            }
+            std::string nodeStrs;
+            for (const auto &node : unreachableNodes) {
+                nodeStrs += node->toString() + ", ";
+            }
+            l.in("Topo").warn("Unreachable nodes in graph {} detected: {}", g->name(), nodeStrs);
+        }
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
         for (const auto &[portNode, __] : g->portNodes()) {

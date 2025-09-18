@@ -19,6 +19,7 @@
 
 #include "fallback.h"
 #include "builtin/algo/topo.h"
+#include "utils/debug.h"
 
 using namespace std;
 using namespace GraphIR;
@@ -39,18 +40,24 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
             }
             return ins;
         });
-        if (sortedNodes.size() != graph->nodes().size()) {
-            l.in("Topo").warn(
-                "Topological sort found {} reachable nodes, but graph {} has {} nodes.",
-                sortedNodes.size(),
-                graph->name(),
-                graph->nodes().size());
-        }
-        l.in("Topo")
-            .debug("Topological order for graph {}, {} nodes:", graph->name(), sortedNodes.size());
-        for (auto &n : sortedNodes) {
-            l.in("Topo").debug("{}", n->toString());
-        }
+        EXEC_WHEN_DEBUG([&]() {
+            if (sortedNodes.size() != graph->nodes().size()) {
+                GraphIR::node_vec_t unreachableNodes;
+                for (const auto &n : graph->nodes()) {
+                    if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
+                        unreachableNodes.push_back(n);
+                    }
+                }
+                std::string nodeStrs;
+                for (const auto &node : unreachableNodes) {
+                    nodeStrs += node->toString() + ", ";
+                }
+                l.in("Topo").warn(
+                    "Unreachable nodes in graph {} detected: {}",
+                    graph->name(),
+                    nodeStrs);
+            }
+        }());
         const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
         graphTopoNodesCache_[graph.get()] = sortedNodesPtr;
         return sortedNodesPtr;

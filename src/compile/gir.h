@@ -203,7 +203,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
     NodeType type() const { return nodeType_; }
     DataType dataType() const { return dataIndex_.type; }
-    virtual std::string data2str() const { return "<null>"; }
+    virtual std::string data2str() const { return "null"; }
     virtual std::string toString() const {
         return std::format(
             "Node({}, {}, {})",
@@ -374,7 +374,7 @@ class SourceNode : public Node {
     std::string data2str() const override {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
         const auto &arena = graph_.lock()->arena();
-        return arena->has(dataIndex_) ? dataOf(*arena)->toString() : "<null>";
+        return arena->has(dataIndex_) ? dataOf(*arena)->toString() : "null";
     }
     std::string toString() const override {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
@@ -383,7 +383,7 @@ class SourceNode : public Node {
             "Source({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
-            arena->has(dataIndex_) ? dataOf(*arena)->toString() : "<null>");
+            arena->has(dataIndex_) ? dataOf(*arena)->toString() : "null");
     }
 };
 
