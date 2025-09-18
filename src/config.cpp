@@ -81,6 +81,7 @@ bool dumpAST = false;    // Whether to dump Abstract Syntax Tree
 bool dumpGCT = false;    // Whether to dump Graph Construction Tree
 bool dumpGIR = false;    // Whether to dump Graph Intermediate Representation
 bool dumpTNS = false;    // Whether to dump Topological Node Sequence
+bool geneCode = false;   // Whether to generate code from GIR
 int passUntil = -1;      // Pass until the given pass
 } // namespace Inspect
 
@@ -232,6 +233,7 @@ bool parseArgs(int argc, char *argv[]) {
          option("--gct", "--graph-construct-tree").set(dumpGCT) % "dump graph construct tree",
          option("--gir", "--graph-ir").set(dumpGIR) % "dump graph intermediate representation",
          option("--tns", "--topo-node-seq").set(dumpTNS) % "dump topological sorted node sequence",
+         option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",
          globalOps,

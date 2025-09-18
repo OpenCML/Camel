@@ -52,6 +52,7 @@ const char *typeName(int t) {
         return "Unknown";
     }
 }
+
 string Generator::generate(const AbstractSyntaxTree::node_ptr_t &ast) {
     if (!ast)
         return "";
@@ -131,6 +132,7 @@ string Generator::generateChildren(const AbstractSyntaxTree::node_ptr_t &node) {
     }
     return code;
 }
+
 string Generator::generateModuleLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -250,6 +252,7 @@ string Generator::extractReturnType(const AbstractSyntaxTree::node_ptr_t &node) 
     }
     return "";
 }
+
 void Generator::collectParamsFromNode(
     const AbstractSyntaxTree::node_ptr_t &node, vector<string> &params, Generator *gen) {
     if (!node)
@@ -467,6 +470,7 @@ void Generator::collectParams(
         }
     }
 }
+
 string Generator::generateFuncDeclLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -605,6 +609,7 @@ string Generator::generateFuncDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     }
     return code + "\n";
 }
+
 string Generator::generateFuncTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -658,6 +663,7 @@ string Generator::generateFuncTypeLoad(const AbstractSyntaxTree::node_ptr_t &nod
 
     return code;
 }
+
 string Generator::generateTypeDeclLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -731,6 +737,7 @@ string Generator::generateStmtLoad(const AbstractSyntaxTree::node_ptr_t &node) {
         return generateChildren(node);
     }
 }
+
 string Generator::generateExitStmtLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -745,6 +752,7 @@ string Generator::generateExitStmtLoad(const AbstractSyntaxTree::node_ptr_t &nod
     }
     return code + ";\n";
 }
+
 string Generator::generateExprStmtLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -791,6 +799,7 @@ string Generator::generateStmtBlockLoad(const AbstractSyntaxTree::node_ptr_t &no
     code += "}";
     return code;
 }
+
 string Generator::generateDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -851,6 +860,7 @@ string Generator::generateDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
 
     return result;
 }
+
 string Generator::generateUnaryExprLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
@@ -1359,6 +1369,7 @@ string Generator::generateNullableTypeLoad(const AbstractSyntaxTree::node_ptr_t 
 
     return "?";
 }
+
 string Generator::generateNamedDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";

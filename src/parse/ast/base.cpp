@@ -73,7 +73,7 @@ const string ImportLoad::geneCode() const {
             code += " }";
         }
     }
-    code += " from \"" + path_ + "\"";
+    code += " from " + path_;
     return code;
 }
 
