@@ -590,16 +590,17 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter child of EXIT node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
-    node_ptr_t exitNode = node;
+    node_ptr_t resultNode = node;
     if (nodeModifierMap_.count(node.get())) {
-        exitNode = nodeModifierMap_[node.get()].lock();
+        resultNode = nodeModifierMap_[node.get()].lock();
     }
+    currGraph_->setOutput(resultNode);
+    node_ptr_t exitNode = currGraph_->returnNode();
     if (synced_ && lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, exitNode)) {
         Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
     }
-    currGraph_->setOutput(exitNode);
     LEAVE("EXIT");
-    return exitNode;
+    return resultNode;
 }
 
 node_ptr_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {

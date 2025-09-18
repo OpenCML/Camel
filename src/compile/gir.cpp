@@ -167,7 +167,8 @@ node_ptr_t Graph::addPort(bool isWithArg) {
 
 void Graph::setOutput(const node_ptr_t &node) {
     ASSERT(output_ == nullptr, "Output node has already been set.");
-    output_ = node;
+    output_ = ReturnNode::create(shared_from_this(), node->index());
+    Node::link(LinkType::Norm, node, output_);
 }
 
 /*

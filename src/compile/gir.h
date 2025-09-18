@@ -156,7 +156,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isWithArg = false);
 
-    const node_ptr_t &outputNode() const {
+    const node_ptr_t &returnNode() const {
         ASSERT(output_ != nullptr, "Graph has no output node.");
         return output_;
     }

@@ -26,7 +26,7 @@ using namespace GIR;
 std::shared_ptr<GIR::node_vec_t>
 FallbackExecSchedPass::getTopoNodes(const GIR::graph_ptr_t &graph) {
     if (graphTopoNodesCache_.find(graph.get()) == graphTopoNodesCache_.end()) {
-        node_ptr_t retNode = graph->outputNode();
+        node_ptr_t retNode = graph->returnNode();
         auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
             vector<node_ptr_t> ins;
             ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());

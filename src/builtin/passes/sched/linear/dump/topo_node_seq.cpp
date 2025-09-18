@@ -91,7 +91,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
-        node_ptr_t retNode = g->outputNode();
+        node_ptr_t retNode = g->returnNode();
         auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
             vector<node_ptr_t> ins;
             ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
@@ -158,7 +158,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             oss << "    [" << pointerToIdent(n.get()) << "] " << res << "\n";
         }
         // 打印返回节点
-        oss << "RETN: " << pointerToIdent(g->outputNode().get()) << "\n\n";
+        oss << "RETN: " << pointerToIdent(g->returnNode().get()) << "\n\n";
     }
 
     oss << format("CALL: {}", graph->name()) << "\n";

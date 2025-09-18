@@ -140,11 +140,9 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     }
 
     string funcId = pointerToIdent(graph.get(), "F");
-    string exitId = pointerToIdent(graph->arena().get(), "R");
     string funcName = graph->name();
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
-    void *retNodePtr = graph->hasOutput() ? graph->outputNode().get() : nullptr;
 
     res += baseIndent_;
 
@@ -244,6 +242,12 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
             shape = "diamond";
             break;
         }
+        case NodeType::Return: {
+            label = "RETN";
+            shape = "doublecircle";
+            size = "width=0.9, height=0.9";
+            break;
+        }
         default:
             throw runtime_error("Unknown node type encountered during GraphViz generation.");
         }
@@ -258,15 +262,6 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
             style,
             size.empty() ? "" : ", " + size,
             std::format("{}\\n{}", escape(label), escape(tooltip)));
-    }
-
-    // Draw return node if not root
-    if (!graph->isRoot()) {
-        res += std::format(
-            "{}{}{} [label=\"RETN\", shape=doublecircle, width=0.9, height=0.9];\r\n",
-            baseIndent_,
-            indent_,
-            exitId);
     }
 
     // Connect ARGS node to port nodes
@@ -347,26 +342,6 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
                     i);
             }
         }
-
-        // Connect return node
-        if (node.get() == retNodePtr) {
-            res += std::format(
-                "{}{}{} -> {};\r\n",
-                baseIndent_,
-                indent_,
-                pointerToIdent(node.get()),
-                exitId);
-        }
-    }
-
-    // Special case: graph has no nodes but has output set (outer entity capture)
-    if (graph->nodes().empty() && graph->hasOutput()) {
-        res += std::format(
-            "{}{}{} -> {};\r\n",
-            baseIndent_,
-            indent_,
-            pointerToIdent(graph->outputNode().get()),
-            exitId);
     }
 
     res += baseIndent_ + "}\r\n";
