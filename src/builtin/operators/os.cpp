@@ -18,9 +18,11 @@
  */
 
 #include "os.h"
+#include "compile/gir.h"
 #include "core/context/context.h"
+#include "core/context/frame.h"
 
-data_ptr_t __sleep__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     if (norm.size() != 1) {
         ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<sleep>", 1, norm.size());
         return Data::null();

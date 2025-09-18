@@ -18,9 +18,11 @@
  */
 
 #include "math.h"
+#include "compile/gir.h"
 #include "core/context/context.h"
+#include "core/context/frame.h"
 
-data_ptr_t __abs__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 1, "abs operator requires exactly one argument");
     auto val = norm[0];
     if (!val->type()->primary()) {
@@ -50,7 +52,7 @@ data_ptr_t __abs__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __round__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 1, "round operator requires exactly one argument");
     auto val = norm[0];
     if (!val->type()->primary()) {
@@ -74,7 +76,7 @@ data_ptr_t __round__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __ceil__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 1, "ceil operator requires exactly one argument");
     auto val = norm[0];
     if (!val->type()->primary()) {
@@ -98,7 +100,7 @@ data_ptr_t __ceil__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __floor__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 1, "floor operator requires exactly one argument");
     auto val = norm[0];
     if (!val->type()->primary()) {
@@ -122,7 +124,7 @@ data_ptr_t __floor__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __bin__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 1, "bin operator requires exactly one argument");
     auto val = norm[0];
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
@@ -145,7 +147,7 @@ data_ptr_t __bin__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<StringData>(result);
 }
 
-data_ptr_t __oct__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 1, "oct operator requires exactly one argument");
     auto val = norm[0];
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
@@ -166,7 +168,7 @@ data_ptr_t __oct__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<StringData>(oss.str());
 }
 
-data_ptr_t __hex__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 1, "hex operator requires exactly one argument");
     auto val = norm[0];
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {

@@ -18,62 +18,64 @@
  */
 
 #include "ops.h"
+#include "compile/gir.h"
 #include "core/context/context.h"
+#include "core/context/frame.h"
 #include "utils/assert.h"
 
 #include <cmath>
 
-data_ptr_t __builtin__assn__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_add__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_add operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_sub__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_sub operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_mul__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_mul operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_div__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_div operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_mod__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_mod operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_mat__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_mat operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_exp__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_exp operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_and__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_and operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__assn_or__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__assn_or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "assn_or operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__or__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "or operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -98,7 +100,7 @@ data_ptr_t __builtin__or__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__and__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "and operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -123,7 +125,7 @@ data_ptr_t __builtin__and__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__eq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "eq operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -131,7 +133,7 @@ data_ptr_t __builtin__eq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<BoolData>(res);
 }
 
-data_ptr_t __builtin__neq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "neq operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -139,7 +141,7 @@ data_ptr_t __builtin__neq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<BoolData>(res);
 }
 
-data_ptr_t __builtin__strict_eq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__strict_eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "strict_eq operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -148,7 +150,7 @@ data_ptr_t __builtin__strict_eq__(Context &ctx, data_vec_t &with, data_vec_t &no
     return std::make_shared<BoolData>(res);
 }
 
-data_ptr_t __builtin__strict_neq__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__strict_neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "strict_neq operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -157,7 +159,7 @@ data_ptr_t __builtin__strict_neq__(Context &ctx, data_vec_t &with, data_vec_t &n
     return std::make_shared<BoolData>(res);
 }
 
-data_ptr_t __builtin__lt__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__lt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "lt operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -180,7 +182,7 @@ data_ptr_t __builtin__lt__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<BoolData>(l->data() < r->data());
 }
 
-data_ptr_t __builtin__le__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__le__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "le operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -203,7 +205,7 @@ data_ptr_t __builtin__le__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<BoolData>(l->data() <= r->data());
 }
 
-data_ptr_t __builtin__gt__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__gt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "gt operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -226,7 +228,7 @@ data_ptr_t __builtin__gt__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<BoolData>(l->data() > r->data());
 }
 
-data_ptr_t __builtin__ge__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "ge operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -249,7 +251,7 @@ data_ptr_t __builtin__ge__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<BoolData>(l->data() >= r->data());
 }
 
-data_ptr_t __builtin__add__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "add operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -295,7 +297,7 @@ data_ptr_t __builtin__add__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__sub__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "sub operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -338,7 +340,7 @@ data_ptr_t __builtin__sub__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__mul__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "mul operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -381,7 +383,7 @@ data_ptr_t __builtin__mul__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__div__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "div operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -433,7 +435,7 @@ data_ptr_t __builtin__div__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__mod__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "mod operator requires exactly two arguments");
     auto left = norm[0];
     auto right = norm[1];
@@ -474,12 +476,12 @@ data_ptr_t __builtin__mod__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__mat__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "mat operator not implemented");
     return nullptr;
 }
 
-data_ptr_t __builtin__exp__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "exp operator requires exactly two arguments");
     auto base = norm[0];
     auto exponent = norm[1];
@@ -522,7 +524,7 @@ data_ptr_t __builtin__exp__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     }
 }
 
-data_ptr_t __builtin__idx__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "idx operator not implemented");
     return nullptr;
 }

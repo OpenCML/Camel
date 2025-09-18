@@ -18,7 +18,10 @@
  */
 
 #include "str.h"
+#include "compile/gir.h"
 #include "core/context/context.h"
+#include "core/context/frame.h"
+
 #include "fmt/args.h"
 #include "fmt/core.h"
 
@@ -32,7 +35,7 @@ std::string format_vector(const std::string &fmtStr, const std::vector<std::stri
     return fmt::vformat(fmtStr, store);
 }
 
-data_ptr_t __format__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     if (with.size() == 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)

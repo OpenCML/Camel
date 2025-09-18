@@ -28,7 +28,7 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
     executorFactories[name] = fact;
 }
 
-data_ptr_t ExecutorManager::eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) {
+EvalResultCode ExecutorManager::eval(std::string uri, GIR::node_ptr_t &self, Frame &frame) {
     l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri);
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {
@@ -37,7 +37,7 @@ data_ptr_t ExecutorManager::eval(std::string uri, data_vec_t &withArgs, data_vec
     const std::string protocol = uri.substr(0, pos);
     auto itExec = loadedExecutors.find(protocol);
     if (itExec != loadedExecutors.end()) {
-        return itExec->second->eval(uri.substr(pos + 1), withArgs, normArgs);
+        return itExec->second->eval(uri.substr(pos + 1), self, frame);
     }
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
@@ -48,5 +48,5 @@ data_ptr_t ExecutorManager::eval(std::string uri, data_vec_t &withArgs, data_vec
     l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol);
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, executor);
-    return executor->eval(uri.substr(pos + 1), withArgs, normArgs);
+    return executor->eval(uri.substr(pos + 1), self, frame);
 }

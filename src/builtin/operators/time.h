@@ -22,6 +22,6 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-data_ptr_t __now__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __strftime__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __strptime__(Context &ctx, data_vec_t &with, data_vec_t &norm);
+EvalResultCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);

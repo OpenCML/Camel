@@ -18,12 +18,14 @@
  */
 
 #include "time.h"
+#include "compile/gir.h"
 #include "core/context/context.h"
+#include "core/context/frame.h"
 #include "utils/strpt.h"
 
 #include <chrono>
 
-data_ptr_t __now__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     auto now = std::chrono::system_clock::now();
     auto epoch = now.time_since_epoch();
     double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count() / 1000.0;
@@ -34,7 +36,7 @@ data_ptr_t __now__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<DoubleData>(seconds);
 }
 
-data_ptr_t __strftime__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "<strftime> requires exactly two arguments");
 
     auto time_val = norm[0];
@@ -76,7 +78,7 @@ data_ptr_t __strftime__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return std::make_shared<StringData>(std::string(buffer));
 }
 
-data_ptr_t __strptime__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(norm.size() == 2, "<strptime> requires exactly two arguments");
 
     auto str_val = norm[0];

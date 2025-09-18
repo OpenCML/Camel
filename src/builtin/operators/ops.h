@@ -22,33 +22,33 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-data_ptr_t __builtin__assn__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_add__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_sub__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_mul__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_div__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_mod__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_mat__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_exp__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_and__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__assn_or__(Context &ctx, data_vec_t &with, data_vec_t &norm);
+EvalResultCode __builtin__assn__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__assn_or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
 
-data_ptr_t __builtin__or__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__and__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__eq__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__neq__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__strict_eq__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__strict_neq__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__lt__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__le__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__gt__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__ge__(Context &ctx, data_vec_t &with, data_vec_t &norm);
+EvalResultCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__strict_eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__strict_neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__lt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__le__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__gt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
 
-data_ptr_t __builtin__add__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__sub__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__mul__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__div__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__mod__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__mat__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__exp__(Context &ctx, data_vec_t &with, data_vec_t &norm);
-data_ptr_t __builtin__idx__(Context &ctx, data_vec_t &with, data_vec_t &norm);
+EvalResultCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);

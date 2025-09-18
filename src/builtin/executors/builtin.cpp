@@ -90,11 +90,11 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsOpMap()) {};
 
-data_ptr_t BasicBuiltinExecutor::eval(std::string uri, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode BasicBuiltinExecutor::eval(std::string uri, GIR::node_ptr_t &self, Frame &frame) {
     l.in("BasicExec").debug("Evaluating operator of URI: {}", uri);
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
         throw CamelRuntimeException(RetCode::InvalidURI, std::format("Invalid URI: {}", uri));
     }
-    return it->second(*context_, with, norm);
+    return it->second(self, frame, *context_);
 };

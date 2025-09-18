@@ -18,16 +18,15 @@
  */
 
 #include "io.h"
+#include "core/context/context.h"
+#include "core/context/frame.h"
 
 #include <iostream>
 #include <sstream>
 
-data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    for (size_t i = 0; i < with.size(); i++) {
-        if (i > 0) {
-            std::cout << " ";
-        }
-        with[i]->print(std::cout);
+EvalResultCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    for (const auto &ins: self->normInputs()()) {
+        
     }
     for (size_t i = 0; i < norm.size(); i++) {
         if (i > 0) {
@@ -38,7 +37,7 @@ data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return Data::null();
 }
 
-data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     for (size_t i = 0; i < with.size(); i++) {
         if (i > 0) {
             std::cout << " ";
@@ -55,7 +54,7 @@ data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     return Data::null();
 }
 
-data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::stringstream oss;
 
     for (size_t i = 0; i < with.size(); i++) {
