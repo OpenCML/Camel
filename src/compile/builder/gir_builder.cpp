@@ -261,9 +261,15 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     node_ptr_t node = nullptr;
     if (data->resolved()) {
         DataIndex index = graph->addSharedConstant(data);
+        if (varied_) {
+            index = graph->addVariable(index);
+        }
         node = SourceNode::create(currGraph_, index);
     } else {
         DataIndex index = graph->addRuntimeConstant(data);
+        if (varied_) {
+            index = graph->addVariable(index);
+        }
         node = StructNode::create(currGraph_, index, data->type());
         for (const string &ref : data->refs()) {
             Node::link(LinkType::Norm, resolveNodeByRef(ref), node);

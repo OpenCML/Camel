@@ -6,10 +6,7 @@ func fib(idx: int): int sync {
     var cnt = 0    
     func fibonacci(n: int): int sync {
         wait cnt += 1
-        return if n == 0 then 0
-        else if n == 1 then 1 else {
-            fibonacci(n - 1) + fibonacci(n - 2)
-        }
+        return if n <= 1 then n else fibonacci(n - 1) + fibonacci(n - 2)
     }
     let res = fibonacci(idx)
     println("Total calls made: {}".format(cnt))
@@ -17,7 +14,7 @@ func fib(idx: int): int sync {
 }
 
 export func main(): int sync {
-    let idx = 10
+    let idx = 30
     println("Start computing fibonacci({})...".format(idx))
     let start = now()
     let res = fib(idx)

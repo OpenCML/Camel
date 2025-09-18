@@ -13,7 +13,7 @@ func fibonacci(n: int): int {
 }
 
 export func main(): int sync {
-    let idx = 10
+    let idx = 3
     println("Start computing fibonacci({})...".format(idx))
     let start = now()
     let res = fibonacci(idx)
