@@ -37,6 +37,7 @@ enum class NodeType {
     Access,   // Element accessed during runtime
     Struct,   // Runtime constructed data structure
     Source,   // Compile-time constant or port
+    Return,   // Final output node
     Operator, // Atomic operation
     Function, // (Sub)-Graph, function
 };
@@ -155,17 +156,14 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addNode(const node_ptr_t &node);
     node_ptr_t addPort(bool isWithArg = false);
 
-    const node_ptr_t &output() const {
-        // In the usage phase, the graph is assumed to be fully constructed,
-        // thus output_ should not be null.
-        // except the "__root__" graph
-        ASSERT(output_, "Graph has no output node.");
+    const node_ptr_t &outputNode() const {
+        ASSERT(output_ != nullptr, "Graph has no output node.");
         return output_;
     }
     bool hasOutput() const { return output_ != nullptr; }
     void setOutput(const node_ptr_t &node);
 
-    const std::vector<std::pair<node_ptr_t, bool>> &ports() const { return ports_; }
+    const std::vector<std::pair<node_ptr_t, bool>> &portNodes() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
 
   private:
@@ -377,6 +375,20 @@ class SourceNode : public Node {
             dataIndex_.index,
             arena->has(dataIndex_) ? dataOf(*arena)->toString() : "<null>");
     }
+};
+
+class ReturnNode : public Node {
+  public:
+    ReturnNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Return, index) {}
+    ~ReturnNode() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
+        auto node = std::make_shared<ReturnNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
+
+    std::string toString() const override { return std::string("Node(Return)"); }
 };
 
 class OperatorNode : public Node {

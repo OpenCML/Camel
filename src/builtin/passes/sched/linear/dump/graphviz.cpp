@@ -144,7 +144,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     string funcName = graph->name();
     string res;
     unordered_map<size_t, pair<string, bool>> portsNameMap;
-    void *retNodePtr = graph->hasOutput() ? graph->output().get() : nullptr;
+    void *retNodePtr = graph->hasOutput() ? graph->outputNode().get() : nullptr;
 
     res += baseIndent_;
 
@@ -156,7 +156,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
-        for (size_t i = 0; i < graph->ports().size(); i++) {
+        for (size_t i = 0; i < graph->portNodes().size(); i++) {
             const string name = type->argNameAt(i);
             bool isVar = type->variableMap().at(name);
             portsNameMap[i] = make_pair(name, isVar);
@@ -185,7 +185,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     }
 
     // Draw ARGS node to represent function arguments
-    if (!graph->isRoot() && !graph->ports().empty()) {
+    if (!graph->isRoot() && !graph->portNodes().empty()) {
         res += std::format(
             "{}{}{} [label=\"ARGS\", style=dashed, shape=circle];\r\n",
             baseIndent_,
@@ -270,7 +270,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
 
     // Connect ARGS node to port nodes
     size_t withIdx = 0, normIdx = 0;
-    for (const auto &[portNode, isWithArg] : graph->ports()) {
+    for (const auto &[portNode, isWithArg] : graph->portNodes()) {
         string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", style={}];\r\n",
@@ -364,7 +364,7 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
             "{}{}{} -> {};\r\n",
             baseIndent_,
             indent_,
-            pointerToIdent(graph->output().get()),
+            pointerToIdent(graph->outputNode().get()),
             exitId);
     }
 

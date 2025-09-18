@@ -34,6 +34,8 @@ std::string to_string(NodeType type) {
         return "Struct";
     case NodeType::Source:
         return "Source";
+    case NodeType::Return:
+        return "Return";
     case NodeType::Operator:
         return "Operator";
     case NodeType::Function:
