@@ -43,7 +43,6 @@ enum class TypeOp {
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);
-
 class TypeLoad : public Load {
   public:
     TypeLoad(TypeType type) : Load(LoadType::Type), typeType_(type) {}
@@ -59,13 +58,14 @@ class NullableTypeLoad : public TypeLoad {
   public:
     NullableTypeLoad() : TypeLoad(TypeType::Null) {}
     const std::string toString() const override { return "NullableType"; }
+    const std::string geneCode() const override;
 };
 
 class TypeExprLoad : public TypeLoad {
   public:
     TypeExprLoad(TypeOp op) : TypeLoad(TypeType::Expr), op_(op) {}
     const std::string toString() const override { return "TypeExpr: " + to_string(op_); }
-
+    const std::string geneCode() const override;
     TypeOp op() const { return op_; }
 
   private:
@@ -80,6 +80,7 @@ class ListTypeLoad : public TypeLoad {
     }
 
     size_t dims() const { return dims_; }
+    const std::string geneCode() const override;
 
   private:
     size_t dims_ = 0;
@@ -89,12 +90,14 @@ class DictTypeLoad : public TypeLoad {
   public:
     DictTypeLoad() : TypeLoad(TypeType::Dict) {}
     const std::string toString() const override { return "DictType"; }
+    const std::string geneCode() const override;
 };
 
 class TupleTypeLoad : public TypeLoad {
   public:
     TupleTypeLoad() : TypeLoad(TypeType::Tuple) {}
     const std::string toString() const override { return "TupleType"; }
+    const std::string geneCode() const override;
 };
 
 class FuncTypeLoad : public TypeLoad {
@@ -110,6 +113,7 @@ class FuncTypeLoad : public TypeLoad {
     void setModifiers(const ModifierSet &modifiers) { modifiers_ = modifiers; }
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark implMark) { implMark_ = implMark; }
+    const std::string geneCode() const override;
 
   private:
     ImplMark implMark_ = ImplMark::Graph;
@@ -121,6 +125,7 @@ class UnitTypeLoad : public TypeLoad {
   public:
     UnitTypeLoad(Reference ref) : TypeLoad(TypeType::Unit), ref_(ref) {}
     const std::string toString() const override { return "UnitType"; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -130,6 +135,7 @@ class InferTypeLoad : public TypeLoad {
   public:
     InferTypeLoad(Reference ref) : TypeLoad(TypeType::Infer), ref_(ref) {}
     const std::string toString() const override { return "InferType"; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -139,6 +145,7 @@ class DataTypeLoad : public TypeLoad {
   public:
     DataTypeLoad(Reference ref) : TypeLoad(TypeType::Data), ref_(ref) {}
     const std::string toString() const override { return "DataType: " + ref_.toString(); }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -150,6 +157,7 @@ class RefTypeLoad : public TypeLoad {
     const std::string toString() const override { return "RefType: " + ref_.toString(); }
 
     const Reference &ref() const { return ref_; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;

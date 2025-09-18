@@ -20,6 +20,8 @@
 #include "base.h"
 #include "utils/str.h"
 
+using namespace std;
+
 namespace AbstractSyntaxTree {
 
 std::string to_string(LoadType type) {
@@ -49,6 +51,59 @@ std::string to_string(LoadType type) {
     default:
         throw std::runtime_error("Unknown LoadType");
     }
+}
+
+const string Load::geneCode() const { return ""; }
+
+const string ModuleLoad::geneCode() const { return "module " + ref_.toString(); }
+
+const string ImportLoad::geneCode() const {
+    string code = "import ";
+    if (!refs_.empty()) {
+        if (refs_.size() == 1) {
+            code += refs_[0].toString();
+        } else {
+            code += "{ ";
+            for (auto ref : refs_) {
+                code += ref.toString() + ", ";
+            }
+            if (code.ends_with(", ")) {
+                code = code.substr(0, code.size() - 2);
+            }
+            code += " }";
+        }
+    }
+    code += " from " + path_;
+    return code;
+}
+
+const string ExportLoad::geneCode() const {
+    string code = "export ";
+    if (!refs_.empty()) {
+        if (refs_.size() == 1) {
+            code += refs_[0].toString();
+        } else {
+            code += "{ ";
+            for (auto ref : refs_) {
+                code += ref.toString() + ", ";
+            }
+            if (code.ends_with(", ")) {
+                code = code.substr(0, code.size() - 2);
+            }
+            code += " }";
+        }
+    }
+    return code;
+}
+
+const string NamedDataLoad::geneCode() const { return ref_.toString(); }
+
+const string NamedTypeLoad::geneCode() const {
+    return (isVar_ ? string("var ") : "") + ref_.toString();
+}
+
+const string NamedPairLoad::geneCode() const {
+    return (isVar_ ? string("var ") : "") + ref_.toString();
 }
 
 } // namespace AbstractSyntaxTree

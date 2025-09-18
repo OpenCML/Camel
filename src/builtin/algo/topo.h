@@ -20,6 +20,7 @@
 #pragma once
 
 #include "utils/assert.h"
+#include "utils/debug.h"
 
 #include <functional>
 #include <iterator>
@@ -64,9 +65,25 @@ auto topoSort(
     }
 
     ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
-    ASSERT(
-        allowUnreachable || sortedNodes.size() == count,
-        "Unreachable nodes detected in the graph.");
+    EXEC_WHEN_DEBUG([&]() {
+        if (!allowUnreachable) {
+            if (sortedNodes.size() != count) {
+                // Find unreachable nodes
+                std::vector<NodeType> unreachableNodes;
+                for (auto it = first; it != last; ++it) {
+                    NodeType node = *it;
+                    if (inDegrees[node] > 0) {
+                        unreachableNodes.push_back(node);
+                    }
+                }
+                std::string msg = "Unreachable nodes detected: ";
+                for (const auto &node : unreachableNodes) {
+                    msg += node->toString() + ", ";
+                }
+                ASSERT(false, msg);
+            }
+        }
+    }());
 
     return sortedNodes;
 }

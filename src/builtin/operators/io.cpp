@@ -18,57 +18,62 @@
  */
 
 #include "io.h"
+#include "compile/gir.h"
+#include "core/context/context.h"
+#include "core/context/frame.h"
 
 #include <iostream>
 #include <sstream>
 
-data_ptr_t __print__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    for (size_t i = 0; i < with.size(); i++) {
+namespace GIR = GraphIR;
+
+EvalResultCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    for (size_t i = 0; i < ins.size(); i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        with[i]->print(std::cout);
+        const data_ptr_t &data = frame.get(ins[i]);
+        data->print(std::cout);
     }
-    for (size_t i = 0; i < norm.size(); i++) {
-        if (i > 0) {
-            std::cout << " ";
-        }
-        norm[i]->print(std::cout);
-    }
-    return Data::null();
+    frame.set(self, Data::null());
+    return EvalResultCode::OK;
 }
 
-data_ptr_t __println__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
-    for (size_t i = 0; i < with.size(); i++) {
+EvalResultCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    for (size_t i = 0; i < ins.size(); i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        with[i]->print(std::cout);
-    }
-    for (size_t i = 0; i < norm.size(); i++) {
-        if (i > 0) {
-            std::cout << " ";
-        }
-        norm[i]->print(std::cout);
+        const data_ptr_t &data = frame.get(ins[i]);
+        data->print(std::cout);
     }
     std::cout << std::endl;
-    return Data::null();
+    frame.set(self, Data::null());
+    return EvalResultCode::OK;
 }
 
-data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
+EvalResultCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::stringstream oss;
+
+    const auto &with = self->withInputs();
+    const auto &norm = self->normInputs();
 
     for (size_t i = 0; i < with.size(); i++) {
         if (i > 0) {
             oss << " ";
         }
-        with[i]->print(oss);
+        const data_ptr_t &data = frame.get(with[i]);
+        data->print(oss);
     }
+
     for (size_t i = 0; i < norm.size(); i++) {
-        if (i > 0) {
+        if (i > 0 || !with.empty()) {
             oss << " ";
         }
-        norm[i]->print(oss);
+        const data_ptr_t &data = frame.get(norm[i]);
+        data->print(oss);
     }
 
     std::cout << oss.str();
@@ -76,5 +81,6 @@ data_ptr_t __input__(Context &ctx, data_vec_t &with, data_vec_t &norm) {
     std::string input;
     std::getline(std::cin, input);
 
-    return std::make_shared<StringData>(input);
+    frame.set(self, std::make_shared<StringData>(input));
+    return EvalResultCode::OK;
 }

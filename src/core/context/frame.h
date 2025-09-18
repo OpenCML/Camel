@@ -20,59 +20,33 @@
 #pragma once
 
 #include "arena.h"
-#include "compile/gir.h"
 #include "utils/log.h"
 
 class Frame;
 using frame_ptr_t = std::shared_ptr<Frame>;
 
+namespace GraphIR {
+class Node;
+class Graph;
+using node_ptr_t = std::shared_ptr<Node>;
+using graph_ptr_t = std::shared_ptr<Graph>;
+} // namespace GraphIR
+
 class Frame {
   public:
-    Frame(const frame_ptr_t &parent, const GIR::graph_ptr_t &graph)
-        : parent_(parent), graph_(graph), arena_(*graph->arena()) {
-        l.in("Frame").debug(
-            "Created Frame for Graph: {} (Parent: {})",
-            graph_->name().empty() ? "<anonymous>" : graph_->name(),
-            parent_ ? "Yes" : "No");
-    }
+    Frame(const frame_ptr_t &parent, const GraphIR::graph_ptr_t &graph);
+    ~Frame();
 
-    ~Frame() {
-        l.in("Frame").debug(
-            "Destroyed Frame for Graph: {} (Parent: {})",
-            graph_->name().empty() ? "<anonymous>" : graph_->name(),
-            parent_ ? "Yes" : "No");
-    }
-
-    static frame_ptr_t create(const frame_ptr_t &parent, const GIR::graph_ptr_t &graph) {
-        return std::make_shared<Frame>(parent, graph);
-    }
+    static frame_ptr_t create(const frame_ptr_t &parent, const GraphIR::graph_ptr_t &graph);
 
     DataArena &arena() { return arena_; }
 
-    data_ptr_t get(const GIR::node_ptr_t &node) {
-        const GIR::graph_ptr_t &g = node->graph();
-        if (g.get() != graph_.get()) {
-            ASSERT(parent_, "Node does not belong to the current frame's graph.");
-            return parent_->get(node);
-        }
-        ASSERT(arena_.has(node->index()), "Data not found in frame's arena.");
-        return arena_.get(node->index());
-    }
-
-    void set(const GIR::node_ptr_t &node, const data_ptr_t &data) {
-        const GIR::graph_ptr_t &g = node->graph();
-        if (g.get() != graph_.get()) {
-            ASSERT(parent_, "Node does not belong to the current frame's graph.");
-            parent_->set(node, data);
-            return;
-        }
-        arena_.set(node->index(), data);
-    }
-
+    data_ptr_t get(const GraphIR::node_ptr_t &node);
+    void set(const GraphIR::node_ptr_t &node, const data_ptr_t &data);
     void detach() { parent_ = nullptr; }
 
   private:
     frame_ptr_t parent_;
-    GIR::graph_ptr_t graph_;
+    GraphIR::graph_ptr_t graph_;
     DataArena arena_;
 };

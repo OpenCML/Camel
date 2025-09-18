@@ -105,6 +105,7 @@ class DataLoad : public Load {
 
     void setNonNull(bool notNull) { notNull_ = notNull; }
     bool isNonNull() const { return notNull_; }
+    const std::string geneCode() const override;
 
   private:
     DataType dataType_;
@@ -120,6 +121,7 @@ class UnaryExprLoad : public DataLoad {
     }
 
     UnaryDataOp op() const { return op_; }
+    const std::string geneCode() const override;
 
   private:
     UnaryDataOp op_;
@@ -133,6 +135,7 @@ class BinaryExprLoad : public DataLoad {
     }
 
     BinaryDataOp op() const { return op_; }
+    const std::string geneCode() const override;
 
   private:
     BinaryDataOp op_;
@@ -146,6 +149,7 @@ class ReservedExprLoad : public DataLoad {
     }
 
     ReservedDataOp op() const { return op_; }
+    const std::string geneCode() const override;
 
   private:
     ReservedDataOp op_;
@@ -155,18 +159,21 @@ class IfExprLoad : public DataLoad {
   public:
     IfExprLoad() : DataLoad(DataType::IfExpr) {}
     const std::string toString() const override { return "IfExpr" + this->status(); }
+    const std::string geneCode() const override;
 };
 
 class MatchExprLoad : public DataLoad {
   public:
     MatchExprLoad() : DataLoad(DataType::MatchExpr) {}
     const std::string toString() const override { return "MatchExpr" + this->status(); }
+    const std::string geneCode() const override;
 };
 
 class TryExprLoad : public DataLoad {
   public:
     TryExprLoad() : DataLoad(DataType::TryExpr) {}
     const std::string toString() const override { return "TryExpr" + this->status(); }
+    const std::string geneCode() const override;
 };
 
 class LiteralLoad : public DataLoad {
@@ -175,6 +182,7 @@ class LiteralLoad : public DataLoad {
     const std::string toString() const override { return value_.toString() + this->status(); }
 
     const Literal &value() const { return value_; }
+    const std::string geneCode() const override;
 
   private:
     Literal value_;
@@ -184,18 +192,21 @@ class ListDataLoad : public DataLoad {
   public:
     ListDataLoad() : DataLoad(DataType::List) {}
     const std::string toString() const override { return "ListData" + this->status(); }
+    const std::string geneCode() const override;
 };
 
 class DictDataLoad : public DataLoad {
   public:
     DictDataLoad() : DataLoad(DataType::Dict) {}
     const std::string toString() const override { return "DictData" + this->status(); }
+    const std::string geneCode() const override;
 };
 
 class TupleDataLoad : public DataLoad {
   public:
     TupleDataLoad() : DataLoad(DataType::Tuple) {}
     const std::string toString() const override { return "TupleData" + this->status(); }
+    const std::string geneCode() const override;
 };
 
 class FuncDataLoad : public DataLoad {
@@ -207,6 +218,7 @@ class FuncDataLoad : public DataLoad {
     }
 
     const Reference &ref() const { return ref_; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -220,6 +232,7 @@ class RefDataLoad : public DataLoad {
     }
 
     const Reference &ref() const { return ref_; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;

@@ -27,7 +27,7 @@
 #include <sstream>
 
 using namespace std;
-using namespace GIR;
+using namespace GraphIR;
 
 string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
     uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
@@ -55,43 +55,16 @@ string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) 
 }
 
 any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
-    // 先对子图进行拓扑排序
     // 收集所有被依赖的子图
-    unordered_set<graph_ptr_t> graphSet;
-    const auto visit = [&](const graph_ptr_t &g) {
-        auto visit_impl = [&](auto &&self, const graph_ptr_t &node) -> void {
-            if (graphSet.find(node) == graphSet.end()) {
-                graphSet.insert(node);
-                for (const auto &dep : node->dependencies()) {
-                    self(self, dep);
-                }
-            }
-        };
-        visit_impl(visit_impl, g);
-    };
-    visit(graph);
+    auto sortedGraphs =
+        findReachable(graph, [](const graph_ptr_t &g) { return g->dependencies(); });
 
     ostringstream oss;
-
-    // 对子图进行拓扑排序
-    auto sortedGraphs = topoSort(
-        graphSet.begin(),
-        graphSet.end(),
-        [](const auto &g) { return g->inDegree(); },
-        [](const auto &g) {
-            vector<graph_ptr_t> outs;
-            for (const auto &dep : g->dependents()) {
-                if (auto sp = dep.lock()) {
-                    outs.push_back(sp);
-                }
-            }
-            return outs;
-        });
 
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
-        node_ptr_t retNode = g->output();
+        node_ptr_t retNode = g->returnNode();
         auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
             vector<node_ptr_t> ins;
             ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
@@ -105,9 +78,22 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             }
             return ins;
         });
+        if (sortedNodes.size() != g->nodes().size()) {
+            GraphIR::node_vec_t unreachableNodes;
+            for (const auto &n : g->nodes()) {
+                if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
+                    unreachableNodes.push_back(n);
+                }
+            }
+            std::string nodeStrs;
+            for (const auto &node : unreachableNodes) {
+                nodeStrs += node->toString() + ", ";
+            }
+            l.in("Topo").warn("Unreachable nodes in graph {} detected: {}", g->name(), nodeStrs);
+        }
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
-        for (const auto &[portNode, __] : g->ports()) {
+        for (const auto &[portNode, __] : g->portNodes()) {
             oss << ", " << pointerToIdent(portNode.get());
         }
         oss << "\n";
@@ -158,7 +144,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             oss << "    [" << pointerToIdent(n.get()) << "] " << res << "\n";
         }
         // 打印返回节点
-        oss << "RETN: " << pointerToIdent(g->output().get()) << "\n\n";
+        oss << "RETN: " << pointerToIdent(g->returnNode().get()) << "\n\n";
     }
 
     oss << format("CALL: {}", graph->name()) << "\n";

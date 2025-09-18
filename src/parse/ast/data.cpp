@@ -41,15 +41,15 @@ std::string to_string(DataType type) {
     case DataType::Literal:
         return "Literal";
     case DataType::List:
-        return "ListData";
+        return "List";
     case DataType::Dict:
-        return "DictData";
+        return "Dict";
     case DataType::Tuple:
-        return "TupleData";
+        return "Tuple";
     case DataType::Func:
-        return "FuncData";
+        return "Func";
     case DataType::Ref:
-        return "RefData";
+        return "Ref";
     default:
         ASSERT(false, "Unknown DataType");
         return "UnknownDataType";
@@ -159,5 +159,37 @@ std::string to_string(ReservedDataOp op) {
         return "UnknownReservedDataOp";
     }
 }
+
+const std::string DataLoad::geneCode() const { return ""; }
+
+const std::string UnaryExprLoad::geneCode() const { return to_string(op_); }
+
+const std::string BinaryExprLoad::geneCode() const { return to_string(op_); }
+
+const std::string ReservedExprLoad::geneCode() const { return to_string(op_); }
+
+const std::string IfExprLoad::geneCode() const { return "if"; }
+
+const std::string MatchExprLoad::geneCode() const { return "match"; }
+
+const std::string TryExprLoad::geneCode() const { return "try"; }
+
+const std::string LiteralLoad::geneCode() const { return value_.toString(); }
+
+const std::string ListDataLoad::geneCode() const { return "[]"; }
+
+const std::string DictDataLoad::geneCode() const { return "{}"; }
+
+const std::string TupleDataLoad::geneCode() const { return "()"; }
+
+const std::string FuncDataLoad::geneCode() const {
+    if (ref_.empty()) {
+        return "func";
+    } else {
+        return "func " + ref_.toString();
+    }
+}
+
+const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
 
 } // namespace AbstractSyntaxTree

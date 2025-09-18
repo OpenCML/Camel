@@ -56,7 +56,8 @@ class Data : public std::enable_shared_from_this<Data> {
     void setVariable();
 
     static data_ptr_t null();
-
+    virtual bool isNull() const; // check if this is a null data
+    virtual bool isZero() const; // check if this is a zero data
     virtual std::vector<std::string> refs() const;
     virtual bool resolved() const;                    // check if all data references are resolved
     virtual void resolve(const data_vec_t &dataList); // resolve data references by dataList

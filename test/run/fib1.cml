@@ -4,7 +4,7 @@ import { now } from time
 
 var cnt = 0
 
-func fibonacci(n: int): int {
+func fibonacci(n: int): int sync {
     wait cnt += 1
     return if n == 0 then 0
     else if n == 1 then 1 else {
@@ -13,7 +13,7 @@ func fibonacci(n: int): int {
 }
 
 export func main(): int sync {
-    let idx = 10
+    let idx = 30
     println("Start computing fibonacci({})...".format(idx))
     let start = now()
     let res = fibonacci(idx)

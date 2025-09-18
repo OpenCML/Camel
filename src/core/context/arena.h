@@ -127,9 +127,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
 
     virtual void set(const data_ptr_t &data, size_t index) = 0;
     virtual data_ptr_t get(size_t index) const = 0;
-    virtual bool has(size_t index) const {
-        return index < dataArr_.size() && dataArr_[index] != nullptr;
-    }
+    virtual bool has(size_t index) const = 0;
 
     virtual array_ptr_t clone() = 0;
 
@@ -156,7 +154,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
             dataPreview += "]";
         }
         return std::format(
-            "DataArray({})[{}]: {}",
+            "DataArray({}, {}): {}",
             std::string(type_),
             dataArr_.size(),
             dataPreview);
@@ -178,6 +176,9 @@ class ConstantArray : public DataArray {
         return {type_, dataArr_.size() - 1};
     }
 
+    virtual bool has(size_t index) const override {
+        return index < dataArr_.size() && dataArr_[index] != nullptr;
+    }
     void set(const data_ptr_t &data, size_t index) override {
         l.in("DataArray")
             .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
@@ -208,8 +209,10 @@ class VariableArray : public DataArray {
         : DataArray(DataType(shared, false)), refs_(refs) {}
 
     DataIndex emplace(DataIndex constIndex) {
+        if (!indices_) {
+            indices_ = std::make_shared<std::vector<size_t>>();
+        }
         ASSERT(refs_.lock(), "Cannot emplace data in a variable array without references.");
-        ASSERT(indices_, "Indices vector is not initialized.");
         ASSERT(constIndex.type.constant, "Cannot emplace non-constant data in a variable array.");
         ASSERT(constIndex.type.shared == type_.shared, "Data type mismatch in variable array.");
 
@@ -219,6 +222,7 @@ class VariableArray : public DataArray {
         return {type_, index};
     }
 
+    virtual bool has(size_t index) const override { return index < dataArr_.size(); }
     void set(const data_ptr_t &data, size_t index) override {
         l.in("DataArray")
             .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());

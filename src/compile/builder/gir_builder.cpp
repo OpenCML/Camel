@@ -27,7 +27,25 @@
 
 using namespace std;
 
-namespace GraphIntermediateRepresentation {
+namespace GraphIR {
+
+inline void tryRemoveCtrlLink(const node_ptr_t &from, const node_ptr_t &to) {
+    // if from has already linked to to by a ctrl link, remove it first
+    // sometimes we may need to change a ctrl link (linked before) to a data link
+    // because data link has higher priority than ctrl link
+    // and we don't want to have duplicate links
+    auto &fromCtrlOutputs = from->ctrlOutputs();
+    if (std::find(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to) != fromCtrlOutputs.end()) {
+        fromCtrlOutputs.erase(
+            std::remove(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to),
+            fromCtrlOutputs.end());
+
+        auto &toCtrlInputs = to->ctrlInputs();
+        toCtrlInputs.erase(
+            std::remove(toCtrlInputs.begin(), toCtrlInputs.end(), from),
+            toCtrlInputs.end());
+    }
+}
 
 inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     // prevent linking a node to itself
@@ -38,7 +56,9 @@ inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     if (from->hasLinkedTo(to)) {
         return false;
     }
-    // prevent linking nodes that are already deeply linked
+    // prevent linking nodes that are already deeply linked reversely
+    // which may cause cycles in the graph
+    // note: this check can be expensive
     if (to->hasDeepLinkedTo(from)) {
         l.in("GIR").warn(
             "Prevent linking deeply linked nodes: {} -> {}",
@@ -241,9 +261,15 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     node_ptr_t node = nullptr;
     if (data->resolved()) {
         DataIndex index = graph->addSharedConstant(data);
+        if (varied_) {
+            index = graph->addVariable(index);
+        }
         node = SourceNode::create(currGraph_, index);
     } else {
         DataIndex index = graph->addRuntimeConstant(data);
+        if (varied_) {
+            index = graph->addVariable(index);
+        }
         node = StructNode::create(currGraph_, index, data->type());
         for (const string &ref : data->refs()) {
             Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
@@ -313,10 +339,10 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     if (module_->hasImportedRef(ident)) {
         const auto &e = module_->getImportedEntity(ident);
-        if (std::holds_alternative<GIR::node_ptr_t>(e)) {
+        if (std::holds_alternative<node_ptr_t>(e)) {
             LEAVE("DREF");
-            return std::get<GIR::node_ptr_t>(e);
-        } else if (std::holds_alternative<GIR::graph_vec_ptr_t>(e)) {
+            return std::get<node_ptr_t>(e);
+        } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
@@ -401,10 +427,11 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (i < params.size()) {
             isVar = std::get<2>(params[i]);
         }
+        tryRemoveCtrlLink(inputNode, funcNode);
         Node::link(LinkType::Norm, inputNode, funcNode);
         if (nodeModifierMap_.count(inputNode.get())) {
             node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
-            if (modifierNode) {
+            if (modifierNode && linkCheek(modifierNode, funcNode)) {
                 Node::link(LinkType::Ctrl, modifierNode, funcNode);
             }
         }
@@ -412,17 +439,11 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             if (!waited_) {
                 diags_->of(SemanticDiag::IgnoredSideEffect).commit();
             }
-            nodeModifierMap_[inputNode.get()] =
-                funcNode; // Mark this node as a modifier for the input node
-        }
-        if (synced_) {
-            if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
-                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
-            }
-            lastCalledFuncNode_ = funcNode;
+            // Mark this node as a modifier for the input node
+            nodeModifierMap_[inputNode.get()] = funcNode;
         }
     }
-    if (inputs.empty() && synced_) {
+    if (synced_) {
         if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
             Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
         }
@@ -465,10 +486,11 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         if (i < params.size()) {
             isVar = std::get<2>(params[i]);
         }
+        tryRemoveCtrlLink(inputNode, funcNode);
         Node::link(LinkType::With, inputNode, funcNode);
         if (nodeModifierMap_.count(inputNode.get())) {
             node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
-            if (modifierNode) {
+            if (modifierNode && linkCheek(modifierNode, funcNode)) {
                 Node::link(LinkType::Ctrl, modifierNode, funcNode);
             }
         }
@@ -476,17 +498,11 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             if (!waited_) {
                 diags_->of(SemanticDiag::IgnoredSideEffect).commit();
             }
-            nodeModifierMap_[inputNode.get()] =
-                funcNode; // Mark this node as a modifier for the input node
-        }
-        if (synced_) {
-            if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
-                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
-            }
-            lastCalledFuncNode_ = funcNode;
+            // Mark this node as a modifier for the input node
+            nodeModifierMap_[inputNode.get()] = funcNode;
         }
     }
-    if (inputs.empty() && synced_) {
+    if (synced_) {
         if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
             Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
         }
@@ -580,16 +596,17 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter child of EXIT node.");
     node_ptr_t node = any_cast<node_ptr_t>(res);
-    node_ptr_t exitNode = node;
+    node_ptr_t resultNode = node;
     if (nodeModifierMap_.count(node.get())) {
-        exitNode = nodeModifierMap_[node.get()].lock();
+        resultNode = nodeModifierMap_[node.get()].lock();
     }
+    currGraph_->setOutput(resultNode);
+    node_ptr_t exitNode = currGraph_->returnNode();
     if (synced_ && lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, exitNode)) {
         Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
     }
-    currGraph_->setOutput(exitNode);
     LEAVE("EXIT");
-    return exitNode;
+    return resultNode;
 }
 
 node_ptr_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
@@ -643,4 +660,4 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     return nullptr;
 }
 
-} // namespace GraphIntermediateRepresentation
+} // namespace GraphIR

@@ -27,6 +27,7 @@
 #include "builtin/passes/sched/linear/dump/graphviz.h"
 #include "builtin/passes/sched/linear/dump/topo_node_seq.h"
 #include "builtin/passes/sched/linear/exec/fallback.h"
+#include "codegen/source/generator.h"
 #include "config.h"
 #include "core/module/userdef.h"
 #include "core/type/type.h"
@@ -97,11 +98,10 @@ int main(int argc, char *argv[]) {
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setConfig(
-                DiagsConfig{
-                    .total_limit = -1,
-                    .per_severity_limits = {{Severity::Error, 0}},
-                });
+            diagnostics->setConfig(DiagsConfig{
+                .total_limit = -1,
+                .per_severity_limits = {{Severity::Error, 0}},
+            });
         }
 
         bool useJsonFormat = (errorFormat == "json");
@@ -142,6 +142,13 @@ int main(int argc, char *argv[]) {
                         ast->print(os);
                     }
                 }
+                if (Inspect::geneCode) {
+                    auto ast = parser->ast();
+                    if (ast) {
+                        ASTCodeGen::Generator generator = ASTCodeGen::Generator();
+                        os << generator.generate(ast);
+                    }
+                }
                 if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
                     // Inspect Command ends here if only
                     // tokens, CST or AST is requested
@@ -162,10 +169,10 @@ int main(int argc, char *argv[]) {
                     .searchPaths =
                         {
                             entryDir,
-                            fs::absolute(
-                                fs::path(
-                                    Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                            : Run::stdLibPath))
+                            fs::absolute(fs::path(
+                                             Run::stdLibPath.empty()
+                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                 : Run::stdLibPath))
                                 .string(),
                             getEnv("CAMEL_PACKAGES"),
                             getEnv("CAMEL_HOME", camelPath.string()),

@@ -31,5 +31,5 @@ class BasicBuiltinExecutor : public Executor {
         return std::make_shared<BasicBuiltinExecutor>(ctx);
     }
 
-    virtual data_ptr_t eval(std::string uri, data_vec_t &with, data_vec_t &norm) override;
+    virtual EvalResultCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override;
 };

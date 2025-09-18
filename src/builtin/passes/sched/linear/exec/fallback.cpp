@@ -19,14 +19,14 @@
 
 #include "fallback.h"
 #include "builtin/algo/topo.h"
+#include "utils/debug.h"
 
 using namespace std;
-using namespace GIR;
+using namespace GraphIR;
 
-std::shared_ptr<GIR::node_vec_t>
-FallbackExecSchedPass::getTopoNodes(const GIR::graph_ptr_t &graph) {
+std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_t &graph) {
     if (graphTopoNodesCache_.find(graph.get()) == graphTopoNodesCache_.end()) {
-        node_ptr_t retNode = graph->output();
+        node_ptr_t retNode = graph->returnNode();
         auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
             vector<node_ptr_t> ins;
             ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
@@ -40,18 +40,24 @@ FallbackExecSchedPass::getTopoNodes(const GIR::graph_ptr_t &graph) {
             }
             return ins;
         });
-        if (sortedNodes.size() != graph->nodes().size()) {
-            l.in("Topo").warn(
-                "Topological sort found {} reachable nodes, but graph {} has {} nodes.",
-                sortedNodes.size(),
-                graph->name(),
-                graph->nodes().size());
-        }
-        l.in("Topo")
-            .debug("Topological order for graph {}, {} nodes:", graph->name(), sortedNodes.size());
-        for (auto &n : sortedNodes) {
-            l.in("Topo").debug("{}", n->toString());
-        }
+        EXEC_WHEN_DEBUG([&]() {
+            if (sortedNodes.size() != graph->nodes().size()) {
+                GraphIR::node_vec_t unreachableNodes;
+                for (const auto &n : graph->nodes()) {
+                    if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
+                        unreachableNodes.push_back(n);
+                    }
+                }
+                std::string nodeStrs;
+                for (const auto &node : unreachableNodes) {
+                    nodeStrs += node->toString() + ", ";
+                }
+                l.in("Topo").warn(
+                    "Unreachable nodes in graph {} detected: {}",
+                    graph->name(),
+                    nodeStrs);
+            }
+        }());
         const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
         graphTopoNodesCache_[graph.get()] = sortedNodesPtr;
         return sortedNodesPtr;
@@ -62,8 +68,9 @@ FallbackExecSchedPass::getTopoNodes(const GIR::graph_ptr_t &graph) {
 
 data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_t &frame) {
     l.in("Eval").debug("Evaluating graph: {}", graph->name());
+    data_ptr_t result;
     // 按拓扑序执行
-    for (const auto &n : *getTopoNodes(graph)) {
+    for (auto &n : *getTopoNodes(graph)) {
         // 用于跳过被标记为不执行的节点（分支功能）
         if (!brInfoStack_.empty() && n == brInfoStack_.top().second) {
             continue;
@@ -74,7 +81,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             auto subGraph = func->graph();
             auto newFrame = Frame::create(frame, subGraph);
             const auto &inNodes = n->dataInputs();
-            const auto &ports = subGraph->ports();
+            const auto &ports = subGraph->portNodes();
             ASSERT(
                 inNodes.size() == ports.size(),
                 "Function node input size does not match function graph port size.");
@@ -100,8 +107,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 normArgs.push_back(frame->get(inNode));
             }
 
-            data_ptr_t res = context_->eval(uri, withArgs, normArgs);
-            frame->set(n, res);
+            context_->eval(uri, n, *frame);
             break;
         }
         case NodeType::Select: {
@@ -158,22 +164,25 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             ASSERT(data != nullptr, "Source data is null.");
             break;
         }
+        case NodeType::Return: {
+            ASSERT(n->withInputs().size() == 0, "Return node cannot have with inputs.");
+            const auto &input = n->dataInputs();
+            if (input.empty()) {
+                result = Data::null();
+            } else {
+                result = frame->get(input.front());
+            }
+            break;
+        }
         }
     }
 
-    // 返回图的返回节点数据
-    if (graph->hasOutput()) {
-        auto retNode = graph->output();
-        auto res = frame->get(retNode);
-        l.in("Eval").debug(
-            "Graph {} evaluation completed with returned value {}.",
-            graph->name(),
-            res->toString());
-        return res;
-    } else {
-        l.in("Eval").debug("Graph {} evaluation completed with no return value.", graph->name());
-        return Data::null();
-    }
+    ASSERT(result != nullptr, "Graph evaluation did not produce a result.");
+    l.in("Eval").debug(
+        "Graph {} evaluation completed with returned value {}.",
+        graph->name(),
+        result->toString());
+    return result;
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {

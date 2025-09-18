@@ -24,11 +24,27 @@
 #include <functional>
 #include <unordered_map>
 
+class Frame;
 class Context;
 class Operator;
 class OperatorIndex;
 
-using operator_t = std::function<data_ptr_t(Context &, data_vec_t &, data_vec_t &)>;
+namespace GraphIR {
+class Node;
+class Graph;
+using node_ptr_t = std::shared_ptr<Node>;
+using graph_ptr_t = std::shared_ptr<Graph>;
+} // namespace GraphIR
+
+enum class EvalResultCode {
+    OK = 0,
+    Error = 1,
+    NotImplemented = 2,
+    InvalidArgument = 3,
+    RuntimeError = 4,
+};
+
+using operator_t = std::function<EvalResultCode(GraphIR::node_ptr_t &, Frame &, Context &)>;
 
 using oper_idx_ptr_t = std::shared_ptr<OperatorIndex>;
 using oper_idx_vec_t = std::vector<oper_idx_ptr_t>;

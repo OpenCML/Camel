@@ -94,4 +94,43 @@ const std::string FuncTypeLoad::toString() const {
     return result;
 }
 
+const std::string NullableTypeLoad::geneCode() const { return "?"; }
+
+const std::string TypeExprLoad::geneCode() const { return to_string(op_); }
+
+const std::string ListTypeLoad::geneCode() const {
+    std::string result = "";
+    for (size_t i = 0; i < dims_; i++) {
+        result += "[]";
+    }
+    return result;
+}
+
+const std::string DictTypeLoad::geneCode() const { return "{}"; }
+
+const std::string TupleTypeLoad::geneCode() const { return "()"; }
+
+const std::string FuncTypeLoad::geneCode() const {
+    std::string result = "";
+    if (implMark_ != ImplMark::Graph) {
+        result += to_string(implMark_) + " ";
+    }
+    if (!modifiers_.empty()) {
+        result += std::string(modifiers_) + " ";
+    }
+    return result;
+}
+
+const std::string UnitTypeLoad::geneCode() const { return ref_.toString(); }
+
+const std::string InferTypeLoad::geneCode() const { return ref_.toString(); }
+
+const std::string DataTypeLoad::geneCode() const { return ref_.toString(); }
+
+const std::string RefTypeLoad::geneCode() const {
+    auto s = ref_.toString();
+    // std::cout << "[RefTypeLoad::geneCode] " << s << std::endl;
+    return s;
+}
+
 } // namespace AbstractSyntaxTree

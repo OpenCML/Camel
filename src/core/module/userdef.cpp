@@ -40,6 +40,8 @@ namespace fs = std::filesystem;
 using namespace std;
 using namespace antlr4;
 
+namespace GIR = GraphIR;
+
 UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)
     : Module(name, path, ctx) {

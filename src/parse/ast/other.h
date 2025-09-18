@@ -35,6 +35,7 @@ class ParamDeclLoad : public Load {
     const std::string toString() const override {
         return "ParamDecl: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -45,6 +46,7 @@ class ParamDataLoad : public Load {
   public:
     ParamDataLoad(const Reference &ref) : Load(LoadType::NamedData), ref_(ref) {}
     const std::string toString() const override { return "ParamData: " + ref_.toString(); }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
