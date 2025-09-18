@@ -76,6 +76,7 @@ class Load {
 
     virtual const std::string toString() const { return typeStr(); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
+    virtual const std::string geneCode() const;
 
   protected:
     LoadType type_;
@@ -131,6 +132,7 @@ class ModuleLoad : public Load {
         }
         return ref_;
     }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -164,6 +166,7 @@ class ImportLoad : public Load {
         }
         return as_;
     }
+    const std::string geneCode() const override;
 
   private:
     std::string path_;
@@ -191,6 +194,7 @@ class ExportLoad : public Load {
         }
         refs_.push_back(ref);
     }
+    const std::string geneCode() const override;
 
   private:
     std::vector<Reference> refs_;
@@ -202,6 +206,7 @@ class NamedDataLoad : public Load {
     const std::string toString() const override { return "NamedData: " + ref_.toString(); }
 
     const Reference &ref() const { return ref_; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;
@@ -214,7 +219,7 @@ class NamedTypeLoad : public Load {
     const std::string toString() const override {
         return "NamedType: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }
-
+    const std::string geneCode() const override;
     const Reference &getRef() const { return ref_; }
 
   private:
@@ -225,12 +230,13 @@ class NamedTypeLoad : public Load {
 class NamedPairLoad : public Load {
   public:
     NamedPairLoad(const Reference &ref, bool isVar = false)
-        : Load(LoadType::NamedType), ref_(ref), isVar_(isVar) {}
+        : Load(LoadType::NamedPair), ref_(ref), isVar_(isVar) {}
     const std::string toString() const override {
         return "NamedPair: " + (isVar_ ? std::string("var ") : "") + ref_.toString();
     }
     const Reference &getRef() const { return ref_; }
     bool isVar() const { return isVar_; }
+    const std::string geneCode() const override;
 
   private:
     Reference ref_;

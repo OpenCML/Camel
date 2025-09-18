@@ -40,6 +40,7 @@
 #include "parse/parse.h"
 #include "service/formatter/fmt.h"
 #include "service/profiler/trace.h"
+#include "src/codegen/ast_codegen/generator.h"
 #include "utils/env.h"
 #include "utils/log.h"
 
@@ -139,6 +140,10 @@ int main(int argc, char *argv[]) {
                     auto ast = parser->ast();
                     if (ast) {
                         ast->print(os);
+                        os << "========GeneCode===========";
+                        ASTCodeGen::Generator generator = ASTCodeGen::Generator();
+                        os << generator.generate(ast);
+                        os << "========GenCode============";
                     }
                 }
                 if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {

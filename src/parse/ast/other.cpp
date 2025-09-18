@@ -20,4 +20,12 @@
 #include "other.h"
 #include "utils/str.h"
 
-namespace AbstractSyntaxTree {} // namespace AbstractSyntaxTree
+namespace AbstractSyntaxTree {
+
+const std::string ParamDeclLoad::geneCode() const {
+    return (isVar_ ? std::string("var ") : "") + ref_.toString();
+}
+
+const std::string ParamDataLoad::geneCode() const { return ref_.toString(); }
+
+} // namespace AbstractSyntaxTree
