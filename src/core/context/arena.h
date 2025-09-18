@@ -154,7 +154,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
             dataPreview += "]";
         }
         return std::format(
-            "DataArray({})[{}]: {}",
+            "DataArray({}, {}): {}",
             std::string(type_),
             dataArr_.size(),
             dataPreview);

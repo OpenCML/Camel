@@ -55,38 +55,12 @@ string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) 
 }
 
 any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
-    // 先对子图进行拓扑排序
     // 收集所有被依赖的子图
-    unordered_set<graph_ptr_t> graphSet;
-    const auto visit = [&](const graph_ptr_t &g) {
-        auto visit_impl = [&](auto &&self, const graph_ptr_t &node) -> void {
-            if (graphSet.find(node) == graphSet.end()) {
-                graphSet.insert(node);
-                for (const auto &dep : node->dependencies()) {
-                    self(self, dep);
-                }
-            }
-        };
-        visit_impl(visit_impl, g);
-    };
-    visit(graph);
+    auto sortedGraphs = findReachable(graph, [](const graph_ptr_t &g) {
+        return g->dependencies();
+    });
 
     ostringstream oss;
-
-    // 对子图进行拓扑排序
-    auto sortedGraphs = topoSort(
-        graphSet.begin(),
-        graphSet.end(),
-        [](const auto &g) { return g->inDegree(); },
-        [](const auto &g) {
-            vector<graph_ptr_t> outs;
-            for (const auto &dep : g->dependents()) {
-                if (auto sp = dep.lock()) {
-                    outs.push_back(sp);
-                }
-            }
-            return outs;
-        });
 
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {

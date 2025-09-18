@@ -111,6 +111,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
     size_t inDegree() const { return dependencies_.size(); }
     size_t outDegree() const { return dependents_.size(); }
 
+    std::string toString() const {
+        return std::format(
+            "Graph({}, nodes: {}, subgraphs: {}, deps: {}, outs: {})",
+            name_.empty() ? "<anonymous>" : name_,
+            nodes_.size(),
+            subGraphs_.size(),
+            dependencies_.size(),
+            dependents_.size());
+    }
+
     DataIndex addSharedConstant(const data_ptr_t &data) { return arena_->addConstant(data, true); }
     DataIndex addRuntimeConstant(const data_ptr_t &data) {
         return arena_->addConstant(data, false);
@@ -272,7 +282,7 @@ class SelectNode : public Node {
 
     std::string toString() const override {
         return std::format(
-            "Node(Select, {}, {}): {}",
+            "Select({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             selectType_ == SelectType::Branch ? "BRCH" : "JOIN");
@@ -309,7 +319,7 @@ class AccessNode : public Node {
     std::string data2str() const override { return std::format("#{}", index2String()); }
     std::string toString() const override {
         return std::format(
-            "Node(Access, {}, {}): ${}",
+            "Access({}, {}): ${}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             index2String());
@@ -338,7 +348,7 @@ class StructNode : public Node {
     std::string data2str() const override { return std::format("{}", dataType()->toString()); }
     std::string toString() const override {
         return std::format(
-            "Node(Struct, {}, {}): {}",
+            "Struct({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             dataType()->toString());
@@ -370,7 +380,7 @@ class SourceNode : public Node {
         ASSERT(graph_.lock(), "Graph is not set for Node.");
         const auto &arena = graph_.lock()->arena();
         return std::format(
-            "Node(Source, {}, {}): {}",
+            "Source({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             arena->has(dataIndex_) ? dataOf(*arena)->toString() : "<null>");
@@ -414,7 +424,7 @@ class OperatorNode : public Node {
     std::string data2str() const override { return std::format("<{}>", operator_->name()); }
     std::string toString() const override {
         return std::format(
-            "Node(Opera., {}, {}): {}",
+            "Opera.({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             operator_->name());
@@ -446,7 +456,7 @@ class FunctionNode : public Node {
     }
     std::string toString() const override {
         return std::format(
-            "Node(Funct., {}, {}): {}",
+            "Funct.({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
             func_->name().empty() ? func_->graph()->name() : func_->name());

@@ -64,9 +64,23 @@ auto topoSort(
     }
 
     ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
-    ASSERT(
-        allowUnreachable || sortedNodes.size() == count,
-        "Unreachable nodes detected in the graph.");
+    if (!allowUnreachable) {
+        if (sortedNodes.size() != count) {
+            // Find unreachable nodes
+            std::vector<NodeType> unreachableNodes;
+            for (auto it = first; it != last; ++it) {
+                NodeType node = *it;
+                if (inDegrees[node] > 0) {
+                    unreachableNodes.push_back(node);
+                }
+            }
+            std::string msg = "Unreachable nodes detected: ";
+            for (const auto &node : unreachableNodes) {
+                msg += node->toString() + ", ";
+            }
+            ASSERT(false, msg);
+        }
+    }
 
     return sortedNodes;
 }
