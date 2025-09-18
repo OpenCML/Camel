@@ -29,6 +29,24 @@ using namespace std;
 
 namespace GraphIntermediateRepresentation {
 
+inline void tryRemoveCtrlLink(const node_ptr_t &from, const node_ptr_t &to) {
+    // if from has already linked to to by a ctrl link, remove it first
+    // sometimes we may need to change a ctrl link (linked before) to a data link
+    // because data link has higher priority than ctrl link
+    // and we don't want to have duplicate links
+    auto &fromCtrlOutputs = from->ctrlOutputs();
+    if (std::find(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to) != fromCtrlOutputs.end()) {
+        fromCtrlOutputs.erase(
+            std::remove(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to),
+            fromCtrlOutputs.end());
+
+        auto &toCtrlInputs = to->ctrlInputs();
+        toCtrlInputs.erase(
+            std::remove(toCtrlInputs.begin(), toCtrlInputs.end(), from),
+            toCtrlInputs.end());
+    }
+}
+
 inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     // prevent linking a node to itself
     if (from.get() == to.get()) {
@@ -38,7 +56,9 @@ inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     if (from->hasLinkedTo(to)) {
         return false;
     }
-    // prevent linking nodes that are already deeply linked
+    // prevent linking nodes that are already deeply linked reversely
+    // which may cause cycles in the graph
+    // note: this check can be expensive
     if (to->hasDeepLinkedTo(from)) {
         l.in("GIR").warn(
             "Prevent linking deeply linked nodes: {} -> {}",
@@ -401,10 +421,11 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (i < params.size()) {
             isVar = std::get<2>(params[i]);
         }
+        tryRemoveCtrlLink(inputNode, funcNode);
         Node::link(LinkType::Norm, inputNode, funcNode);
         if (nodeModifierMap_.count(inputNode.get())) {
             node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
-            if (modifierNode) {
+            if (modifierNode && linkCheek(modifierNode, funcNode)) {
                 Node::link(LinkType::Ctrl, modifierNode, funcNode);
             }
         }
@@ -412,17 +433,11 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             if (!waited_) {
                 diags_->of(SemanticDiag::IgnoredSideEffect).commit();
             }
-            nodeModifierMap_[inputNode.get()] =
-                funcNode; // Mark this node as a modifier for the input node
-        }
-        if (synced_) {
-            if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
-                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
-            }
-            lastCalledFuncNode_ = funcNode;
+            // Mark this node as a modifier for the input node
+            nodeModifierMap_[inputNode.get()] = funcNode;
         }
     }
-    if (inputs.empty() && synced_) {
+    if (synced_) {
         if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
             Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
         }
@@ -465,10 +480,11 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         if (i < params.size()) {
             isVar = std::get<2>(params[i]);
         }
+        tryRemoveCtrlLink(inputNode, funcNode);
         Node::link(LinkType::With, inputNode, funcNode);
         if (nodeModifierMap_.count(inputNode.get())) {
             node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
-            if (modifierNode) {
+            if (modifierNode && linkCheek(modifierNode, funcNode)) {
                 Node::link(LinkType::Ctrl, modifierNode, funcNode);
             }
         }
@@ -476,17 +492,11 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             if (!waited_) {
                 diags_->of(SemanticDiag::IgnoredSideEffect).commit();
             }
-            nodeModifierMap_[inputNode.get()] =
-                funcNode; // Mark this node as a modifier for the input node
-        }
-        if (synced_) {
-            if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
-                Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
-            }
-            lastCalledFuncNode_ = funcNode;
+            // Mark this node as a modifier for the input node
+            nodeModifierMap_[inputNode.get()] = funcNode;
         }
     }
-    if (inputs.empty() && synced_) {
+    if (synced_) {
         if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, funcNode)) {
             Node::link(LinkType::Ctrl, lastCalledFuncNode_, funcNode);
         }
