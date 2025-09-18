@@ -33,7 +33,7 @@ enum class CompileStage { None, AST, GCT, GIR, Done };
 
 class UserDefinedModule : public Module {
     GCT::node_ptr_t gct_;
-    GIR::graph_ptr_t gir_;
+    GraphIR::graph_ptr_t gir_;
     diagnostics_ptr_t diagnostics_;
     parser_ptr_t parser_;
     CompileStage stage_ = CompileStage::None;
@@ -45,7 +45,7 @@ class UserDefinedModule : public Module {
     virtual ~UserDefinedModule() = default;
 
     GCT::node_ptr_t gct() const { return gct_; }
-    GIR::graph_ptr_t gir() const { return gir_; }
+    GraphIR::graph_ptr_t gir() const { return gir_; }
     diagnostics_ptr_t diagnostics() const { return diagnostics_; }
     parser_ptr_t parser() const { return parser_; }
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }

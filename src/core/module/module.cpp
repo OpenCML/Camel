@@ -18,6 +18,7 @@
  */
 
 #include "module.h"
+#include "compile/gir.h"
 #include "error/base.h"
 
 Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
@@ -41,9 +42,11 @@ void Module::importAllRefsFromMod(const module_ptr_t &mod) {
         importedRefModMap_[Reference(ref)] = mod;
     });
 }
+
 void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mod) {
     importedRefModMap_[ref] = mod;
 }
+
 bool Module::hasImportedRef(const Reference &ref) const {
     return importedRefModMap_.find(ref) != importedRefModMap_.end();
 }
@@ -51,6 +54,7 @@ bool Module::hasImportedRef(const Reference &ref) const {
 bool Module::exportType(const Reference &ref, const type_ptr_t &type) {
     return exportedTypeNS_->insert(ref, type);
 }
+
 bool Module::exportEntity(const Reference &ref, const entity &ent) {
     return exportedEntityNS_->insert(ref, ent);
 }
@@ -71,6 +75,7 @@ type_ptr_t Module::getImportedType(const Reference &ref) const {
     }
     return optType.value();
 };
+
 entity Module::getImportedEntity(const Reference &ref) const {
     ASSERT(
         importedRefModMap_.find(ref) != importedRefModMap_.end(),
@@ -92,6 +97,7 @@ std::optional<type_ptr_t> Module::getExportedType(const Reference &ref) const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedTypeNS_->get(ref);
 };
+
 std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_->get(ref);
@@ -101,6 +107,7 @@ type_ns_ptr_t Module::exportedTypeNS() const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedTypeNS_;
 }
+
 entity_ns_ptr_t Module::exportedEntityNS() const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_;

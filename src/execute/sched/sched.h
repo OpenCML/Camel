@@ -26,5 +26,5 @@ class SchedulePass : public GraphIRPass {
     SchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~SchedulePass() = default;
 
-    virtual std::any apply(GIR::graph_ptr_t &graph) override = 0;
+    virtual std::any apply(GraphIR::graph_ptr_t &graph) override = 0;
 };

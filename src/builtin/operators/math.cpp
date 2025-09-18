@@ -22,116 +22,153 @@
 #include "core/context/context.h"
 #include "core/context/frame.h"
 
+namespace GIR = GraphIR;
+
 EvalResultCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(norm.size() == 1, "abs operator requires exactly one argument");
-    auto val = norm[0];
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "abs operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> operator requires a primary type");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
 
+    data_ptr_t result;
     if (val->type() == Type::Int32()) {
         auto v = val->as<Int32Data>(Type::Int32());
-        return std::make_shared<Int32Data>(std::abs(v->data()));
+        result = std::make_shared<Int32Data>(std::abs(v->data()));
     } else if (val->type() == Type::Int64()) {
         auto v = val->as<Int64Data>(Type::Int64());
-        return std::make_shared<Int64Data>(std::abs(v->data()));
+        result = std::make_shared<Int64Data>(std::abs(v->data()));
     } else if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
-        return std::make_shared<FloatData>(std::fabs(v->data()));
+        result = std::make_shared<FloatData>(std::fabs(v->data()));
     } else if (val->type() == Type::Double()) {
         auto v = val->as<DoubleData>(Type::Double());
-        return std::make_shared<DoubleData>(std::fabs(v->data()));
+        result = std::make_shared<DoubleData>(std::fabs(v->data()));
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> not supported for type " + val->type()->toString());
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
+
+    frame.set(self, result);
+    return EvalResultCode::OK;
 }
 
 EvalResultCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(norm.size() == 1, "round operator requires exactly one argument");
-    auto val = norm[0];
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "round operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<round> operator requires a primary type");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
 
+    data_ptr_t result;
     if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
-        return std::make_shared<FloatData>(std::round(v->data()));
+        result = std::make_shared<FloatData>(std::round(v->data()));
     } else if (val->type() == Type::Double()) {
         auto v = val->as<DoubleData>(Type::Double());
-        return std::make_shared<DoubleData>(std::round(v->data()));
+        result = std::make_shared<DoubleData>(std::round(v->data()));
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<round> not supported for type " + val->type()->toString());
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
+
+    frame.set(self, result);
+    return EvalResultCode::OK;
 }
 
 EvalResultCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(norm.size() == 1, "ceil operator requires exactly one argument");
-    auto val = norm[0];
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "ceil operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<ceil> operator requires a primary type");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
 
+    data_ptr_t result;
     if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
-        return std::make_shared<FloatData>(std::ceil(v->data()));
+        result = std::make_shared<FloatData>(std::ceil(v->data()));
     } else if (val->type() == Type::Double()) {
         auto v = val->as<DoubleData>(Type::Double());
-        return std::make_shared<DoubleData>(std::ceil(v->data()));
+        result = std::make_shared<DoubleData>(std::ceil(v->data()));
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<ceil> not supported for type " + val->type()->toString());
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
+
+    frame.set(self, result);
+    return EvalResultCode::OK;
 }
 
 EvalResultCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(norm.size() == 1, "floor operator requires exactly one argument");
-    auto val = norm[0];
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "floor operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<floor> operator requires a primary type");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
 
+    data_ptr_t result;
     if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
-        return std::make_shared<FloatData>(std::floor(v->data()));
+        result = std::make_shared<FloatData>(std::floor(v->data()));
     } else if (val->type() == Type::Double()) {
         auto v = val->as<DoubleData>(Type::Double());
-        return std::make_shared<DoubleData>(std::floor(v->data()));
+        result = std::make_shared<DoubleData>(std::floor(v->data()));
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<floor> not supported for type " + val->type()->toString());
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
+
+    frame.set(self, result);
+    return EvalResultCode::OK;
 }
 
 EvalResultCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(norm.size() == 1, "bin operator requires exactly one argument");
-    auto val = norm[0];
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "bin operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<bin> operator requires integer type");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
 
     int64_t number = 0;
@@ -142,19 +179,22 @@ EvalResultCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
 
     std::string result = "0b" + std::bitset<64>(number).to_string();
-    // 去除前导零
-    result.erase(2, result.find('1') - 2);
-    return std::make_shared<StringData>(result);
+    result.erase(2, result.find('1') - 2); // remove leading zeros
+    frame.set(self, std::make_shared<StringData>(result));
+    return EvalResultCode::OK;
 }
 
 EvalResultCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(norm.size() == 1, "oct operator requires exactly one argument");
-    auto val = norm[0];
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "oct operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<oct> operator requires integer type");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
 
     std::ostringstream oss;
@@ -165,17 +205,21 @@ EvalResultCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         oss << val->as<Int64Data>(Type::Int64())->data();
     }
 
-    return std::make_shared<StringData>(oss.str());
+    frame.set(self, std::make_shared<StringData>(oss.str()));
+    return EvalResultCode::OK;
 }
 
 EvalResultCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(norm.size() == 1, "hex operator requires exactly one argument");
-    auto val = norm[0];
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "hex operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<hex> operator requires integer type");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
 
     std::ostringstream oss;
@@ -186,5 +230,6 @@ EvalResultCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         oss << val->as<Int64Data>(Type::Int64())->data();
     }
 
-    return std::make_shared<StringData>(oss.str());
+    frame.set(self, std::make_shared<StringData>(oss.str()));
+    return EvalResultCode::OK;
 }

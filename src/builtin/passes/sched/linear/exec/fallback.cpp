@@ -21,10 +21,9 @@
 #include "builtin/algo/topo.h"
 
 using namespace std;
-using namespace GIR;
+using namespace GraphIR;
 
-std::shared_ptr<GIR::node_vec_t>
-FallbackExecSchedPass::getTopoNodes(const GIR::graph_ptr_t &graph) {
+std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_t &graph) {
     if (graphTopoNodesCache_.find(graph.get()) == graphTopoNodesCache_.end()) {
         node_ptr_t retNode = graph->returnNode();
         auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
@@ -64,7 +63,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
     l.in("Eval").debug("Evaluating graph: {}", graph->name());
     data_ptr_t result;
     // 按拓扑序执行
-    for (const auto &n : *getTopoNodes(graph)) {
+    for (auto &n : *getTopoNodes(graph)) {
         // 用于跳过被标记为不执行的节点（分支功能）
         if (!brInfoStack_.empty() && n == brInfoStack_.top().second) {
             continue;
@@ -101,8 +100,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 normArgs.push_back(frame->get(inNode));
             }
 
-            data_ptr_t res = context_->eval(uri, withArgs, normArgs);
-            frame->set(n, res);
+            context_->eval(uri, n, *frame);
             break;
         }
         case NodeType::Select: {

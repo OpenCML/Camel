@@ -27,7 +27,7 @@
 #include <sstream>
 
 using namespace std;
-using namespace GIR;
+using namespace GraphIR;
 
 string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
     uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);

@@ -60,6 +60,20 @@ template <typename T> class PrimaryData : public Data {
         return false;
     }
 
+    virtual bool isZero() const override {
+        if constexpr (
+            std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> || std::is_same_v<T, float> ||
+            std::is_same_v<T, double>) {
+            return data_ == 0;
+        } else if constexpr (std::is_same_v<T, bool>) {
+            return data_ == false;
+        } else if constexpr (std::is_same_v<T, char>) {
+            return data_ == '\0';
+        } else {
+            static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
+        }
+    }
+
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
         ASSERT(inplace == false, "In-place conversion not supported for PrimaryData");
         if (target == type_ || type_->code() == target->code()) {

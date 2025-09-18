@@ -30,6 +30,6 @@ class GraphIRPass {
     GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
     virtual ~GraphIRPass() = default;
 
-    virtual std::any apply(GIR::graph_ptr_t &graph) = 0;
-    virtual std::any apply(const GIR::graph_ptr_t &graph) = 0;
+    virtual std::any apply(GraphIR::graph_ptr_t &graph) = 0;
+    virtual std::any apply(const GraphIR::graph_ptr_t &graph) = 0;
 };

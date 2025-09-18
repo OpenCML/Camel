@@ -27,7 +27,7 @@
 
 using namespace std;
 
-namespace GraphIntermediateRepresentation {
+namespace GraphIR {
 
 inline void tryRemoveCtrlLink(const node_ptr_t &from, const node_ptr_t &to) {
     // if from has already linked to to by a ctrl link, remove it first
@@ -333,10 +333,10 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     if (module_->hasImportedRef(ident)) {
         const auto &e = module_->getImportedEntity(ident);
-        if (std::holds_alternative<GIR::node_ptr_t>(e)) {
+        if (std::holds_alternative<node_ptr_t>(e)) {
             LEAVE("DREF");
-            return std::get<GIR::node_ptr_t>(e);
-        } else if (std::holds_alternative<GIR::graph_vec_ptr_t>(e)) {
+            return std::get<node_ptr_t>(e);
+        } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
@@ -654,4 +654,4 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     return nullptr;
 }
 
-} // namespace GraphIntermediateRepresentation
+} // namespace GraphIR

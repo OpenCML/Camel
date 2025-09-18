@@ -22,10 +22,10 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __abs__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __round__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __ceil__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __floor__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __bin__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __oct__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __hex__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

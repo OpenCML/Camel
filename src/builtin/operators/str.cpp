@@ -27,6 +27,8 @@
 
 #include <sstream>
 
+namespace GIR = GraphIR;
+
 std::string format_vector(const std::string &fmtStr, const std::vector<std::string> &args) {
     fmt::dynamic_format_arg_store<fmt::format_context> store;
     for (const auto &arg : args) {
@@ -36,36 +38,50 @@ std::string format_vector(const std::string &fmtStr, const std::vector<std::stri
 }
 
 EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    if (with.size() == 0) {
+    const auto &with = self->withInputs();
+    const auto &norm = self->normInputs();
+
+    if (with.empty()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
             .commit("<format>", "at least 1 with arg", std::to_string(norm.size()));
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
-    if (norm.size() == 0) {
+
+    if (norm.empty()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
             .commit("<format>", "at least 1 norm arg", std::to_string(norm.size()));
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
-    auto fmtStrData = with.front();
+
+    const data_ptr_t &fmtStrData = frame.get(with[0]);
     if (!Type::castSafetyCheck(fmtStrData->type(), Type::String())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<format>", "string", fmtStrData->type()->toString());
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
+
     std::string fmtStr = fmtStrData->as<StringData>(Type::String())->data();
-    auto args = std::vector<std::string>();
-    for (const auto &arg : norm) {
+    std::vector<std::string> args;
+
+    for (size_t i = 0; i < norm.size(); ++i) {
+        const data_ptr_t &arg = frame.get(norm[i]);
         std::ostringstream oss;
         arg->print(oss);
         args.push_back(oss.str());
     }
+
     try {
-        return std::make_shared<StringData>(format_vector(fmtStr, args));
+        frame.set(self, std::make_shared<StringData>(format_vector(fmtStr, args)));
     } catch (const fmt::format_error &e) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<format>", e.what());
-        return Data::null();
+        frame.set(self, Data::null());
     }
+
+    return EvalResultCode::OK;
 }

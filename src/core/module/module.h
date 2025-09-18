@@ -24,11 +24,19 @@
 #include <vector>
 
 #include "common/ns.h"
-#include "compile/gir.h"
 #include "core/operator.h"
 #include "core/type/type.h"
 
-using entity = std::variant<GIR::node_ptr_t, GIR::graph_vec_ptr_t, oper_idx_vec_ptr_t>;
+namespace GraphIR {
+class Node;
+class Graph;
+using node_ptr_t = std::shared_ptr<Node>;
+using graph_ptr_t = std::shared_ptr<Graph>;
+using graph_vec_t = std::vector<graph_ptr_t>;
+using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
+} // namespace GraphIR
+
+using entity = std::variant<GraphIR::node_ptr_t, GraphIR::graph_vec_ptr_t, oper_idx_vec_ptr_t>;
 using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
 using type_ns_ptr_t = std::shared_ptr<Namespace<std::string, type_ptr_t>>;
 

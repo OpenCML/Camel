@@ -22,25 +22,32 @@
 #include "core/context/context.h"
 #include "core/context/frame.h"
 
+namespace GIR = GraphIR;
+
 EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    if (norm.size() != 1) {
-        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<sleep>", 1, norm.size());
-        return Data::null();
+    const auto &ins = self->normInputs();
+    if (ins.size() != 1) {
+        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<sleep>", 1, ins.size());
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
-    data_ptr_t arg = norm[0];
+    const data_ptr_t &arg = frame.get(ins[0]);
     if (!Type::castSafetyCheck(arg->type(), Type::Int64())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<sleep>", "int64", arg->type()->toString());
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
     auto pd = arg->as<Int64Data>(Type::Int64());
     if (pd->data() < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sleep> requires a non-negative integer");
-        return Data::null();
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
-    return Data::null();
+    frame.set(self, Data::null());
+    return EvalResultCode::OK;
 }

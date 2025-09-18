@@ -22,6 +22,6 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __print__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __println__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __input__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

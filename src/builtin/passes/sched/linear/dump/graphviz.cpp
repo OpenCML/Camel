@@ -22,7 +22,7 @@
 #include "utils/type.h"
 
 using namespace std;
-using namespace GIR;
+using namespace GraphIR;
 
 std::string escape(const std::string &input) {
     std::string result;
@@ -131,7 +131,7 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
+any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         // Skip if the graph has already been visited to avoid duplication
         return string("");
@@ -147,11 +147,10 @@ any GraphVizDumpPass::apply(const GIR::graph_ptr_t &graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format(
-            "digraph GraphIR {{\r\n"
-            "    graph [rankdir=LR, fontsize=18];\r\n"
-            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-            "    edge [minlen=2];\r\n");
+        res += std::format("digraph GraphIR {{\r\n"
+                           "    graph [rankdir=LR, fontsize=18];\r\n"
+                           "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+                           "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();

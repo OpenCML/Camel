@@ -30,7 +30,7 @@
 #include "utils/log.h"
 #include "utils/type.h"
 
-namespace GraphIntermediateRepresentation {
+namespace GraphIR {
 
 enum class NodeType {
     Select,
@@ -453,6 +453,4 @@ class FunctionNode : public Node {
     }
 };
 
-} // namespace GraphIntermediateRepresentation
-
-namespace GIR = GraphIntermediateRepresentation;
+} // namespace GraphIR

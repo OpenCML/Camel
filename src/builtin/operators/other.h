@@ -22,7 +22,7 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __not_implemented__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+EvalResultCode __not_implemented__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
-    return Data::null();
+    return EvalResultCode::OK;
 }

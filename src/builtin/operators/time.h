@@ -22,6 +22,6 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __now__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __strftime__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __strptime__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

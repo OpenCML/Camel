@@ -19,41 +19,28 @@
 
 #pragma once
 
+#include "core/module/builtin.h"
+#include "error/diagnostics/diagnostics.h"
+#include "execute/executor/executor.h"
+
 #include <fstream>
 #include <memory>
 #include <unordered_map>
 
-#include "core/module/builtin.h"
-#include "error/diagnostics/diagnostics.h"
-#include "execute/executor/executor.h"
+namespace GraphIR {
+class Graph;
+using graph_ptr_t = std::shared_ptr<Graph>;
+} // namespace GraphIR
+
+class Module;
+using module_ptr_t = std::shared_ptr<Module>;
 
 struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path
     std::vector<std::string> searchPaths; // search paths for modules
 
-    std::string toString() const {
-        std::ostringstream os;
-        os << "{\n";
-        os << "  entryDir: " << entryDir << "\n";
-        os << "  entryFile: " << entryFile << "\n";
-        os << "  searchPaths: [";
-
-        bool first = true;
-        for (const auto &path : searchPaths) {
-            if (path.empty())
-                continue;
-            if (!first) {
-                os << ", ";
-            }
-            os << path;
-            first = false;
-        }
-
-        os << "]\n";
-        os << "}";
-        return os.str();
-    }
+    std::string toString() const;
 };
 
 class Context : public std::enable_shared_from_this<Context> {
@@ -89,16 +76,12 @@ class Context : public std::enable_shared_from_this<Context> {
     DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
     diagnostics_ptr_t rtmDiags() const { return rtmDiags_; }
-    GIR::graph_ptr_t rootGraph() const;
-    GIR::graph_ptr_t mainGraph() const;
+    GraphIR::graph_ptr_t rootGraph() const;
+    GraphIR::graph_ptr_t mainGraph() const;
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
-    void registerExecutorFactory(std::string name, executor_factory_t fact) {
-        exeMgr_->registerExecutorFactory(name, fact);
-    }
-    data_ptr_t eval(std::string uri, data_vec_t &withArgs, data_vec_t &normArgs) {
-        return exeMgr_->eval(uri, withArgs, normArgs);
-    }
+    void registerExecutorFactory(std::string name, executor_factory_t fact);
+    EvalResultCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
 
     module_ptr_t
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");

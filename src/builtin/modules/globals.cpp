@@ -21,6 +21,8 @@
 #include "builtin/executors/builtin.h"
 #include "core/context/context.h"
 
+#include "utils/log.h"
+
 void GlobalsBuiltinModule::exportBinaryOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(
         name,

@@ -28,7 +28,7 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
     executorFactories[name] = fact;
 }
 
-EvalResultCode ExecutorManager::eval(std::string uri, GIR::node_ptr_t &self, Frame &frame) {
+EvalResultCode ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
     l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri);
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {

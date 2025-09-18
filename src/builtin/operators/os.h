@@ -22,4 +22,4 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __sleep__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

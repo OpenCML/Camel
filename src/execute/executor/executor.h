@@ -29,11 +29,6 @@
 #include <unordered_map>
 #include <vector>
 
-namespace GIR {
-class Node;
-using node_ptr_t = std::shared_ptr<Node>;
-} // namespace GIR
-
 class Frame;
 class Context;
 using context_ptr_t = std::shared_ptr<Context>;
@@ -49,7 +44,7 @@ class Executor : public std::enable_shared_from_this<Executor> {
         : context_(ctx), opsMap_(ops) {};
     virtual ~Executor() = default;
 
-    virtual EvalResultCode eval(std::string uri, GIR::node_ptr_t &self, Frame &frame) = 0;
+    virtual EvalResultCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) = 0;
 };
 
 using executor_ptr_t = std::shared_ptr<Executor>;
@@ -66,7 +61,7 @@ class ExecutorManager {
     ~ExecutorManager() = default;
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 
-    EvalResultCode eval(std::string uri, GIR::node_ptr_t &self, Frame &frame);
+    EvalResultCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
 };
 
 using exec_mgr_uptr_t = std::unique_ptr<ExecutorManager>;

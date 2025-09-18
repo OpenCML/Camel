@@ -28,7 +28,7 @@
 #include "../gct.h"
 #include "../gir.h"
 
-namespace GraphIntermediateRepresentation {
+namespace GraphIR {
 
 using void_ptr_t = void *;
 
@@ -46,7 +46,7 @@ class Builder {
         nodeScope_ = node_scope_t::create();
         graphScope_ = graph_scope_t::create();
         opScope_ = operator_scope_t::create();
-        rootGraph_ = GIR::Graph::create(nullptr, "__root__");
+        rootGraph_ = Graph::create(nullptr, "__root__");
         currGraph_ = rootGraph_;
     }
 
@@ -117,4 +117,5 @@ class Builder {
     node_ptr_t visitExecNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
-} // namespace GraphIntermediateRepresentation
+
+} // namespace GraphIR

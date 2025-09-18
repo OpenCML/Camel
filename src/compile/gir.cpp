@@ -22,7 +22,7 @@
 
 using namespace std;
 
-namespace GraphIntermediateRepresentation {
+namespace GraphIR {
 
 std::string to_string(NodeType type) {
     switch (type) {
@@ -187,4 +187,4 @@ OperatorNode
 SelectNode
 */
 
-} // namespace GraphIntermediateRepresentation
+} // namespace GraphIR

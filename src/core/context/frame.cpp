@@ -18,3 +18,45 @@
  */
 
 #include "frame.h"
+#include "compile/gir.h"
+
+using namespace GraphIR;
+
+Frame::Frame(const frame_ptr_t &parent, const graph_ptr_t &graph)
+    : parent_(parent), graph_(graph), arena_(*graph->arena()) {
+    l.in("Frame").debug(
+        "Created Frame for Graph: {} (Parent: {})",
+        graph_->name().empty() ? "<anonymous>" : graph_->name(),
+        parent_ ? "Yes" : "No");
+}
+
+Frame::~Frame() {
+    l.in("Frame").debug(
+        "Destroyed Frame for Graph: {} (Parent: {})",
+        graph_->name().empty() ? "<anonymous>" : graph_->name(),
+        parent_ ? "Yes" : "No");
+}
+
+frame_ptr_t Frame::create(const frame_ptr_t &parent, const graph_ptr_t &graph) {
+    return std::make_shared<Frame>(parent, graph);
+}
+
+data_ptr_t Frame::get(const node_ptr_t &node) {
+    const graph_ptr_t &g = node->graph();
+    if (g.get() != graph_.get()) {
+        ASSERT(parent_, "Node does not belong to the current frame's graph.");
+        return parent_->get(node);
+    }
+    ASSERT(arena_.has(node->index()), "Data not found in frame's arena.");
+    return arena_.get(node->index());
+}
+
+void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
+    const graph_ptr_t &g = node->graph();
+    if (g.get() != graph_.get()) {
+        ASSERT(parent_, "Node does not belong to the current frame's graph.");
+        parent_->set(node, data);
+        return;
+    }
+    arena_.set(node->index(), data);
+}

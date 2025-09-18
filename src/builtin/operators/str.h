@@ -22,4 +22,4 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __format__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
