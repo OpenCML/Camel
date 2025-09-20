@@ -3,7 +3,7 @@ type Point = { x: int, y: int }
 let WIDTH = 10
 let HEIGHT = 10
 
-func render(snake: any[]): void sync {
+func render(snake: Point[]): void sync {
     let rows = range(0, HEIGHT)
 
     rows.foreach((y: int) => sync {

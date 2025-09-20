@@ -187,10 +187,6 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Inspect) {
-                if (!mainModule->loaded()) {
-                    mainModule->diagnostics()->dump(os, useJsonFormat);
-                    return 1;
-                }
                 if (Inspect::dumpGCT && mainModule->gct()) {
                     mainModule->gct()->print(os);
                 }
