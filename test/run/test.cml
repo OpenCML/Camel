@@ -1,0 +1,24 @@
+type Point = { x: int, y: int }
+
+let WIDTH = 10
+let HEIGHT = 10
+
+func render(snake: any[]): void sync {
+    let rows = range(0, HEIGHT)
+
+    rows.foreach((y: int) => sync {
+        let cols = range(0, WIDTH)
+        let lines = cols.map((x: int): string => {
+            let p = {x: x, y: y}
+            return if snake.contains(p) then "O" else "."
+        })
+        println(lines.join(""))
+    })
+
+    println("")
+}
+
+func main(): int sync {
+    render([{x: 5, y: 5}, {x: 5, y: 6}, {x: 5, y: 7}])
+    return 0
+}

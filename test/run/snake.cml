@@ -1,0 +1,83 @@
+module snake
+
+import { now, sleep } from time
+
+// Map size
+let WIDTH = 20
+let HEIGHT = 10
+
+// Direction enum
+type Dir = enum {
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+// Coordinate point
+type Point = struct {
+    x: int,
+    y: int
+}
+
+// Render the map using functional style (no for/while)
+func render(snake: list<Point>): void {
+    let rows = (0..HEIGHT).to_list()
+
+    rows.foreach(fn (y: int) {
+        let cols = (0..WIDTH).to_list()
+        let line = cols.map(fn (x: int) -> string {
+            let p = Point{x, y}
+            return if snake.contains(p) then "O" else "."
+        }).join("")  // Join the row into a string
+        println(line)
+    })
+
+    println("")  // Extra newline for spacing
+}
+
+// Move the snake in the given direction
+func move_snake(snake: list<Point>, dir: Dir): list<Point> {
+    let head = snake.first()
+    let new_head = match dir {
+        Dir::Up => Point{ head.x, head.y - 1 },
+        Dir::Down => Point{ head.x, head.y + 1 },
+        Dir::Left => Point{ head.x - 1, head.y },
+        Dir::Right => Point{ head.x + 1, head.y },
+    }
+    return [new_head] + snake.slice(0, snake.len() - 1)  // New head + rest of body (remove tail)
+}
+
+// Check if the snake hits the wall
+func hit_wall(p: Point): bool {
+    return p.x < 0 || p.x >= WIDTH || p.y < 0 || p.y >= HEIGHT
+}
+
+// Recursive game loop
+func game_loop(snake: list<Point>, dir: Dir, steps: int): void {
+    render(snake)
+    let new_snake = move_snake(snake, dir)
+    let head = new_snake.first()
+
+    if hit_wall(head) {
+        println("Game over! You hit the wall after {} steps.".format(steps))
+        return
+    }
+
+    sleep(0.2)  // Delay for visual effect
+
+    // Recursive call for next frame
+    game_loop(new_snake, dir, steps + 1)
+}
+
+// Entry point
+export func main(): int sync {
+    println("Starting recursive Snake Game...")
+
+    let initial_snake = [Point{5, 5}, Point{4, 5}, Point{3, 5}]
+    let direction = Dir::Right
+
+    game_loop(initial_snake, direction, 0)
+
+    return 0
+}

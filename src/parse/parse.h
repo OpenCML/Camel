@@ -140,6 +140,7 @@ class CamelParser {
     }
 
     void dumpTokens(std::ostream &os) {
+        tokens_->reset();
         while (true) {
             antlr4::Token *token = tokens_->LT(1);
             if (token->getType() == antlr4::Token::EOF) {

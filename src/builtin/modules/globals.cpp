@@ -89,6 +89,8 @@ static const std::pair<std::string, std::string> others[] = {
     {"reduce", ":not-impl"},
     {"len", ":not-impl"},
     {"range", ":not-impl"},
+    {"foreach", ":not-impl"},
+    {"contains", ":not-impl"},
     {"enumerate", ":not-impl"},
     {"zip", ":not-impl"},
     {"unzip", ":not-impl"},

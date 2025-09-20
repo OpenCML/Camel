@@ -98,10 +98,11 @@ int main(int argc, char *argv[]) {
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setConfig(DiagsConfig{
-                .total_limit = -1,
-                .per_severity_limits = {{Severity::Error, 0}},
-            });
+            diagnostics->setConfig(
+                DiagsConfig{
+                    .total_limit = -1,
+                    .per_severity_limits = {{Severity::Error, 0}},
+                });
         }
 
         bool useJsonFormat = (errorFormat == "json");
@@ -169,10 +170,10 @@ int main(int argc, char *argv[]) {
                     .searchPaths =
                         {
                             entryDir,
-                            fs::absolute(fs::path(
-                                             Run::stdLibPath.empty()
-                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                 : Run::stdLibPath))
+                            fs::absolute(
+                                fs::path(
+                                    Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                            : Run::stdLibPath))
                                 .string(),
                             getEnv("CAMEL_PACKAGES"),
                             getEnv("CAMEL_HOME", camelPath.string()),
@@ -203,6 +204,10 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Inspect) {
+                if (!mainModule->loaded()) {
+                    mainModule->diagnostics()->dump(os, useJsonFormat);
+                    return 1;
+                }
                 if (Inspect::dumpGCT && mainModule->gct()) {
                     mainModule->gct()->print(os);
                 }
