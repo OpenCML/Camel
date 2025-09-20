@@ -261,15 +261,15 @@ bool Diagnostics::hasErrors() const {
 void Diagnostics::checkLimits(const Diagnostic &d) {
     // Check total limit
     if (config_.hasTotalLimit() && static_cast<int>(storage_.size()) >= config_.total_limit) {
-        throw DiagnosticsExceededTotalLimitException(config_.total_limit, d);
+        throw DiagnosticsTotalLimitExceededException(config_.total_limit, d);
     }
 
     // Check per-severity limit
     if (config_.hasSeverityLimit(d.severity)) {
-        size_t currentCount = countBySeverityInternal(d.severity);
+        size_t currentCount = countBySeverityInternal(d.severity) + 1;
         int limit = config_.getSeverityLimit(d.severity);
         if (static_cast<int>(currentCount) >= limit) {
-            throw DiagnosticsExceededLimitException(d.severity, limit, d);
+            throw DiagnosticsLimitExceededException(d.severity, limit, d);
         }
     }
 }

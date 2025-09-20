@@ -1152,12 +1152,12 @@ type_ptr_t Builder::visitDictType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for DictType");
     auto res = make_shared<DictType>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
-        const auto &namedPair = child->loadAs<AST::NamedPairLoad>();
-        const string &name = namedPair->getRef().ident();
+        const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
+        const string &name = namedType->getRef().ident();
         type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
         data_ptr_t data = nullptr;
         if (!res->add(name, type)) {
-            diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
+            diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(name);
             throw BuildAbortException();
         }
     }

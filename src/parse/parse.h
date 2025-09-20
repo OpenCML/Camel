@@ -82,19 +82,12 @@ class CamelParser {
             parser_->addErrorListener(listener.get());
             parser_->setErrorHandler(std::make_shared<antlr4::DefaultErrorStrategy>());
 
-            try {
-                cst_ = parser_->program();
-            } catch (std::exception &e) {
-                cst_ = nullptr;
-                return false;
-            }
+            cst_ = parser_->program();
 
             if (listener->hasErrors()) {
                 cst_ = nullptr;
                 return false;
             }
-        } catch (std::exception &e) {
-            throw e;
         }
 
         return cst_ != nullptr;
@@ -140,6 +133,7 @@ class CamelParser {
     }
 
     void dumpTokens(std::ostream &os) {
+        tokens_->reset();
         while (true) {
             antlr4::Token *token = tokens_->LT(1);
             if (token->getType() == antlr4::Token::EOF) {

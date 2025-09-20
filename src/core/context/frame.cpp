@@ -43,7 +43,7 @@ frame_ptr_t Frame::create(const frame_ptr_t &parent, const graph_ptr_t &graph) {
 
 data_ptr_t Frame::get(const node_ptr_t &node) {
     const graph_ptr_t &g = node->graph();
-    if (g.get() != graph_.get()) {
+    if (g != graph_) {
         ASSERT(parent_, "Node does not belong to the current frame's graph.");
         return parent_->get(node);
     }
@@ -53,10 +53,30 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
 
 void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
     const graph_ptr_t &g = node->graph();
-    if (g.get() != graph_.get()) {
+    if (g != graph_) {
         ASSERT(parent_, "Node does not belong to the current frame's graph.");
         parent_->set(node, data);
         return;
     }
     arena_.set(node->index(), data);
+}
+
+frame_ptr_t Frame::push(const GraphIR::graph_ptr_t &graph) {
+    ASSERT(graph, "Cannot push a null graph.");
+    ASSERT(graph != graph_, "Cannot push the same graph as the current frame's graph.");
+    return Frame::create(shared_from_this(), graph);
+}
+
+frame_ptr_t Frame::pop() {
+    auto p = parent_;
+    parent_ = nullptr;
+    return p;
+}
+
+std::string Frame::toString() {
+    return std::format(
+        "Frame(Graph: {}, Parent: {})): {}",
+        graph_->name().empty() ? "<anonymous>" : graph_->name(),
+        parent_ ? "Yes" : "No",
+        arena_.toString());
 }

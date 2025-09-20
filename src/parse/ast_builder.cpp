@@ -1822,14 +1822,16 @@ dictType
 */
 any Builder::visitDictType(OpenCMLParser::DictTypeContext *context) {
     ENTER("DictType");
-    node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedPair");
+    node_ptr_t res = createNodeAs<DictTypeLoad>();
+    node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedType");
     setNodeTokenRangeByContext(repeatNode, context);
     for (auto &pair : context->keyTypePair()) {
         node_ptr_t pairNode = any2node(visitKeyTypePair(pair));
         *repeatNode << pairNode;
     }
+    *res << repeatNode;
     LEAVE("DictType");
-    return repeatNode;
+    return res;
 }
 
 /*

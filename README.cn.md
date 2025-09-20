@@ -119,7 +119,7 @@ camel hello.cml
 
 ## 📚 了解更多
 
-- [自行构建](docs/setup.en.md) - 环境设置和安装指南
+- [自行构建](docs/setup.cn.md) - 环境设置和安装指南
 - [WIP] [文档](https://docs.opencml.com/) - 语言规范和API参考
 - [WIP] [示例](examples/) - 从MNIST训练到分布式管道
 - [WIP] [白皮书](https://arxiv.org/abs/xxxx.xxxx) - 深入了解编译器架构

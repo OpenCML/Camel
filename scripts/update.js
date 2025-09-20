@@ -1,60 +1,9 @@
 import fs from 'fs'
 import fsp from 'fs/promises'
-import path from 'path'
 import readline from 'readline'
-import crypto from 'crypto'
-
-const CACHE_FILE_PATH = '.updcache'
+import { execSync } from 'child_process'
 
 let updatedFiles = 0
-
-let cacheMap = {}
-let cacheHasChanges = false
-
-async function initializeCache() {
-    try {
-        const cacheContent = await fsp.readFile(CACHE_FILE_PATH, 'utf8').catch(() => '')
-        const lines = cacheContent.split('\n')
-        cacheMap = {}
-
-        for (const line of lines) {
-            const trimmedLine = line.trim()
-            if (trimmedLine) {
-                const [cachedPath, cachedMD5Base64] = trimmedLine.split(':')
-                cacheMap[cachedPath] = cachedMD5Base64
-            }
-        }
-    } catch (err) {
-        console.error(`Error initializing cache: ${err}`)
-    }
-}
-
-async function updateCacheFile() {
-    try {
-        const updatedCacheContent = Object.entries(cacheMap)
-            .map(([path, md5]) => `${path}:${md5}`)
-            .join('\n')
-        await fsp.writeFile(CACHE_FILE_PATH, updatedCacheContent, 'utf8')
-    } catch (err) {
-        console.error(`Error updating cache file: ${err}`)
-    }
-}
-
-function calculateMD5Base64(filePath) {
-    const fileBuffer = fs.readFileSync(filePath)
-    const hash = crypto.createHash('md5')
-    hash.update(fileBuffer)
-    return hash.digest('base64')
-}
-
-async function compareMD5(srcPath) {
-    const srcMD5Base64 = calculateMD5Base64(srcPath)
-    const cachedMD5Base64 = cacheMap[srcPath]
-    if (cachedMD5Base64) {
-        return cachedMD5Base64 === srcMD5Base64
-    }
-    return false
-}
 
 function formatDate(date) {
     const months = [
@@ -97,11 +46,12 @@ async function updateFile(filePath) {
             lines.push(line)
         }
         lines.push('')
+
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].includes('* Created:')) {
                 needUpdate = true
-                if (lines[i + 1].includes('* Updated:')) {
-                    if (lines[i + 1] == updatedLine) {
+                if (lines[i + 1]?.includes('* Updated:')) {
+                    if (lines[i + 1] === updatedLine) {
                         needUpdate = false
                         break
                     }
@@ -112,14 +62,13 @@ async function updateFile(filePath) {
                 break
             }
         }
-        if (needUpdate && !(await compareMD5(filePath))) {
+
+        if (needUpdate) {
             if (updateIndex) {
                 lines.splice(updateIndex, 0, updatedLine)
             }
             await fsp.writeFile(filePath, lines.join('\r\n'), 'utf8')
             console.log(`Updated: ${filePath}`)
-            cacheMap[filePath] = calculateMD5Base64(filePath)
-            cacheHasChanges = true
             updatedFiles++
         }
     } catch (err) {
@@ -127,51 +76,40 @@ async function updateFile(filePath) {
     }
 }
 
-async function traverseDirectory(dir) {
+function getChangedFiles() {
     try {
-        const files = await fsp.readdir(dir)
-
-        for (const file of files) {
-            const filePath = path.join(dir, file)
-            const stat = await fsp.stat(filePath)
-
-            if (stat.isFile()) {
-                await updateFile(filePath)
-            } else if (stat.isDirectory()) {
-                await traverseDirectory(filePath)
-            }
-        }
+        const stdout = execSync('git diff --name-only && git diff --name-only --cached', {
+            encoding: 'utf8'
+        })
+        const files = stdout
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(
+                (line) =>
+                    line &&
+                    (line.endsWith('.c') ||
+                        line.endsWith('.cpp') ||
+                        line.endsWith('.h') ||
+                        line.endsWith('.hpp'))
+            )
+        return [...new Set(files)]
     } catch (err) {
-        console.error(`Could not list the directory: ${err}`)
-    }
-}
-
-async function cleanUpCache() {
-    for (const cachedPath in cacheMap) {
-        try {
-            await fsp.access(cachedPath);
-        } catch (err) {
-            console.log(`File ${path.resolve(cachedPath)} is missing. Removing from cache...`);
-            delete cacheMap[cachedPath];
-            cacheHasChanges = true;
-        }
+        console.error('Failed to get changed files from git:', err)
+        return []
     }
 }
 
 ;(async () => {
-    await initializeCache()
+    const changedFiles = getChangedFiles()
 
-    const targetDirs = ['src', 'include']
-    for (const targetDirectory of targetDirs) {
-        await traverseDirectory(targetDirectory)
+    if (changedFiles.length === 0) {
+        console.log('No changes detected by git. Nothing to update.')
+        return
     }
 
-    console.log(`Updated ${updatedFiles} files.`)
-
-    await cleanUpCache()
-
-    if (cacheHasChanges) {
-        await updateCacheFile()
-        console.log('Cache has been updated.')
+    for (const filePath of changedFiles) {
+        await updateFile(filePath)
     }
+
+    console.log(`Updated ${updatedFiles} file(s).`)
 })()

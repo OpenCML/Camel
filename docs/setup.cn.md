@@ -1,6 +1,6 @@
 # Camel 项目开发环境配置指南
 
-[English](setup.en.md) | 中文简体
+[English](setup.md) | 中文简体
 
 ## 1. 项目简介
 
@@ -179,19 +179,24 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
 
 执行以下命令完成依赖安装：
 
-1. 初始化依赖（仅需执行一次）：
+1. 安装项目依赖（自动安装并初始化项目）：
    ```bash
-   npm run init
+   npm install
    ```
 
-2. 更新 Conan 依赖：
+2. 手动初始化项目（如果需要）：
    ```bash
-   npm run install
+   npm run init
    ```
 
 3. 若 Antlr4 语法定义有变更，重新生成解析器：
    ```bash
    npm run psrgen
+   ```
+
+4. 对于VSCode用户，推荐执行以下命令修复Intellisense报错：
+   ```bash
+   npm run fix:vsc
    ```
 
 ---
@@ -215,66 +220,7 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
 
 ---
 
-## 4. VSCode 配置推荐
-
-### 4.1 基础配置
-
-创建 `.vscode/settings.json` 文件：
-```json
-{
-    "files.associations": {
-        ".opencmlrc": "json"
-    },
-    "editor.tabSize": 4
-}
-```
-
-### 4.2 调试配置
-
-创建 `.vscode/launch.json` 文件：
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "C++ Debug (Windows)",
-      "cwd": "${workspaceFolder}",
-      "type": "cppvsdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/build/Debug/camel.exe",
-      "symbolSearchPath": "${workspaceFolder}/build/Debug",
-      "args": ["inspect", "--cst", "D:\\Projects\\Camel\\test\\format\\format.cml"],
-      "console": "externalTerminal",
-      "logging": {
-        "moduleLoad": false,
-        "trace": true
-      },
-    }
-  ]
-}
-```
-
-### 4.3 头文件提示配置
-
-创建 `.vscode/c_cpp_properties.json` 文件：
-```json
-{
-  "configurations": [
-    {
-      "includePath": [
-        "${workspaceFolder}/src",
-        "${workspaceFolder}/vendor",
-        "${workspaceFolder}/third_party"
-      ],
-      "cppStandard": "c++23"
-    }
-  ]
-}
-```
-
----
-
-## 5. 参考资源
+## 4. 参考资源
 
 1. [CMake 官方文档](https://cmake.org/documentation/)
 2. [Conan 2.0 最佳实践](https://docs.conan.io/2/)

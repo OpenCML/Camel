@@ -120,7 +120,7 @@ camel hello.cml
 
 ## 📚 Learn More
 
-- [Build Yourself](docs/setup.en.md) - Environment setup and installation guide
+- [Build Yourself](docs/setup.md) - Environment setup and installation guide
 - [WIP] [Documentation](https://docs.opencml.com/) - Language specs and API reference
 - [WIP] [Examples](examples/) - From MNIST training to distributed pipelines
 - [WIP] [Whitepaper](https://arxiv.org/abs/xxxx.xxxx) - Deep dive into the compiler architecture

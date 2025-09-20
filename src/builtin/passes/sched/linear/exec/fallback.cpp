@@ -27,21 +27,25 @@ using namespace GraphIR;
 std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_t &graph) {
     if (graphTopoNodesCache_.find(graph.get()) == graphTopoNodesCache_.end()) {
         node_ptr_t retNode = graph->returnNode();
-        auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
-            vector<node_ptr_t> ins;
-            ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-            for (const auto &in : n->dataInputs()) {
-                if (in->graph() == n->graph()) // only consider nodes in the same graph
-                    ins.push_back(in);
-            }
-            for (const auto &in : n->ctrlInputs()) {
-                if (in->graph() == n->graph()) // only consider nodes in the same graph
-                    ins.push_back(in);
-            }
-            return ins;
-        });
+        auto sortedNodes = findReachable(
+            retNode,
+            [](const node_ptr_t &n) {
+                vector<node_ptr_t> ins;
+                ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
+                for (const auto &in : n->dataInputs()) {
+                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                        ins.push_back(in);
+                }
+                for (const auto &in : n->ctrlInputs()) {
+                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                        ins.push_back(in);
+                }
+                return ins;
+            },
+            true // skip the start node itself
+        );
         EXEC_WHEN_DEBUG([&]() {
-            if (sortedNodes.size() != graph->nodes().size()) {
+            if (sortedNodes.size() != graph->nodes().size() - 1) {
                 GraphIR::node_vec_t unreachableNodes;
                 for (const auto &n : graph->nodes()) {
                     if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
@@ -68,121 +72,196 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
 
 data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_t &frame) {
     l.in("Eval").debug("Evaluating graph: {}", graph->name());
-    data_ptr_t result;
-    // 按拓扑序执行
-    for (auto &n : *getTopoNodes(graph)) {
-        // 用于跳过被标记为不执行的节点（分支功能）
-        if (!brInfoStack_.empty() && n == brInfoStack_.top().second) {
-            continue;
-        }
-        switch (n->type()) {
-        case NodeType::Function: {
-            auto func = tt::as_shared<FunctionNode>(n)->func();
-            auto subGraph = func->graph();
-            auto newFrame = Frame::create(frame, subGraph);
-            const auto &inNodes = n->dataInputs();
-            const auto &ports = subGraph->portNodes();
-            ASSERT(
-                inNodes.size() == ports.size(),
-                "Function node input size does not match function graph port size.");
-            for (size_t i = 0; i < ports.size(); ++i) {
-                newFrame->set(ports[i].first, frame->get(inNodes[i]));
-            }
-            data_ptr_t res = evalGraph(subGraph, newFrame);
-            frame->set(n, res);
-            break;
-        }
-        case NodeType::Operator: {
-            auto opNode = tt::as_shared<OperatorNode>(n);
-            const auto &uri = opNode->oper()->uri();
-
-            data_vec_t withArgs, normArgs;
-            withArgs.reserve(n->withInputs().size());
-            normArgs.reserve(n->normInputs().size());
-
-            for (const auto &inNode : n->withInputs()) {
-                withArgs.push_back(frame->get(inNode));
-            }
-            for (const auto &inNode : n->normInputs()) {
-                normArgs.push_back(frame->get(inNode));
-            }
-
-            context_->eval(uri, n, *frame);
-            break;
-        }
-        case NodeType::Select: {
-            auto selectNode = tt::as_shared<SelectNode>(n);
-            auto selectType = selectNode->selectType();
-            if (selectType == SelectNode::SelectType::Branch) {
-                // 判断输入条件，并将不执行的节点放入跳过栈
-                ASSERT(
-                    n->dataInputs().size() == 1,
-                    "Branch node must have exactly one data input.");
-                ASSERT(n->ctrlOutputs().size() == 2, "Branch node must have exactly two outputs.");
-                auto condDataRaw = frame->get(n->dataInputs().front());
-                auto condData = condDataRaw->as<BoolData>(Type::Bool());
-                bool cond = condData->data();
-                if (cond) {
-                    // True branch, skip the second output
-                    brInfoStack_.push({0, n->ctrlOutputs().back()});
-                } else {
-                    // False branch, skip the first output
-                    brInfoStack_.push({1, n->ctrlOutputs().front()});
-                }
-            } else {
-                ASSERT(n->ctrlInputs().size() == 2, "Join node must have exactly two ctrl inputs.");
-                size_t idx = brInfoStack_.top().first;
-                brInfoStack_.pop();
-                auto data = frame->get(n->ctrlInputs()[idx]);
-                frame->set(n, data);
-            }
-            break;
-        }
-        case NodeType::Struct: {
-            auto structNode = tt::as_shared<StructNode>(n);
-            const auto &dataInputs = n->dataInputs();
-            data_ptr_t data = frame->get(n);
-            ASSERT(data != nullptr, "Struct data is null.");
-            data_vec_t inputs;
-            inputs.reserve(dataInputs.size());
-            for (const auto &input : dataInputs) {
-                inputs.push_back(frame->get(input));
-            }
-            data->resolve(inputs);
-            frame->set(n, data);
-            break;
-        }
-        case NodeType::Access: {
-            ASSERT(false, "Access node evaluation not implemented yet.");
-            auto accessNode = tt::as_shared<AccessNode>(n);
-            data_ptr_t source = frame->get(n->dataInputs().front());
-            data_ptr_t res;
-            break;
-        }
-        case NodeType::Source: {
-            data_ptr_t data = frame->get(n);
-            ASSERT(data != nullptr, "Source data is null.");
-            break;
-        }
-        case NodeType::Return: {
-            ASSERT(n->withInputs().size() == 0, "Return node cannot have with inputs.");
-            const auto &input = n->dataInputs();
-            if (input.empty()) {
-                result = Data::null();
-            } else {
-                result = frame->get(input.front());
-            }
-            break;
-        }
-        }
+    if (currRecursionDepth_++ > maxRecursionDepth_) {
+        context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
     }
 
-    ASSERT(result != nullptr, "Graph evaluation did not produce a result.");
-    l.in("Eval").debug(
-        "Graph {} evaluation completed with returned value {}.",
-        graph->name(),
-        result->toString());
-    return result;
+    bool loop = false;
+    auto nodesPtr = getTopoNodes(graph);
+    frame_ptr_t currFrame = frame, tailFrame = nullptr;
+
+    auto evalFuncNode = [&](const node_ptr_t &n, bool isTailCall) {
+        auto func = tt::as_shared<FunctionNode>(n)->func();
+        auto tgtGraph = func->graph();
+        frame_ptr_t nextFrame;
+
+        data_vec_t args;
+        const auto &inNodes = n->dataInputs();
+        args.reserve(inNodes.size());
+        for (const auto &inNode : inNodes) {
+            args.push_back(currFrame->get(inNode));
+        }
+
+        const auto &portNodes = tgtGraph->portNodes();
+        ASSERT(
+            inNodes.size() == portNodes.size(),
+            "Function node input size does not match function graph port size.");
+
+        if (isTailCall) {
+            // Tail-call optimization
+            loop = true;
+            frame_ptr_t lastFrame = currFrame;
+
+            if (tgtGraph == currFrame->graph()) {
+                // Self-recursion optimization
+                currFrame = lastFrame;
+                l.in("Eval").debug(
+                    "Optimizing self-recursion for graph: {}",
+                    currFrame->graph()->name());
+            } else {
+                nodesPtr = getTopoNodes(tgtGraph);
+
+                if (tailFrame && tailFrame->graph() == tgtGraph) {
+                    // Mutual-tail-recursion optimization
+                    l.in("Eval").debug(
+                        "Optimizing mutual-tail-recursion for graph: {}",
+                        currFrame->graph()->name());
+                    currFrame = tailFrame;
+                } else {
+                    currFrame = Frame::create(currFrame, tgtGraph);
+                }
+            }
+
+            tailFrame = lastFrame;
+            nextFrame = currFrame;
+
+            // clear the frame for re-use
+            // note: here the nextFrame may be the currFrame
+            // so we need to reset it after retrieving the args
+            nextFrame->reset();
+
+            for (size_t i = 0; i < portNodes.size(); ++i) {
+                nextFrame->set(portNodes[i].first, args[i]);
+            }
+        } else {
+            nextFrame = Frame::create(currFrame, tgtGraph);
+
+            for (size_t i = 0; i < portNodes.size(); ++i) {
+                nextFrame->set(portNodes[i].first, args[i]);
+            }
+
+            // evaluate the target graph
+            data_ptr_t res = evalGraph(tgtGraph, nextFrame);
+            currFrame->set(n, res);
+        }
+    };
+
+    // for tail-call optimization
+    // reuse the current frame for tail-recursive calls
+    do {
+        loop = false;
+        auto &nodes = *nodesPtr;
+        // 按拓扑序执行
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            auto &n = nodes[i];
+            switch (n->type()) {
+            case NodeType::Function: {
+                evalFuncNode(n, i == nodes.size() - 1);
+                break;
+            }
+            case NodeType::Operator: {
+                auto opNode = tt::as_shared<OperatorNode>(n);
+                const auto &uri = opNode->oper()->uri();
+
+                data_vec_t withArgs, normArgs;
+                withArgs.reserve(n->withInputs().size());
+                normArgs.reserve(n->normInputs().size());
+
+                for (const auto &inNode : n->withInputs()) {
+                    withArgs.push_back(currFrame->get(inNode));
+                }
+                for (const auto &inNode : n->normInputs()) {
+                    normArgs.push_back(currFrame->get(inNode));
+                }
+
+                context_->eval(uri, n, *currFrame);
+                break;
+            }
+            case NodeType::Select: {
+                // BRCH node
+                auto selectNode = tt::as_shared<SelectNode>(n);
+                auto selectType = selectNode->selectType();
+                if (selectType == SelectNode::SelectType::Branch) {
+                    // 判断输入条件，并将执行的节点放入Info栈
+                    ASSERT(
+                        n->dataInputs().size() == 1,
+                        "Branch node must have exactly one data input.");
+                    ASSERT(
+                        n->ctrlOutputs().size() == 2,
+                        "Branch node must have exactly two outputs.");
+                    auto condDataRaw = currFrame->get(n->dataInputs().front());
+                    auto condData = condDataRaw->as<BoolData>(Type::Bool());
+                    bool cond = condData->data();
+                    if (cond) {
+                        brInfoStack_.push(n->ctrlOutputs().front());
+                    } else {
+                        brInfoStack_.push(n->ctrlOutputs().back());
+                    }
+                    i += 2; // skip the two branches
+                } else {
+                    // JOIN node
+                    ASSERT(
+                        n->ctrlInputs().size() == 2,
+                        "Join node must have exactly two ctrl inputs.");
+                    auto execNode = brInfoStack_.top();
+                    brInfoStack_.pop();
+                    if (i == nodes.size() - 1) {
+                        // Here, the branch function node is delayed to be executed at the JOIN
+                        // node, which facilitates tail-call optimization. This is because when the
+                        // JOIN node is the last node of the current execution sequence, the
+                        // function call can be optimized as a tail-call. If the branch function
+                        // call is executed earlier, it is difficult to determine whether it is a
+                        // tail-call.
+                        evalFuncNode(execNode, true);
+                    } else {
+                        currFrame->set(n, currFrame->get(execNode));
+                    }
+                }
+                break;
+            }
+            case NodeType::Struct: {
+                auto structNode = tt::as_shared<StructNode>(n);
+                const auto &dataInputs = n->dataInputs();
+                data_ptr_t data = currFrame->get(n);
+                ASSERT(data != nullptr, "Struct data is null.");
+                data_vec_t inputs;
+                inputs.reserve(dataInputs.size());
+                for (const auto &input : dataInputs) {
+                    inputs.push_back(currFrame->get(input));
+                }
+                data->resolve(inputs);
+                currFrame->set(n, data);
+                break;
+            }
+            case NodeType::Access: {
+                ASSERT(false, "Access node evaluation not implemented yet.");
+                auto accessNode = tt::as_shared<AccessNode>(n);
+                data_ptr_t source = currFrame->get(n->dataInputs().front());
+                data_ptr_t res;
+                break;
+            }
+            case NodeType::Source: {
+                data_ptr_t data = currFrame->get(n);
+                ASSERT(data != nullptr, "Source data is null.");
+                break;
+            }
+            default:
+                ASSERT(false, "Unknown node type.");
+            }
+        }
+    } while (loop);
+
+    currRecursionDepth_--;
+
+    const auto &retNode = currFrame->graph()->returnNode();
+    ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
+    ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
+    const auto &input = retNode->normInputs();
+    if (input.empty()) {
+        return Data::null();
+    } else {
+        return currFrame->get(input.front());
+    }
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
