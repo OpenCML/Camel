@@ -23,3 +23,4 @@
 #include "core/type/type.h"
 
 EvalResultCode __sleep__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+EvalResultCode __whoami__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

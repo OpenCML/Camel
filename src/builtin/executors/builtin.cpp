@@ -67,6 +67,7 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // os
         {"os/sleep", __sleep__},
+        {"os/whoami", __whoami__},
 
         // str
         {"str/format", __format__},

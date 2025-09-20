@@ -18,3 +18,28 @@
  */
 
 #include "arena.h"
+
+std::string DataArray::toString() const {
+    std::string dataPreview;
+    if (dataArr_.empty()) {
+        dataPreview = "[]";
+    } else {
+        dataPreview = "[";
+        size_t previewCount = std::min(dataArr_.size(), static_cast<size_t>(10));
+        for (size_t i = 0; i < previewCount; ++i) {
+            if (dataArr_[i]) {
+                dataPreview += dataArr_[i]->toString();
+            } else {
+                dataPreview += "none";
+            }
+            if (i < previewCount - 1) {
+                dataPreview += ", ";
+            }
+        }
+        if (dataArr_.size() > previewCount) {
+            dataPreview += ", ...";
+        }
+        dataPreview += "]";
+    }
+    return std::format("DataArray({}, {}): {}", std::string(type_), dataArr_.size(), dataPreview);
+}

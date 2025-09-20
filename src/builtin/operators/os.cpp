@@ -22,6 +22,16 @@
 #include "core/context/context.h"
 #include "core/context/frame.h"
 
+#include <memory>
+
+#ifdef _WIN32
+#include <Lmcons.h>
+#include <windows.h>
+#else
+#include <pwd.h>
+#include <unistd.h>
+#endif
+
 namespace GIR = GraphIR;
 
 EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
@@ -49,5 +59,41 @@ EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
     frame.set(self, Data::null());
+    return EvalResultCode::OK;
+}
+
+EvalResultCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    if (!ins.empty()) {
+        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<whoami>", 0, ins.size());
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
+    }
+
+    std::string username;
+
+#ifdef _WIN32
+    char buffer[UNLEN + 1];
+    DWORD len = UNLEN + 1;
+    if (GetUserNameA(buffer, &len)) {
+        username = buffer;
+    } else {
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
+    }
+#else
+    struct passwd *pw = getpwuid(getuid());
+    if (pw) {
+        username = pw->pw_name;
+    } else {
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
+    }
+#endif
+
+    data_ptr_t result = std::make_shared<StringData>(username);
+    frame.set(self, result);
     return EvalResultCode::OK;
 }

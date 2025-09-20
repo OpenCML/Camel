@@ -123,6 +123,7 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
         ":io/println");
     exportBuiltinOperator("input", param_init_list{}, param_init_list{}, Type::Void(), ":io/input");
     exportBuiltinOperator("sleep", param_init_list{}, param_init_list{}, Type::Void(), ":os/sleep");
+    exportBuiltinOperator("whoami", param_init_list{}, param_init_list{}, Type::Void(), ":os/whoami");
     exportBuiltinOperator(
         "format",
         param_init_list{},

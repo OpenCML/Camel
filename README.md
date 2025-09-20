@@ -83,12 +83,14 @@ sync func train(x: Tensor, y: Tensor): Tensor {
 pip install camel-lang
 ```
 
-### Hello World in Camel [WIP]
+### Hello World in Camel
 
 ```camel
 // hello.cml
+module main
+
 func main() {
-    print(`Hello, ${os::user()}!`)
+    println('Hello, {}!'.format(whoami()))
 }
 ```
 
