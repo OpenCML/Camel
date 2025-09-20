@@ -71,7 +71,7 @@ func game_loop(snake: list<Point>, dir: Dir, steps: int): void {
 }
 
 // Entry point
-export func main(): int sync {
+func main(): int sync {
     println("Starting recursive Snake Game...")
 
     let initial_snake = [Point{5, 5}, Point{4, 5}, Point{3, 5}]

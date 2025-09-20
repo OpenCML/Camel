@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 21, 2025
- * Updated: Jul. 21, 2025
+ * Updated: Sep. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -131,34 +131,7 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
     virtual void reset() = 0;
     virtual array_ptr_t clone() = 0;
 
-    std::string toString() const {
-        std::string dataPreview;
-        if (dataArr_.empty()) {
-            dataPreview = "[]";
-        } else {
-            dataPreview = "[";
-            size_t previewCount = std::min(dataArr_.size(), static_cast<size_t>(10));
-            for (size_t i = 0; i < previewCount; ++i) {
-                if (dataArr_[i]) {
-                    dataPreview += dataArr_[i]->toString();
-                } else {
-                    dataPreview += "none";
-                }
-                if (i < previewCount - 1) {
-                    dataPreview += ", ";
-                }
-            }
-            if (dataArr_.size() > previewCount) {
-                dataPreview += ", ...";
-            }
-            dataPreview += "]";
-        }
-        return std::format(
-            "DataArray({}, {}): {}",
-            std::string(type_),
-            dataArr_.size(),
-            dataPreview);
-    }
+    std::string toString() const;
 
   protected:
     DataType type_;

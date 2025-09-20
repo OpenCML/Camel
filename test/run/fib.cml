@@ -6,7 +6,7 @@ func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-export func main(): int sync {
+func main(): int sync {
     let idx = 25
     println("Start computing fibonacci({})...".format(idx))
     let start = now()

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 09, 2025
+ * Updated: Sep. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,6 +67,7 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // os
         {"os/sleep", __sleep__},
+        {"os/whoami", __whoami__},
 
         // str
         {"str/format", __format__},
