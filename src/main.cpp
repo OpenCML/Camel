@@ -98,28 +98,17 @@ int main(int argc, char *argv[]) {
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setConfig(
-                DiagsConfig{
-                    .total_limit = -1,
-                    .per_severity_limits = {{Severity::Error, 0}},
-                });
+            diagnostics->setConfig(DiagsConfig{
+                .total_limit = -1,
+                .per_severity_limits = {{Severity::Error, 0}},
+            });
         }
 
         bool useJsonFormat = (errorFormat == "json");
 
         try {
             parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
-            try {
-                parser->parse(*input);
-            } catch (CamelBaseException &e) {
-                if (selectedCommand == Command::Check) {
-                    parser->dumpDiagnostics(os, useJsonFormat);
-                    return 0;
-                } else {
-                    os << e.what(useJsonFormat) << endl;
-                    return 1;
-                }
-            }
+            parser->parse(*input);
 
             if (selectedCommand == Command::Format) {
                 auto formatter = Formatter(parser->getTokens());
@@ -170,10 +159,10 @@ int main(int argc, char *argv[]) {
                     .searchPaths =
                         {
                             entryDir,
-                            fs::absolute(
-                                fs::path(
-                                    Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                            : Run::stdLibPath))
+                            fs::absolute(fs::path(
+                                             Run::stdLibPath.empty()
+                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                 : Run::stdLibPath))
                                 .string(),
                             getEnv("CAMEL_PACKAGES"),
                             getEnv("CAMEL_HOME", camelPath.string()),
@@ -186,21 +175,15 @@ int main(int argc, char *argv[]) {
             auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
             ctx->setMainModule(mainModule);
 
-            try {
-                if (selectedCommand == Command::Inspect) {
-                    if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
-                        mainModule->compile(CompileStage::GCT);
-                    }
-                    if (Inspect::dumpGIR || Inspect::dumpTNS) {
-                        mainModule->compile(CompileStage::Done);
-                    }
-                } else {
+            if (selectedCommand == Command::Inspect) {
+                if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
+                    mainModule->compile(CompileStage::GCT);
+                }
+                if (Inspect::dumpGIR || Inspect::dumpTNS) {
                     mainModule->compile(CompileStage::Done);
                 }
-            } catch (DiagnosticsLimitExceededException &e) {
-                auto lastDiag = e.lastDiagnostic();
-                os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
-                return selectedCommand == Command::Check ? 0 : 1;
+            } else {
+                mainModule->compile(CompileStage::Done);
             }
 
             if (selectedCommand == Command::Inspect) {
@@ -247,12 +230,16 @@ int main(int argc, char *argv[]) {
                 }
             }
 
+        } catch (DiagnosticsLimitExceededBaseException &e) {
+            auto lastDiag = e.lastDiagnostic();
+            os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
+            return selectedCommand == Command::Check ? 0 : 1;
         } catch (CamelBaseException &e) {
-            os << e.what(useJsonFormat) << endl;
+            return selectedCommand == Command::Check ? 0 : 1;
             return 1;
         } catch (exception &e) {
             os << e.what() << endl;
-            return 1;
+            return selectedCommand == Command::Check ? 0 : 1;
         } catch (...) {
             os << "Unknown error occurred." << endl;
             return 1;
