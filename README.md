@@ -83,7 +83,7 @@ sync func train(x: Tensor, y: Tensor): Tensor {
 pip install camel-lang
 ```
 
-### Hello World in Camel
+### Hello World
 
 ```camel
 // hello.cml
@@ -98,6 +98,36 @@ Run it:
 
 ```bash
 camel hello.cml
+```
+
+Here is the English translation of the provided code and comments:
+
+---
+
+### Advanced Usage
+
+Calculate the sum of an arithmetic sequence and measure execution time:
+
+```camel
+module arithmetic_sum
+
+import { now } from time
+
+func sum(n: int64, a: int64, d: int64, acc: int64): int64 {
+    return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
+}
+
+func main(): int sync {
+    let n = 100000  // number of terms
+    let a = 1       // first term
+    let d = 3       // common difference
+    println("Start computing arithmetic_sum(n={}, a={}, d={})...".format(n, a, d))
+    let start = now()
+    let res = sum(n, a, d, 0)
+    let duration = now() - start
+    println("Sum of arithmetic series = {} (computed in {} seconds)".format(res, duration))
+    return 0
+}
 ```
 
 ## 🧠 Design Philosophy

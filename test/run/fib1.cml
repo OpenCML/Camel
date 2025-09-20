@@ -12,7 +12,7 @@ func fibonacci(n: int): int sync {
     }
 }
 
-export func main(): int sync {
+func main(): int sync {
     let idx = 25
     println("Start computing fibonacci({})...".format(idx))
     let start = now()
