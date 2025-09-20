@@ -100,8 +100,6 @@ Run it:
 camel hello.cml
 ```
 
-Here is the English translation of the provided code and comments:
-
 ---
 
 ### Advanced Usage
