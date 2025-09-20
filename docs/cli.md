@@ -1,74 +1,106 @@
-# Camel CLI
+# Camel CLI User Guide
 
-[cml file]：以该文件或目录为入口执行
+[中文简体](cli.cn.md) | English
 
-- --help：输出命令行使用手册
-- --doc：输出包帮助文档，后跟指定包名
-- --version：打印版本信息
-- --about：打印版权等信息
-- --profile：执行过程中记录各步花费时间并生成报告文件
-- --scheduler：选择图调度器（后端）
-- --threads：最大线程数
-- --no-cache：不使用缓存的模块
-- --repeat：重复执行若干次
-- --include：指定当前脚本模块查找的根目录，可多选，按顺序查找，默认为target所在目录
-- --stdlib：指定标准库路径（默认路径在当前目录下/stdlib文件夹）
+    camel [options] <target file>
+    camel <command> [command-options] <target file>
 
-format：自动格式化，后跟目录或cml源文件
+## Global Options
 
-- --tab-size：缩进空格数
-- --use-tabs：使用制表符代替空格缩进
-- --quote-prefer[single/double]：默认使用单引号
-- --max-width：一行最大字符数控制
-- --config：指定配置文件路径
-- --ignore：忽略定义文件
-- --inplace/-i：直接修改源文件，而不是打印结果
+- `-v`, `--verbose`: Enable verbose output  
+- `-l`, `--log-level <level>`: Set log level. Options: `debug`, `info` (default), `warn`, `error`, `off`
 
-check：代码健康度检查，给出限定数量的警告和所有已知错误
+---
 
-- --lexical-only/-l：仅执行到词法分析步骤（不向后继续执行）
-- --syntax-only/-s：仅执行到语法检查步骤（不向后进行格式、语义检查）
-- --output-format/-O：json，输出格式
-- --max-warnings/-N：允许的最大警告数
-- --config/-c：规则定义文件路径
-- --ignore/-e：忽略定义文件路径
-- --output/-o：指定输出文件，不设置默认是控制台
+## Main Execution (Default Behavior)
 
-inspect：打印输出中间状态
+Executes the specified `.cml` file or directory as the entry point:
 
-- --tokens/-tT：打印tokens
-- --syntax-tree/--cst/-sS：打印（具象）语法树
-- --abstract-tree/--ast/-aA：打印抽象语法树
-- --graph-tree/--gct/-cC：打印图构造树
-- --graph/--gir/-gG：打印图中间表示
-- --pass-until/-pP：控制执行到哪一个图优化遍（默认为-1）
+- `-P`, `--profile`: Record time spent in each stage and output a performance report  
+- `-S`, `--scheduler <type>`: Specify the scheduler type  
+- `-t`, `--threads <num>`: Maximum number of threads  
+- `-n`, `--no-cache`: Disable cache modules  
+- `-r`, `--repeat <times>`: Repeat execution a number of times  
+- `-I`, `--include <dir>`: Add module search path (can be used multiple times)  
+- `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
+- `-E`, `--error-format <text|json>`: Error output format (default: `text`)
 
-build
+---
 
-- --optimize/-o/-O：开启优化
-- --rollup/-r/-R：是否打包成一个可执行模块
-- --verbose/-g：输出各类信息
-- --warning/-W：on/off
-- --output：指定输出目录或文件名，如果指定了rollup则是文件名
-- --include：指定当前脚本模块查找的根目录，可多选，按顺序查找，默认为target所在目录
-- --stdlib：指定标准库路径（默认路径在当前目录下/stdlib文件夹）
+## Information Display
 
-serve：开启Language Server(LSP协议)
+- `-V`, `--version`: Show version information  
+- `-h`, `--help`: Show help information  
+- `-d`, `--docs`: Show documentation of package or module  
+- `-a`, `--about`: Show copyright and project information  
+- `-z`, `--zen`: Show the Zen of Camel
 
-- --host
-- --port
+---
 
-debug：步进调试执行
+## format: Code Formatter
 
-- --variable
-- --print
-- --include：指定当前脚本模块查找的根目录，可多选，按顺序查找，默认为target所在目录
-- --stdlib：指定标准库路径（默认路径在当前目录下/stdlib文件夹）
+    camel format [options] <cml file or directory>
 
-camel pkg：包管理器
+- `-t`, `--tab-size <num>`: Number of spaces per indent (default: 4)  
+- `-u`, `--use-tabs`: Use tabs instead of spaces  
+- `-q`, `--quote-prefer <single|double>`: Preferred quote style for strings (default: `single`)  
+- `-m`, `--max-width <num>`: Maximum characters per line (default: 100)  
+- `-c`, `--config <file>`: Specify configuration file  
+- `--ignore`: Ignore definition files  
+- `-i`, `--inplace`: Modify source files in place instead of printing to console  
+- Available global options: `--verbose`, `--log-level`
 
-- list
-- init
-- install
-- remove
-- update
+---
+
+## check: Code Health Checker
+
+    camel check [options] <cml file or directory>
+
+- `-i`, `--lexical-only`: Perform lexical analysis only  
+- `-s`, `--syntax-only`: Perform syntax check only (excluding formatting or semantics)  
+- `-O`, `--output-format <text|json>`: Output format (default: `text`)  
+- `-N`, `--max-warning <num>`: Maximum number of allowed warnings  
+- `-c`, `--config <file>`: Path to rule definition file  
+- `-e`, `--ignore`: Ignore definition files  
+- `-o`, `--output <file>`: Output file (default: console)  
+- Available global options: `--verbose`, `--log-level`
+
+---
+
+## inspect: Intermediate State Viewer
+
+    camel inspect [options] <cml file>
+
+- `-t`, `-T`, `--tok`, `--token-stream`: Print lexical tokens  
+- `-s`, `-S`, `--cst`, `--concrete-syntax-tree`: Print Concrete Syntax Tree (CST)  
+- `-a`, `-A`, `--ast`, `--abstract-syntax-tree`: Print Abstract Syntax Tree (AST)  
+- `-c`, `-C`, `--gct`, `--graph-construct-tree`: Print Graph Construction Tree (GCT)  
+- `-g`, `-G`, `--gir`, `--graph-ir`: Print Graph Intermediate Representation (GIR)  
+- `--tns`, `--topo-node-seq`: Print topologically sorted node sequence  
+- `--gen`, `--gene-code`: Generate code from AST  
+- `-p`, `-P`, `--pass-until <n>`: Execute up to a specified graph optimization stage  
+- Available global options: `--verbose`, `--log-level`
+
+---
+
+## Examples
+
+```bash
+# Run the main file
+camel main.cml
+
+# Run and record performance
+camel -P main.cml
+
+# Format code
+camel format src/xxx.cml
+
+# Syntax check only and output in JSON
+camel check -s -O json src/
+
+# Print intermediate representation
+camel inspect --gir main.cml
+
+# View Zen of Camel
+camel --zen
+```
