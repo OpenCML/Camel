@@ -32,7 +32,7 @@ using node_ptr_t = std::shared_ptr<Node>;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 
-class Frame {
+class Frame : public std::enable_shared_from_this<Frame> {
   public:
     Frame(const frame_ptr_t &parent, const GraphIR::graph_ptr_t &graph);
     ~Frame();
@@ -40,10 +40,16 @@ class Frame {
     static frame_ptr_t create(const frame_ptr_t &parent, const GraphIR::graph_ptr_t &graph);
 
     DataArena &arena() { return arena_; }
+    GraphIR::graph_ptr_t graph() const { return graph_; }
+    frame_ptr_t parent() const { return parent_; }
+    void reset() { arena_.reset(); }
 
     data_ptr_t get(const GraphIR::node_ptr_t &node);
     void set(const GraphIR::node_ptr_t &node, const data_ptr_t &data);
-    void detach() { parent_ = nullptr; }
+    frame_ptr_t push(const GraphIR::graph_ptr_t &graph);
+    frame_ptr_t pop();
+
+    std::string toString();
 
   private:
     frame_ptr_t parent_;

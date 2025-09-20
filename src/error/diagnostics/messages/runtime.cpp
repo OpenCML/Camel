@@ -71,5 +71,13 @@ const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap() {
                 "Ensure the number of arguments matches the function definition.",
             },
         },
+        {
+            RuntimeDiag::MaxRecursionDepthExceeded,
+            {
+                "MaxRecursionDepthExceeded",
+                "Maximum recursion depth exceeded when evaluating graph '{0}'.",
+                "Check for infinite recursion or excessively deep recursive calls.",
+            },
+        },
     };
 }
