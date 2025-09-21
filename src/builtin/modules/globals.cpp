@@ -84,16 +84,13 @@ static const std::pair<std::string, std::string> binaryOps[] = {
     {"__idx__", ":op/idx"}};
 
 static const std::pair<std::string, std::string> others[] = {
-    {"map", ":not-impl"},
-    {"filter", ":not-impl"},
-    {"reduce", ":not-impl"},
+    {"map", ":mark/map"},
+    {"filter", ":mark/filter"},
+    {"foreach", ":mark/foreach"},
+    {"apply", ":mark/apply"},
     {"len", ":not-impl"},
     {"range", ":not-impl"},
-    {"foreach", ":not-impl"},
     {"contains", ":not-impl"},
-    {"enumerate", ":not-impl"},
-    {"zip", ":not-impl"},
-    {"unzip", ":not-impl"},
     {"exit", ":not-impl"}};
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {

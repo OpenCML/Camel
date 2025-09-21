@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,16 @@ class ArrayData : public StructData {
 
   public:
     ArrayData(type_ptr_t type, size_t length, data_list_t data = {});
+    ArrayData(type_ptr_t type, data_vec_t &&data);
     virtual ~ArrayData() = default;
+
+    static std::shared_ptr<ArrayData>
+    create(type_ptr_t type, size_t length, data_list_t data = {}) {
+        return std::make_shared<ArrayData>(type, length, data);
+    }
+    static std::shared_ptr<ArrayData> create(type_ptr_t type, data_vec_t &&data) {
+        return std::make_shared<ArrayData>(type, std::move(data));
+    }
 
     bool emplace(const data_ptr_t &e, size_t index);
 
@@ -36,6 +45,7 @@ class ArrayData : public StructData {
     bool set(size_t index, const data_ptr_t &e);
     size_t size() const;
     size_t length() const;
+    std::vector<data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,7 +81,7 @@ class Context : public std::enable_shared_from_this<Context> {
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
     void registerExecutorFactory(std::string name, executor_factory_t fact);
-    EvalResultCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
+    OperatorReturnCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
 
     module_ptr_t
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");

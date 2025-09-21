@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ using node_ptr_t = std::shared_ptr<Node>;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 
-enum class EvalResultCode {
+enum class OperatorReturnCode {
     OK = 0,
     Error = 1,
     NotImplemented = 2,
@@ -44,7 +44,7 @@ enum class EvalResultCode {
     RuntimeError = 4,
 };
 
-using operator_t = std::function<EvalResultCode(GraphIR::node_ptr_t &, Frame &, Context &)>;
+using operator_t = std::function<OperatorReturnCode(GraphIR::node_ptr_t &, Frame &, Context &)>;
 
 using oper_idx_ptr_t = std::shared_ptr<OperatorIndex>;
 using oper_idx_vec_t = std::vector<oper_idx_ptr_t>;

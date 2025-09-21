@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 20, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,12 +34,12 @@
 
 namespace GIR = GraphIR;
 
-EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     if (ins.size() != 1) {
         ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<sleep>", 1, ins.size());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     const data_ptr_t &arg = frame.get(ins[0]);
     if (!Type::castSafetyCheck(arg->type(), Type::Int64())) {
@@ -47,7 +47,7 @@ EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<sleep>", "int64", arg->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     auto pd = arg->as<Int64Data>(Type::Int64());
     if (pd->data() < 0) {
@@ -55,19 +55,19 @@ EvalResultCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sleep> requires a non-negative integer");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
     frame.set(self, Data::null());
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     if (!ins.empty()) {
         ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<whoami>", 0, ins.size());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     std::string username;
@@ -80,7 +80,7 @@ EvalResultCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 #else
     struct passwd *pw = getpwuid(getuid());
@@ -89,11 +89,11 @@ EvalResultCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 #endif
 
     data_ptr_t result = std::make_shared<StringData>(username);
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }

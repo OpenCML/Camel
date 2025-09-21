@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,6 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __now__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __strftime__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __strptime__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __now__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __strftime__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __strptime__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

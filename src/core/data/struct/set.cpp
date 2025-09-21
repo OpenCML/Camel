@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,6 +36,9 @@ SetData::SetData(type_ptr_t elType, data_list_t data)
         }
     }
 }
+
+SetData::SetData(type_ptr_t setType, std::unordered_set<data_ptr_t> &&data)
+    : StructData(setType), data_(std::move(data)) {}
 
 bool SetData::emplace(const data_ptr_t &e) {
     bool res = data_.insert(e).second;

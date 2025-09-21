@@ -22,5 +22,5 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __format__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __join__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __format__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __join__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
