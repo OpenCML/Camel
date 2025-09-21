@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -282,21 +282,21 @@ any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
     return evalGraph(mainGraph, mainFrame);
 }
 
-void FallbackExecSchedPass::evalMarkedOperatorMap(const node_ptr_t &n, frame_ptr_t &currFrame) {
-    if (n->withInputs().size() != 1) {
+void FallbackExecSchedPass::evalMarkedOperatorMap(const node_ptr_t &node, frame_ptr_t &currFrame) {
+    if (node->withInputs().size() != 1) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<map>", 1, n->withInputs().size());
+            .commit("<map>", 1, node->withInputs().size());
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
     }
-    if (n->normInputs().size() != 1) {
+    if (node->normInputs().size() != 1) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<map>", 1, n->normInputs().size());
+            .commit("<map>", 1, node->normInputs().size());
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
     }
-    auto targetData = currFrame->get(n->withInputs().front());
-    auto funcData = currFrame->get(n->normInputs().front());
+    auto targetData = currFrame->get(node->withInputs().front());
+    auto funcData = currFrame->get(node->normInputs().front());
     if (funcData->type()->code() != TypeCode::Func) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
@@ -319,7 +319,7 @@ void FallbackExecSchedPass::evalMarkedOperatorMap(const node_ptr_t &n, frame_ptr
                 evalGraph(funcData->as<FunctionData>(Type::Func())->graph(), mapFrame);
             res.push_back(mapRes);
         }
-        // currFrame->set(n, ListData::create(listData->elementType(), res));
+        currFrame->set(node, ListData::create(std::move(res)));
         break;
     }
 
