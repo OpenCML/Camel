@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 20, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -135,6 +135,7 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
         param_init_list{},
         Type::Void(),
         ":str/format");
+    exportBuiltinOperator("join", param_init_list{}, param_init_list{}, Type::Void(), ":str/join");
 }
 
 bool GlobalsBuiltinModule::load() {

@@ -12,7 +12,7 @@ func render(snake: Point[]): void sync {
             let p = {x: x, y: y}
             return if snake.contains(p) then "O" else "."
         })
-        println(lines.join(""))
+        println("".join(lines))
     })
 
     println("")

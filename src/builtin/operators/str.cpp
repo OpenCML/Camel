@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,5 +83,55 @@ EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         frame.set(self, Data::null());
     }
 
+    return EvalResultCode::OK;
+}
+
+EvalResultCode __join__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &with = self->withInputs();
+    const auto &norm = self->normInputs();
+
+    if (with.empty()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<join>", "1 with arg (separator)", std::to_string(with.size()));
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
+    }
+
+    if (norm.empty()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<join>", "at least 1 norm arg", std::to_string(norm.size()));
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
+    }
+
+    const data_ptr_t &sepData = frame.get(with[0]);
+    if (!Type::castSafetyCheck(sepData->type(), Type::String())) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<join>", "string (separator)", sepData->type()->toString());
+        frame.set(self, Data::null());
+        return EvalResultCode::OK;
+    }
+
+    std::string separator = sepData->as<StringData>(Type::String())->data();
+    std::vector<std::string> parts;
+
+    for (size_t i = 0; i < norm.size(); ++i) {
+        const data_ptr_t &arg = frame.get(norm[i]);
+        std::ostringstream oss;
+        arg->print(oss);
+        parts.push_back(oss.str());
+    }
+
+    std::ostringstream joined;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0)
+            joined << separator;
+        joined << parts[i];
+    }
+
+    frame.set(self, std::make_shared<StringData>(joined.str()));
     return EvalResultCode::OK;
 }
