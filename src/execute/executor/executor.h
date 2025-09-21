@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Apr. 16, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,7 +44,7 @@ class Executor : public std::enable_shared_from_this<Executor> {
         : context_(ctx), opsMap_(ops) {};
     virtual ~Executor() = default;
 
-    virtual EvalResultCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) = 0;
+    virtual OperatorReturnCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) = 0;
 };
 
 using executor_ptr_t = std::shared_ptr<Executor>;
@@ -61,7 +61,7 @@ class ExecutorManager {
     ~ExecutorManager() = default;
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 
-    EvalResultCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
+    OperatorReturnCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
 };
 
 using exec_mgr_uptr_t = std::unique_ptr<ExecutorManager>;

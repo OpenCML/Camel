@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,7 +44,7 @@ data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<Functi
 
 const std::string FunctionData::toString() const {
     FunctionType *type = dynamic_cast<FunctionType *>(type_.get());
-    return "Function<" + type->toString() + ">";
+    return graph_->name() + ": " + type->toString();
 }
 
 void FunctionData::print(std::ostream &os) const { os << toString(); }

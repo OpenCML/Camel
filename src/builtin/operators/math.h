@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,10 +22,10 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __abs__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __round__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __ceil__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __floor__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __bin__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __oct__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-EvalResultCode __hex__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __abs__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __round__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __ceil__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __floor__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __bin__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __oct__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __hex__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

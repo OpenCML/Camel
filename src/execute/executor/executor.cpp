@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Apr. 16, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,11 +28,11 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
     executorFactories[name] = fact;
 }
 
-EvalResultCode ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
+OperatorReturnCode ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
     l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri);
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {
-        throw CamelRuntimeException(RetCode::InvalidURI, "Invalid URI format");
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidURI, "Invalid URI format");
     }
     const std::string protocol = uri.substr(0, pos);
     auto itExec = loadedExecutors.find(protocol);
@@ -42,7 +42,7 @@ EvalResultCode ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self,
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
         throw CamelRuntimeException(
-            RetCode::InvalidURI,
+            RuntimeExceptionCode::InvalidURI,
             std::format("Protocol <{}> not found.", protocol));
     }
     l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol);

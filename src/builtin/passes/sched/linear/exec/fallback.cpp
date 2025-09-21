@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 08, 2025
+ * Updated: Sep. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -163,15 +163,24 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 auto opNode = tt::as_shared<OperatorNode>(n);
                 const auto &uri = opNode->oper()->uri();
 
-                data_vec_t withArgs, normArgs;
-                withArgs.reserve(n->withInputs().size());
-                normArgs.reserve(n->normInputs().size());
-
-                for (const auto &inNode : n->withInputs()) {
-                    withArgs.push_back(currFrame->get(inNode));
-                }
-                for (const auto &inNode : n->normInputs()) {
-                    normArgs.push_back(currFrame->get(inNode));
+                if (uri.starts_with(":mark/")) {
+                    if (uri == ":mark/map") {
+                    } else if (uri == ":mark/filter") {
+                        // ASSERT(normArgs.size() == 2, "filter operator requires 2 norm args.");
+                        // auto listData = normArgs[0]->as<ListData>(Type::List());
+                        // auto funcData = normArgs[1]->as<FunctionData>(Type::Func());
+                        // data_ptr_t res = listData->filter(funcData, context_, currFrame);
+                        // currFrame->set(n, res);
+                    } else if (uri == ":mark/foreach") {
+                        // ASSERT(normArgs.size() == 2, "foreach operator requires 2 norm args.");
+                        // auto listData = normArgs[0]->as<ListData>(Type::List());
+                        // auto funcData = normArgs[1]->as<FunctionData>(Type::Func());
+                        // listData->foreach(funcData, context_, currFrame);
+                        // currFrame->set(n, Data::null());
+                    } else {
+                        ASSERT(false, std::format("Mark Operator {} not implemented.", uri));
+                    }
+                    break;
                 }
 
                 context_->eval(uri, n, *currFrame);
@@ -271,4 +280,53 @@ any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
     auto mainGraph = optMainGraph.value();
     auto mainFrame = Frame::create(rootFrame, mainGraph);
     return evalGraph(mainGraph, mainFrame);
+}
+
+void FallbackExecSchedPass::evalMarkedOperatorMap(const node_ptr_t &node, frame_ptr_t &currFrame) {
+    if (node->withInputs().size() != 1) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<map>", 1, node->withInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+    if (node->normInputs().size() != 1) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<map>", 1, node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
+    }
+    auto targetData = currFrame->get(node->withInputs().front());
+    auto funcData = currFrame->get(node->normInputs().front());
+    if (funcData->type()->code() != TypeCode::Func) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<map>", "Function", funcData->type()->toString());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
+    }
+    switch (targetData->type()->code()) {
+    case TypeCode::List: {
+        auto listData = targetData->as<ListData>(Type::List());
+        data_vec_t &target = listData->raw();
+        data_vec_t res;
+        res.reserve(target.size());
+        for (const auto &item : target) {
+            frame_ptr_t mapFrame =
+                Frame::create(currFrame, funcData->as<FunctionData>(Type::Func())->graph());
+            mapFrame->set(
+                funcData->as<FunctionData>(Type::Func())->graph()->portNodes().front().first,
+                item);
+            data_ptr_t mapRes =
+                evalGraph(funcData->as<FunctionData>(Type::Func())->graph(), mapFrame);
+            res.push_back(mapRes);
+        }
+        currFrame->set(node, ListData::create(std::move(res)));
+        break;
+    }
+
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<map>", "List", funcData->type()->toString());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,9 @@ DictData::DictData(initializer_list<pair<string, data_ptr_t>> data)
         }
     }
 }
+
+DictData::DictData(std::unordered_map<std::string, data_ptr_t> &&data)
+    : StructData(make_shared<DictType>()), data_(std::move(data)) {}
 
 bool DictData::emplace(const std::string &key, const data_ptr_t &val) {
     DictType &dictType = *static_cast<DictType *>(type_.get());

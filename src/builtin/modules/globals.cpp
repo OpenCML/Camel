@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 20, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,16 +84,13 @@ static const std::pair<std::string, std::string> binaryOps[] = {
     {"__idx__", ":op/idx"}};
 
 static const std::pair<std::string, std::string> others[] = {
-    {"map", ":not-impl"},
-    {"filter", ":not-impl"},
-    {"reduce", ":not-impl"},
+    {"map", ":mark/map"},
+    {"filter", ":mark/filter"},
+    {"foreach", ":mark/foreach"},
+    {"apply", ":mark/apply"},
     {"len", ":not-impl"},
     {"range", ":not-impl"},
-    {"foreach", ":not-impl"},
     {"contains", ":not-impl"},
-    {"enumerate", ":not-impl"},
-    {"zip", ":not-impl"},
-    {"unzip", ":not-impl"},
     {"exit", ":not-impl"}};
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
@@ -135,6 +132,7 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
         param_init_list{},
         Type::Void(),
         ":str/format");
+    exportBuiltinOperator("join", param_init_list{}, param_init_list{}, Type::Void(), ":str/join");
 }
 
 bool GlobalsBuiltinModule::load() {

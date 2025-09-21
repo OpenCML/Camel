@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,15 @@ class ListData : public StructData {
   public:
     ListData();
     ListData(data_list_t data);
+    ListData(data_vec_t &&data);
     virtual ~ListData() = default;
+
+    static std::shared_ptr<ListData> create(data_list_t data) {
+        return std::make_shared<ListData>(data);
+    }
+    static std::shared_ptr<ListData> create(data_vec_t &&data) {
+        return std::make_shared<ListData>(std::move(data));
+    }
 
     void emplace(const data_ptr_t &e);
 
@@ -38,6 +46,7 @@ class ListData : public StructData {
 
     data_ptr_t get(size_t index) const;
     bool set(size_t index, const data_ptr_t &e);
+    std::vector<data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }

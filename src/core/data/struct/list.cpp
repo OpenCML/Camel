@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,8 @@ ListData::ListData(data_list_t data) : StructData(Type::List()), data_(data) {
         i++;
     }
 }
+
+ListData::ListData(data_vec_t &&data) : StructData(Type::List()), data_(std::move(data)) {}
 
 void ListData::emplace(const data_ptr_t &e) {
     data_.push_back(e);

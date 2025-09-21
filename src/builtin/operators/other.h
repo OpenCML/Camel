@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-EvalResultCode __not_implemented__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __not_implemented__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }

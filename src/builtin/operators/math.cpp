@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 
 namespace GIR = GraphIR;
 
-EvalResultCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "abs operator requires exactly one argument");
 
@@ -34,7 +34,7 @@ EvalResultCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> operator requires a primary type");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -55,14 +55,14 @@ EvalResultCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "round operator requires exactly one argument");
 
@@ -72,7 +72,7 @@ EvalResultCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<round> operator requires a primary type");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -87,14 +87,14 @@ EvalResultCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<round> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "ceil operator requires exactly one argument");
 
@@ -104,7 +104,7 @@ EvalResultCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<ceil> operator requires a primary type");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -119,14 +119,14 @@ EvalResultCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<ceil> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "floor operator requires exactly one argument");
 
@@ -136,7 +136,7 @@ EvalResultCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<floor> operator requires a primary type");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -151,14 +151,14 @@ EvalResultCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<floor> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "bin operator requires exactly one argument");
 
@@ -168,7 +168,7 @@ EvalResultCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<bin> operator requires integer type");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     int64_t number = 0;
@@ -181,10 +181,10 @@ EvalResultCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::string result = "0b" + std::bitset<64>(number).to_string();
     result.erase(2, result.find('1') - 2); // remove leading zeros
     frame.set(self, std::make_shared<StringData>(result));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "oct operator requires exactly one argument");
 
@@ -194,7 +194,7 @@ EvalResultCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<oct> operator requires integer type");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     std::ostringstream oss;
@@ -206,10 +206,10 @@ EvalResultCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
 
     frame.set(self, std::make_shared<StringData>(oss.str()));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "hex operator requires exactly one argument");
 
@@ -219,7 +219,7 @@ EvalResultCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<hex> operator requires integer type");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     std::ostringstream oss;
@@ -231,5 +231,5 @@ EvalResultCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
 
     frame.set(self, std::make_shared<StringData>(oss.str()));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }

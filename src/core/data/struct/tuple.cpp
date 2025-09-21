@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,13 @@ TupleData::TupleData(data_list_t data) : data_(data) {
         i++;
     }
     type_ = std::make_shared<TupleType>(types);
+}
+
+TupleData::TupleData(type_ptr_t type, data_vec_t &&data)
+    : StructData(type), data_(std::move(data)) {
+    ASSERT(type->code() == TypeCode::Tuple, "Type is not TupleType");
+    TupleType &tupleType = *static_cast<TupleType *>(type_.get());
+    ASSERT(tupleType.size() == data_.size(), "Data size does not match TupleType size");
 }
 
 void TupleData::emplace(const data_ptr_t &e) {

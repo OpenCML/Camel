@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 13, 2025
- * Updated: Jul. 13, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,21 +21,22 @@
 
 #include "base.h"
 
-enum class RetCode {
+enum class RuntimeExceptionCode {
     Success,
     InvalidWithParameter,
-    InvalidnormParameter,
+    InvalidNormParameter,
     InvalidURI,
+    UnsupportedOperator,
     ErrorOnExecution,
     UnknownError
 };
 
 class CamelRuntimeException : public CamelBaseException {
-    RetCode code_;
+    RuntimeExceptionCode code_;
 
   public:
-    CamelRuntimeException(RetCode code, const std::string &msg)
+    CamelRuntimeException(RuntimeExceptionCode code, const std::string &msg)
         : CamelBaseException(msg), code_(code) {}
 
-    RetCode code() const { return code_; }
+    RuntimeExceptionCode code() const { return code_; }
 };

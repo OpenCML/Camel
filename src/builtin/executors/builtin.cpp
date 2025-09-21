@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 20, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,6 +71,7 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // str
         {"str/format", __format__},
+        {"str/join", __join__},
 
         // math
         {"str/abs", __abs__},
@@ -91,12 +92,14 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsOpMap()) {};
 
-EvalResultCode
+OperatorReturnCode
 BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
     l.in("BasicExec").debug("Evaluating operator of URI: {}", uri);
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
-        throw CamelRuntimeException(RetCode::InvalidURI, std::format("Invalid URI: {}", uri));
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidURI,
+            std::format("Invalid URI: {}", uri));
     }
     return it->second(self, frame, *context_);
 };

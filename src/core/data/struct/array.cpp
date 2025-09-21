@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,9 @@ ArrayData::ArrayData(type_ptr_t type, size_t length, data_list_t data) : data_(d
     type_ = std::make_shared<ArrayType>(type, length);
     data_.resize(length);
 }
+
+ArrayData::ArrayData(type_ptr_t type, data_vec_t &&data)
+    : StructData(type), data_(std::move(data)) {}
 
 bool ArrayData::emplace(const data_ptr_t &e, size_t index) {
     if (index >= data_.size()) {

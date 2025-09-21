@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,9 @@ using namespace std;
 
 MapData::MapData(type_ptr_t keyType, type_ptr_t dataType)
     : StructData(std::make_shared<MapType>(keyType, dataType)) {}
+
+MapData::MapData(type_ptr_t mapType, std::unordered_map<data_ptr_t, data_ptr_t> &&data)
+    : StructData(mapType), data_(std::move(data)) {}
 
 bool MapData::emplace(const data_ptr_t &key, const data_ptr_t &val) {
     bool res = data_.insert(std::make_pair(key, val)).second;

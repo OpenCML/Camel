@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,16 @@ class DictData : public StructData {
   public:
     DictData();
     DictData(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
+    DictData(std::unordered_map<std::string, data_ptr_t> &&data);
     virtual ~DictData() = default;
+
+    static std::shared_ptr<DictData>
+    create(std::initializer_list<std::pair<std::string, data_ptr_t>> data) {
+        return std::make_shared<DictData>(data);
+    }
+    static std::shared_ptr<DictData> create(std::unordered_map<std::string, data_ptr_t> &&data) {
+        return std::make_shared<DictData>(std::move(data));
+    }
 
     bool emplace(const std::string &key, const data_ptr_t &val);
 
@@ -38,6 +47,7 @@ class DictData : public StructData {
     bool has(const std::string &key) const;
     void set(const std::string &key, const data_ptr_t &val);
     data_ptr_t get(const std::string &key) const;
+    std::unordered_map<std::string, data_ptr_t> &raw() { return data_; }
 
     void clear() {
         DictType &dictType = *static_cast<DictType *>(type_.get());

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,13 +30,27 @@ class SetData : public StructData {
   public:
     SetData(type_ptr_t elType);
     SetData(type_ptr_t elType, data_list_t data);
+    SetData(type_ptr_t setType, std::unordered_set<data_ptr_t> &&data);
     virtual ~SetData() = default;
+
+    static std::shared_ptr<SetData> create(type_ptr_t elType) {
+        return std::make_shared<SetData>(elType);
+    }
+    static std::shared_ptr<SetData> create(type_ptr_t elType, data_list_t data) {
+        return std::make_shared<SetData>(elType, data);
+    }
+    static std::shared_ptr<SetData>
+    create(type_ptr_t setType, std::unordered_set<data_ptr_t> &&data) {
+        return std::make_shared<SetData>(setType, std::move(data));
+    }
 
     // append element to the set during construction
     bool emplace(const data_ptr_t &e);
 
     bool add(const data_ptr_t &e);
     bool del(const data_ptr_t &e);
+
+    std::unordered_set<data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }

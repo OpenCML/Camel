@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,11 +28,20 @@ class TupleData : public StructData {
 
   public:
     TupleData(data_list_t data = {});
+    TupleData(type_ptr_t type, data_vec_t &&data);
     virtual ~TupleData() = default;
+
+    static std::shared_ptr<TupleData> create(data_list_t data = {}) {
+        return std::make_shared<TupleData>(data);
+    }
+    static std::shared_ptr<TupleData> create(type_ptr_t type, data_vec_t &&data) {
+        return std::make_shared<TupleData>(type, std::move(data));
+    }
 
     void emplace(const data_ptr_t &e);
 
     data_ptr_t get(size_t index) const;
+    std::vector<data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
