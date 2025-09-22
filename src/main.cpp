@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 17, 2025
+ * Updated: Sep. 22, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -231,6 +231,7 @@ int main(int argc, char *argv[]) {
             os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (CamelBaseException &e) {
+            os << e.what(useJsonFormat) << endl;
             return selectedCommand == Command::Check ? 0 : 1;
             return 1;
         } catch (exception &e) {

@@ -128,7 +128,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             // clear the frame for re-use
             // note: here the nextFrame may be the currFrame
             // so we need to reset it after retrieving the args
-            nextFrame->reset();
+            EXEC_WHEN_DEBUG(nextFrame->reset());
 
             for (size_t i = 0; i < portNodes.size(); ++i) {
                 nextFrame->set(portNodes[i].first, args[i]);

@@ -1,0 +1,7 @@
+module main
+
+import { zen } from this
+
+func main() {
+    println(zen())
+}
