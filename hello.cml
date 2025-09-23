@@ -1,5 +1,6 @@
 module main
 
-func main() {
+func main() sync {
     println('Hello, {}!'.format(whoami()))
+    return 0
 }

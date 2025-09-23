@@ -1,0 +1,12 @@
+// variables and sync for explicit
+sync func update(var target: int) {
+    wait target += 1
+}
+
+func main(): int sync {
+    var c = 0
+    println(c)
+    wait update(c)
+    println(c)
+    return c
+}

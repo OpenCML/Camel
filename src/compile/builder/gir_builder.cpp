@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -611,18 +611,21 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ASSERT(
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter child of EXIT node.");
-    node_ptr_t node = any_cast<node_ptr_t>(res);
-    node_ptr_t resultNode = node;
-    if (nodeModifierMap_.count(node.get())) {
-        resultNode = nodeModifierMap_[node.get()].lock();
+    node_ptr_t resNode = any_cast<node_ptr_t>(res);
+    currGraph_->setOutput(resNode);
+    if (nodeModifierMap_.count(resNode.get())) {
+        node_ptr_t modifier = nodeModifierMap_[resNode.get()].lock();
+        node_ptr_t returnNode = currGraph_->returnNode();
+        if (modifier && linkCheek(modifier, returnNode)) {
+            Node::link(LinkType::Ctrl, modifier, returnNode);
+        }
     }
-    currGraph_->setOutput(resultNode);
     node_ptr_t exitNode = currGraph_->returnNode();
     if (synced_ && lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, exitNode)) {
         Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
     }
     LEAVE("EXIT");
-    return resultNode;
+    return resNode;
 }
 
 node_ptr_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {

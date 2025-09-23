@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Sep. 22, 2025
+ * Updated: Sep. 23, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -105,9 +105,9 @@ int main(int argc, char *argv[]) {
         }
 
         bool useJsonFormat = (errorFormat == "json");
+        parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
 
         try {
-            parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
             parser->parse(*input);
 
             if (selectedCommand == Command::Format) {
@@ -228,6 +228,9 @@ int main(int argc, char *argv[]) {
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
             auto lastDiag = e.lastDiagnostic();
+            // TODO: fetch range
+            RangeConverter conv(parser->getTokens());
+            lastDiag.fetchRange(conv);
             os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (CamelBaseException &e) {
