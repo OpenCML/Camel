@@ -21,6 +21,12 @@ elseif(UNIX)
     set(CMAKE_INSTALL_RPATH "$ORIGIN")
 endif()
 
+if(WIN32)
+    add_definitions(-DPLATFORM_WINDOWS)
+elseif(UNIX)
+    add_definitions(-DPLATFORM_LINUX)
+endif()
+
 file(GLOB_RECURSE SRC_FILES
 	"${PROJECT_SOURCE_DIR}/src/*.cpp"
 	"${PROJECT_SOURCE_DIR}/third_party/*.cpp"

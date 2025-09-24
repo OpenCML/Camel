@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "core/context/frame.h"
 
 #include <memory>
+#include <thread>
 
 #ifdef _WIN32
 #include <Lmcons.h>

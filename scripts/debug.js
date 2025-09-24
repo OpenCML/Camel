@@ -34,7 +34,10 @@ function main() {
     runCommand('cmake --build . --config Debug')
 
     const debugDir = path.join(BASEDIR, 'build', 'Debug')
-    copyFile(path.join(debugDir, 'camel.exe'), path.join(BASEDIR, 'camel.exe'))
+    const isWindows = process.platform === 'win32'
+    const executableName = `camel${isWindows ? '.exe' : ''}`
+
+    copyFile(path.join(debugDir, executableName), path.join(BASEDIR, executableName))
 
     logDone('Debug build completed')
 }

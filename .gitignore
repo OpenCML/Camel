@@ -22,6 +22,7 @@ dist/
 out/
 
 *.cmo
+camel
 camel.exe
 result.json
 CMakeUserPresets.json

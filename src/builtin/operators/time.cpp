@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,13 @@
 namespace GIR = GraphIR;
 
 #include <chrono>
+#include <cstring> // for std::memset
+#include <ctime>
+
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 OperatorReturnCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     auto now = std::chrono::system_clock::now();
@@ -75,7 +82,27 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
 
     std::time_t tt = static_cast<std::time_t>(timestamp);
     std::tm tm;
-    localtime_s(&tm, &tt); // Still uses local time to represent UTC+8
+    std::memset(&tm, 0, sizeof(std::tm));
+
+#if defined(_WIN32)
+    // Windows: localtime_s
+    if (localtime_s(&tm, &tt) != 0) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<strftime> failed to convert time using localtime_s");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+#else
+    // POSIX: localtime_r
+    if (localtime_r(&tt, &tm) == nullptr) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<strftime> failed to convert time using localtime_r");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+#endif
 
     auto fmt = fmt_val->as<StringData>(Type::String())->data();
 

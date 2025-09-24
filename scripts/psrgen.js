@@ -48,7 +48,7 @@ function walkDirAndReplace(dir) {
 function generateAntlrParser() {
     logStep('Generating ANTLR parser...')
     runCommand(
-        'java -jar ./antlr/antlr-4.13.1-complete.jar -Dlanguage=Cpp -DcontextSuperClass=antlr4::RuleContextWithAltNum ./antlr/OpenCML.g4 -no-listener -visitor -o "./src/parse/antlr"'
+        'java -jar ./antlr/antlr-4.13.1-complete.jar -Dlanguage=Cpp -DcontextSuperClass=antlr4::RuleContextWithAltNum ./antlr/OpenCML.g4 -no-listener -visitor -o "./src/parse"'
     )
     logDone('Generated ANTLR parser')
 

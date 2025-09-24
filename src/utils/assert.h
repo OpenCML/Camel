@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 19, 2025
- * Updated: Jul. 19, 2025
+ * Updated: Sep. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,8 +22,17 @@
 #include <cstdlib>
 #include <iostream>
 #include <source_location>
-#include <stacktrace>
 #include <string>
+
+#ifdef _WIN32
+#include <crtdbg.h>
+#include <stacktrace>
+#define HAS_STACKTRACE 1
+// 避免调用 abort() 时触发 Windows 错误报告对话框
+#define ENABLE_ABORT_BEHAVIOR() _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT)
+#else
+#define HAS_STACKTRACE 0
+#endif
 
 namespace cml {
 
@@ -37,6 +46,7 @@ inline void handle_assert_failure(
               << "\033[1;32m    Expression : \033[0m" << expression << "\n"
               << "\033[1;32m    Suggestion : \033[0m" << suggestion << "\n";
 
+#if HAS_STACKTRACE
     std::cerr << "\n\033[1;31mStack Trace:\033[0m\n";
     auto trace = std::stacktrace::current();
     constexpr size_t skip_front = 1;
@@ -49,9 +59,11 @@ inline void handle_assert_failure(
             std::cerr << "<\033[1;36m" << i << "\033[0m> " << trace[i] << "\n";
         }
     }
+    ENABLE_ABORT_BEHAVIOR();
+#else
+    std::cerr << "\n\033[1;31mStack Trace:\033[0m (not available on this platform)\n";
+#endif
 
-    // 避免调用 abort() 时触发 Windows 错误报告对话框
-    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     std::abort();
 }
 

@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Sep. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <any>
+#include <list>
 #include <map>
 #include <memory>
 #include <stdexcept>
