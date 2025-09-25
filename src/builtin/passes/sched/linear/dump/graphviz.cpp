@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -166,8 +166,9 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     // Recursively dump subgraphs first
     for (auto &[_, subGraph] : graph->subGraphs()) {
-        l.in("GraphViz")
-            .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name());
+        EXEC_WHEN_DEBUG(
+            l.in("GraphViz")
+                .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
         pushIndent();
         res += any_cast<string>(apply(subGraph));
         popIndent();
@@ -175,8 +176,9 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     // Dump dependency graphs if any
     for (const auto &dep : graph->dependencies()) {
-        l.in("GraphViz")
-            .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name());
+        EXEC_WHEN_DEBUG(
+            l.in("GraphViz")
+                .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
         pushIndent();
         res += any_cast<string>(apply(dep));
         popIndent();

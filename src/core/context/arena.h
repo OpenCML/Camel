@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 21, 2025
- * Updated: Sep. 20, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,8 +153,12 @@ class ConstantArray : public DataArray {
         return index < dataArr_.size() && dataArr_[index] != nullptr;
     }
     void set(const data_ptr_t &data, size_t index) override {
-        l.in("DataArray")
-            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
+        EXEC_WHEN_DEBUG(l.in("DataArray")
+                            .debug(
+                                "Setting data ({}) at index {} in {}.",
+                                data->toString(),
+                                index,
+                                toString()));
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -197,8 +201,12 @@ class VariableArray : public DataArray {
 
     virtual bool has(size_t index) const override { return index < dataArr_.size(); }
     void set(const data_ptr_t &data, size_t index) override {
-        l.in("DataArray")
-            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
+        EXEC_WHEN_DEBUG(l.in("DataArray")
+                            .debug(
+                                "Setting data ({}) at index {} in {}.",
+                                data->toString(),
+                                index,
+                                toString()));
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));

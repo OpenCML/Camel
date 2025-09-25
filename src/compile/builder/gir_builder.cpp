@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 23, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,10 +60,10 @@ inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     // which may cause cycles in the graph
     // note: this check can be expensive
     if (to->hasDeepLinkedTo(from)) {
-        l.in("GIR").warn(
+        EXEC_WHEN_DEBUG(l.in("GIR").warn(
             "Prevent linking deeply linked nodes: {} -> {}",
             from->toString(),
-            to->toString());
+            to->toString()));
         return false;
     }
     return true;

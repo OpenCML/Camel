@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Sep. 23, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
         input = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
-        l.in("Main").info("Reading from standard input.");
+        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from standard input."));
     } else {
         targetFile = Run::targetFiles[0];
         auto file = std::make_unique<std::ifstream>(targetFile);
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         input = std::move(file);
-        l.in("Main").info("Reading from file '{}'.", targetFile);
+        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from file '{}'.", targetFile));
     }
 
     chrono::high_resolution_clock::time_point startTime, endTime;
@@ -249,7 +249,7 @@ int main(int argc, char *argv[]) {
             endTime = chrono::high_resolution_clock::now();
             auto duration =
                 chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            l.in("Main").info("Time used: {} us", duration);
+            EXEC_WHEN_DEBUG(l.in("Main").info("Time used: {} us", duration));
         }
     }
 

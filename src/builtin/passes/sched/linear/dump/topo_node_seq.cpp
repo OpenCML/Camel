@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 05, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -89,7 +89,10 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             for (const auto &node : unreachableNodes) {
                 nodeStrs += node->toString() + ", ";
             }
-            l.in("Topo").warn("Unreachable nodes in graph {} detected: {}", g->name(), nodeStrs);
+            EXEC_WHEN_DEBUG(l.in("Topo").warn(
+                "Unreachable nodes in graph {} detected: {}",
+                g->name(),
+                nodeStrs));
         }
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();

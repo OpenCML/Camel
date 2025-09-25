@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 22, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fallback.h"
 #include "builtin/algo/topo.h"
-#include "utils/debug.h"
 
 using namespace std;
 using namespace GraphIR;
@@ -56,10 +55,10 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
                 for (const auto &node : unreachableNodes) {
                     nodeStrs += node->toString() + ", ";
                 }
-                l.in("Topo").warn(
+                EXEC_WHEN_DEBUG(l.in("Topo").warn(
                     "Unreachable nodes in graph {} detected: {}",
                     graph->name(),
-                    nodeStrs);
+                    nodeStrs));
             }
         }());
         const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
@@ -71,7 +70,7 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
 }
 
 data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_t &frame) {
-    l.in("Eval").debug("Evaluating graph: {}", graph->name());
+    EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
     }
@@ -105,17 +104,17 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             if (tgtGraph == currFrame->graph()) {
                 // Self-recursion optimization
                 currFrame = lastFrame;
-                l.in("Eval").debug(
+                EXEC_WHEN_DEBUG(l.in("Eval").debug(
                     "Optimizing self-recursion for graph: {}",
-                    currFrame->graph()->name());
+                    currFrame->graph()->name()));
             } else {
                 nodesPtr = getTopoNodes(tgtGraph);
 
                 if (tailFrame && tailFrame->graph() == tgtGraph) {
                     // Mutual-tail-recursion optimization
-                    l.in("Eval").debug(
+                    EXEC_WHEN_DEBUG(l.in("Eval").debug(
                         "Optimizing mutual-tail-recursion for graph: {}",
-                        currFrame->graph()->name());
+                        currFrame->graph()->name()));
                     currFrame = tailFrame;
                 } else {
                     currFrame = Frame::create(currFrame, tgtGraph);

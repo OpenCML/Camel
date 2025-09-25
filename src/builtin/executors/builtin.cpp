@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 22, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,7 @@ BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, ge
 
 OperatorReturnCode
 BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
-    l.in("BasicExec").debug("Evaluating operator of URI: {}", uri);
+    EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
         throw CamelRuntimeException(
