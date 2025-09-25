@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 21, 2024
+ * Updated: Sep. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "utils/template.h"
 

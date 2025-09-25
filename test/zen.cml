@@ -1,6 +1,8 @@
 module main
 
+import { zen } from this
+
 func main() sync {
-    println('Hello, {}!'.format(whoami()))
+    println(zen())
     return 0
 }

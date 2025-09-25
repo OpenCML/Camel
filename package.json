@@ -16,6 +16,7 @@
         "check": "node ./scripts/check.js",
         "build": "node ./scripts/build.js",
         "debug": "node ./scripts/debug.js",
+        "profile": "node ./scripts/profile.js",
         "clean": "node ./scripts/clean.js",
         "format": "node ./scripts/format.js",
         "setver": "node ./scripts/setver.js",

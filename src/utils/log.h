@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Sep. 04, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include <format>
 #include <optional>
 #include <string>
+#include <memory>
 
 #ifdef NDEBUG
 
@@ -55,7 +56,6 @@ class Logger {
 #include <ctime>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <mutex>
 
 class Logger {

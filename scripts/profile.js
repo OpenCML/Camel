@@ -27,19 +27,19 @@ export default function main() {
         new Date().toISOString().replace(/[-:]/g, '').replace(/[T]/g, '_').slice(2, 15) +
         (gitVersion ? `_${gitVersion}` : '')
 
-    logStep(`Building Release... (${BUILD_FOOTPRINT})`)
+    logStep(`Building Profile... (${BUILD_FOOTPRINT})`)
     runCommand(
         `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake`
     )
-    runCommand('cmake --build . --config Release')
+    runCommand('cmake --build . --config RelWithDebInfo')
 
-    const debugDir = path.join(BASEDIR, 'build', 'Release')
+    const debugDir = path.join(BASEDIR, 'build', 'RelWithDebInfo')
     const isWindows = process.platform === 'win32'
     const executableName = `camel${isWindows ? '.exe' : ''}`
 
     copyFile(path.join(debugDir, executableName), path.join(BASEDIR, executableName))
 
-    logDone('Release build completed')
+    logDone('Profile build completed')
 }
 
 main()

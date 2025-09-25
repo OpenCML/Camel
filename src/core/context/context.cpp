@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -119,7 +119,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         }
     }
 
-    throw CamelBaseException("Module not found '" + rawModuleName);
+    throw CamelBaseException(std::format("Module '{}' not found.", rawModuleName));
 }
 
 std::vector<std::string> Context::getModuleNameCandidates(
