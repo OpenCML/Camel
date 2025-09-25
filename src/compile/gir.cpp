@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,7 +61,9 @@ bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
     dfs = [&](const node_ptr_t &current, size_t jumpsLeft) -> bool {
         ASSERT(current, "Current node is null in DFS.");
         if (jumpsLeft == 0) {
-            l.in("GIR").warn("Deep link check reached max jumps at node: {}.", node->toString());
+            EXEC_WHEN_DEBUG(l.in("GIR").warn(
+                "Deep link check reached max jumps at node: {}.",
+                node->toString()));
             return false;
         }
 

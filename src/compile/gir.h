@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,9 +83,13 @@ class Graph : public std::enable_shared_from_this<Graph> {
     Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name), arena_() {
         outer_ = graph;
         arena_ = std::make_shared<DataArena>();
-        l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_);
+        EXEC_WHEN_DEBUG(
+            l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
     }
-    ~Graph() { l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_); };
+    ~Graph() {
+        EXEC_WHEN_DEBUG(
+            l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_));
+    };
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr, const std::string &name = "") {
         static int anonymousIdx = 0;

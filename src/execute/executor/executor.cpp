@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #include "utils/log.h"
 
 void ExecutorManager::registerExecutorFactory(std::string name, executor_factory_t fact) {
-    l.in("ExecMgr").debug("Registering executor factory for protocol: <{}>", name);
+    EXEC_WHEN_DEBUG(l.in("ExecMgr").debug("Registering executor factory for protocol: <{}>", name));
     ASSERT(
         executorFactories.find(name) == executorFactories.end(),
         "Executor factory for protocol '" + name + "' is already registered.");
@@ -29,7 +29,7 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
 }
 
 OperatorReturnCode ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
-    l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri);
+    EXEC_WHEN_DEBUG(l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri));
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidURI, "Invalid URI format");
@@ -45,7 +45,7 @@ OperatorReturnCode ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &s
             RuntimeExceptionCode::InvalidURI,
             std::format("Protocol <{}> not found.", protocol));
     }
-    l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol);
+    EXEC_WHEN_DEBUG(l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol));
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, executor);
     return executor->eval(uri.substr(pos + 1), self, frame);

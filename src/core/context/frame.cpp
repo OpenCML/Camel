@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Sep. 16, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,17 +24,17 @@ using namespace GraphIR;
 
 Frame::Frame(const frame_ptr_t &parent, const graph_ptr_t &graph)
     : parent_(parent), graph_(graph), arena_(*graph->arena()) {
-    l.in("Frame").debug(
+    EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Created Frame for Graph: {} (Parent: {})",
         graph_->name().empty() ? "<anonymous>" : graph_->name(),
-        parent_ ? "Yes" : "No");
+        parent_ ? "Yes" : "No"));
 }
 
 Frame::~Frame() {
-    l.in("Frame").debug(
+    EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Destroyed Frame for Graph: {} (Parent: {})",
         graph_->name().empty() ? "<anonymous>" : graph_->name(),
-        parent_ ? "Yes" : "No");
+        parent_ ? "Yes" : "No"));
 }
 
 frame_ptr_t Frame::create(const frame_ptr_t &parent, const graph_ptr_t &graph) {

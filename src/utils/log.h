@@ -20,9 +20,18 @@
 #pragma once
 
 #include <format>
+#include <memory>
 #include <optional>
 #include <string>
-#include <memory>
+
+#ifndef NDEBUG
+#define EXEC_WHEN_DEBUG(code)                                                                      \
+    do {                                                                                           \
+        code;                                                                                      \
+    } while (0)
+#else
+#define EXEC_WHEN_DEBUG(code)
+#endif
 
 #ifdef NDEBUG
 
