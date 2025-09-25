@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,5 +22,6 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
+OperatorReturnCode __exit__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __sleep__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __whoami__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

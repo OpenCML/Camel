@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,7 @@
 #include "../operators/os.h"
 #include "../operators/other.h"
 #include "../operators/str.h"
+#include "../operators/struct.h"
 #include "../operators/this.h"
 #include "../operators/time.h"
 
@@ -65,6 +66,10 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"io/print", __print__},
         {"io/println", __println__},
         {"io/input", __input__},
+
+        // struct
+        {"struct/range", __range__},
+        {"struct/contains", __contains__},
 
         // os
         {"os/sleep", __sleep__},

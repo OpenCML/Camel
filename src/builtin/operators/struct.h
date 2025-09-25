@@ -12,32 +12,16 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 13, 2025
+ * Created: Sep. 25, 2025
  * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include "core/operator.h"
+#include "core/type/type.h"
 
-enum class RuntimeExceptionCode {
-    Success,
-    InvalidWithParameter,
-    InvalidNormParameter,
-    InvalidURI,
-    UnsupportedOperator,
-    ErrorOnExecution,
-    UnknownError,
-    ForceExit
-};
-
-class CamelRuntimeException : public CamelBaseException {
-    RuntimeExceptionCode code_;
-
-  public:
-    CamelRuntimeException(RuntimeExceptionCode code, const std::string &msg)
-        : CamelBaseException(msg), code_(code) {}
-
-    RuntimeExceptionCode code() const { return code_; }
-};
+OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

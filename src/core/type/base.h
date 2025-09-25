@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 24, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -145,6 +145,9 @@ class Type {
     static type_ptr_t Number();
 
     static type_ptr_t List();
+    static type_ptr_t Array(const type_ptr_t &elementType, size_t size);
+    static type_ptr_t Tuple(const std::vector<type_ptr_t> &types);
+    static type_ptr_t Vector(const type_ptr_t &elementType);
 
     static type_ptr_t Any();
     static type_ptr_t Void();

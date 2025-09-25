@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,10 @@ func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<Fun
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
 
 data_ptr_t FunctionData::convert(type_ptr_t target, bool inplace) {
+    if (target->code() == TypeCode::Func) {
+        // TODO: check function type compatibility
+        return shared_from_this();
+    }
     throw DataConvError("Cannot convert functor to " + typeCodeToString(target->code()));
 }
 

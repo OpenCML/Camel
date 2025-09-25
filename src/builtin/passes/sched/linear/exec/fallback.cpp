@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,10 +55,10 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
                 for (const auto &node : unreachableNodes) {
                     nodeStrs += node->toString() + ", ";
                 }
-                EXEC_WHEN_DEBUG(l.in("Topo").warn(
+                l.in("Topo").warn(
                     "Unreachable nodes in graph {} detected: {}",
                     graph->name(),
-                    nodeStrs));
+                    nodeStrs);
             }
         }());
         const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
@@ -164,18 +164,13 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
 
                 if (uri.starts_with(":mark/")) {
                     if (uri == ":mark/map") {
+                        evalMarkedOperator_map(n, currFrame);
+                    } else if (uri == ":mark/apply") {
+                        evalMarkedOperator_apply(n, currFrame);
                     } else if (uri == ":mark/filter") {
-                        // ASSERT(normArgs.size() == 2, "filter operator requires 2 norm args.");
-                        // auto listData = normArgs[0]->as<ListData>(Type::List());
-                        // auto funcData = normArgs[1]->as<FunctionData>(Type::Func());
-                        // data_ptr_t res = listData->filter(funcData, context_, currFrame);
-                        // currFrame->set(n, res);
+                        evalMarkedOperator_filter(n, currFrame);
                     } else if (uri == ":mark/foreach") {
-                        // ASSERT(normArgs.size() == 2, "foreach operator requires 2 norm args.");
-                        // auto listData = normArgs[0]->as<ListData>(Type::List());
-                        // auto funcData = normArgs[1]->as<FunctionData>(Type::Func());
-                        // listData->foreach(funcData, context_, currFrame);
-                        // currFrame->set(n, Data::null());
+                        evalMarkedOperator_foreach(n, currFrame);
                     } else {
                         ASSERT(false, std::format("Mark Operator {} not implemented.", uri));
                     }
@@ -281,51 +276,251 @@ any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
     return evalGraph(mainGraph, mainFrame);
 }
 
-void FallbackExecSchedPass::evalMarkedOperatorMap(const node_ptr_t &node, frame_ptr_t &currFrame) {
-    if (node->withInputs().size() != 1) {
+void FallbackExecSchedPass::evalMarkedOperator_map(const node_ptr_t &node, frame_ptr_t &currFrame) {
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<map>", 1, node->withInputs().size());
+            .commit("<map>", 1, node->withInputs().size() + node->normInputs().size());
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
     }
-    if (node->normInputs().size() != 1) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<map>", 1, node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
-    }
+
     auto targetData = currFrame->get(node->withInputs().front());
     auto funcData = currFrame->get(node->normInputs().front());
+
     if (funcData->type()->code() != TypeCode::Func) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<map>", "Function", funcData->type()->toString());
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
     }
-    switch (targetData->type()->code()) {
-    case TypeCode::List: {
-        auto listData = targetData->as<ListData>(Type::List());
-        data_vec_t &target = listData->raw();
+    auto func = funcData->as<FunctionData>(Type::Func());
+    type_ptr_t funcRetType = func->funcType()->returnType();
+
+    auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
         data_vec_t res;
-        res.reserve(target.size());
-        for (const auto &item : target) {
-            frame_ptr_t mapFrame =
-                Frame::create(currFrame, funcData->as<FunctionData>(Type::Func())->graph());
-            mapFrame->set(
-                funcData->as<FunctionData>(Type::Func())->graph()->portNodes().front().first,
-                item);
-            data_ptr_t mapRes =
-                evalGraph(funcData->as<FunctionData>(Type::Func())->graph(), mapFrame);
-            res.push_back(mapRes);
+        res.reserve(inputVec.size());
+        for (const auto &item : inputVec) {
+            auto mapFrame = Frame::create(currFrame, func->graph());
+            mapFrame->set(func->graph()->portNodes().front().first, item);
+            res.push_back(evalGraph(func->graph(), mapFrame));
         }
-        currFrame->set(node, ListData::create(std::move(res)));
+        return res;
+    };
+
+    switch (targetData->type()->code()) {
+    case TypeCode::List:
+        currFrame->set(
+            node,
+            ListData::create(applyMap(tt::as_shared<ListData>(targetData)->raw())));
+        break;
+    case TypeCode::Array: {
+        auto arrayData = tt::as_shared<ArrayData>(targetData);
+        currFrame->set(
+            node,
+            ArrayData::create(
+                Type::Array(funcRetType, arrayData->size()),
+                applyMap(arrayData->raw())));
         break;
     }
-
+    case TypeCode::Vector: {
+        auto vectorData = tt::as_shared<VectorData>(targetData);
+        currFrame->set(
+            node,
+            VectorData::create(Type::Vector(funcRetType), applyMap(vectorData->raw())));
+        break;
+    }
+    case TypeCode::Dict: {
+        auto dictData = tt::as_shared<DictData>(targetData);
+        std::unordered_map<std::string, data_ptr_t> res;
+        for (const auto &[k, v] : dictData->raw()) {
+            auto mapFrame = Frame::create(currFrame, func->graph());
+            mapFrame->set(func->graph()->portNodes().front().first, v);
+            res[k] = evalGraph(func->graph(), mapFrame);
+        }
+        currFrame->set(node, DictData::create(std::move(res)));
+        break;
+    }
     default:
         context_->rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<map>", "List", funcData->type()->toString());
+            .commit(0, "<map>", "List/Array/Tuple/Vector/Dict", targetData->type()->toString());
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+}
+
+void FallbackExecSchedPass::evalMarkedOperator_apply(
+    const node_ptr_t &node, frame_ptr_t &currFrame) {
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<apply>", 1, node->withInputs().size() + node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+
+    auto targetData = currFrame->get(node->withInputs().front());
+    auto funcData = currFrame->get(node->normInputs().front());
+    auto func = funcData->as<FunctionData>(Type::Func());
+
+    auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
+        auto frame = Frame::create(currFrame, func->graph());
+        frame->set(func->graph()->portNodes().front().first, item);
+        return evalGraph(func->graph(), frame);
+    };
+
+    auto applyToSequence = [&](auto containerData, auto createFunc) {
+        const auto &raw = containerData->raw();
+        data_vec_t res;
+        res.reserve(raw.size());
+        for (const auto &item : raw) {
+            res.push_back(applyFunc(item));
+        }
+        currFrame->set(node, createFunc(containerData->type(), std::move(res)));
+    };
+
+    switch (targetData->type()->code()) {
+    case TypeCode::List:
+        applyToSequence(tt::as_shared<ListData>(targetData), [](auto, data_vec_t v) {
+            return ListData::create(std::move(v));
+        });
+        break;
+    case TypeCode::Array:
+        applyToSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
+            return ArrayData::create(t, std::move(v));
+        });
+        break;
+    case TypeCode::Tuple:
+        applyToSequence(tt::as_shared<TupleData>(targetData), [](auto t, data_vec_t v) {
+            return TupleData::create(t, std::move(v));
+        });
+        break;
+    case TypeCode::Vector:
+        applyToSequence(tt::as_shared<VectorData>(targetData), [](auto t, data_vec_t v) {
+            return VectorData::create(t, std::move(v));
+        });
+        break;
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<apply>", "List/Array/Tuple/Vector/Dict", targetData->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidWithParameter,
+            "Unsupported type.");
+    }
+}
+
+void FallbackExecSchedPass::evalMarkedOperator_filter(
+    const node_ptr_t &node, frame_ptr_t &currFrame) {
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<filter>", 1, node->withInputs().size() + node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+
+    auto targetData = currFrame->get(node->withInputs().front());
+    auto funcData = currFrame->get(node->normInputs().front());
+    auto func = funcData->as<FunctionData>(Type::Func());
+
+    auto shouldKeep = [&](const data_ptr_t &item) -> bool {
+        auto frame = Frame::create(currFrame, func->graph());
+        frame->set(func->graph()->portNodes().front().first, item);
+        auto result = evalGraph(func->graph(), frame);
+        ASSERT(result->type()->code() == TypeCode::Bool, "Filter function must return Bool.");
+        return result->as<BoolData>(Type::Bool())->data();
+    };
+
+    auto filterSequence = [&](auto containerData, auto createFunc) {
+        const auto &raw = containerData->raw();
+        data_vec_t res;
+        for (const auto &item : raw) {
+            if (shouldKeep(item))
+                res.push_back(item);
+        }
+        currFrame->set(node, createFunc(containerData->type(), std::move(res)));
+    };
+
+    switch (targetData->type()->code()) {
+    case TypeCode::List:
+        filterSequence(tt::as_shared<ListData>(targetData), [](auto, data_vec_t v) {
+            return ListData::create(std::move(v));
+        });
+        break;
+    case TypeCode::Array:
+        filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
+            return ArrayData::create(t, std::move(v));
+        });
+        break;
+    case TypeCode::Tuple:
+        filterSequence(tt::as_shared<TupleData>(targetData), [](auto t, data_vec_t v) {
+            return TupleData::create(t, std::move(v));
+        });
+        break;
+    case TypeCode::Vector:
+        filterSequence(tt::as_shared<VectorData>(targetData), [](auto t, data_vec_t v) {
+            return VectorData::create(t, std::move(v));
+        });
+        break;
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<filter>", "List/Array/Tuple/Vector/Dict", targetData->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidWithParameter,
+            "Unsupported type.");
+    }
+}
+
+void FallbackExecSchedPass::evalMarkedOperator_foreach(
+    const node_ptr_t &node, frame_ptr_t &currFrame) {
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<foreach>", 1, node->withInputs().size() + node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+
+    auto targetData = currFrame->get(node->withInputs().front());
+    auto funcData = currFrame->get(node->normInputs().front());
+    auto func = funcData->as<FunctionData>(Type::Func());
+
+    auto applyFunc = [&](const data_ptr_t &item) {
+        auto frame = Frame::create(currFrame, func->graph());
+        frame->set(func->graph()->portNodes().front().first, item);
+        evalGraph(func->graph(), frame); // 忽略返回值
+    };
+
+    switch (targetData->type()->code()) {
+    case TypeCode::List:
+        for (const auto &item : tt::as_shared<ListData>(targetData)->raw()) {
+            applyFunc(item);
+        }
+        break;
+    case TypeCode::Array:
+        for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
+            applyFunc(item);
+        }
+        break;
+    case TypeCode::Tuple:
+        for (const auto &item : tt::as_shared<TupleData>(targetData)->raw()) {
+            applyFunc(item);
+        }
+        break;
+    case TypeCode::Vector:
+        for (const auto &item : tt::as_shared<VectorData>(targetData)->raw()) {
+            applyFunc(item);
+        }
+        break;
+    case TypeCode::Dict:
+        for (const auto &[k, v] : tt::as_shared<DictData>(targetData)->raw()) {
+            applyFunc(v);
+        }
+        break;
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<foreach>", "List/Array/Tuple/Vector/Dict", targetData->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidWithParameter,
+            "Unsupported type.");
     }
 }

@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
+#include "vector.h"
 
 #include "set.h"
 
@@ -64,8 +65,8 @@ CastSafety ArrayType::castSafetyTo(const Type &other) const {
             return elementType_->castSafetyTo(*otherSet.valueType());
         }
         case TypeCode::Vector: {
-            // we cannot know the size of the array
-            return CastSafety::Forbidden;
+            const VectorType &otherVector = dynamic_cast<const VectorType &>(other);
+            return elementType_->castSafetyTo(*otherVector.elementType());
         }
         case TypeCode::Tensor: {
             // we cannot know the size of the array
