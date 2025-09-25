@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 24, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,6 @@ namespace GIR = GraphIR;
 #include <ctime>
 
 #if defined(_WIN32)
-#define NOMINMAX
 #include <windows.h>
 #endif
 
