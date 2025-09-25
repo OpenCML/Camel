@@ -26,6 +26,8 @@ camel
 camel.exe
 result.json
 CMakeUserPresets.json
+perf.data
+perf.data.old
 
 pypi/camel-lang/bin/
 pypi/camel-lang/stdlib/

@@ -16,6 +16,17 @@
             }
         },
         {
+            "name": "RUN (build) - Linux",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Release/camel",
+            "args": ["${file}"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": true,
+        },
+        {
             "name": "RUN (debug)",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
@@ -28,6 +39,26 @@
                 "moduleLoad": true,
                 "trace": true
             }
+        },
+        {
+            "name": "RUN (debug) - Linux",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel",
+            "args": ["-v", "--log-level debug", "--profile", "${file}"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": true,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/usr/bin/gdb"
         },
         {
             "name": "RUN (debug/clear)",
