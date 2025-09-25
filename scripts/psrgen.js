@@ -49,31 +49,35 @@ function walkDirAndReplace(dir) {
 function moveFilesUp() {
     const __filename = fileURLToPath(import.meta.url)
     const __dirname = path.dirname(__filename)
-    const nestedDir = path.join(__dirname, 'src', 'parse', 'antlr', 'antlr')
-    const targetDir = path.join(__dirname, 'src', 'parse', 'antlr')
+    const nestedDir = path.join(__dirname, '..', 'src', 'parse', 'antlr', 'antlr')
+    const targetDir = path.join(__dirname, '..', 'src', 'parse', 'antlr')
+
     if (!fs.existsSync(nestedDir)) {
+        logStep('No nested antlr directory found, skipping move.')
         return
+    } else {
+        logStep(`Found nested directory: ${nestedDir}, moving files up...`)
     }
 
     const files = fs.readdirSync(nestedDir)
 
     files.forEach((file) => {
-        const ext = path.extname(file)
-        if (ext === '.h' || ext === '.cpp') {
-            const srcPath = path.join(nestedDir, file)
-            const destPath = path.join(targetDir, file)
+        const srcPath = path.join(nestedDir, file)
+        const destPath = path.join(targetDir, file)
 
-            if (fs.existsSync(destPath)) {
-                fs.unlinkSync(destPath)
-            }
-
-            fs.renameSync(srcPath, destPath)
+        if (fs.existsSync(destPath)) {
+            fs.unlinkSync(destPath)
         }
+
+        fs.renameSync(srcPath, destPath)
     })
 
     const remaining = fs.readdirSync(nestedDir)
     if (remaining.length === 0) {
         fs.rmdirSync(nestedDir)
+        logStep('Moved files up and removed empty nested directory.')
+    } else {
+        logStep('Moved files up, but nested directory is not empty:', remaining)
     }
 }
 
