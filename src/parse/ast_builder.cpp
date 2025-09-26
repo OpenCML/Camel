@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: May. 01, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -880,9 +880,19 @@ pattern
 */
 any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
     ENTER("Pattern");
-    throw std::runtime_error("visitPattern: not implemented yet");
+    node_ptr_t res;
+    if (context->literal()) {
+        Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
+        res = createNodeAs<LiteralLoad>(literal);
+        setNodeTokenRangeByContext(res, context->literal());
+    } else if (context->getText() == "_") {
+        res = createNodeAs<NullLoad>();
+        setNodeTokenRangeByContext(res, context);
+    } else {
+        throw CamelBaseException("visitPattern: not implemented yet");
+    }
     LEAVE("Pattern");
-    return nullptr;
+    return res;
 }
 
 /*
@@ -891,11 +901,14 @@ matchCase
     ;
 */
 any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
-    // TODO: match case
     ENTER("MatchCase");
-    throw std::runtime_error("visitMatchCase: not implemented yet");
+    node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
+    setNodeTokenRangeByContext(caseNode, context);
+    node_ptr_t pattern = any2node(visitPattern(context->pattern(0)));
+    node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
+    *caseNode << pattern << exprNode;
     LEAVE("MatchCase");
-    return nullptr;
+    return caseNode;
 }
 
 /*
@@ -939,9 +952,21 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
             *elseBlockNode << stmts;
         }
     } break;
+    case 2: // MATCH identRef '{' matchCase+ '}'
+    {
+        Reference ref(context->identRef()->getText());
+        ctrlNode = createNodeAs<MatchExprLoad>(ref);
+        setNodeTokenRangeByContext(ctrlNode, context);
+        node_ptr_t casesNode = createNodeAs<RepeatedLoad>("MatchCase");
+        setNodeTokenRangeByContext(casesNode, context);
+        for (auto &matchCase : context->matchCase()) {
+            *casesNode << any2node(visitMatchCase(matchCase));
+        }
+        *ctrlNode << casesNode;
+    } break;
 
     default:
-        throw std::runtime_error("visitCtrlExpr: unsupported control expression type");
+        throw CamelBaseException("visitCtrlExpr: unsupported control expression type");
     }
     LEAVE("CtrlExpr");
     return ctrlNode;

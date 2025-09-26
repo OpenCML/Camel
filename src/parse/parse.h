@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Aug. 24, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,15 +94,10 @@ class CamelParser {
     }
 
     bool buildAST() {
-        try {
-            auto constructor = AST::Builder();
-            ast_ = constructor.build(cst_, diagnostics_);
+        auto constructor = AST::Builder();
+        ast_ = constructor.build(cst_, diagnostics_);
 
-            if (diagnostics_->hasErrors()) {
-                ast_ = nullptr;
-                return false;
-            }
-        } catch (std::exception &e) {
+        if (diagnostics_->hasErrors()) {
             ast_ = nullptr;
             return false;
         }

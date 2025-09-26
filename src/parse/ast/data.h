@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -164,9 +164,26 @@ class IfExprLoad : public DataLoad {
 
 class MatchExprLoad : public DataLoad {
   public:
-    MatchExprLoad() : DataLoad(DataType::MatchExpr) {}
-    const std::string toString() const override { return "MatchExpr" + this->status(); }
+    MatchExprLoad(const Reference &ref) : DataLoad(DataType::MatchExpr), ref_(ref) {}
+
+    const Reference &ref() const { return ref_; }
+
+    const std::string toString() const override {
+        return "MatchExpr: " + ref_.toString() + this->status();
+    }
     const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+};
+
+class MatchCaseLoad : public Load {
+  public:
+    MatchCaseLoad() : Load(LoadType::Data) {}
+    const std::string toString() const override { return "MatchCase"; }
+    const std::string geneCode() const override {
+        throw CamelBaseException("MatchCaseLoad::geneCode() not implemented");
+    }
 };
 
 class TryExprLoad : public DataLoad {
