@@ -141,7 +141,7 @@ function updateCppProperties(depMap) {
 
         config.configurations.forEach((cfg) => {
             cfg.includePath = cfg.includePath || []
-            cfg.cppStandard = 'c++20'
+            cfg.cppStandard = 'c++23'
             const newPaths = []
 
             newPaths.push('${workspaceFolder}')

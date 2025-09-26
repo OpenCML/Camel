@@ -21,6 +21,12 @@ elseif(UNIX)
     set(CMAKE_INSTALL_RPATH "$ORIGIN")
 endif()
 
+if(WIN32)
+    add_definitions(-DPLATFORM_WINDOWS)
+elseif(UNIX)
+    add_definitions(-DPLATFORM_LINUX)
+endif()
+
 file(GLOB_RECURSE SRC_FILES
 	"${PROJECT_SOURCE_DIR}/src/*.cpp"
 	"${PROJECT_SOURCE_DIR}/third_party/*.cpp"
@@ -44,9 +50,17 @@ if (NOT ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))
     message(FATAL_ERROR "This project requires Clang as the C++ compiler. Current compiler is ${CMAKE_CXX_COMPILER_ID}.")
 endif()
 
+# 开启全局 LTO 支持
+include(CheckIPOSupported)
+check_ipo_supported(RESULT result OUTPUT output)
+if(result)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+endif()
+
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>:-O3>
-    $<$<CONFIG:Release>:-flto>
+    $<$<CONFIG:RelWithDebInfo>:-O2>
+    $<$<CONFIG:RelWithDebInfo>:-g3>
     $<$<CONFIG:Debug>:-O0>
     $<$<CONFIG:Debug>:-g3>
     -Wall -Wextra -Wpedantic

@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 17, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
         input = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
-        l.in("Main").info("Reading from standard input.");
+        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from standard input."));
     } else {
         targetFile = Run::targetFiles[0];
         auto file = std::make_unique<std::ifstream>(targetFile);
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         input = std::move(file);
-        l.in("Main").info("Reading from file '{}'.", targetFile);
+        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from file '{}'.", targetFile));
     }
 
     chrono::high_resolution_clock::time_point startTime, endTime;
@@ -105,20 +105,10 @@ int main(int argc, char *argv[]) {
         }
 
         bool useJsonFormat = (errorFormat == "json");
+        parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
 
         try {
-            parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
-            try {
-                parser->parse(*input);
-            } catch (CamelBaseException &e) {
-                if (selectedCommand == Command::Check) {
-                    parser->dumpDiagnostics(os, useJsonFormat);
-                    return 0;
-                } else {
-                    os << e.what(useJsonFormat) << endl;
-                    return 1;
-                }
-            }
+            parser->parse(*input);
 
             if (selectedCommand == Command::Format) {
                 auto formatter = Formatter(parser->getTokens());
@@ -185,21 +175,15 @@ int main(int argc, char *argv[]) {
             auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
             ctx->setMainModule(mainModule);
 
-            try {
-                if (selectedCommand == Command::Inspect) {
-                    if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
-                        mainModule->compile(CompileStage::GCT);
-                    }
-                    if (Inspect::dumpGIR || Inspect::dumpTNS) {
-                        mainModule->compile(CompileStage::Done);
-                    }
-                } else {
+            if (selectedCommand == Command::Inspect) {
+                if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
+                    mainModule->compile(CompileStage::GCT);
+                }
+                if (Inspect::dumpGIR || Inspect::dumpTNS) {
                     mainModule->compile(CompileStage::Done);
                 }
-            } catch (DiagnosticsLimitExceededException &e) {
-                auto lastDiag = e.lastDiagnostic();
-                os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
-                return selectedCommand == Command::Check ? 0 : 1;
+            } else {
+                mainModule->compile(CompileStage::Done);
             }
 
             if (selectedCommand == Command::Inspect) {
@@ -242,12 +226,20 @@ int main(int argc, char *argv[]) {
                 }
             }
 
+        } catch (DiagnosticsLimitExceededBaseException &e) {
+            auto lastDiag = e.lastDiagnostic();
+            // TODO: fetch range
+            RangeConverter conv(parser->getTokens());
+            lastDiag.fetchRange(conv);
+            os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
+            return selectedCommand == Command::Check ? 0 : 1;
         } catch (CamelBaseException &e) {
             os << e.what(useJsonFormat) << endl;
+            return selectedCommand == Command::Check ? 0 : 1;
             return 1;
         } catch (exception &e) {
             os << e.what() << endl;
-            return 1;
+            return selectedCommand == Command::Check ? 0 : 1;
         } catch (...) {
             os << "Unknown error occurred." << endl;
             return 1;
@@ -257,7 +249,7 @@ int main(int argc, char *argv[]) {
             endTime = chrono::high_resolution_clock::now();
             auto duration =
                 chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            l.in("Main").info("Time used: {} us", duration);
+            EXEC_WHEN_DEBUG(l.in("Main").info("Time used: {} us", duration));
         }
     }
 

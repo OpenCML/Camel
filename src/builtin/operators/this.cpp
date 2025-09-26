@@ -9,23 +9,25 @@
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * See the the MIT license for more details
+ * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 17, 2025
- * Updated: Sep. 17, 2025
+ * Created: Sep. 22, 2025
+ * Updated: Sep. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "this.h"
+#include "compile/gir.h"
+#include "core/context/context.h"
+#include "core/context/frame.h"
 
-#include <functional>
+#include <iostream>
 
-#ifndef NDEBUG
-#define EXEC_WHEN_DEBUG(code)                                                                      \
-    do {                                                                                           \
-        code;                                                                                      \
-    } while (0)
-#else
-#define EXEC_WHEN_DEBUG(code)
-#endif
+OperatorReturnCode __zen__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    std::string zen =
+#include "ZEN"
+        ;
+    frame.set(self, std::make_shared<StringData>(zen));
+    return OperatorReturnCode::OK;
+}

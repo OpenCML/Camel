@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
+#include "list.h"
 #include "params.h"
 #include "utils/scope.h"
+#include "vector.h"
 
 #include "../other/any.h"
 #include "../other/null.h"
@@ -41,6 +43,9 @@ ArrayData::ArrayData(type_ptr_t type, size_t length, data_list_t data) : data_(d
     type_ = std::make_shared<ArrayType>(type, length);
     data_.resize(length);
 }
+
+ArrayData::ArrayData(type_ptr_t type, data_vec_t &&data)
+    : StructData(type), data_(std::move(data)) {}
 
 bool ArrayData::emplace(const data_ptr_t &e, size_t index) {
     if (index >= data_.size()) {
@@ -87,6 +92,21 @@ data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
         if (target->structured()) {
             switch (target->code()) {
                 // TODO: implement conversion to other structured types
+            case TypeCode::List: {
+                auto res = make_shared<ListData>();
+                for (const auto &e : data_) {
+                    res->emplace(e);
+                }
+                return res;
+            } break;
+            case TypeCode::Vector: {
+                auto res = make_shared<VectorData>(
+                    Type::Vector(dynamic_pointer_cast<ArrayType>(type_)->elementType()));
+                for (const auto &e : data_) {
+                    res->emplace(e);
+                }
+                return res;
+            } break;
             case TypeCode::Params: {
                 auto res = dynamic_pointer_cast<ParamsType>(target);
                 return convertToParams(res);

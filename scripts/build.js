@@ -34,7 +34,10 @@ export default function main() {
     runCommand('cmake --build . --config Release')
 
     const debugDir = path.join(BASEDIR, 'build', 'Release')
-    copyFile(path.join(debugDir, 'camel.exe'), path.join(BASEDIR, 'camel.exe'))
+    const isWindows = process.platform === 'win32'
+    const executableName = `camel${isWindows ? '.exe' : ''}`
+
+    copyFile(path.join(debugDir, executableName), path.join(BASEDIR, executableName))
 
     logDone('Release build completed')
 }

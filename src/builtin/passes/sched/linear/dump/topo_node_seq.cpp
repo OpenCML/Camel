@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 05, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,19 +65,22 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
         node_ptr_t retNode = g->returnNode();
-        auto sortedNodes = findReachable(retNode, [](const node_ptr_t &n) {
-            vector<node_ptr_t> ins;
-            ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-            for (const auto &in : n->dataInputs()) {
-                if (in->graph() == n->graph()) // only consider nodes in the same graph
-                    ins.push_back(in);
-            }
-            for (const auto &in : n->ctrlInputs()) {
-                if (in->graph() == n->graph()) // only consider nodes in the same graph
-                    ins.push_back(in);
-            }
-            return ins;
-        });
+        auto sortedNodes = findReachable(
+            retNode,
+            [](const node_ptr_t &n) {
+                vector<node_ptr_t> ins;
+                ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
+                for (const auto &in : n->ctrlInputs()) {
+                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                        ins.push_back(in);
+                }
+                for (const auto &in : n->dataInputs()) {
+                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                        ins.push_back(in);
+                }
+                return ins;
+            },
+            true);
         if (sortedNodes.size() != g->nodes().size()) {
             GraphIR::node_vec_t unreachableNodes;
             for (const auto &n : g->nodes()) {
@@ -89,7 +92,10 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             for (const auto &node : unreachableNodes) {
                 nodeStrs += node->toString() + ", ";
             }
-            l.in("Topo").warn("Unreachable nodes in graph {} detected: {}", g->name(), nodeStrs);
+            EXEC_WHEN_DEBUG(l.in("Topo").warn(
+                "Unreachable nodes in graph {} detected: {}",
+                g->name(),
+                nodeStrs));
         }
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();

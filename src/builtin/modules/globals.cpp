@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,18 +81,32 @@ static const std::pair<std::string, std::string> binaryOps[] = {
     {"__mod__", ":op/mod"},
     {"__mat__", ":op/mat"},
     {"__exp__", ":op/exp"},
-    {"__idx__", ":op/idx"}};
+    {"__idx__", ":op/idx"},
+};
 
 static const std::pair<std::string, std::string> others[] = {
-    {"map", ":not-impl"},
-    {"filter", ":not-impl"},
-    {"reduce", ":not-impl"},
-    {"len", ":not-impl"},
-    {"range", ":not-impl"},
-    {"enumerate", ":not-impl"},
-    {"zip", ":not-impl"},
-    {"unzip", ":not-impl"},
-    {"exit", ":not-impl"}};
+    {"print", ":io/print"},
+    {"println", ":io/println"},
+    {"input", ":io/input"},
+    {"sleep", ":os/sleep"},
+    {"whoami", ":os/whoami"},
+    {"format", ":str/format"},
+    {"join", ":str/join"},
+    {"exit", ":os/exit"},
+    // struct
+    {"len", ":struct/len"},
+    {"range", ":struct/range"},
+    {"slice", ":struct/slice"},
+    {"concat", ":struct/concat"},
+    {"append", ":struct/append"},
+    {"extend", ":struct/extend"},
+    {"contains", ":struct/contains"},
+    // Marked Operators
+    {"map", ":mark/map"},
+    {"apply", ":mark/apply"},
+    {"filter", ":mark/filter"},
+    {"foreach", ":mark/foreach"},
+};
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     for (const auto &[name, func] : assnOps) {
@@ -106,31 +120,10 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &[name, func] : others) {
         exportBuiltinOperator(name, param_init_list{}, param_init_list{}, Type::Any(), func);
     }
-
-    exportBuiltinOperator(
-        "print",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
-        Type::Void(),
-        ":io/print");
-    exportBuiltinOperator(
-        "println",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
-        Type::Void(),
-        ":io/println");
-    exportBuiltinOperator("input", param_init_list{}, param_init_list{}, Type::Void(), ":io/input");
-    exportBuiltinOperator("sleep", param_init_list{}, param_init_list{}, Type::Void(), ":os/sleep");
-    exportBuiltinOperator(
-        "format",
-        param_init_list{},
-        param_init_list{},
-        Type::Void(),
-        ":str/format");
 }
 
 bool GlobalsBuiltinModule::load() {
-    l.in("GlobalsBuiltinModule").info("Loading basic built-in module.");
+    EXEC_WHEN_DEBUG(l.in("GlobalsBuiltinModule").info("Loading basic built-in module."));
     if (loaded_) {
         return true;
     }

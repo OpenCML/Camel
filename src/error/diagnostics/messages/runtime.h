@@ -31,6 +31,7 @@ enum class RuntimeDiag : uint32_t {
     KeyNotFound = 0x000003,
     IncompatibleArgType = 0x000004,
     IncorrectArgsCount = 0x000005,
+    MaxRecursionDepthExceeded = 0x000006
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

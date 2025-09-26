@@ -52,9 +52,9 @@ struct Diagnostic {
 };
 
 // ---- Exception classes ----
-class DiagnosticsLimitExceededException : public CamelBaseException {
+class DiagnosticsLimitExceededBaseException : public CamelBaseException {
   public:
-    DiagnosticsLimitExceededException(const std::string &msg, const Diagnostic &lastDiag)
+    DiagnosticsLimitExceededBaseException(const std::string &msg, const Diagnostic &lastDiag)
         : CamelBaseException(msg), lastDiagnostic_(lastDiag) {}
 
     const Diagnostic &lastDiagnostic() const { return lastDiagnostic_; }
@@ -63,10 +63,10 @@ class DiagnosticsLimitExceededException : public CamelBaseException {
     Diagnostic lastDiagnostic_;
 };
 
-class DiagnosticsExceededLimitException : public DiagnosticsLimitExceededException {
+class DiagnosticsLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
-    DiagnosticsExceededLimitException(Severity sev, size_t limit, const Diagnostic &lastDiagnostic)
-        : DiagnosticsLimitExceededException(
+    DiagnosticsLimitExceededException(Severity sev, size_t limit, const Diagnostic &lastDiagnostic)
+        : DiagnosticsLimitExceededBaseException(
               "Too many " + to_string(sev) +
                   " diagnostics exceeded limit: " + std::to_string(limit),
               lastDiagnostic),
@@ -80,10 +80,10 @@ class DiagnosticsExceededLimitException : public DiagnosticsLimitExceededExcepti
     size_t limit_;
 };
 
-class DiagnosticsExceededTotalLimitException : public DiagnosticsLimitExceededException {
+class DiagnosticsTotalLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
-    DiagnosticsExceededTotalLimitException(size_t total, const Diagnostic &lastDiagnostic)
-        : DiagnosticsLimitExceededException(
+    DiagnosticsTotalLimitExceededException(size_t total, const Diagnostic &lastDiagnostic)
+        : DiagnosticsLimitExceededBaseException(
               "Total diagnostic limit exceeded: " + std::to_string(total), lastDiagnostic),
           total_limit_(total) {}
 
@@ -102,7 +102,7 @@ struct DiagsConfig {
     bool hasTotalLimit() const { return total_limit > 0; }
     bool hasSeverityLimit(Severity sev) const {
         return per_severity_limits.find(sev) != per_severity_limits.end() &&
-               per_severity_limits.at(sev) > 0;
+               per_severity_limits.at(sev) != -1;
     }
     int getSeverityLimit(Severity sev) const {
         auto it = per_severity_limits.find(sev);

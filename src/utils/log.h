@@ -13,15 +13,25 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Sep. 04, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <format>
+#include <memory>
 #include <optional>
 #include <string>
+
+#ifndef NDEBUG
+#define EXEC_WHEN_DEBUG(code)                                                                      \
+    do {                                                                                           \
+        code;                                                                                      \
+    } while (0)
+#else
+#define EXEC_WHEN_DEBUG(code)
+#endif
 
 #ifdef NDEBUG
 
@@ -55,7 +65,6 @@ class Logger {
 #include <ctime>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <mutex>
 
 class Logger {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@
 
 namespace GIR = GraphIR;
 
-EvalResultCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     for (size_t i = 0; i < ins.size(); i++) {
         if (i > 0) {
@@ -37,10 +37,10 @@ EvalResultCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         data->print(std::cout);
     }
     frame.set(self, Data::null());
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     for (size_t i = 0; i < ins.size(); i++) {
         if (i > 0) {
@@ -51,10 +51,10 @@ EvalResultCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
     std::cout << std::endl;
     frame.set(self, Data::null());
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::stringstream oss;
 
     const auto &with = self->withInputs();
@@ -82,5 +82,5 @@ EvalResultCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::getline(std::cin, input);
 
     frame.set(self, std::make_shared<StringData>(input));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }

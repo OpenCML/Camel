@@ -1,21 +1,26 @@
 {
     "name": "camel-scripts",
     "private": true,
-    "version": "0.0.20",
+    "version": "0.0.21",
     "type": "module",
     "pre-commit": [
         "upd"
     ],
     "scripts": {
+        "prepare": "husky && node ./scripts/psrgen.js && node ./scripts/install.js",
         "upd": "node ./scripts/update.js",
         "cnt": "tokei --exclude third_party --exclude package-lock.json --sort lines",
         "init": "node ./scripts/psrgen.js && node ./scripts/install.js",
-        "install": "node ./scripts/install.js",
         "psrgen": "node ./scripts/psrgen.js",
         "codegen": "node ./scripts/codegen.js",
         "check": "node ./scripts/check.js",
         "build": "node ./scripts/build.js",
         "debug": "node ./scripts/debug.js",
+        "profile": "node ./scripts/profile.js",
+        "perf:samply": "samply record camel ./test/perf/main.cml",
+        "perf:record": "perf record -g camel ./test/perf/main.cml",
+        "perf:report": "perf report",
+        "perf:render": "perf record -g --call-graph dwarf camel ./test/perf/main.cml && hotspot ./perf.data",
         "clean": "node ./scripts/clean.js",
         "format": "node ./scripts/format.js",
         "setver": "node ./scripts/setver.js",
@@ -29,6 +34,7 @@
     },
     "devDependencies": {
         "fs-extra": "^11.3.0",
+        "husky": "^9.1.7",
         "ora": "^8.2.0",
         "sqlite3": "^5.1.7"
     }

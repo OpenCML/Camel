@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 20, 2025
- * Updated: Aug. 20, 2025
+ * Updated: Sep. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #ifndef NDEBUG
 
+#include <cstdint>
 #include <string>
 
 void trace_event_begin(const std::string &name, const std::string &cat = "default");

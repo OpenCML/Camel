@@ -1,0 +1,72 @@
+module snake
+
+import { now, sleep } from time
+
+// Map size
+let WIDTH = 20
+let HEIGHT = 10
+
+// Coordinate point
+type Point = {
+    x: int,
+    y: int
+}
+
+func render(snake: Point[]): void sync {
+    let rows = range(0, HEIGHT)
+
+    rows.foreach((y: int) => sync {
+        let cols = range(0, WIDTH)
+        let lines = cols.map((x: int): string => {
+            let p = {x: x, y: y}
+            return if snake.contains(p) then "O" else "."
+        })
+        println("".join(lines))
+    })
+
+    println("")
+}
+
+func move_snake(snake: Point[], dir: int): Point[] {
+    let head = snake.first()
+    let new_head = match dir {
+        case 0 => { x: head.$x, y: head.$y - 1 }  // Up
+        case 1 => { x: head.$x, y: head.$y + 1 }  // Down
+        case 2 => { x: head.$x - 1, y: head.$y }  // Left
+        case 3 => { x: head.$x + 1, y: head.$y }  // Right
+        case _ => head
+    }
+    return [new_head].extend(snake.slice(0, snake.len() - 1))
+}
+
+// Check if the snake hits the wall
+func hit_wall(p: Point): bool {
+    return p.$x < 0 || p.$x >= WIDTH || p.$y < 0 || p.$y >= HEIGHT
+}
+
+// Recursive game loop
+func game_loop(snake: Point[], dir: Dir, steps: int) sync {
+    render(snake)
+    let new_snake = move_snake(snake, dir)
+    let head = new_snake.first()
+
+    if hit_wall(head) then {
+        println("Game over! You hit the wall after {} steps.".format(steps))
+    } else sync {
+        sleep(0.2)  // Delay for visual effect
+        // Recursive call for next frame
+        game_loop(new_snake, dir, steps + 1)
+    }
+}
+
+// Entry point
+func main(): int sync {
+    println("Starting recursive Snake Game...")
+
+    let initial_snake = [{ x: 5, y: 5}, { x: 4, y: 5}, { x: 3, y: 5}]
+    let direction = 0  // Initial direction: Up
+
+    game_loop(initial_snake, direction, 0)
+
+    return 0
+}

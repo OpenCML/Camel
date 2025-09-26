@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ std::string format_vector(const std::string &fmtStr, const std::vector<std::stri
     return fmt::vformat(fmtStr, store);
 }
 
-EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &with = self->withInputs();
     const auto &norm = self->normInputs();
 
@@ -46,7 +46,7 @@ EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::IncorrectArgsCount)
             .commit("<format>", "at least 1 with arg", std::to_string(norm.size()));
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (norm.empty()) {
@@ -54,7 +54,7 @@ EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::IncorrectArgsCount)
             .commit("<format>", "at least 1 norm arg", std::to_string(norm.size()));
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     const data_ptr_t &fmtStrData = frame.get(with[0]);
@@ -63,7 +63,7 @@ EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<format>", "string", fmtStrData->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     std::string fmtStr = fmtStrData->as<StringData>(Type::String())->data();
@@ -83,5 +83,58 @@ EvalResultCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         frame.set(self, Data::null());
     }
 
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __join__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &with = self->withInputs();
+    const auto &norm = self->normInputs();
+
+    if (with.empty()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<join>", "1 with arg (separator)", std::to_string(with.size()));
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    if (norm.empty()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<join>", "at least 1 norm arg", std::to_string(norm.size()));
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &sepData = frame.get(with[0]);
+    if (!Type::castSafetyCheck(sepData->type(), Type::String())) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<join>", "string (separator)", sepData->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    std::string separator = sepData->as<StringData>(Type::String())->data();
+
+    std::ostringstream joined;
+
+    const data_ptr_t &arr = frame.get(norm.front());
+    if (Type::castSafetyCheck(arr->type(), Type::Vector(Type::String()))) {
+        auto vecData = arr->as<VectorData>(Type::Vector(Type::String()));
+        for (auto &arg : vecData->raw()) {
+            if (joined.tellp() > 0)
+                joined << separator;
+            arg->print(joined);
+        }
+    } else {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<join>", "list/array/vector<string>", arr->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    frame.set(self, std::make_shared<StringData>(joined.str()));
+    return OperatorReturnCode::OK;
 }

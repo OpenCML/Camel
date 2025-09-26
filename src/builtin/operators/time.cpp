@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,8 +26,14 @@
 namespace GIR = GraphIR;
 
 #include <chrono>
+#include <cstring> // for std::memset
+#include <ctime>
 
-EvalResultCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
+OperatorReturnCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     auto now = std::chrono::system_clock::now();
     auto epoch = now.time_since_epoch();
     double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count() / 1000.0;
@@ -36,17 +42,17 @@ EvalResultCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     seconds += 8 * 3600;
 
     frame.set(self, std::make_shared<DoubleData>(seconds));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &norm = self->normInputs();
     if (norm.size() != 2) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
             .commit("<strftime>", "exactly 2 arguments", std::to_string(norm.size()));
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     const data_ptr_t &time_val = frame.get(norm[0]);
@@ -57,7 +63,7 @@ EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> first argument must be a float timestamp");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (fmt_val->type() != Type::String()) {
@@ -65,7 +71,7 @@ EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> second argument must be a string format");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     double timestamp = time_val->as<DoubleData>(Type::Double())->data();
@@ -75,7 +81,27 @@ EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
 
     std::time_t tt = static_cast<std::time_t>(timestamp);
     std::tm tm;
-    localtime_s(&tm, &tt); // Still uses local time to represent UTC+8
+    std::memset(&tm, 0, sizeof(std::tm));
+
+#if defined(_WIN32)
+    // Windows: localtime_s
+    if (localtime_s(&tm, &tt) != 0) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<strftime> failed to convert time using localtime_s");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+#else
+    // POSIX: localtime_r
+    if (localtime_r(&tt, &tm) == nullptr) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<strftime> failed to convert time using localtime_r");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+#endif
 
     auto fmt = fmt_val->as<StringData>(Type::String())->data();
 
@@ -85,21 +111,21 @@ EvalResultCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> formatting failed (buffer too small or invalid format)");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, std::make_shared<StringData>(std::string(buffer)));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &norm = self->normInputs();
     if (norm.size() != 2) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
             .commit("<strptime>", "exactly 2 arguments", std::to_string(norm.size()));
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     const data_ptr_t &str_val = frame.get(norm[0]);
@@ -110,7 +136,7 @@ EvalResultCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strptime> requires two string arguments");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     auto time_str = str_val->as<StringData>(Type::String())->data();
@@ -122,19 +148,19 @@ EvalResultCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strptime> failed to parse time string with format: " + fmt_str);
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     std::time_t time_epoch = std::mktime(&tm);
     if (time_epoch == -1) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strptime> mktime conversion failed");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     // Add UTC+8 offset
     double seconds = static_cast<double>(time_epoch) + 8 * 3600;
 
     frame.set(self, std::make_shared<DoubleData>(seconds));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }

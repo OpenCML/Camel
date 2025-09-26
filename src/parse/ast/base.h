@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,7 @@
 #include "core/func.h"
 #include "core/impl.h"
 #include "core/literal.h"
+#include "error/base.h"
 #include "error/diagnostics/range.h"
 #include "utils/assert.h"
 
@@ -42,6 +43,7 @@ enum class LoadType {
     Stmt,
     Data,
     Type,
+    Null,
 
     NamedData,
     NamedType,
@@ -241,6 +243,12 @@ class NamedPairLoad : public Load {
   private:
     Reference ref_;
     bool isVar_;
+};
+
+class NullLoad : public Load {
+  public:
+    NullLoad() : Load(LoadType::Null) {}
+    const std::string toString() const override { return "Null"; }
 };
 
 class RepeatedLoad : public Load {

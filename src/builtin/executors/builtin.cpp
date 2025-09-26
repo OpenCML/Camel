@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 09, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,8 @@
 #include "../operators/os.h"
 #include "../operators/other.h"
 #include "../operators/str.h"
+#include "../operators/struct.h"
+#include "../operators/this.h"
 #include "../operators/time.h"
 
 const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
@@ -65,11 +67,23 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"io/println", __println__},
         {"io/input", __input__},
 
+        // struct
+        {"struct/len", __len__},
+        {"struct/range", __range__},
+        {"struct/slice", __slice__},
+        {"struct/concat", __concat__},
+        {"struct/concat", __concat__},
+        {"struct/append", __append__},
+        {"struct/extend", __extend__},
+        {"struct/contains", __contains__},
+
         // os
         {"os/sleep", __sleep__},
+        {"os/whoami", __whoami__},
 
         // str
         {"str/format", __format__},
+        {"str/join", __join__},
 
         // math
         {"str/abs", __abs__},
@@ -84,18 +98,23 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"time/now", __now__},
         {"time/strftime", __strftime__},
         {"time/strptime", __strptime__},
+
+        // this
+        {"zen", __zen__},
     };
     return map;
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsOpMap()) {};
 
-EvalResultCode
+OperatorReturnCode
 BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
-    l.in("BasicExec").debug("Evaluating operator of URI: {}", uri);
+    EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
-        throw CamelRuntimeException(RetCode::InvalidURI, std::format("Invalid URI: {}", uri));
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidURI,
+            std::format("Invalid URI: {}", uri));
     }
     return it->second(self, frame, *context_);
 };

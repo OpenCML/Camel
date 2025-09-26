@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 21, 2025
- * Updated: Jul. 21, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -128,37 +128,10 @@ class DataArray : public std::enable_shared_from_this<DataArray> {
     virtual void set(const data_ptr_t &data, size_t index) = 0;
     virtual data_ptr_t get(size_t index) const = 0;
     virtual bool has(size_t index) const = 0;
-
+    virtual void reset() = 0;
     virtual array_ptr_t clone() = 0;
 
-    std::string toString() const {
-        std::string dataPreview;
-        if (dataArr_.empty()) {
-            dataPreview = "[]";
-        } else {
-            dataPreview = "[";
-            size_t previewCount = std::min(dataArr_.size(), static_cast<size_t>(10));
-            for (size_t i = 0; i < previewCount; ++i) {
-                if (dataArr_[i]) {
-                    dataPreview += dataArr_[i]->toString();
-                } else {
-                    dataPreview += "none";
-                }
-                if (i < previewCount - 1) {
-                    dataPreview += ", ";
-                }
-            }
-            if (dataArr_.size() > previewCount) {
-                dataPreview += ", ...";
-            }
-            dataPreview += "]";
-        }
-        return std::format(
-            "DataArray({}, {}): {}",
-            std::string(type_),
-            dataArr_.size(),
-            dataPreview);
-    }
+    std::string toString() const;
 
   protected:
     DataType type_;
@@ -180,8 +153,12 @@ class ConstantArray : public DataArray {
         return index < dataArr_.size() && dataArr_[index] != nullptr;
     }
     void set(const data_ptr_t &data, size_t index) override {
-        l.in("DataArray")
-            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
+        EXEC_WHEN_DEBUG(l.in("DataArray")
+                            .debug(
+                                "Setting data ({}) at index {} in {}.",
+                                data->toString(),
+                                index,
+                                toString()));
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -198,7 +175,7 @@ class ConstantArray : public DataArray {
         ASSERT(data != nullptr, "Accessing not-initialized data in a constant array.");
         return data;
     }
-
+    virtual void reset() override { std::fill(dataArr_.begin(), dataArr_.end(), nullptr); }
     array_ptr_t clone() override { return shared_from_this(); }
 };
 
@@ -224,8 +201,12 @@ class VariableArray : public DataArray {
 
     virtual bool has(size_t index) const override { return index < dataArr_.size(); }
     void set(const data_ptr_t &data, size_t index) override {
-        l.in("DataArray")
-            .debug("Setting data ({}) at index {} in {}.", data->toString(), index, toString());
+        EXEC_WHEN_DEBUG(l.in("DataArray")
+                            .debug(
+                                "Setting data ({}) at index {} in {}.",
+                                data->toString(),
+                                index,
+                                toString()));
         ASSERT(
             index < dataArr_.size(),
             std::format("Data index {} out of bounds (size {})", index, dataArr_.size()));
@@ -247,7 +228,12 @@ class VariableArray : public DataArray {
         }
         return data;
     }
-
+    virtual void reset() override {
+        dataArr_.clear();
+        if (indices_) {
+            dataArr_.resize(indices_->size(), nullptr);
+        }
+    }
     array_ptr_t clone() override {
         auto cloned = std::make_shared<VariableArray>(type_.shared);
         cloned->refs_ = refs_;
@@ -340,8 +326,22 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
             }
         }
     }
-
+    void reset() {
+        runtimeConstants_->reset();
+        runtimeVariables_->reset();
+    }
     arena_ptr_t clone() { return std::make_shared<DataArena>(*this); }
+
+    std::string toString() const {
+        return std::format(
+            "DataArena:\n  Shared Constants: {}\n  Shared Variables: {}\n  Runtime Constants: {}\n "
+            " "
+            "Runtime Variables: {}",
+            sharedConstants_->toString(),
+            sharedVariables_->toString(),
+            runtimeConstants_->toString(),
+            runtimeVariables_->toString());
+    }
 
   private:
     std::shared_ptr<ConstantArray> sharedConstants_;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Jul. 09, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -275,10 +275,10 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
                 node_ptr_t dataNode = visitData(dataASTNode);
                 const string id = std::to_string(idIndex_++);
-                node_ptr_t dataRefNode = createNodeAs<NRefLoad>(id);
+                node_ptr_t nRefNode = createNodeAs<NRefLoad>(id);
                 node_ptr_t dRefNode = createNodeAs<DRefLoad>(id);
-                *dataRefNode << dataNode;
-                *res << dataRefNode;
+                *nRefNode << dataNode;
+                *res << nRefNode;
                 for (size_t i = 0; i < refs.size(); ++i) {
                     const auto &ref = refs[i];
                     if (!validateIdent(ref.ident())) {
@@ -783,13 +783,17 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     *brchNode << visitData(ast->atAs<AST::DataLoad>(0)); // condition
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
     node_ptr_t thenNode = visitStmtBlock(thenBlock);
-    *brchNode << thenNode; // then block
+    node_ptr_t trueCase = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
+    *trueCase << thenNode;
+    *brchNode << trueCase;
     const auto &elseNode = ast->optAtAs<AST::StmtBlockLoad>(2);
+    node_ptr_t elseCase = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+    *brchNode << elseCase;
     if (elseNode) {
         node_ptr_t elseBlock = visitStmtBlock(elseNode);
-        *brchNode << elseBlock; // else block
+        *elseCase << elseBlock;
     } else {
-        *brchNode << createNodeAs<ExecLoad>(); // empty else block
+        *elseCase << createNodeAs<ExecLoad>(); // empty else block
     }
     LEAVE("IfExpr");
     return brchNode;
@@ -801,10 +805,28 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     ENTER("MatchExpr");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("MatchExpr");
-    throw BuildAbortException();
+    const auto &matchExprLoad = ast->loadAs<AST::MatchExprLoad>();
+    const Reference &matchRef = matchExprLoad->ref();
+    node_ptr_t dRefNode = createNodeAs<DRefLoad>(matchRef); // condition node
+    node_ptr_t brchNode = createNodeAs<BrchLoad>();
+    *brchNode << dRefNode;
+    for (const auto &aCaseNode : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &caseLoadType = aCaseNode->front()->type();
+        node_ptr_t gCaseNode = nullptr;
+        if (caseLoadType != AST::LoadType::Null) {
+            gCaseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::Value);
+            node_ptr_t caseDataNode = visitData(aCaseNode->atAs<AST::DataLoad>(0));
+            node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
+            *gCaseNode << caseDataNode << caseExprNode;
+        } else {
+            gCaseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
+            *gCaseNode << caseExprNode;
+        }
+        *brchNode << gCaseNode;
+    }
     LEAVE("MatchExpr");
-    return nullptr;
+    return brchNode;
 }
 
 /*
@@ -1152,12 +1174,12 @@ type_ptr_t Builder::visitDictType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for DictType");
     auto res = make_shared<DictType>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
-        const auto &namedPair = child->loadAs<AST::NamedPairLoad>();
-        const string &name = namedPair->getRef().ident();
+        const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
+        const string &name = namedType->getRef().ident();
         type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
         data_ptr_t data = nullptr;
         if (!res->add(name, type)) {
-            diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
+            diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(name);
             throw BuildAbortException();
         }
     }

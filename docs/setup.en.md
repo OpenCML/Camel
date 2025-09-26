@@ -177,21 +177,26 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
 
 ### 3.4 Installing Project Dependencies
 
-Run the following commands to install project dependencies:
+Run the following commands to install the required dependencies:
 
-1. Initialize dependencies (only needed once):
+1. Install project dependencies (automatically installs and initializes the project):
+   ```bash
+   npm install
+   ```
+
+2. Manually initialize the project (if needed):
    ```bash
    npm run init
    ```
 
-2. Update Conan dependencies:
-   ```bash
-   npm run install
-   ```
-
-3. If Antlr4 grammar definitions are updated, regenerate the parser:
+3. If the Antlr4 grammar definitions have changed, regenerate the parser:
    ```bash
    npm run psrgen
+   ```
+
+4. For VSCode users, it is recommended to run the following command to fix Intellisense errors:
+   ```bash
+   npm run fix:vsc
    ```
 
 ---
@@ -215,66 +220,7 @@ Run the following commands to install project dependencies:
 
 ---
 
-## 4. Recommended VSCode Configuration
-
-### 4.1 Basic Configuration
-
-Create a `.vscode/settings.json` file:
-```json
-{
-    "files.associations": {
-        ".opencmlrc": "json"
-    },
-    "editor.tabSize": 4
-}
-```
-
-### 4.2 Debug Configuration
-
-Create a `.vscode/launch.json` file:
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "C++ Debug (Windows)",
-      "cwd": "${workspaceFolder}",
-      "type": "cppvsdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/build/Debug/camel.exe",
-      "symbolSearchPath": "${workspaceFolder}/build/Debug",
-      "args": ["inspect", "--cst", "D:\\Projects\\Camel\\test\\format\\format.cml"],
-      "console": "externalTerminal",
-      "logging": {
-        "moduleLoad": false,
-        "trace": true
-      },
-    }
-  ]
-}
-```
-
-### 4.3 Include Path Configuration
-
-Create a `.vscode/c_cpp_properties.json` file:
-```json
-{
-  "configurations": [
-    {
-      "includePath": [
-        "${workspaceFolder}/src",
-        "${workspaceFolder}/vendor",
-        "${workspaceFolder}/third_party"
-      ],
-      "cppStandard": "c++23"
-    }
-  ]
-}
-```
-
----
-
-## 5. Reference Resources
+## 4. Reference Resources
 
 1. [CMake Official Documentation](https://cmake.org/documentation/)
 2. [Conan 2.0 Best Practices](https://docs.conan.io/2/)

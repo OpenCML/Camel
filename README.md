@@ -83,12 +83,14 @@ sync func train(x: Tensor, y: Tensor): Tensor {
 pip install camel-lang
 ```
 
-### Hello World in Camel [WIP]
+### Hello World
 
 ```camel
 // hello.cml
+module main
+
 func main() {
-    print(`Hello, ${os::user()}!`)
+    println('Hello, {}!'.format(whoami()))
 }
 ```
 
@@ -96,6 +98,34 @@ Run it:
 
 ```bash
 camel hello.cml
+```
+
+---
+
+### Advanced Usage
+
+Calculate the sum of an arithmetic sequence and measure execution time:
+
+```camel
+module arithmetic_sum
+
+import { now } from time
+
+func sum(n: int64, a: int64, d: int64, acc: int64): int64 {
+    return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
+}
+
+func main(): int sync {
+    let n = 100000  // number of terms
+    let a = 1       // first term
+    let d = 3       // common difference
+    println("Start computing arithmetic_sum(n={}, a={}, d={})...".format(n, a, d))
+    let start = now()
+    let res = sum(n, a, d, 0)
+    let duration = now() - start
+    println("Sum of arithmetic series = {} (computed in {} seconds)".format(res, duration))
+    return 0
+}
 ```
 
 ## 🧠 Design Philosophy
@@ -120,7 +150,7 @@ camel hello.cml
 
 ## 📚 Learn More
 
-- [Build Yourself](docs/setup.en.md) - Environment setup and installation guide
+- [Build Yourself](docs/setup.md) - Environment setup and installation guide
 - [WIP] [Documentation](https://docs.opencml.com/) - Language specs and API reference
 - [WIP] [Examples](examples/) - From MNIST training to distributed pipelines
 - [WIP] [Whitepaper](https://arxiv.org/abs/xxxx.xxxx) - Deep dive into the compiler architecture

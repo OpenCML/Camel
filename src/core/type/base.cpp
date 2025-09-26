@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -196,6 +196,18 @@ type_ptr_t Type::List() {
         type = tt::as_shared<Type>(make_shared<ListType>());
     }
     return type;
+}
+
+type_ptr_t Type::Array(const type_ptr_t &elementType, size_t size) {
+    return tt::as_shared<Type>(make_shared<ArrayType>(elementType, size));
+}
+
+type_ptr_t Type::Tuple(const std::vector<type_ptr_t> &types) {
+    return tt::as_shared<Type>(make_shared<TupleType>(types));
+}
+
+type_ptr_t Type::Vector(const type_ptr_t &elementType) {
+    return tt::as_shared<Type>(make_shared<VectorType>(elementType));
 }
 
 type_ptr_t Type::Any() {

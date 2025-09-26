@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,9 +83,13 @@ class Graph : public std::enable_shared_from_this<Graph> {
     Graph(graph_ptr_t graph = nullptr, const std::string &name = "") : name_(name), arena_() {
         outer_ = graph;
         arena_ = std::make_shared<DataArena>();
-        l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_);
+        EXEC_WHEN_DEBUG(
+            l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
     }
-    ~Graph() { l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_); };
+    ~Graph() {
+        EXEC_WHEN_DEBUG(
+            l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_));
+    };
 
     static graph_ptr_t create(graph_ptr_t graph = nullptr, const std::string &name = "") {
         static int anonymousIdx = 0;
@@ -122,9 +126,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
     DataIndex addSharedConstant(const data_ptr_t &data) { return arena_->addConstant(data, true); }
-    DataIndex addRuntimeConstant(const data_ptr_t &data) {
-        return arena_->addConstant(data, false);
-    }
+    DataIndex addRuntimeConstant() { return arena_->addConstant(nullptr, false); }
     DataIndex addVariable(DataIndex index) { return arena_->addVariable(index); }
 
     void setFuncType(const func_type_ptr_t &type);
@@ -356,12 +358,15 @@ class StructNode : public Node {
 };
 
 class SourceNode : public Node {
+    bool isPort_;
+
   public:
-    SourceNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Source, index) {}
+    SourceNode(graph_ptr_t graph, const DataIndex &index, bool isPort = false)
+        : Node(graph, NodeType::Source, index), isPort_(isPort) {}
     ~SourceNode() = default;
 
-    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
-        auto node = std::make_shared<SourceNode>(graph, index);
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index, bool isPort = false) {
+        auto node = std::make_shared<SourceNode>(graph, index, isPort);
         graph->addNode(node);
         return node;
     }
@@ -383,7 +388,7 @@ class SourceNode : public Node {
             "Source({}, {}): {}",
             std::string(dataIndex_.type),
             dataIndex_.index,
-            arena->has(dataIndex_) ? dataOf(*arena)->toString() : "null");
+            isPort_ ? "<PORT>" : dataOf(*arena)->toString());
     }
 };
 

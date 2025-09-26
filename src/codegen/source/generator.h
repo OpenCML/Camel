@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 13, 2025
- * Updated: Sep. 13, 2025
+ * Updated: Sep. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
 
-#include "src\parse\ast\ast.h"
+#include "src/parse/ast/ast.h"
 #include <string>
 
 namespace ASTCodeGen {

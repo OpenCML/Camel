@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,7 +42,7 @@ std::shared_ptr<TData> cast(const data_ptr_t &data, const type_ptr_t &type) {
     return data->as<TData>(type);
 }
 
-EvalResultCode eval_assignment_op(
+OperatorReturnCode eval_assignment_op(
     GIR::node_ptr_t &self, Frame &frame, Context &ctx, const std::string &opname,
     const BinaryOpFunc &op_func, bool require_integral = false, bool check_div_zero = false) {
     const auto &ins = self->normInputs();
@@ -60,7 +60,7 @@ EvalResultCode eval_assignment_op(
             ->of(RuntimeDiag::RuntimeError)
             .commit("<" + opname + "> requires integer types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!lhs_type->primary() || !rhs_type->primary()) {
@@ -68,7 +68,7 @@ EvalResultCode eval_assignment_op(
             ->of(RuntimeDiag::RuntimeError)
             .commit("<" + opname + "> requires primary types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!Type::castSafetyCheck(rhs_type, lhs_type)) {
@@ -76,24 +76,24 @@ EvalResultCode eval_assignment_op(
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<" + opname + ">", lhs_type->toString(), rhs_type->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (check_div_zero && rhs->isZero()) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<" + opname + "> division by zero");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result = op_func(lhs, rhs, lhs_type, ctx);
     if (!result) {
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(ins[0], result);
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
 data_ptr_t
@@ -270,54 +270,54 @@ do_or(const data_ptr_t &lhs, const data_ptr_t &rhs, const type_ptr_t &type, Cont
 
 } // anonymous namespace
 
-EvalResultCode __builtin__assn__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "assn requires exactly two arguments");
     const data_ptr_t &rhs = frame.get(ins[1]);
     frame.set(ins[0], rhs);
     frame.set(self, rhs);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__assn_add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_add", do_add);
 }
 
-EvalResultCode __builtin__assn_sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_sub", do_sub);
 }
 
-EvalResultCode __builtin__assn_mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_mul", do_mul);
 }
 
-EvalResultCode __builtin__assn_div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_div", do_div, false, true);
 }
 
-EvalResultCode __builtin__assn_mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_mod", do_mod, false, true);
 }
 
-EvalResultCode __builtin__assn_exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_exp", do_exp);
 }
 
-EvalResultCode __builtin__assn_and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_and", do_and, true);
 }
 
-EvalResultCode __builtin__assn_or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     return eval_assignment_op(self, frame, ctx, "assn_or", do_or, true);
 }
 
-EvalResultCode __builtin__assn_mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__assn_mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<assn_mat> not implemented");
     frame.set(self, Data::null());
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "or operator requires exactly two arguments");
 
@@ -329,14 +329,14 @@ EvalResultCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<or>", "bool", left->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     if (!Type::castSafetyCheck(right->type(), Type::Bool())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<or>", "bool", right->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     auto l = left->as<BoolData>(Type::Bool());
@@ -346,10 +346,10 @@ EvalResultCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
         auto r = right->as<BoolData>(Type::Bool());
         frame.set(self, std::make_shared<BoolData>(r->data()));
     }
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "and operator requires exactly two arguments");
 
@@ -361,14 +361,14 @@ EvalResultCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<and>", "bool", left->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     if (!Type::castSafetyCheck(right->type(), Type::Bool())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<and>", "bool", right->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     auto l = left->as<BoolData>(Type::Bool());
@@ -378,10 +378,10 @@ EvalResultCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context &ct
         auto r = right->as<BoolData>(Type::Bool());
         frame.set(self, std::make_shared<BoolData>(r->data()));
     }
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "eq operator requires exactly two arguments");
 
@@ -390,10 +390,10 @@ EvalResultCode __builtin__eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
 
     bool res = left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "neq operator requires exactly two arguments");
 
@@ -402,10 +402,10 @@ EvalResultCode __builtin__neq__(GIR::node_ptr_t &self, Frame &frame, Context &ct
 
     bool res = !left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__strict_eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__strict_eq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "strict_eq operator requires exactly two arguments");
 
@@ -414,10 +414,10 @@ EvalResultCode __builtin__strict_eq__(GIR::node_ptr_t &self, Frame &frame, Conte
 
     bool res = left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__strict_neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__strict_neq__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "strict_neq operator requires exactly two arguments");
 
@@ -426,10 +426,10 @@ EvalResultCode __builtin__strict_neq__(GIR::node_ptr_t &self, Frame &frame, Cont
 
     bool res = !left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__lt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__lt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "lt operator requires exactly two arguments");
 
@@ -441,24 +441,24 @@ EvalResultCode __builtin__lt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<lt>", "double", left->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     if (!Type::castSafetyCheck(right->type(), Type::Double())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<lt>", "double", right->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
     frame.set(self, std::make_shared<BoolData>(l->data() < r->data()));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__le__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__le__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "le operator requires exactly two arguments");
 
@@ -470,24 +470,24 @@ EvalResultCode __builtin__le__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<le>", "double", left->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     if (!Type::castSafetyCheck(right->type(), Type::Double())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<le>", "double", right->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
     frame.set(self, std::make_shared<BoolData>(l->data() <= r->data()));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__gt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__gt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "gt operator requires exactly two arguments");
 
@@ -499,24 +499,24 @@ EvalResultCode __builtin__gt__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<gt>", "double", left->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     if (!Type::castSafetyCheck(right->type(), Type::Double())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<gt>", "double", right->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
     frame.set(self, std::make_shared<BoolData>(l->data() > r->data()));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "ge operator requires exactly two arguments");
 
@@ -528,24 +528,24 @@ EvalResultCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<ge>", "double", left->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
     if (!Type::castSafetyCheck(right->type(), Type::Double())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<ge>", "double", right->type()->toString());
         frame.set(self, std::make_shared<BoolData>(false));
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
     frame.set(self, std::make_shared<BoolData>(l->data() >= r->data()));
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "add operator requires exactly two arguments");
 
@@ -557,7 +557,7 @@ EvalResultCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<add> operator requires primary types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
@@ -565,7 +565,7 @@ EvalResultCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<add>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -594,14 +594,14 @@ EvalResultCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<add> operator not supported for type " + left->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "sub operator requires exactly two arguments");
 
@@ -613,7 +613,7 @@ EvalResultCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sub> operator requires primary types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
@@ -621,7 +621,7 @@ EvalResultCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<sub>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -646,14 +646,14 @@ EvalResultCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sub> operator not supported for type " + left->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "mul operator requires exactly two arguments");
 
@@ -665,7 +665,7 @@ EvalResultCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<mul> operator requires primary types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
@@ -673,7 +673,7 @@ EvalResultCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<mul>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -698,14 +698,14 @@ EvalResultCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<mul> operator not supported for type " + left->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "div operator requires exactly two arguments");
 
@@ -717,7 +717,7 @@ EvalResultCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<div> operator requires primary types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
@@ -725,7 +725,7 @@ EvalResultCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<div>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     // 除以 0 检查
@@ -735,7 +735,7 @@ EvalResultCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ct
         (right->type() == Type::Double() && right->as<DoubleData>(Type::Double())->data() == 0.0)) {
         ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -760,14 +760,14 @@ EvalResultCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<div> operator not supported for type " + left->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "mod operator requires exactly two arguments");
 
@@ -779,7 +779,7 @@ EvalResultCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<mod> operator requires primary types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
@@ -787,14 +787,14 @@ EvalResultCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<mod>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
         (right->type() == Type::Int64() && right->as<Int64Data>(Type::Int64())->data() == 0)) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -811,20 +811,20 @@ EvalResultCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<mod> operator only supports integer types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "mat operator not implemented");
     frame.set(self, Data::null());
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "exp operator requires exactly two arguments");
 
@@ -836,7 +836,7 @@ EvalResultCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<exp> operator requires primary types");
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     if (!Type::castSafetyCheck(exponent->type(), base->type())) {
@@ -844,7 +844,7 @@ EvalResultCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(1, "<exp>", base->type()->toString(), exponent->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     data_ptr_t result;
@@ -869,15 +869,15 @@ EvalResultCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<exp> operator not supported for type " + base->type()->toString());
         frame.set(self, Data::null());
-        return EvalResultCode::OK;
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, result);
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }
 
-EvalResultCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "idx operator not implemented");
     frame.set(self, Data::null());
-    return EvalResultCode::OK;
+    return OperatorReturnCode::OK;
 }

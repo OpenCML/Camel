@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,13 +29,23 @@ class MapData : public StructData {
 
   public:
     MapData(type_ptr_t keyType, type_ptr_t dataType);
+    MapData(type_ptr_t mapType, std::unordered_map<data_ptr_t, data_ptr_t> &&data);
     virtual ~MapData() = default;
+
+    static std::shared_ptr<MapData> create(type_ptr_t keyType, type_ptr_t dataType) {
+        return std::make_shared<MapData>(keyType, dataType);
+    }
+    static std::shared_ptr<MapData>
+    create(type_ptr_t mapType, std::unordered_map<data_ptr_t, data_ptr_t> &&data) {
+        return std::make_shared<MapData>(mapType, std::move(data));
+    }
 
     bool emplace(const data_ptr_t &key, const data_ptr_t &val);
 
     bool set(const data_ptr_t &key, const data_ptr_t &val);
     bool del(const data_ptr_t &key);
     data_ptr_t get(const data_ptr_t &key) const;
+    std::unordered_map<data_ptr_t, data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }

@@ -13,14 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 05, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "utils/assert.h"
-#include "utils/debug.h"
 
 #include <functional>
 #include <iterator>
@@ -89,8 +88,9 @@ auto topoSort(
 }
 
 template <typename NodeType, typename GetInputsFunc>
-std::vector<NodeType>
-findReachable(const NodeType &startNode, GetInputsFunc getInputs, bool reverse = false) {
+std::vector<NodeType> findReachable(
+    const NodeType &startNode, GetInputsFunc getInputs, bool skipStart = false,
+    bool reverse = false) {
     std::unordered_set<NodeType> visited;
     std::vector<NodeType> reachableNodes;
 
@@ -106,7 +106,17 @@ findReachable(const NodeType &startNode, GetInputsFunc getInputs, bool reverse =
     };
 
     visited.insert(startNode);
-    dfs(startNode);
+
+    if (skipStart) {
+        // Start DFS from its inputs only (skip adding startNode itself)
+        for (const auto &input : getInputs(startNode)) {
+            if (visited.insert(input).second) {
+                dfs(input);
+            }
+        }
+    } else {
+        dfs(startNode);
+    }
 
     if (reverse) {
         std::reverse(reachableNodes.begin(), reachableNodes.end());

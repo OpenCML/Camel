@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,11 @@ VectorData::VectorData(type_ptr_t type, data_list_t data) : data_(data) {
         i++;
     }
     type_ = std::make_shared<VectorType>(type);
+}
+
+VectorData::VectorData(type_ptr_t type, data_vec_t &&data)
+    : StructData(type), data_(std::move(data)) {
+    ASSERT(type->code() == TypeCode::Vector, "Type is not VectorType");
 }
 
 void VectorData::emplace(const data_ptr_t &e) {

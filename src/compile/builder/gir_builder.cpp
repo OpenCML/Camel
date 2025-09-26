@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,10 +60,10 @@ inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     // which may cause cycles in the graph
     // note: this check can be expensive
     if (to->hasDeepLinkedTo(from)) {
-        l.in("GIR").warn(
+        EXEC_WHEN_DEBUG(l.in("GIR").warn(
             "Prevent linking deeply linked nodes: {} -> {}",
             from->toString(),
-            to->toString());
+            to->toString()));
         return false;
     }
     return true;
@@ -266,11 +266,14 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         }
         node = SourceNode::create(currGraph_, index);
     } else {
-        DataIndex index = graph->addRuntimeConstant(data);
+        DataIndex srcIndex = graph->addSharedConstant(data);
+        node_ptr_t srcNode = SourceNode::create(currGraph_, srcIndex);
+        DataIndex index = graph->addRuntimeConstant();
         if (varied_) {
             index = graph->addVariable(index);
         }
         node = StructNode::create(currGraph_, index, data->type());
+        Node::link(LinkType::With, srcNode, node);
         for (const string &ref : data->refs()) {
             Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
         }
@@ -317,7 +320,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         auto graphs = optGraph.value();
         if (!graphs->empty()) {
             // TODO: generate data as the return value of a function
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             graph_ptr_t &tgtGraph = graphs->front();
             currGraph_->addDependency(tgtGraph);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
@@ -330,7 +333,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (optOp.has_value()) {
         auto ops = optOp.value();
         if (!ops->empty()) {
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             oper_idx_ptr_t &op = ops->front();
             node_ptr_t opNode = OperatorNode::create(graph, index, op);
             LEAVE("DREF");
@@ -347,7 +350,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
             currGraph_->addDependency(tgtGraph);
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
             LEAVE("DREF");
@@ -356,7 +359,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             auto ops = std::get<oper_idx_vec_ptr_t>(e);
             ASSERT(!ops->empty(), "Imported operator list is empty.");
             oper_idx_ptr_t op = ops->front();
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             node_ptr_t opNode = OperatorNode::create(graph, index, op);
             LEAVE("DREF");
             return opNode;
@@ -415,11 +418,19 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     vector<node_ptr_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
-        ASSERT(
-            dataRes.type() == typeid(node_ptr_t),
-            "Unexpected result type from Enter the child of LINK node.");
-        node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
-        inputs.push_back(inputNode);
+        if (dataRes.type() == typeid(graph_ptr_t)) {
+            graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
+            auto funcData = FunctionData::create(subGraph);
+            node_ptr_t portNode =
+                SourceNode::create(currGraph_, currGraph_->addSharedConstant(funcData), true);
+            currGraph_->addDependency(subGraph);
+            inputs.push_back(portNode);
+        } else if (dataRes.type() == typeid(node_ptr_t)) {
+            node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
+            inputs.push_back(inputNode);
+        } else {
+            ASSERT(false, std::format("Unexpected result type from the {} child of LINK node", i));
+        }
     }
     for (size_t i = 0; i < inputs.size(); i++) {
         const node_ptr_t &inputNode = inputs[i];
@@ -468,17 +479,25 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         func_type_ptr_t funcType = tt::as_shared<OperatorNode>(funcNode)->funcType();
         params = funcType->withParams();
     } else {
-        ASSERT(false, "LINK node must be a function or operator node.");
+        ASSERT(false, "WITH node must be a function or operator node.");
     }
     // TODO: check if the number of parameters matches the number of inputs
     vector<node_ptr_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
-        ASSERT(
-            dataRes.type() == typeid(node_ptr_t),
-            "Unexpected result type from Enter the child of LINK node.");
-        node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
-        inputs.push_back(inputNode);
+        if (dataRes.type() == typeid(graph_ptr_t)) {
+            graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
+            auto funcData = FunctionData::create(subGraph);
+            node_ptr_t portNode =
+                SourceNode::create(currGraph_, currGraph_->addSharedConstant(funcData), true);
+            currGraph_->addDependency(subGraph);
+            inputs.push_back(portNode);
+        } else if (dataRes.type() == typeid(node_ptr_t)) {
+            node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
+            inputs.push_back(inputNode);
+        } else {
+            ASSERT(false, std::format("Unexpected result type from the {} child of WITH node", i));
+        }
     }
     for (size_t i = 0; i < inputs.size(); i++) {
         const node_ptr_t &inputNode = inputs[i];
@@ -529,7 +548,7 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ASSERT(tgtNode != nullptr, "Access node target is null.");
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     graph_ptr_t &graph = currGraph_;
-    DataIndex index = graph->addRuntimeConstant(nullptr);
+    DataIndex index = graph->addRuntimeConstant();
     // TODO: here may need inplace access to the data
     node_ptr_t accsNode = AccessNode::create(graph, index, accsLoad->index());
     Node::link(LinkType::Norm, tgtNode, accsNode);
@@ -547,36 +566,57 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
     node_ptr_t brchNode =
         SelectNode::create(currGraph_, condNode->index(), SelectNode::SelectType::Branch);
-    Node::link(LinkType::Norm, condNode, brchNode);
-
-    graph_ptr_t tGraph = enterScope();
-    tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
-    node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (!tGraph->hasOutput() && tNode != nullptr) {
-        tGraph->setOutput(tNode);
-    }
-    leaveScope();
-    currGraph_->addDependency(tGraph);
-    func_ptr_t tData = FunctionData::create(tGraph);
-    node_ptr_t tFunc = FunctionNode::create(graph, graph->addRuntimeConstant(nullptr), tData);
-    Node::link(LinkType::Ctrl, brchNode, tFunc);
-
-    graph_ptr_t fGraph = enterScope();
-    fGraph->setFuncType(std::make_shared<FunctionType>());
-    node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
-    if (!fGraph->hasOutput() && fNode != nullptr) {
-        fGraph->setOutput(fNode);
-    }
-    leaveScope();
-    currGraph_->addDependency(fGraph);
-    func_ptr_t fData = FunctionData::create(fGraph);
-    node_ptr_t fFunc = FunctionNode::create(graph, graph->addRuntimeConstant(nullptr), fData);
-    Node::link(LinkType::Ctrl, brchNode, fFunc);
-
-    DataIndex index = graph->addRuntimeConstant(nullptr);
+    DataIndex index = graph->addRuntimeConstant();
     node_ptr_t joinNode = SelectNode::create(graph, index, SelectNode::SelectType::Join);
-    Node::link(LinkType::Ctrl, tFunc, joinNode);
-    Node::link(LinkType::Ctrl, fFunc, joinNode);
+
+    Node::link(LinkType::With, condNode, brchNode);
+
+    for (size_t i = 1; i < gct->size(); i++) {
+        const auto &caseNode = gct->atAs<GCT::CaseLoad>(i);
+        const auto &caseLoad = caseNode->loadAs<GCT::CaseLoad>();
+        GCT::node_ptr_t caseExecNode = nullptr;
+
+        switch (caseLoad->caseType()) {
+        case GCT::CaseLoad::CaseType::True:
+            ASSERT(caseNode->size() == 1, "True case should have only one child.");
+            caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+            break;
+        case GCT::CaseLoad::CaseType::Else:
+            ASSERT(i == gct->size() - 1, "Else case should be the last case.");
+            ASSERT(caseNode->size() == 1, "Else case should have only one child.");
+            caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+            break;
+        case GCT::CaseLoad::CaseType::Value: {
+            ASSERT(caseNode->size() == 2, "Value case should have two children.");
+            any res = visit(caseNode->at(0));
+            ASSERT(
+                res.type() == typeid(node_ptr_t),
+                "Unexpected result type from visiting the case node.");
+            node_ptr_t valueNode = any_cast<node_ptr_t>(res);
+            Node::link(LinkType::Norm, valueNode, brchNode);
+            caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
+            break;
+        }
+        default:
+            ASSERT(false, "Unknown case type in BRCH node.");
+        }
+
+        graph_ptr_t subGraph = enterScope();
+        // TODO: set the function type properly
+        subGraph->setFuncType(std::make_shared<FunctionType>());
+        node_ptr_t execNode = visitExecNode(caseExecNode);
+        if (!subGraph->hasOutput() && execNode != nullptr) {
+            subGraph->setOutput(execNode);
+        }
+        leaveScope();
+
+        currGraph_->addDependency(subGraph);
+        func_ptr_t funcData = FunctionData::create(subGraph);
+        node_ptr_t funcNode = FunctionNode::create(graph, graph->addRuntimeConstant(), funcData);
+
+        Node::link(LinkType::Ctrl, brchNode, funcNode);
+        Node::link(LinkType::Ctrl, funcNode, joinNode);
+    }
 
     LEAVE("BRCH");
     return joinNode;
@@ -595,28 +635,30 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ASSERT(
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter child of EXIT node.");
-    node_ptr_t node = any_cast<node_ptr_t>(res);
-    node_ptr_t resultNode = node;
-    if (nodeModifierMap_.count(node.get())) {
-        resultNode = nodeModifierMap_[node.get()].lock();
+    node_ptr_t resNode = any_cast<node_ptr_t>(res);
+    currGraph_->setOutput(resNode);
+    if (nodeModifierMap_.count(resNode.get())) {
+        node_ptr_t modifier = nodeModifierMap_[resNode.get()].lock();
+        node_ptr_t returnNode = currGraph_->returnNode();
+        if (modifier && linkCheek(modifier, returnNode)) {
+            Node::link(LinkType::Ctrl, modifier, returnNode);
+        }
     }
-    currGraph_->setOutput(resultNode);
     node_ptr_t exitNode = currGraph_->returnNode();
     if (synced_ && lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, exitNode)) {
         Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
     }
     LEAVE("EXIT");
-    return resultNode;
+    return resNode;
 }
 
 node_ptr_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
     const auto &execLoad = gct->loadAs<GCT::ExecLoad>();
     bool old = synced_;
+    node_ptr_t oldFuncNode = lastCalledFuncNode_;
     synced_ = execLoad->synced();
-    if (synced_ && !old) {
-        lastCalledFuncNode_ = nullptr;
-    }
+    lastCalledFuncNode_ = nullptr;
     node_ptr_t res = nullptr;
     for (size_t i = 0; i < gct->size(); i++) {
         try {
@@ -629,6 +671,7 @@ node_ptr_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         }
     }
     synced_ = old;
+    lastCalledFuncNode_ = oldFuncNode;
     LEAVE("EXEC");
     return res;
 }
