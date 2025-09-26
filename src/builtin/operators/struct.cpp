@@ -22,57 +22,45 @@
 #include "core/context/context.h"
 #include "core/context/frame.h"
 
-OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withs = self->withInputs();
-    if (withs.size() != 1) {
+OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    if (ins.size() != 1) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<contains> operator requires one with argument: (collection)");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    const auto &norms = self->normInputs();
-    if (norms.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<contains> operator requires one norm argument: (target)");
+            .commit("<len> operator requires exactly one argument");
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
 
-    const data_ptr_t &collection = frame.get(withs[0]);
-    const data_ptr_t &target = frame.get(norms[0]);
+    const data_ptr_t &arg = frame.get(ins[0]);
 
-    bool found = false;
+    int32_t len = 0;
 
-    auto checkInListLike = [&](const auto &container) {
-        for (const auto &item : container->raw()) {
-            if (item->equals(target)) {
-                found = true;
-                break;
-            }
-        }
-    };
-
-    switch (collection->type()->code()) {
+    switch (arg->type()->code()) {
     case TypeCode::List:
-        checkInListLike(tt::as_shared<ListData>(collection));
+        len = static_cast<int32_t>(tt::as_shared<ListData>(arg)->raw().size());
         break;
     case TypeCode::Array:
-        checkInListLike(tt::as_shared<ArrayData>(collection));
+        len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
         break;
     case TypeCode::Vector:
-        checkInListLike(tt::as_shared<VectorData>(collection));
+        len = static_cast<int32_t>(tt::as_shared<VectorData>(arg)->raw().size());
+        break;
+    case TypeCode::Tuple:
+        len = static_cast<int32_t>(tt::as_shared<TupleData>(arg)->raw().size());
+        break;
+    case TypeCode::Dict:
+        len = static_cast<int32_t>(tt::as_shared<DictData>(arg)->raw().size());
         break;
     default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<contains> not supported for type: " + collection->type()->toString());
+            .commit("<len> not supported for type: " + arg->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, std::make_shared<BoolData>(found));
+    frame.set(self, std::make_shared<Int32Data>(len));
     return OperatorReturnCode::OK;
 }
 
@@ -140,44 +128,301 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    if (ins.size() != 1) {
+OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withIns = self->withInputs();
+    const auto &normIns = self->normInputs();
+    if (withIns.size() != 1) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<len> operator requires exactly one argument");
+            .commit("<slice> operator requires one with argument: (collection)");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+    if (normIns.size() != 2) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<slice> operator requires exactly three arguments: start, end");
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
 
-    const data_ptr_t &arg = frame.get(ins[0]);
+    const data_ptr_t &collect = frame.get(withIns[0]);
+    const data_ptr_t &startArg = frame.get(normIns[0]);
+    const data_ptr_t &endArg = frame.get(normIns[1]);
 
-    int32_t len = 0;
+    if (!Type::castSafetyCheck(startArg->type(), Type::Int64()) ||
+        !Type::castSafetyCheck(endArg->type(), Type::Int64())) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<slice> operator requires start and end to be integer");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
 
-    switch (arg->type()->code()) {
+    int32_t start = startArg->as<Int64Data>(Type::Int64())->data();
+    int32_t end = endArg->as<Int64Data>(Type::Int64())->data();
+
+    auto slice_range = [](int32_t size, int32_t &start, int32_t &end) {
+        if (start < 0)
+            start += size;
+        if (end < 0)
+            end += size;
+        start = std::max(0, std::min(start, size));
+        end = std::max(0, std::min(end, size));
+        if (end < start)
+            end = start; // empty slice
+    };
+
+    switch (collect->type()->code()) {
+    case TypeCode::List: {
+        auto list = tt::as_shared<ListData>(collect)->raw();
+        slice_range(static_cast<int32_t>(list.size()), start, end);
+        data_vec_t sliced(list.begin() + start, list.begin() + end);
+        frame.set(self, ListData::create(std::move(sliced)));
+        break;
+    }
+    case TypeCode::Array: {
+        auto array = tt::as_shared<ArrayData>(collect)->raw();
+        slice_range(static_cast<int32_t>(array.size()), start, end);
+        data_vec_t sliced(array.begin() + start, array.begin() + end);
+        frame.set(
+            self,
+            ArrayData::create(
+                Type::Array(
+                    tt::as_shared<ArrayType>(collect->type())->elementType(),
+                    sliced.size()),
+                std::move(sliced)));
+        break;
+    }
+    case TypeCode::Vector: {
+        auto vec = tt::as_shared<VectorData>(collect)->raw();
+        slice_range(static_cast<int32_t>(vec.size()), start, end);
+        data_vec_t sliced(vec.begin() + start, vec.begin() + end);
+        frame.set(self, VectorData::create(collect->type(), std::move(sliced)));
+        break;
+    }
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<slice> not supported for type: " + collect->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __concat__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withIns = self->withInputs();
+    const auto &normIns = self->normInputs();
+
+    if (withIns.size() != 1 || normIns.size() != 1) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<concat> operator requires one with argument and one normal argument");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &left = frame.get(withIns[0]);
+    const data_ptr_t &right = frame.get(normIns[0]);
+
+    if (left->type()->code() != right->type()->code()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<concat> operator requires both arguments to be of same type");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    switch (left->type()->code()) {
+    case TypeCode::List: {
+        auto l = tt::as_shared<ListData>(left)->raw();
+        auto r = tt::as_shared<ListData>(right)->raw();
+        l.insert(l.end(), r.begin(), r.end());
+        frame.set(self, ListData::create(std::move(l)));
+        break;
+    }
+    case TypeCode::Array: {
+        auto l = tt::as_shared<ArrayData>(left)->raw();
+        auto r = tt::as_shared<ArrayData>(right)->raw();
+        l.insert(l.end(), r.begin(), r.end());
+        auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
+        frame.set(self, ArrayData::create(Type::Array(elemType, l.size()), std::move(l)));
+        break;
+    }
+    case TypeCode::Vector: {
+        auto l = tt::as_shared<VectorData>(left)->raw();
+        auto r = tt::as_shared<VectorData>(right)->raw();
+        l.insert(l.end(), r.begin(), r.end());
+        frame.set(self, VectorData::create(left->type(), std::move(l)));
+        break;
+    }
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<concat> not supported for type: " + left->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withIns = self->withInputs();
+    const auto &normIns = self->normInputs();
+
+    if (withIns.size() != 1 || normIns.size() != 1) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<append> operator requires one with argument and one element to append");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &collection = frame.get(withIns[0]);
+    const data_ptr_t &element = frame.get(normIns[0]);
+
+    switch (collection->type()->code()) {
+    case TypeCode::List: {
+        auto vec = tt::as_shared<ListData>(collection)->raw();
+        vec.push_back(element);
+        frame.set(self, ListData::create(std::move(vec)));
+        break;
+    }
+    case TypeCode::Array: {
+        auto vec = tt::as_shared<ArrayData>(collection)->raw();
+        vec.push_back(element);
+        auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
+        frame.set(self, ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
+        break;
+    }
+    case TypeCode::Vector: {
+        auto vec = tt::as_shared<VectorData>(collection)->raw();
+        vec.push_back(element);
+        frame.set(self, VectorData::create(collection->type(), std::move(vec)));
+        break;
+    }
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<append> not supported for type: " + collection->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withIns = self->withInputs();
+    const auto &normIns = self->normInputs();
+
+    if (withIns.size() != 1 || normIns.size() != 1) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit(
+                "<extend> operator requires one with argument and one collection to extend from");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &collection = frame.get(withIns[0]);
+    const data_ptr_t &other = frame.get(normIns[0]);
+
+    if (collection->type()->code() != other->type()->code()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<extend> operator requires both operands to be of same type");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    switch (collection->type()->code()) {
+    case TypeCode::List: {
+        auto vec = tt::as_shared<ListData>(collection)->raw();
+        auto ext = tt::as_shared<ListData>(other)->raw();
+        vec.insert(vec.end(), ext.begin(), ext.end());
+        frame.set(self, ListData::create(std::move(vec)));
+        break;
+    }
+    case TypeCode::Array: {
+        auto vec = tt::as_shared<ArrayData>(collection)->raw();
+        auto ext = tt::as_shared<ArrayData>(other)->raw();
+        vec.insert(vec.end(), ext.begin(), ext.end());
+        auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
+        frame.set(self, ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
+        break;
+    }
+    case TypeCode::Vector: {
+        auto vec = tt::as_shared<VectorData>(collection)->raw();
+        auto ext = tt::as_shared<VectorData>(other)->raw();
+        vec.insert(vec.end(), ext.begin(), ext.end());
+        frame.set(self, VectorData::create(collection->type(), std::move(vec)));
+        break;
+    }
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<extend> not supported for type: " + collection->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withs = self->withInputs();
+    if (withs.size() != 1) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<contains> operator requires one with argument: (collection)");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+    const auto &norms = self->normInputs();
+    if (norms.size() != 1) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<contains> operator requires one norm argument: (target)");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &collection = frame.get(withs[0]);
+    const data_ptr_t &target = frame.get(norms[0]);
+
+    bool found = false;
+
+    auto checkInListLike = [&](const auto &container) {
+        for (const auto &item : container->raw()) {
+            if (item->equals(target)) {
+                found = true;
+                break;
+            }
+        }
+    };
+
+    switch (collection->type()->code()) {
     case TypeCode::List:
-        len = static_cast<int32_t>(tt::as_shared<ListData>(arg)->raw().size());
+        checkInListLike(tt::as_shared<ListData>(collection));
         break;
     case TypeCode::Array:
-        len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
+        checkInListLike(tt::as_shared<ArrayData>(collection));
         break;
     case TypeCode::Vector:
-        len = static_cast<int32_t>(tt::as_shared<VectorData>(arg)->raw().size());
-        break;
-    case TypeCode::Tuple:
-        len = static_cast<int32_t>(tt::as_shared<TupleData>(arg)->raw().size());
-        break;
-    case TypeCode::Dict:
-        len = static_cast<int32_t>(tt::as_shared<DictData>(arg)->raw().size());
+        checkInListLike(tt::as_shared<VectorData>(collection));
         break;
     default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<len> not supported for type: " + arg->type()->toString());
+            .commit("<contains> not supported for type: " + collection->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, std::make_shared<Int32Data>(len));
+    frame.set(self, std::make_shared<BoolData>(found));
     return OperatorReturnCode::OK;
 }

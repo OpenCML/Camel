@@ -68,7 +68,13 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"io/input", __input__},
 
         // struct
+        {"struct/len", __len__},
         {"struct/range", __range__},
+        {"struct/slice", __slice__},
+        {"struct/concat", __concat__},
+        {"struct/concat", __concat__},
+        {"struct/append", __append__},
+        {"struct/extend", __extend__},
         {"struct/contains", __contains__},
 
         // os

@@ -22,6 +22,10 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __concat__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

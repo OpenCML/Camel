@@ -85,7 +85,6 @@ static const std::pair<std::string, std::string> binaryOps[] = {
 };
 
 static const std::pair<std::string, std::string> others[] = {
-    {"len", ":struct/len"},
     {"print", ":io/print"},
     {"println", ":io/println"},
     {"input", ":io/input"},
@@ -94,7 +93,13 @@ static const std::pair<std::string, std::string> others[] = {
     {"format", ":str/format"},
     {"join", ":str/join"},
     {"exit", ":os/exit"},
+    // struct
+    {"len", ":struct/len"},
     {"range", ":struct/range"},
+    {"slice", ":struct/slice"},
+    {"concat", ":struct/concat"},
+    {"append", ":struct/append"},
+    {"extend", ":struct/extend"},
     {"contains", ":struct/contains"},
     // Marked Operators
     {"map", ":mark/map"},
