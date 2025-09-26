@@ -47,13 +47,17 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
             if (sortedNodes.size() != graph->nodes().size() - 1) {
                 GraphIR::node_vec_t unreachableNodes;
                 for (const auto &n : graph->nodes()) {
-                    if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
+                    if (n != retNode &&
+                        std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
                         unreachableNodes.push_back(n);
                     }
                 }
                 std::string nodeStrs;
                 for (const auto &node : unreachableNodes) {
-                    nodeStrs += node->toString() + ", ";
+                    if (!nodeStrs.empty()) {
+                        nodeStrs += ", ";
+                    }
+                    nodeStrs += node->toString();
                 }
                 l.in("Topo").warn(
                     "Unreachable nodes in graph {} detected: {}",
@@ -82,6 +86,10 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
     auto evalFuncNode = [&](const node_ptr_t &n, bool isTailCall) {
         auto func = tt::as_shared<FunctionNode>(n)->func();
         auto tgtGraph = func->graph();
+        EXEC_WHEN_DEBUG(l.in("Eval").debug(
+            "Calling function: {} (tail-call: {})",
+            func->name().empty() ? tgtGraph->name() : func->name(),
+            isTailCall ? "yes" : "no"));
         frame_ptr_t nextFrame;
 
         data_vec_t args;
@@ -224,8 +232,9 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             }
             case NodeType::Struct: {
                 auto structNode = tt::as_shared<StructNode>(n);
-                const auto &dataInputs = n->dataInputs();
-                data_ptr_t data = currFrame->get(n);
+                const auto &srcNode = n->withInputs().front();
+                const auto &dataInputs = n->normInputs();
+                data_ptr_t data = currFrame->get(srcNode)->clone();
                 ASSERT(data != nullptr, "Struct data is null.");
                 data_vec_t inputs;
                 inputs.reserve(dataInputs.size());

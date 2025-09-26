@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -162,7 +162,7 @@ void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
 node_ptr_t Graph::addPort(bool isWithArg) {
     DataIndex index = arena_->addConstant(nullptr, false);
-    node_ptr_t portNode = SourceNode::create(shared_from_this(), index);
+    node_ptr_t portNode = SourceNode::create(shared_from_this(), index, true);
     ports_.push_back({portNode, isWithArg});
     return portNode;
 }

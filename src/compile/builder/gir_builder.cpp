@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -266,11 +266,14 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         }
         node = SourceNode::create(currGraph_, index);
     } else {
-        DataIndex index = graph->addRuntimeConstant(data);
+        DataIndex srcIndex = graph->addSharedConstant(data);
+        node_ptr_t srcNode = SourceNode::create(currGraph_, srcIndex);
+        DataIndex index = graph->addRuntimeConstant();
         if (varied_) {
             index = graph->addVariable(index);
         }
         node = StructNode::create(currGraph_, index, data->type());
+        Node::link(LinkType::With, srcNode, node);
         for (const string &ref : data->refs()) {
             Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
         }
@@ -317,7 +320,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         auto graphs = optGraph.value();
         if (!graphs->empty()) {
             // TODO: generate data as the return value of a function
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             graph_ptr_t &tgtGraph = graphs->front();
             currGraph_->addDependency(tgtGraph);
             func_ptr_t funcData = FunctionData::create(tgtGraph);
@@ -330,7 +333,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (optOp.has_value()) {
         auto ops = optOp.value();
         if (!ops->empty()) {
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             oper_idx_ptr_t &op = ops->front();
             node_ptr_t opNode = OperatorNode::create(graph, index, op);
             LEAVE("DREF");
@@ -347,7 +350,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
             auto tgtGraph = graphs->front();
             currGraph_->addDependency(tgtGraph);
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             func_ptr_t funcData = FunctionData::create(tgtGraph);
             node_ptr_t funcNode = FunctionNode::create(graph, index, funcData);
             LEAVE("DREF");
@@ -356,7 +359,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             auto ops = std::get<oper_idx_vec_ptr_t>(e);
             ASSERT(!ops->empty(), "Imported operator list is empty.");
             oper_idx_ptr_t op = ops->front();
-            DataIndex index = graph->addRuntimeConstant(nullptr);
+            DataIndex index = graph->addRuntimeConstant();
             node_ptr_t opNode = OperatorNode::create(graph, index, op);
             LEAVE("DREF");
             return opNode;
@@ -418,10 +421,10 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (dataRes.type() == typeid(graph_ptr_t)) {
             graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
             auto funcData = FunctionData::create(subGraph);
-            node_ptr_t funcNode =
-                SourceNode::create(currGraph_, currGraph_->addSharedConstant(funcData));
+            node_ptr_t portNode =
+                SourceNode::create(currGraph_, currGraph_->addSharedConstant(funcData), true);
             currGraph_->addDependency(subGraph);
-            inputs.push_back(funcNode);
+            inputs.push_back(portNode);
         } else if (dataRes.type() == typeid(node_ptr_t)) {
             node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
             inputs.push_back(inputNode);
@@ -485,10 +488,10 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         if (dataRes.type() == typeid(graph_ptr_t)) {
             graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
             auto funcData = FunctionData::create(subGraph);
-            node_ptr_t funcNode =
-                SourceNode::create(currGraph_, currGraph_->addSharedConstant(funcData));
+            node_ptr_t portNode =
+                SourceNode::create(currGraph_, currGraph_->addSharedConstant(funcData), true);
             currGraph_->addDependency(subGraph);
-            inputs.push_back(funcNode);
+            inputs.push_back(portNode);
         } else if (dataRes.type() == typeid(node_ptr_t)) {
             node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
             inputs.push_back(inputNode);
@@ -545,7 +548,7 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ASSERT(tgtNode != nullptr, "Access node target is null.");
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     graph_ptr_t &graph = currGraph_;
-    DataIndex index = graph->addRuntimeConstant(nullptr);
+    DataIndex index = graph->addRuntimeConstant();
     // TODO: here may need inplace access to the data
     node_ptr_t accsNode = AccessNode::create(graph, index, accsLoad->index());
     Node::link(LinkType::Norm, tgtNode, accsNode);
@@ -574,7 +577,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     leaveScope();
     currGraph_->addDependency(tGraph);
     func_ptr_t tData = FunctionData::create(tGraph);
-    node_ptr_t tFunc = FunctionNode::create(graph, graph->addRuntimeConstant(nullptr), tData);
+    node_ptr_t tFunc = FunctionNode::create(graph, graph->addRuntimeConstant(), tData);
     Node::link(LinkType::Ctrl, brchNode, tFunc);
 
     graph_ptr_t fGraph = enterScope();
@@ -586,10 +589,10 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     leaveScope();
     currGraph_->addDependency(fGraph);
     func_ptr_t fData = FunctionData::create(fGraph);
-    node_ptr_t fFunc = FunctionNode::create(graph, graph->addRuntimeConstant(nullptr), fData);
+    node_ptr_t fFunc = FunctionNode::create(graph, graph->addRuntimeConstant(), fData);
     Node::link(LinkType::Ctrl, brchNode, fFunc);
 
-    DataIndex index = graph->addRuntimeConstant(nullptr);
+    DataIndex index = graph->addRuntimeConstant();
     node_ptr_t joinNode = SelectNode::create(graph, index, SelectNode::SelectType::Join);
     Node::link(LinkType::Ctrl, tFunc, joinNode);
     Node::link(LinkType::Ctrl, fFunc, joinNode);
