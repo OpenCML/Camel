@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,19 @@ data_ptr_t DictData::get(const string &key) const {
 }
 
 bool DictData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for DictData
+    if (other == nullptr || other->type()->code() != TypeCode::Dict) {
+        return false;
+    }
+    auto o = tt::as_shared<DictData>(other);
+    if (data_.size() != o->data_.size()) {
+        return false;
+    }
+    for (const auto &[k, v] : data_) {
+        auto it = o->data_.find(k);
+        if (it == o->data_.end() || !v->equals(it->second)) {
+            return false;
+        }
+    }
     return true;
 }
 

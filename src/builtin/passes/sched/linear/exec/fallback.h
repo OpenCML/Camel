@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 22, 2025
+ * Updated: Sep. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,10 @@ class FallbackExecSchedPass : public LinearSchedPass {
     data_ptr_t evalGraph(const GraphIR::graph_ptr_t &graph, frame_ptr_t &frame);
     std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(const GraphIR::graph_ptr_t &graph);
 
-    void evalMarkedOperatorMap(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_map(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_apply(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_filter(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
 
   public:
     FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};

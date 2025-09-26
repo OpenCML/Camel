@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -116,20 +116,23 @@ OperatorReturnCode __join__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
 
     std::string separator = sepData->as<StringData>(Type::String())->data();
-    std::vector<std::string> parts;
-
-    for (size_t i = 0; i < norm.size(); ++i) {
-        const data_ptr_t &arg = frame.get(norm[i]);
-        std::ostringstream oss;
-        arg->print(oss);
-        parts.push_back(oss.str());
-    }
 
     std::ostringstream joined;
-    for (size_t i = 0; i < parts.size(); ++i) {
-        if (i > 0)
-            joined << separator;
-        joined << parts[i];
+
+    const data_ptr_t &arr = frame.get(norm.front());
+    if (Type::castSafetyCheck(arr->type(), Type::Vector(Type::String()))) {
+        auto vecData = arr->as<VectorData>(Type::Vector(Type::String()));
+        for (auto &arg : vecData->raw()) {
+            if (joined.tellp() > 0)
+                joined << separator;
+            arg->print(joined);
+        }
+    } else {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<join>", "list/array/vector<string>", arr->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
     }
 
     frame.set(self, std::make_shared<StringData>(joined.str()));

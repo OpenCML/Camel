@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,7 +47,12 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
         ASSERT(parent_, "Node does not belong to the current frame's graph.");
         return parent_->get(node);
     }
-    ASSERT(arena_.has(node->index()), "Data not found in frame's arena.");
+    ASSERT(
+        arena_.has(node->index()),
+        std::format(
+            "Accessing non-exist data of node {} in arena: {}",
+            node->toString(),
+            arena_.toString()));
     return arena_.get(node->index());
 }
 

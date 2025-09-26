@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 24, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -97,4 +97,8 @@ OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx)
     data_ptr_t result = std::make_shared<StringData>(username);
     frame.set(self, result);
     return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __exit__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    throw CamelRuntimeException(RuntimeExceptionCode::ForceExit, "<exit> operator invoked");
 }

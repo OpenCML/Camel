@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 13, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,8 @@ enum class RuntimeExceptionCode {
     InvalidURI,
     UnsupportedOperator,
     ErrorOnExecution,
-    UnknownError
+    UnknownError,
+    ForceExit
 };
 
 class CamelRuntimeException : public CamelBaseException {
