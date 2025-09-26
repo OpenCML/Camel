@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,8 +43,9 @@ TupleData::TupleData(data_list_t data) : data_(data) {
 TupleData::TupleData(type_ptr_t type, data_vec_t &&data)
     : StructData(type), data_(std::move(data)) {
     ASSERT(type->code() == TypeCode::Tuple, "Type is not TupleType");
-    TupleType &tupleType = *static_cast<TupleType *>(type_.get());
-    ASSERT(tupleType.size() == data_.size(), "Data size does not match TupleType size");
+    ASSERT(
+        (*static_cast<TupleType *>(type_.get())).size() == data_.size(),
+        "Data size does not match TupleType size");
 }
 
 void TupleData::emplace(const data_ptr_t &e) {
