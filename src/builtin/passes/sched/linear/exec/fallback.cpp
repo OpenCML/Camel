@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,11 +31,12 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
             [](const node_ptr_t &n) {
                 vector<node_ptr_t> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-                for (const auto &in : n->dataInputs()) {
+                for (const auto &in : n->ctrlInputs()) {
                     if (in->graph() == n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }
-                for (const auto &in : n->ctrlInputs()) {
+                // Put value computation nodes at the back for correct tail-call optimization
+                for (const auto &in : n->dataInputs()) {
                     if (in->graph() == n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }
@@ -44,6 +45,10 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
             true // skip the start node itself
         );
         EXEC_WHEN_DEBUG([&]() {
+            l.in("Topo").debug("Topologically sorted nodes for graph {}:", graph->name());
+            for (const auto &n : sortedNodes) {
+                l.in("Topo").debug("  {}", n->toString());
+            }
             if (sortedNodes.size() != graph->nodes().size() - 1) {
                 GraphIR::node_vec_t unreachableNodes;
                 for (const auto &n : graph->nodes()) {
@@ -193,40 +198,59 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 auto selectNode = tt::as_shared<SelectNode>(n);
                 auto selectType = selectNode->selectType();
                 if (selectType == SelectNode::SelectType::Branch) {
-                    // 判断输入条件，并将执行的节点放入Info栈
                     ASSERT(
-                        n->dataInputs().size() == 1,
-                        "Branch node must have exactly one data input.");
-                    ASSERT(
-                        n->ctrlOutputs().size() == 2,
-                        "Branch node must have exactly two outputs.");
-                    auto condDataRaw = currFrame->get(n->dataInputs().front());
-                    auto condData = condDataRaw->as<BoolData>(Type::Bool());
-                    bool cond = condData->data();
-                    if (cond) {
-                        brInfoStack_.push(n->ctrlOutputs().front());
+                        n->withInputs().size() == 1,
+                        "Branch node must have exactly one with input.");
+                    auto condData = currFrame->get(n->withInputs().front());
+                    const auto &normIns = n->normInputs();
+                    const auto &ctrlOuts = n->ctrlOutputs();
+                    if (normIns.size() == 0) {
+                        // if-else branch
+                        ASSERT(
+                            ctrlOuts.size() == 2,
+                            "If-else branch node must have exactly two outputs.");
+                        auto boolCondData = condData->as<BoolData>(Type::Bool());
+                        bool cond = boolCondData->data();
+                        if (cond) {
+                            brInfoStack_.push(ctrlOuts.front());
+                        } else {
+                            brInfoStack_.push(ctrlOuts.back());
+                        }
                     } else {
-                        brInfoStack_.push(n->ctrlOutputs().back());
+                        // match-case branch
+                        ASSERT(
+                            normIns.size() == ctrlOuts.size() - 1,
+                            "Match-case branch node must have exactly one more ctrl output than "
+                            "norm inputs.");
+                        size_t j = 0;
+                        for (; j < normIns.size(); ++j) {
+                            auto caseData = currFrame->get(normIns[j]);
+                            EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                                "Matching case: {} with condition: {}",
+                                caseData->toString(),
+                                condData->toString()));
+                            if (condData->equals(caseData)) {
+                                brInfoStack_.push(ctrlOuts[j]);
+                                break;
+                            }
+                        }
+                        if (j == normIns.size()) {
+                            // fallthrough to else case if no match
+                            brInfoStack_.push(ctrlOuts.back());
+                        }
                     }
-                    i += 2; // skip the two branches
+                    i += ctrlOuts.size(); // skip all cases
                 } else {
                     // JOIN node
-                    ASSERT(
-                        n->ctrlInputs().size() == 2,
-                        "Join node must have exactly two ctrl inputs.");
                     auto execNode = brInfoStack_.top();
                     brInfoStack_.pop();
-                    if (i == nodes.size() - 1) {
-                        // Here, the branch function node is delayed to be executed at the JOIN
-                        // node, which facilitates tail-call optimization. This is because when the
-                        // JOIN node is the last node of the current execution sequence, the
-                        // function call can be optimized as a tail-call. If the branch function
-                        // call is executed earlier, it is difficult to determine whether it is a
-                        // tail-call.
-                        evalFuncNode(execNode, true);
-                    } else {
-                        currFrame->set(n, currFrame->get(execNode));
-                    }
+                    // Here, the branch function node is delayed to be executed at the JOIN
+                    // node, which facilitates tail-call optimization. This is because when the
+                    // JOIN node is the last node of the current execution sequence, the
+                    // function call can be optimized as a tail-call. If the branch function
+                    // call is executed earlier, it is difficult to determine whether it is a
+                    // tail-call.
+                    evalFuncNode(execNode, i == nodes.size() - 1);
                 }
                 break;
             }

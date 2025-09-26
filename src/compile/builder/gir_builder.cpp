@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -566,36 +566,57 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
     node_ptr_t brchNode =
         SelectNode::create(currGraph_, condNode->index(), SelectNode::SelectType::Branch);
-    Node::link(LinkType::Norm, condNode, brchNode);
-
-    graph_ptr_t tGraph = enterScope();
-    tGraph->setFuncType(std::make_shared<FunctionType>()); // TODO: set the function type properly
-    node_ptr_t tNode = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (!tGraph->hasOutput() && tNode != nullptr) {
-        tGraph->setOutput(tNode);
-    }
-    leaveScope();
-    currGraph_->addDependency(tGraph);
-    func_ptr_t tData = FunctionData::create(tGraph);
-    node_ptr_t tFunc = FunctionNode::create(graph, graph->addRuntimeConstant(), tData);
-    Node::link(LinkType::Ctrl, brchNode, tFunc);
-
-    graph_ptr_t fGraph = enterScope();
-    fGraph->setFuncType(std::make_shared<FunctionType>());
-    node_ptr_t fNode = visitExecNode(gct->atAs<GCT::ExecLoad>(2));
-    if (!fGraph->hasOutput() && fNode != nullptr) {
-        fGraph->setOutput(fNode);
-    }
-    leaveScope();
-    currGraph_->addDependency(fGraph);
-    func_ptr_t fData = FunctionData::create(fGraph);
-    node_ptr_t fFunc = FunctionNode::create(graph, graph->addRuntimeConstant(), fData);
-    Node::link(LinkType::Ctrl, brchNode, fFunc);
-
     DataIndex index = graph->addRuntimeConstant();
     node_ptr_t joinNode = SelectNode::create(graph, index, SelectNode::SelectType::Join);
-    Node::link(LinkType::Ctrl, tFunc, joinNode);
-    Node::link(LinkType::Ctrl, fFunc, joinNode);
+
+    Node::link(LinkType::With, condNode, brchNode);
+
+    for (size_t i = 1; i < gct->size(); i++) {
+        const auto &caseNode = gct->atAs<GCT::CaseLoad>(i);
+        const auto &caseLoad = caseNode->loadAs<GCT::CaseLoad>();
+        GCT::node_ptr_t caseExecNode = nullptr;
+
+        switch (caseLoad->caseType()) {
+        case GCT::CaseLoad::CaseType::True:
+            ASSERT(caseNode->size() == 1, "True case should have only one child.");
+            caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+            break;
+        case GCT::CaseLoad::CaseType::Else:
+            ASSERT(i == gct->size() - 1, "Else case should be the last case.");
+            ASSERT(caseNode->size() == 1, "Else case should have only one child.");
+            caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+            break;
+        case GCT::CaseLoad::CaseType::Value: {
+            ASSERT(caseNode->size() == 2, "Value case should have two children.");
+            any res = visit(caseNode->at(0));
+            ASSERT(
+                res.type() == typeid(node_ptr_t),
+                "Unexpected result type from visiting the case node.");
+            node_ptr_t valueNode = any_cast<node_ptr_t>(res);
+            Node::link(LinkType::Norm, valueNode, brchNode);
+            caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
+            break;
+        }
+        default:
+            ASSERT(false, "Unknown case type in BRCH node.");
+        }
+
+        graph_ptr_t subGraph = enterScope();
+        // TODO: set the function type properly
+        subGraph->setFuncType(std::make_shared<FunctionType>());
+        node_ptr_t execNode = visitExecNode(caseExecNode);
+        if (!subGraph->hasOutput() && execNode != nullptr) {
+            subGraph->setOutput(execNode);
+        }
+        leaveScope();
+
+        currGraph_->addDependency(subGraph);
+        func_ptr_t funcData = FunctionData::create(subGraph);
+        node_ptr_t funcNode = FunctionNode::create(graph, graph->addRuntimeConstant(), funcData);
+
+        Node::link(LinkType::Ctrl, brchNode, funcNode);
+        Node::link(LinkType::Ctrl, funcNode, joinNode);
+    }
 
     LEAVE("BRCH");
     return joinNode;

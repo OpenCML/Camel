@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,11 +70,11 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             [](const node_ptr_t &n) {
                 vector<node_ptr_t> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-                for (const auto &in : n->dataInputs()) {
+                for (const auto &in : n->ctrlInputs()) {
                     if (in->graph() == n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }
-                for (const auto &in : n->ctrlInputs()) {
+                for (const auto &in : n->dataInputs()) {
                     if (in->graph() == n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }

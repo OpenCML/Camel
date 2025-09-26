@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,38 +28,42 @@ namespace GraphConstructTree {
 
 std::string to_string(LoadType type) {
     switch (type) {
-    case LoadType::DATA:
-        return "DATA";
-    case LoadType::VARI:
-        return "VARI";
-    case LoadType::TYPE:
-        return "TYPE";
     case LoadType::DECL:
         return "DECL";
     case LoadType::FUNC:
         return "FUNC";
+    case LoadType::DATA:
+        return "DATA";
+    case LoadType::TYPE:
+        return "TYPE";
     case LoadType::NREF:
         return "NREF";
     case LoadType::DREF:
         return "DREF";
+    case LoadType::VARI:
+        return "VARI";
     case LoadType::WAIT:
         return "WAIT";
-    case LoadType::ANNO:
-        return "ANNO";
     case LoadType::LINK:
         return "LINK";
     case LoadType::WITH:
         return "WITH";
     case LoadType::BIND:
         return "BIND";
-    case LoadType::EXIT:
-        return "EXIT";
-    case LoadType::EXEC:
-        return "EXEC";
     case LoadType::ACCS:
         return "ACCS";
     case LoadType::BRCH:
         return "BRCH";
+    case LoadType::CASE:
+        return "CASE";
+    case LoadType::ANNO:
+        return "ANNO";
+    case LoadType::EXIT:
+        return "EXIT";
+    case LoadType::EXEC:
+        return "EXEC";
+    case LoadType::EXPT:
+        return "EXPT";
     default:
         ASSERT(false, "Unknown NodeType");
     }

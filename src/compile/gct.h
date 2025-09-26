@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,6 +50,7 @@ enum class LoadType {
     BIND,
     ACCS,
     BRCH,
+    CASE,
     ANNO,
     EXIT,
     EXEC,
@@ -347,6 +348,37 @@ class BrchLoad : public Load {
     BrchLoad() : Load(LoadType::BRCH) {}
 
     // const std::string toString() const override;
+};
+
+class CaseLoad : public Load {
+  public:
+    enum class CaseType {
+        Value,
+        True,
+        Else,
+    };
+    CaseLoad(CaseType type) : Load(LoadType::CASE), caseType_(type) {}
+
+    CaseType caseType() const { return caseType_; }
+
+    const std::string toString() const override {
+        std::string result = "CASE: ";
+        switch (caseType_) {
+        case CaseType::Value:
+            result += "(value)";
+            break;
+        case CaseType::True:
+            result += "(true)";
+            break;
+        case CaseType::Else:
+            result += "(else)";
+            break;
+        }
+        return result;
+    }
+
+  private:
+    CaseType caseType_;
 };
 
 } // namespace GraphConstructTree

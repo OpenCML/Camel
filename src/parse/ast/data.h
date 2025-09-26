@@ -29,6 +29,7 @@ enum class DataType {
     ReservedExpr,
     IfExpr,
     MatchExpr,
+    MatchCase,
     TryExpr,
     Literal,
     List,
@@ -177,10 +178,11 @@ class MatchExprLoad : public DataLoad {
     Reference ref_;
 };
 
-class MatchCaseLoad : public Load {
+class MatchCaseLoad : public DataLoad {
   public:
-    MatchCaseLoad() : Load(LoadType::Data) {}
-    const std::string toString() const override { return "MatchCase"; }
+    MatchCaseLoad() : DataLoad(DataType::MatchCase) {}
+
+    const std::string toString() const override { return "MatchCase" + this->status(); }
     const std::string geneCode() const override {
         throw CamelBaseException("MatchCaseLoad::geneCode() not implemented");
     }
