@@ -89,7 +89,6 @@ static const std::pair<std::string, std::string> others[] = {
     {"println", ":io/println"},
     {"input", ":io/input"},
     {"sleep", ":os/sleep"},
-    {"whoami", ":os/whoami"},
     {"format", ":str/format"},
     {"join", ":str/join"},
     {"exit", ":os/exit"},

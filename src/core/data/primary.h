@@ -22,6 +22,10 @@
 #include "data.h"
 #include "utils/assert.h"
 
+#include <iomanip>
+#include <sstream>
+#include <type_traits>
+
 template <typename T> class PrimaryData : public Data {
   private:
     T data_;
@@ -165,9 +169,15 @@ template <typename T> class PrimaryData : public Data {
         } else if constexpr (std::is_same_v<T, char>) {
             return std::string(1, data_);
         } else if constexpr (std::is_same_v<T, float>) {
-            return std::to_string(data_); // TODO: format float
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(3) << data_;
+            return oss.str();
         } else if constexpr (std::is_same_v<T, double>) {
-            return std::to_string(data_); // TODO: format double
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(6) << data_;
+            return oss.str();
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            return std::to_string(data_);
         } else if constexpr (std::is_same_v<T, int64_t>) {
             return std::to_string(data_) + "L";
         } else {

@@ -1,6 +1,7 @@
 module snake
 
 import { now } from time
+import { set_terminal_raw_mode, has_input, get_char } from os
 
 // Map size
 let WIDTH = 20
@@ -13,6 +14,7 @@ type Point = {
 }
 
 func render(snake: Point[]): void sync {
+    print("\033[2J\033[H")  // Clear screen
     let rows = range(0, HEIGHT)
 
     rows.foreach((y: int) => sync {
@@ -27,13 +29,13 @@ func render(snake: Point[]): void sync {
     println("")
 }
 
-func move_snake(snake: Point[], dir: int): Point[] {
+func move_snake(snake: Point[], dir: string): Point[] {
     let head = snake.head()
     let new_head = match dir {
-        case 0 => { x: head.$x, y: head.$y - 1 }  // Up
-        case 1 => { x: head.$x, y: head.$y + 1 }  // Down
-        case 2 => { x: head.$x - 1, y: head.$y }  // Left
-        case 3 => { x: head.$x + 1, y: head.$y }  // Right
+        case 'w' => { x: head.$x, y: head.$y - 1 }  // Up
+        case 'a' => { x: head.$x - 1, y: head.$y }  // Left
+        case 's' => { x: head.$x, y: head.$y + 1 }  // Down
+        case 'd' => { x: head.$x + 1, y: head.$y }  // Right
         case _ => head
     }
     return [new_head].extend(snake.slice(0, snake.len() - 1))
@@ -45,7 +47,7 @@ func hit_wall(p: Point): bool {
 }
 
 // Recursive game loop
-func game_loop(snake: Point[], dir: int, steps: int) sync {
+func game_loop(snake: Point[], dir: string, steps: int) sync {
     render(snake)
     let new_snake = move_snake(snake, dir)
     let head = new_snake.head()
@@ -55,18 +57,14 @@ func game_loop(snake: Point[], dir: int, steps: int) sync {
     } else sync {
         sleep(500)  // Delay for visual effect
         // Recursive call for next frame
-        game_loop(new_snake, dir, steps + 1)
+        game_loop(new_snake, if has_input() then get_char() else dir, steps + 1)
     }
 }
 
 // Entry point
 func main(): int sync {
-    println("Starting recursive Snake Game...")
-
+    set_terminal_raw_mode(true)
     let initial_snake = [{ x: 5, y: 5}, { x: 4, y: 5}, { x: 3, y: 5}]
-    let direction = 0  // Initial direction: Up
-
-    game_loop(initial_snake, direction, 0)
-
+    game_loop(initial_snake, 'w', 0)
     return 0
 }

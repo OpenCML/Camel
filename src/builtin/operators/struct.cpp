@@ -104,6 +104,17 @@ OperatorReturnCode __head__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
     case TypeCode::Vector:
         frame.set(self, extract_first(tt::as_shared<VectorData>(collect)->raw()));
         break;
+    case TypeCode::Tuple:
+        frame.set(self, extract_first(tt::as_shared<TupleData>(collect)->raw()));
+        break;
+    case TypeCode::String: {
+        auto str = tt::as_shared<StringData>(collect)->data();
+        if (str.empty()) {
+            frame.set(self, Data::null());
+        } else {
+            frame.set(self, std::make_shared<StringData>(std::string(1, str[0])));
+        }
+    } break;
     default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
@@ -163,6 +174,25 @@ OperatorReturnCode __tail__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
     case TypeCode::Vector: {
         auto vec = tt::as_shared<VectorData>(collect)->raw();
         frame.set(self, VectorData::create(collect->type(), slice_tail(vec)));
+        break;
+    }
+    case TypeCode::Tuple: {
+        auto vec = tt::as_shared<TupleData>(collect)->raw();
+        frame.set(
+            self,
+            TupleData::create(
+                tt::as_shared<TupleType>(collect->type())
+                    ->slice(1, tt::as_shared<TupleType>(collect->type())->size()),
+                slice_tail(vec)));
+        break;
+    }
+    case TypeCode::String: {
+        auto str = tt::as_shared<StringData>(collect)->data();
+        if (str.size() <= 1) {
+            frame.set(self, Data::null());
+        } else {
+            frame.set(self, std::make_shared<StringData>(str.substr(1)));
+        }
         break;
     }
     default:
