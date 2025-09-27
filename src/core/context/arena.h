@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 21, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -334,9 +334,7 @@ class DataArena : public std::enable_shared_from_this<DataArena> {
 
     std::string toString() const {
         return std::format(
-            "DataArena:\n  Shared Constants: {}\n  Shared Variables: {}\n  Runtime Constants: {}\n "
-            " "
-            "Runtime Variables: {}",
+            "DataArena:\n  {}\n  {}\n  {}\n  {}",
             sharedConstants_->toString(),
             sharedVariables_->toString(),
             runtimeConstants_->toString(),

@@ -50,13 +50,14 @@ func game_loop(snake: Point[], dir: int, steps: int) sync {
     let new_snake = move_snake(snake, dir)
     let head = new_snake.head()
 
-    if hit_wall(head) then {
-        println("Game over! You hit the wall after {} steps.".format(steps))
-    } else sync {
-        sleep(0.2)  // Delay for visual effect
-        // Recursive call for next frame
-        game_loop(new_snake, dir, steps + 1)
-    }
+    // if hit_wall(head) then {
+    //     println("Game over! You hit the wall after {} steps.".format(steps))
+    // }
+    //  else sync {
+    //     sleep(2)  // Delay for visual effect
+    //     // Recursive call for next frame
+    //     game_loop(new_snake, dir, steps + 1)
+    // }
 }
 
 // Entry point

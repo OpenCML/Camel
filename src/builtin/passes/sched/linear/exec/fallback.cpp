@@ -250,7 +250,14 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                     // function call can be optimized as a tail-call. If the branch function
                     // call is executed earlier, it is difficult to determine whether it is a
                     // tail-call.
-                    evalFuncNode(execNode, i == nodes.size() - 1);
+                    if (i == nodes.size() - 1) {
+                        evalFuncNode(execNode, true);
+                        // no need to set currFrame->set(n, ...)
+                        // as the tail-call function will reset the frame
+                    } else {
+                        evalFuncNode(execNode, false);
+                        currFrame->set(n, currFrame->get(execNode));
+                    }
                 }
                 break;
             }

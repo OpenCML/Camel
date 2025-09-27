@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -73,8 +73,8 @@ OperatorReturnCode eval_assignment_op(
 
     if (!Type::castSafetyCheck(rhs_type, lhs_type)) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<" + opname + ">", lhs_type->toString(), rhs_type->toString());
+            ->of(RuntimeDiag::MismatchedOperandTypes)
+            .commit("<" + opname + ">", lhs_type->toString(), rhs_type->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -562,8 +562,8 @@ OperatorReturnCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<add>", left->type()->toString(), right->type()->toString());
+            ->of(RuntimeDiag::MismatchedOperandTypes)
+            .commit("<add>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -618,8 +618,8 @@ OperatorReturnCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<sub>", left->type()->toString(), right->type()->toString());
+            ->of(RuntimeDiag::MismatchedOperandTypes)
+            .commit("<sub>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -670,8 +670,8 @@ OperatorReturnCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<mul>", left->type()->toString(), right->type()->toString());
+            ->of(RuntimeDiag::MismatchedOperandTypes)
+            .commit("<mul>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -722,8 +722,8 @@ OperatorReturnCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<div>", left->type()->toString(), right->type()->toString());
+            ->of(RuntimeDiag::MismatchedOperandTypes)
+            .commit("<div>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -784,8 +784,8 @@ OperatorReturnCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context
 
     if (!Type::castSafetyCheck(right->type(), left->type())) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<mod>", left->type()->toString(), right->type()->toString());
+            ->of(RuntimeDiag::MismatchedOperandTypes)
+            .commit("<mod>", left->type()->toString(), right->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -841,8 +841,8 @@ OperatorReturnCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context
 
     if (!Type::castSafetyCheck(exponent->type(), base->type())) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<exp>", base->type()->toString(), exponent->type()->toString());
+            ->of(RuntimeDiag::MismatchedOperandTypes)
+            .commit("<exp>", base->type()->toString(), exponent->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }

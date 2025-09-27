@@ -23,7 +23,7 @@
 #include "core/context/frame.h"
 
 OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
+    const auto &ins = self->withInputs();
     if (ins.size() != 1) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
