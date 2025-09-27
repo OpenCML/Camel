@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -159,6 +159,8 @@ func_type_ptr_t Graph::funcType() const {
 }
 
 void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
+
+void Graph::addCapture(const node_ptr_t &node) { capture_.insert(node); }
 
 node_ptr_t Graph::addPort(bool isWithArg) {
     DataIndex index = arena_->addConstant(nullptr, false);

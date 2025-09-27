@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,14 +49,47 @@ std::string escape(const std::string &input) {
 std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) {
     std::vector<std::string> lines;
     std::istringstream stream(text);
-    std::string line;
+    std::string paragraph;
 
     // Step 1: Split input by existing '\n'
-    while (std::getline(stream, line)) {
+    while (std::getline(stream, paragraph)) {
+        size_t len = paragraph.length();
+
+        // If the line fits in one line, push directly
+        if (len <= maxWidth) {
+            lines.push_back(paragraph);
+            continue;
+        }
+
+        // If the line fits in two lines but not one, try to split in the middle
+        if (len <= maxWidth * 2) {
+            size_t splitPos = len / 2;
+
+            // Try to split at whitespace near the middle
+            size_t left = paragraph.rfind(' ', splitPos);
+            size_t right = paragraph.find(' ', splitPos);
+
+            if (left != std::string::npos && (splitPos - left) <= (right - splitPos)) {
+                splitPos = left;
+            } else if (right != std::string::npos) {
+                splitPos = right;
+            }
+
+            std::string first = paragraph.substr(0, splitPos);
+            std::string second = paragraph.substr(splitPos);
+            // Trim leading space of second line
+            if (!second.empty() && second[0] == ' ')
+                second = second.substr(1);
+            lines.push_back(first);
+            lines.push_back(second);
+            continue;
+        }
+
+        // Otherwise, break into fixed maxWidth chunks
         size_t pos = 0;
-        while (pos < line.length()) {
-            size_t take = std::min(maxWidth, line.length() - pos);
-            lines.push_back(line.substr(pos, take));
+        while (pos < len) {
+            size_t take = std::min(maxWidth, len - pos);
+            lines.push_back(paragraph.substr(pos, take));
             pos += take;
         }
     }
@@ -66,12 +99,11 @@ std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) 
         std::vector<std::string> limitedLines;
         for (size_t i = 0; i < maxLines; ++i) {
             if (i == maxLines - 1) {
-                // Last line: truncate and add ellipsis if needed
                 std::string lastLine = lines[i];
                 if (lastLine.length() > maxWidth) {
                     lastLine = lastLine.substr(0, maxWidth);
                 }
-                if (lastLine.length() > 3) {
+                if (maxWidth >= 3 && lastLine.length() > 3) {
                     lastLine = lastLine.substr(0, maxWidth - 3) + "...";
                 } else {
                     lastLine = std::string(maxWidth, '.');
@@ -213,7 +245,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             break;
         }
         case NodeType::Struct: {
-            label = "DREF";
+            label = "FILL";
             shape = "diamond";
             break;
         }

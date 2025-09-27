@@ -50,9 +50,9 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
     ASSERT(
         arena_.has(node->index()),
         std::format(
-            "Accessing non-exist data of node {} in arena: {}",
+            "Accessing non-exist data of node {} in {}",
             node->toString(),
-            arena_.toString()));
+            this->toString()));
     return arena_.get(node->index());
 }
 

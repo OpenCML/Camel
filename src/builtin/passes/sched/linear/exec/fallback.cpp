@@ -250,7 +250,14 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                     // function call can be optimized as a tail-call. If the branch function
                     // call is executed earlier, it is difficult to determine whether it is a
                     // tail-call.
-                    evalFuncNode(execNode, i == nodes.size() - 1);
+                    if (i == nodes.size() - 1) {
+                        evalFuncNode(execNode, true);
+                        // no need to set currFrame->set(n, ...)
+                        // as the tail-call function will reset the frame
+                    } else {
+                        evalFuncNode(execNode, false);
+                        currFrame->set(n, currFrame->get(execNode));
+                    }
                 }
                 break;
             }
@@ -270,10 +277,47 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 break;
             }
             case NodeType::Access: {
-                ASSERT(false, "Access node evaluation not implemented yet.");
-                auto accessNode = tt::as_shared<AccessNode>(n);
                 data_ptr_t source = currFrame->get(n->dataInputs().front());
-                data_ptr_t res;
+                auto accessNode = tt::as_shared<AccessNode>(n);
+                if (accessNode->isNum()) {
+                    size_t idx = accessNode->index<size_t>();
+                    if (source->type()->code() == TypeCode::Array) {
+                        auto arrayData = tt::as_shared<ArrayData>(source);
+                        ASSERT(idx < arrayData->size(), "Array index out of bounds.");
+                        currFrame->set(n, arrayData->raw()[idx]);
+                    } else if (source->type()->code() == TypeCode::Tuple) {
+                        auto tupleData = tt::as_shared<TupleData>(source);
+                        ASSERT(idx < tupleData->size(), "Tuple index out of bounds.");
+                        currFrame->set(n, tupleData->raw()[idx]);
+                    } else if (source->type()->code() == TypeCode::Vector) {
+                        auto vectorData = tt::as_shared<VectorData>(source);
+                        ASSERT(idx < vectorData->size(), "Vector index out of bounds.");
+                        currFrame->set(n, vectorData->raw()[idx]);
+                    } else {
+                        context_->rtmDiags()
+                            ->of(RuntimeDiag::IncompatibleArgType)
+                            .commit(0, "Access", "Array/Tuple/Vector", source->type()->toString());
+                        throw CamelRuntimeException(
+                            RuntimeExceptionCode::InvalidWithParameter,
+                            "Incorrect args.");
+                    }
+                } else {
+                    std::string key = accessNode->index<std::string>();
+                    if (source->type()->code() == TypeCode::Dict) {
+                        auto dictData = tt::as_shared<DictData>(source);
+                        ASSERT(
+                            dictData->raw().find(key) != dictData->raw().end(),
+                            "Dict key not found: " + key);
+                        currFrame->set(n, dictData->raw().at(key));
+                    } else {
+                        context_->rtmDiags()
+                            ->of(RuntimeDiag::IncompatibleArgType)
+                            .commit(0, "Access", "Dict", source->type()->toString());
+                        throw CamelRuntimeException(
+                            RuntimeExceptionCode::InvalidWithParameter,
+                            "Incorrect args.");
+                    }
+                }
                 break;
             }
             case NodeType::Source: {

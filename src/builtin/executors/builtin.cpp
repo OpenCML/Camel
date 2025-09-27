@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,6 +69,8 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // struct
         {"struct/len", __len__},
+        {"struct/head", __head__},
+        {"struct/tail", __tail__},
         {"struct/range", __range__},
         {"struct/slice", __slice__},
         {"struct/concat", __concat__},
@@ -78,8 +80,14 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"struct/contains", __contains__},
 
         // os
+        {"os/exit", __exit__},
         {"os/sleep", __sleep__},
         {"os/whoami", __whoami__},
+        {"os/set_terminal_raw_mode", __set_terminal_raw_mode__},
+        {"os/has_input", __has_input__},
+        {"os/get_char", __get_char__},
+        {"os/get_chars", __get_chars__},
+        {"os/clear_input_buffer", __clear_input_buffer__},
 
         // str
         {"str/format", __format__},

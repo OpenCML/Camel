@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include <any>
 #include <list>
+#include <unordered_set>
 #include <variant>
 
 #include "core/context/arena.h"
@@ -61,6 +62,7 @@ using node_ptr_t = std::shared_ptr<Node>;
 using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;
 using node_vec_t = std::vector<node_ptr_t>;
+using node_set_t = std::unordered_set<node_ptr_t>;
 
 struct WeakPtrHash {
     template <typename T> std::size_t operator()(const std::weak_ptr<T> &wp) const {
@@ -166,6 +168,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
     void addNode(const node_ptr_t &node);
+    void addCapture(const node_ptr_t &node);
     node_ptr_t addPort(bool isWithArg = false);
 
     const node_ptr_t &returnNode() const {
@@ -177,6 +180,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     const std::vector<std::pair<node_ptr_t, bool>> &portNodes() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
+    const node_set_t &capture() const { return capture_; }
 
   private:
     bool looped_ = false;
@@ -192,6 +196,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     node_vec_t nodes_;
     node_ptr_t output_;
+    node_set_t capture_;
     std::vector<std::pair<node_ptr_t, bool>> ports_;
 };
 

@@ -19,6 +19,7 @@
 
 #include "gct_builder.h"
 
+#include "utils/escape.h"
 #include "utils/scope.h"
 #include "utils/token.h"
 #include "utils/type.h"
@@ -865,7 +866,8 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     data_ptr_t data;
     switch (value.type()) {
     case LiteralType::String: {
-        data = tt::as_shared<Data>(make_shared<StringData>(str));
+        std::string decoded = decodeEscapes(str);
+        data = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
         diags_->of(SemanticDiag::FeatureNotSupported)
@@ -874,7 +876,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
-        data = makeDataFromLiteral(parseNumber<int64_t>(str));
+        data = makeDataFromLiteral(parseNumber<int32_t>(str));
     } break;
     case LiteralType::Real: {
         data = makeDataFromLiteral(parseNumber<double>(str));

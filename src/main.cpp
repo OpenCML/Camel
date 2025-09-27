@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -249,7 +249,7 @@ int main(int argc, char *argv[]) {
             endTime = chrono::high_resolution_clock::now();
             auto duration =
                 chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            EXEC_WHEN_DEBUG(l.in("Main").info("Time used: {} us", duration));
+            l.in("Main").info("Time used: {} us", duration);
         }
     }
 

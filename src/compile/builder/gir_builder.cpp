@@ -49,7 +49,7 @@ inline void tryRemoveCtrlLink(const node_ptr_t &from, const node_ptr_t &to) {
 
 inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     // prevent linking a node to itself
-    if (from.get() == to.get()) {
+    if (from == to) {
         return false;
     }
     // prevent linking nodes that are already linked
@@ -311,8 +311,13 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
     auto optNode = nodeAt(ident);
     if (optNode.has_value()) {
+        const auto &node = optNode.value();
+        if (node->graph() != currGraph_) {
+            // the referenced node is from an outer scope, need to mark it as captured
+            currGraph_->addCapture(node);
+        }
         LEAVE("DREF");
-        return optNode.value();
+        return node;
     }
     graph_ptr_t &graph = currGraph_;
     auto optGraph = graphAt(ident);
@@ -343,8 +348,13 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (module_->hasImportedRef(ident)) {
         const auto &e = module_->getImportedEntity(ident);
         if (std::holds_alternative<node_ptr_t>(e)) {
+            const auto &node = std::get<node_ptr_t>(e);
+            if (node->graph() != currGraph_) {
+                // the referenced node is from an outer scope, need to mark it as captured
+                currGraph_->addCapture(node);
+            }
             LEAVE("DREF");
-            return std::get<node_ptr_t>(e);
+            return node;
         } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
             ASSERT(!graphs->empty(), "Imported graph list is empty.");
@@ -406,8 +416,14 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
     std::vector<std::tuple<std::string, type_ptr_t, bool>> params;
     if (funcNode->type() == NodeType::Function) {
-        func_type_ptr_t funcType = tt::as_shared<FunctionNode>(funcNode)->funcType();
+        const auto &func = tt::as_shared<FunctionNode>(funcNode);
+        func_type_ptr_t funcType = func->funcType();
         params = funcType->normParams();
+        // link capture nodes to the function node
+        // to ensure the function node is executed after the capture nodes
+        for (const auto &capNode : func->graph()->capture()) {
+            Node::link(LinkType::Ctrl, capNode, funcNode);
+        }
     } else if (funcNode->type() == NodeType::Operator) {
         func_type_ptr_t funcType = tt::as_shared<OperatorNode>(funcNode)->funcType();
         params = funcType->normParams();
@@ -473,8 +489,14 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     node_ptr_t funcNode = any_cast<node_ptr_t>(funcNodeRes);
     std::vector<std::tuple<std::string, type_ptr_t, bool>> params;
     if (funcNode->type() == NodeType::Function) {
-        func_type_ptr_t funcType = tt::as_shared<FunctionNode>(funcNode)->funcType();
+        const auto &func = tt::as_shared<FunctionNode>(funcNode);
+        func_type_ptr_t funcType = func->funcType();
         params = funcType->withParams();
+        // link capture nodes to the function node
+        // to ensure the function node is executed after the capture nodes
+        for (const auto &capNode : func->graph()->capture()) {
+            Node::link(LinkType::Ctrl, capNode, funcNode);
+        }
     } else if (funcNode->type() == NodeType::Operator) {
         func_type_ptr_t funcType = tt::as_shared<OperatorNode>(funcNode)->funcType();
         params = funcType->withParams();
@@ -613,6 +635,10 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         currGraph_->addDependency(subGraph);
         func_ptr_t funcData = FunctionData::create(subGraph);
         node_ptr_t funcNode = FunctionNode::create(graph, graph->addRuntimeConstant(), funcData);
+
+        for (const auto &capNode : subGraph->capture()) {
+            Node::link(LinkType::Ctrl, capNode, funcNode);
+        }
 
         Node::link(LinkType::Ctrl, brchNode, funcNode);
         Node::link(LinkType::Ctrl, funcNode, joinNode);
