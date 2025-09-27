@@ -874,7 +874,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
-        data = makeDataFromLiteral(parseNumber<int64_t>(str));
+        data = makeDataFromLiteral(parseNumber<int32_t>(str));
     } break;
     case LiteralType::Real: {
         data = makeDataFromLiteral(parseNumber<double>(str));

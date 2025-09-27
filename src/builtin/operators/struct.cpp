@@ -194,18 +194,18 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         stepData = frame.get(ins[2]);
     }
 
-    auto extractInt64 = [&](const data_ptr_t &d) -> std::optional<int64_t> {
+    auto extractInt32 = [&](const data_ptr_t &d) -> std::optional<int32_t> {
         if (d->type() == Type::Int32()) {
-            return static_cast<int64_t>(d->as<Int32Data>(Type::Int32())->data());
+            return d->as<Int32Data>(Type::Int32())->data();
         } else if (d->type() == Type::Int64()) {
-            return d->as<Int64Data>(Type::Int64())->data();
+            return static_cast<int32_t>(d->as<Int64Data>(Type::Int64())->data());
         }
         return std::nullopt;
     };
 
-    auto startOpt = extractInt64(startData);
-    auto stopOpt = extractInt64(stopData);
-    auto stepOpt = stepData ? extractInt64(stepData) : std::optional<int64_t>(1);
+    auto startOpt = extractInt32(startData);
+    auto stopOpt = extractInt32(stopData);
+    auto stepOpt = stepData ? extractInt32(stepData) : std::optional<int32_t>(1);
 
     if (!startOpt || !stopOpt || !stepOpt) {
         ctx.rtmDiags()
@@ -215,9 +215,9 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         return OperatorReturnCode::OK;
     }
 
-    int64_t start = *startOpt;
-    int64_t stop = *stopOpt;
-    int64_t step = *stepOpt;
+    int32_t start = *startOpt;
+    int32_t stop = *stopOpt;
+    int32_t step = *stepOpt;
 
     if (step == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<range> step cannot be zero");
@@ -228,8 +228,8 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     data_vec_t values;
 
     if ((step > 0 && start < stop) || (step < 0 && start > stop)) {
-        for (int64_t i = start; (step > 0 ? i < stop : i > stop); i += step) {
-            values.push_back(std::make_shared<Int64Data>(i));
+        for (int32_t i = start; (step > 0 ? i < stop : i > stop); i += step) {
+            values.push_back(std::make_shared<Int32Data>(i));
         }
     }
 
@@ -262,8 +262,8 @@ OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     const data_ptr_t &startArg = frame.get(normIns[0]);
     const data_ptr_t &endArg = frame.get(normIns[1]);
 
-    if (!Type::castSafetyCheck(startArg->type(), Type::Int64()) ||
-        !Type::castSafetyCheck(endArg->type(), Type::Int64())) {
+    if (!Type::castSafetyCheck(startArg->type(), Type::Int32()) ||
+        !Type::castSafetyCheck(endArg->type(), Type::Int32())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<slice> operator requires start and end to be integer");
@@ -271,8 +271,8 @@ OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         return OperatorReturnCode::OK;
     }
 
-    int32_t start = startArg->as<Int64Data>(Type::Int64())->data();
-    int32_t end = endArg->as<Int64Data>(Type::Int64())->data();
+    int32_t start = startArg->as<Int32Data>(Type::Int32())->data();
+    int32_t end = endArg->as<Int32Data>(Type::Int32())->data();
 
     auto slice_range = [](int32_t size, int32_t &start, int32_t &end) {
         if (start < 0)

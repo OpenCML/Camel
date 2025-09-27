@@ -17,7 +17,7 @@ func render(snake: Point[]): void sync {
 
     rows.foreach((y: int) => sync {
         let cols = range(0, WIDTH)
-        let lines = cols.map((x: int): string => {
+        let lines = cols.map((x: int): string => sync {
             let p = { x: x, y: y }
             return if snake.contains(p) then "O" else "."
         })
@@ -50,14 +50,13 @@ func game_loop(snake: Point[], dir: int, steps: int) sync {
     let new_snake = move_snake(snake, dir)
     let head = new_snake.head()
 
-    // if hit_wall(head) then {
-    //     println("Game over! You hit the wall after {} steps.".format(steps))
-    // }
-    //  else sync {
-    //     sleep(2)  // Delay for visual effect
-    //     // Recursive call for next frame
-    //     game_loop(new_snake, dir, steps + 1)
-    // }
+    if hit_wall(head) then {
+        println("Game over! You hit the wall after {} steps.".format(steps))
+    } else sync {
+        sleep(500)  // Delay for visual effect
+        // Recursive call for next frame
+        game_loop(new_snake, dir, steps + 1)
+    }
 }
 
 // Entry point
