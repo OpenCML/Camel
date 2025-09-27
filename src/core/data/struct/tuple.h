@@ -42,6 +42,7 @@ class TupleData : public StructData {
 
     data_ptr_t get(size_t index) const;
     std::vector<data_ptr_t> &raw() { return data_; }
+    size_t size() const { return data_.size(); }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refIndices_.empty(); }

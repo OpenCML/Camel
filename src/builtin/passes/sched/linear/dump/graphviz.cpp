@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -213,7 +213,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             break;
         }
         case NodeType::Struct: {
-            label = "DREF";
+            label = "FILL";
             shape = "diamond";
             break;
         }
