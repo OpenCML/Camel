@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,118 @@ OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
     }
 
     frame.set(self, std::make_shared<Int32Data>(len));
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __head__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withIns = self->withInputs();
+    const auto &normIns = self->normInputs();
+
+    if (withIns.size() != 1) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<head> operator requires one with argument: (collection)");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+    if (!normIns.empty()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<head> operator does not take normal arguments");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &collect = frame.get(withIns[0]);
+
+    if (!collect || collect->isNull()) {
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    auto extract_first = [&](const data_vec_t &vec) -> data_ptr_t {
+        return vec.empty() ? Data::null() : vec[0];
+    };
+
+    switch (collect->type()->code()) {
+    case TypeCode::List:
+        frame.set(self, extract_first(tt::as_shared<ListData>(collect)->raw()));
+        break;
+    case TypeCode::Array:
+        frame.set(self, extract_first(tt::as_shared<ArrayData>(collect)->raw()));
+        break;
+    case TypeCode::Vector:
+        frame.set(self, extract_first(tt::as_shared<VectorData>(collect)->raw()));
+        break;
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<head> not supported for type: " + collect->type()->toString());
+        frame.set(self, Data::null());
+        break;
+    }
+
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __tail__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withIns = self->withInputs();
+    const auto &normIns = self->normInputs();
+
+    if (withIns.size() != 1) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<tail> operator requires one with argument: (collection)");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+    if (!normIns.empty()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<tail> operator does not take normal arguments");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &collect = frame.get(withIns[0]);
+
+    if (!collect || collect->isNull()) {
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    auto slice_tail = [](const data_vec_t &vec) -> data_vec_t {
+        return vec.size() <= 1 ? data_vec_t{} : data_vec_t(vec.begin() + 1, vec.end());
+    };
+
+    switch (collect->type()->code()) {
+    case TypeCode::List: {
+        auto vec = tt::as_shared<ListData>(collect)->raw();
+        frame.set(self, ListData::create(slice_tail(vec)));
+        break;
+    }
+    case TypeCode::Array: {
+        auto array = tt::as_shared<ArrayData>(collect)->raw();
+        auto new_vec = slice_tail(array);
+        auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
+        frame.set(
+            self,
+            ArrayData::create(Type::Array(elem_type, new_vec.size()), std::move(new_vec)));
+        break;
+    }
+    case TypeCode::Vector: {
+        auto vec = tt::as_shared<VectorData>(collect)->raw();
+        frame.set(self, VectorData::create(collect->type(), slice_tail(vec)));
+        break;
+    }
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<tail> not supported for type: " + collect->type()->toString());
+        frame.set(self, Data::null());
+        break;
+    }
+
     return OperatorReturnCode::OK;
 }
 

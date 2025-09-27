@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,6 +95,8 @@ static const std::pair<std::string, std::string> others[] = {
     {"exit", ":os/exit"},
     // struct
     {"len", ":struct/len"},
+    {"head", ":struct/head"},
+    {"tail", ":struct/tail"},
     {"range", ":struct/range"},
     {"slice", ":struct/slice"},
     {"concat", ":struct/concat"},

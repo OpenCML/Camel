@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,6 +69,8 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // struct
         {"struct/len", __len__},
+        {"struct/head", __head__},
+        {"struct/tail", __tail__},
         {"struct/range", __range__},
         {"struct/slice", __slice__},
         {"struct/concat", __concat__},

@@ -28,7 +28,7 @@ func render(snake: Point[]): void sync {
 }
 
 func move_snake(snake: Point[], dir: int): Point[] {
-    let head = snake.first()
+    let head = snake.head()
     let new_head = match dir {
         case 0 => { x: head.$x, y: head.$y - 1 }  // Up
         case 1 => { x: head.$x, y: head.$y + 1 }  // Down
@@ -45,10 +45,10 @@ func hit_wall(p: Point): bool {
 }
 
 // Recursive game loop
-func game_loop(snake: Point[], dir: Dir, steps: int) sync {
+func game_loop(snake: Point[], dir: int, steps: int) sync {
     render(snake)
     let new_snake = move_snake(snake, dir)
-    let head = new_snake.first()
+    let head = new_snake.head()
 
     if hit_wall(head) then {
         println("Game over! You hit the wall after {} steps.".format(steps))
