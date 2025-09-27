@@ -86,6 +86,8 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"os/set_terminal_raw_mode", __set_terminal_raw_mode__},
         {"os/has_input", __has_input__},
         {"os/get_char", __get_char__},
+        {"os/get_chars", __get_chars__},
+        {"os/clear_input_buffer", __clear_input_buffer__},
 
         // str
         {"str/format", __format__},

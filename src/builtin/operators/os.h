@@ -28,3 +28,5 @@ OperatorReturnCode __whoami__(GraphIR::node_ptr_t &self, Frame &frame, Context &
 OperatorReturnCode __set_terminal_raw_mode__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __has_input__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __get_char__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __get_chars__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __clear_input_buffer__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

@@ -33,7 +33,6 @@
 #include <unistd.h>
 #endif
 
-// Terminal control for raw mode and non-blocking input
 #ifdef _WIN32
 // ========================
 // Windows 实现
@@ -41,12 +40,14 @@
 #include <conio.h>
 #include <windows.h>
 
+// Terminal control namespace
 namespace Terminal {
 
 static DWORD originalMode = 0;
 static HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
 static bool rawModeEnabled = false;
 
+// 设置或取消原始输入模式
 bool setRawMode(bool enable) {
     if (enable && !rawModeEnabled) {
         if (!GetConsoleMode(hStdin, &originalMode))
@@ -64,11 +65,24 @@ bool setRawMode(bool enable) {
     return true;
 }
 
+// 检查是否有输入
 bool hasInput() { return _kbhit() != 0; }
 
-std::string readInput() {
-    char ch = _getch();
-    return std::string(1, ch);
+// 读取输入，最多读取 maxChars 个字符，-1 代表全部读取
+std::string readInput(int maxChars = -1) {
+    std::string result;
+    while (hasInput() && (maxChars < 0 || static_cast<int>(result.size()) < maxChars)) {
+        char ch = _getch();
+        result += ch;
+    }
+    return result;
+}
+
+// 清空输入缓冲区
+void clearInputBuffer() {
+    while (_kbhit()) {
+        _getch(); // 丢弃字符
+    }
 }
 
 } // namespace Terminal
@@ -87,6 +101,7 @@ namespace Terminal {
 static struct termios originalTermios;
 static bool rawModeEnabled = false;
 
+// 设置或取消原始输入模式
 bool setRawMode(bool enable) {
     if (enable && !rawModeEnabled) {
         if (!isatty(STDIN_FILENO))
@@ -95,7 +110,7 @@ bool setRawMode(bool enable) {
             return false;
 
         struct termios raw = originalTermios;
-        raw.c_lflag &= ~(ECHO | ICANON); // 关闭回显和标准输入缓冲
+        raw.c_lflag &= ~(ECHO | ICANON); // 关闭回显和标准缓冲
         raw.c_cc[VMIN] = 1;
         raw.c_cc[VTIME] = 0;
 
@@ -109,6 +124,7 @@ bool setRawMode(bool enable) {
     return true;
 }
 
+// 检查是否有输入
 bool hasInput() {
     fd_set fds;
     struct timeval tv = {0, 0};
@@ -118,16 +134,29 @@ bool hasInput() {
     return select(STDIN_FILENO + 1, &fds, nullptr, nullptr, &tv) > 0;
 }
 
-std::string readInput() {
+// 读取输入，最多读取 maxChars 个字符，-1 代表全部读取
+std::string readInput(int maxChars = -1) {
+    std::string result;
     char ch;
-    ssize_t n = read(STDIN_FILENO, &ch, 1);
-    if (n <= 0)
-        return "";
-    return std::string(1, ch);
+    while (hasInput() && (maxChars < 0 || static_cast<int>(result.size()) < maxChars)) {
+        ssize_t n = read(STDIN_FILENO, &ch, 1);
+        if (n <= 0)
+            break;
+        result += ch;
+    }
+    return result;
+}
+
+// 清空输入缓冲区
+void clearInputBuffer() {
+    char ch;
+    while (hasInput()) {
+        if (read(STDIN_FILENO, &ch, 1) <= 0)
+            break;
+    }
 }
 
 } // namespace Terminal
-
 #endif
 
 namespace GIR = GraphIR;
@@ -254,8 +283,38 @@ OperatorReturnCode __get_char__(GIR::node_ptr_t &self, Frame &frame, Context &ct
         return OperatorReturnCode::OK;
     }
 
-    std::string input = Terminal::readInput();
+    std::string input = Terminal::readInput(1);
 
     frame.set(self, std::make_shared<StringData>(input));
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __get_chars__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    int maxChars = -1; // Default to read all available characters
+    if (ins.size() == 1) {
+        maxChars = frame.get(ins[0])->as<Int32Data>(Type::Int32())->data();
+    }
+
+    std::string input = Terminal::readInput(maxChars);
+
+    frame.set(self, std::make_shared<StringData>(input));
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __clear_input_buffer__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    if (!ins.empty()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<clear_input_buffer>", 0, ins.size());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    Terminal::clearInputBuffer();
+
+    frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }

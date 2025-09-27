@@ -44,6 +44,18 @@ OSBuiltinModule::OSBuiltinModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
         {{"value", Type::Any(), nullptr, false}},
         Type::Void(),
         ":os/get_char");
+    exportBuiltinOperator(
+        "get_chars",
+        param_init_list{},
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
+        ":os/get_chars");
+    exportBuiltinOperator(
+        "clear_input_buffer",
+        param_init_list{},
+        {{"value", Type::Any(), nullptr, false}},
+        Type::Void(),
+        ":os/clear_input_buffer");
 }
 
 bool OSBuiltinModule::load() {
