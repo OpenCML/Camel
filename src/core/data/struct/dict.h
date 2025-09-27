@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class DictData : public StructData {
   private:
-    std::vector<std::string> refs_;
+    std::vector<std::string> refIndices_;
     std::unordered_map<std::string, data_ptr_t> data_;
 
   public:
@@ -56,7 +56,7 @@ class DictData : public StructData {
     }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolved() const override { return refIndices_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

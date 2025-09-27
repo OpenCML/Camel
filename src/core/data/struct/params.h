@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class ParamsData : public StructData {
   private:
-    std::vector<std::pair<size_t, std::string>> refs_;
+    std::vector<std::pair<size_t, std::string>> refIndices_;
     std::vector<data_ptr_t> indexData_;
     std::map<std::string, data_ptr_t> namedData_;
 
@@ -34,7 +34,7 @@ class ParamsData : public StructData {
     bool emplace(const data_ptr_t &val, const std::string &key = "");
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolved() const override { return refIndices_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     data_vec_t &indexData() { return indexData_; }
