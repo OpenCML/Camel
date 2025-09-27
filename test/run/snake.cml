@@ -57,7 +57,8 @@ func game_loop(snake: Point[], dir: string, steps: int) sync {
     } else sync {
         sleep(500)  // Delay for visual effect
         // Recursive call for next frame
-        game_loop(new_snake, if has_input() then get_char() else dir, steps + 1)
+        let d = if has_input() then (input()).head() else dir
+        game_loop(new_snake, d, steps + 1)
     }
 }
 

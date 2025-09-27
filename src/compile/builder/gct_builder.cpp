@@ -19,6 +19,7 @@
 
 #include "gct_builder.h"
 
+#include "utils/escape.h"
 #include "utils/scope.h"
 #include "utils/token.h"
 #include "utils/type.h"
@@ -843,98 +844,6 @@ node_ptr_t Builder::visitTryExpr(const AST::node_ptr_t &ast) {
 
 template <typename T> inline data_ptr_t makeDataFromLiteral(const T &value) {
     return tt::as_shared<Data>(make_shared<PrimaryData<T>>(value));
-}
-
-// 处理类似 "\n", "\t", "\033", "\x1b" 等转义字符
-inline std::string decodeEscapes(const std::string &input) {
-    std::ostringstream oss;
-    for (size_t i = 0; i < input.length(); ++i) {
-        if (input[i] == '\\' && i + 1 < input.length()) {
-            char next = input[i + 1];
-            switch (next) {
-            case 'n':
-                oss << '\n';
-                ++i;
-                break;
-            case 't':
-                oss << '\t';
-                ++i;
-                break;
-            case 'r':
-                oss << '\r';
-                ++i;
-                break;
-            case '\\':
-                oss << '\\';
-                ++i;
-                break;
-            case '\'':
-                oss << '\'';
-                ++i;
-                break;
-            case '\"':
-                oss << '\"';
-                ++i;
-                break;
-            case 'a':
-                oss << '\a';
-                ++i;
-                break;
-            case 'b':
-                oss << '\b';
-                ++i;
-                break;
-            case 'f':
-                oss << '\f';
-                ++i;
-                break;
-            case 'v':
-                oss << '\v';
-                ++i;
-                break;
-
-            case 'x': { // 十六进制转义：\x1b
-                if (i + 3 < input.length() && isxdigit(input[i + 2]) && isxdigit(input[i + 3])) {
-                    std::string hex = input.substr(i + 2, 2);
-                    char ch = static_cast<char>(std::stoi(hex, nullptr, 16));
-                    oss << ch;
-                    i += 3;
-                } else {
-                    oss << '\\' << next; // 不合法的 \x 转义，原样输出
-                    i++;
-                }
-            } break;
-
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7': { // 八进制转义：\033
-                size_t j = i + 1;
-                std::string oct;
-                while (j < input.length() && oct.length() < 3 && input[j] >= '0' &&
-                       input[j] <= '7') {
-                    oct += input[j];
-                    ++j;
-                }
-                char ch = static_cast<char>(std::stoi(oct, nullptr, 8));
-                oss << ch;
-                i = j - 1;
-            } break;
-
-            default:
-                oss << '\\' << next;
-                ++i;
-                break;
-            }
-        } else {
-            oss << input[i];
-        }
-    }
-    return oss.str();
 }
 
 /*
