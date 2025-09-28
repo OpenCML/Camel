@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -245,8 +245,15 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(graph->hasFuncType(), "Function graph must have a function type.");
     node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (!graph->hasOutput() && res != nullptr) {
-        graph->setOutput(res);
+    if (!graph->hasOutput()) {
+        if (res) {
+            graph->setOutput(res);
+        } else {
+            // function with no return value, setting null by default
+            DataIndex index = graph->addSharedConstant(Data::null());
+            node_ptr_t resNode = SourceNode::create(graph, index);
+            graph->setOutput(resNode);
+        }
     }
     leaveScope();
     LEAVE("FUNC");
@@ -428,7 +435,10 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         func_type_ptr_t funcType = tt::as_shared<OperatorNode>(funcNode)->funcType();
         params = funcType->normParams();
     } else {
-        ASSERT(false, "LINK node must be a function or operator node.");
+        DataIndex index = currGraph_->addRuntimeConstant();
+        node_ptr_t invokeNode = InvokeNode::create(currGraph_, index);
+        Node::link(LinkType::With, funcNode, invokeNode);
+        funcNode = invokeNode;
     }
     // TODO: check if the number of parameters matches the number of inputs
     vector<node_ptr_t> inputs;
@@ -501,7 +511,10 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         func_type_ptr_t funcType = tt::as_shared<OperatorNode>(funcNode)->funcType();
         params = funcType->withParams();
     } else {
-        ASSERT(false, "WITH node must be a function or operator node.");
+        DataIndex index = currGraph_->addRuntimeConstant();
+        node_ptr_t attachNode = AttachNode::create(currGraph_, index);
+        Node::link(LinkType::Norm, funcNode, attachNode);
+        funcNode = attachNode;
     }
     // TODO: check if the number of parameters matches the number of inputs
     vector<node_ptr_t> inputs;
@@ -626,9 +639,16 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         graph_ptr_t subGraph = enterScope();
         // TODO: set the function type properly
         subGraph->setFuncType(std::make_shared<FunctionType>());
-        node_ptr_t execNode = visitExecNode(caseExecNode);
-        if (!subGraph->hasOutput() && execNode != nullptr) {
-            subGraph->setOutput(execNode);
+        node_ptr_t res = visitExecNode(caseExecNode);
+        if (!subGraph->hasOutput()) {
+            if (res) {
+                subGraph->setOutput(res);
+            } else {
+                // function with no return value, setting null by default
+                DataIndex index = subGraph->addSharedConstant(Data::null());
+                node_ptr_t resNode = SourceNode::create(subGraph, index);
+                subGraph->setOutput(resNode);
+            }
         }
         leaveScope();
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,20 +26,24 @@ namespace GraphIR {
 
 std::string to_string(NodeType type) {
     switch (type) {
-    case NodeType::Select:
-        return "Select";
-    case NodeType::Access:
-        return "Access";
-    case NodeType::Struct:
-        return "Struct";
     case NodeType::Source:
         return "Source";
+    case NodeType::Struct:
+        return "Struct";
+    case NodeType::Access:
+        return "Access";
     case NodeType::Return:
         return "Return";
-    case NodeType::Operator:
-        return "Operator";
+    case NodeType::Select:
+        return "Select";
+    case NodeType::Invoke:
+        return "Invoke";
+    case NodeType::Attach:
+        return "Attach";
     case NodeType::Function:
         return "Function";
+    case NodeType::Operator:
+        return "Operator";
     }
     ASSERT(false, "Unknown NodeType");
     return "Unknown";

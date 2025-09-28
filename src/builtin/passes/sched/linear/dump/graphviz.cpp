@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -242,6 +242,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
         case NodeType::Access: {
             auto accessNode = tt::as_shared<AccessNode>(node);
             label = "$" + accessNode->index2String();
+            shape = "diamond";
             break;
         }
         case NodeType::Struct: {
@@ -260,6 +261,22 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             }
             break;
         }
+        case NodeType::Return: {
+            label = "RETN";
+            shape = "doublecircle";
+            size = "width=0.9, height=0.9";
+            break;
+        }
+        case NodeType::Invoke: {
+            label = "CALL";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::Attach: {
+            label = "WITH";
+            shape = "diamond";
+            break;
+        }
         case NodeType::Function: {
             func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
             label = func->name().empty() ? func->graph()->name() : func->name();
@@ -271,12 +288,6 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             auto oper = tt::as_shared<OperatorNode>(node);
             label = oper->oper()->name();
             shape = "diamond";
-            break;
-        }
-        case NodeType::Return: {
-            label = "RETN";
-            shape = "doublecircle";
-            size = "width=0.9, height=0.9";
             break;
         }
         default:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,13 +34,15 @@
 namespace GraphIR {
 
 enum class NodeType {
-    Select,
-    Access,   // Element accessed during runtime
-    Struct,   // Runtime constructed data structure
     Source,   // Compile-time constant or port
+    Struct,   // Runtime constructed data structure
+    Access,   // Element accessed during runtime
     Return,   // Final output node
-    Operator, // Atomic operation
+    Select,   // Conditional branch or join
+    Invoke,   // Invoke a function
+    Attach,   // Attach with params to a function
     Function, // (Sub)-Graph, function
+    Operator, // Atomic operation
 };
 
 enum class LinkType {
@@ -409,6 +411,34 @@ class ReturnNode : public Node {
     }
 
     std::string toString() const override { return std::string("Node(Return)"); }
+};
+
+class InvokeNode : public Node {
+  public:
+    InvokeNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Invoke, index) {}
+    ~InvokeNode() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
+        auto node = std::make_shared<InvokeNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
+
+    std::string toString() const override { return std::string("Node(Invoke)"); }
+};
+
+class AttachNode : public Node {
+  public:
+    AttachNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::Attach, index) {}
+    ~AttachNode() = default;
+
+    static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
+        auto node = std::make_shared<AttachNode>(graph, index);
+        graph->addNode(node);
+        return node;
+    }
+
+    std::string toString() const override { return std::string("Node(Attach)"); }
 };
 
 class OperatorNode : public Node {

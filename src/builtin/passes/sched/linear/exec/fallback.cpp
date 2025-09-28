@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -167,30 +167,71 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
         for (size_t i = 0; i < nodes.size(); ++i) {
             auto &n = nodes[i];
             switch (n->type()) {
-            case NodeType::Function: {
-                evalFuncNode(n, i == nodes.size() - 1);
+            case NodeType::Source: {
+                ASSERT(currFrame->get(n) != nullptr, "Source data is null.");
                 break;
             }
-            case NodeType::Operator: {
-                auto opNode = tt::as_shared<OperatorNode>(n);
-                const auto &uri = opNode->oper()->uri();
-
-                if (uri.starts_with(":mark/")) {
-                    if (uri == ":mark/map") {
-                        evalMarkedOperator_map(n, currFrame);
-                    } else if (uri == ":mark/apply") {
-                        evalMarkedOperator_apply(n, currFrame);
-                    } else if (uri == ":mark/filter") {
-                        evalMarkedOperator_filter(n, currFrame);
-                    } else if (uri == ":mark/foreach") {
-                        evalMarkedOperator_foreach(n, currFrame);
-                    } else {
-                        ASSERT(false, std::format("Mark Operator {} not implemented.", uri));
-                    }
-                    break;
+            case NodeType::Struct: {
+                auto structNode = tt::as_shared<StructNode>(n);
+                const auto &srcNode = n->withInputs().front();
+                const auto &dataInputs = n->normInputs();
+                data_ptr_t data = currFrame->get(srcNode)->clone();
+                ASSERT(data != nullptr, "Struct data is null.");
+                data_vec_t inputs;
+                inputs.reserve(dataInputs.size());
+                for (const auto &input : dataInputs) {
+                    inputs.push_back(currFrame->get(input));
                 }
-
-                context_->eval(uri, n, *currFrame);
+                data->resolve(inputs);
+                currFrame->set(n, data);
+                break;
+            }
+            case NodeType::Access: {
+                data_ptr_t source = currFrame->get(n->dataInputs().front());
+                auto accessNode = tt::as_shared<AccessNode>(n);
+                if (accessNode->isNum()) {
+                    size_t idx = accessNode->index<size_t>();
+                    if (source->type()->code() == TypeCode::Array) {
+                        auto arrayData = tt::as_shared<ArrayData>(source);
+                        ASSERT(idx < arrayData->size(), "Array index out of bounds.");
+                        currFrame->set(n, arrayData->raw()[idx]);
+                    } else if (source->type()->code() == TypeCode::Tuple) {
+                        auto tupleData = tt::as_shared<TupleData>(source);
+                        ASSERT(idx < tupleData->size(), "Tuple index out of bounds.");
+                        currFrame->set(n, tupleData->raw()[idx]);
+                    } else if (source->type()->code() == TypeCode::Vector) {
+                        auto vectorData = tt::as_shared<VectorData>(source);
+                        ASSERT(idx < vectorData->size(), "Vector index out of bounds.");
+                        currFrame->set(n, vectorData->raw()[idx]);
+                    } else {
+                        context_->rtmDiags()
+                            ->of(RuntimeDiag::IncompatibleArgType)
+                            .commit(0, "Access", "Array/Tuple/Vector", source->type()->toString());
+                        throw CamelRuntimeException(
+                            RuntimeExceptionCode::InvalidWithParameter,
+                            "Incorrect args.");
+                    }
+                } else {
+                    std::string key = accessNode->index<std::string>();
+                    if (source->type()->code() == TypeCode::Dict) {
+                        auto dictData = tt::as_shared<DictData>(source);
+                        ASSERT(
+                            dictData->raw().find(key) != dictData->raw().end(),
+                            "Dict key not found: " + key);
+                        currFrame->set(n, dictData->raw().at(key));
+                    } else {
+                        context_->rtmDiags()
+                            ->of(RuntimeDiag::IncompatibleArgType)
+                            .commit(0, "Access", "Dict", source->type()->toString());
+                        throw CamelRuntimeException(
+                            RuntimeExceptionCode::InvalidWithParameter,
+                            "Incorrect args.");
+                    }
+                }
+                break;
+            }
+            case NodeType::Return: {
+                ASSERT(false, "Return node should not appear in the execution sequence.");
                 break;
             }
             case NodeType::Select: {
@@ -261,68 +302,46 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 }
                 break;
             }
-            case NodeType::Struct: {
-                auto structNode = tt::as_shared<StructNode>(n);
-                const auto &srcNode = n->withInputs().front();
-                const auto &dataInputs = n->normInputs();
-                data_ptr_t data = currFrame->get(srcNode)->clone();
-                ASSERT(data != nullptr, "Struct data is null.");
-                data_vec_t inputs;
-                inputs.reserve(dataInputs.size());
-                for (const auto &input : dataInputs) {
-                    inputs.push_back(currFrame->get(input));
+            case NodeType::Invoke: {
+                const auto &funcNode = n->withInputs().front();
+                const auto &funcData = currFrame->get(funcNode);
+                const auto &tgtGraph = tt::as_shared<FunctionData>(funcData)->graph();
+                frame_ptr_t funcFrame = Frame::create(currFrame, tgtGraph);
+
+                data_vec_t args;
+                const auto &inNodes = n->normInputs();
+                args.reserve(inNodes.size());
+                for (const auto &inNode : inNodes) {
+                    args.push_back(currFrame->get(inNode));
                 }
-                data->resolve(inputs);
-                currFrame->set(n, data);
+
+                const auto &portNodes = tgtGraph->portNodes();
+                for (size_t i = 0; i < portNodes.size(); ++i) {
+                    funcFrame->set(portNodes[i].first, args[i]);
+                }
+
+                const auto &res = evalGraph(tgtGraph, funcFrame);
+                currFrame->set(n, res);
                 break;
             }
-            case NodeType::Access: {
-                data_ptr_t source = currFrame->get(n->dataInputs().front());
-                auto accessNode = tt::as_shared<AccessNode>(n);
-                if (accessNode->isNum()) {
-                    size_t idx = accessNode->index<size_t>();
-                    if (source->type()->code() == TypeCode::Array) {
-                        auto arrayData = tt::as_shared<ArrayData>(source);
-                        ASSERT(idx < arrayData->size(), "Array index out of bounds.");
-                        currFrame->set(n, arrayData->raw()[idx]);
-                    } else if (source->type()->code() == TypeCode::Tuple) {
-                        auto tupleData = tt::as_shared<TupleData>(source);
-                        ASSERT(idx < tupleData->size(), "Tuple index out of bounds.");
-                        currFrame->set(n, tupleData->raw()[idx]);
-                    } else if (source->type()->code() == TypeCode::Vector) {
-                        auto vectorData = tt::as_shared<VectorData>(source);
-                        ASSERT(idx < vectorData->size(), "Vector index out of bounds.");
-                        currFrame->set(n, vectorData->raw()[idx]);
-                    } else {
-                        context_->rtmDiags()
-                            ->of(RuntimeDiag::IncompatibleArgType)
-                            .commit(0, "Access", "Array/Tuple/Vector", source->type()->toString());
-                        throw CamelRuntimeException(
-                            RuntimeExceptionCode::InvalidWithParameter,
-                            "Incorrect args.");
-                    }
-                } else {
-                    std::string key = accessNode->index<std::string>();
-                    if (source->type()->code() == TypeCode::Dict) {
-                        auto dictData = tt::as_shared<DictData>(source);
-                        ASSERT(
-                            dictData->raw().find(key) != dictData->raw().end(),
-                            "Dict key not found: " + key);
-                        currFrame->set(n, dictData->raw().at(key));
-                    } else {
-                        context_->rtmDiags()
-                            ->of(RuntimeDiag::IncompatibleArgType)
-                            .commit(0, "Access", "Dict", source->type()->toString());
-                        throw CamelRuntimeException(
-                            RuntimeExceptionCode::InvalidWithParameter,
-                            "Incorrect args.");
-                    }
-                }
+            case NodeType::Attach: {
+                ASSERT(false, "Attach node not implemented yet.");
                 break;
             }
-            case NodeType::Source: {
-                data_ptr_t data = currFrame->get(n);
-                ASSERT(data != nullptr, "Source data is null.");
+            case NodeType::Function: {
+                evalFuncNode(n, i == nodes.size() - 1);
+                break;
+            }
+            case NodeType::Operator: {
+                auto opNode = tt::as_shared<OperatorNode>(n);
+                const auto &uri = opNode->oper()->uri();
+
+                if (uri.starts_with(":mark/")) {
+                    evalMarkedOperator(uri.substr(6), n, currFrame);
+                    break;
+                }
+
+                context_->eval(uri, n, *currFrame);
                 break;
             }
             default:
@@ -351,6 +370,21 @@ any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
     auto mainGraph = optMainGraph.value();
     auto mainFrame = Frame::create(rootFrame, mainGraph);
     return evalGraph(mainGraph, mainFrame);
+}
+
+void FallbackExecSchedPass::evalMarkedOperator(
+    const std::string uri, const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame) {
+    if (uri == "map") {
+        evalMarkedOperator_map(node, currFrame);
+    } else if (uri == "apply") {
+        evalMarkedOperator_apply(node, currFrame);
+    } else if (uri == "filter") {
+        evalMarkedOperator_filter(node, currFrame);
+    } else if (uri == "foreach") {
+        evalMarkedOperator_foreach(node, currFrame);
+    } else {
+        ASSERT(false, std::format("Mark Operator {} not implemented.", uri));
+    }
 }
 
 void FallbackExecSchedPass::evalMarkedOperator_map(const node_ptr_t &node, frame_ptr_t &currFrame) {
