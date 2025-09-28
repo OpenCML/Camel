@@ -26,27 +26,64 @@ namespace GraphIR {
 
 std::string to_string(NodeType type) {
     switch (type) {
-    case NodeType::Source:
-        return "Source";
-    case NodeType::Struct:
-        return "Struct";
-    case NodeType::Access:
-        return "Access";
-    case NodeType::Return:
-        return "Return";
-    case NodeType::Select:
-        return "Select";
-    case NodeType::Invoke:
-        return "Invoke";
-    case NodeType::Attach:
-        return "Attach";
-    case NodeType::Function:
-        return "Function";
-    case NodeType::Operator:
-        return "Operator";
+    case NodeType::DATA:
+        return "DATA";
+    case NodeType::PORT:
+        return "PORT";
+    case NodeType::COPY:
+        return "COPY";
+    case NodeType::FILL:
+        return "FILL";
+    case NodeType::ACCS:
+        return "ACCS";
+    case NodeType::BRCH:
+        return "BRCH";
+    case NodeType::JOIN:
+        return "JOIN";
+    case NodeType::CALL:
+        return "CALL";
+    case NodeType::WITH:
+        return "WITH";
+    case NodeType::FUNC:
+        return "FUNC";
+    case NodeType::OPER:
+        return "OPER";
+    case NodeType::EXIT:
+        return "EXIT";
     }
     ASSERT(false, "Unknown NodeType");
     return "Unknown";
+}
+
+/*
+Graph
+*/
+
+void Graph::setFuncType(const func_type_ptr_t &type) {
+    ASSERT(funcType_ == nullptr, "Function type has already been set.");
+    funcType_ = type;
+}
+
+func_type_ptr_t Graph::funcType() const {
+    ASSERT(funcType_ != nullptr, "Graph has not been set to a function type.");
+    return funcType_;
+}
+
+void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
+
+void Graph::addCapture(const node_ptr_t &node) { capture_.insert(node); }
+
+node_ptr_t Graph::addPort(bool isWithArg) {
+    DataIndex index = arena_->addConstant(nullptr, false);
+    node_ptr_t portNode = PortNode::create(shared_from_this(), index);
+    ports_.push_back({portNode, isWithArg});
+    return portNode;
+}
+
+void Graph::setOutput(const node_ptr_t &node) {
+    ASSERT(output_ == nullptr, "Output node has already been set.");
+    output_ = ExitNode::create(shared_from_this(), node->index());
+    Node::link(LinkType::Norm, node, output_);
 }
 
 /*
@@ -147,52 +184,5 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         break;
     }
 }
-
-/*
-Graph
-*/
-
-void Graph::setFuncType(const func_type_ptr_t &type) {
-    ASSERT(funcType_ == nullptr, "Function type has already been set.");
-    funcType_ = type;
-}
-
-func_type_ptr_t Graph::funcType() const {
-    ASSERT(funcType_ != nullptr, "Graph has not been set to a function type.");
-    return funcType_;
-}
-
-void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
-
-void Graph::addCapture(const node_ptr_t &node) { capture_.insert(node); }
-
-node_ptr_t Graph::addPort(bool isWithArg) {
-    DataIndex index = arena_->addConstant(nullptr, false);
-    node_ptr_t portNode = SourceNode::create(shared_from_this(), index, true);
-    ports_.push_back({portNode, isWithArg});
-    return portNode;
-}
-
-void Graph::setOutput(const node_ptr_t &node) {
-    ASSERT(output_ == nullptr, "Output node has already been set.");
-    output_ = ReturnNode::create(shared_from_this(), node->index());
-    Node::link(LinkType::Norm, node, output_);
-}
-
-/*
-LiteralNode
-*/
-
-/*
-StructNode
-*/
-
-/*
-OperatorNode
-*/
-
-/*
-SelectNode
-*/
 
 } // namespace GraphIR

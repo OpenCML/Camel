@@ -25,7 +25,7 @@ using namespace GraphIR;
 
 std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_t &graph) {
     if (graphTopoNodesCache_.find(graph.get()) == graphTopoNodesCache_.end()) {
-        node_ptr_t retNode = graph->returnNode();
+        node_ptr_t retNode = graph->exitNode();
         auto sortedNodes = findReachable(
             retNode,
             [](const node_ptr_t &n) {
@@ -89,7 +89,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
     frame_ptr_t currFrame = frame, tailFrame = nullptr;
 
     auto evalFuncNode = [&](const node_ptr_t &n, bool isTailCall) {
-        auto func = tt::as_shared<FunctionNode>(n)->func();
+        auto func = tt::as_shared<FuncNode>(n)->func();
         auto tgtGraph = func->graph();
         EXEC_WHEN_DEBUG(l.in("Eval").debug(
             "Calling function: {} (tail-call: {})",
@@ -167,16 +167,24 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
         for (size_t i = 0; i < nodes.size(); ++i) {
             auto &n = nodes[i];
             switch (n->type()) {
-            case NodeType::Source: {
-                ASSERT(currFrame->get(n) != nullptr, "Source data is null.");
+            case NodeType::DATA: {
+                ASSERT(currFrame->get(n) != nullptr, "DATA data is null.");
                 break;
             }
-            case NodeType::Struct: {
-                auto structNode = tt::as_shared<StructNode>(n);
+            case NodeType::PORT: {
+                ASSERT(currFrame->get(n) != nullptr, "PORT data is null.");
+                break;
+            }
+            case NodeType::COPY: {
+                currFrame->set(n, currFrame->get(n->normInputs().front())->clone());
+                break;
+            }
+            case NodeType::FILL: {
+                auto structNode = tt::as_shared<FillNode>(n);
                 const auto &srcNode = n->withInputs().front();
                 const auto &dataInputs = n->normInputs();
                 data_ptr_t data = currFrame->get(srcNode)->clone();
-                ASSERT(data != nullptr, "Struct data is null.");
+                ASSERT(data != nullptr, "FILL data is null.");
                 data_vec_t inputs;
                 inputs.reserve(dataInputs.size());
                 for (const auto &input : dataInputs) {
@@ -186,9 +194,9 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 currFrame->set(n, data);
                 break;
             }
-            case NodeType::Access: {
+            case NodeType::ACCS: {
                 data_ptr_t source = currFrame->get(n->dataInputs().front());
-                auto accessNode = tt::as_shared<AccessNode>(n);
+                auto accessNode = tt::as_shared<AccsNode>(n);
                 if (accessNode->isNum()) {
                     size_t idx = accessNode->index<size_t>();
                     if (source->type()->code() == TypeCode::Array) {
@@ -206,7 +214,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                     } else {
                         context_->rtmDiags()
                             ->of(RuntimeDiag::IncompatibleArgType)
-                            .commit(0, "Access", "Array/Tuple/Vector", source->type()->toString());
+                            .commit(0, "ACCS", "Array/Tuple/Vector", source->type()->toString());
                         throw CamelRuntimeException(
                             RuntimeExceptionCode::InvalidWithParameter,
                             "Incorrect args.");
@@ -222,7 +230,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                     } else {
                         context_->rtmDiags()
                             ->of(RuntimeDiag::IncompatibleArgType)
-                            .commit(0, "Access", "Dict", source->type()->toString());
+                            .commit(0, "ACCS", "Dict", source->type()->toString());
                         throw CamelRuntimeException(
                             RuntimeExceptionCode::InvalidWithParameter,
                             "Incorrect args.");
@@ -230,79 +238,72 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 }
                 break;
             }
-            case NodeType::Return: {
-                ASSERT(false, "Return node should not appear in the execution sequence.");
+            case NodeType::BRCH: {
+                // BRCH node
+                ASSERT(
+                    n->withInputs().size() == 1,
+                    "Branch node must have exactly one with input.");
+                auto condData = currFrame->get(n->withInputs().front());
+                const auto &normIns = n->normInputs();
+                const auto &ctrlOuts = n->ctrlOutputs();
+                if (normIns.size() == 0) {
+                    // if-else branch
+                    ASSERT(
+                        ctrlOuts.size() == 2,
+                        "If-else branch node must have exactly two outputs.");
+                    auto boolCondData = condData->as<BoolData>(Type::Bool());
+                    bool cond = boolCondData->data();
+                    if (cond) {
+                        brInfoStack_.push(ctrlOuts.front());
+                    } else {
+                        brInfoStack_.push(ctrlOuts.back());
+                    }
+                } else {
+                    // match-case branch
+                    ASSERT(
+                        normIns.size() == ctrlOuts.size() - 1,
+                        "Match-case branch node must have exactly one more ctrl output than "
+                        "norm inputs.");
+                    size_t j = 0;
+                    for (; j < normIns.size(); ++j) {
+                        auto caseData = currFrame->get(normIns[j]);
+                        EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                            "Matching case: {} with condition: {}",
+                            caseData->toString(),
+                            condData->toString()));
+                        if (condData->equals(caseData)) {
+                            brInfoStack_.push(ctrlOuts[j]);
+                            break;
+                        }
+                    }
+                    if (j == normIns.size()) {
+                        // fallthrough to else case if no match
+                        brInfoStack_.push(ctrlOuts.back());
+                    }
+                }
+                i += ctrlOuts.size(); // skip all cases
                 break;
             }
-            case NodeType::Select: {
-                // BRCH node
-                auto selectNode = tt::as_shared<SelectNode>(n);
-                auto selectType = selectNode->selectType();
-                if (selectType == SelectNode::SelectType::Branch) {
-                    ASSERT(
-                        n->withInputs().size() == 1,
-                        "Branch node must have exactly one with input.");
-                    auto condData = currFrame->get(n->withInputs().front());
-                    const auto &normIns = n->normInputs();
-                    const auto &ctrlOuts = n->ctrlOutputs();
-                    if (normIns.size() == 0) {
-                        // if-else branch
-                        ASSERT(
-                            ctrlOuts.size() == 2,
-                            "If-else branch node must have exactly two outputs.");
-                        auto boolCondData = condData->as<BoolData>(Type::Bool());
-                        bool cond = boolCondData->data();
-                        if (cond) {
-                            brInfoStack_.push(ctrlOuts.front());
-                        } else {
-                            brInfoStack_.push(ctrlOuts.back());
-                        }
-                    } else {
-                        // match-case branch
-                        ASSERT(
-                            normIns.size() == ctrlOuts.size() - 1,
-                            "Match-case branch node must have exactly one more ctrl output than "
-                            "norm inputs.");
-                        size_t j = 0;
-                        for (; j < normIns.size(); ++j) {
-                            auto caseData = currFrame->get(normIns[j]);
-                            EXEC_WHEN_DEBUG(l.in("Eval").debug(
-                                "Matching case: {} with condition: {}",
-                                caseData->toString(),
-                                condData->toString()));
-                            if (condData->equals(caseData)) {
-                                brInfoStack_.push(ctrlOuts[j]);
-                                break;
-                            }
-                        }
-                        if (j == normIns.size()) {
-                            // fallthrough to else case if no match
-                            brInfoStack_.push(ctrlOuts.back());
-                        }
-                    }
-                    i += ctrlOuts.size(); // skip all cases
+            case NodeType::JOIN: {
+                auto execNode = brInfoStack_.top();
+                brInfoStack_.pop();
+                // Here, the branch function node is delayed to be executed at the JOIN
+                // node, which facilitates tail-call optimization. This is because when the
+                // JOIN node is the last node of the current execution sequence, the
+                // function call can be optimized as a tail-call. If the branch function
+                // call is executed earlier, it is difficult to determine whether it is a
+                // tail-call.
+                if (i == nodes.size() - 1) {
+                    evalFuncNode(execNode, true);
+                    // no need to set currFrame->set(n, ...)
+                    // as the tail-call function will reset the frame
                 } else {
-                    // JOIN node
-                    auto execNode = brInfoStack_.top();
-                    brInfoStack_.pop();
-                    // Here, the branch function node is delayed to be executed at the JOIN
-                    // node, which facilitates tail-call optimization. This is because when the
-                    // JOIN node is the last node of the current execution sequence, the
-                    // function call can be optimized as a tail-call. If the branch function
-                    // call is executed earlier, it is difficult to determine whether it is a
-                    // tail-call.
-                    if (i == nodes.size() - 1) {
-                        evalFuncNode(execNode, true);
-                        // no need to set currFrame->set(n, ...)
-                        // as the tail-call function will reset the frame
-                    } else {
-                        evalFuncNode(execNode, false);
-                        currFrame->set(n, currFrame->get(execNode));
-                    }
+                    evalFuncNode(execNode, false);
+                    currFrame->set(n, currFrame->get(execNode));
                 }
                 break;
             }
-            case NodeType::Invoke: {
+            case NodeType::CALL: {
                 const auto &funcNode = n->withInputs().front();
                 const auto &funcData = currFrame->get(funcNode);
                 const auto &tgtGraph = tt::as_shared<FunctionData>(funcData)->graph();
@@ -324,16 +325,16 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 currFrame->set(n, res);
                 break;
             }
-            case NodeType::Attach: {
+            case NodeType::WITH: {
                 ASSERT(false, "Attach node not implemented yet.");
                 break;
             }
-            case NodeType::Function: {
+            case NodeType::FUNC: {
                 evalFuncNode(n, i == nodes.size() - 1);
                 break;
             }
-            case NodeType::Operator: {
-                auto opNode = tt::as_shared<OperatorNode>(n);
+            case NodeType::OPER: {
+                auto opNode = tt::as_shared<OperNode>(n);
                 const auto &uri = opNode->oper()->uri();
 
                 if (uri.starts_with(":mark/")) {
@@ -344,15 +345,17 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 context_->eval(uri, n, *currFrame);
                 break;
             }
-            default:
-                ASSERT(false, "Unknown node type.");
+            case NodeType::EXIT: {
+                ASSERT(false, "Return node should not appear in the execution sequence.");
+                break;
+            }
             }
         }
     } while (loop);
 
     currRecursionDepth_--;
 
-    const auto &retNode = currFrame->graph()->returnNode();
+    const auto &retNode = currFrame->graph()->exitNode();
     ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
