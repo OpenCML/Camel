@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -233,47 +233,68 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
         tooltip = graph->name() + "::" + node->toString();
 
         switch (node->type()) {
-        case NodeType::Select: {
-            auto selectNode = tt::as_shared<SelectNode>(node);
-            label = selectNode->selectType() == SelectNode::SelectType::Branch ? "BRCH" : "JOIN";
+        case NodeType::DATA: {
+            auto sourceNode = tt::as_shared<DataNode>(node);
+            data_ptr_t data = sourceNode->dataOf(*graph->arena());
+            label = data->toString();
+            break;
+        }
+        case NodeType::PORT: {
+            ASSERT(portsNameMap.contains(i), "Port index out of range.");
+            label = portsNameMap[i].first;
+            style = "dashed";
+            break;
+        }
+        case NodeType::COPY: {
+            label = "COPY";
             shape = "diamond";
             break;
         }
-        case NodeType::Access: {
-            auto accessNode = tt::as_shared<AccessNode>(node);
-            label = "$" + accessNode->index2String();
-            break;
-        }
-        case NodeType::Struct: {
+        case NodeType::FILL: {
             label = "FILL";
             shape = "diamond";
             break;
         }
-        case NodeType::Source: {
-            if (portsNameMap.contains(i)) {
-                label = portsNameMap[i].first;
-                style = "dashed";
-            } else {
-                auto sourceNode = tt::as_shared<SourceNode>(node);
-                data_ptr_t data = sourceNode->dataOf(*graph->arena());
-                label = data->toString();
-            }
+        case NodeType::ACCS: {
+            auto accessNode = tt::as_shared<AccsNode>(node);
+            label = "$" + accessNode->index2String();
+            shape = "diamond";
             break;
         }
-        case NodeType::Function: {
-            func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
+        case NodeType::BRCH: {
+            label = "BRCH";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::JOIN: {
+            label = "JOIN";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::CALL: {
+            label = "CALL";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::WITH: {
+            label = "WITH";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::FUNC: {
+            func_ptr_t func = tt::as_shared<FuncNode>(node)->func();
             label = func->name().empty() ? func->graph()->name() : func->name();
             shape = "Mdiamond";
             size = "width=1.1, height=1.1";
             break;
         }
-        case NodeType::Operator: {
-            auto oper = tt::as_shared<OperatorNode>(node);
+        case NodeType::OPER: {
+            auto oper = tt::as_shared<OperNode>(node);
             label = oper->oper()->name();
             shape = "diamond";
             break;
         }
-        case NodeType::Return: {
+        case NodeType::EXIT: {
             label = "RETN";
             shape = "doublecircle";
             size = "width=0.9, height=0.9";

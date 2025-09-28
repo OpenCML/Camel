@@ -38,7 +38,7 @@ func move_snake(snake: Point[], dir: string): Point[] {
         case 'd' => { x: now_head.$x + 1, y: now_head.$y }  // Right
         case _ => now_head
     }
-    return [new_head].extend(snake.slice(0, snake.len() - 1))
+    return [new_head].concat(snake.slice(0, snake.len() - 1))
 }
 
 // Check if the snake hits the wall

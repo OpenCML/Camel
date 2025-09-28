@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -423,27 +423,30 @@ OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         return OperatorReturnCode::OK;
     }
 
-    const data_ptr_t &collection = frame.get(withIns[0]);
+    const auto &collectNode = withIns[0];
+    const data_ptr_t &collection = frame.get(collectNode);
     const data_ptr_t &element = frame.get(normIns[0]);
 
     switch (collection->type()->code()) {
     case TypeCode::List: {
         auto vec = tt::as_shared<ListData>(collection)->raw();
         vec.push_back(element);
-        frame.set(self, ListData::create(std::move(vec)));
+        frame.set(collectNode, ListData::create(std::move(vec)));
         break;
     }
     case TypeCode::Array: {
         auto vec = tt::as_shared<ArrayData>(collection)->raw();
         vec.push_back(element);
         auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(self, ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
+        frame.set(
+            collectNode,
+            ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
         break;
     }
     case TypeCode::Vector: {
         auto vec = tt::as_shared<VectorData>(collection)->raw();
         vec.push_back(element);
-        frame.set(self, VectorData::create(collection->type(), std::move(vec)));
+        frame.set(collectNode, VectorData::create(collection->type(), std::move(vec)));
         break;
     }
     default:
@@ -454,6 +457,7 @@ OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         return OperatorReturnCode::OK;
     }
 
+    frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }
 
@@ -470,7 +474,8 @@ OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         return OperatorReturnCode::OK;
     }
 
-    const data_ptr_t &collection = frame.get(withIns[0]);
+    const auto &collectNode = withIns[0];
+    const data_ptr_t &collection = frame.get(collectNode);
     const data_ptr_t &other = frame.get(normIns[0]);
 
     if (collection->type()->code() != other->type()->code()) {
@@ -486,7 +491,7 @@ OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         auto vec = tt::as_shared<ListData>(collection)->raw();
         auto ext = tt::as_shared<ListData>(other)->raw();
         vec.insert(vec.end(), ext.begin(), ext.end());
-        frame.set(self, ListData::create(std::move(vec)));
+        frame.set(collectNode, ListData::create(std::move(vec)));
         break;
     }
     case TypeCode::Array: {
@@ -494,14 +499,16 @@ OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         auto ext = tt::as_shared<ArrayData>(other)->raw();
         vec.insert(vec.end(), ext.begin(), ext.end());
         auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(self, ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
+        frame.set(
+            collectNode,
+            ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
         break;
     }
     case TypeCode::Vector: {
         auto vec = tt::as_shared<VectorData>(collection)->raw();
         auto ext = tt::as_shared<VectorData>(other)->raw();
         vec.insert(vec.end(), ext.begin(), ext.end());
-        frame.set(self, VectorData::create(collection->type(), std::move(vec)));
+        frame.set(collectNode, VectorData::create(collection->type(), std::move(vec)));
         break;
     }
     default:
@@ -512,6 +519,7 @@ OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         return OperatorReturnCode::OK;
     }
 
+    frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }
 
