@@ -239,7 +239,6 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 break;
             }
             case NodeType::BRCH: {
-                // BRCH node
                 ASSERT(
                     n->withInputs().size() == 1,
                     "Branch node must have exactly one with input.");
@@ -325,8 +324,8 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 currFrame->set(n, res);
                 break;
             }
-            case NodeType::WITH: {
-                ASSERT(false, "Attach node not implemented yet.");
+            case NodeType::BIND: {
+                ASSERT(false, "BIND node not implemented yet.");
                 break;
             }
             case NodeType::FUNC: {
@@ -346,7 +345,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 break;
             }
             case NodeType::EXIT: {
-                ASSERT(false, "Return node should not appear in the execution sequence.");
+                ASSERT(false, "EXIT node should not appear in the execution sequence.");
                 break;
             }
             }

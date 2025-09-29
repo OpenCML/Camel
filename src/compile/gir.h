@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Sep. 28, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,7 +42,7 @@ enum class NodeType {
     BRCH, // Conditional branch
     JOIN, // Conditional branch join
     CALL, // Invoke a function
-    WITH, // Attach with params to a function
+    BIND, // Attach with params to a function
     FUNC, // (Sub)-Graph, function
     OPER, // Atomic operation
     EXIT, // Final output node
@@ -476,18 +476,18 @@ class CallNode : public Node {
     std::string toString() const override { return std::string("CALL()"); }
 };
 
-class WithNode : public Node {
+class BindNode : public Node {
   public:
-    WithNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::WITH, index) {}
-    ~WithNode() = default;
+    BindNode(graph_ptr_t graph, const DataIndex &index) : Node(graph, NodeType::BIND, index) {}
+    ~BindNode() = default;
 
     static node_ptr_t create(graph_ptr_t graph, const DataIndex &index) {
-        auto node = std::make_shared<WithNode>(graph, index);
+        auto node = std::make_shared<BindNode>(graph, index);
         graph->addNode(node);
         return node;
     }
 
-    std::string toString() const override { return std::string("With()"); }
+    std::string toString() const override { return std::string("BIND()"); }
 };
 
 class FuncNode : public Node {

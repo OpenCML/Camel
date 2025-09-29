@@ -28,7 +28,7 @@ func linear(x: float[], w: float[], b: float): float {
 
 // Main function: test the network
 func main(): int sync {
-    // macro: binding
+    // macro: function composition
     let forward = linear..sigmoid
 
     // // macro: auto differentiation

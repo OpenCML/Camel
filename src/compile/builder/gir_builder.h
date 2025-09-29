@@ -78,6 +78,10 @@ class Builder {
     bool varied_;
 
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
+    // if a function node is marked as called,
+    // the node itself does not represent a function
+    // but the result of invoking the function
+    std::unordered_set<Node *> calledNodesSet_;
     node_ptr_t lastCalledFuncNode_;
 
     std::optional<node_ptr_t> nodeAt(const std::string &name) { return nodeScope_->get(name); }

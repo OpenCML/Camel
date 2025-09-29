@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 28, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,8 +42,8 @@ std::string to_string(NodeType type) {
         return "JOIN";
     case NodeType::CALL:
         return "CALL";
-    case NodeType::WITH:
-        return "WITH";
+    case NodeType::BIND:
+        return "BIND";
     case NodeType::FUNC:
         return "FUNC";
     case NodeType::OPER:
