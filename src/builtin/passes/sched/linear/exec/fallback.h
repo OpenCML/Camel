@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 28, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,7 @@ class FallbackExecSchedPass : public LinearSchedPass {
     void evalMarkedOperator_map(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
     void evalMarkedOperator_apply(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
     void evalMarkedOperator_filter(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_reduce(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
     void evalMarkedOperator_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
 
   public:

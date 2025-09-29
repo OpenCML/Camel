@@ -1,0 +1,52 @@
+module neural
+
+import { exp } from math
+// import { ApplyGrad } from nn
+
+// Activation function: Sigmoid
+func sigmoid(x: float): float {
+    return 1.0 / (1.0 + exp(-x))
+}
+
+// Vector dot product function
+func dot(a: float[], b: float[]): float {
+    return ((zip(a, b))
+        .map((e: float[]) => e[0] * e[1]))
+        .reduce((acc: float, cur: float) => acc + cur, 0.0)
+}
+
+// Linear transformation function
+func linear(x: float[], w: float[], b: float): float {
+    return dot(x, w) + b
+}
+
+// Forward propagation example: single neuron
+func forward(input: float[], weights: float[], bias: float): float {
+    let z = dot(input, weights) + bias
+    return sigmoid(z)
+}
+
+// Main function: test the network
+func main(): int sync {
+    // // macro: binding
+    // let forward = linear..sigmoid
+
+    // // macro: auto differentiation
+    // let backward = ApplyGrad(forward)
+
+    // let trainer = forward..backward
+
+    // Input vector (features)
+    let input = [1.0, 2.0, 3.0]         // x1, x2, x3
+
+    // Weight vector
+    let weights = [0.1, 0.2, 0.3]       // w1, w2, w3
+
+    // Bias term
+    let bias = 0.5                      // b
+
+    let output = forward(input, weights, bias)
+    println("output: {}".format(output))
+
+    return 0
+}

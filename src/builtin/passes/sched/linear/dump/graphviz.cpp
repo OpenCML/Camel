@@ -295,7 +295,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             break;
         }
         case NodeType::EXIT: {
-            label = "RETN";
+            label = "EXIT";
             shape = "doublecircle";
             size = "width=0.9, height=0.9";
             break;

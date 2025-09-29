@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,8 @@
 #include "compile/gir.h"
 #include "core/context/context.h"
 #include "core/context/frame.h"
+
+#include <cmath> // For std::exp, std::fabs
 
 namespace GIR = GraphIR;
 
@@ -54,6 +56,46 @@ OperatorReturnCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> not supported for type " + val->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "<exp> operator requires exactly one argument");
+
+    const data_ptr_t &x = frame.get(ins[0]);
+
+    if (!x->type()->primary()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<exp> operator requires a primary type");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    data_ptr_t result;
+
+    if (x->type() == Type::Float()) {
+        auto val = x->as<FloatData>(Type::Float());
+        result = std::make_shared<FloatData>(std::exp(val->data()));
+    } else if (x->type() == Type::Double()) {
+        auto val = x->as<DoubleData>(Type::Double());
+        result = std::make_shared<DoubleData>(std::exp(val->data()));
+    } else if (x->type() == Type::Int32()) {
+        auto val = x->as<Int32Data>(Type::Int32());
+        result = std::make_shared<DoubleData>(std::exp(static_cast<double>(val->data())));
+    } else if (x->type() == Type::Int64()) {
+        auto val = x->as<Int64Data>(Type::Int64());
+        result = std::make_shared<DoubleData>(std::exp(static_cast<double>(val->data())));
+    } else {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<exp> operator not supported for type " + x->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }

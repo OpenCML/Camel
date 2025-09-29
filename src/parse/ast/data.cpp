@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -124,7 +124,7 @@ std::string to_string(BinaryDataOp op) {
         return "%";
     case BinaryDataOp::Mat:
         return "@";
-    case BinaryDataOp::Exp:
+    case BinaryDataOp::Pow:
         return "^";
     case BinaryDataOp::Index:
         return "[]";
