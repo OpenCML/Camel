@@ -9,7 +9,9 @@ func sigmoid(x: float): float {
 
 // Vector dot product function
 func dot(a: float[], b: float[]): float {
-    return zip(a, b).map((x: float, y: float) => x * y).reduce((acc: float, cur: float) => acc + cur, 0.0)
+    return zip(a, b)
+        .map((x: float, y: float) => x * y)
+        .reduce((acc: float, cur: float) => acc + cur, 0.0)
 }
 
 // Linear transformation function
@@ -17,21 +19,21 @@ func linear(x: float[], w: float[], b: float): float {
     return dot(x, w) + b
 }
 
-// Forward propagation example: single neuron
-// func forward(input: float[], weights: float[], bias: float): float {
-//     let z = dot(input, weights) + bias
-//     return sigmoid(z)
-// }
+Forward propagation example: single neuron
+func forward(input: float[], weights: float[], bias: float): float {
+    let z = dot(input, weights) + bias
+    return sigmoid(z)
+}
 
 // Main function: test the network
 func main(): int sync {
-    // macro: binding
-    let forward = linear..sigmoid
+    // // macro: binding
+    // let forward = linear..sigmoid
 
-    // macro: auto differentiation
-    let backward = ApplyGrad(forward)
+    // // macro: auto differentiation
+    // let backward = ApplyGrad(forward)
 
-    let trainer = forward..backward
+    // let trainer = forward..backward
 
     // Input vector (features)
     let input = [1.0, 2.0, 3.0]         // x1, x2, x3

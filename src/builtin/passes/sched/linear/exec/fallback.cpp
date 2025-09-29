@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 28, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -383,6 +383,8 @@ void FallbackExecSchedPass::evalMarkedOperator(
         evalMarkedOperator_apply(node, currFrame);
     } else if (uri == "filter") {
         evalMarkedOperator_filter(node, currFrame);
+    } else if (uri == "reduce") {
+        evalMarkedOperator_reduce(node, currFrame);
     } else if (uri == "foreach") {
         evalMarkedOperator_foreach(node, currFrame);
     } else {
@@ -582,6 +584,88 @@ void FallbackExecSchedPass::evalMarkedOperator_filter(
             RuntimeExceptionCode::InvalidWithParameter,
             "Unsupported type.");
     }
+}
+
+void FallbackExecSchedPass::evalMarkedOperator_reduce(
+    const node_ptr_t &node, frame_ptr_t &currFrame) {
+    // 参数检查：必须有1个with输入，2个norm输入
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 2) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<reduce>", 2, node->withInputs().size() + node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+
+    auto targetData = currFrame->get(node->withInputs().front());
+    auto funcData = currFrame->get(node->normInputs()[0]);
+    auto initData = currFrame->get(node->normInputs()[1]);
+
+    if (funcData->type()->code() != TypeCode::Func) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<reduce>", "Function", funcData->type()->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidNormParameter,
+            "Expected function.");
+    }
+
+    auto func = funcData->as<FunctionData>(Type::Func());
+
+    // 检查函数参数个数（必须是2个参数）
+    if (func->graph()->portNodes().size() != 2) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<reduce>", 2, func->graph()->portNodes().size());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidNormParameter,
+            "Function must take 2 parameters.");
+    }
+
+    data_vec_t elements;
+
+    switch (targetData->type()->code()) {
+    case TypeCode::List:
+        elements = tt::as_shared<ListData>(targetData)->raw();
+        break;
+    case TypeCode::Array:
+        elements = tt::as_shared<ArrayData>(targetData)->raw();
+        break;
+    case TypeCode::Vector:
+        elements = tt::as_shared<VectorData>(targetData)->raw();
+        break;
+    case TypeCode::Tuple:
+        elements = tt::as_shared<TupleData>(targetData)->raw();
+        break;
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<reduce>", "List/Array/Vector/Tuple", targetData->type()->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidWithParameter,
+            "Unsupported input type.");
+    }
+
+    if (elements.empty()) {
+        // 空序列：返回初始值
+        currFrame->set(node, initData);
+        return;
+    }
+
+    // 执行 reduce 操作
+    data_ptr_t result = initData;
+    for (const auto &item : elements) {
+        auto frame = Frame::create(currFrame, func->graph());
+
+        // 设置参数：acc, cur
+        const auto &ports = func->graph()->portNodes();
+        frame->set(ports[0].first, result); // acc
+        frame->set(ports[1].first, item);   // cur
+
+        result = evalGraph(func->graph(), frame); // 更新 result
+    }
+
+    // 设置结果
+    currFrame->set(node, result);
 }
 
 void FallbackExecSchedPass::evalMarkedOperator_foreach(

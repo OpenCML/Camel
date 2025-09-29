@@ -69,6 +69,7 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // struct
         {"struct/len", __len__},
+        {"struct/zip", __zip__},
         {"struct/head", __head__},
         {"struct/tail", __tail__},
         {"struct/range", __range__},

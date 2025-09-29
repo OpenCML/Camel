@@ -94,6 +94,7 @@ static const std::pair<std::string, std::string> others[] = {
     {"exit", ":os/exit"},
     // struct
     {"len", ":struct/len"},
+    {"zip", ":struct/zip"},
     {"head", ":struct/head"},
     {"tail", ":struct/tail"},
     {"range", ":struct/range"},

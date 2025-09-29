@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Sep. 28, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,73 @@ OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
     }
 
     frame.set(self, std::make_shared<Int32Data>(len));
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &withIns = self->withInputs();
+
+    if (withIns.size() != 2) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<zip> operator requires exactly two input sequences");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_ptr_t &a = frame.get(withIns[0]);
+    const data_ptr_t &b = frame.get(withIns[1]);
+
+    auto getElements = [](const data_ptr_t &data) -> std::optional<data_vec_t> {
+        switch (data->type()->code()) {
+        case TypeCode::List:
+            return tt::as_shared<ListData>(data)->raw();
+        case TypeCode::Array:
+            return tt::as_shared<ArrayData>(data)->raw();
+        case TypeCode::Vector:
+            return tt::as_shared<VectorData>(data)->raw();
+        case TypeCode::Tuple:
+            return tt::as_shared<TupleData>(data)->raw();
+        default:
+            return std::nullopt;
+        }
+    };
+
+    auto aElemsOpt = getElements(a);
+    auto bElemsOpt = getElements(b);
+
+    if (!aElemsOpt || !bElemsOpt) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<zip> requires both inputs to be List/Array/Vector/Tuple");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    const data_vec_t &aElems = *aElemsOpt;
+    const data_vec_t &bElems = *bElemsOpt;
+
+    if (aElems.size() != bElems.size()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<zip> requires both sequences to have the same length");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    data_vec_t zipped;
+    zipped.reserve(aElems.size());
+
+    for (size_t i = 0; i < aElems.size(); ++i) {
+        data_vec_t pair{aElems[i], bElems[i]};
+        zipped.push_back(ArrayData::create(Type::Array(Type::Any(), 2), std::move(pair)));
+    }
+
+    frame.set(
+        self,
+        ArrayData::create(
+            Type::Array(Type::Array(Type::Any(), 2), zipped.size()),
+            std::move(zipped)));
     return OperatorReturnCode::OK;
 }
 
