@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 28, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,8 +153,6 @@ any Builder::visit(const GCT::node_ptr_t &node) {
         return visitLinkNode(node);
     case GCT::LoadType::WITH:
         return visitWithNode(node);
-    case GCT::LoadType::BIND:
-        return visitBindNode(node);
     case GCT::LoadType::ACCS:
         return visitAccsNode(node);
     case GCT::LoadType::BRCH:
@@ -582,13 +580,6 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     }
     LEAVE("WITH");
     return funcNode;
-}
-
-node_ptr_t Builder::visitBindNode(const GCT::node_ptr_t &gct) {
-    ENTER("BIND");
-    ASSERT(false, "Bind nodes are not supported in the current version of the compiler.");
-    LEAVE("BIND");
-    return nullptr;
 }
 
 node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {

@@ -28,8 +28,8 @@ func forward(input: float[], weights: float[], bias: float): float {
 
 // Main function: test the network
 func main(): int sync {
-    // // macro: binding
-    // let forward = linear..sigmoid
+    // macro: binding
+    let forward = linear..sigmoid
 
     // // macro: auto differentiation
     // let backward = ApplyGrad(forward)

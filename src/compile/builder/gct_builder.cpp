@@ -738,8 +738,9 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
     case AST::ReservedDataOp::Bind: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        res = createNodeAs<BindLoad>();
-        *res << visitData(lhsASTNode) << visitData(rhsASTNode);
+        node_ptr_t opNode = createNodeAs<DRefLoad>("__bind__");
+        res = createNodeAs<LinkLoad>(2);
+        *res << opNode << visitData(lhsASTNode) << visitData(rhsASTNode);
     } break;
 
     case AST::ReservedDataOp::As: {

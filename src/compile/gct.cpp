@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,8 +48,6 @@ std::string to_string(LoadType type) {
         return "LINK";
     case LoadType::WITH:
         return "WITH";
-    case LoadType::BIND:
-        return "BIND";
     case LoadType::ACCS:
         return "ACCS";
     case LoadType::BRCH:

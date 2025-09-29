@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,7 +47,6 @@ enum class LoadType {
     WAIT,
     LINK,
     WITH,
-    BIND,
     ACCS,
     BRCH,
     CASE,
@@ -264,13 +263,6 @@ class WithLoad : public Load {
   private:
     size_t args_;
     std::vector<std::string> kwargs_;
-};
-
-class BindLoad : public Load {
-  public:
-    BindLoad() : Load(LoadType::BIND) {}
-
-    // const std::string toString() const override;
 };
 
 class ExitLoad : public Load {

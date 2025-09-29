@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -109,7 +109,6 @@ class Builder {
     node_ptr_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitLinkNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitWithNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitBindNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitBrchNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
