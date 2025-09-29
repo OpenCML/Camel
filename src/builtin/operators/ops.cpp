@@ -881,3 +881,90 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
     frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }
+
+OperatorReturnCode __builtin__not__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "not operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
+
+    if (val->type() != Type::Bool()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<not> operator requires boolean type, got " + val->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    bool result = !val->as<BoolData>(Type::Bool())->data();
+    frame.set(self, std::make_shared<BoolData>(result));
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__neg__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "neg operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
+
+    if (!val->type()->primary()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<neg> operator requires primary types");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    data_ptr_t result;
+    if (val->type() == Type::Int32()) {
+        result = std::make_shared<Int32Data>(-val->as<Int32Data>(Type::Int32())->data());
+    } else if (val->type() == Type::Int64()) {
+        result = std::make_shared<Int64Data>(-val->as<Int64Data>(Type::Int64())->data());
+    } else if (val->type() == Type::Float()) {
+        result = std::make_shared<FloatData>(-val->as<FloatData>(Type::Float())->data());
+    } else if (val->type() == Type::Double()) {
+        result = std::make_shared<DoubleData>(-val->as<DoubleData>(Type::Double())->data());
+    } else {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<neg> operator not supported for type " + val->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__inv__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 1, "inv operator requires exactly one argument");
+
+    const data_ptr_t &val = frame.get(ins[0]);
+
+    if (!val->type()->primary()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<inv> operator requires primary types");
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    data_ptr_t result;
+    if (val->type() == Type::Int32()) {
+        result = std::make_shared<Int32Data>(~val->as<Int32Data>(Type::Int32())->data());
+    } else if (val->type() == Type::Int64()) {
+        result = std::make_shared<Int64Data>(~val->as<Int64Data>(Type::Int64())->data());
+    } else {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit(
+                "<inv> operator only supported for integer types (Int32 / Int64), got " +
+                val->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}

@@ -82,6 +82,9 @@ static const std::pair<std::string, std::string> binaryOps[] = {
     {"__mat__", ":op/mat"},
     {"__pow__", ":op/pow"},
     {"__idx__", ":op/idx"},
+    {"__not__", ":op/not"},
+    {"__neg__", ":op/neg"},
+    {"__inv__", ":op/inv"},
 };
 
 static const std::pair<std::string, std::string> others[] = {
@@ -107,6 +110,7 @@ static const std::pair<std::string, std::string> others[] = {
     {"map", ":mark/map"},
     {"apply", ":mark/apply"},
     {"filter", ":mark/filter"},
+    {"reduce", ":mark/reduce"},
     {"foreach", ":mark/foreach"},
 };
 

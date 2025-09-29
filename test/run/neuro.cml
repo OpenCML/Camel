@@ -1,6 +1,7 @@
-module neural_net
+module neural
 
-import { ApplyGrad } from nn
+import { exp } from math
+// import { ApplyGrad } from nn
 
 // Activation function: Sigmoid
 func sigmoid(x: float): float {
@@ -9,8 +10,8 @@ func sigmoid(x: float): float {
 
 // Vector dot product function
 func dot(a: float[], b: float[]): float {
-    return zip(a, b)
-        .map((x: float, y: float) => x * y)
+    return ((zip(a, b))
+        .map((x: float, y: float) => x * y))
         .reduce((acc: float, cur: float) => acc + cur, 0.0)
 }
 
@@ -19,7 +20,7 @@ func linear(x: float[], w: float[], b: float): float {
     return dot(x, w) + b
 }
 
-Forward propagation example: single neuron
+// Forward propagation example: single neuron
 func forward(input: float[], weights: float[], bias: float): float {
     let z = dot(input, weights) + bias
     return sigmoid(z)
@@ -45,7 +46,7 @@ func main(): int sync {
     let bias = 0.5                      // b
 
     let output = forward(input, weights, bias)
-    println("output" + output.to_string())
+    println("output: {}".format(output))
 
     return 0
 }

@@ -65,9 +65,9 @@ OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
 }
 
 OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withIns = self->withInputs();
+    const auto &normIns = self->normInputs();
 
-    if (withIns.size() != 2) {
+    if (normIns.size() != 2) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<zip> operator requires exactly two input sequences");
@@ -75,8 +75,8 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
         return OperatorReturnCode::OK;
     }
 
-    const data_ptr_t &a = frame.get(withIns[0]);
-    const data_ptr_t &b = frame.get(withIns[1]);
+    const data_ptr_t &a = frame.get(normIns[0]);
+    const data_ptr_t &b = frame.get(normIns[1]);
 
     auto getElements = [](const data_ptr_t &data) -> std::optional<data_vec_t> {
         switch (data->type()->code()) {

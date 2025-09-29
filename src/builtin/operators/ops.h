@@ -52,3 +52,7 @@ OperatorReturnCode __builtin__mod__(GraphIR::node_ptr_t &self, Frame &frame, Con
 OperatorReturnCode __builtin__mat__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __builtin__pow__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __builtin__idx__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
+OperatorReturnCode __builtin__not__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__neg__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__inv__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
