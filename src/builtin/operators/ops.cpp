@@ -877,7 +877,66 @@ OperatorReturnCode __builtin__pow__(GIR::node_ptr_t &self, Frame &frame, Context
 }
 
 OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    ASSERT(false, "idx operator not implemented");
+    const auto &ins = self->normInputs();
+    ASSERT(ins.size() == 2, "idx operator requires exactly two arguments");
+
+    const data_ptr_t &container = frame.get(ins[0]);
+    const data_ptr_t &index = frame.get(ins[1]);
+
+    const TypeCode containerType = container->type()->code();
+
+    // 数值索引：适用于 Array / Tuple / Vector
+    if (index->type() == Type::Int32() || index->type() == Type::Int64()) {
+        size_t idx = (index->type() == Type::Int32())
+                         ? static_cast<size_t>(index->as<Int32Data>(Type::Int32())->data())
+                         : static_cast<size_t>(index->as<Int64Data>(Type::Int64())->data());
+
+        if (containerType == TypeCode::Array) {
+            auto arr = std::dynamic_pointer_cast<ArrayData>(container);
+            ASSERT(idx < arr->size(), "Array index out of bounds.");
+            frame.set(self, arr->raw()[idx]);
+        } else if (containerType == TypeCode::Tuple) {
+            auto tup = std::dynamic_pointer_cast<TupleData>(container);
+            ASSERT(idx < tup->size(), "Tuple index out of bounds.");
+            frame.set(self, tup->raw()[idx]);
+        } else if (containerType == TypeCode::Vector) {
+            auto vec = std::dynamic_pointer_cast<VectorData>(container);
+            ASSERT(idx < vec->size(), "Vector index out of bounds.");
+            frame.set(self, vec->raw()[idx]);
+        } else {
+            ctx.rtmDiags()
+                ->of(RuntimeDiag::IncompatibleArgType)
+                .commit("<idx>", "Array/Tuple/Vector", container->type()->toString());
+            frame.set(self, Data::null());
+        }
+
+        return OperatorReturnCode::OK;
+    }
+
+    // 字符串索引：适用于 Dict
+    if (index->type() == Type::String()) {
+        if (containerType == TypeCode::Dict) {
+            auto dict = std::dynamic_pointer_cast<DictData>(container);
+            const std::string &key = index->as<StringData>(Type::String())->data();
+            const auto &map = dict->raw();
+
+            auto it = map.find(key);
+            ASSERT(it != map.end(), "Dict key not found: " + key);
+            frame.set(self, it->second);
+        } else {
+            ctx.rtmDiags()
+                ->of(RuntimeDiag::IncompatibleArgType)
+                .commit("<idx>", "Dict", container->type()->toString());
+            frame.set(self, Data::null());
+        }
+
+        return OperatorReturnCode::OK;
+    }
+
+    // 不支持的索引类型
+    ctx.rtmDiags()
+        ->of(RuntimeDiag::IncompatibleArgType)
+        .commit("<idx> operator requires Int or String as index, got " + index->type()->toString());
     frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }

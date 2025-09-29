@@ -5,13 +5,13 @@ import { exp } from math
 
 // Activation function: Sigmoid
 func sigmoid(x: float): float {
-    return 1.0 / (1.0 + (-x).exp())
+    return 1.0 / (1.0 + exp(-x))
 }
 
 // Vector dot product function
 func dot(a: float[], b: float[]): float {
     return ((zip(a, b))
-        .map((x: float, y: float) => x * y))
+        .map((e: float[]) => e[0] * e[1]))
         .reduce((acc: float, cur: float) => acc + cur, 0.0)
 }
 

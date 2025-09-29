@@ -758,7 +758,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Access: {
         const auto &refASTNode = ast->atAs<AST::RefDataLoad>(1);
         const auto &refDataLoad = refASTNode->loadAs<AST::RefDataLoad>();
-        res = createNodeAs<AccsLoad>(refDataLoad->ref());
+        const auto &ref = refDataLoad->ref();
+        try {
+            size_t index = std::stoul(ref.ident());
+            res = createNodeAs<AccsLoad>(index);
+        } catch (const std::exception &) {
+            // Not an index, treat as named access
+            res = createNodeAs<AccsLoad>(ref);
+        }
         *res << visitData(lhsASTNode);
     } break;
     default:
