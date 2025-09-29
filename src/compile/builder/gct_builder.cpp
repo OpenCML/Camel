@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -539,7 +539,7 @@ enum BinaryDataOp {
     Div,
     Mod,
     Mat,
-    Exp,
+    Pow,
     Index, // Data obj, Data* indices
 }
 BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
@@ -630,8 +630,8 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::Mat: {
         opNode = createNodeAs<DRefLoad>("__mat__");
     } break;
-    case AST::BinaryDataOp::Exp: {
-        opNode = createNodeAs<DRefLoad>("__exp__");
+    case AST::BinaryDataOp::Pow: {
+        opNode = createNodeAs<DRefLoad>("__pow__");
     } break;
     case AST::BinaryDataOp::Index: {
         opNode = createNodeAs<DRefLoad>("__idx__");

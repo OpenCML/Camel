@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "core/type/type.h"
 
 OperatorReturnCode __abs__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __exp__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __round__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __ceil__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __floor__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

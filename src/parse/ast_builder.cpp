@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1203,7 +1203,7 @@ any Builder::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *c
         } else if (strOp == "/") {
             op = BinaryDataOp::Div;
         } else if (strOp == "^") {
-            op = BinaryDataOp::Exp;
+            op = BinaryDataOp::Pow;
         } else if (strOp == "@") {
             op = BinaryDataOp::Mat;
         } else if (strOp == "%") {

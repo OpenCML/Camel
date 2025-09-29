@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -218,7 +218,7 @@ do_mod(const data_ptr_t &lhs, const data_ptr_t &rhs, const type_ptr_t &type, Con
 }
 
 data_ptr_t
-do_exp(const data_ptr_t &lhs, const data_ptr_t &rhs, const type_ptr_t &type, Context &ctx) {
+do_pow(const data_ptr_t &lhs, const data_ptr_t &rhs, const type_ptr_t &type, Context &ctx) {
     if (type == Type::Float()) {
         return make_data<FloatData>(
             type,
@@ -230,7 +230,7 @@ do_exp(const data_ptr_t &lhs, const data_ptr_t &rhs, const type_ptr_t &type, Con
     }
     ctx.rtmDiags()
         ->of(RuntimeDiag::RuntimeError)
-        .commit("<exp> operator not supported for type " + type->toString());
+        .commit("<pow> operator not supported for type " + type->toString());
     return nullptr;
 }
 
@@ -300,7 +300,7 @@ OperatorReturnCode __builtin__assn_mod__(GIR::node_ptr_t &self, Frame &frame, Co
 }
 
 OperatorReturnCode __builtin__assn_exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    return eval_assignment_op(self, frame, ctx, "assn_exp", do_exp);
+    return eval_assignment_op(self, frame, ctx, "assn_exp", do_pow);
 }
 
 OperatorReturnCode __builtin__assn_and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
@@ -824,9 +824,9 @@ OperatorReturnCode __builtin__mat__(GIR::node_ptr_t &self, Frame &frame, Context
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__pow__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 2, "exp operator requires exactly two arguments");
+    ASSERT(ins.size() == 2, "pow operator requires exactly two arguments");
 
     const data_ptr_t &base = frame.get(ins[0]);
     const data_ptr_t &exponent = frame.get(ins[1]);
@@ -834,7 +834,7 @@ OperatorReturnCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context
     if (!base->type()->primary() || !exponent->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<exp> operator requires primary types");
+            .commit("<pow> operator requires primary types");
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -842,7 +842,7 @@ OperatorReturnCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context
     if (!Type::castSafetyCheck(exponent->type(), base->type())) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<exp>", base->type()->toString(), exponent->type()->toString());
+            .commit("<pow>", base->type()->toString(), exponent->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -867,7 +867,7 @@ OperatorReturnCode __builtin__exp__(GIR::node_ptr_t &self, Frame &frame, Context
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<exp> operator not supported for type " + base->type()->toString());
+            .commit("<pow> operator not supported for type " + base->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }

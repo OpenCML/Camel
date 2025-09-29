@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,7 +80,7 @@ static const std::pair<std::string, std::string> binaryOps[] = {
     {"__div__", ":op/div"},
     {"__mod__", ":op/mod"},
     {"__mat__", ":op/mat"},
-    {"__exp__", ":op/exp"},
+    {"__pow__", ":op/pow"},
     {"__idx__", ":op/idx"},
 };
 
