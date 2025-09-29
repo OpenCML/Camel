@@ -668,7 +668,7 @@ enum ReservedDataOp {
     NotNullThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     With, // Data obj, Data* args, NamedData* kwargs
-    Bind, // Data lhs, Data rhs
+    Comp, // Data lhs, Data rhs
     As, // Data lhs, Type rhs
     Is, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
@@ -736,9 +736,9 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             *res << visitData(dataNode);
         }
     } break;
-    case AST::ReservedDataOp::Bind: {
+    case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        node_ptr_t opNode = createNodeAs<DRefLoad>("__bind__");
+        node_ptr_t opNode = createNodeAs<DRefLoad>("__cmp__");
         res = createNodeAs<LinkLoad>(2);
         *res << opNode << visitData(lhsASTNode) << visitData(rhsASTNode);
     } break;

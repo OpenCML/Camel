@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,9 +24,10 @@
 extern std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories;
 
-inline func_type_ptr_t
-makeFuncType(const param_init_list &with, const param_init_list &norm, const type_ptr_t &ret) {
-    return std::make_shared<FunctionType>(with, norm, ret);
+inline func_type_ptr_t makeFuncType(
+    const param_init_list &with, const param_init_list &norm, const type_ptr_t &ret,
+    const ModifierSet &mods = Modifier::None) {
+    return std::make_shared<FunctionType>(with, norm, ret, mods);
 }
 
 inline oper_idx_ptr_t

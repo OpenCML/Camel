@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: May. 01, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -812,13 +812,6 @@ any Formatter::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
            any_cast<string>(visitAssignExpr(context->assignExpr()));
 }
 
-// TODO: MODIFIED
-/*
-assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
-logicalOrExpr)?
-    ;
-*/
 /*
 assignExpr
     : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
@@ -925,19 +918,19 @@ any Formatter::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
 
 /*
 linkExpr
-    : bindExpr (('->' | '?->') bindExpr)*
+    : compExpr (('->' | '?->') compExpr)*
     ;
 */
 any Formatter::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
-    return formatBiOpsList(context->bindExpr(), context->children, false);
+    return formatBiOpsList(context->compExpr(), context->children, false);
 }
 
 /*
-bindExpr
+compExpr
     : annoExpr (('..' | '?..') annoExpr)*
     ;
 */
-any Formatter::visitBindExpr(OpenCMLParser::BindExprContext *context) {
+any Formatter::visitCompExpr(OpenCMLParser::CompExprContext *context) {
     return formatBiOpsList(context->annoExpr(), context->children, false);
 }
 

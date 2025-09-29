@@ -72,7 +72,7 @@ enum class BinaryDataOp {
     Index
 };
 
-enum class ReservedDataOp { NullThen, ErrorThen, NotNullThen, Access, Call, With, Bind, As, Is };
+enum class ReservedDataOp { NullThen, ErrorThen, NotNullThen, Access, Call, With, Comp, As, Is };
 
 std::string to_string(DataType type);
 std::string to_string(UnaryDataOp op);

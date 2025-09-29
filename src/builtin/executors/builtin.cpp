@@ -21,6 +21,7 @@
 #include "utils/log.h"
 
 #include "../operators/io.h"
+#include "../operators/macro.h"
 #include "../operators/math.h"
 #include "../operators/ops.h"
 #include "../operators/os.h"
@@ -114,6 +115,9 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // this
         {"zen", __zen__},
+
+        // macro
+        {"macro/bind", __cmp__},
     };
     return map;
 }

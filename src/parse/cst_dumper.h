@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 25, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -250,8 +250,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpNode(context, "LinkExpr");
     };
 
-    std::any visitBindExpr(OpenCMLParser::BindExprContext *context) {
-        return dumpNode(context, "BindExpr");
+    std::any visitCompExpr(OpenCMLParser::CompExprContext *context) {
+        return dumpNode(context, "CompExpr");
     };
 
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {

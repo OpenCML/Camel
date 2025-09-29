@@ -1016,6 +1016,12 @@ assignExpr
 logicalOrExpr)?
     ;
 */
+/*
+assignExpr
+    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
+logicalOrExpr)?
+    ;
+*/
 any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
     ENTER("AssignExpr");
     node_ptr_t lhsNode = any2node(visitLogicalOrExpr(context->logicalOrExpr(0)));
@@ -1314,26 +1320,26 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
 
 /*
 linkExpr
-    : bindExpr (('->' | '?->') bindExpr)*
+    : compExpr (('->' | '?->') compExpr)*
     ;
 */
 any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
     ENTER("LinkExpr");
-    node_ptr_t lhsNode = any2node(visitBindExpr(context->bindExpr(0)));
-    for (size_t i = 1; i < context->bindExpr().size(); i++) {
+    node_ptr_t lhsNode = any2node(visitCompExpr(context->compExpr(0)));
+    for (size_t i = 1; i < context->compExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
-        node_ptr_t rhsNode = any2node(visitBindExpr(context->bindExpr(i)));
+        node_ptr_t rhsNode = any2node(visitCompExpr(context->compExpr(i)));
         if (strOp == "?->") {
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            setNodeTokenRangeByContext(notNullNode, context->bindExpr(i));
+            setNodeTokenRangeByContext(notNullNode, context->compExpr(i));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
         node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
-        setNodeTokenRangeByContext(dataList, context->bindExpr(i));
+        setNodeTokenRangeByContext(dataList, context->compExpr(i));
         node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
-        setNodeTokenRangeByContext(namedDataList, context->bindExpr(i));
+        setNodeTokenRangeByContext(namedDataList, context->compExpr(i));
         *dataList << lhsNode;
         *linkNode << rhsNode << dataList << namedDataList;
         lhsNode = linkNode;
@@ -1343,16 +1349,16 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
 }
 
 /*
-bindExpr
+compExpr
     : annoExpr (('..' | '?..') annoExpr)*
     ;
 */
-any Builder::visitBindExpr(OpenCMLParser::BindExprContext *context) {
-    ENTER("BindExpr");
+any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
+    ENTER("CompExpr");
     node_ptr_t lhsNode = any2node(visitAnnoExpr(context->annoExpr(0)));
     for (size_t i = 1; i < context->annoExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
-        node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
+        node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
         setNodeTokenRangeByContext(dataNode, context->annoExpr(i));
         node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
         if (strOp == "?..") {
@@ -1364,7 +1370,7 @@ any Builder::visitBindExpr(OpenCMLParser::BindExprContext *context) {
         *dataNode << lhsNode << rhsNode;
         lhsNode = dataNode;
     }
-    LEAVE("BindExpr");
+    LEAVE("CompExpr");
     return lhsNode;
 }
 

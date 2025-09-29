@@ -148,7 +148,7 @@ std::string to_string(ReservedDataOp op) {
         return "()";
     case ReservedDataOp::With:
         return "<>";
-    case ReservedDataOp::Bind:
+    case ReservedDataOp::Comp:
         return "..";
     case ReservedDataOp::As:
         return "AS";

@@ -126,6 +126,19 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &[name, func] : others) {
         exportBuiltinOperator(name, param_init_list{}, param_init_list{}, Type::Any(), func);
     }
+
+    auto op = makeOperator(
+        "__cmp__",
+        makeFuncType(
+            param_init_list{},
+            {{"lhs", Type::Any(), nullptr, false}, {"rhs", Type::Any(), nullptr, false}},
+            Type::Any(),
+            Modifier::Macro),
+        ":macro/bind");
+
+    auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
+    ops->push_back(op);
+    exportEntity("__cmp__", ops);
 }
 
 bool GlobalsBuiltinModule::load() {
