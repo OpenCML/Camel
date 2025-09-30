@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,17 +38,17 @@ using func_vec_t = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public Data {
-    GraphIR::graph_ptr_t graph_;
+    GraphIR::Graph &graph_;
     // frame_ptr_t closure_;
 
   public:
-    FunctionData(GraphIR::graph_ptr_t graph);
+    FunctionData(GraphIR::Graph &graph);
     virtual ~FunctionData() = default;
 
-    static func_ptr_t create(GraphIR::graph_ptr_t graph);
+    static func_ptr_t create(GraphIR::Graph &graph);
 
     std::string name() const;
-    GraphIR::graph_ptr_t graph() const { return graph_; }
+    GraphIR::Graph &graph() const { return graph_; }
     // frame_ptr_t closure() const { return closure_; }
     func_type_ptr_t funcType() const;
 

@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -235,13 +235,15 @@ int main(int argc, char *argv[]) {
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (CamelBaseException &e) {
             os << e.what(useJsonFormat) << endl;
+            ASSERT(false, e.what(useJsonFormat));
             return selectedCommand == Command::Check ? 0 : 1;
-            return 1;
         } catch (exception &e) {
             os << e.what() << endl;
+            ASSERT(false, e.what());
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (...) {
             os << "Unknown error occurred." << endl;
+            ASSERT(false, "Unknown error occurred.");
             return 1;
         }
 
