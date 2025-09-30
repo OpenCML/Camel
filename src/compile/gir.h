@@ -87,7 +87,12 @@ struct WeakPtrEqual {
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
-    Graph(const graph_ptr_t &graph = nullptr, const std::string &name = "") : name_(name) {
+    Graph(const Graph &other) = delete;            // 删除拷贝构造函数
+    Graph &operator=(const Graph &other) = delete; // 删除赋值运算
+    Graph(Graph &&other) = delete;                 // 删除移动构造函数
+    Graph &operator=(Graph &&other) = delete;      // 删除移动赋值运算
+
+    explicit Graph(const graph_ptr_t &graph = nullptr, const std::string &name = "") : name_(name) {
         outer_ = graph;
         EXEC_WHEN_DEBUG(
             l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));

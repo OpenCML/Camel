@@ -532,9 +532,9 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             // if (retType->isFunction()) {
             //     paramTypes = tt::as_shared<FunctionType>(retType)->withParams();
             // }
-            node_ptr_t targetNode = BindNode::create(*currGraph_);
-            Node::link(LinkType::Norm, targetNode, targetNode);
-            targetNode = targetNode;
+            node_ptr_t invokeNode = BindNode::create(*currGraph_);
+            Node::link(LinkType::Norm, targetNode, invokeNode);
+            targetNode = invokeNode;
         } else {
             paramTypes = funcType->withParams();
         }
@@ -552,9 +552,9 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             // if (retType->isFunction()) {
             //     paramTypes = tt::as_shared<FunctionType>(retType)->withParams();
             // }
-            node_ptr_t targetNode = BindNode::create(*currGraph_);
-            Node::link(LinkType::Norm, targetNode, targetNode);
-            targetNode = targetNode;
+            node_ptr_t invokeNode = BindNode::create(*currGraph_);
+            Node::link(LinkType::Norm, targetNode, invokeNode);
+            targetNode = invokeNode;
         } else {
             paramTypes = funcType->withParams();
         }

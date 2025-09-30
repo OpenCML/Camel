@@ -22,6 +22,27 @@
 
 using namespace GraphIR;
 
+inline std::string formatAddress(void *ptr) {
+    std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);
+
+    std::stringstream ss;
+    ss << std::hex << std::uppercase << addr;
+    std::string hexStr = ss.str();
+
+    if (hexStr.length() < 16) {
+        hexStr = std::string(16 - hexStr.length(), '0') + hexStr;
+    }
+
+    std::string formatted;
+    for (size_t i = 0; i < hexStr.length(); ++i) {
+        formatted += hexStr[i];
+        if ((i + 1) % 4 == 0 && i + 1 != hexStr.length())
+            formatted += '\'';
+    }
+
+    return "0x" + formatted;
+}
+
 Frame::Frame(const frame_ptr_t &parent, Graph &graph)
     : parent_(parent), graph_(graph), dataArr_(graph.runtimeDataSize(), nullptr) {
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
@@ -42,8 +63,22 @@ frame_ptr_t Frame::create(const frame_ptr_t &parent, Graph &graph) {
 }
 
 data_ptr_t Frame::get(const node_ptr_t &node) {
-    if (&node->graph() != &graph_) {
-        ASSERT(parent_, "Node does not belong to the current frame's graph.");
+    if (&(node->graph()) != &graph_) {
+        EXEC_WHEN_DEBUG(l.in("Frame").debug(
+            "Getting data for node {}::{} from parent ({}) of current frame {}. {} != {}",
+            node->graph().name(),
+            node->toString(),
+            parent_ ? parent_->graph().name() : "none",
+            graph_.name(),
+            formatAddress(&(node->graph())),
+            formatAddress(&graph_)));
+        ASSERT(
+            parent_,
+            std::format(
+                "Node {} of graph {} does not belong to the current frame's graph {}",
+                node->toString(),
+                node->graph().name(),
+                graph_.name()));
         return parent_->get(node);
     }
     if (node->type() == NodeType::DATA) {
@@ -62,8 +97,22 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
 }
 
 void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
-    if (&node->graph() != &graph_) {
-        ASSERT(parent_, "Node does not belong to the current frame's graph.");
+    if (&(node->graph()) != &graph_) {
+        EXEC_WHEN_DEBUG(l.in("Frame").debug(
+            "Setting data for node {}::{} from parent ({}) of current frame {}. {} != {}",
+            node->graph().name(),
+            node->toString(),
+            parent_ ? parent_->graph().name() : "none",
+            graph_.name(),
+            formatAddress(&(node->graph())),
+            formatAddress(&graph_)));
+        ASSERT(
+            parent_,
+            std::format(
+                "Node {} of graph {} does not belong to the current frame's graph {}",
+                node->toString(),
+                node->graph().name(),
+                graph_.name()));
         return parent_->set(node, data);
     }
     if (node->type() == NodeType::DATA) {
