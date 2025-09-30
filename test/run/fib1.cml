@@ -14,7 +14,7 @@ func fibonacci(n: int): int sync {
 }
 
 func main(): int sync {
-    let idx = 25
+    let idx = 5
     println("Start computing fibonacci({})...".format(idx))
     let start = now()
     let res = fibonacci(idx)

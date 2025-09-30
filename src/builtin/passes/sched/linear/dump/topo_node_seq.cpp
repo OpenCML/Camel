@@ -119,7 +119,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
             switch (n->type()) {
             case NodeType::FUNC: {
                 func_ptr_t func = tt::as_shared<FuncNode>(n)->func();
-                string name = func->name().empty() ? func->graph()->name() : func->name();
+                string name = func->name().empty() ? func->graph().name() : func->name();
                 res = format("CALL: {}", name);
                 for (const auto &inputNode : n->dataInputs()) {
                     res += format(", {}", pointerToIdent(inputNode.get()));

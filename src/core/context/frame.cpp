@@ -50,7 +50,14 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
         return graph_.getStaticData(node->index());
     } else {
         ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
-        return dataArr_[node->index()];
+        const data_ptr_t &res = dataArr_[node->index()];
+        ASSERT(
+            res != nullptr,
+            std::format(
+                "Accessing uninitialized data of node: {}::{}",
+                graph_.name(),
+                node->toString()));
+        return res;
     }
 }
 

@@ -226,6 +226,21 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     }
 
     // Draw nodes inside the graph
+    const node_vec_t &ports = graph->ports();
+    for (size_t i = 0; i < ports.size(); ++i) {
+        ASSERT(portsNameMap.contains(i), "Port index out of range.");
+        string label = portsNameMap[i].first;
+        const auto &node = ports[i];
+        string tooltip = graph->name() + "::" + node->toString();
+        res += std::format(
+            "{}{}{} [label=\"{}\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
+            baseIndent_,
+            indent_,
+            pointerToIdent(node.get()),
+            escape(wrapText(label, 7, 2)),
+            std::format("{}\\n{}", escape(label), escape(tooltip)));
+    }
+
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
@@ -240,7 +255,6 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             break;
         }
         case NodeType::PORT: {
-            ASSERT(portsNameMap.contains(i), "Port index out of range.");
             label = portsNameMap[i].first;
             style = "dashed";
             break;
@@ -283,7 +297,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
         }
         case NodeType::FUNC: {
             func_ptr_t func = tt::as_shared<FuncNode>(node)->func();
-            label = func->name().empty() ? func->graph()->name() : func->name();
+            label = func->name().empty() ? func->graph().name() : func->name();
             shape = "Mdiamond";
             size = "width=1.1, height=1.1";
             break;

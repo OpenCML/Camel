@@ -52,11 +52,11 @@ OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
 
     func_ptr_t lhsFunc = lhs->as<FunctionData>(Type::Func());
     func_type_ptr_t lhsFuncType = lhsFunc->funcType();
-    graph_ptr_t lhsGraph = lhs->as<FunctionData>(Type::Func())->graph();
+    Graph &lhsGraph = lhs->as<FunctionData>(Type::Func())->graph();
 
     func_ptr_t rhsFunc = rhs->as<FunctionData>(Type::Func());
     func_type_ptr_t rhsFuncType = rhsFunc->funcType();
-    graph_ptr_t rhsGraph = rhs->as<FunctionData>(Type::Func())->graph();
+    Graph &rhsGraph = rhs->as<FunctionData>(Type::Func())->graph();
 
     if (rhsFuncType->normParams().size() != 1) {
         ctx.rtmDiags()

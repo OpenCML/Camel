@@ -496,7 +496,7 @@ class FuncNode : public Node {
         return std::format(
             "FUNC({}): {}",
             dataIndex_,
-            func_->name().empty() ? func_->graph()->name() : func_->name());
+            func_->name().empty() ? func_->graph().name() : func_->name());
     }
 
     virtual node_ptr_t clone(Graph &graph) const override { return FuncNode::create(graph, func_); }

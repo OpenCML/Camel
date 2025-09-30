@@ -23,8 +23,8 @@
 using namespace std;
 using namespace GraphIR;
 
-std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_t &graph) {
-    if (graphTopoNodesCache_.find(graph.get()) == graphTopoNodesCache_.end()) {
+std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
+    if (graphTopoNodesCache_.find(graph) == graphTopoNodesCache_.end()) {
         node_ptr_t retNode = graph->exitNode();
         auto sortedNodes = findReachable(
             retNode,
@@ -71,14 +71,14 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(const graph_ptr_
             }
         }());
         const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
-        graphTopoNodesCache_[graph.get()] = sortedNodesPtr;
+        graphTopoNodesCache_[graph] = sortedNodesPtr;
         return sortedNodesPtr;
     } else {
-        return graphTopoNodesCache_[graph.get()];
+        return graphTopoNodesCache_[graph];
     }
 }
 
-data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_t &frame) {
+data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
@@ -93,7 +93,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
         auto tgtGraph = func->graph();
         EXEC_WHEN_DEBUG(l.in("Eval").debug(
             "Calling function: {} (tail-call: {})",
-            func->name().empty() ? tgtGraph->name() : func->name(),
+            func->name().empty() ? tgtGraph.name() : func->name(),
             isTailCall ? "yes" : "no"));
         frame_ptr_t nextFrame;
 
@@ -104,7 +104,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             args.push_back(currFrame->get(inNode));
         }
 
-        const auto &portNodes = tgtGraph->ports();
+        const auto &portNodes = tgtGraph.ports();
         ASSERT(
             inNodes.size() == portNodes.size(),
             "Function node input size does not match function graph port size.");
@@ -114,23 +114,23 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             loop = true;
             frame_ptr_t lastFrame = currFrame;
 
-            if (tgtGraph.get() == &currFrame->graph()) {
+            if (&tgtGraph == &currFrame->graph()) {
                 // Self-recursion optimization
                 currFrame = lastFrame;
                 EXEC_WHEN_DEBUG(l.in("Eval").debug(
                     "Optimizing self-recursion for graph: {}",
                     currFrame->graph().name()));
             } else {
-                nodesPtr = getTopoNodes(tgtGraph);
+                nodesPtr = getTopoNodes(&tgtGraph);
 
-                if (tailFrame && &tailFrame->graph() == tgtGraph.get()) {
+                if (tailFrame && &tailFrame->graph() == &tgtGraph) {
                     // Mutual-tail-recursion optimization
                     EXEC_WHEN_DEBUG(l.in("Eval").debug(
                         "Optimizing mutual-tail-recursion for graph: {}",
                         currFrame->graph().name()));
                     currFrame = tailFrame;
                 } else {
-                    currFrame = Frame::create(currFrame, *tgtGraph);
+                    currFrame = Frame::create(currFrame, tgtGraph);
                 }
             }
 
@@ -146,14 +146,14 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 nextFrame->set(portNodes[i], args[i]);
             }
         } else {
-            nextFrame = Frame::create(currFrame, *tgtGraph);
+            nextFrame = Frame::create(currFrame, tgtGraph);
 
             for (size_t i = 0; i < portNodes.size(); ++i) {
                 nextFrame->set(portNodes[i], args[i]);
             }
 
             // evaluate the target graph
-            data_ptr_t res = evalGraph(tgtGraph, nextFrame);
+            data_ptr_t res = evalGraph(&tgtGraph, nextFrame);
             currFrame->set(n, res);
         }
     };
@@ -176,7 +176,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                 break;
             }
             case NodeType::COPY: {
-                currFrame->set(n, currFrame->get(n->normInputs().front())->clone());
+                currFrame->set(n, currFrame->get(n->withInputs().front())->clone());
                 break;
             }
             case NodeType::FILL: {
@@ -305,8 +305,8 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
             case NodeType::CALL: {
                 const auto &funcNode = n->withInputs().front();
                 const auto &funcData = currFrame->get(funcNode);
-                const auto &tgtGraph = tt::as_shared<FunctionData>(funcData)->graph();
-                frame_ptr_t funcFrame = Frame::create(currFrame, *tgtGraph);
+                auto &tgtGraph = tt::as_shared<FunctionData>(funcData)->graph();
+                frame_ptr_t funcFrame = Frame::create(currFrame, tgtGraph);
 
                 data_vec_t args;
                 const auto &inNodes = n->normInputs();
@@ -315,12 +315,12 @@ data_ptr_t FallbackExecSchedPass::evalGraph(const graph_ptr_t &graph, frame_ptr_
                     args.push_back(currFrame->get(inNode));
                 }
 
-                const auto &portNodes = tgtGraph->ports();
+                const auto &portNodes = tgtGraph.ports();
                 for (size_t i = 0; i < portNodes.size(); ++i) {
                     funcFrame->set(portNodes[i], args[i]);
                 }
 
-                const auto &res = evalGraph(tgtGraph, funcFrame);
+                const auto &res = evalGraph(&tgtGraph, funcFrame);
                 currFrame->set(n, res);
                 break;
             }
@@ -371,7 +371,7 @@ any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
     ASSERT(optMainGraph.has_value(), "Main graph not found.");
     auto mainGraph = optMainGraph.value();
     auto mainFrame = Frame::create(rootFrame, *mainGraph);
-    return evalGraph(mainGraph, mainFrame);
+    return evalGraph(mainGraph.get(), mainFrame);
 }
 
 void FallbackExecSchedPass::evalMarkedOperator(
@@ -415,9 +415,9 @@ void FallbackExecSchedPass::evalMarkedOperator_map(const node_ptr_t &node, frame
         data_vec_t res;
         res.reserve(inputVec.size());
         for (const auto &item : inputVec) {
-            auto mapFrame = Frame::create(currFrame, *func->graph());
-            mapFrame->set(func->graph()->ports().front(), item);
-            res.push_back(evalGraph(func->graph(), mapFrame));
+            auto mapFrame = Frame::create(currFrame, func->graph());
+            mapFrame->set(func->graph().ports().front(), item);
+            res.push_back(evalGraph(&func->graph(), mapFrame));
         }
         return res;
     };
@@ -448,9 +448,9 @@ void FallbackExecSchedPass::evalMarkedOperator_map(const node_ptr_t &node, frame
         auto dictData = tt::as_shared<DictData>(targetData);
         std::unordered_map<std::string, data_ptr_t> res;
         for (const auto &[k, v] : dictData->raw()) {
-            auto mapFrame = Frame::create(currFrame, *func->graph());
-            mapFrame->set(func->graph()->ports().front(), v);
-            res[k] = evalGraph(func->graph(), mapFrame);
+            auto mapFrame = Frame::create(currFrame, func->graph());
+            mapFrame->set(func->graph().ports().front(), v);
+            res[k] = evalGraph(&func->graph(), mapFrame);
         }
         currFrame->set(node, DictData::create(std::move(res)));
         break;
@@ -477,9 +477,9 @@ void FallbackExecSchedPass::evalMarkedOperator_apply(
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
-        auto frame = Frame::create(currFrame, *func->graph());
-        frame->set(func->graph()->ports().front(), item);
-        return evalGraph(func->graph(), frame);
+        auto frame = Frame::create(currFrame, func->graph());
+        frame->set(func->graph().ports().front(), item);
+        return evalGraph(&func->graph(), frame);
     };
 
     auto applyToSequence = [&](auto containerData, auto createFunc) {
@@ -537,9 +537,9 @@ void FallbackExecSchedPass::evalMarkedOperator_filter(
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto shouldKeep = [&](const data_ptr_t &item) -> bool {
-        auto frame = Frame::create(currFrame, *func->graph());
-        frame->set(func->graph()->ports().front(), item);
-        auto result = evalGraph(func->graph(), frame);
+        auto frame = Frame::create(currFrame, func->graph());
+        frame->set(func->graph().ports().front(), item);
+        auto result = evalGraph(&func->graph(), frame);
         ASSERT(result->type()->code() == TypeCode::Bool, "Filter function must return Bool.");
         return result->as<BoolData>(Type::Bool())->data();
     };
@@ -611,10 +611,10 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
     auto func = funcData->as<FunctionData>(Type::Func());
 
     // 检查函数参数个数（必须是2个参数）
-    if (func->graph()->ports().size() != 2) {
+    if (func->graph().ports().size() != 2) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<reduce>", 2, func->graph()->ports().size());
+            .commit("<reduce>", 2, func->graph().ports().size());
         throw CamelRuntimeException(
             RuntimeExceptionCode::InvalidNormParameter,
             "Function must take 2 parameters.");
@@ -653,14 +653,14 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
     // 执行 reduce 操作
     data_ptr_t result = initData;
     for (const auto &item : elements) {
-        auto frame = Frame::create(currFrame, *func->graph());
+        auto frame = Frame::create(currFrame, func->graph());
 
         // 设置参数：acc, cur
-        const auto &ports = func->graph()->ports();
+        const auto &ports = func->graph().ports();
         frame->set(ports[0], result); // acc
         frame->set(ports[1], item);   // cur
 
-        result = evalGraph(func->graph(), frame); // 更新 result
+        result = evalGraph(&func->graph(), frame); // 更新 result
     }
 
     // 设置结果
@@ -681,9 +681,9 @@ void FallbackExecSchedPass::evalMarkedOperator_foreach(
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto applyFunc = [&](const data_ptr_t &item) {
-        auto frame = Frame::create(currFrame, *func->graph());
-        frame->set(func->graph()->ports().front(), item);
-        evalGraph(func->graph(), frame); // 忽略返回值
+        auto frame = Frame::create(currFrame, func->graph());
+        frame->set(func->graph().ports().front(), item);
+        evalGraph(&func->graph(), frame); // 忽略返回值
     };
 
     switch (targetData->type()->code()) {
