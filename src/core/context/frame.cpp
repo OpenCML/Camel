@@ -81,19 +81,26 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
                 graph_.name()));
         return parent_->get(node);
     }
+    data_ptr_t res;
     if (node->type() == NodeType::DATA) {
-        return graph_.getStaticData(node->index());
+        res = graph_.getStaticData(node->index());
     } else {
         ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
-        const data_ptr_t &res = dataArr_[node->index()];
-        ASSERT(
-            res != nullptr,
-            std::format(
-                "Accessing uninitialized data of node: {}::{}",
-                graph_.name(),
-                node->toString()));
-        return res;
+        res = dataArr_[node->index()];
     }
+    ASSERT(
+        res != nullptr,
+        std::format(
+            "Accessing uninitialized data of node: {}::{}",
+            graph_.name(),
+            node->toString()));
+    EXEC_WHEN_DEBUG(l.in("Frame").debug(
+        "Getting data for node {}::{} from frame {}: {}",
+        node->graph().name(),
+        node->toString(),
+        graph_.name(),
+        res->toString()));
+    return res;
 }
 
 void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
@@ -115,6 +122,12 @@ void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
                 graph_.name()));
         return parent_->set(node, data);
     }
+    EXEC_WHEN_DEBUG(l.in("Frame").debug(
+        "Setting data for node {}::{} in frame {}: {}",
+        node->graph().name(),
+        node->toString(),
+        graph_.name(),
+        data ? data->toString() : "null"));
     if (node->type() == NodeType::DATA) {
         return graph_.setStaticData(node->index(), data);
     } else {

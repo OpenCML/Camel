@@ -8,5 +8,5 @@ func main(): int sync {
     println(c)
     wait update(c)
     println(c)
-    return c
+    return 0
 }

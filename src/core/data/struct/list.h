@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,8 @@ class ListData : public StructData {
     data_ptr_t get(size_t index) const;
     bool set(size_t index, const data_ptr_t &e);
     std::vector<data_ptr_t> &raw() { return data_; }
+    size_t size() const { return data_.size(); }
+    bool empty() const { return data_.empty(); }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refIndices_.empty(); }

@@ -107,7 +107,11 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
         const auto &portNodes = tgtGraph.ports();
         ASSERT(
             inNodes.size() == portNodes.size(),
-            "Function node input size does not match function graph port size.");
+            std::format(
+                "Function {} expects {} arguments, but got {}.",
+                func->name().empty() ? tgtGraph.name() : func->name(),
+                portNodes.size(),
+                inNodes.size()));
 
         if (isTailCall) {
             // Tail-call optimization

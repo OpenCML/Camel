@@ -17,18 +17,18 @@ func comp3(signal: Signal): Signal {
 }
 
 func analyzer1(signal: Signal) {
-    println('Analyzer1: {}', signal)
+    println('Analyzer1: {}'.format(signal))
 }
 
 func analyzer2(result: int) {
-    println('Analyzer2: {}', result)
+    println('Analyzer2: {}'.format(result))
 }
 
-func process(signals: Signal[]) {
+func process(signals: Signal[]) sync {
     let res1 = signals[0]->comp1->comp2
     res1[0]->analyzer1
     let res2 = signals[1]->comp3
-    [res1[1], res2]->add->analyzer2
+    add(res1[1], res2[1])->analyzer2
 }
 
 func main() {

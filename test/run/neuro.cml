@@ -21,15 +21,15 @@ func linear(x: float[], w: float[], b: float): float {
 }
 
 // Forward propagation example: single neuron
-// func forward(input: float[], weights: float[], bias: float): float {
-//     let z = dot(input, weights) + bias
-//     return sigmoid(z)
-// }
+func forward(input: float[], weights: float[], bias: float): float {
+    let z = dot(input, weights) + bias
+    return sigmoid(z)
+}
 
 // Main function: test the network
 func main(): int sync {
     // macro: function composition
-    let forward = linear..sigmoid
+    // let forward = linear..sigmoid
 
     // // macro: auto differentiation
     // let backward = ApplyGrad(forward)

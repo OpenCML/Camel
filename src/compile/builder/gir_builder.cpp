@@ -316,8 +316,12 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (optNode.has_value()) {
         const auto &node = optNode.value();
         if (&node->graph() != currGraph_.get()) {
-            // the referenced node is from an outer scope, need to mark it as captured
-            currGraph_->addCapture(node);
+            Graph *curr = currGraph_.get();
+            while (curr != nullptr && &node->graph() != curr) {
+                // the referenced node is from an outer scope, need to mark it as captured
+                curr->addCapture(node);
+                curr = curr->outer().get();
+            }
         }
         LEAVE("DREF");
         return node;
@@ -351,8 +355,12 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         if (std::holds_alternative<node_ptr_t>(e)) {
             const auto &node = std::get<node_ptr_t>(e);
             if (&node->graph() != currGraph_.get()) {
-                // the referenced node is from an outer scope, need to mark it as captured
-                currGraph_->addCapture(node);
+                Graph *curr = currGraph_.get();
+                while (curr != nullptr && &node->graph() != curr) {
+                    // the referenced node is from an outer scope, need to mark it as captured
+                    curr->addCapture(node);
+                    curr = curr->outer().get();
+                }
             }
             LEAVE("DREF");
             return node;

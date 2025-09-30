@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -552,10 +552,17 @@ OperatorReturnCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!left->type()->primary() || !right->type()->primary()) {
+    if (!left->type()->primary()) {
         ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<add> operator requires primary types");
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<add>", "primary types", left->type()->toString());
+        frame.set(self, Data::null());
+        return OperatorReturnCode::OK;
+    }
+    if (!right->type()->primary()) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(1, "<add>", "primary types", right->type()->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -885,7 +892,7 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
 
     const TypeCode containerType = container->type()->code();
 
-    // 数值索引：适用于 Array / Tuple / Vector
+    // 数值索引：适用于 Array / Tuple / Vector / List
     if (index->type() == Type::Int32() || index->type() == Type::Int64()) {
         size_t idx = (index->type() == Type::Int32())
                          ? static_cast<size_t>(index->as<Int32Data>(Type::Int32())->data())
@@ -903,10 +910,14 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
             auto vec = std::dynamic_pointer_cast<VectorData>(container);
             ASSERT(idx < vec->size(), "Vector index out of bounds.");
             frame.set(self, vec->raw()[idx]);
+        } else if (containerType == TypeCode::List) {
+            auto lst = std::dynamic_pointer_cast<ListData>(container);
+            ASSERT(idx < lst->size(), "List index out of bounds.");
+            frame.set(self, lst->raw()[idx]);
         } else {
             ctx.rtmDiags()
                 ->of(RuntimeDiag::IncompatibleArgType)
-                .commit("<idx>", "Array/Tuple/Vector", container->type()->toString());
+                .commit(0, "<idx>", "Array/Tuple/Vector", container->type()->toString());
             frame.set(self, Data::null());
         }
 
@@ -926,17 +937,16 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
         } else {
             ctx.rtmDiags()
                 ->of(RuntimeDiag::IncompatibleArgType)
-                .commit("<idx>", "Dict", container->type()->toString());
+                .commit(0, "<idx>", "Dict", container->type()->toString());
             frame.set(self, Data::null());
         }
 
         return OperatorReturnCode::OK;
     }
 
-    // 不支持的索引类型
     ctx.rtmDiags()
         ->of(RuntimeDiag::IncompatibleArgType)
-        .commit("<idx> operator requires Int or String as index, got " + index->type()->toString());
+        .commit(1, "<idx>", "Int or String", index->type()->toString());
     frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }
