@@ -203,6 +203,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_vec_t &nodes() { return nodes_; }
     const node_set_t &capture() const { return capture_; }
 
+    graph_ptr_t clone() const;
+
   private:
     bool looped_ = false;
     std::string name_;

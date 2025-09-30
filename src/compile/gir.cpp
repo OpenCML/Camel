@@ -81,6 +81,33 @@ void Graph::setOutput(const node_ptr_t &node) {
     Node::link(LinkType::Norm, node, output_);
 }
 
+graph_ptr_t Graph::clone() const {
+    graph_ptr_t newGraph = std::make_shared<Graph>(name_);
+    newGraph->staticDataArr_ = staticDataArr_;
+    newGraph->runtimeDataSize_ = runtimeDataSize_;
+    newGraph->funcType_ = funcType_;
+    for (const auto &port : ports_) {
+        port->clone(*newGraph);
+    }
+    for (const auto &node : nodes_) {
+        node->clone(*newGraph);
+    }
+    if (output_) {
+        // Find the corresponding node in the new graph
+        auto it = std::find_if(
+            newGraph->nodes_.begin(),
+            newGraph->nodes_.end(),
+            [this](const node_ptr_t &n) { return n->index() == output_->index(); });
+        ASSERT(it != newGraph->nodes_.end(), "Output node not found in cloned graph.");
+        newGraph->setOutput(*it);
+    }
+    for (const auto &[subName, subGraph] : subGraphs_) {
+        graph_ptr_t newSubGraph = subGraph->clone();
+        newGraph->addSubGraph(newSubGraph);
+    }
+    return newGraph;
+}
+
 /*
 Node
 */

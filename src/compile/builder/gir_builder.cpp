@@ -266,7 +266,10 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     node_ptr_t node = nullptr;
     if (data->resolved()) {
         node = DataNode::create(*currGraph_, data);
-        if (varied_) {
+        if (varied_ && currGraph_->outer() != nullptr) {
+            // If it is a global variable, no longer maintain a copy
+            // For local variables, still need to create a new copy for each call
+            // The mechanism of local shared variables is yet to be designed
             node_ptr_t copyNode = CopyNode::create(*currGraph_);
             Node::link(LinkType::With, node, copyNode);
             node = copyNode;
