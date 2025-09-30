@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,18 +71,13 @@ func_type_ptr_t Graph::funcType() const {
 
 void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
-void Graph::addCapture(const node_ptr_t &node) { capture_.insert(node); }
+void Graph::addPort(const node_ptr_t &node) { ports_.push_back(node); }
 
-node_ptr_t Graph::addPort(bool isWithArg) {
-    DataIndex index = arena_->addConstant(nullptr, false);
-    node_ptr_t portNode = PortNode::create(shared_from_this(), index);
-    ports_.push_back({portNode, isWithArg});
-    return portNode;
-}
+void Graph::addCapture(const node_ptr_t &node) { capture_.insert(node); }
 
 void Graph::setOutput(const node_ptr_t &node) {
     ASSERT(output_ == nullptr, "Output node has already been set.");
-    output_ = ExitNode::create(shared_from_this(), node->index());
+    output_ = ExitNode::create(*this, node->index());
     Node::link(LinkType::Norm, node, output_);
 }
 

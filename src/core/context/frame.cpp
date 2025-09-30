@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,53 +22,54 @@
 
 using namespace GraphIR;
 
-Frame::Frame(const frame_ptr_t &parent, const graph_ptr_t &graph)
-    : parent_(parent), graph_(graph), arena_(*graph->arena()) {
+Frame::Frame(const frame_ptr_t &parent, Graph &graph)
+    : parent_(parent), graph_(graph), dataArr_(graph.runtimeDataSize(), nullptr) {
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Created Frame for Graph: {} (Parent: {})",
-        graph_->name().empty() ? "<anonymous>" : graph_->name(),
-        parent_ ? "Yes" : "No"));
+        graph_.name(),
+        parent_ ? parent_->graph().name() : "none"));
 }
 
 Frame::~Frame() {
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Destroyed Frame for Graph: {} (Parent: {})",
-        graph_->name().empty() ? "<anonymous>" : graph_->name(),
-        parent_ ? "Yes" : "No"));
+        graph_.name(),
+        parent_ ? parent_->graph().name() : "none"));
 }
 
-frame_ptr_t Frame::create(const frame_ptr_t &parent, const graph_ptr_t &graph) {
+frame_ptr_t Frame::create(const frame_ptr_t &parent, Graph &graph) {
     return std::make_shared<Frame>(parent, graph);
 }
 
 data_ptr_t Frame::get(const node_ptr_t &node) {
-    const graph_ptr_t &g = node->graph();
-    if (g != graph_) {
+    if (&node->graph() != &graph_) {
         ASSERT(parent_, "Node does not belong to the current frame's graph.");
         return parent_->get(node);
     }
-    ASSERT(
-        arena_.has(node->index()),
-        std::format(
-            "Accessing non-exist data of node {} in {}",
-            node->toString(),
-            this->toString()));
-    return arena_.get(node->index());
+    if (node->type() == NodeType::DATA) {
+        return graph_.getStaticData(node->index());
+    } else {
+        ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
+        return dataArr_[node->index()];
+    }
 }
 
 void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
-    const graph_ptr_t &g = node->graph();
-    if (g != graph_) {
+    if (&node->graph() != &graph_) {
         ASSERT(parent_, "Node does not belong to the current frame's graph.");
-        parent_->set(node, data);
+        return parent_->set(node, data);
+    }
+    if (node->type() == NodeType::DATA) {
+        return graph_.setStaticData(node->index(), data);
+    } else {
+        ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
+        dataArr_[node->index()] = data;
         return;
     }
-    arena_.set(node->index(), data);
 }
 
-frame_ptr_t Frame::push(const GraphIR::graph_ptr_t &graph) {
-    ASSERT(graph, "Cannot push a null graph.");
-    ASSERT(graph != graph_, "Cannot push the same graph as the current frame's graph.");
+frame_ptr_t Frame::push(Graph &graph) {
+    ASSERT(&graph != &graph_, "Cannot push the same graph as the current frame's graph.");
     return Frame::create(shared_from_this(), graph);
 }
 
@@ -78,10 +79,37 @@ frame_ptr_t Frame::pop() {
     return p;
 }
 
-std::string Frame::toString() {
-    return std::format(
-        "Frame(Graph: {}, Parent: {})): {}",
-        graph_->name().empty() ? "<anonymous>" : graph_->name(),
-        parent_ ? "Yes" : "No",
-        arena_.toString());
+std::string Frame::toString() const {
+    std::ostringstream oss;
+
+    auto printDataArr = [&](const std::vector<data_ptr_t> &arr) {
+        oss << "[";
+        for (size_t i = 0; i < arr.size(); ++i) {
+            if (i > 0) {
+                oss << ", ";
+            }
+            if (arr[i]) {
+                oss << std::string_view(arr[i]->toString());
+            } else {
+                oss << "none";
+            }
+        }
+        oss << "]";
+        return oss.str();
+    };
+
+    oss << std::format(
+        "Frame(Graph: {}, Parent: {})): (static)[",
+        graph_.name(),
+        parent_ ? parent_->graph().name() : "none");
+
+    printDataArr(graph_.staticDataArr());
+
+    oss << std::format("] (runtime)[");
+
+    printDataArr(dataArr_);
+
+    oss << "]";
+
+    return oss.str();
 }

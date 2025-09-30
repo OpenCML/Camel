@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Sep. 16, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,25 +34,24 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 
 class Frame : public std::enable_shared_from_this<Frame> {
   public:
-    Frame(const frame_ptr_t &parent, const GraphIR::graph_ptr_t &graph);
+    Frame(const frame_ptr_t &parent, GraphIR::Graph &graph);
     ~Frame();
 
-    static frame_ptr_t create(const frame_ptr_t &parent, const GraphIR::graph_ptr_t &graph);
+    static frame_ptr_t create(const frame_ptr_t &parent, GraphIR::Graph &graph);
 
-    DataArena &arena() { return arena_; }
-    GraphIR::graph_ptr_t graph() const { return graph_; }
+    GraphIR::Graph &graph() const { return graph_; }
     frame_ptr_t parent() const { return parent_; }
-    void reset() { arena_.reset(); }
+    void reset() { std::fill(dataArr_.begin(), dataArr_.end(), nullptr); }
 
     data_ptr_t get(const GraphIR::node_ptr_t &node);
     void set(const GraphIR::node_ptr_t &node, const data_ptr_t &data);
-    frame_ptr_t push(const GraphIR::graph_ptr_t &graph);
+    frame_ptr_t push(GraphIR::Graph &graph);
     frame_ptr_t pop();
 
-    std::string toString();
+    std::string toString() const;
 
   private:
     frame_ptr_t parent_;
-    GraphIR::graph_ptr_t graph_;
-    DataArena arena_;
+    GraphIR::Graph &graph_;
+    data_vec_t dataArr_;
 };

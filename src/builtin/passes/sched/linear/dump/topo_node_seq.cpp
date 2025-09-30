@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 28, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,11 +71,11 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
                 vector<node_ptr_t> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
                 for (const auto &in : n->ctrlInputs()) {
-                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }
                 for (const auto &in : n->dataInputs()) {
-                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }
                 return ins;
@@ -109,7 +109,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
         }());
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
-        for (const auto &[portNode, __] : g->portNodes()) {
+        for (const auto &portNode : g->ports()) {
             oss << ", " << pointerToIdent(portNode.get());
         }
         oss << "\n";
@@ -156,7 +156,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
                 break;
             }
             default:
-                res = format("NODE: {} ({})", n->data2str(), string(n->dataType()));
+                res = format("NODE: {}", n->toString());
             }
             oss << "    [" << pointerToIdent(n.get()) << "] " << res << "\n";
         }

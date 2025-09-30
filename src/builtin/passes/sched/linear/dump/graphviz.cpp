@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -186,7 +186,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
-        for (size_t i = 0; i < graph->portNodes().size(); i++) {
+        for (size_t i = 0; i < graph->ports().size(); i++) {
             const string name = type->argNameAt(i);
             bool isVar = type->variableMap().at(name);
             portsNameMap[i] = make_pair(name, isVar);
@@ -217,7 +217,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     }
 
     // Draw ARGS node to represent function arguments
-    if (!graph->isRoot() && !graph->portNodes().empty()) {
+    if (!graph->isRoot() && !graph->ports().empty()) {
         res += std::format(
             "{}{}{} [label=\"ARGS\", style=dashed, shape=circle];\r\n",
             baseIndent_,
@@ -235,7 +235,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
         switch (node->type()) {
         case NodeType::DATA: {
             auto sourceNode = tt::as_shared<DataNode>(node);
-            data_ptr_t data = sourceNode->dataOf(*graph->arena());
+            data_ptr_t data = sourceNode->data();
             label = data->toString();
             break;
         }
@@ -318,7 +318,9 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     // Connect ARGS node to port nodes
     size_t withIdx = 0, normIdx = 0;
-    for (const auto &[portNode, isWithArg] : graph->portNodes()) {
+    for (const auto &node : graph->ports()) {
+        const auto &portNode = tt::as_shared<PortNode>(node);
+        bool isWithArg = portNode->isWithArg();
         string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", style={}];\r\n",
