@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class TupleData : public StructData {
   private:
-    std::vector<size_t> refs_;
+    std::vector<size_t> refIndices_;
     std::vector<data_ptr_t> data_;
 
   public:
@@ -42,9 +42,10 @@ class TupleData : public StructData {
 
     data_ptr_t get(size_t index) const;
     std::vector<data_ptr_t> &raw() { return data_; }
+    size_t size() const { return data_.size(); }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolved() const override { return refIndices_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

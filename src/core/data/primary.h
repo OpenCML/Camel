@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 01, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,10 @@
 
 #include "data.h"
 #include "utils/assert.h"
+
+#include <iomanip>
+#include <sstream>
+#include <type_traits>
 
 template <typename T> class PrimaryData : public Data {
   private:
@@ -159,7 +163,27 @@ template <typename T> class PrimaryData : public Data {
     virtual data_ptr_t clone(bool deep = false) const override {
         return std::make_shared<PrimaryData<T>>(data_);
     }
-    virtual const std::string toString() const override { return std::to_string(data_); }
+    virtual const std::string toString() const override {
+        if constexpr (std::is_same_v<T, bool>) {
+            return data_ ? "true" : "false";
+        } else if constexpr (std::is_same_v<T, char>) {
+            return std::string(1, data_);
+        } else if constexpr (std::is_same_v<T, float>) {
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(3) << data_;
+            return oss.str();
+        } else if constexpr (std::is_same_v<T, double>) {
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(6) << data_;
+            return oss.str();
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            return std::to_string(data_);
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            return std::to_string(data_) + "L";
+        } else {
+            return std::to_string(data_);
+        }
+    }
     virtual void print(std::ostream &os) const override { os << std::to_string(data_); }
 };
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "utils/log.h"
 
 #include "../operators/io.h"
+#include "../operators/macro.h"
 #include "../operators/math.h"
 #include "../operators/ops.h"
 #include "../operators/os.h"
@@ -61,14 +62,20 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"op/div", __builtin__div__},
         {"op/mod", __builtin__mod__},
         {"op/mat", __builtin__mat__},
-        {"op/exp", __builtin__exp__},
+        {"op/pow", __builtin__pow__},
         {"op/idx", __builtin__idx__},
+        {"op/not", __builtin__not__},
+        {"op/neg", __builtin__neg__},
+        {"op/inv", __builtin__inv__},
         {"io/print", __print__},
         {"io/println", __println__},
         {"io/input", __input__},
 
         // struct
         {"struct/len", __len__},
+        {"struct/zip", __zip__},
+        {"struct/head", __head__},
+        {"struct/tail", __tail__},
         {"struct/range", __range__},
         {"struct/slice", __slice__},
         {"struct/concat", __concat__},
@@ -78,21 +85,28 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"struct/contains", __contains__},
 
         // os
+        {"os/exit", __exit__},
         {"os/sleep", __sleep__},
         {"os/whoami", __whoami__},
+        {"os/set_terminal_raw_mode", __set_terminal_raw_mode__},
+        {"os/has_input", __has_input__},
+        {"os/get_char", __get_char__},
+        {"os/get_chars", __get_chars__},
+        {"os/clear_input_buffer", __clear_input_buffer__},
 
         // str
         {"str/format", __format__},
         {"str/join", __join__},
 
         // math
-        {"str/abs", __abs__},
-        {"str/round", __round__},
-        {"str/ceil", __ceil__},
-        {"str/floor", __floor__},
-        {"str/bin", __bin__},
-        {"str/oct", __oct__},
-        {"str/hex", __hex__},
+        {"math/abs", __abs__},
+        {"math/exp", __exp__},
+        {"math/round", __round__},
+        {"math/ceil", __ceil__},
+        {"math/floor", __floor__},
+        {"math/bin", __bin__},
+        {"math/oct", __oct__},
+        {"math/hex", __hex__},
 
         // time
         {"time/now", __now__},
@@ -101,6 +115,9 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
 
         // this
         {"zen", __zen__},
+
+        // macro
+        {"macro/bind", __cmp__},
     };
     return map;
 }

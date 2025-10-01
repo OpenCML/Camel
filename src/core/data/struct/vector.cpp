@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ VectorData::VectorData(type_ptr_t type, data_list_t data) : data_(data) {
     size_t i = 0;
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::Ref) {
-            refs_.push_back(i);
+            refIndices_.push_back(i);
         } else if (e->type()->castSafetyTo(*type) != CastSafety::Safe) {
             throw DataConvError(
                 "Cannot convert " + e->type()->toString() + " to " + type->toString());
@@ -48,7 +48,7 @@ VectorData::VectorData(type_ptr_t type, data_vec_t &&data)
 
 void VectorData::emplace(const data_ptr_t &e) {
     if (e->type()->code() == TypeCode::Ref) {
-        refs_.push_back(data_.size());
+        refIndices_.push_back(data_.size());
     } else if (e->type()->castSafetyTo(*type_) != CastSafety::Safe) {
         throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
     }
@@ -142,23 +142,24 @@ data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
 
 vector<string> VectorData::refs() const {
     vector<string> res;
-    for (const auto &idx : refs_) {
+    res.reserve(refIndices_.size());
+    for (const auto &idx : refIndices_) {
         data_ptr_t ref = data_[idx];
-        res.push_back(dynamic_pointer_cast<RefData>(ref)->ref());
+        res.push_back(tt::as_shared<RefData>(ref)->ref());
     }
     return res;
 }
 
 void VectorData::resolve(const data_vec_t &dataList) {
-    if (refs_.empty()) {
+    if (refIndices_.empty()) {
         return;
     }
-    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refs_.size(); i++) {
-        size_t idx = refs_[i];
+    ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < refIndices_.size(); i++) {
+        size_t idx = refIndices_[i];
         data_[idx] = dataList[i];
     }
-    refs_.clear();
+    refIndices_.clear();
 }
 
 data_ptr_t VectorData::clone(bool deep) const {

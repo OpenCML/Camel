@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
+#include "utils/assert.h"
 
 using namespace std;
 
@@ -67,6 +68,12 @@ bool TupleType::operator!=(const Type &other) const { return !(*this == other); 
 void TupleType::add(const type_ptr_t &type) { types_.push_back(type); }
 
 void TupleType::set(size_t index, const type_ptr_t &type) { types_[index] = type; }
+
+std::shared_ptr<TupleType> TupleType::slice(size_t start, size_t end) const {
+    ASSERT(start <= end && end <= types_.size(), "TupleType slice indices out of range");
+    return std::make_shared<TupleType>(
+        std::vector<type_ptr_t>(types_.begin() + start, types_.begin() + end));
+}
 
 size_t TupleType::size() const { return types_.size(); }
 

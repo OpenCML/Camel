@@ -1,5 +1,7 @@
 module main
 
+import { whoami } from os
+
 func main() sync {
     println('Hello, {}!'.format(whoami()))
     return 0

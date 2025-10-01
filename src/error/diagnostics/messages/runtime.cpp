@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,6 +77,15 @@ const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap() {
                 "MaxRecursionDepthExceeded",
                 "Maximum recursion depth exceeded when evaluating graph '{0}'.",
                 "Check for infinite recursion or excessively deep recursive calls.",
+            },
+        },
+        {
+            RuntimeDiag::MismatchedOperandTypes,
+            {
+                "MismatchedOperandTypes",
+                "Operand types do not match in function/operator '{0}', "
+                "trying to operate '{1}' with '{2}'.",
+                "Ensure that all operands are of compatible types for the operation.",
             },
         },
     };

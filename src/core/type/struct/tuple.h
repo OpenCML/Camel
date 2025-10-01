@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,7 @@ class TupleType : public StructType {
 
     void add(const type_ptr_t &type);
     void set(size_t index, const type_ptr_t &type);
+    std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
 
     size_t size() const;
 

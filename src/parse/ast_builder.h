@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: May. 01, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -162,7 +162,7 @@ class Builder : public OpenCMLVisitor {
 
     std::any visitLinkExpr(OpenCMLParser::LinkExprContext *context);
 
-    std::any visitBindExpr(OpenCMLParser::BindExprContext *context);
+    std::any visitCompExpr(OpenCMLParser::CompExprContext *context);
 
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 

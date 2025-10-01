@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 
 #include "../other/any.h"
 #include "../other/null.h"
+#include "../other/ref.h"
 
 using namespace std;
 
@@ -36,7 +37,7 @@ DictData::DictData(initializer_list<pair<string, data_ptr_t>> data)
         data_[key] = val;
         dictType.add(key, val->type());
         if (val->type()->code() == TypeCode::Ref) {
-            refs_.push_back(key);
+            refIndices_.push_back(key);
         }
     }
 }
@@ -49,7 +50,7 @@ bool DictData::emplace(const std::string &key, const data_ptr_t &val) {
     if (dictType.add(key, val->type())) {
         data_[key] = val;
         if (val->type()->code() == TypeCode::Ref) {
-            refs_.push_back(key);
+            refIndices_.push_back(key);
         }
         return true;
     }
@@ -153,21 +154,29 @@ data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
         "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-vector<string> DictData::refs() const { return refs_; }
+vector<string> DictData::refs() const {
+    vector<string> res;
+    res.reserve(refIndices_.size());
+    for (const auto &e : refIndices_) {
+        const auto &refData = tt::as_shared<RefData>(data_.at(e));
+        res.push_back(refData->ref());
+    }
+    return res;
+}
 
 void DictData::resolve(const data_vec_t &dataList) {
-    if (refs_.empty()) {
+    if (refIndices_.empty()) {
         return;
     }
-    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
+    ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
     DictType &dictType = *static_cast<DictType *>(type_.get());
-    for (size_t i = 0; i < refs_.size(); i++) {
-        const string &key = refs_[i];
+    for (size_t i = 0; i < refIndices_.size(); i++) {
+        const string &key = refIndices_[i];
         data_ptr_t data = dataList[i];
         data_[key] = data;
         dictType.set(key, data->type());
     }
-    refs_.clear();
+    refIndices_.clear();
 }
 
 data_ptr_t DictData::clone(bool deep) const {

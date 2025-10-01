@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,7 @@ SetData::SetData(type_ptr_t elType, data_list_t data)
     : StructData(std::make_shared<SetType>(elType)), data_(data) {
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::Ref) {
-            refs_.push_back(e);
+            refDatas_.push_back(e);
         }
     }
 }
@@ -43,7 +43,7 @@ SetData::SetData(type_ptr_t setType, std::unordered_set<data_ptr_t> &&data)
 bool SetData::emplace(const data_ptr_t &e) {
     bool res = data_.insert(e).second;
     if (res && e->type()->code() == TypeCode::Ref) {
-        refs_.push_back(e);
+        refDatas_.push_back(e);
     }
     return res;
 }
@@ -100,24 +100,25 @@ data_ptr_t SetData::convert(type_ptr_t target, bool inplace) {
 
 vector<string> SetData::refs() const {
     vector<string> res;
-    for (const auto &ref : refs_) {
-        res.push_back(dynamic_pointer_cast<RefData>(ref)->ref());
+    res.reserve(refDatas_.size());
+    for (const auto &ref : refDatas_) {
+        res.push_back(tt::as_shared<RefData>(ref)->ref());
     }
     return res;
 }
 
 void SetData::resolve(const data_vec_t &dataList) {
-    if (refs_.empty()) {
+    if (refDatas_.empty()) {
         return;
     }
-    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refs_.size(); i++) {
-        data_ptr_t ref = refs_[i];
+    ASSERT(refDatas_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < refDatas_.size(); i++) {
+        data_ptr_t ref = refDatas_[i];
         data_ptr_t data = dataList[i];
         data_.erase(ref);
         data_.insert(data);
     }
-    refs_.clear();
+    refDatas_.clear();
 }
 
 data_ptr_t SetData::clone(bool deep) const {

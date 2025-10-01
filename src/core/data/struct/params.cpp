@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2024
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,33 +40,34 @@ bool ParamsData::emplace(const data_ptr_t &val, const std::string &key) {
     }
     paramsType.add(key, val->type());
     if (val->type()->code() == TypeCode::Ref) {
-        refs_.emplace_back(indexData_.size() - 1, key);
+        refIndices_.emplace_back(indexData_.size() - 1, key);
     }
     return true;
 }
 
 vector<string> ParamsData::refs() const {
     vector<string> res;
-    for (const auto &[idx, _] : refs_) {
+    res.reserve(refIndices_.size());
+    for (const auto &[idx, _] : refIndices_) {
         const data_ptr_t &ref = indexData_[idx];
-        res.push_back(dynamic_pointer_cast<RefData>(ref)->ref());
+        res.push_back(tt::as_shared<RefData>(ref)->ref());
     }
     return res;
 }
 
 void ParamsData::resolve(const data_vec_t &dataList) {
-    if (refs_.empty()) {
+    if (refIndices_.empty()) {
         return;
     }
-    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refs_.size(); i++) {
-        const auto &[idx, key] = refs_[i];
+    ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < refIndices_.size(); i++) {
+        const auto &[idx, key] = refIndices_[i];
         indexData_[idx] = dataList[i];
         if (!key.empty()) {
             namedData_[key] = dataList[i];
         }
     }
-    refs_.clear();
+    refIndices_.clear();
 }
 
 bool ParamsData::equals(const data_ptr_t &other) const {
@@ -205,14 +206,14 @@ data_ptr_t ParamsData::convertToParams(const shared_ptr<ParamsType> &other, bool
     }
     if (inplace) {
         type_ = other;
-        refs_ = std::move(refs);
+        refIndices_ = std::move(refs);
         indexData_ = std::move(indexData);
         namedData_ = std::move(namedData);
         return shared_from_this();
     } else {
         auto params = make_shared<ParamsData>();
         params->type_ = other;
-        params->refs_ = std::move(refs);
+        params->refIndices_ = std::move(refs);
         params->indexData_ = std::move(indexData);
         params->namedData_ = std::move(namedData);
         return params;

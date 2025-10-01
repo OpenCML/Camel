@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,8 +80,11 @@ static const std::pair<std::string, std::string> binaryOps[] = {
     {"__div__", ":op/div"},
     {"__mod__", ":op/mod"},
     {"__mat__", ":op/mat"},
-    {"__exp__", ":op/exp"},
+    {"__pow__", ":op/pow"},
     {"__idx__", ":op/idx"},
+    {"__not__", ":op/not"},
+    {"__neg__", ":op/neg"},
+    {"__inv__", ":op/inv"},
 };
 
 static const std::pair<std::string, std::string> others[] = {
@@ -89,12 +92,14 @@ static const std::pair<std::string, std::string> others[] = {
     {"println", ":io/println"},
     {"input", ":io/input"},
     {"sleep", ":os/sleep"},
-    {"whoami", ":os/whoami"},
     {"format", ":str/format"},
     {"join", ":str/join"},
     {"exit", ":os/exit"},
     // struct
     {"len", ":struct/len"},
+    {"zip", ":struct/zip"},
+    {"head", ":struct/head"},
+    {"tail", ":struct/tail"},
     {"range", ":struct/range"},
     {"slice", ":struct/slice"},
     {"concat", ":struct/concat"},
@@ -105,6 +110,7 @@ static const std::pair<std::string, std::string> others[] = {
     {"map", ":mark/map"},
     {"apply", ":mark/apply"},
     {"filter", ":mark/filter"},
+    {"reduce", ":mark/reduce"},
     {"foreach", ":mark/foreach"},
 };
 
@@ -120,6 +126,19 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &[name, func] : others) {
         exportBuiltinOperator(name, param_init_list{}, param_init_list{}, Type::Any(), func);
     }
+
+    auto op = makeOperator(
+        "__cmp__",
+        makeFuncType(
+            param_init_list{},
+            {{"lhs", Type::Any(), nullptr, false}, {"rhs", Type::Any(), nullptr, false}},
+            Type::Any(),
+            Modifier::Macro),
+        ":macro/bind");
+
+    auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
+    ops->push_back(op);
+    exportEntity("__cmp__", ops);
 }
 
 bool GlobalsBuiltinModule::load() {

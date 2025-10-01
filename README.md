@@ -89,6 +89,8 @@ pip install camel-lang
 // hello.cml
 module main
 
+import { whoami } from os
+
 func main() {
     println('Hello, {}!'.format(whoami()))
 }

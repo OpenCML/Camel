@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "gct_builder.h"
 
+#include "utils/escape.h"
 #include "utils/scope.h"
 #include "utils/token.h"
 #include "utils/type.h"
@@ -538,7 +539,7 @@ enum BinaryDataOp {
     Div,
     Mod,
     Mat,
-    Exp,
+    Pow,
     Index, // Data obj, Data* indices
 }
 BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
@@ -629,8 +630,8 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::Mat: {
         opNode = createNodeAs<DRefLoad>("__mat__");
     } break;
-    case AST::BinaryDataOp::Exp: {
-        opNode = createNodeAs<DRefLoad>("__exp__");
+    case AST::BinaryDataOp::Pow: {
+        opNode = createNodeAs<DRefLoad>("__pow__");
     } break;
     case AST::BinaryDataOp::Index: {
         opNode = createNodeAs<DRefLoad>("__idx__");
@@ -667,7 +668,7 @@ enum ReservedDataOp {
     NotNullThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     With, // Data obj, Data* args, NamedData* kwargs
-    Bind, // Data lhs, Data rhs
+    Comp, // Data lhs, Data rhs
     As, // Data lhs, Type rhs
     Is, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
@@ -735,10 +736,11 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             *res << visitData(dataNode);
         }
     } break;
-    case AST::ReservedDataOp::Bind: {
+    case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        res = createNodeAs<BindLoad>();
-        *res << visitData(lhsASTNode) << visitData(rhsASTNode);
+        node_ptr_t opNode = createNodeAs<DRefLoad>("__cmp__");
+        res = createNodeAs<LinkLoad>(2);
+        *res << opNode << visitData(lhsASTNode) << visitData(rhsASTNode);
     } break;
 
     case AST::ReservedDataOp::As: {
@@ -757,7 +759,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Access: {
         const auto &refASTNode = ast->atAs<AST::RefDataLoad>(1);
         const auto &refDataLoad = refASTNode->loadAs<AST::RefDataLoad>();
-        res = createNodeAs<AccsLoad>(refDataLoad->ref());
+        const auto &ref = refDataLoad->ref();
+        try {
+            size_t index = std::stoul(ref.ident());
+            res = createNodeAs<AccsLoad>(index);
+        } catch (const std::exception &) {
+            // Not an index, treat as named access
+            res = createNodeAs<AccsLoad>(ref);
+        }
         *res << visitData(lhsASTNode);
     } break;
     default:
@@ -865,7 +874,8 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     data_ptr_t data;
     switch (value.type()) {
     case LiteralType::String: {
-        data = tt::as_shared<Data>(make_shared<StringData>(str));
+        std::string decoded = decodeEscapes(str);
+        data = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
         diags_->of(SemanticDiag::FeatureNotSupported)
@@ -874,7 +884,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
-        data = makeDataFromLiteral(parseNumber<int64_t>(str));
+        data = makeDataFromLiteral(parseNumber<int32_t>(str));
     } break;
     case LiteralType::Real: {
         data = makeDataFromLiteral(parseNumber<double>(str));

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 12, 2024
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,8 +37,8 @@ FunctionType::FunctionType(
 
 FunctionType::FunctionType(
     const param_init_list &withParamsList, const param_init_list &normParamsList,
-    const type_ptr_t &returnType)
-    : SpecialType(TypeCode::Func) {
+    const type_ptr_t &returnType, const ModifierSet &modifiers)
+    : SpecialType(TypeCode::Func), modifiers_(modifiers), returnType_(returnType) {
     withParamsType_ = make_shared<ParamsType>();
     normParamsType_ = make_shared<ParamsType>();
     for (const auto &tuple : withParamsList) {

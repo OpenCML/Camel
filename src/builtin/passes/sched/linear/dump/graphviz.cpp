@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,14 +49,47 @@ std::string escape(const std::string &input) {
 std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) {
     std::vector<std::string> lines;
     std::istringstream stream(text);
-    std::string line;
+    std::string paragraph;
 
     // Step 1: Split input by existing '\n'
-    while (std::getline(stream, line)) {
+    while (std::getline(stream, paragraph)) {
+        size_t len = paragraph.length();
+
+        // If the line fits in one line, push directly
+        if (len <= maxWidth) {
+            lines.push_back(paragraph);
+            continue;
+        }
+
+        // If the line fits in two lines but not one, try to split in the middle
+        if (len <= maxWidth * 2) {
+            size_t splitPos = len / 2;
+
+            // Try to split at whitespace near the middle
+            size_t left = paragraph.rfind(' ', splitPos);
+            size_t right = paragraph.find(' ', splitPos);
+
+            if (left != std::string::npos && (splitPos - left) <= (right - splitPos)) {
+                splitPos = left;
+            } else if (right != std::string::npos) {
+                splitPos = right;
+            }
+
+            std::string first = paragraph.substr(0, splitPos);
+            std::string second = paragraph.substr(splitPos);
+            // Trim leading space of second line
+            if (!second.empty() && second[0] == ' ')
+                second = second.substr(1);
+            lines.push_back(first);
+            lines.push_back(second);
+            continue;
+        }
+
+        // Otherwise, break into fixed maxWidth chunks
         size_t pos = 0;
-        while (pos < line.length()) {
-            size_t take = std::min(maxWidth, line.length() - pos);
-            lines.push_back(line.substr(pos, take));
+        while (pos < len) {
+            size_t take = std::min(maxWidth, len - pos);
+            lines.push_back(paragraph.substr(pos, take));
             pos += take;
         }
     }
@@ -66,12 +99,11 @@ std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) 
         std::vector<std::string> limitedLines;
         for (size_t i = 0; i < maxLines; ++i) {
             if (i == maxLines - 1) {
-                // Last line: truncate and add ellipsis if needed
                 std::string lastLine = lines[i];
                 if (lastLine.length() > maxWidth) {
                     lastLine = lastLine.substr(0, maxWidth);
                 }
-                if (lastLine.length() > 3) {
+                if (maxWidth >= 3 && lastLine.length() > 3) {
                     lastLine = lastLine.substr(0, maxWidth - 3) + "...";
                 } else {
                     lastLine = std::string(maxWidth, '.');
@@ -154,7 +186,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
-        for (size_t i = 0; i < graph->portNodes().size(); i++) {
+        for (size_t i = 0; i < graph->ports().size(); i++) {
             const string name = type->argNameAt(i);
             bool isVar = type->variableMap().at(name);
             portsNameMap[i] = make_pair(name, isVar);
@@ -185,7 +217,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     }
 
     // Draw ARGS node to represent function arguments
-    if (!graph->isRoot() && !graph->portNodes().empty()) {
+    if (!graph->isRoot() && !graph->ports().empty()) {
         res += std::format(
             "{}{}{} [label=\"ARGS\", style=dashed, shape=circle];\r\n",
             baseIndent_,
@@ -194,6 +226,21 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     }
 
     // Draw nodes inside the graph
+    const node_vec_t &ports = graph->ports();
+    for (size_t i = 0; i < ports.size(); ++i) {
+        ASSERT(portsNameMap.contains(i), "Port index out of range.");
+        string label = portsNameMap[i].first;
+        const auto &node = ports[i];
+        string tooltip = graph->name() + "::" + node->toString();
+        res += std::format(
+            "{}{}{} [label=\"{}\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
+            baseIndent_,
+            indent_,
+            pointerToIdent(node.get()),
+            escape(wrapText(label, 7, 2)),
+            std::format("{}\\n{}", escape(label), escape(tooltip)));
+    }
+
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
@@ -201,48 +248,68 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
         tooltip = graph->name() + "::" + node->toString();
 
         switch (node->type()) {
-        case NodeType::Select: {
-            auto selectNode = tt::as_shared<SelectNode>(node);
-            label = selectNode->selectType() == SelectNode::SelectType::Branch ? "BRCH" : "JOIN";
+        case NodeType::DATA: {
+            auto sourceNode = tt::as_shared<DataNode>(node);
+            data_ptr_t data = sourceNode->data();
+            label = data->toString();
+            break;
+        }
+        case NodeType::PORT: {
+            label = portsNameMap[i].first;
+            style = "dashed";
+            break;
+        }
+        case NodeType::COPY: {
+            label = "COPY";
             shape = "diamond";
             break;
         }
-        case NodeType::Access: {
-            auto accessNode = tt::as_shared<AccessNode>(node);
+        case NodeType::FILL: {
+            label = "FILL";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::ACCS: {
+            auto accessNode = tt::as_shared<AccsNode>(node);
             label = "$" + accessNode->index2String();
-            break;
-        }
-        case NodeType::Struct: {
-            label = "DREF";
             shape = "diamond";
             break;
         }
-        case NodeType::Source: {
-            if (portsNameMap.contains(i)) {
-                label = portsNameMap[i].first;
-                style = "dashed";
-            } else {
-                auto sourceNode = tt::as_shared<SourceNode>(node);
-                data_ptr_t data = sourceNode->dataOf(*graph->arena());
-                label = data->toString();
-            }
+        case NodeType::BRCH: {
+            label = "BRCH";
+            shape = "diamond";
             break;
         }
-        case NodeType::Function: {
-            func_ptr_t func = tt::as_shared<FunctionNode>(node)->func();
-            label = func->name().empty() ? func->graph()->name() : func->name();
+        case NodeType::JOIN: {
+            label = "JOIN";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::CALL: {
+            label = "CALL";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::BIND: {
+            label = "BIND";
+            shape = "diamond";
+            break;
+        }
+        case NodeType::FUNC: {
+            func_ptr_t func = tt::as_shared<FuncNode>(node)->func();
+            label = func->name().empty() ? func->graph().name() : func->name();
             shape = "Mdiamond";
             size = "width=1.1, height=1.1";
             break;
         }
-        case NodeType::Operator: {
-            auto oper = tt::as_shared<OperatorNode>(node);
+        case NodeType::OPER: {
+            auto oper = tt::as_shared<OperNode>(node);
             label = oper->oper()->name();
             shape = "diamond";
             break;
         }
-        case NodeType::Return: {
-            label = "RETN";
+        case NodeType::EXIT: {
+            label = "EXIT";
             shape = "doublecircle";
             size = "width=0.9, height=0.9";
             break;
@@ -265,7 +332,9 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     // Connect ARGS node to port nodes
     size_t withIdx = 0, normIdx = 0;
-    for (const auto &[portNode, isWithArg] : graph->portNodes()) {
+    for (const auto &node : graph->ports()) {
+        const auto &portNode = tt::as_shared<PortNode>(node);
+        bool isWithArg = portNode->isWithArg();
         string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", style={}];\r\n",

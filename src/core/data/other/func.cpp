@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,15 +22,14 @@
 
 using namespace std;
 
-FunctionData::FunctionData(GraphIR::graph_ptr_t graph) : Data(graph->funcType()), graph_(graph) {}
+FunctionData::FunctionData(GraphIR::Graph &graph) : Data(graph.funcType()), graph_(graph) {}
 
-func_ptr_t FunctionData::create(GraphIR::graph_ptr_t graph) {
-    ASSERT(graph != nullptr, "Graph cannot be null for FunctionData.");
-    ASSERT(graph->funcType() != nullptr, "Graph must have a function type for FunctionData.");
+func_ptr_t FunctionData::create(GraphIR::Graph &graph) {
+    ASSERT(graph.funcType() != nullptr, "Graph must have a function type for FunctionData.");
     return std::make_shared<FunctionData>(graph);
 }
 
-std::string FunctionData::name() const { return graph_->name(); }
+std::string FunctionData::name() const { return graph_.name(); }
 
 func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<FunctionType>(type_); }
 
@@ -48,7 +47,7 @@ data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<Functi
 
 const std::string FunctionData::toString() const {
     FunctionType *type = dynamic_cast<FunctionType *>(type_.get());
-    return graph_->name() + ": " + type->toString();
+    return graph_.name() + ": " + type->toString();
 }
 
 void FunctionData::print(std::ostream &os) const { os << toString(); }

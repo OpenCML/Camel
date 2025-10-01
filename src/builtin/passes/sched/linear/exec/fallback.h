@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,12 +30,16 @@ class FallbackExecSchedPass : public LinearSchedPass {
     std::stack<GraphIR::node_ptr_t> brInfoStack_;
     std::unordered_map<GraphIR::Graph *, std::shared_ptr<GraphIR::node_vec_t>> graphTopoNodesCache_;
 
-    data_ptr_t evalGraph(const GraphIR::graph_ptr_t &graph, frame_ptr_t &frame);
-    std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(const GraphIR::graph_ptr_t &graph);
+    data_ptr_t evalGraph(GraphIR::Graph *graph, const frame_ptr_t &frame);
+    std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(GraphIR::Graph *graph);
+
+    void evalMarkedOperator(
+        const std::string uri, const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
 
     void evalMarkedOperator_map(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
     void evalMarkedOperator_apply(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
     void evalMarkedOperator_filter(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_reduce(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
     void evalMarkedOperator_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
 
   public:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Sep. 30, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,42 +64,52 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
-        node_ptr_t retNode = g->returnNode();
+        node_ptr_t retNode = g->exitNode();
         auto sortedNodes = findReachable(
             retNode,
             [](const node_ptr_t &n) {
                 vector<node_ptr_t> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
                 for (const auto &in : n->ctrlInputs()) {
-                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }
                 for (const auto &in : n->dataInputs()) {
-                    if (in->graph() == n->graph()) // only consider nodes in the same graph
+                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
                         ins.push_back(in);
                 }
                 return ins;
             },
             true);
-        if (sortedNodes.size() != g->nodes().size()) {
-            GraphIR::node_vec_t unreachableNodes;
-            for (const auto &n : g->nodes()) {
-                if (std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
-                    unreachableNodes.push_back(n);
+        EXEC_WHEN_DEBUG([&]() {
+            l.in("Topo").debug("Topologically sorted nodes for graph {}:", graph->name());
+            for (const auto &n : sortedNodes) {
+                l.in("Topo").debug("  {}", n->toString());
+            }
+            if (sortedNodes.size() != graph->nodes().size() - 1) {
+                GraphIR::node_vec_t unreachableNodes;
+                for (const auto &n : graph->nodes()) {
+                    if (n != retNode &&
+                        std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
+                        unreachableNodes.push_back(n);
+                    }
                 }
+                std::string nodeStrs;
+                for (const auto &node : unreachableNodes) {
+                    if (!nodeStrs.empty()) {
+                        nodeStrs += ", ";
+                    }
+                    nodeStrs += node->toString();
+                }
+                l.in("Topo").warn(
+                    "Unreachable nodes in graph {} detected: {}",
+                    graph->name(),
+                    nodeStrs);
             }
-            std::string nodeStrs;
-            for (const auto &node : unreachableNodes) {
-                nodeStrs += node->toString() + ", ";
-            }
-            EXEC_WHEN_DEBUG(l.in("Topo").warn(
-                "Unreachable nodes in graph {} detected: {}",
-                g->name(),
-                nodeStrs));
-        }
+        }());
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
-        for (const auto &[portNode, __] : g->portNodes()) {
+        for (const auto &portNode : g->ports()) {
             oss << ", " << pointerToIdent(portNode.get());
         }
         oss << "\n";
@@ -107,17 +117,17 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
         for (const auto &n : sortedNodes) {
             string res;
             switch (n->type()) {
-            case NodeType::Function: {
-                func_ptr_t func = tt::as_shared<FunctionNode>(n)->func();
-                string name = func->name().empty() ? func->graph()->name() : func->name();
+            case NodeType::FUNC: {
+                func_ptr_t func = tt::as_shared<FuncNode>(n)->func();
+                string name = func->name().empty() ? func->graph().name() : func->name();
                 res = format("CALL: {}", name);
                 for (const auto &inputNode : n->dataInputs()) {
                     res += format(", {}", pointerToIdent(inputNode.get()));
                 }
                 break;
             }
-            case NodeType::Operator: {
-                auto oper = tt::as_shared<OperatorNode>(n);
+            case NodeType::OPER: {
+                auto oper = tt::as_shared<OperNode>(n);
                 string name = oper->oper()->name();
                 res = format("CALL: <{}>", name);
                 for (const auto &inputNode : n->dataInputs()) {
@@ -125,32 +135,33 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
                 }
                 break;
             }
-            case NodeType::Select: {
-                auto selectNode = tt::as_shared<SelectNode>(n);
-                if (selectNode->selectType() == SelectNode::SelectType::Branch) {
-                    const auto &ins = selectNode->dataInputs();
-                    const auto &outs = selectNode->ctrlOutputs();
-                    res = format(
-                        "BRCH: {}? {}: {}",
-                        pointerToIdent(ins[0].get()),
-                        pointerToIdent(outs[0].get()),
-                        pointerToIdent(outs[1].get()));
-                } else {
-                    const auto &ins = selectNode->ctrlInputs();
-                    res = format(
-                        "JOIN: {}, {}",
-                        pointerToIdent(ins[0].get()),
-                        pointerToIdent(ins[1].get()));
-                }
+            case NodeType::BRCH: {
+                auto brchNode = tt::as_shared<BrchNode>(n);
+                const auto &ins = brchNode->dataInputs();
+                const auto &outs = brchNode->ctrlOutputs();
+                res = format(
+                    "BRCH: {}? {}: {}",
+                    pointerToIdent(ins[0].get()),
+                    pointerToIdent(outs[0].get()),
+                    pointerToIdent(outs[1].get()));
+                break;
+            }
+            case NodeType::JOIN: {
+                auto joinNode = tt::as_shared<JoinNode>(n);
+                const auto &ins = joinNode->ctrlInputs();
+                res = format(
+                    "JOIN: {}, {}",
+                    pointerToIdent(ins[0].get()),
+                    pointerToIdent(ins[1].get()));
                 break;
             }
             default:
-                res = format("NODE: {} ({})", n->data2str(), string(n->dataType()));
+                res = format("NODE: {}", n->toString());
             }
             oss << "    [" << pointerToIdent(n.get()) << "] " << res << "\n";
         }
         // 打印返回节点
-        oss << "RETN: " << pointerToIdent(g->returnNode().get()) << "\n\n";
+        oss << "RETN: " << pointerToIdent(g->exitNode().get()) << "\n\n";
     }
 
     oss << format("CALL: {}", graph->name()) << "\n";

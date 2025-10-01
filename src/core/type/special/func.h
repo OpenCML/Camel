@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 12, 2024
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ class FunctionType : public SpecialType {
         const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
     FunctionType(
         const param_init_list &withParamsList, const param_init_list &normParamsList,
-        const type_ptr_t &returnType);
+        const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None);
 
     const std::string &argNameAt(size_t idx) const;
 
@@ -46,6 +46,7 @@ class FunctionType : public SpecialType {
 
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
+    bool hasModifier(Modifier mod) const { return modifiers_.has(mod); }
 
     bool checkModifiers() const;
 

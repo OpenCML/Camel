@@ -12,9 +12,14 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 21, 2025
- * Updated: Sep. 30, 2025
+ * Created: Sep. 29, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "arena.h"
+#pragma once
+
+#include "core/operator.h"
+#include "core/type/type.h"
+
+OperatorReturnCode __cmp__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

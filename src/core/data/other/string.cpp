@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "any.h"
 
 #include "../struct/list.h"
+#include "utils/escape.h"
 
 StringData::StringData(const std::string &data) : Data(Type::String()), data_(data) {}
 
@@ -69,9 +70,6 @@ data_ptr_t StringData::convert(type_ptr_t target, bool inplace) {
 
 data_ptr_t StringData::clone(bool deep) const { return std::make_shared<StringData>(data_); }
 
-const std::string StringData::toString() const {
-    std::regex re("\\n");
-    return "\"" + std::regex_replace(data_, re, "\\n") + "\"";
-}
+const std::string StringData::toString() const { return "\"" + encodeEscapes(data_) + "\""; }
 
 void StringData::print(std::ostream &os) const { os << data_; }

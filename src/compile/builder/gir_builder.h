@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Sep. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -78,6 +78,10 @@ class Builder {
     bool varied_;
 
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
+    // if a function node is marked as called,
+    // the node itself does not represent a function
+    // but the result of invoking the function
+    std::unordered_set<Node *> calledNodesSet_;
     node_ptr_t lastCalledFuncNode_;
 
     std::optional<node_ptr_t> nodeAt(const std::string &name) { return nodeScope_->get(name); }
@@ -109,7 +113,6 @@ class Builder {
     node_ptr_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitLinkNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitWithNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitBindNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitBrchNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);

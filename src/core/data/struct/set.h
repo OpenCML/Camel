@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 21, 2025
+ * Updated: Sep. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class SetData : public StructData {
   private:
-    std::vector<data_ptr_t> refs_;
+    std::vector<data_ptr_t> refDatas_;
     // TODO: need to implement a hash function for data_ptr_t
     std::unordered_set<data_ptr_t> data_;
 
@@ -53,7 +53,7 @@ class SetData : public StructData {
     std::unordered_set<data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolved() const override { return refDatas_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

@@ -172,10 +172,10 @@ unaryExpr
     ;
 
 linkExpr
-    : bindExpr (('->' | '?->') bindExpr)*
+    : compExpr (('->' | '?->') compExpr)*
     ;
 
-bindExpr
+compExpr
     : annoExpr (('..' | '?..') annoExpr)*
     ;
 
