@@ -3,6 +3,7 @@ module main
 import { whoami } from os
 
 func main() sync {
-    println('Hello, {}!'.format(whoami()))
+    let i = whoami()
+    println('Hello, {}!'.format(i))
     return 0
 }

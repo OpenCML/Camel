@@ -1,8 +1,0 @@
-module main
-
-import { dense } from nn
-
-func main(): int sync {
-    0->dense<1, 2>->println
-    return 0
-}
