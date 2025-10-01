@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -222,6 +222,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     node_vec_t nodes_;
     node_ptr_t output_;
     node_set_t capture_;
+    node_set_t exposure_;
 };
 
 class Node : public std::enable_shared_from_this<Node> {

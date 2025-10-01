@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -318,14 +318,6 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     auto optNode = nodeAt(ident);
     if (optNode.has_value()) {
         const auto &node = optNode.value();
-        if (&node->graph() != currGraph_.get()) {
-            Graph *curr = currGraph_.get();
-            while (curr != nullptr && &node->graph() != curr) {
-                // the referenced node is from an outer scope, need to mark it as captured
-                curr->addCapture(node);
-                curr = curr->outer().get();
-            }
-        }
         LEAVE("DREF");
         return node;
     }
@@ -357,14 +349,6 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         const auto &e = module_->getImportedEntity(ident);
         if (std::holds_alternative<node_ptr_t>(e)) {
             const auto &node = std::get<node_ptr_t>(e);
-            if (&node->graph() != currGraph_.get()) {
-                Graph *curr = currGraph_.get();
-                while (curr != nullptr && &node->graph() != curr) {
-                    // the referenced node is from an outer scope, need to mark it as captured
-                    curr->addCapture(node);
-                    curr = curr->outer().get();
-                }
-            }
             LEAVE("DREF");
             return node;
         } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
