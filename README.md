@@ -9,7 +9,7 @@
   <img src='https://www.github.com/OpenCML/ImagesHosting/raw/main/camel_logo_text.png' width=800>
 </p>
 
-Camel is a **graph-based**, **multi-stage**, and **type-driven** domain-specific language (DSL) designed to bridge the gap between AI research and production deployment. It combines the elegance of **functional programming** with the expressiveness of **declarative programming**. It provides **born-async semantics** and highly **customizable graph manipulations**, enabling developers to write **high-level code** that compiles to **near-native performance**.
+Camel is a **graph-native**, **multi-stage**, and **type-driven** domain-specific language (DSL) designed to bridge the gap between AI research and production deployment. It combines the elegance of **functional programming** with the expressiveness of **declarative programming**. It provides **born-async semantics** and highly **customizable graph manipulations**, enabling developers to write **high-level code** that compiles to **near-native performance**.
 
 ## 🚀 Why Camel?
 
