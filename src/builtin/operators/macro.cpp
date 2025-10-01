@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,11 +52,11 @@ OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
 
     func_ptr_t lhsFunc = lhs->as<FunctionData>(Type::Func());
     func_type_ptr_t lhsFuncType = lhsFunc->funcType();
-    Graph &lhsGraph = lhs->as<FunctionData>(Type::Func())->graph();
+    // Graph &lhsGraph = lhs->as<FunctionData>(Type::Func())->graph();
 
     func_ptr_t rhsFunc = rhs->as<FunctionData>(Type::Func());
     func_type_ptr_t rhsFuncType = rhsFunc->funcType();
-    Graph &rhsGraph = rhs->as<FunctionData>(Type::Func())->graph();
+    // Graph &rhsGraph = rhs->as<FunctionData>(Type::Func())->graph();
 
     if (rhsFuncType->normParams().size() != 1) {
         ctx.rtmDiags()
@@ -87,9 +87,6 @@ OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
-
-    // create a new graph for the composed function
-    graph_ptr_t newGraph = Graph::create(self->graph().shared_from_this());
 
     return OperatorReturnCode::OK;
 }

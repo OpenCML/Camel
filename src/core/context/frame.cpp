@@ -132,6 +132,14 @@ void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
         return graph_.setStaticData(node->index(), data);
     } else {
         ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
+        // ASSERT(
+        //     dataArr_[node->index()] == nullptr,
+        //     std::format(
+        //         "Overwriting initialized data of node: {}::{} in frame {}: {}",
+        //         graph_.name(),
+        //         node->toString(),
+        //         graph_.name(),
+        //         dataArr_[node->index()]->toString()));
         dataArr_[node->index()] = data;
         return;
     }

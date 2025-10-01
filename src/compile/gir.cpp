@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -73,12 +73,74 @@ void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
 void Graph::addPort(const node_ptr_t &node) { ports_.push_back(node); }
 
-void Graph::addCapture(const node_ptr_t &node) { capture_.insert(node); }
+void Graph::addCapture(const node_ptr_t &node) {
+    ASSERT(&node->graph() != this, "Cannot capture a node from the same graph.");
+    capture_.insert(node);
+    node->graph().exposure_.insert(node);
+}
 
 void Graph::setOutput(const node_ptr_t &node) {
     ASSERT(output_ == nullptr, "Output node has already been set.");
     output_ = ExitNode::create(*this, node->index());
     Node::link(LinkType::Norm, node, output_);
+}
+
+graph_ptr_t Graph::clone() const {
+    graph_ptr_t newGraph = Graph::create(outer_.lock(), name_);
+    newGraph->looped_ = looped_;
+
+    newGraph->funcType_ = funcType_;
+    newGraph->staticDataArr_ = staticDataArr_;
+    newGraph->runtimeDataSize_ = runtimeDataSize_;
+
+    for (const auto &subGraph : subGraphs_) {
+        newGraph->addSubGraph(subGraph.second->clone());
+    }
+    for (const auto &dep : dependencies_) {
+        newGraph->addDependency(dep);
+    }
+
+    std::unordered_map<Node *, node_ptr_t> nodeMap;
+
+    for (const auto &port : ports_) {
+        const auto &newPort = port->clone(*newGraph);
+        nodeMap[port.get()] = newPort;
+    }
+    for (const auto &node : nodes_) {
+        const auto &newNode = node->clone(*newGraph);
+        nodeMap[newNode.get()] = newNode;
+    }
+
+    // 重新建立节点之间的连接
+    for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
+        for (const auto &withInput : oldNodePtr->withInputs()) {
+            if (nodeMap.find(withInput.get()) == nodeMap.end()) { // capture
+                Node::link(LinkType::With, withInput, newNodePtr);
+            } else {
+                Node::link(LinkType::With, nodeMap[withInput.get()], newNodePtr);
+            }
+        }
+        for (const auto &normInput : oldNodePtr->normInputs()) {
+            if (nodeMap.find(normInput.get()) == nodeMap.end()) { // capture
+                Node::link(LinkType::Norm, normInput, newNodePtr);
+            } else {
+                Node::link(LinkType::Norm, nodeMap[normInput.get()], newNodePtr);
+            }
+        }
+        for (const auto &ctrlInput : oldNodePtr->ctrlInputs()) {
+            if (nodeMap.find(ctrlInput.get()) == nodeMap.end()) { // capture
+                Node::link(LinkType::Ctrl, ctrlInput, newNodePtr);
+            } else {
+                Node::link(LinkType::Ctrl, nodeMap[ctrlInput.get()], newNodePtr);
+            }
+        }
+    }
+
+    if (output_) {
+        newGraph->setOutput(nodeMap[output_.get()]);
+    }
+
+    return newGraph;
 }
 
 /*
@@ -166,17 +228,38 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
     ASSERT(from != to, "Cannot link a node to itself.");
     switch (type) {
     case LinkType::With:
+        ASSERT(
+            std::find(from->dataOutputs().begin(), from->dataOutputs().end(), to) ==
+                from->dataOutputs().end(),
+            "Nodes are already linked (with).");
         from->dataOutputs().push_back(to);
         to->withInputs().push_back(from);
         break;
     case LinkType::Norm:
+        ASSERT(
+            std::find(from->dataOutputs().begin(), from->dataOutputs().end(), to) ==
+                from->dataOutputs().end(),
+            "Nodes are already linked (norm).");
         from->dataOutputs().push_back(to);
         to->normInputs().push_back(from);
         break;
     case LinkType::Ctrl:
+        ASSERT(
+            std::find(from->ctrlOutputs().begin(), from->ctrlOutputs().end(), to) ==
+                from->ctrlOutputs().end(),
+            "Nodes are already linked (ctrl).");
         from->ctrlOutputs().push_back(to);
         to->ctrlInputs().push_back(from);
         break;
+    }
+    // setting capture
+    if (&from->graph() != &to->graph()) {
+        Graph *curr = &to->graph();
+        while (curr != nullptr && &from->graph() != curr) {
+            // the referenced node is from an outer scope, need to mark it as captured
+            curr->addCapture(from);
+            curr = curr->outer().get();
+        }
     }
 }
 
