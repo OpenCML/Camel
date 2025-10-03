@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 01, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,6 +52,19 @@ std::string to_string(NodeType type) {
         return "EXIT";
     }
     ASSERT(false, "Unknown NodeType");
+    return "Unknown";
+}
+
+std::string to_string(LinkType type) {
+    switch (type) {
+    case LinkType::Norm:
+        return "Norm";
+    case LinkType::With:
+        return "With";
+    case LinkType::Ctrl:
+        return "Ctrl";
+    }
+    ASSERT(false, "Unknown LinkType");
     return "Unknown";
 }
 
@@ -226,6 +239,11 @@ bool Node::hasLinkedTo(const node_ptr_t &node) const {
 void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
     ASSERT(from && to, "Cannot link null nodes.");
     ASSERT(from != to, "Cannot link a node to itself.");
+    EXEC_WHEN_DEBUG(l.in("GIR").debug(
+        "Linking nodes: {} ->({}) {}",
+        from->toString(),
+        to_string(type),
+        to->toString()));
     switch (type) {
     case LinkType::With:
         ASSERT(
