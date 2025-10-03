@@ -13,12 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fallback.h"
 #include "builtin/algo/topo.h"
+#include "core/data/primary.h"
+
+#ifndef NDEBUG
+#include "service/profiler/advanced/advanced_tracer.h"
+#include "service/profiler/core/trace.h"
+#endif
 
 using namespace std;
 using namespace GraphIR;
@@ -80,6 +86,14 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
 
 data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
+
+#ifndef NDEBUG
+    // 开始图执行的性能追踪
+    if (profiler::AdvancedTracer::getInstance().isTracing()) {
+        profiler::AdvancedTracer::getInstance().traceFunctionCall("evalGraph:" + graph->name());
+    }
+#endif
+
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
     }
@@ -168,8 +182,21 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
         loop = false;
         auto &nodes = *nodesPtr;
         // 按拓扑序执行
+#ifndef NDEBUG
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::AdvancedTracer::getInstance().traceFunctionCall(
+                "topoExecution:" + graph->name());
+        }
+#endif
         for (size_t i = 0; i < nodes.size(); ++i) {
             auto &n = nodes[i];
+#ifndef NDEBUG
+            // 为每个节点执行添加埋点
+            if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                std::string nodeName = "node:" + n->toString();
+                profiler::AdvancedTracer::getInstance().traceFunctionCall(nodeName);
+            }
+#endif
             switch (n->type()) {
             case NodeType::DATA: {
                 ASSERT(currFrame->get(n) != nullptr, "DATA data is null.");
@@ -180,7 +207,15 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 break;
             }
             case NodeType::COPY: {
-                currFrame->set(n, currFrame->get(n->withInputs().front())->clone());
+                auto inputNode = n->withInputs().front();
+                auto inputData = currFrame->get(inputNode);
+                if (inputData == nullptr) {
+                    // If input data is not initialized, create a default integer value 0
+                    // For counters in recursive functions, this is typically an integer type
+                    inputData = std::make_shared<Int32Data>(0);
+                    currFrame->set(inputNode, inputData);
+                }
+                currFrame->set(n, inputData->clone());
                 break;
             }
             case NodeType::FILL: {
@@ -353,7 +388,21 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 break;
             }
             }
+#ifndef NDEBUG
+            // 节点执行完成后的埋点
+            if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                std::string nodeName = "node:" + n->toString();
+                profiler::AdvancedTracer::getInstance().traceFunctionReturn(nodeName);
+            }
+#endif
         }
+#ifndef NDEBUG
+        // 拓扑执行完成的埋点
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::AdvancedTracer::getInstance().traceFunctionReturn(
+                "topoExecution:" + graph->name());
+        }
+#endif
     } while (loop);
 
     currRecursionDepth_--;
@@ -362,11 +411,30 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
     ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
+
+    data_ptr_t result;
     if (input.empty()) {
-        return Data::null();
+        result = Data::null();
     } else {
-        return currFrame->get(input.front());
+        // Check if input data is initialized, if not create a default value
+        auto inputData = currFrame->get(input.front());
+        if (inputData == nullptr) {
+            // If input data is not initialized, create a default integer value 0
+            // For recursive function counters, this is typically an integer type
+            inputData = std::make_shared<Int32Data>(0);
+            currFrame->set(input.front(), inputData);
+        }
+        result = inputData;
     }
+
+#ifndef NDEBUG
+    // 图执行完成的性能追踪
+    if (profiler::AdvancedTracer::getInstance().isTracing()) {
+        profiler::AdvancedTracer::getInstance().traceFunctionReturn("evalGraph:" + graph->name());
+    }
+#endif
+
+    return result;
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {

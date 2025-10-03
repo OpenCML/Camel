@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Camel Compiler Trace Viewer</title>
+    <meta charset="UTF-8">
+</head>
+
+<body>
+    <h1>Camel Compiler Trace Viewer</h1>
+    <p>Opening Perfetto visualization tool...</p>
+
+    <script>
+        // Delay execution to ensure page loading is complete
+        setTimeout(function () {
+            // Create a hidden iframe to upload the file
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'https://ui.perfetto.dev/#!/';
+            document.body.appendChild(iframe);
+
+            // Redirect main window to Perfetto
+            window.location.href = 'https://ui.perfetto.dev/#!/';
+        }, 1000);
+    </script>
+
+    <p>If the browser does not open automatically, please visit manually:</p>
+    <a href="https://ui.perfetto.dev/#!/" target="_blank">https://ui.perfetto.dev/#!/</a>
+    <p>Then upload the trace file:</p>
+    <code>profile_reports/camel_trace.perfetto-trace</code>
+</body>
+
+</html>

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,7 @@
 #include "../operators/ops.h"
 #include "../operators/os.h"
 #include "../operators/other.h"
+#include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
 #include "../operators/this.h"
@@ -112,6 +113,12 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"time/now", __now__},
         {"time/strftime", __strftime__},
         {"time/strptime", __strptime__},
+
+        // profiler
+        {"profiler/begin", __profiler_begin__},
+        {"profiler/end", __profiler_end__},
+        {"profiler/instant", __profiler_instant__},
+        {"profiler/enable", __profiler_enable__},
 
         // this
         {"zen", __zen__},

@@ -12,24 +12,32 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 20, 2025
- * Updated: Aug. 20, 2025
+ * Created: Sep. 27, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
+#pragma once
+
 #include "buffer.h"
+#include <atomic>
+#include <filesystem>
+#include <fstream>
+#include <thread>
 
-void TraceBuffer::push(const TraceEvent &event) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    queue_.push(event);
-}
+class TraceSender {
+  public:
+    explicit TraceSender(TraceBuffer &buffer);
+    ~TraceSender();
 
-std::vector<TraceEvent> TraceBuffer::pop_all() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    std::vector<TraceEvent> result;
-    while (!queue_.empty()) {
-        result.push_back(queue_.front());
-        queue_.pop();
-    }
-    return result;
-}
+    void start();
+    void stop();
+    bool isRunning() const { return running_; }
+
+  private:
+    void run();
+
+    TraceBuffer &buffer_;
+    std::thread thread_;
+    std::atomic<bool> running_;
+};

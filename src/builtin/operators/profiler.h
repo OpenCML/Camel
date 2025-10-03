@@ -12,29 +12,17 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 20, 2025
- * Updated: Aug. 20, 2025
+ * Created: Oct. 1, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "buffer.h"
-#include <atomic>
-#include <thread>
+#include "core/context/frame.h"
+#include "core/operator.h"
 
-class TraceSender {
-  public:
-    TraceSender(TraceBuffer &buffer);
-    ~TraceSender();
-
-    void start();
-    void stop();
-
-  private:
-    void run();
-
-    TraceBuffer &buffer_;
-    std::thread thread_;
-    std::atomic<bool> running_;
-};
+OperatorReturnCode __profiler_begin__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __profiler_end__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __profiler_instant__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
