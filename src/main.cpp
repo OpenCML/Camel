@@ -97,12 +97,6 @@ int main(int argc, char *argv[]) {
         if (Run::profile) {
             startTime = chrono::high_resolution_clock::now();
 #ifndef NDEBUG
-#ifdef _WIN32
-            _putenv("CAMEL_PROFILE_MODE=FULL");
-#else
-            setenv("CAMEL_PROFILE_MODE", "FULL", 1);
-#endif
-
             // Initialize and start advanced tracing using profiler configuration
             profiler::AdvancedTracer::Config config;
             config.enable_perfetto_integration = true;
@@ -116,10 +110,11 @@ int main(int argc, char *argv[]) {
 
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setConfig(DiagsConfig{
-                .total_limit = -1,
-                .per_severity_limits = {{Severity::Error, 0}},
-            });
+            diagnostics->setConfig(
+                DiagsConfig{
+                    .total_limit = -1,
+                    .per_severity_limits = {{Severity::Error, 0}},
+                });
         }
 
         bool useJsonFormat = (errorFormat == "json");
@@ -177,10 +172,10 @@ int main(int argc, char *argv[]) {
                     .searchPaths =
                         {
                             entryDir,
-                            fs::absolute(fs::path(
-                                             Run::stdLibPath.empty()
-                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                 : Run::stdLibPath))
+                            fs::absolute(
+                                fs::path(
+                                    Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                            : Run::stdLibPath))
                                 .string(),
                             getEnv("CAMEL_PACKAGES"),
                             getEnv("CAMEL_HOME", camelPath.string()),

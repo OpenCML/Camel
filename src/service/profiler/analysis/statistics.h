@@ -115,7 +115,6 @@ class Statistics {
     void recordCounter(const std::string &counter_name, int64_t value);
 
     // 报告生成
-    // 报告生成
     void generateSummaryReport(
         const std::string &output_file = "profile_reports/statistics_summary.json");
     void generateDetailedReport(

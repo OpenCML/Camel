@@ -18,6 +18,7 @@
  */
 
 #include "profiler.h"
+#ifndef NDEBUG
 #include "../../service/profiler/advanced/advanced_tracer.h"
 #include "../../service/profiler/analysis/statistics.h"
 #include "../../service/profiler/core/trace.h"
@@ -95,3 +96,4 @@ bool ProfilerBuiltinModule::load() {
     loaded_ = true;
     return true;
 }
+#endif

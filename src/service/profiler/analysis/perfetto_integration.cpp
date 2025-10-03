@@ -29,8 +29,11 @@
 #ifndef NDEBUG
 
 #ifdef _WIN32
-#include <shellapi.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
+#include <shellapi.h>
 #else
 #include <unistd.h>
 #endif
@@ -191,33 +194,7 @@ void PerfettoIntegration::generatePerfettoFile() {
 }
 
 void PerfettoIntegration::openPerfettoInBrowser(bool auto_open) {
-#ifdef _WIN32
-    if (auto_open) {
-        std::string url = "https://ui.perfetto.dev/";
-        ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
-        std::cout << "[PROFILER PERFETTO] Opening Perfetto UI in browser..." << std::endl;
-    } else {
-        std::cout << "[PROFILER PERFETTO] To view trace results, manually open "
-                     "https://ui.perfetto.dev/ and load the trace file."
-                  << std::endl;
-    }
-#else
-    if (auto_open) {
-        std::string command = "xdg-open https://ui.perfetto.dev/ &";
-        int result = system(command.c_str());
-        if (result != 0) {
-            std::cout << "[PROFILER PERFETTO] Failed to open browser. To view trace results, "
-                         "manually open https://ui.perfetto.dev/ and load the trace file."
-                      << std::endl;
-        } else {
-            std::cout << "[PROFILER PERFETTO] Opening Perfetto UI in browser..." << std::endl;
-        }
-    } else {
-        std::cout << "[PROFILER PERFETTO] To view trace results, manually open "
-                     "https://ui.perfetto.dev/ and load the trace file."
-                  << std::endl;
-    }
-#endif
+    std::cout << "[PROFILER PERFETTO] To view trace results, manually open https://ui.perfetto.dev/ and load the trace file." << std::endl;
 }
 
 } // namespace profiler
