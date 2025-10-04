@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -114,7 +114,6 @@ class Statistics {
     // 计数器
     void recordCounter(const std::string &counter_name, int64_t value);
 
-    // 报告生成
     // 报告生成
     void generateSummaryReport(
         const std::string &output_file = "profile_reports/statistics_summary.json");

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,13 +84,14 @@ class CallTracer {
         int depth;
     };
 
+#ifndef NDEBUG
     bool function_tracing_enabled_ = false;
     bool memory_tracing_enabled_ = false;
     bool io_tracing_enabled_ = false;
     bool exception_tracing_enabled_ = false;
-
     int max_depth_ = 100;
     uint64_t min_duration_ = 0;
+#endif
     std::string output_file_ = "profiler_reports/call_trace.json";
 
     std::vector<CallFrame> call_stack_;

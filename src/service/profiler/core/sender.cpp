@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,6 +86,4 @@ void TraceSender::run() {
 
     out << "\n]}\n";
     out.close();
-    // std::cout << "[PROFILER CORE] Trace data saved to profile_reports/trace_output.json" <<
-    // std::endl;
 }

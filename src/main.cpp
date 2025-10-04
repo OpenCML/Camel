@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -97,12 +97,6 @@ int main(int argc, char *argv[]) {
         if (Run::profile) {
             startTime = chrono::high_resolution_clock::now();
 #ifndef NDEBUG
-#ifdef _WIN32
-            _putenv("CAMEL_PROFILE_MODE=FULL");
-#else
-            setenv("CAMEL_PROFILE_MODE", "FULL", 1);
-#endif
-
             // Initialize and start advanced tracing using profiler configuration
             profiler::AdvancedTracer::Config config;
             config.enable_perfetto_integration = true;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 #include "core/module/builtin.h"
 #include <string>
-
+#ifndef NDEBUG
 class ProfilerBuiltinModule : public BuiltinModule {
   private:
     bool enabled_ = false;
@@ -47,3 +47,19 @@ class ProfilerBuiltinModule : public BuiltinModule {
         return std::make_shared<ProfilerBuiltinModule>(ctx);
     }
 };
+#else
+class ProfilerBuiltinModule : public BuiltinModule {
+  public:
+    ProfilerBuiltinModule(context_ptr_t ctx) : BuiltinModule("profiler", ctx) {}
+    virtual ~ProfilerBuiltinModule() = default;
+    virtual bool load() override { return true; }
+    void begin(const std::string &name) {}
+    void end(const std::string &name) {}
+    void instant(const std::string &name) {}
+    void enable(bool enabled) {}
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<ProfilerBuiltinModule>(ctx);
+    }
+};
+
+#endif

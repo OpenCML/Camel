@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 20, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,9 +84,7 @@ void AdvancedTracer::startTracing() {
 }
 
 void AdvancedTracer::stopTracing() {
-    // std::cout << "[PROFILER_DEBUG] AdvancedTracer::stopTracing() called" << std::endl;
     if (!tracing_enabled_) {
-        // std::cout << "[PROFILER_DEBUG] Tracing not enabled, returning" << std::endl;
         return;
     }
 
@@ -94,30 +92,23 @@ void AdvancedTracer::stopTracing() {
     g_profiling_stopped = true;
     trace_end_time_ = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
 
-    // std::cout << "[PROFILER_DEBUG] Stopping CallTracer" << std::endl;
     CallTracer::getInstance().stopTracing();
 
     if (perfetto_integration_) {
-        // std::cout << "[PROFILER_DEBUG] Stopping Perfetto integration" << std::endl;
         perfetto_integration_->stopAndOpenPerfetto();
-        // std::cout << "[PROFILER_DEBUG] Perfetto integration stopped" << std::endl;
     }
 
     TRACE_EVENT_INSTANT("advanced_tracing_stopped");
 
     if (config_.generate_summary_report) {
-        // std::cout << "[PROFILER_DEBUG] Generating statistics report" << std::endl;
         generateStatisticsReport();
     }
 
     if (config_.generate_call_graph) {
-        // std::cout << "[PROFILER_DEBUG] Generating call graph" << std::endl;
         generateCallGraph();
     }
 
-    // std::cout << "[PROFILER_DEBUG] Generating trace file" << std::endl;
     generateTraceFile();
-    // std::cout << "[PROFILER_DEBUG] AdvancedTracer::stopTracing() completed" << std::endl;
 }
 
 void AdvancedTracer::pauseTracing() {
@@ -140,55 +131,33 @@ bool AdvancedTracer::isTracing() const { return tracing_enabled_ && !tracing_pau
 
 void AdvancedTracer::traceFunctionCall(
     const std::string &func_name, const std::string &file, int line) {
-    // std::cout << "[ADVANCED_TRACER_DEBUG] traceFunctionCall called with func_name: " << func_name
-    // << std::endl;
     if (!isTracing() || !shouldTraceFunction(func_name)) {
-        // std::cout << "[ADVANCED_TRACER_DEBUG] Tracing not enabled or function should not be
-        // traced, returning" << std::endl;
         return;
     }
 
-    // std::cout << "[ADVANCED_TRACER_DEBUG] Calling CallTracer::functionEnter" << std::endl;
-    // Record to various tracers
     CallTracer::getInstance().functionEnter(func_name, file, line);
-    // std::cout << "[ADVANCED_TRACER_DEBUG] CallTracer::functionEnter completed" << std::endl;
 
     if (perfetto_integration_) {
-        // std::cout << "[ADVANCED_TRACER_DEBUG] Recording event begin in perfetto" << std::endl;
         perfetto_integration_->recordEventBegin(func_name, "function");
-        // std::cout << "[ADVANCED_TRACER_DEBUG] Perfetto event begin recorded" << std::endl;
     }
 
     trace_event_count_++;
 
-    // Record statistics
     Statistics::getInstance().recordFunctionCall(func_name, 0); // Duration recorded on return
-    // std::cout << "[ADVANCED_TRACER_DEBUG] traceFunctionCall completed" << std::endl;
 }
 
 void AdvancedTracer::traceFunctionReturn(const std::string &func_name) {
-    // std::cout << "[ADVANCED_TRACER_DEBUG] traceFunctionReturn called with func_name: " <<
-    // func_name << std::endl;
     if (!isTracing() || !shouldTraceFunction(func_name)) {
-        // std::cout << "[ADVANCED_TRACER_DEBUG] Tracing not enabled or function should not be
-        // traced, returning" << std::endl;
         return;
     }
 
-    // std::cout << "[ADVANCED_TRACER_DEBUG] Calling CallTracer::functionExit" << std::endl;
-    // Record to various tracers
     CallTracer::getInstance().functionExit(func_name);
 
     if (perfetto_integration_) {
-        // std::cout << "[ADVANCED_TRACER_DEBUG] Recording event end in perfetto" << std::endl;
         perfetto_integration_->recordEventEnd(func_name, "function");
     }
 
     trace_event_count_++;
-
-    // Record statistics
-    // Statistics::getInstance().recordFunctionCall(func_name, 0); // Duration recorded on return
-    // std::cout << "[ADVANCED_TRACER_DEBUG] traceFunctionReturn completed" << std::endl;
 }
 void AdvancedTracer::traceMemoryAllocation(void *ptr, size_t size, const std::string &type) {
     if (!isTracing())
@@ -353,17 +322,14 @@ uint64_t AdvancedTracer::getTraceDuration() const {
 size_t AdvancedTracer::getTraceEventCount() const { return trace_event_count_; }
 
 size_t AdvancedTracer::getMemoryUsage() const {
-    // Simplified implementation, return current traced memory usage
-    return 0; // Actual implementation needs to get from memory tracer
+    return Statistics::getInstance().getCurrentMemoryUsage();
 }
 
 bool AdvancedTracer::shouldTraceFunction(const std::string &func_name) const {
-    // Check exclusion list
     if (config_.exclude_functions.find(func_name) != config_.exclude_functions.end()) {
         return false;
     }
 
-    // Check inclusion list
     if (!config_.include_functions.empty() &&
         config_.include_functions.find(func_name) == config_.include_functions.end()) {
         return false;
@@ -375,7 +341,6 @@ bool AdvancedTracer::shouldTraceFunction(const std::string &func_name) const {
 void AdvancedTracer::recordTraceEvent(
     const std::string &name, const std::string &category, const std::string &phase,
     uint64_t timestamp, uint64_t duration) {
-    // Basic trace event recording
     if (phase == "B") {
         TRACE_EVENT_BEGIN(name.c_str());
     } else if (phase == "E") {
@@ -417,14 +382,10 @@ void generate_advanced_report(const std::string &output_file) {
     bool is_full_profile = (profile_mode && std::string(profile_mode) == "FULL");
 #endif
 
-    if (is_full_profile) {
-        AdvancedTracer::getInstance().openPerfettoUI();
-    } else {
-        std::cout << "[PROFILER ADVANCED] Report files generated." << std::endl;
-        std::cout << "[PROFILER ADVANCED] To view results, manually open https://ui.perfetto.dev/ "
-                     "and load the trace file."
-                  << std::endl;
-    }
+    std::cout << "[PROFILER ADVANCED] Report files generated." << std::endl;
+    std::cout << "[PROFILER ADVANCED] To view results, manually open https://ui.perfetto.dev/ "
+                 "and load the trace file."
+              << std::endl;
 }
 
 } // namespace profiler

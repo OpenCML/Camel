@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,9 @@
 #ifndef NDEBUG
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <shellapi.h>
 #include <windows.h>
 #else
@@ -191,33 +194,9 @@ void PerfettoIntegration::generatePerfettoFile() {
 }
 
 void PerfettoIntegration::openPerfettoInBrowser(bool auto_open) {
-#ifdef _WIN32
-    if (auto_open) {
-        std::string url = "https://ui.perfetto.dev/";
-        ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
-        std::cout << "[PROFILER PERFETTO] Opening Perfetto UI in browser..." << std::endl;
-    } else {
-        std::cout << "[PROFILER PERFETTO] To view trace results, manually open "
-                     "https://ui.perfetto.dev/ and load the trace file."
-                  << std::endl;
-    }
-#else
-    if (auto_open) {
-        std::string command = "xdg-open https://ui.perfetto.dev/ &";
-        int result = system(command.c_str());
-        if (result != 0) {
-            std::cout << "[PROFILER PERFETTO] Failed to open browser. To view trace results, "
-                         "manually open https://ui.perfetto.dev/ and load the trace file."
-                      << std::endl;
-        } else {
-            std::cout << "[PROFILER PERFETTO] Opening Perfetto UI in browser..." << std::endl;
-        }
-    } else {
-        std::cout << "[PROFILER PERFETTO] To view trace results, manually open "
-                     "https://ui.perfetto.dev/ and load the trace file."
-                  << std::endl;
-    }
-#endif
+    std::cout << "[PROFILER PERFETTO] To view trace results, manually open "
+                 "https://ui.perfetto.dev/ and load the trace file."
+              << std::endl;
 }
 
 } // namespace profiler

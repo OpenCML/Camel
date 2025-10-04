@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,5 +45,7 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"json", [](context_ptr_t ctx) { return JsonBuiltinModule::create(ctx); }},
         {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
         {"this", [](context_ptr_t ctx) { return ThisBuiltinModule::create(ctx); }},
+#ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},
+#endif
 };

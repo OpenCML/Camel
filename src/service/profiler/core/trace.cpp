@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,11 +32,7 @@ static std::vector<TraceEvent> g_events;
 static std::mutex g_mutex;
 
 void trace_event_begin(const char *name, const char *category) {
-    // std::cout << "[TRACE_DEBUG] trace_event_begin called with name: " << (name ? name :
-    // "unnamed") << std::endl;
-
     std::lock_guard<std::mutex> lock(g_mutex);
-    // std::cout << "[TRACE_DEBUG] Acquired mutex in trace_event_begin" << std::endl;
 
     TraceEvent e;
     e.name = name ? name : "unnamed";
@@ -46,14 +42,11 @@ void trace_event_begin(const char *name, const char *category) {
                .count();
 
     g_events.push_back(e);
-    // std::cout << "[TRACE_DEBUG] Event added to g_events" << std::endl;
 }
 
 void trace_event_end() {
-    // std::cout << "[TRACE_DEBUG] trace_event_end called" << std::endl;
 
     std::lock_guard<std::mutex> lock(g_mutex);
-    // std::cout << "[TRACE_DEBUG] Acquired mutex in trace_event_end" << std::endl;
 
     TraceEvent e;
     e.ph = "E";
@@ -62,7 +55,6 @@ void trace_event_end() {
                .count();
 
     g_events.push_back(e);
-    // std::cout << "[TRACE_DEBUG] End event added to g_events" << std::endl;
 }
 
 void trace_event_instant(const char *name, const char *category) {
@@ -144,7 +136,6 @@ void trace_event_flush(const std::string &filename) {
     if (file.is_open()) {
         file << std::setw(2) << trace_data << std::endl;
         file.close();
-        // std::cout << "[PROFILER CORE] Trace data saved to " << output_filename << std::endl;
     }
 
     g_events.clear();

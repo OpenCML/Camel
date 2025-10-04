@@ -13,17 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "call_tracer.h"
-#include "../analysis/statistics.h"
 #include "../core/trace.h"
+
+#ifndef NDEBUG
+#include "../analysis/statistics.h"
+#endif
+
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <thread>
+#ifndef NDEBUG
 namespace profiler {
 
 CallTracer &CallTracer::getInstance() {
@@ -40,10 +45,7 @@ void CallTracer::enableIOTracing(bool enable) { io_tracing_enabled_ = enable; }
 void CallTracer::enableExceptionTracing(bool enable) { exception_tracing_enabled_ = enable; }
 
 void CallTracer::functionEnter(const std::string &func_name, const std::string &file, int line) {
-    // std::cout << "[CALL_TRACER_DEBUG] functionEnter called with func_name: " << func_name <<
-    // std::endl;
     if (!function_tracing_enabled_) {
-        // std::cout << "[CALL_TRACER_DEBUG] Function tracing not enabled, returning" << std::endl;
         return;
     }
 
@@ -51,13 +53,10 @@ void CallTracer::functionEnter(const std::string &func_name, const std::string &
     auto timestamp =
         std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
-    // std::cout << "[CALL_TRACER_DEBUG] Calling TRACE_EVENT_BEGIN" << std::endl;
     TRACE_EVENT_BEGIN(func_name.c_str());
-    // std::cout << "[CALL_TRACER_DEBUG] TRACE_EVENT_BEGIN completed" << std::endl;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        // std::cout << "[CALL_TRACER_DEBUG] Acquired CallTracer mutex" << std::endl;
 
         CallFrame frame;
         frame.function_name = func_name;
@@ -71,18 +70,13 @@ void CallTracer::functionEnter(const std::string &func_name, const std::string &
         auto &stats = function_stats_[func_name];
         stats.function_name = func_name;
         stats.call_count++;
-        // std::cout << "[CALL_TRACER_DEBUG] Updated function stats" << std::endl;
     }
 
     Statistics::getInstance().recordFunctionCall(func_name, 0);
-    // std::cout << "[CALL_TRACER_DEBUG] functionEnter completed" << std::endl;
 }
 
 void CallTracer::functionExit(const std::string &func_name) {
-    // std::cout << "[CALL_TRACER_DEBUG] functionExit called with func_name: " << func_name <<
-    // std::endl;
     if (!function_tracing_enabled_) {
-        // std::cout << "[CALL_TRACER_DEBUG] Function tracing not enabled, returning" << std::endl;
         return;
     }
 
@@ -90,15 +84,9 @@ void CallTracer::functionExit(const std::string &func_name) {
     auto timestamp =
         std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
-    // std::cout << "[CALL_TRACER_DEBUG] Calling TRACE_EVENT_END" << std::endl;
     TRACE_EVENT_END();
-    // std::cout << "[CALL_TRACER_DEBUG] TRACE_EVENT_END completed" << std::endl;
-
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        // std::cout << "[CALL_TRACER_DEBUG] Acquired CallTracer mutex in functionExit" <<
-        // std::endl;
-
         if (!call_stack_.empty()) {
             CallFrame frame = call_stack_.back();
             call_stack_.pop_back();
@@ -114,17 +102,9 @@ void CallTracer::functionExit(const std::string &func_name) {
                     stats.max_time = duration;
 
                 Statistics::getInstance().recordFunctionCall(func_name, duration);
-                // std::cout << "[CALL_TRACER_DEBUG] Updated function stats in functionExit" <<
-                // std::endl;
-            } else {
-                // std::cout << "[CALL_TRACER_DEBUG] Function name mismatch in functionExit" <<
-                // std::endl;
             }
-        } else {
-            // std::cout << "[CALL_TRACER_DEBUG] Call stack is empty in functionExit" << std::endl;
         }
     }
-    // std::cout << "[CALL_TRACER_DEBUG] functionExit completed" << std::endl;
 }
 
 void CallTracer::memoryAllocate(void *ptr, size_t size, const std::string &type) {
@@ -319,3 +299,64 @@ const std::unordered_map<std::string, CallTracer::CallStats> &CallTracer::getFun
 }
 
 } // namespace profiler
+#else
+
+namespace profiler {
+
+CallTracer &CallTracer::getInstance() {
+    static CallTracer instance;
+    return instance;
+}
+
+void CallTracer::functionEnter(const std::string &func_name, const std::string &file, int line) {
+    TRACE_EVENT_BEGIN(func_name.c_str());
+}
+
+void CallTracer::functionExit(const std::string &func_name) { TRACE_EVENT_END(); }
+
+void CallTracer::memoryAllocate(void *ptr, size_t size, const std::string &type) {}
+
+void CallTracer::memoryDeallocate(void *ptr) {}
+
+void CallTracer::memoryUsageSnapshot() {}
+
+void CallTracer::fileOpen(const std::string &filename, const std::string &mode) {}
+
+void CallTracer::fileClose(const std::string &filename) {}
+
+void CallTracer::fileRead(const std::string &filename, size_t bytes) {}
+
+void CallTracer::fileWrite(const std::string &filename, size_t bytes) {}
+
+void CallTracer::exceptionThrown(const std::string &exception_type, const std::string &message) {}
+
+void CallTracer::exceptionCaught(const std::string &exception_type) {}
+
+void CallTracer::enableFunctionTracing(bool enable) {}
+
+void CallTracer::enableMemoryTracing(bool enable) {}
+
+void CallTracer::enableIOTracing(bool enable) {}
+
+void CallTracer::enableExceptionTracing(bool enable) {}
+
+void CallTracer::setMaxDepth(int depth) {}
+
+void CallTracer::setMinDuration(uint64_t microseconds) {}
+
+void CallTracer::setOutputFile(const std::string &filename) {}
+
+void CallTracer::startTracing() {}
+
+void CallTracer::stopTracing() {}
+
+void CallTracer::generateReport() {}
+
+const std::unordered_map<std::string, CallTracer::CallStats> &CallTracer::getFunctionStats() const {
+    static std::unordered_map<std::string, CallTracer::CallStats> empty_stats;
+    return empty_stats;
+}
+
+} // namespace profiler
+
+#endif

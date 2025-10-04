@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "profiler.h"
+#ifndef NDEBUG
 #include "../../service/profiler/advanced/advanced_tracer.h"
 #include "../../service/profiler/analysis/statistics.h"
 #include "../../service/profiler/core/trace.h"
@@ -95,3 +96,4 @@ bool ProfilerBuiltinModule::load() {
     loaded_ = true;
     return true;
 }
+#endif

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,12 +87,11 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
 data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
 
-#ifndef NDEBUG
-    // 开始图执行的性能追踪
-    if (profiler::AdvancedTracer::getInstance().isTracing()) {
-        profiler::AdvancedTracer::getInstance().traceFunctionCall("evalGraph:" + graph->name());
-    }
-#endif
+    EXEC_WHEN_DEBUG([&]() {
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::AdvancedTracer::getInstance().traceFunctionCall("evalGraph:" + graph->name());
+        }
+    }());
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
@@ -181,22 +180,20 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
     do {
         loop = false;
         auto &nodes = *nodesPtr;
-        // 按拓扑序执行
-#ifndef NDEBUG
-        if (profiler::AdvancedTracer::getInstance().isTracing()) {
-            profiler::AdvancedTracer::getInstance().traceFunctionCall(
-                "topoExecution:" + graph->name());
-        }
-#endif
+        EXEC_WHEN_DEBUG([&]() {
+            if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                profiler::AdvancedTracer::getInstance().traceFunctionCall(
+                    "topoExecution:" + graph->name());
+            }
+        }());
         for (size_t i = 0; i < nodes.size(); ++i) {
             auto &n = nodes[i];
-#ifndef NDEBUG
-            // 为每个节点执行添加埋点
-            if (profiler::AdvancedTracer::getInstance().isTracing()) {
-                std::string nodeName = "node:" + n->toString();
-                profiler::AdvancedTracer::getInstance().traceFunctionCall(nodeName);
-            }
-#endif
+            EXEC_WHEN_DEBUG([&]() {
+                if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                    std::string nodeName = "node:" + n->toString();
+                    profiler::AdvancedTracer::getInstance().traceFunctionCall(nodeName);
+                }
+            }());
             switch (n->type()) {
             case NodeType::DATA: {
                 ASSERT(currFrame->get(n) != nullptr, "DATA data is null.");
@@ -388,21 +385,19 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 break;
             }
             }
-#ifndef NDEBUG
-            // 节点执行完成后的埋点
+            EXEC_WHEN_DEBUG([&]() {
+                if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                    std::string nodeName = "node:" + n->toString();
+                    profiler::AdvancedTracer::getInstance().traceFunctionReturn(nodeName);
+                }
+            }());
+        }
+        EXEC_WHEN_DEBUG([&]() {
             if (profiler::AdvancedTracer::getInstance().isTracing()) {
-                std::string nodeName = "node:" + n->toString();
-                profiler::AdvancedTracer::getInstance().traceFunctionReturn(nodeName);
+                profiler::AdvancedTracer::getInstance().traceFunctionReturn(
+                    "topoExecution:" + graph->name());
             }
-#endif
-        }
-#ifndef NDEBUG
-        // 拓扑执行完成的埋点
-        if (profiler::AdvancedTracer::getInstance().isTracing()) {
-            profiler::AdvancedTracer::getInstance().traceFunctionReturn(
-                "topoExecution:" + graph->name());
-        }
-#endif
+        }());
     } while (loop);
 
     currRecursionDepth_--;
@@ -427,12 +422,12 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
         result = inputData;
     }
 
-#ifndef NDEBUG
-    // 图执行完成的性能追踪
-    if (profiler::AdvancedTracer::getInstance().isTracing()) {
-        profiler::AdvancedTracer::getInstance().traceFunctionReturn("evalGraph:" + graph->name());
-    }
-#endif
+    EXEC_WHEN_DEBUG([&]() {
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::AdvancedTracer::getInstance().traceFunctionReturn(
+                "evalGraph:" + graph->name());
+        }
+    }());
 
     return result;
 }
@@ -659,7 +654,6 @@ void FallbackExecSchedPass::evalMarkedOperator_filter(
 
 void FallbackExecSchedPass::evalMarkedOperator_reduce(
     const node_ptr_t &node, frame_ptr_t &currFrame) {
-    // 参数检查：必须有1个with输入，2个norm输入
     if (node->withInputs().size() != 1 || node->normInputs().size() != 2) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
@@ -682,7 +676,6 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
 
     auto func = funcData->as<FunctionData>(Type::Func());
 
-    // 检查函数参数个数（必须是2个参数）
     if (func->graph().ports().size() != 2) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
@@ -717,17 +710,14 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
     }
 
     if (elements.empty()) {
-        // 空序列：返回初始值
         currFrame->set(node, initData);
         return;
     }
 
-    // 执行 reduce 操作
     data_ptr_t result = initData;
     for (const auto &item : elements) {
         auto frame = Frame::create(currFrame, func->graph());
 
-        // 设置参数：acc, cur
         const auto &ports = func->graph().ports();
         frame->set(ports[0], result); // acc
         frame->set(ports[1], item);   // cur
@@ -735,7 +725,6 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
         result = evalGraph(&func->graph(), frame); // 更新 result
     }
 
-    // 设置结果
     currFrame->set(node, result);
 }
 
