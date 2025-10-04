@@ -34,4 +34,4 @@ pypi/camel-lang/bin/
 pypi/camel-lang/stdlib/
 pypi/camel-lang/src/camel_lang.egg-info
 
-profiler_reports/
+profile_reports/

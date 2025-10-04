@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 1, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -149,9 +149,9 @@ OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, 
     if (enabled) {
         // std::cout << "[PROFILER_DEBUG] Enabling profiling..." << std::endl;
         profiler::AdvancedTracer::Config config;
-        config.enable_perfetto_integration = true;
-        config.perfetto_output = "profile_reports/camel_trace.perfetto-trace";
-        config.output_file = "profile_reports/camel_trace.json";
+        config.enablePerfettoIntegration = true;
+        config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
+        config.outputFile = "profile_reports/camel_trace.json";
         profiler::AdvancedTracer::getInstance().initialize(config);
         profiler::AdvancedTracer::getInstance().startTracing();
         std::cout << "[PROFILER] Profiling enabled" << std::endl;

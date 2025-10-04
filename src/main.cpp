@@ -39,13 +39,10 @@
 #include "parse/cst_dumper.h"
 #include "parse/parse.h"
 #include "service/formatter/fmt.h"
+#include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
 #include "utils/env.h"
 #include "utils/log.h"
-
-#ifndef NDEBUG
-#include "service/profiler/advanced/advanced_tracer.h"
-#endif
 
 #include <chrono>
 #include <filesystem>
@@ -93,21 +90,6 @@ int main(int argc, char *argv[]) {
     }
 
     while (Run::repeat--) {
-        chrono::high_resolution_clock::time_point startTime, endTime;
-        if (Run::profile) {
-            startTime = chrono::high_resolution_clock::now();
-#ifndef NDEBUG
-            // Initialize and start advanced tracing using profiler configuration
-            profiler::AdvancedTracer::Config config;
-            config.enable_perfetto_integration = true;
-            config.perfetto_output = "profile_reports/camel_trace.perfetto-trace";
-            config.output_file = "profile_reports/camel_trace.json";
-            profiler::start_advanced_tracing(config);
-#else
-            std::cerr << "Warning: Profiling is not available in release builds." << std::endl;
-#endif
-        }
-
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
             diagnostics->setConfig(DiagsConfig{
@@ -228,6 +210,17 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Run) {
+                EXEC_WHEN_DEBUG([] {
+                    if (Run::profile) {
+                        // Initialize and start advanced tracing using profiler configuration
+                        profiler::AdvancedTracer::Config config;
+                        config.enablePerfettoIntegration = true;
+                        config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
+                        config.outputFile = "profile_reports/camel_trace.json";
+                        profiler::start_advanced_tracing(config);
+                    }
+                }());
+
                 FallbackExecSchedPass pass(ctx);
                 pass.apply(ctx->rootGraph());
                 // int exitCode = ctx->getExitCode();
@@ -236,6 +229,13 @@ int main(int argc, char *argv[]) {
                     diags->dump(os, useJsonFormat);
                     return 1;
                 }
+
+                EXEC_WHEN_DEBUG([] {
+                    if (Run::profile) {
+                        profiler::stop_advanced_tracing();
+                        profiler::generate_advanced_report();
+                    }
+                }());
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
@@ -257,23 +257,6 @@ int main(int argc, char *argv[]) {
             os << "Unknown error occurred." << endl;
             ASSERT(false, "Unknown error occurred.");
             return 1;
-        }
-
-        if (Run::profile) {
-#ifndef NDEBUG
-            profiler::stop_advanced_tracing();
-            profiler::generate_advanced_report();
-            endTime = chrono::high_resolution_clock::now();
-            auto duration =
-                chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            l.in("Main").info("Time used: {} us", duration);
-#else
-            std::cerr << "Warning: Profiling is not available in release builds." << std::endl;
-            endTime = chrono::high_resolution_clock::now();
-            auto duration =
-                chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            l.in("Main").info("Time used: {} us", duration);
-#endif
         }
     }
 

@@ -19,6 +19,7 @@
 
 #include "perfetto_integration.h"
 #include "../core/trace.h"
+#include "utils/log.h"
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -32,8 +33,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <shellapi.h>
 #include <windows.h>
+// windows.h should be included before shellapi.h
+#include <shellapi.h>
 #else
 #include <unistd.h>
 #endif
@@ -46,16 +48,16 @@ PerfettoIntegration &PerfettoIntegration::getInstance() {
 }
 
 void PerfettoIntegration::startTracing(const std::string &output_file) {
-    tracing_enabled_ = true;
-    output_file_ = output_file;
+    tracingEnabled_ = true;
+    outputFile_ = output_file;
     events_.clear();
 
     recordEventInstant("perfetto_tracing_started", "perfetto");
 }
 
 void PerfettoIntegration::stopAndOpenPerfetto() {
-    if (!tracing_enabled_) {
-        std::cout << "[PROFILER PERFETTO] Tracing not started" << std::endl;
+    if (!tracingEnabled_) {
+        l.in("Profiler").warn("Tracing was not started, nothing to stop.");
         return;
     }
 
@@ -81,11 +83,11 @@ void PerfettoIntegration::stopAndOpenPerfetto() {
         }).detach();
     }
 
-    tracing_enabled_ = false;
+    tracingEnabled_ = false;
 }
 
 void PerfettoIntegration::recordEventBegin(const std::string &name, const std::string &category) {
-    if (!tracing_enabled_)
+    if (!tracingEnabled_)
         return;
 
     PerfettoTraceEvent event;
@@ -93,13 +95,13 @@ void PerfettoIntegration::recordEventBegin(const std::string &name, const std::s
     event.category = category;
     event.phase = 'B';
     event.timestamp = getCurrentTimestamp();
-    event.thread_id = getCurrentThreadId();
+    event.threadId = getCurrentThreadId();
 
     events_.push_back(event);
 }
 
 void PerfettoIntegration::recordEventEnd(const std::string &name, const std::string &category) {
-    if (!tracing_enabled_)
+    if (!tracingEnabled_)
         return;
 
     PerfettoTraceEvent event;
@@ -107,13 +109,13 @@ void PerfettoIntegration::recordEventEnd(const std::string &name, const std::str
     event.category = category;
     event.phase = 'E';
     event.timestamp = getCurrentTimestamp();
-    event.thread_id = getCurrentThreadId();
+    event.threadId = getCurrentThreadId();
 
     events_.push_back(event);
 }
 
 void PerfettoIntegration::recordEventInstant(const std::string &name, const std::string &category) {
-    if (!tracing_enabled_)
+    if (!tracingEnabled_)
         return;
 
     PerfettoTraceEvent event;
@@ -121,15 +123,15 @@ void PerfettoIntegration::recordEventInstant(const std::string &name, const std:
     event.category = category;
     event.phase = 'i';
     event.timestamp = getCurrentTimestamp();
-    event.thread_id = getCurrentThreadId();
+    event.threadId = getCurrentThreadId();
 
     events_.push_back(event);
 }
 
 uint64_t PerfettoIntegration::getCurrentTimestamp() {
     auto now = std::chrono::high_resolution_clock::now();
-    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
-    return ns;
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    return us;
 }
 
 uint32_t PerfettoIntegration::getCurrentThreadId() {
@@ -141,14 +143,14 @@ uint32_t PerfettoIntegration::getCurrentThreadId() {
 }
 
 void PerfettoIntegration::generatePerfettoFile() {
-    std::filesystem::path filepath(output_file_);
+    std::filesystem::path filepath(outputFile_);
     if (filepath.has_parent_path()) {
         std::filesystem::create_directories(filepath.parent_path());
     }
 
-    std::ofstream file(output_file_);
+    std::ofstream file(outputFile_);
     if (!file.is_open()) {
-        std::cerr << "Error: Cannot open file " << output_file_ << " for writing" << std::endl;
+        std::cerr << "Error: Cannot open file " << outputFile_ << " for writing" << std::endl;
         return;
     }
 
@@ -181,22 +183,20 @@ void PerfettoIntegration::generatePerfettoFile() {
         file << "      \"cat\": \"" << category << "\",\n";
         file << "      \"ph\": \"" << event.phase << "\",\n";
         file << "      \"ts\": " << event.timestamp << ",\n";
-        file << "      \"pid\": " << event.process_id << ",\n";
-        file << "      \"tid\": " << event.thread_id << "\n";
+        file << "      \"pid\": " << event.processId << ",\n";
+        file << "      \"tid\": " << event.threadId << "\n";
         file << "    }";
     }
 
     file << "\n  ]\n";
     file << "}\n";
     file.close();
-
-    // std::cout << "[PROFILER PERFETTO] Trace file generated: " << output_file_ << std::endl;
 }
 
 void PerfettoIntegration::openPerfettoInBrowser(bool auto_open) {
-    std::cout << "[PROFILER PERFETTO] To view trace results, manually open "
-                 "https://ui.perfetto.dev/ and load the trace file."
-              << std::endl;
+    l.in("Profiler")
+        .info("To view trace results, manually open https://ui.perfetto.dev/ and load the trace "
+              "file.");
 }
 
 } // namespace profiler

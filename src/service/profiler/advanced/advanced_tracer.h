@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 20, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,27 +37,27 @@ class AdvancedTracer {
 
     // Configuration options
     struct Config {
-        bool enable_function_tracing = true;
-        bool enable_memory_tracing = true;
-        bool enable_io_tracing = true;
-        bool enable_exception_tracing = true;
-        bool enable_statistics = true;
-        bool enable_perfetto_integration = true;
+        bool enableFunctionTracing = true;
+        bool enableMemoryTracing = true;
+        bool enableIoTracing = true;
+        bool enableExceptionTracing = true;
+        bool enableStatistics = true;
+        bool enablePerfettoIntegration = true;
 
-        int max_call_depth = 100;
-        uint64_t min_duration_us = 0;
-        double sampling_rate = 1.0;
-        size_t max_samples = 1000;
+        int maxCallDepth = 100;
+        uint64_t minDurationUs = 0;
+        double samplingRate = 1.0;
+        size_t maxSamples = 1000;
 
-        std::string output_file = "profile_reports/camel_trace.json";
-        std::string perfetto_output = "profile_reports/camel_trace.perfetto-trace";
+        std::string outputFile = "profile_reports/camel_trace.json";
+        std::string perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
 
-        std::unordered_set<std::string> include_functions;
-        std::unordered_set<std::string> exclude_functions;
+        std::unordered_set<std::string> includeFunctions;
+        std::unordered_set<std::string> excludeFunctions;
 
-        bool real_time_analysis = false;
-        bool generate_call_graph = true;
-        bool generate_summary_report = true;
+        bool realTimeAnalysis = false;
+        bool generateCallGraph = true;
+        bool generateSummaryReport = true;
     };
 
     // Configuration initialization
@@ -125,14 +125,14 @@ class AdvancedTracer {
         uint64_t timestamp, uint64_t duration = 0);
 
     Config config_;
-    bool tracing_enabled_ = false;
-    bool tracing_paused_ = false;
+    bool tracingEnabled_ = false;
+    bool tracingPaused_ = false;
 
-    uint64_t trace_start_time_ = 0;
-    uint64_t trace_end_time_ = 0;
-    size_t trace_event_count_ = 0;
+    uint64_t traceStartTime_ = 0;
+    uint64_t traceEndTime_ = 0;
+    size_t traceEventCount_ = 0;
 
-    std::unique_ptr<PerfettoIntegration> perfetto_integration_;
+    std::unique_ptr<PerfettoIntegration> perfettoIntegration_;
 };
 
 void start_advanced_tracing(const AdvancedTracer::Config &config = AdvancedTracer::Config());

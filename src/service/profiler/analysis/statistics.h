@@ -35,50 +35,50 @@ class Statistics {
   public:
     struct FunctionStats {
         std::string function_name;
-        uint64_t call_count = 0;
-        uint64_t total_time_us = 0;
-        uint64_t min_time = UINT64_MAX;
-        uint64_t max_time = 0;
+        uint64_t callCount = 0;
+        uint64_t totalTimeUs = 0;
+        uint64_t minTime = UINT64_MAX;
+        uint64_t maxTime = 0;
     };
 
     struct MemoryStats {
         size_t allocations = 0;
         size_t deallocations = 0;
-        size_t total_allocated = 0;
-        size_t total_deallocated = 0;
-        size_t max_allocation = 0;
-        size_t current_usage = 0;
-        size_t peak_usage = 0;
+        size_t totalAllocated = 0;
+        size_t totalDeallocated = 0;
+        size_t maxAllocation = 0;
+        size_t currentUsage = 0;
+        size_t peakUsage = 0;
     };
 
     struct MemoryTypeStats {
         size_t count = 0;
-        size_t total_size = 0;
+        size_t totalSize = 0;
     };
 
     struct IOStats {
         std::string filename;
         std::unordered_map<std::string, size_t> operations;
-        size_t total_bytes = 0;
-        uint64_t total_time_us = 0;
-        uint64_t min_time = UINT64_MAX;
-        uint64_t max_time = 0;
+        size_t totalBytes = 0;
+        uint64_t totalTimeUs = 0;
+        uint64_t minTime = UINT64_MAX;
+        uint64_t maxTime = 0;
     };
 
     struct NetworkStats {
         std::string endpoint;
         std::unordered_map<std::string, size_t> operations;
-        size_t total_bytes = 0;
-        uint64_t total_time_us = 0;
-        uint64_t min_time = UINT64_MAX;
-        uint64_t max_time = 0;
+        size_t totalBytes = 0;
+        uint64_t totalTimeUs = 0;
+        uint64_t minTime = UINT64_MAX;
+        uint64_t maxTime = 0;
     };
 
     struct PerformanceMetric {
         std::string name;
         std::vector<double> values;
-        double min_value = 0;
-        double max_value = 0;
+        double minValue = 0;
+        double maxValue = 0;
     };
 
   public:
@@ -123,7 +123,7 @@ class Statistics {
 
     // 配置
     void setSamplingRate(double rate);
-    void setMaxSamples(size_t max_samples);
+    void setMaxSamples(size_t maxSamples);
     void enableRealTimeAnalysis(bool enable);
 
     // 获取统计信息
@@ -152,38 +152,38 @@ class Statistics {
 
     mutable std::mutex mutex_;
 
-    std::unordered_map<std::string, FunctionStats> function_stats_;
-    std::unordered_map<std::string, std::vector<std::string>> function_args_;
-    uint64_t total_function_calls_ = 0;
-    uint64_t total_function_time_ = 0;
+    std::unordered_map<std::string, FunctionStats> functionStats_;
+    std::unordered_map<std::string, std::vector<std::string>> functionArgs_;
+    uint64_t totalFunctionCalls_ = 0;
+    uint64_t totalFunctionTime_ = 0;
 
     MemoryStats memory_stats_;
-    std::unordered_map<std::string, MemoryTypeStats> memory_type_stats_;
-    size_t current_memory_usage_ = 0;
-    size_t peak_memory_usage_ = 0;
+    std::unordered_map<std::string, MemoryTypeStats> memoryTypeStats_;
+    size_t currentMemoryUsage_ = 0;
+    size_t peakMemoryUsage_ = 0;
 
     std::unordered_map<std::string, IOStats> io_stats_;
-    size_t total_io_operations_ = 0;
-    size_t total_io_bytes_ = 0;
-    uint64_t total_io_time_us_ = 0;
+    size_t totalIoOperations_ = 0;
+    size_t totalIoBytes_ = 0;
+    uint64_t totalIoTimeUs_ = 0;
 
-    std::unordered_map<std::string, NetworkStats> network_stats_;
-    size_t total_network_operations_ = 0;
-    size_t total_network_bytes_ = 0;
-    uint64_t total_network_time_us_ = 0;
+    std::unordered_map<std::string, NetworkStats> networkStats_;
+    size_t totalNetworkOperations_ = 0;
+    size_t totalNetworkBytes_ = 0;
+    uint64_t totalNetworkTimeUs_ = 0;
 
-    std::unordered_map<std::string, size_t> exception_stats_;
-    std::unordered_map<std::string, size_t> handled_exceptions_;
-    std::unordered_map<std::string, std::set<std::string>> exception_messages_;
-    size_t total_exceptions_ = 0;
+    std::unordered_map<std::string, size_t> exceptionStats_;
+    std::unordered_map<std::string, size_t> handledExceptions_;
+    std::unordered_map<std::string, std::set<std::string>> exceptionMessages_;
+    size_t totalExceptions_ = 0;
 
-    std::unordered_map<std::string, PerformanceMetric> performance_metrics_;
+    std::unordered_map<std::string, PerformanceMetric> performanceMetrics_;
 
     std::unordered_map<std::string, int64_t> counters_;
 
-    double sampling_rate_ = 1.0;
-    size_t max_samples_ = 10000;
-    bool real_time_analysis_ = false;
+    double samplingRate_ = 1.0;
+    size_t maxSamples_ = 10000;
+    bool realTimeAnalysis_ = false;
 };
 
 } // namespace profiler

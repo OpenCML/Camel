@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 20, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,11 +25,11 @@ namespace profiler {
 
 class ScopeGuard {
   public:
-    explicit ScopeGuard(std::function<void()> on_exit) : on_exit_(std::move(on_exit)) {}
+    explicit ScopeGuard(std::function<void()> on_exit) : onExit_(std::move(on_exit)) {}
 
     ~ScopeGuard() {
-        if (on_exit_) {
-            on_exit_();
+        if (onExit_) {
+            onExit_();
         }
     }
 
@@ -38,20 +38,20 @@ class ScopeGuard {
     ScopeGuard &operator=(const ScopeGuard &) = delete;
 
     // Enable move
-    ScopeGuard(ScopeGuard &&other) noexcept : on_exit_(std::move(other.on_exit_)) {
-        other.on_exit_ = nullptr;
+    ScopeGuard(ScopeGuard &&other) noexcept : onExit_(std::move(other.onExit_)) {
+        other.onExit_ = nullptr;
     }
 
     ScopeGuard &operator=(ScopeGuard &&other) noexcept {
         if (this != &other) {
-            on_exit_ = std::move(other.on_exit_);
-            other.on_exit_ = nullptr;
+            onExit_ = std::move(other.onExit_);
+            other.onExit_ = nullptr;
         }
         return *this;
     }
 
   private:
-    std::function<void()> on_exit_;
+    std::function<void()> onExit_;
 };
 
 } // namespace profiler

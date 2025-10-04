@@ -21,18 +21,18 @@ Statistics &Statistics::getInstance() {
 void Statistics::recordFunctionCall(const std::string &func_name, uint64_t duration_us) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto &stats = function_stats_[func_name];
+    auto &stats = functionStats_[func_name];
     stats.function_name = func_name;
-    stats.call_count++;
-    stats.total_time_us += duration_us;
+    stats.callCount++;
+    stats.totalTimeUs += duration_us;
 
-    if (duration_us < stats.min_time)
-        stats.min_time = duration_us;
-    if (duration_us > stats.max_time)
-        stats.max_time = duration_us;
+    if (duration_us < stats.minTime)
+        stats.minTime = duration_us;
+    if (duration_us > stats.maxTime)
+        stats.maxTime = duration_us;
 
-    total_function_calls_++;
-    total_function_time_ += duration_us;
+    totalFunctionCalls_++;
+    totalFunctionTime_ += duration_us;
 }
 
 void Statistics::recordFunctionCallWithArgs(
@@ -40,25 +40,25 @@ void Statistics::recordFunctionCallWithArgs(
     recordFunctionCall(func_name, duration_us);
 
     std::lock_guard<std::mutex> lock(mutex_);
-    function_args_[func_name] = args;
+    functionArgs_[func_name] = args;
 }
 
 void Statistics::recordMemoryAllocation(size_t size, const std::string &type) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     memory_stats_.allocations++;
-    memory_stats_.total_allocated += size;
-    if (size > memory_stats_.max_allocation)
-        memory_stats_.max_allocation = size;
+    memory_stats_.totalAllocated += size;
+    if (size > memory_stats_.maxAllocation)
+        memory_stats_.maxAllocation = size;
 
     if (!type.empty()) {
-        memory_type_stats_[type].count++;
-        memory_type_stats_[type].total_size += size;
+        memoryTypeStats_[type].count++;
+        memoryTypeStats_[type].totalSize += size;
     }
 
-    current_memory_usage_ += size;
-    if (current_memory_usage_ > peak_memory_usage_) {
-        peak_memory_usage_ = current_memory_usage_;
+    currentMemoryUsage_ += size;
+    if (currentMemoryUsage_ > peakMemoryUsage_) {
+        peakMemoryUsage_ = currentMemoryUsage_;
     }
 }
 
@@ -66,23 +66,23 @@ void Statistics::recordMemoryDeallocation(size_t size, const std::string &type) 
     std::lock_guard<std::mutex> lock(mutex_);
 
     memory_stats_.deallocations++;
-    memory_stats_.total_deallocated += size;
+    memory_stats_.totalDeallocated += size;
 
     if (!type.empty()) {
-        memory_type_stats_[type].count--;
-        memory_type_stats_[type].total_size -= size;
+        memoryTypeStats_[type].count--;
+        memoryTypeStats_[type].totalSize -= size;
     }
 
-    if (current_memory_usage_ >= size) {
-        current_memory_usage_ -= size;
+    if (currentMemoryUsage_ >= size) {
+        currentMemoryUsage_ -= size;
     }
 }
 
 void Statistics::recordMemoryUsage(size_t current, size_t peak) {
     std::lock_guard<std::mutex> lock(mutex_);
-    current_memory_usage_ = current;
-    if (peak > peak_memory_usage_)
-        peak_memory_usage_ = peak;
+    currentMemoryUsage_ = current;
+    if (peak > peakMemoryUsage_)
+        peakMemoryUsage_ = peak;
 }
 
 void Statistics::recordFileOperation(
@@ -92,66 +92,66 @@ void Statistics::recordFileOperation(
     auto &stats = io_stats_[filename];
     stats.filename = filename;
     stats.operations[operation]++;
-    stats.total_bytes += bytes;
-    stats.total_time_us += duration_us;
+    stats.totalBytes += bytes;
+    stats.totalTimeUs += duration_us;
 
-    if (duration_us < stats.min_time)
-        stats.min_time = duration_us;
-    if (duration_us > stats.max_time)
-        stats.max_time = duration_us;
+    if (duration_us < stats.minTime)
+        stats.minTime = duration_us;
+    if (duration_us > stats.maxTime)
+        stats.maxTime = duration_us;
 
-    total_io_operations_++;
-    total_io_bytes_ += bytes;
-    total_io_time_us_ += duration_us;
+    totalIoOperations_++;
+    totalIoBytes_ += bytes;
+    totalIoTimeUs_ += duration_us;
 }
 
 void Statistics::recordNetworkOperation(
     const std::string &operation, const std::string &endpoint, size_t bytes, uint64_t duration_us) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto &stats = network_stats_[endpoint];
+    auto &stats = networkStats_[endpoint];
     stats.endpoint = endpoint;
     stats.operations[operation]++;
-    stats.total_bytes += bytes;
-    stats.total_time_us += duration_us;
+    stats.totalBytes += bytes;
+    stats.totalTimeUs += duration_us;
 
-    if (duration_us < stats.min_time)
-        stats.min_time = duration_us;
-    if (duration_us > stats.max_time)
-        stats.max_time = duration_us;
+    if (duration_us < stats.minTime)
+        stats.minTime = duration_us;
+    if (duration_us > stats.maxTime)
+        stats.maxTime = duration_us;
 
-    total_network_operations_++;
-    total_network_bytes_ += bytes;
-    total_network_time_us_ += duration_us;
+    totalNetworkOperations_++;
+    totalNetworkBytes_ += bytes;
+    totalNetworkTimeUs_ += duration_us;
 }
 
 void Statistics::recordException(const std::string &exception_type, const std::string &message) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    exception_stats_[exception_type]++;
-    exception_messages_[exception_type].insert(message);
-    total_exceptions_++;
+    exceptionStats_[exception_type]++;
+    exceptionMessages_[exception_type].insert(message);
+    totalExceptions_++;
 }
 
 void Statistics::recordExceptionHandled(const std::string &exception_type) {
     std::lock_guard<std::mutex> lock(mutex_);
-    handled_exceptions_[exception_type]++;
+    handledExceptions_[exception_type]++;
 }
 
 void Statistics::recordPerformanceMetric(const std::string &metric_name, double value) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto &metric = performance_metrics_[metric_name];
+    auto &metric = performanceMetrics_[metric_name];
     metric.name = metric_name;
     metric.values.push_back(value);
     if (metric.values.size() == 1) {
-        metric.min_value = value;
-        metric.max_value = value;
+        metric.minValue = value;
+        metric.maxValue = value;
     } else {
-        if (value < metric.min_value)
-            metric.min_value = value;
-        if (value > metric.max_value)
-            metric.max_value = value;
+        if (value < metric.minValue)
+            metric.minValue = value;
+        if (value > metric.maxValue)
+            metric.maxValue = value;
     }
 }
 
@@ -172,58 +172,58 @@ void Statistics::generateSummaryReport(const std::string &output_file) {
     if (file.is_open()) {
         nlohmann::json report;
 
-        report["total_function_calls"] = total_function_calls_;
-        report["total_function_time_us"] = total_function_time_;
-        report["total_io_operations"] = total_io_operations_;
-        report["total_io_bytes"] = total_io_bytes_;
-        report["total_io_time_us"] = total_io_time_us_;
-        report["total_network_operations"] = total_network_operations_;
-        report["total_network_bytes"] = total_network_bytes_;
-        report["total_network_time_us"] = total_network_time_us_;
-        report["total_exceptions"] = total_exceptions_;
-        report["current_memory_usage"] = current_memory_usage_;
-        report["peak_memory_usage"] = peak_memory_usage_;
+        report["total_function_calls"] = totalFunctionCalls_;
+        report["total_function_time_us"] = totalFunctionTime_;
+        report["total_io_operations"] = totalIoOperations_;
+        report["total_io_bytes"] = totalIoBytes_;
+        report["total_io_time_us"] = totalIoTimeUs_;
+        report["total_network_operations"] = totalNetworkOperations_;
+        report["total_network_bytes"] = totalNetworkBytes_;
+        report["total_network_time_us"] = totalNetworkTimeUs_;
+        report["total_exceptions"] = totalExceptions_;
+        report["current_memory_usage"] = currentMemoryUsage_;
+        report["peak_memory_usage"] = peakMemoryUsage_;
 
         nlohmann::json memory_data;
         memory_data["allocations"] = memory_stats_.allocations;
         memory_data["deallocations"] = memory_stats_.deallocations;
-        memory_data["total_allocated"] = memory_stats_.total_allocated;
-        memory_data["total_deallocated"] = memory_stats_.total_deallocated;
-        memory_data["max_allocation"] = memory_stats_.max_allocation;
-        memory_data["current_usage"] = memory_stats_.current_usage;
-        memory_data["peak_usage"] = memory_stats_.peak_usage;
+        memory_data["total_allocated"] = memory_stats_.totalAllocated;
+        memory_data["total_deallocated"] = memory_stats_.totalDeallocated;
+        memory_data["max_allocation"] = memory_stats_.maxAllocation;
+        memory_data["current_usage"] = memory_stats_.currentUsage;
+        memory_data["peak_usage"] = memory_stats_.peakUsage;
         report["memory_stats"] = memory_data;
 
         nlohmann::json memory_type_data = nlohmann::json::object();
-        for (const auto &pair : memory_type_stats_) {
+        for (const auto &pair : memoryTypeStats_) {
             const auto &type = pair.first;
             const auto &stats = pair.second;
             nlohmann::json type_data;
             type_data["count"] = stats.count;
-            type_data["total_size"] = stats.total_size;
+            type_data["total_size"] = stats.totalSize;
             memory_type_data[type] = type_data;
         }
         report["memory_type_stats"] = memory_type_data;
 
         nlohmann::json exception_data = nlohmann::json::object();
-        for (const auto &pair : exception_stats_) {
+        for (const auto &pair : exceptionStats_) {
             exception_data[pair.first] = pair.second;
         }
         report["exception_stats"] = exception_data;
 
         nlohmann::json handled_exception_data = nlohmann::json::object();
-        for (const auto &pair : handled_exceptions_) {
+        for (const auto &pair : handledExceptions_) {
             handled_exception_data[pair.first] = pair.second;
         }
         report["handled_exceptions"] = handled_exception_data;
 
         nlohmann::json metrics_data = nlohmann::json::object();
-        for (const auto &pair : performance_metrics_) {
+        for (const auto &pair : performanceMetrics_) {
             const auto &name = pair.first;
             const auto &metric = pair.second;
             nlohmann::json metric_data;
-            metric_data["min_value"] = metric.min_value;
-            metric_data["max_value"] = metric.max_value;
+            metric_data["min_value"] = metric.minValue;
+            metric_data["max_value"] = metric.maxValue;
             metric_data["values"] = metric.values;
             metrics_data[name] = metric_data;
         }
@@ -249,17 +249,17 @@ void Statistics::generateDetailedReport(const std::string &output_file) {
         nlohmann::json report;
 
         nlohmann::json function_stats = nlohmann::json::object();
-        for (const auto &pair : function_stats_) {
+        for (const auto &pair : functionStats_) {
             const auto &name = pair.first;
             const auto &stats = pair.second;
 
             nlohmann::json func_data;
-            func_data["call_count"] = stats.call_count;
-            func_data["total_time_us"] = stats.total_time_us;
-            func_data["min_time_us"] = stats.min_time;
-            func_data["max_time_us"] = stats.max_time;
+            func_data["call_count"] = stats.callCount;
+            func_data["total_time_us"] = stats.totalTimeUs;
+            func_data["min_time_us"] = stats.minTime;
+            func_data["max_time_us"] = stats.maxTime;
             func_data["avg_time_us"] =
-                stats.call_count > 0 ? stats.total_time_us / stats.call_count : 0;
+                stats.callCount > 0 ? stats.totalTimeUs / stats.callCount : 0;
 
             function_stats[name] = func_data;
         }
@@ -271,10 +271,10 @@ void Statistics::generateDetailedReport(const std::string &output_file) {
             const auto &stats = pair.second;
 
             nlohmann::json file_data;
-            file_data["total_bytes"] = stats.total_bytes;
-            file_data["total_time_us"] = stats.total_time_us;
-            file_data["min_time_us"] = stats.min_time;
-            file_data["max_time_us"] = stats.max_time;
+            file_data["total_bytes"] = stats.totalBytes;
+            file_data["total_time_us"] = stats.totalTimeUs;
+            file_data["min_time_us"] = stats.minTime;
+            file_data["max_time_us"] = stats.maxTime;
 
             nlohmann::json operations = nlohmann::json::object();
             for (const auto &op_pair : stats.operations) {
@@ -287,15 +287,15 @@ void Statistics::generateDetailedReport(const std::string &output_file) {
         report["io_stats"] = io_stats;
 
         nlohmann::json network_stats = nlohmann::json::object();
-        for (const auto &pair : network_stats_) {
+        for (const auto &pair : networkStats_) {
             const auto &endpoint = pair.first;
             const auto &stats = pair.second;
 
             nlohmann::json endpoint_data;
-            endpoint_data["total_bytes"] = stats.total_bytes;
-            endpoint_data["total_time_us"] = stats.total_time_us;
-            endpoint_data["min_time_us"] = stats.min_time;
-            endpoint_data["max_time_us"] = stats.max_time;
+            endpoint_data["total_bytes"] = stats.totalBytes;
+            endpoint_data["total_time_us"] = stats.totalTimeUs;
+            endpoint_data["min_time_us"] = stats.minTime;
+            endpoint_data["max_time_us"] = stats.maxTime;
 
             nlohmann::json operations = nlohmann::json::object();
             for (const auto &op_pair : stats.operations) {
@@ -310,43 +310,43 @@ void Statistics::generateDetailedReport(const std::string &output_file) {
         nlohmann::json memory_stats;
         memory_stats["allocations"] = memory_stats_.allocations;
         memory_stats["deallocations"] = memory_stats_.deallocations;
-        memory_stats["total_allocated"] = memory_stats_.total_allocated;
-        memory_stats["total_deallocated"] = memory_stats_.total_deallocated;
-        memory_stats["max_allocation"] = memory_stats_.max_allocation;
-        memory_stats["current_usage"] = memory_stats_.current_usage;
-        memory_stats["peak_usage"] = memory_stats_.peak_usage;
+        memory_stats["total_allocated"] = memory_stats_.totalAllocated;
+        memory_stats["total_deallocated"] = memory_stats_.totalDeallocated;
+        memory_stats["max_allocation"] = memory_stats_.maxAllocation;
+        memory_stats["current_usage"] = memory_stats_.currentUsage;
+        memory_stats["peak_usage"] = memory_stats_.peakUsage;
         report["memory_stats"] = memory_stats;
 
         nlohmann::json memory_type_stats = nlohmann::json::object();
-        for (const auto &pair : memory_type_stats_) {
+        for (const auto &pair : memoryTypeStats_) {
             const auto &type = pair.first;
             const auto &stats = pair.second;
             nlohmann::json type_data;
             type_data["count"] = stats.count;
-            type_data["total_size"] = stats.total_size;
+            type_data["total_size"] = stats.totalSize;
             memory_type_stats[type] = type_data;
         }
         report["memory_type_stats"] = memory_type_stats;
 
         nlohmann::json exception_stats = nlohmann::json::object();
-        for (const auto &pair : exception_stats_) {
+        for (const auto &pair : exceptionStats_) {
             exception_stats[pair.first] = pair.second;
         }
         report["exception_stats"] = exception_stats;
 
         nlohmann::json handled_exceptions = nlohmann::json::object();
-        for (const auto &pair : handled_exceptions_) {
+        for (const auto &pair : handledExceptions_) {
             handled_exceptions[pair.first] = pair.second;
         }
         report["handled_exceptions"] = handled_exceptions;
 
         nlohmann::json performance_metrics = nlohmann::json::object();
-        for (const auto &pair : performance_metrics_) {
+        for (const auto &pair : performanceMetrics_) {
             const auto &name = pair.first;
             const auto &metric = pair.second;
             nlohmann::json metric_data;
-            metric_data["min_value"] = metric.min_value;
-            metric_data["max_value"] = metric.max_value;
+            metric_data["min_value"] = metric.minValue;
+            metric_data["max_value"] = metric.maxValue;
             metric_data["values"] = metric.values;
             performance_metrics[name] = metric_data;
         }
@@ -369,15 +369,15 @@ void Statistics::generateCallGraph(const std::string &output_file) {
 
     nlohmann::json call_graph = nlohmann::json::object();
 
-    for (const auto &pair : function_stats_) {
+    for (const auto &pair : functionStats_) {
         const auto &stats = pair.second;
 
         nlohmann::json node;
-        node["call_count"] = stats.call_count;
-        node["total_time_us"] = stats.total_time_us;
-        node["min_time_us"] = stats.min_time;
-        node["max_time_us"] = stats.max_time;
-        node["avg_time_us"] = stats.call_count > 0 ? stats.total_time_us / stats.call_count : 0;
+        node["call_count"] = stats.callCount;
+        node["total_time_us"] = stats.totalTimeUs;
+        node["min_time_us"] = stats.minTime;
+        node["max_time_us"] = stats.maxTime;
+        node["avg_time_us"] = stats.callCount > 0 ? stats.totalTimeUs / stats.callCount : 0;
 
         /*if (!stats.callees.empty()) {
             nlohmann::json callees = nlohmann::json::array();
@@ -401,22 +401,22 @@ void Statistics::generateCallGraph(const std::string &output_file) {
 
 void Statistics::setSamplingRate(double rate) {
     std::lock_guard<std::mutex> lock(mutex_);
-    sampling_rate_ = std::min(1.0, std::max(0.0, rate));
+    samplingRate_ = std::min(1.0, std::max(0.0, rate));
 }
 
-void Statistics::setMaxSamples(size_t max_samples) {
+void Statistics::setMaxSamples(size_t maxSamples) {
     std::lock_guard<std::mutex> lock(mutex_);
-    max_samples_ = max_samples;
+    maxSamples_ = maxSamples;
 }
 
 void Statistics::enableRealTimeAnalysis(bool enable) {
     std::lock_guard<std::mutex> lock(mutex_);
-    real_time_analysis_ = enable;
+    realTimeAnalysis_ = enable;
 }
 
 const std::unordered_map<std::string, Statistics::FunctionStats> &
 Statistics::getFunctionStats() const {
-    return function_stats_;
+    return functionStats_;
 }
 
 const Statistics::MemoryStats &Statistics::getMemoryStats() const { return memory_stats_; }
@@ -427,39 +427,39 @@ const std::unordered_map<std::string, Statistics::IOStats> &Statistics::getIOSta
 
 const std::unordered_map<std::string, Statistics::NetworkStats> &
 Statistics::getNetworkStats() const {
-    return network_stats_;
+    return networkStats_;
 }
 
 const std::unordered_map<std::string, size_t> &Statistics::getExceptionStats() const {
-    return exception_stats_;
+    return exceptionStats_;
 }
 
 const std::unordered_map<std::string, Statistics::PerformanceMetric> &
 Statistics::getPerformanceMetrics() const {
-    return performance_metrics_;
+    return performanceMetrics_;
 }
 
-uint64_t Statistics::getTotalFunctionCalls() const { return total_function_calls_; }
+uint64_t Statistics::getTotalFunctionCalls() const { return totalFunctionCalls_; }
 
-uint64_t Statistics::getTotalFunctionTime() const { return total_function_time_; }
+uint64_t Statistics::getTotalFunctionTime() const { return totalFunctionTime_; }
 
-size_t Statistics::getTotalIOOperations() const { return total_io_operations_; }
+size_t Statistics::getTotalIOOperations() const { return totalIoOperations_; }
 
-size_t Statistics::getTotalIOBytes() const { return total_io_bytes_; }
+size_t Statistics::getTotalIOBytes() const { return totalIoBytes_; }
 
-uint64_t Statistics::getTotalIOTime() const { return total_io_time_us_; }
+uint64_t Statistics::getTotalIOTime() const { return totalIoTimeUs_; }
 
-size_t Statistics::getTotalNetworkOperations() const { return total_network_operations_; }
+size_t Statistics::getTotalNetworkOperations() const { return totalNetworkOperations_; }
 
-size_t Statistics::getTotalNetworkBytes() const { return total_network_bytes_; }
+size_t Statistics::getTotalNetworkBytes() const { return totalNetworkBytes_; }
 
-uint64_t Statistics::getTotalNetworkTime() const { return total_network_time_us_; }
+uint64_t Statistics::getTotalNetworkTime() const { return totalNetworkTimeUs_; }
 
-size_t Statistics::getTotalExceptions() const { return total_exceptions_; }
+size_t Statistics::getTotalExceptions() const { return totalExceptions_; }
 
-size_t Statistics::getCurrentMemoryUsage() const { return current_memory_usage_; }
+size_t Statistics::getCurrentMemoryUsage() const { return currentMemoryUsage_; }
 
-size_t Statistics::getPeakMemoryUsage() const { return peak_memory_usage_; }
+size_t Statistics::getPeakMemoryUsage() const { return peakMemoryUsage_; }
 
 } // namespace profiler
 

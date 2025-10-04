@@ -21,7 +21,10 @@
 #include "../analysis/perfetto_integration.h"
 #include "../core/trace.h"
 #include "scope_guard.h"
+#include "utils/log.h"
+
 #include <iostream>
+
 #ifndef NDEBUG
 
 namespace profiler {
@@ -33,9 +36,9 @@ class ProfilingCleanup {
   public:
     ~ProfilingCleanup() {
         if (g_profiling_enabled && !g_profiling_stopped) {
-            std::cerr << "[PROFILER WARNING] Profiling was enabled but not properly stopped with "
-                         "enable(false). "
-                      << "Performance data may not have been saved." << std::endl;
+            l.in("Profiler")
+                .warn("Profiling was enabled but not properly stopped with enable(false). "
+                      "Performance data may not have been saved.");
         }
     }
 };
@@ -52,9 +55,9 @@ AdvancedTracer &AdvancedTracer::getInstance() {
 void AdvancedTracer::initialize(const Config &config) {
     config_ = config;
 
-    if (config_.enable_perfetto_integration) {
-        perfetto_integration_ = std::make_unique<PerfettoIntegration>();
-        perfetto_integration_->startTracing(config_.perfetto_output);
+    if (config_.enablePerfettoIntegration) {
+        perfettoIntegration_ = std::make_unique<PerfettoIntegration>();
+        perfettoIntegration_->startTracing(config_.perfettoOutput);
     }
 }
 
@@ -64,47 +67,47 @@ void AdvancedTracer::initializeWithDefaults() {
 }
 
 void AdvancedTracer::startTracing() {
-    if (tracing_enabled_)
+    if (tracingEnabled_)
         return;
     g_profiling_enabled = true;
     g_profiling_stopped = false;
-    tracing_enabled_ = true;
-    tracing_paused_ = false;
+    tracingEnabled_ = true;
+    tracingPaused_ = false;
 
-    trace_start_time_ = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
-    trace_event_count_ = 0;
+    traceStartTime_ = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
+    traceEventCount_ = 0;
 
     CallTracer::getInstance().startTracing();
 
-    if (perfetto_integration_) {
-        perfetto_integration_->startTracing(config_.perfetto_output);
+    if (perfettoIntegration_) {
+        perfettoIntegration_->startTracing(config_.perfettoOutput);
     }
 
     TRACE_EVENT_INSTANT("advanced_tracing_started");
 }
 
 void AdvancedTracer::stopTracing() {
-    if (!tracing_enabled_) {
+    if (!tracingEnabled_) {
         return;
     }
 
-    tracing_enabled_ = false;
+    tracingEnabled_ = false;
     g_profiling_stopped = true;
-    trace_end_time_ = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
+    traceEndTime_ = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
 
     CallTracer::getInstance().stopTracing();
 
-    if (perfetto_integration_) {
-        perfetto_integration_->stopAndOpenPerfetto();
+    if (perfettoIntegration_) {
+        perfettoIntegration_->stopAndOpenPerfetto();
     }
 
     TRACE_EVENT_INSTANT("advanced_tracing_stopped");
 
-    if (config_.generate_summary_report) {
+    if (config_.generateSummaryReport) {
         generateStatisticsReport();
     }
 
-    if (config_.generate_call_graph) {
+    if (config_.generateCallGraph) {
         generateCallGraph();
     }
 
@@ -112,22 +115,22 @@ void AdvancedTracer::stopTracing() {
 }
 
 void AdvancedTracer::pauseTracing() {
-    if (!tracing_enabled_ || tracing_paused_)
+    if (!tracingEnabled_ || tracingPaused_)
         return;
 
-    tracing_paused_ = true;
+    tracingPaused_ = true;
     TRACE_EVENT_INSTANT("advanced_tracing_paused");
 }
 
 void AdvancedTracer::resumeTracing() {
-    if (!tracing_enabled_ || !tracing_paused_)
+    if (!tracingEnabled_ || !tracingPaused_)
         return;
 
-    tracing_paused_ = false;
+    tracingPaused_ = false;
     TRACE_EVENT_INSTANT("advanced_tracing_resumed");
 }
 
-bool AdvancedTracer::isTracing() const { return tracing_enabled_ && !tracing_paused_; }
+bool AdvancedTracer::isTracing() const { return tracingEnabled_ && !tracingPaused_; }
 
 void AdvancedTracer::traceFunctionCall(
     const std::string &func_name, const std::string &file, int line) {
@@ -137,11 +140,11 @@ void AdvancedTracer::traceFunctionCall(
 
     CallTracer::getInstance().functionEnter(func_name, file, line);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventBegin(func_name, "function");
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventBegin(func_name, "function");
     }
 
-    trace_event_count_++;
+    traceEventCount_++;
 
     Statistics::getInstance().recordFunctionCall(func_name, 0); // Duration recorded on return
 }
@@ -153,11 +156,11 @@ void AdvancedTracer::traceFunctionReturn(const std::string &func_name) {
 
     CallTracer::getInstance().functionExit(func_name);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventEnd(func_name, "function");
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventEnd(func_name, "function");
     }
 
-    trace_event_count_++;
+    traceEventCount_++;
 }
 void AdvancedTracer::traceMemoryAllocation(void *ptr, size_t size, const std::string &type) {
     if (!isTracing())
@@ -166,8 +169,8 @@ void AdvancedTracer::traceMemoryAllocation(void *ptr, size_t size, const std::st
     CallTracer::getInstance().memoryAllocate(ptr, size, type);
     Statistics::getInstance().recordMemoryAllocation(size, type);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventInstant("memory_alloc:" + std::to_string(size), "memory");
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventInstant("memory_alloc:" + std::to_string(size), "memory");
     }
 }
 
@@ -177,8 +180,8 @@ void AdvancedTracer::traceMemoryDeallocation(void *ptr) {
 
     CallTracer::getInstance().memoryDeallocate(ptr);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventInstant("memory_free", "memory");
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventInstant("memory_free", "memory");
     }
 }
 
@@ -199,8 +202,8 @@ void AdvancedTracer::traceFileOperation(
 
     Statistics::getInstance().recordFileOperation(operation, filename, bytes, duration_us);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventInstant("file_" + operation + ":" + filename, "io");
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventInstant("file_" + operation + ":" + filename, "io");
     }
 }
 
@@ -211,8 +214,8 @@ void AdvancedTracer::traceNetworkOperation(
 
     Statistics::getInstance().recordNetworkOperation(operation, endpoint, bytes, duration_us);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventInstant(operation + ":" + endpoint, "network");
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventInstant(operation + ":" + endpoint, "network");
     }
 }
 
@@ -223,8 +226,8 @@ void AdvancedTracer::traceException(const std::string &exception_type, const std
     CallTracer::getInstance().exceptionThrown(exception_type, message);
     Statistics::getInstance().recordException(exception_type, message);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventInstant("exception:" + exception_type, "exception");
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventInstant("exception:" + exception_type, "exception");
     }
 }
 
@@ -235,8 +238,8 @@ void AdvancedTracer::traceExceptionHandled(const std::string &exception_type) {
     CallTracer::getInstance().exceptionCaught(exception_type);
     Statistics::getInstance().recordExceptionHandled(exception_type);
 
-    if (perfetto_integration_) {
-        perfetto_integration_->recordEventInstant(
+    if (perfettoIntegration_) {
+        perfettoIntegration_->recordEventInstant(
             "exception_handled:" + exception_type,
             "exception");
     }
@@ -257,10 +260,10 @@ void AdvancedTracer::incrementCounter(const std::string &name, int64_t increment
 }
 
 void AdvancedTracer::generateTraceFile() {
-    trace_event_flush(config_.output_file);
+    trace_event_flush(config_.outputFile);
 
-    if (config_.generate_summary_report) {
-        Statistics::getInstance().generateSummaryReport(config_.output_file);
+    if (config_.generateSummaryReport) {
+        Statistics::getInstance().generateSummaryReport(config_.outputFile);
     }
 }
 
@@ -275,63 +278,63 @@ void AdvancedTracer::generateCallGraph() {
 }
 
 void AdvancedTracer::openPerfettoUI() {
-    if (perfetto_integration_) {
-        perfetto_integration_->openPerfettoInBrowser();
+    if (perfettoIntegration_) {
+        perfettoIntegration_->openPerfettoInBrowser();
     }
 }
 
-void AdvancedTracer::enableRealTimeAnalysis(bool enable) { config_.real_time_analysis = enable; }
+void AdvancedTracer::enableRealTimeAnalysis(bool enable) { config_.realTimeAnalysis = enable; }
 
 void AdvancedTracer::setSamplingRate(double rate) {
-    config_.sampling_rate = rate;
+    config_.samplingRate = rate;
     Statistics::getInstance().setSamplingRate(rate);
 }
 
-void AdvancedTracer::setOutputFile(const std::string &filename) { config_.output_file = filename; }
+void AdvancedTracer::setOutputFile(const std::string &filename) { config_.outputFile = filename; }
 
 void AdvancedTracer::addFunctionFilter(const std::string &func_name, bool include) {
     if (include) {
-        config_.include_functions.insert(func_name);
+        config_.includeFunctions.insert(func_name);
     } else {
-        config_.exclude_functions.insert(func_name);
+        config_.excludeFunctions.insert(func_name);
     }
 }
 
 void AdvancedTracer::removeFunctionFilter(const std::string &func_name) {
-    config_.include_functions.erase(func_name);
-    config_.exclude_functions.erase(func_name);
+    config_.includeFunctions.erase(func_name);
+    config_.excludeFunctions.erase(func_name);
 }
 
 void AdvancedTracer::clearFunctionFilters() {
-    config_.include_functions.clear();
-    config_.exclude_functions.clear();
+    config_.includeFunctions.clear();
+    config_.excludeFunctions.clear();
 }
 
 const AdvancedTracer::Config &AdvancedTracer::getConfig() const { return config_; }
 
 uint64_t AdvancedTracer::getTraceDuration() const {
-    if (trace_start_time_ == 0)
+    if (traceStartTime_ == 0)
         return 0;
     uint64_t end_time =
-        trace_end_time_ > 0
-            ? trace_end_time_
+        traceEndTime_ > 0
+            ? traceEndTime_
             : duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
-    return end_time - trace_start_time_;
+    return end_time - traceStartTime_;
 }
 
-size_t AdvancedTracer::getTraceEventCount() const { return trace_event_count_; }
+size_t AdvancedTracer::getTraceEventCount() const { return traceEventCount_; }
 
 size_t AdvancedTracer::getMemoryUsage() const {
     return Statistics::getInstance().getCurrentMemoryUsage();
 }
 
 bool AdvancedTracer::shouldTraceFunction(const std::string &func_name) const {
-    if (config_.exclude_functions.find(func_name) != config_.exclude_functions.end()) {
+    if (config_.excludeFunctions.find(func_name) != config_.excludeFunctions.end()) {
         return false;
     }
 
-    if (!config_.include_functions.empty() &&
-        config_.include_functions.find(func_name) == config_.include_functions.end()) {
+    if (!config_.includeFunctions.empty() &&
+        config_.includeFunctions.find(func_name) == config_.includeFunctions.end()) {
         return false;
     }
 
@@ -381,11 +384,11 @@ void generate_advanced_report(const std::string &output_file) {
     const char *profile_mode = std::getenv("CAMEL_PROFILE_MODE");
     bool is_full_profile = (profile_mode && std::string(profile_mode) == "FULL");
 #endif
-
-    std::cout << "[PROFILER ADVANCED] Report files generated." << std::endl;
-    std::cout << "[PROFILER ADVANCED] To view results, manually open https://ui.perfetto.dev/ "
-                 "and load the trace file."
-              << std::endl;
+    if (is_full_profile) {
+        l.in("Profiler").info("Full profiling mode detected, opening Perfetto UI...");
+        AdvancedTracer::getInstance().openPerfettoUI();
+    }
+    l.in("Profiler").info("Advanced profiling report generation completed.");
 }
 
 } // namespace profiler

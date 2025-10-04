@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,8 +34,8 @@ struct PerfettoTraceEvent {
     std::string category;
     char phase; // 'B'=Begin, 'E'=End, 'I'=Instant
     uint64_t timestamp;
-    uint32_t thread_id;
-    uint32_t process_id = 1;
+    uint32_t threadId;
+    uint32_t processId = 1;
 
     std::string args;
     uint64_t duration = 0;
@@ -63,8 +63,8 @@ class PerfettoIntegration {
     friend class AdvancedTracer;
 
   private:
-    bool tracing_enabled_ = false;
-    std::string output_file_;
+    bool tracingEnabled_ = false;
+    std::string outputFile_;
     std::vector<PerfettoTraceEvent> events_;
 
     uint64_t getCurrentTimestamp();
