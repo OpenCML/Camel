@@ -14,12 +14,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
 
-// json 需要早于 antlr4-runtime 引入
 #include "nlohmann/json.hpp"
 
 #include "antlr4-runtime/antlr4-runtime.h"
@@ -40,7 +39,8 @@
 #include "parse/cst_dumper.h"
 #include "parse/parse.h"
 #include "service/formatter/fmt.h"
-#include "service/profiler/trace.h"
+#include "service/profiler/advanced/advanced_tracer.h"
+#include "service/profiler/core/trace.h"
 #include "utils/env.h"
 #include "utils/log.h"
 
@@ -89,13 +89,7 @@ int main(int argc, char *argv[]) {
         EXEC_WHEN_DEBUG(l.in("Main").info("Reading from file '{}'.", targetFile));
     }
 
-    chrono::high_resolution_clock::time_point startTime, endTime;
-
     while (Run::repeat--) {
-        if (Run::profile) {
-            startTime = chrono::high_resolution_clock::now();
-        }
-
         diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
         if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
             diagnostics->setConfig(DiagsConfig{
@@ -216,6 +210,17 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Run) {
+                EXEC_WHEN_DEBUG([] {
+                    if (Run::profile) {
+                        // Initialize and start advanced tracing using profiler configuration
+                        profiler::AdvancedTracer::Config config;
+                        config.enablePerfettoIntegration = true;
+                        config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
+                        config.outputFile = "profile_reports/camel_trace.json";
+                        profiler::start_advanced_tracing(config);
+                    }
+                }());
+
                 FallbackExecSchedPass pass(ctx);
                 pass.apply(ctx->rootGraph());
                 // int exitCode = ctx->getExitCode();
@@ -224,6 +229,13 @@ int main(int argc, char *argv[]) {
                     diags->dump(os, useJsonFormat);
                     return 1;
                 }
+
+                EXEC_WHEN_DEBUG([] {
+                    if (Run::profile) {
+                        profiler::stop_advanced_tracing();
+                        profiler::generate_advanced_report();
+                    }
+                }());
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
@@ -245,13 +257,6 @@ int main(int argc, char *argv[]) {
             os << "Unknown error occurred." << endl;
             ASSERT(false, "Unknown error occurred.");
             return 1;
-        }
-
-        if (Run::profile) {
-            endTime = chrono::high_resolution_clock::now();
-            auto duration =
-                chrono::duration_cast<chrono::microseconds>(endTime - startTime).count();
-            l.in("Main").info("Time used: {} us", duration);
         }
     }
 

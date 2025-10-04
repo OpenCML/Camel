@@ -12,24 +12,33 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 20, 2025
- * Updated: Aug. 20, 2025
+ * Created: Sep. 27, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
 #include "event.h"
 
-#include <mutex>
-#include <queue>
-#include <vector>
+nlohmann::json TraceEvent::to_json() const {
+    nlohmann::json j;
+    j["name"] = name;
+    j["cat"] = cat;
+    j["ph"] = ph;
+    j["ts"] = ts;
+    j["pid"] = pid;
+    j["tid"] = tid;
 
-class TraceBuffer {
-  public:
-    void push(const TraceEvent &event);
-    std::vector<TraceEvent> pop_all();
+    if (!args.empty()) {
+        j["args"] = args;
+    }
 
-  private:
-    std::mutex mutex_;
-    std::queue<TraceEvent> queue_;
-};
+    if (ph == "i" && !scope.empty()) {
+        j["s"] = scope;
+    }
+
+    if (ph == "X") {
+        j["dur"] = dur;
+    }
+
+    return j;
+}

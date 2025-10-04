@@ -12,33 +12,31 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 20, 2025
- * Updated: Aug. 20, 2025
+ * Created: Sep. 27, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "event.h"
+#pragma once
 
-nlohmann::json TraceEvent::to_json() const {
-    nlohmann::json j;
-    j["name"] = name;
-    j["cat"] = cat;
-    j["ph"] = ph;
-    j["ts"] = ts;
-    j["pid"] = pid;
-    j["tid"] = tid;
+#ifndef EOF
+#define EOF (-1)
+#endif
 
-    if (!args.empty()) {
-        j["args"] = args;
-    }
+#include "nlohmann/json.hpp"
+#include <string>
+#include <unordered_map>
 
-    if (ph == "i" && !scope.empty()) {
-        j["s"] = scope;
-    }
+struct TraceEvent {
+    std::string name;
+    std::string cat;
+    std::string ph;
+    uint64_t ts;
+    int pid;
+    int tid;
+    std::unordered_map<std::string, std::string> args;
+    std::string scope; // for 'i'
+    uint64_t dur = 0;  // for 'X'
 
-    if (ph == "X") {
-        j["dur"] = dur;
-    }
-
-    return j;
-}
+    nlohmann::json to_json() const;
+};

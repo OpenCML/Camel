@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 01, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -604,12 +604,7 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             nodeModifierMap_[inputNode.get()] = targetNode;
         }
     }
-    if (synced_) {
-        if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, targetNode)) {
-            Node::link(LinkType::Ctrl, lastCalledFuncNode_, targetNode);
-        }
-        lastCalledFuncNode_ = targetNode;
-    }
+    // with 操作不属于调用，所以这里不处理synced_和lastCalledFuncNode_
     LEAVE("WITH");
     return targetNode;
 }

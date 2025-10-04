@@ -13,12 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fallback.h"
 #include "builtin/algo/topo.h"
+#include "core/data/primary.h"
+
+#ifndef NDEBUG
+#include "service/profiler/advanced/advanced_tracer.h"
+#include "service/profiler/core/trace.h"
+#endif
 
 using namespace std;
 using namespace GraphIR;
@@ -80,6 +86,13 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
 
 data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
+
+    EXEC_WHEN_DEBUG([&]() {
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::AdvancedTracer::getInstance().traceFunctionCall("evalGraph:" + graph->name());
+        }
+    }());
+
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
     }
@@ -167,9 +180,20 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
     do {
         loop = false;
         auto &nodes = *nodesPtr;
-        // 按拓扑序执行
+        EXEC_WHEN_DEBUG([&]() {
+            if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                profiler::AdvancedTracer::getInstance().traceFunctionCall(
+                    "topoExecution:" + graph->name());
+            }
+        }());
         for (size_t i = 0; i < nodes.size(); ++i) {
             auto &n = nodes[i];
+            EXEC_WHEN_DEBUG([&]() {
+                if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                    std::string nodeName = "node:" + n->toString();
+                    profiler::AdvancedTracer::getInstance().traceFunctionCall(nodeName);
+                }
+            }());
             switch (n->type()) {
             case NodeType::DATA: {
                 ASSERT(currFrame->get(n) != nullptr, "DATA data is null.");
@@ -180,7 +204,15 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 break;
             }
             case NodeType::COPY: {
-                currFrame->set(n, currFrame->get(n->withInputs().front())->clone());
+                auto inputNode = n->withInputs().front();
+                auto inputData = currFrame->get(inputNode);
+                if (inputData == nullptr) {
+                    // If input data is not initialized, create a default integer value 0
+                    // For counters in recursive functions, this is typically an integer type
+                    inputData = std::make_shared<Int32Data>(0);
+                    currFrame->set(inputNode, inputData);
+                }
+                currFrame->set(n, inputData->clone());
                 break;
             }
             case NodeType::FILL: {
@@ -353,7 +385,19 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 break;
             }
             }
+            EXEC_WHEN_DEBUG([&]() {
+                if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                    std::string nodeName = "node:" + n->toString();
+                    profiler::AdvancedTracer::getInstance().traceFunctionReturn(nodeName);
+                }
+            }());
         }
+        EXEC_WHEN_DEBUG([&]() {
+            if (profiler::AdvancedTracer::getInstance().isTracing()) {
+                profiler::AdvancedTracer::getInstance().traceFunctionReturn(
+                    "topoExecution:" + graph->name());
+            }
+        }());
     } while (loop);
 
     currRecursionDepth_--;
@@ -362,11 +406,30 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
     ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
+
+    data_ptr_t result;
     if (input.empty()) {
-        return Data::null();
+        result = Data::null();
     } else {
-        return currFrame->get(input.front());
+        // Check if input data is initialized, if not create a default value
+        auto inputData = currFrame->get(input.front());
+        if (inputData == nullptr) {
+            // If input data is not initialized, create a default integer value 0
+            // For recursive function counters, this is typically an integer type
+            inputData = std::make_shared<Int32Data>(0);
+            currFrame->set(input.front(), inputData);
+        }
+        result = inputData;
     }
+
+    EXEC_WHEN_DEBUG([&]() {
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::AdvancedTracer::getInstance().traceFunctionReturn(
+                "evalGraph:" + graph->name());
+        }
+    }());
+
+    return result;
 }
 
 any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
@@ -591,7 +654,6 @@ void FallbackExecSchedPass::evalMarkedOperator_filter(
 
 void FallbackExecSchedPass::evalMarkedOperator_reduce(
     const node_ptr_t &node, frame_ptr_t &currFrame) {
-    // 参数检查：必须有1个with输入，2个norm输入
     if (node->withInputs().size() != 1 || node->normInputs().size() != 2) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
@@ -614,7 +676,6 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
 
     auto func = funcData->as<FunctionData>(Type::Func());
 
-    // 检查函数参数个数（必须是2个参数）
     if (func->graph().ports().size() != 2) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncorrectArgsCount)
@@ -649,17 +710,14 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
     }
 
     if (elements.empty()) {
-        // 空序列：返回初始值
         currFrame->set(node, initData);
         return;
     }
 
-    // 执行 reduce 操作
     data_ptr_t result = initData;
     for (const auto &item : elements) {
         auto frame = Frame::create(currFrame, func->graph());
 
-        // 设置参数：acc, cur
         const auto &ports = func->graph().ports();
         frame->set(ports[0], result); // acc
         frame->set(ports[1], item);   // cur
@@ -667,7 +725,6 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce(
         result = evalGraph(&func->graph(), frame); // 更新 result
     }
 
-    // 设置结果
     currFrame->set(node, result);
 }
 

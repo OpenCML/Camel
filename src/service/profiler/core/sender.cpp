@@ -12,16 +12,21 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 20, 2025
- * Updated: Aug. 20, 2025
+ * Created: Sep. 27, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "sender.h"
 
 #include <chrono>
+#include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <nlohmann/json.hpp>
 #include <thread>
+
+using json = nlohmann::json;
 
 TraceSender::TraceSender(TraceBuffer &buffer) : buffer_(buffer), running_(false) {}
 
@@ -40,7 +45,8 @@ void TraceSender::stop() {
 }
 
 void TraceSender::run() {
-    std::ofstream out("trace_output.json");
+    std::filesystem::create_directories("profile_reports");
+    std::ofstream out("profile_reports/trace_output.json");
     out << "{\"traceEvents\":[\n";
 
     bool first = true;
@@ -49,14 +55,33 @@ void TraceSender::run() {
         auto events = buffer_.pop_all();
         if (!events.empty()) {
             for (const auto &e : events) {
-                if (!first)
+                if (!first) {
                     out << ",\n";
-                out << e.to_json();
+                }
                 first = false;
+
+                nlohmann::json json_event;
+                json_event["name"] = e.name;
+                json_event["cat"] = e.cat;
+                json_event["ph"] = e.ph;
+                json_event["ts"] = e.ts;
+                json_event["pid"] = e.pid;
+                json_event["tid"] = e.tid;
+
+                if (!e.args.empty()) {
+                    try {
+                        json_event["args"] = e.args;
+                    } catch (...) {
+                        json_event["args"] = e.args;
+                    }
+                }
+
+                out << json_event.dump();
             }
             out.flush();
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     out << "\n]}\n";
