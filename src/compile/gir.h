@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 01, 2025
+ * Updated: Oct. 03, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,6 +55,7 @@ enum class LinkType {
 };
 
 std::string to_string(NodeType type);
+std::string to_string(LinkType type);
 
 class Graph;
 class Node;
