@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -182,27 +182,17 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
     type_ptr_t type = typeNode->loadAs<GCT::TypeLoad>()->dataType();
     func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
-    const auto &withParamsType = tt::as_shared<ParamsType>(funcType->withParamsType());
-    const auto &normParamsType = tt::as_shared<ParamsType>(funcType->normParamsType());
 
     graph_ptr_t graph = enterScope(declLoad->ref().ident());
     graph->setFuncType(funcType);
-    for (const auto &[name, type, data] : withParamsType->elements()) {
-        // TODO: ignored type and default data here
-        if (data != nullptr) {
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .commit("Default data in function parameters");
-        }
-        node_ptr_t portNode = PortNode::create(*graph, true);
+    for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
+        node_ptr_t portNode = PortNode::create(*graph, name, isVar);
+        graph->addPort(portNode, true);
         insertNode(name, portNode);
     }
-    for (const auto &[name, type, data] : normParamsType->elements()) {
-        // TODO: ignored type and default data here
-        if (data != nullptr) {
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .commit("Default data in function parameters");
-        }
-        node_ptr_t portNode = PortNode::create(*graph, false);
+    for (const auto &[name, type, isVar] : funcType->normArgsInfo()) {
+        node_ptr_t portNode = PortNode::create(*graph, name, isVar);
+        graph->addPort(portNode, false);
         insertNode(name, portNode);
     }
     leaveScope();
@@ -221,25 +211,15 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         // TODO: 非全局函数不会生成前置DECL节点，因此不会预设函数类型信息，需要从FUNC节点中获取
         type_ptr_t type = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
         func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
-        const auto &withParamsType = tt::as_shared<ParamsType>(funcType->withParamsType());
-        const auto &normParamsType = tt::as_shared<ParamsType>(funcType->normParamsType());
         graph->setFuncType(funcType);
-        for (const auto &[name, type, data] : withParamsType->elements()) {
-            // TODO: ignored type and default data here
-            if (data != nullptr) {
-                diags_->of(SemanticDiag::FeatureNotSupported)
-                    .commit("Default data in function parameters");
-            }
-            node_ptr_t portNode = PortNode::create(*graph, true);
+        for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
+            node_ptr_t portNode = PortNode::create(*graph, name, isVar);
+            graph->addPort(portNode, true);
             insertNode(name, portNode);
         }
-        for (const auto &[name, type, data] : normParamsType->elements()) {
-            // TODO: ignored type and default data here
-            if (data != nullptr) {
-                diags_->of(SemanticDiag::FeatureNotSupported)
-                    .commit("Default data in function parameters");
-            }
-            node_ptr_t portNode = PortNode::create(*graph, false);
+        for (const auto &[name, type, isVar] : funcType->normArgsInfo()) {
+            node_ptr_t portNode = PortNode::create(*graph, name, isVar);
+            graph->addPort(portNode, false);
             insertNode(name, portNode);
         }
     }
@@ -408,12 +388,12 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         targetNodeRes.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of LINK node.");
     node_ptr_t targetNode = any_cast<node_ptr_t>(targetNodeRes);
-    std::vector<std::tuple<std::string, type_ptr_t, bool>> paramTypes;
+    param_vec_t paramTypes;
     if (targetNode->type() == NodeType::FUNC) {
         const auto &funcNode = tt::as_shared<FuncNode>(targetNode);
         func_type_ptr_t funcType = funcNode->funcType();
         if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->returnType();
+            // const auto &retType = funcType->exitType();
             // if (retType->isFunction()) {
             //     paramTypes = tt::as_shared<FunctionType>(retType)->normParams();
             // } else {
@@ -424,7 +404,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             Node::link(LinkType::With, targetNode, invokeNode);
             targetNode = invokeNode;
         } else {
-            paramTypes = funcType->normParams();
+            paramTypes = funcType->normTypes();
         }
         // link capture nodes to the function node
         // to ensure the function node is executed after the capture nodes
@@ -436,7 +416,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     } else if (targetNode->type() == NodeType::OPER) {
         func_type_ptr_t funcType = tt::as_shared<OperNode>(targetNode)->funcType();
         if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->returnType();
+            // const auto &retType = funcType->exitType();
             // if (retType->isFunction()) {
             //     paramTypes = tt::as_shared<FunctionType>(retType)->normParams();
             // } else {
@@ -447,7 +427,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             Node::link(LinkType::With, targetNode, invokeNode);
             targetNode = invokeNode;
         } else {
-            paramTypes = funcType->normParams();
+            paramTypes = funcType->normTypes();
         }
     } else {
         node_ptr_t invokeNode = CallNode::create(*currGraph_);
@@ -483,7 +463,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const node_ptr_t &inputNode = inputs[i];
         bool isVar = false;
         if (i < paramTypes.size()) {
-            isVar = std::get<2>(paramTypes[i]);
+            isVar = paramTypes[i].second;
         }
         tryRemoveCtrlLink(inputNode, targetNode);
         Node::link(LinkType::Norm, inputNode, targetNode);
@@ -518,12 +498,12 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         targetNodeRes.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of WITH node.");
     node_ptr_t targetNode = any_cast<node_ptr_t>(targetNodeRes);
-    std::vector<std::tuple<std::string, type_ptr_t, bool>> paramTypes;
+    param_vec_t paramTypes;
     if (targetNode->type() == NodeType::FUNC) {
         const auto &funcNode = tt::as_shared<FuncNode>(targetNode);
         func_type_ptr_t funcType = funcNode->funcType();
         if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->returnType();
+            // const auto &retType = funcType->exitType();
             // if (retType->isFunction()) {
             //     paramTypes = tt::as_shared<FunctionType>(retType)->withParams();
             // }
@@ -531,7 +511,7 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             Node::link(LinkType::Norm, targetNode, invokeNode);
             targetNode = invokeNode;
         } else {
-            paramTypes = funcType->withParams();
+            paramTypes = funcType->withTypes();
         }
         // link capture nodes to the function node
         // to ensure the function node is executed after the capture nodes
@@ -543,7 +523,7 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     } else if (targetNode->type() == NodeType::OPER) {
         func_type_ptr_t funcType = tt::as_shared<OperNode>(targetNode)->funcType();
         if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->returnType();
+            // const auto &retType = funcType->exitType();
             // if (retType->isFunction()) {
             //     paramTypes = tt::as_shared<FunctionType>(retType)->withParams();
             // }
@@ -551,7 +531,7 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             Node::link(LinkType::Norm, targetNode, invokeNode);
             targetNode = invokeNode;
         } else {
-            paramTypes = funcType->withParams();
+            paramTypes = funcType->withTypes();
         }
     } else {
         node_ptr_t attachNode = BindNode::create(*currGraph_);
@@ -586,7 +566,7 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         const node_ptr_t &inputNode = inputs[i];
         bool isVar = false;
         if (i < paramTypes.size()) {
-            isVar = std::get<2>(paramTypes[i]);
+            isVar = paramTypes[i].second;
         }
         tryRemoveCtrlLink(inputNode, targetNode);
         Node::link(LinkType::With, inputNode, targetNode);

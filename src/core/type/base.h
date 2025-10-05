@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,8 +49,7 @@ enum class TypeCode {
     Array = 0b01'000101,
     Tuple = 0b01'000110,
     Vector = 0b01'000111,
-    Params = 0b01'001000,
-    Tensor = 0b01'001001,
+    Tensor = 0b01'001000,
     // special types
     Any = 0b10'000000,
     Void = 0b10'000001,
@@ -82,7 +81,6 @@ class ArrayType;
 class TupleType;
 class UnionType;
 class VectorType;
-class ParamsType;
 class TensorType;
 
 using type_ptr_t = std::shared_ptr<Type>;

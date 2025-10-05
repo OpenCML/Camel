@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,6 +53,4 @@ class TupleData : public StructData {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
     virtual void print(std::ostream &os) const override;
-
-    data_ptr_t convertToParams(const std::shared_ptr<ParamsType> &target);
 };

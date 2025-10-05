@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "dict.h"
-#include "params.h"
 #include "utils/scope.h"
 
 #include "../other/any.h"
@@ -124,10 +123,6 @@ data_ptr_t DictData::convert(type_ptr_t target, bool inplace) {
         if (target->structured()) {
             switch (target->code()) {
                 // TODO: implement conversion to other structured types
-            case TypeCode::Params: {
-                auto res = dynamic_pointer_cast<ParamsType>(target);
-                return convertToParams(res);
-            } break;
             default:
                 throw UnsupportedConvError();
             }
@@ -202,11 +197,3 @@ const string DictData::toString() const {
 }
 
 void DictData::print(std::ostream &os) const { os << toString(); }
-
-data_ptr_t DictData::convertToParams(const std::shared_ptr<ParamsType> &target) {
-    auto params = make_shared<ParamsData>();
-    for (const auto &[key, val] : data_) {
-        params->emplace(val, key);
-    }
-    return params->convertToParams(target);
-}

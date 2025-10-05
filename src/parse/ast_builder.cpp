@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1401,7 +1401,7 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                     visitParentArgues(tt::as<OpenCMLParser::ParentArguesContext>(child)));
                 *exprNode << lhsNode << dataList << namedDataList;
             } else if (tt::is_instance_of<OpenCMLParser::AngledValuesContext>(child)) {
-                exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::With);
+                exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(
                     exprNode,
                     tt::as<OpenCMLParser::AngledValuesContext>(child));
@@ -1428,7 +1428,7 @@ any Builder::visitWithExpr(OpenCMLParser::WithExprContext *context) {
     node_ptr_t lhsNode = any2node(visitAccessExpr(context->accessExpr(0)));
     for (size_t i = 1; i < context->accessExpr().size(); i++) {
         string strOp = context->children[i * 2 - 1]->getText();
-        node_ptr_t withNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::With);
+        node_ptr_t withNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
         setNodeTokenRangeByContext(withNode, context->accessExpr(i));
         node_ptr_t rhsNode = any2node(visitAccessExpr(context->accessExpr(i)));
         if (strOp == "?.") {

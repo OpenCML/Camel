@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -667,7 +667,7 @@ enum ReservedDataOp {
     ErrorThen,
     NotNullThen,
     Call, // Data obj, Data* args, NamedData* kwargs
-    With, // Data obj, Data* args, NamedData* kwargs
+    Bind, // Data obj, Data* args, NamedData* kwargs
     Comp, // Data lhs, Data rhs
     As, // Data lhs, Type rhs
     Is, // Data lhs, Type rhs
@@ -711,15 +711,21 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         for (auto &argNode : *argsNode) {
             *res << visitData(argNode);
         }
-        for (const auto &kwargNode : *kwargsNode) {
-            const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
-            const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
-            const auto &kwargName = namedData->ref().ident();
-            linkLoad->addKwarg(kwargName);
-            *res << visitData(dataNode);
+        if (kwargsNode->size() > 0) {
+            diags_->of(SemanticDiag::FeatureNotSupported)
+                .at(ast->load()->tokenRange())
+                .commit("kwargs");
+            throw BuildAbortException();
         }
+        // for (const auto &kwargNode : *kwargsNode) {
+        //     const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
+        //     const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
+        //     const auto &kwargName = namedData->ref().ident();
+        //     linkLoad->addKwarg(kwargName);
+        //     *res << visitData(dataNode);
+        // }
     } break;
-    case AST::ReservedDataOp::With: {
+    case AST::ReservedDataOp::Bind: {
         const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
         res = createNodeAs<WithLoad>(argsNode->size());
@@ -728,13 +734,19 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         for (auto &argNode : *argsNode) {
             *res << visitData(argNode);
         }
-        for (const auto &kwargNode : *kwargsNode) {
-            const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
-            const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
-            const auto &kwargName = namedData->ref().ident();
-            linkLoad->addKwarg(kwargName);
-            *res << visitData(dataNode);
+        if (kwargsNode->size() > 0) {
+            diags_->of(SemanticDiag::FeatureNotSupported)
+                .at(ast->load()->tokenRange())
+                .commit("kwargs");
+            throw BuildAbortException();
         }
+        // for (const auto &kwargNode : *kwargsNode) {
+        //     const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
+        //     const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
+        //     const auto &kwargName = namedData->ref().ident();
+        //     linkLoad->addKwarg(kwargName);
+        //     *res << visitData(dataNode);
+        // }
     } break;
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
@@ -1221,8 +1233,6 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
-    const auto withParamsType = make_shared<ParamsType>();
-    const auto normParamsType = make_shared<ParamsType>();
     type_ptr_t exitType = Type::Void();
 
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
@@ -1230,7 +1240,8 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
         exitType = visitType(exitTypeNode);
     }
 
-    func_type_ptr_t funcType = make_shared<FunctionType>(withParamsType, normParamsType, exitType);
+    func_type_ptr_t funcType = make_shared<FunctionType>();
+    funcType->setExitType(exitType);
     funcType->setImplMark(typeLoad->implMark());
     funcType->setModifiers(typeLoad->modifiers());
 
@@ -1259,13 +1270,16 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
                     .commit(paramRef.toString());
                 throw BuildAbortException();
             }
+            diags_->of(SemanticDiag::FeatureNotSupported)
+                .at(dataNode->load()->tokenRange())
+                .commit("default parameter values");
+            throw BuildAbortException();
         }
-        bool success = funcType->addIdent(name, isVar);
+        bool success = funcType->addWithArg(name, type, isVar);
         if (!success) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
-        withParamsType->add(name, type, data);
     }
 
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
@@ -1293,13 +1307,16 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
                     .commit(paramRef.toString());
                 throw BuildAbortException();
             }
+            diags_->of(SemanticDiag::FeatureNotSupported)
+                .at(dataNode->load()->tokenRange())
+                .commit("default parameter values");
+            throw BuildAbortException();
         }
-        bool success = funcType->addIdent(name, isVar);
+        bool success = funcType->addWithArg(name, type, isVar);
         if (!success) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
-        normParamsType->add(name, type, data);
     }
 
     LEAVE("FuncType");

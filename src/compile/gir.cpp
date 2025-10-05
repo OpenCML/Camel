@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,7 +84,12 @@ func_type_ptr_t Graph::funcType() const {
 
 void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
-void Graph::addPort(const node_ptr_t &node) { ports_.push_back(node); }
+void Graph::addPort(const node_ptr_t &node, bool isWith) {
+    ports_.push_back(node);
+    if (isWith) {
+        withPortCnt_++;
+    }
+}
 
 void Graph::addCapture(const node_ptr_t &node) {
     ASSERT(&node->graph() != this, "Cannot capture a node from the same graph.");
@@ -118,6 +123,7 @@ graph_ptr_t Graph::clone() const {
     for (const auto &port : ports_) {
         const auto &newPort = port->clone(*newGraph);
         nodeMap[port.get()] = newPort;
+        newGraph->ports_.push_back(newPort);
     }
     for (const auto &node : nodes_) {
         const auto &newNode = node->clone(*newGraph);

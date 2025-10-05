@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 13, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1011,7 +1011,7 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
         }
         return "";
     }
-    case AbstractSyntaxTree::ReservedDataOp::With: {
+    case AbstractSyntaxTree::ReservedDataOp::Bind: {
         if (node->size() >= 2) {
             auto targetNode = node->at(0);
             auto argsNode = node->at(1);
