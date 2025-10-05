@@ -37,6 +37,15 @@ FunctionType::FunctionType(
       normTypes_(normTypes), exitType_(returnType) {}
 
 FunctionType::FunctionType(
+    const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
+    const ModifierSet &modifiers)
+    : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(withTypes),
+      normTypes_(normTypes), exitType_(returnType) {
+    // 通过此方式构造的FunctionType，没有编译期信息
+    hasCompileInfo_ = false;
+}
+
+FunctionType::FunctionType(
     const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
     const ModifierSet &modifiers)
     : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(std::move(withTypes)),
@@ -78,8 +87,6 @@ bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool i
     }
     return true;
 }
-
-bool FunctionType::hasSideEffect() const { return hasSideEffect_; }
 
 type_ptr_t FunctionType::exitType() const { return dynamic_pointer_cast<Type>(exitType_); }
 

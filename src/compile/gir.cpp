@@ -30,6 +30,8 @@ std::string to_string(NodeType type) {
         return "DATA";
     case NodeType::PORT:
         return "PORT";
+    case NodeType::CAST:
+        return "CAST";
     case NodeType::COPY:
         return "COPY";
     case NodeType::FILL:

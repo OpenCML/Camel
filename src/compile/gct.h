@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -133,7 +133,7 @@ class TypeLoad : public Load {
     type_ptr_t dataType_;
 
   public:
-    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri)
+    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri = "")
         : Load(LoadType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
     type_ptr_t dataType() const { return dataType_; }
 

@@ -1006,7 +1006,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
     func_type_ptr_t funcType =
         tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
-    node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark(), funcType->uri());
+    node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode = createNodeAs<FuncLoad>(funcData->ref().ident());
     *funcNode << typeNode << stmtsNode;

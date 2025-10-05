@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,20 +24,22 @@
 #include <functional>
 #include <optional>
 
-using Resolver = std::function<std::optional<type_ptr_t>(const type_vec_t &, const type_vec_t &)>;
+using Resolver = std::function<std::optional<type_ptr_t>(
+    const param_vec_t &, const param_vec_t &, const ModifierSet &)>;
 
 class FuncTypeResolver {
   public:
-    virtual std::optional<func_type_ptr_t>
-    resolve(const type_vec_t &with, const type_vec_t &norm) const = 0;
+    virtual std::optional<func_type_ptr_t> resolve(
+        const param_vec_t &with, const param_vec_t &norm, const ModifierSet &modifiers) const = 0;
 };
 
 class StaticFuncTypeResolver : public FuncTypeResolver {
   public:
     StaticFuncTypeResolver(const func_type_ptr_t &funcType) : funcType_(funcType) {}
 
-    std::optional<func_type_ptr_t>
-    resolve(const type_vec_t &with, const type_vec_t &norm) const override;
+    std::optional<func_type_ptr_t> resolve(
+        const param_vec_t &with, const param_vec_t &norm,
+        const ModifierSet &modifiers) const override;
 
   private:
     func_type_ptr_t funcType_;
@@ -47,8 +49,9 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
   public:
     DynamicFuncTypeResolver(const Resolver &resolver) : resolver_(resolver) {}
 
-    std::optional<func_type_ptr_t>
-    resolve(const type_vec_t &with, const type_vec_t &norm) const override;
+    std::optional<func_type_ptr_t> resolve(
+        const param_vec_t &with, const param_vec_t &norm,
+        const ModifierSet &modifiers) const override;
 
   private:
     Resolver resolver_;

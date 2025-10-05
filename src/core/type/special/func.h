@@ -34,14 +34,14 @@ class FunctionType : public SpecialType {
         const param_init_list_t &withTypes, const param_init_list_t &normTypes,
         const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None);
     FunctionType(
+        const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
+        const ModifierSet &modifiers = Modifier::None);
+    FunctionType(
         const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
         const ModifierSet &modifiers = Modifier::None);
 
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
-
-    const std::string &uri() const { return uri_; }
-    void setUri(const std::string &uri) { uri_ = uri; }
 
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
@@ -76,9 +76,7 @@ class FunctionType : public SpecialType {
 
   private:
     ImplMark implMark_ = ImplMark::Graph;
-    std::string uri_;
     ModifierSet modifiers_ = Modifier::None;
-    bool hasSideEffect_ = false;
 
     param_vec_t withTypes_;
     param_vec_t normTypes_;

@@ -36,6 +36,7 @@ namespace GraphIR {
 enum class NodeType {
     DATA, // Compile-time constant
     PORT, // Port data (runtime)
+    CAST, // Type casting during runtime
     COPY, // A runtime copy of data
     FILL, // Structured data constructed during runtime
     ACCS, // Element accessed during runtime

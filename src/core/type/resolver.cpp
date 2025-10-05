@@ -19,22 +19,35 @@
 
 #include "resolver.h"
 
-std::optional<func_type_ptr_t>
-StaticFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
-    if (!funcType_) {
-        return std::nullopt;
+#include "utils/assert.h"
+
+std::optional<func_type_ptr_t> StaticFuncTypeResolver::resolve(
+    const param_vec_t &with, const param_vec_t &norm, const ModifierSet &modifiers) const {
+    ASSERT(funcType_, "FunctionType is null");
+    const auto &withTypes = funcType_->withTypes();
+    const auto &normTypes = funcType_->normTypes();
+    if (withTypes.size() != with.size() || normTypes.size() != norm.size() ||
+        funcType_->modifiers() != modifiers) {
+        return std::nullopt; // reject
     }
-    return std::nullopt;
+    for (size_t i = 0; i < withTypes.size(); i++) {
+        if (withTypes[i].second != with[i].second || !withTypes[i].first->equals(with[i].first)) {
+            return std::nullopt; // reject
+        }
+    }
+    for (size_t i = 0; i < normTypes.size(); i++) {
+        if (normTypes[i].second != norm[i].second || !normTypes[i].first->equals(norm[i].first)) {
+            return std::nullopt; // reject
+        }
+    }
+    return funcType_; // accept
 }
 
-std::optional<func_type_ptr_t>
-DynamicFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
-    if (!resolver_) {
-        return std::nullopt;
+std::optional<func_type_ptr_t> DynamicFuncTypeResolver::resolve(
+    const param_vec_t &with, const param_vec_t &norm, const ModifierSet &modifiers) const {
+    auto optResType = resolver_(with, norm, modifiers);
+    if (!optResType) {
+        return std::nullopt; // reject
     }
-    auto res = resolver_(with, norm);
-    if (!res) {
-        return std::nullopt;
-    }
-    return std::nullopt;
+    return std::make_shared<FunctionType>(with, norm, *optResType, modifiers);
 }
