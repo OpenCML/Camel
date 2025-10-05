@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@ extern std::unordered_map<std::string, std::function<std::shared_ptr<Module>(con
     builtinModuleFactories;
 
 inline func_type_ptr_t makeFuncType(
-    const param_init_list &with, const param_init_list &norm, const type_ptr_t &ret,
+    const param_init_list_t &with, const param_init_list_t &norm, const type_ptr_t &ret,
     const ModifierSet &mods = Modifier::None) {
     return std::make_shared<FunctionType>(with, norm, ret, mods);
 }
@@ -43,7 +43,7 @@ class BuiltinModule : public Module {
     virtual bool load() = 0;
 
     void exportBuiltinOperator(
-        const std::string &name, const param_init_list &with, const param_init_list &norm,
+        const std::string &name, const param_init_list_t &with, const param_init_list_t &norm,
         const type_ptr_t &ret, const std::string &uri) {
         auto op = makeOperator(name, makeFuncType(with, norm, ret), uri);
         auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();

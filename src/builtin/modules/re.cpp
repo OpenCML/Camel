@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,8 +22,8 @@
 REBuiltinModule::REBuiltinModule(context_ptr_t ctx) : BuiltinModule("re", ctx) {
     exportBuiltinOperator(
         "test",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":not-impl");
 }

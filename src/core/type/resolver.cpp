@@ -12,22 +12,27 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 09, 2024
- * Updated: Oct. 05, 2025
+ * Created: Oct. 03, 2024
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "resolver.h"
 
-#include "base.h"
-#include "primary.h"
-#include "special/func.h"
-#include "struct/array.h"
-#include "struct/dict.h"
-#include "struct/list.h"
-#include "struct/map.h"
-#include "struct/set.h"
-#include "struct/tensor.h"
-#include "struct/tuple.h"
-#include "struct/union.h"
-#include "struct/vector.h"
+std::optional<func_type_ptr_t>
+StaticFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
+    if (!funcType_) {
+        return std::nullopt;
+    }
+}
+
+std::optional<func_type_ptr_t>
+DynamicFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
+    if (!resolver_) {
+        return std::nullopt;
+    }
+    auto res = resolver_(with, norm);
+    if (!res) {
+        return std::nullopt;
+    }
+}

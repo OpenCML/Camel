@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
 #include "list.h"
-#include "params.h"
 #include "utils/scope.h"
 #include "vector.h"
 
@@ -107,10 +106,6 @@ data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
                 }
                 return res;
             } break;
-            case TypeCode::Params: {
-                auto res = dynamic_pointer_cast<ParamsType>(target);
-                return convertToParams(res);
-            } break;
             default:
                 throw UnsupportedConvError();
             }
@@ -181,11 +176,3 @@ const string ArrayData::toString() const {
 }
 
 void ArrayData::print(std::ostream &os) const { os << toString(); }
-
-data_ptr_t ArrayData::convertToParams(const std::shared_ptr<ParamsType> &target) {
-    auto params = make_shared<ParamsData>();
-    for (const auto &e : data_) {
-        params->emplace(e);
-    }
-    return params->convertToParams(target);
-}

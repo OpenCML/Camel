@@ -13,19 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 22, 2025
- * Updated: Sep. 22, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "this.h"
 
 ThisBuiltinModule::ThisBuiltinModule(context_ptr_t ctx) : BuiltinModule("this", ctx) {
-    exportBuiltinOperator(
-        "zen",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
-        Type::Void(),
-        ":zen");
+    exportBuiltinOperator("zen", param_init_list_t{}, {{Type::Any(), false}}, Type::Void(), ":zen");
 }
 
 bool ThisBuiltinModule::load() {

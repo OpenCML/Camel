@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Oct. 01, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,32 +58,14 @@ OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
     func_type_ptr_t rhsFuncType = rhsFunc->funcType();
     // Graph &rhsGraph = rhs->as<FunctionData>(Type::Func())->graph();
 
-    if (rhsFuncType->normParams().size() != 1) {
+    if (rhsFuncType->normTypes().size() != 1) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(
                 0,
                 "<cmp>",
                 "functor with 1 norm param",
-                "functor with " + std::to_string(rhsFuncType->normParams().size()) +
-                    " norm params");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    // check if the return type of rhs matches the type of the only norm param of lhs
-    type_ptr_t lhsReturnType = lhsFuncType->returnType();
-    type_ptr_t rhsOnlyNormParamType = std::get<1>(rhsFuncType->normParams()[0]);
-
-    if (!Type::castSafetyCheck(lhsReturnType, rhsOnlyNormParamType)) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(
-                0,
-                "<cmp>",
-                "return type of the first functor",
-                lhsReturnType->toString() + " and the only norm param type of the second functor " +
-                    rhsOnlyNormParamType->toString());
+                "functor with " + std::to_string(rhsFuncType->normTypes().size()) + " norm params");
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }

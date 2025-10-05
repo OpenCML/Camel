@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "list.h"
-#include "params.h"
 #include "utils/scope.h"
 
 #include "../other/any.h"
@@ -94,9 +93,6 @@ data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
         if (target->structured()) {
             switch (target->code()) {
             // TODO: implement conversion to other structured types
-            case TypeCode::Params:
-                return convertToParams(dynamic_pointer_cast<ParamsType>(target));
-                break;
             default:
                 throw UnsupportedConvError();
             }
@@ -167,11 +163,3 @@ const string ListData::toString() const {
 }
 
 void ListData::print(std::ostream &os) const { os << toString(); }
-
-data_ptr_t ListData::convertToParams(const std::shared_ptr<ParamsType> &target) {
-    auto params = make_shared<ParamsData>();
-    for (const auto &e : data_) {
-        params->emplace(e);
-    }
-    return params->convertToParams(target);
-}

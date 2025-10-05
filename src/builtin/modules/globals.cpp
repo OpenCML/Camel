@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,8 +27,8 @@ void GlobalsBuiltinModule::exportBinaryOp(const std::string &name, const std::st
     auto op = makeOperator(
         name,
         makeFuncType(
-            param_init_list{},
-            {{"lhs", Type::Any(), nullptr, false}, {"rhs", Type::Any(), nullptr, false}},
+            param_init_list_t{},
+            {{Type::Any(), false}, {Type::Any(), false}},
             Type::Any()),
         uri);
 
@@ -40,10 +40,7 @@ void GlobalsBuiltinModule::exportBinaryOp(const std::string &name, const std::st
 void GlobalsBuiltinModule::exportAssnOp(const std::string &name, const std::string &uri) {
     auto op = makeOperator(
         name,
-        makeFuncType(
-            param_init_list{},
-            {{"self", Type::Any(), nullptr, true}, {"value", Type::Any(), nullptr, false}},
-            Type::Any()),
+        makeFuncType(param_init_list_t{}, {{Type::Any(), true}, {Type::Any(), false}}, Type::Any()),
         uri);
 
     auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
@@ -124,14 +121,14 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     }
 
     for (const auto &[name, func] : others) {
-        exportBuiltinOperator(name, param_init_list{}, param_init_list{}, Type::Any(), func);
+        exportBuiltinOperator(name, param_init_list_t{}, param_init_list_t{}, Type::Any(), func);
     }
 
     auto op = makeOperator(
         "__cmp__",
         makeFuncType(
-            param_init_list{},
-            {{"lhs", Type::Any(), nullptr, false}, {"rhs", Type::Any(), nullptr, false}},
+            param_init_list_t{},
+            {{Type::Any(), false}, {Type::Any(), false}},
             Type::Any(),
             Modifier::Macro),
         ":macro/bind");

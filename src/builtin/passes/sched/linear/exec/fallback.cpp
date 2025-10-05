@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -476,7 +476,7 @@ void FallbackExecSchedPass::evalMarkedOperator_map(const node_ptr_t &node, frame
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
     }
     auto func = funcData->as<FunctionData>(Type::Func());
-    type_ptr_t funcRetType = func->funcType()->returnType();
+    type_ptr_t funcRetType = func->funcType()->exitType();
 
     auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
         data_vec_t res;

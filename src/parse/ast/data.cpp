@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -146,7 +146,7 @@ std::string to_string(ReservedDataOp op) {
         return ".$";
     case ReservedDataOp::Call:
         return "()";
-    case ReservedDataOp::With:
+    case ReservedDataOp::Bind:
         return "<>";
     case ReservedDataOp::Comp:
         return "..";
