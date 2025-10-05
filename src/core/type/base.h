@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Oct. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,6 +86,7 @@ class ParamsType;
 class TensorType;
 
 using type_ptr_t = std::shared_ptr<Type>;
+using type_vec_t = std::vector<type_ptr_t>;
 using type_wptr_t = std::weak_ptr<Type>;
 
 class Data;
