@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,6 +51,11 @@ string TensorType::toString() const {
     }
     result += "]>";
     return result;
+}
+
+std::optional<type_ptr_t> TensorType::typeAt(struct_idx_t idx) const {
+    ASSERT(false, "TensorType does not support indexing");
+    return std::nullopt;
 }
 
 bool TensorType::operator==(const Type &other) const {

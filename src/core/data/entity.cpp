@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,7 @@ entity_ptr_t Entity::clone(bool deep) const {
 string Entity::typeStr() const {
     auto type = type_.lock();
     if (type == nullptr) {
-        return "NULL";
+        return "null";
     } else {
         return type->toString();
     }
@@ -57,7 +57,7 @@ string Entity::typeStr() const {
 
 string Entity::metaStr() const {
     if (meta_ == nullptr) {
-        return "NULL";
+        return "null";
     } else {
         return meta_->toString();
     }
@@ -65,7 +65,7 @@ string Entity::metaStr() const {
 
 string Entity::dataStr() const {
     if (data_ == nullptr) {
-        return "NULL";
+        return "null";
     } else {
         return data_->toString();
     }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,13 +33,22 @@ string DictType::toString() const {
         if (field.second) {
             result += field.second->toString() + ", ";
         } else {
-            result += "NULL, ";
+            result += "null, ";
         }
     }
     result.pop_back();
     result.pop_back();
     result += " }";
     return result;
+}
+
+std::optional<type_ptr_t> DictType::typeAt(struct_idx_t idx) const {
+    ASSERT(std::holds_alternative<std::string>(idx), "Dict index must be a string");
+    const std::string &key = std::get<std::string>(idx);
+    if (!has(key)) {
+        return std::nullopt;
+    }
+    return get(key);
 }
 
 bool DictType::operator==(const Type &other) const {

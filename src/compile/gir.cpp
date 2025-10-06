@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,6 +52,8 @@ std::string to_string(NodeType type) {
         return "OPER";
     case NodeType::EXIT:
         return "EXIT";
+    case NodeType::DREF:
+        return "DREF";
     }
     ASSERT(false, "Unknown NodeType");
     return "Unknown";
@@ -101,7 +103,7 @@ void Graph::addCapture(const node_ptr_t &node) {
 
 void Graph::setOutput(const node_ptr_t &node) {
     ASSERT(output_ == nullptr, "Output node has already been set.");
-    output_ = ExitNode::create(*this, node->index());
+    output_ = ExitNode::create(*this, node->dataType(), node->index());
     Node::link(LinkType::Norm, node, output_);
 }
 

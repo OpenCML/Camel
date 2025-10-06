@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -162,7 +162,7 @@ string FunctionType::toString() const {
     if (exitType_) {
         result += exitType_->toString();
     } else {
-        result += "NULL";
+        result += "null";
     }
     return result;
 }

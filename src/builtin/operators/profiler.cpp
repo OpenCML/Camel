@@ -120,6 +120,7 @@ OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, 
 
 #ifndef NDEBUG
     const bool &enabled = boolData->data();
+    const bool &enabled = boolData->data();
     if (enabled) {
         profiler::AdvancedTracer::Config config;
         config.enablePerfettoIntegration = true;

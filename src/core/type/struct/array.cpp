@@ -13,14 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
-#include "vector.h"
-
 #include "set.h"
+#include "vector.h"
 
 using namespace std;
 
@@ -33,6 +32,15 @@ type_ptr_t ArrayType::elementType() const { return elementType_; }
 
 string ArrayType::toString() const {
     return "Array<" + elementType_->toString() + ", " + to_string(size_) + ">";
+}
+
+std::optional<type_ptr_t> ArrayType::typeAt(struct_idx_t idx) const {
+    ASSERT(std::holds_alternative<size_t>(idx), "Array index must be a size_t");
+    size_t index = std::get<size_t>(idx);
+    if (index >= size_) {
+        return std::nullopt;
+    }
+    return elementType_;
 }
 
 bool ArrayType::operator==(const Type &other) const {

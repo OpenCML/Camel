@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@ const std::string StmtLoad::geneCode() const { return ""; }
 
 const std::string ImportLoad::toString() const {
     if (path_.empty()) {
-        return std::string("ImportDecl: NULL");
+        return std::string("ImportDecl: null");
     }
     std::string result = "ImportDecl: ";
     if (!refs_.empty()) {
@@ -45,7 +45,7 @@ const std::string ImportLoad::toString() const {
 
 const std::string ExportLoad::toString() const {
     if (refs_.empty()) {
-        return std::string("ExportDecl: NULL");
+        return std::string("ExportDecl: null");
     }
     std::string result = "ExportDecl: " + strutil::join(refs_, ", ", [](const Reference &ref) {
                              return ref.toString();

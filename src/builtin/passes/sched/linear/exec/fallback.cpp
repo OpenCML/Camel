@@ -203,6 +203,10 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 ASSERT(currFrame->get(n) != nullptr, "PORT data is null.");
                 break;
             }
+            case NodeType::CAST: {
+                ASSERT(false, "CAST node not implemented yet.");
+                break;
+            }
             case NodeType::COPY: {
                 auto inputNode = n->withInputs().front();
                 auto inputData = currFrame->get(inputNode);
@@ -382,6 +386,10 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
             }
             case NodeType::EXIT: {
                 ASSERT(false, "EXIT node should not appear in the execution sequence.");
+                break;
+            }
+            case NodeType::DREF: {
+                ASSERT(false, "DREF node should not appear in the execution sequence.");
                 break;
             }
             }

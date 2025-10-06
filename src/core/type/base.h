@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "../impl.h"
+#include "utils/assert.h"
 
 enum class TypeCode {
     // primitive types

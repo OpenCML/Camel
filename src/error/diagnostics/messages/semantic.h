@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,9 @@ enum class SemanticDiag : uint32_t {
     DuplicateParameter = 0x000009,
     UnresolvedTypeReference = 0x00000A,
     UnresolvedReference = 0x00000B,
+    BranchReturnTypeMismatch = 0x00000C,
+    InvalidAccessIndex = 0x00000D,
+    TypeNotIndexable = 0x00000E,
 
     // Warnings
     FeatureNotSupported = 0x100000,

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,8 @@ class DictType : public StructType {
     DictType();
 
     std::string toString() const override;
+
+    std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
 
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;

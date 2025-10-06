@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -118,6 +118,32 @@ const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
                 "UnresolvedReference",
                 "Unresolved reference: '{0}'.",
                 "Make sure the name is declared and in scope.",
+            },
+        },
+        {
+            SemanticDiag::BranchReturnTypeMismatch,
+            {
+                "BranchReturnTypeMismatch",
+                "Return type mismatch between branches: expected '{0}', found '{1}'.",
+                "Ensure all branches of if-else or match-case expressions return the same type.",
+            },
+        },
+        {
+            SemanticDiag::InvalidAccessIndex,
+            {
+                "InvalidAccessIndex",
+                "Invalid access index: '{0}'.",
+                "Ensure the index is within bounds for arrays or refers to a valid field in "
+                "structs.",
+            },
+        },
+        {
+            SemanticDiag::TypeNotIndexable,
+            {
+                "TypeNotIndexable",
+                "Type '{0}' does not support index access.",
+                "Check the type and ensure it is an array, a tuple, or a dict, etc. that supports "
+                "indexing.",
             },
         },
 

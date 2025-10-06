@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ string TupleType::toString() const {
         if (type) {
             result += type->toString() + ", ";
         } else {
-            result += "NULL, ";
+            result += "null, ";
         }
     }
     if (!types_.empty()) {
@@ -45,6 +45,15 @@ string TupleType::toString() const {
     }
     result += ">";
     return result;
+}
+
+std::optional<type_ptr_t> TupleType::typeAt(struct_idx_t idx) const {
+    ASSERT(std::holds_alternative<size_t>(idx), "Tuple index must be a size_t");
+    size_t index = std::get<size_t>(idx);
+    if (index >= types_.size()) {
+        return std::nullopt;
+    }
+    return types_[index];
 }
 
 bool TupleType::operator==(const Type &other) const {

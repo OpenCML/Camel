@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,7 +82,7 @@ const string DataLoad::toString() const {
     if (type) {
         ss << type->toString();
     } else {
-        ss << "NULL";
+        ss << "null";
     }
     ss << ", " << data_->toString();
     return ss.str();

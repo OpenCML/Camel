@@ -47,6 +47,7 @@ enum class NodeType {
     FUNC, // (Sub)-Graph, function
     OPER, // Atomic operation
     EXIT, // Final output node
+    DREF, // Dereference
 };
 
 enum class LinkType {
@@ -233,11 +234,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
 class Node : public std::enable_shared_from_this<Node> {
   public:
-    Node(Graph &graph, NodeType type, size_t index)
-        : graph_(graph), nodeType_(type), dataIndex_(index) {}
+    Node(Graph &graph, NodeType nodeType, const type_ptr_t &dataType, size_t index)
+        : graph_(graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index) {}
     virtual ~Node() = default;
 
     NodeType type() const { return nodeType_; }
+    type_ptr_t dataType() const {
+        ASSERT(dataType_ != nullptr, "Node has no data type.");
+        return dataType_;
+    }
+    void setDataType(const type_ptr_t &type) { dataType_ = type; }
     virtual std::string toString() const {
         return std::format("Node({}, {})", to_string(nodeType_), std::to_string(dataIndex_));
     }
@@ -282,6 +288,7 @@ class Node : public std::enable_shared_from_this<Node> {
     Graph &graph_;
 
     NodeType nodeType_;
+    type_ptr_t dataType_;
     size_t dataIndex_;
 
     node_vec_t withInputs_;
@@ -294,12 +301,13 @@ class Node : public std::enable_shared_from_this<Node> {
 
 class DataNode : public Node {
   public:
-    DataNode(Graph &graph, size_t index) : Node(graph, NodeType::DATA, index) {}
+    DataNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::DATA, type, index) {}
     ~DataNode() = default;
 
     static node_ptr_t create(Graph &graph, const data_ptr_t &data) {
         size_t index = graph.addStaticData(data);
-        auto node = std::make_shared<DataNode>(graph, index);
+        auto node = std::make_shared<DataNode>(graph, data->type(), index);
         graph.addNode(node);
         return node;
     }
@@ -307,7 +315,11 @@ class DataNode : public Node {
     data_ptr_t data() const { return graph_.getStaticData(dataIndex_); }
 
     virtual std::string toString() const override {
-        return std::format("DATA({}): {}", dataIndex_, data()->toString());
+        return std::format(
+            "DATA({}, {}): {}",
+            dataIndex_,
+            data()->toString(),
+            dataType()->toString());
     }
 
     virtual node_ptr_t clone(Graph &graph) const override {
@@ -320,13 +332,15 @@ class PortNode : public Node {
     bool isVar_;
 
   public:
-    PortNode(Graph &graph, size_t index, const std::string &name, bool isVar)
-        : Node(graph, NodeType::PORT, index), name_(name), isVar_(isVar) {}
+    PortNode(
+        Graph &graph, const type_ptr_t &type, size_t index, const std::string &name, bool isVar)
+        : Node(graph, NodeType::PORT, type, index), name_(name), isVar_(isVar) {}
     ~PortNode() = default;
 
-    static node_ptr_t create(Graph &graph, const std::string &name, bool isVar) {
+    static node_ptr_t
+    create(Graph &graph, const type_ptr_t &type, const std::string &name, bool isVar) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<PortNode>(graph, index, name, isVar);
+        auto node = std::make_shared<PortNode>(graph, type, index, name, isVar);
         // 这里不会自动调用，需要手动添加，因为ports的顺序非常重要
         // graph.addPort(node);
         return node;
@@ -336,47 +350,76 @@ class PortNode : public Node {
     bool isVar() const { return isVar_; }
 
     virtual std::string toString() const override {
-        return std::format("PORT({}): {}{}", dataIndex_, name_, isVar_ ? " (var)" : "");
+        return std::format(
+            "PORT({}, {}{}): {}",
+            dataIndex_,
+            isVar_ ? "var " : "",
+            name_,
+            dataType()->toString());
     }
 
     virtual node_ptr_t clone(Graph &graph) const override {
-        return PortNode::create(graph, name_, isVar_);
+        return PortNode::create(graph, dataType_, name_, isVar_);
+    }
+};
+
+class CastNode : public Node {
+  public:
+    CastNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::CAST, type, index) {}
+    ~CastNode() = default;
+
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+        size_t index = graph.addRuntimeData();
+        auto node = std::make_shared<CastNode>(graph, type, index);
+        graph.addNode(node);
+        return node;
+    }
+
+    virtual std::string toString() const override {
+        return std::format("CAST({}): {}", dataIndex_, dataType()->toString());
+    }
+
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return CastNode::create(graph, dataType_);
     }
 };
 
 class CopyNode : public Node {
   public:
-    CopyNode(Graph &graph, size_t index) : Node(graph, NodeType::COPY, index) {}
+    CopyNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::COPY, type, index) {}
     ~CopyNode() = default;
 
-    static node_ptr_t create(Graph &graph) {
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<CopyNode>(graph, index);
+        auto node = std::make_shared<CopyNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
 
-    virtual std::string toString() const override { return std::format("COPY({})", dataIndex_); }
+    virtual std::string toString() const override {
+        return std::format("COPY({}): {}", dataIndex_, dataType()->toString());
+    }
 
-    virtual node_ptr_t clone(Graph &graph) const override { return CopyNode::create(graph); }
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return CopyNode::create(graph, dataType_);
+    }
 };
 
 class FillNode : public Node {
-    type_ptr_t dataType_;
 
   public:
-    FillNode(Graph &graph, size_t index, type_ptr_t type)
-        : Node(graph, NodeType::FILL, index), dataType_(type) {}
+    FillNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::FILL, type, index) {}
     ~FillNode() = default;
 
-    static node_ptr_t create(Graph &graph, type_ptr_t type) {
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<FillNode>(graph, index, type);
+        auto node = std::make_shared<FillNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
-
-    type_ptr_t dataType() const { return dataType_; }
 
     virtual std::string toString() const override {
         return std::format("FILL({}): {}", dataIndex_, dataType()->toString());
@@ -389,13 +432,16 @@ class FillNode : public Node {
 
 class AccsNode : public Node {
   public:
-    AccsNode(Graph &graph, size_t index, const std::variant<std::string, size_t> &accsIdx)
-        : Node(graph, NodeType::ACCS, index), accsIndex_(accsIdx) {}
+    AccsNode(
+        Graph &graph, const type_ptr_t &type, size_t index,
+        const std::variant<std::string, size_t> &accsIdx)
+        : Node(graph, NodeType::ACCS, type, index), accsIndex_(accsIdx) {}
     ~AccsNode() = default;
 
-    static node_ptr_t create(Graph &graph, const std::variant<std::string, size_t> &accsIdx) {
+    static node_ptr_t
+    create(Graph &graph, const type_ptr_t &type, const std::variant<std::string, size_t> &accsIdx) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<AccsNode>(graph, index, accsIdx);
+        auto node = std::make_shared<AccsNode>(graph, type, index, accsIdx);
         graph.addNode(node);
         return node;
     }
@@ -411,11 +457,11 @@ class AccsNode : public Node {
     }
 
     virtual std::string toString() const override {
-        return std::format("ACCS({}): ${}", dataIndex_, index2String());
+        return std::format("ACCS({}, ${}): {}", dataIndex_, index2String(), dataType()->toString());
     }
 
     virtual node_ptr_t clone(Graph &graph) const override {
-        return AccsNode::create(graph, accsIndex_);
+        return AccsNode::create(graph, dataType_, accsIndex_);
     }
 
   private:
@@ -424,83 +470,103 @@ class AccsNode : public Node {
 
 class BrchNode : public Node {
   public:
-    BrchNode(Graph &graph, size_t index) : Node(graph, NodeType::BRCH, index) {}
+    BrchNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::BRCH, type, index) {}
     ~BrchNode() = default;
 
-    static node_ptr_t create(Graph &graph) {
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<BrchNode>(graph, index);
+        auto node = std::make_shared<BrchNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
 
-    virtual std::string toString() const override { return std::format("BRCH({})", dataIndex_); }
+    virtual std::string toString() const override {
+        return std::format("BRCH({}): {}", dataIndex_, dataType()->toString());
+    }
 
-    virtual node_ptr_t clone(Graph &graph) const override { return BrchNode::create(graph); }
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return BrchNode::create(graph, dataType_);
+    }
 };
 
 class JoinNode : public Node {
   public:
-    JoinNode(Graph &graph, size_t index) : Node(graph, NodeType::JOIN, index) {}
+    JoinNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::JOIN, type, index) {}
     ~JoinNode() = default;
 
-    static node_ptr_t create(Graph &graph) {
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<JoinNode>(graph, index);
+        auto node = std::make_shared<JoinNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
 
-    virtual std::string toString() const override { return std::format("JOIN({})", dataIndex_); }
+    virtual std::string toString() const override {
+        return std::format("JOIN({}): {}", dataIndex_, dataType()->toString());
+    }
 
-    virtual node_ptr_t clone(Graph &graph) const override { return JoinNode::create(graph); }
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return JoinNode::create(graph, dataType_);
+    }
 };
 
 class CallNode : public Node {
   public:
-    CallNode(Graph &graph, size_t index) : Node(graph, NodeType::CALL, index) {}
+    CallNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::CALL, type, index) {}
     ~CallNode() = default;
 
-    static node_ptr_t create(Graph &graph) {
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<CallNode>(graph, index);
+        auto node = std::make_shared<CallNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
 
-    virtual std::string toString() const override { return std::format("CALL({})", dataIndex_); }
+    virtual std::string toString() const override {
+        return std::format("CALL({}): {}", dataIndex_, dataType()->toString());
+    }
 
-    virtual node_ptr_t clone(Graph &graph) const override { return CallNode::create(graph); }
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return CallNode::create(graph, dataType_);
+    }
 };
 
 class BindNode : public Node {
   public:
-    BindNode(Graph &graph, size_t index) : Node(graph, NodeType::BIND, index) {}
+    BindNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::BIND, type, index) {}
     ~BindNode() = default;
 
-    static node_ptr_t create(Graph &graph) {
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<BindNode>(graph, index);
+        auto node = std::make_shared<BindNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
 
-    virtual std::string toString() const override { return std::format("BIND({})", dataIndex_); }
+    virtual std::string toString() const override {
+        return std::format("BIND({}): {}", dataIndex_, dataType()->toString());
+    }
 
-    virtual node_ptr_t clone(Graph &graph) const override { return BindNode::create(graph); }
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return BindNode::create(graph, dataType_);
+    }
 };
 
 class FuncNode : public Node {
     func_ptr_t func_;
 
   public:
-    FuncNode(Graph &graph, size_t index, func_ptr_t func)
-        : Node(graph, NodeType::FUNC, index), func_(func) {}
+    FuncNode(Graph &graph, const type_ptr_t &type, size_t index, func_ptr_t func)
+        : Node(graph, NodeType::FUNC, type, index), func_(func) {}
     ~FuncNode() = default;
 
-    static node_ptr_t create(Graph &graph, func_ptr_t func) {
+    static node_ptr_t create(Graph &graph, func_ptr_t func, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<FuncNode>(graph, index, func);
+        auto node = std::make_shared<FuncNode>(graph, type, index, func);
         graph.addNode(node);
         return node;
     }
@@ -513,25 +579,28 @@ class FuncNode : public Node {
 
     virtual std::string toString() const override {
         return std::format(
-            "FUNC({}): {}",
+            "FUNC({}, {}): {}",
             dataIndex_,
-            func_->name().empty() ? func_->graph().name() : func_->name());
+            func_->name().empty() ? func_->graph().name() : func_->name(),
+            dataType()->toString());
     }
 
-    virtual node_ptr_t clone(Graph &graph) const override { return FuncNode::create(graph, func_); }
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return FuncNode::create(graph, func_, dataType_);
+    }
 };
 
 class OperNode : public Node {
     oper_idx_ptr_t operator_;
 
   public:
-    OperNode(Graph &graph, size_t index, oper_idx_ptr_t op)
-        : Node(graph, NodeType::OPER, index), operator_(op) {}
+    OperNode(Graph &graph, const type_ptr_t &type, size_t index, oper_idx_ptr_t op)
+        : Node(graph, NodeType::OPER, type, index), operator_(op) {}
     ~OperNode() = default;
 
-    static node_ptr_t create(Graph &graph, oper_idx_ptr_t op) {
+    static node_ptr_t create(Graph &graph, oper_idx_ptr_t op, const type_ptr_t &type) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<OperNode>(graph, index, op);
+        auto node = std::make_shared<OperNode>(graph, type, index, op);
         graph.addNode(node);
         return node;
     }
@@ -543,28 +612,59 @@ class OperNode : public Node {
     }
 
     virtual std::string toString() const override {
-        return std::format("OPER({}): <{}>", dataIndex_, operator_->name());
+        return std::format(
+            "OPER({}, <{}>): {}",
+            dataIndex_,
+            operator_->name(),
+            dataType()->toString());
     }
 
     virtual node_ptr_t clone(Graph &graph) const override {
-        return OperNode::create(graph, operator_);
+        return OperNode::create(graph, operator_, dataType_);
     }
 };
 
 class ExitNode : public Node {
   public:
-    ExitNode(Graph &graph, size_t index) : Node(graph, NodeType::EXIT, index) {}
+    ExitNode(Graph &graph, const type_ptr_t &type, size_t index)
+        : Node(graph, NodeType::EXIT, type, index) {}
     ~ExitNode() = default;
 
-    static node_ptr_t create(Graph &graph, size_t index = 0) {
-        auto node = std::make_shared<ExitNode>(graph, index);
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type, size_t index = 0) {
+        auto node = std::make_shared<ExitNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
 
-    virtual std::string toString() const override { return std::format("EXIT({})", dataIndex_); }
+    virtual std::string toString() const override {
+        return std::format("EXIT({}): {}", dataIndex_, dataType()->toString());
+    }
 
-    virtual node_ptr_t clone(Graph &graph) const override { return ExitNode::create(graph); }
+    virtual node_ptr_t clone(Graph &graph) const override {
+        return ExitNode::create(graph, dataType_);
+    }
+};
+
+class DrefNode : public Node {
+  public:
+    DrefNode(Graph &graph) : Node(graph, NodeType::DREF, Type::Void(), 0) {}
+    ~DrefNode() = default;
+
+    static node_ptr_t create(Graph &graph) {
+        auto node = std::make_shared<DrefNode>(graph);
+        // 虚拟节点，不加入graph，只在构造过程中临时使用
+        // graph.addNode(node);
+        return node;
+    }
+
+    virtual std::string toString() const override {
+        return std::format("DREF({}): {}", graph_.name(), dataType()->toString());
+    }
+
+    virtual node_ptr_t clone(Graph &graph) const override {
+        ASSERT(false, "DrefNode cannot be cloned.");
+        return nullptr;
+    }
 };
 
 } // namespace GraphIR

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,12 +21,19 @@
 
 #include "core/type/base.h"
 
+#include <optional>
+#include <variant>
+
+using struct_idx_t = std::variant<std::string, size_t>;
+
 class StructType : public Type {
   public:
     StructType() = delete;
     StructType(TypeCode code) : Type(code) {}
 
     virtual std::string toString() const override = 0;
+
+    virtual std::optional<type_ptr_t> typeAt(struct_idx_t idx) const = 0;
 
     virtual bool operator==(const Type &other) const override = 0;
     virtual bool operator!=(const Type &other) const override = 0;

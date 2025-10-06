@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -79,6 +79,11 @@ string UnionType::toString() const {
     }
     result += ">";
     return result;
+}
+
+std::optional<type_ptr_t> UnionType::typeAt(struct_idx_t idx) const {
+    ASSERT(false, "UnionType does not support indexing");
+    return std::nullopt;
 }
 
 bool UnionType::operator==(const Type &other) const {
