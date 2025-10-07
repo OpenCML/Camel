@@ -13,13 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "time.h"
 
+const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {};
+    return groups;
+}
+
 TimeBuiltinModule::TimeBuiltinModule(context_ptr_t ctx) : BuiltinModule("time", ctx) {
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
     exportBuiltinOperator(
         "now",
         param_init_list_t{},

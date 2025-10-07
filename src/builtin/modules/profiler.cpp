@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,7 +58,16 @@ void ProfilerBuiltinModule::enable(bool enabled) {
     }
 }
 
-ProfilerBuiltinModule::ProfilerBuiltinModule(context_ptr_t ctx) : BuiltinModule("profiler", ctx) {}
+const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {};
+    return groups;
+}
+
+ProfilerBuiltinModule::ProfilerBuiltinModule(context_ptr_t ctx) : BuiltinModule("profiler", ctx) {
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+}
 
 bool ProfilerBuiltinModule::load() {
     if (loaded_) {

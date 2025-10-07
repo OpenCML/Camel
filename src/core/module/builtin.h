@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,30 +24,10 @@
 extern std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories;
 
-inline func_type_ptr_t makeFuncType(
-    const param_init_list_t &with, const param_init_list_t &norm, const type_ptr_t &ret,
-    const ModifierSet &mods = Modifier::None) {
-    return std::make_shared<FunctionType>(with, norm, ret, mods);
-}
-
-inline oper_idx_ptr_t
-makeOperator(const std::string &name, const func_type_ptr_t &&type, const std::string &uri) {
-    return std::make_shared<OperatorIndex>(name, std::move(type), uri);
-}
-
 class BuiltinModule : public Module {
   public:
     BuiltinModule(const std::string &name, context_ptr_t ctx) : Module(name, "", ctx) {}
     virtual ~BuiltinModule() = default;
 
     virtual bool load() = 0;
-
-    void exportBuiltinOperator(
-        const std::string &name, const param_init_list_t &with, const param_init_list_t &norm,
-        const type_ptr_t &ret, const std::string &uri) {
-        auto op = makeOperator(name, makeFuncType(with, norm, ret), uri);
-        auto ops = std::make_shared<std::vector<std::shared_ptr<OperatorIndex>>>();
-        ops->push_back(op);
-        exportEntity(name, ops);
-    }
 };

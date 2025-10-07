@@ -13,19 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "sys.h"
 
+const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {};
+    return groups;
+}
+
 SysBuiltinModule::SysBuiltinModule(context_ptr_t ctx) : BuiltinModule("sys", ctx) {
-    exportBuiltinOperator(
-        "platform",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":not-impl");
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
 }
 
 bool SysBuiltinModule::load() {

@@ -13,13 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "os.h"
 
+const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {};
+    return groups;
+}
+
 OSBuiltinModule::OSBuiltinModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
     exportBuiltinOperator(
         "whoami",
         param_init_list_t{},
