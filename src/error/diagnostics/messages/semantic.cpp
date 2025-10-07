@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "semantic.h"
 
-const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
-    return {
+const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
+    static const std::unordered_map<SemanticDiag, DiagInfo> infoMap = {
         {
             SemanticDiag::UnknownSemanticError,
             {
@@ -173,4 +173,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
             },
         },
     };
+
+    return infoMap;
 };

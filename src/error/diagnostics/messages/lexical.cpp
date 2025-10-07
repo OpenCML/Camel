@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "lexical.h"
 
-const std::unordered_map<LexicalDiag, DiagInfo> getLexicalDiagInfoMap() {
-    return {
+const std::unordered_map<LexicalDiag, DiagInfo> &getLexicalDiagInfoMap() {
+    static const std::unordered_map<LexicalDiag, DiagInfo> infoMap = {
         {
             LexicalDiag::IllegalCharacter,
             {
@@ -62,4 +62,6 @@ const std::unordered_map<LexicalDiag, DiagInfo> getLexicalDiagInfoMap() {
             },
         },
     };
+
+    return infoMap;
 }

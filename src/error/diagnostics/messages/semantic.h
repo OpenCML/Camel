@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,4 +50,4 @@ enum class SemanticDiag : uint32_t {
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
 
-const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap();
+const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap();

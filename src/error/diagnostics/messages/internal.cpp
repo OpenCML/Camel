@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "internal.h"
 
-const std::unordered_map<InternalDiag, DiagInfo> getInternalDiagInfoMap() {
-    return {
+const std::unordered_map<InternalDiag, DiagInfo> &getInternalDiagInfoMap() {
+    static const std::unordered_map<InternalDiag, DiagInfo> infoMap = {
         {
             InternalDiag::UnknownInternalError,
             {
@@ -30,4 +30,6 @@ const std::unordered_map<InternalDiag, DiagInfo> getInternalDiagInfoMap() {
             },
         },
     };
+
+    return infoMap;
 }
