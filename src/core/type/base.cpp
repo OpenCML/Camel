@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,11 +98,32 @@ bool Type::special() const { return (static_cast<int>(code_) & 0b11'000000) == 0
 
 std::string Type::toString() const { return typeCodeToString(code_); }
 
-bool Type::operator==(const Type &other) const { return code_ == other.code_; }
-
-bool Type::operator!=(const Type &other) const { return code_ != other.code_; }
-
 bool Type::equals(const type_ptr_t &type) const { return type && *type == *this; }
+
+bool Type::assignable(const type_ptr_t &type) const {
+    if (!type)
+        return false;
+    if (this == type.get())
+        return true;
+
+    ASSERT(code_ != TypeCode::Ref && type->code_ != TypeCode::Ref, "Ref type cannot be assigned");
+    if (type->code_ == TypeCode::Any)
+        return true;
+    if (code_ == TypeCode::Any)
+        return false;
+    if (code_ == TypeCode::Void || type->code_ == TypeCode::Void)
+        return false;
+
+    if (code_ == TypeCode::Func && type->code_ == TypeCode::Func) {
+        // TODO: 这里需要进一步设计
+        return true;
+    }
+    if (structured() && type->structured()) {
+        return this->equals(type);
+    }
+
+    return code_ == type->code_;
+}
 
 CastSafety Type::castSafetyTo(const Type &other) const {
     if (code_ == other.code_) {
@@ -224,11 +245,20 @@ type_ptr_t Type::Void() {
     return type;
 }
 
-type_ptr_t Type::Func() {
+type_ptr_t Type::Func(
+    const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
+    const ModifierSet &modifiers) {
+    return make_shared<FunctionType>(
+        std::move(withTypes),
+        std::move(normTypes),
+        returnType,
+        modifiers);
+}
+
+type_ptr_t Type::AnyFunc() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(
-            make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Any()));
+        type = Func({}, {}, Void(), Modifier::None);
     }
     return type;
 }

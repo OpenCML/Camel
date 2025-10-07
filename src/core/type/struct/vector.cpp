@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,9 @@ string VectorType::toString() const { return "Vector<" + elementType_->toString(
 std::optional<type_ptr_t> VectorType::typeAt(struct_idx_t idx) const { return elementType_; }
 
 bool VectorType::operator==(const Type &other) const {
+    if (this == &other) {
+        return true;
+    }
     if (other.code() != TypeCode::Vector) {
         return false;
     }

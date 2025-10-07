@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,10 @@ FunctionType::FunctionType(
     const param_init_list_t &withTypes, const param_init_list_t &normTypes,
     const type_ptr_t &returnType, const ModifierSet &modifiers)
     : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(withTypes),
-      normTypes_(normTypes), exitType_(returnType) {}
+      normTypes_(normTypes), exitType_(returnType) {
+    // 通过此方式构造的FunctionType，没有编译期信息
+    hasCompileInfo_ = false;
+}
 
 FunctionType::FunctionType(
     const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
@@ -132,6 +135,9 @@ string FunctionType::toString() const {
     if (withTypes_.size() > 0) {
         result += "<";
         for (size_t i = 0; i < withTypes_.size(); i++) {
+            if (i > 0) {
+                result += ", ";
+            }
             const auto &type = withTypes_[i];
             if (hasCompileInfo_) {
                 const auto &name = argNames_.at(i);
@@ -140,12 +146,15 @@ string FunctionType::toString() const {
             if (type.second) {
                 result += "var ";
             }
-            result += type.first->toString() + ", ";
+            result += type.first->toString();
         }
         result += "> ";
     }
     result += "(";
     for (size_t i = 0; i < normTypes_.size(); i++) {
+        if (i > 0) {
+            result += ", ";
+        }
         const auto &type = normTypes_[i];
         if (hasCompileInfo_) {
             size_t idx = i + withTypes_.size();
@@ -168,6 +177,9 @@ string FunctionType::toString() const {
 }
 
 bool FunctionType::operator==(const Type &other) const {
+    if (this == &other) {
+        return true;
+    }
     if (other.code() != TypeCode::Func) {
         return false;
     }

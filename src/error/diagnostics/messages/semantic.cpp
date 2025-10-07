@@ -172,6 +172,5 @@ const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
                 "Consider waiting the function using the 'wait' keyword.",
             },
         },
-
     };
 };

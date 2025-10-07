@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,13 +40,34 @@ class FunctionType : public SpecialType {
         const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
         const ModifierSet &modifiers = Modifier::None);
 
+    virtual ~FunctionType() = default;
+
+    static func_type_ptr_t create(
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes,
+        const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None) {
+        return std::make_shared<FunctionType>(withTypes, normTypes, returnType, modifiers);
+    }
+    static func_type_ptr_t create(
+        const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
+        const ModifierSet &modifiers = Modifier::None) {
+        return std::make_shared<FunctionType>(withTypes, normTypes, returnType, modifiers);
+    }
+    static func_type_ptr_t create(
+        const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
+        const ModifierSet &modifiers = Modifier::None) {
+        return std::make_shared<FunctionType>(
+            std::move(withTypes),
+            std::move(normTypes),
+            returnType,
+            modifiers);
+    }
+
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
 
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
     bool hasModifier(Modifier mod) const { return modifiers_.has(mod); }
-    bool hasSideEffect() const;
     bool checkModifiers() const;
 
     // 供编译期由GCT构造使用

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,9 +30,14 @@ std::optional<type_ptr_t> ListType::typeAt(struct_idx_t idx) const {
     return std::nullopt;
 }
 
-bool ListType::operator==(const Type &other) const { return true; }
+bool ListType::operator==(const Type &other) const {
+    if (this == &other) {
+        return true;
+    }
+    return other.code() == TypeCode::List;
+}
 
-bool ListType::operator!=(const Type &other) const { return false; }
+bool ListType::operator!=(const Type &other) const { return other.code() != TypeCode::List; }
 
 CastSafety ListType::castSafetyTo(const Type &other) const {
     if (other.structured()) {

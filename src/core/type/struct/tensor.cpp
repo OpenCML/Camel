@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,6 +59,9 @@ std::optional<type_ptr_t> TensorType::typeAt(struct_idx_t idx) const {
 }
 
 bool TensorType::operator==(const Type &other) const {
+    if (this == &other) {
+        return true;
+    }
     if (other.code() != TypeCode::Tensor) {
         return false;
     }

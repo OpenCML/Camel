@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,8 +28,8 @@ class SpecialType : public Type {
 
     virtual std::string toString() const override { return typeCodeToString(code_); }
 
-    virtual bool operator==(const Type &other) const override { return code_ == other.code(); }
-    virtual bool operator!=(const Type &other) const override { return code_ != other.code(); }
+    virtual bool operator==(const Type &other) const override = 0;
+    virtual bool operator!=(const Type &other) const override = 0;
 
     virtual CastSafety castSafetyTo(const Type &other) const override;
 };

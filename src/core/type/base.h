@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -120,10 +120,11 @@ class Type {
 
     virtual std::string toString() const;
 
-    virtual bool operator==(const Type &other) const;
-    virtual bool operator!=(const Type &other) const;
+    virtual bool operator==(const Type &other) const = 0;
+    virtual bool operator!=(const Type &other) const = 0;
 
     bool equals(const type_ptr_t &type) const;
+    bool assignable(const type_ptr_t &type) const;
 
     virtual CastSafety castSafetyTo(const Type &other) const;
 
@@ -151,7 +152,10 @@ class Type {
 
     static type_ptr_t Any();
     static type_ptr_t Void();
-    static type_ptr_t Func();
+    static type_ptr_t Func(
+        const param_vec_t &&withTypes = {}, const param_vec_t &&normTypes = {},
+        const type_ptr_t &returnType = Type::Void(), const ModifierSet &modifiers = Modifier::None);
+    static type_ptr_t AnyFunc();
 
     static type_ptr_t Ref();
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "base.h"
 #include "primary.h"
+#include "resolver.h"
 #include "special/func.h"
 #include "struct/array.h"
 #include "struct/dict.h"
