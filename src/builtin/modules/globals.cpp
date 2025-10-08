@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,9 +80,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -135,9 +132,51 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
+                            if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
+                            return norm[0];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "__assn_sub__",
+            {
+                {
+                    ":op/assn_sub_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/assn_sub_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/assn_sub_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float(), true}, {Type::Float(), false}},
+                        Type::Float()),
+                },
+                {
+                    ":op/assn_sub_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Double(), true}, {Type::Double(), false}},
+                        Type::Double()),
+                },
+                {
+                    ":op/assn_sub",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {true, false}}},
+                        "(var self: typeas T, other: T) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -183,9 +222,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -231,9 +267,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -265,9 +298,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -285,9 +315,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -296,18 +323,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "__assn_exp__",
+            "__assn_pow__",
             {
                 {
-                    ":op/assn_exp",
+                    ":op/assn_pow",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -319,62 +343,30 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__assn_and__",
             {
                 {
-                    ":op/assn_and_b",
+                    ":op/assn_and",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
                         Type::Bool()),
-                },
-                {
-                    ":op/assn_and",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
-                            if (!norm[0]->equals(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
                 },
             }),
         OperatorGroup::create(
             "__assn_or__",
             {
                 {
-                    ":op/assn_or_b",
+                    ":op/assn_or",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
                         Type::Bool()),
                 },
-                {
-                    ":op/assn_or",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
-                            if (!norm[0]->equals(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
         // ======= 逻辑运算符 =======
         OperatorGroup::create(
-            "__or__",
+            "__and__",
             {
                 {
-                    ":op/or_b",
+                    ":op/and",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), false}, {Type::Bool(), false}},
@@ -382,10 +374,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "__and__",
+            "__or__",
             {
                 {
-                    ":op/and_b",
+                    ":op/or",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), false}, {Type::Bool(), false}},
@@ -445,9 +437,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -507,9 +496,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2) {
-                                return nullopt;
-                            }
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -770,8 +756,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2)
-                                return nullopt;
                             if (!norm[0]->assignable(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -816,8 +800,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2)
-                                return nullopt;
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -862,8 +844,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2)
-                                return nullopt;
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -908,8 +888,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2)
-                                return nullopt;
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -940,15 +918,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2)
-                                return nullopt;
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
                         }),
                 },
             }),
-        OperatorGroup::create("__mat__", {}), // 暂不支持矩阵乘
         OperatorGroup::create(
             "__pow__",
             {
@@ -987,61 +962,83 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2)
-                                return nullopt;
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
                         }),
                 },
             }),
+        OperatorGroup::create("__mat__", {}), // 暂不支持矩阵乘
         OperatorGroup::create(
             "__idx__",
             {
                 {
-                    ":op/idx",
+                    ":op/idx_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
-                        "(collect: typeas T, index: int32) => ValOf<T>",
+                        "(arr: Array<T, n>, index: int32) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with.size() != 0 || norm.size() != 2)
+                            if (norm[0]->code() != TypeCode::Array ||
+                                norm[1]->code() != TypeCode::Int32)
                                 return nullopt;
-                            const auto &collect = norm[0];
-                            if (!norm[0]->structured())
+                            return tt::as_shared<ArrayType>(norm[0])->elementType();
+                        }),
+                },
+                {
+                    ":op/idx_vec",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(vec: Vector<T>, index: int32) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Vector ||
+                                norm[1]->code() != TypeCode::Int32)
                                 return nullopt;
-                            switch (norm[0]->code()) {
-                            case TypeCode::Array: {
-                                if (norm[1]->code() != TypeCode::Int32)
-                                    return nullopt;
-                                return tt::as_shared<ArrayType>(norm[0])->elementType();
-                            }
-                            case TypeCode::Vector: {
-                                if (norm[1]->code() != TypeCode::Int32)
-                                    return nullopt;
-                                return tt::as_shared<VectorType>(norm[0])->elementType();
-                            }
-                            case TypeCode::Map: {
-                                const auto &mapType = tt::as_shared<MapType>(norm[0]);
-                                if (!mapType->keyType()->equals(norm[1]))
-                                    return nullopt;
-                                return mapType->valueType();
-                            }
-                            case TypeCode::Set: {
-                                const auto &setType = tt::as_shared<SetType>(norm[0]);
-                                if (!setType->valueType()->equals(norm[1]))
-                                    return nullopt;
-                                return setType->valueType();
-                            }
-                            case TypeCode::String: {
-                                if (norm[1]->code() != TypeCode::Int32)
-                                    return nullopt;
-                                return Type::String();
-                            }
-                            default:
-                                break;
-                            }
-                            return nullopt;
+                            return tt::as_shared<VectorType>(norm[0])->elementType();
+                        }),
+                },
+                {
+                    ":op/idx_map",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(map: Map<K, V>, key: K) => V",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Map)
+                                return nullopt;
+                            const auto &mapType = tt::as_shared<MapType>(norm[0]);
+                            if (!mapType->keyType()->equals(norm[1]))
+                                return nullopt;
+                            return mapType->valueType();
+                        }),
+                },
+                {
+                    ":op/idx_set",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(set: Set<T>, val: T) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Set)
+                                return nullopt;
+                            const auto &setType = tt::as_shared<SetType>(norm[0]);
+                            if (!setType->valueType()->equals(norm[1]))
+                                return nullopt;
+                            return setType->valueType();
+                        }),
+                },
+                {
+                    ":op/idx_str",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(str: string, index: int32) => string",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::String ||
+                                norm[1]->code() != TypeCode::Int32)
+                                return nullopt;
+                            return Type::String();
                         }),
                 },
             }),
@@ -1050,12 +1047,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__not__",
             {
                 {
-                    ":op/not_b",
-                    StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Bool()),
-                },
-                {
                     ":op/not",
-                    StaticFuncTypeResolver::create({}, {{Type::Any(), false}}, Type::Bool()),
+                    StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Bool()),
                 },
             }),
         OperatorGroup::create(
@@ -1083,11 +1076,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(self: typeas T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm.size() != 1)
-                                return nullopt;
-                            return norm[0];
-                        }),
+                            -> optional<type_ptr_t> { return norm[0]; }),
                 },
             }),
         OperatorGroup::create(
@@ -1107,11 +1096,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(self: typeas T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm.size() != 1)
-                                return nullopt;
-                            return norm[0];
-                        }),
+                            -> optional<type_ptr_t> { return norm[0]; }),
                 },
             }),
         // ======= IO =======
@@ -1125,8 +1110,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(prompt: string) => string",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (norm.size() != 1)
-                                return nullopt;
                             if (!norm[0]->equals(Type::String()))
                                 return nullopt;
                             return Type::String();
@@ -1566,8 +1549,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(vec: Vector<T>, value: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (norm.size() != 2)
-                                return nullopt;
                             if (with[0]->code() != TypeCode::Vector)
                                 return nullopt;
                             const auto &vecType = tt::as_shared<VectorType>(with[0]);
@@ -1715,8 +1696,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(lhs: (arg1: T1, arg2: T2, ...) => R, rhs: (arg: R) => U) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (norm.size() != 2)
-                                return nullopt;
                             if (norm[0]->code() != TypeCode::Func)
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Func)

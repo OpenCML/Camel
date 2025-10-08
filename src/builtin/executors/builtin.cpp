@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,58 +32,162 @@
 #include "../operators/this.h"
 #include "../operators/time.h"
 
-const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
+const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
         {"not-impl", __not_implemented__},
 
         // ops
+        {"op/assn_i", __builtin__assn__},
+        {"op/assn_l", __builtin__assn__},
+        {"op/assn_f", __builtin__assn__},
+        {"op/assn_d", __builtin__assn__},
+        {"op/assn_s", __builtin__assn__},
+        {"op/assn_b", __builtin__assn__},
         {"op/assn", __builtin__assn__},
+
+        {"op/assn_add_i", __builtin__assn_add__},
+        {"op/assn_add_l", __builtin__assn_add__},
+        {"op/assn_add_f", __builtin__assn_add__},
+        {"op/assn_add_d", __builtin__assn_add__},
+        {"op/assn_add_s", __builtin__assn_add__},
         {"op/assn_add", __builtin__assn_add__},
+
+        {"op/assn_sub_i", __builtin__assn_sub__},
+        {"op/assn_sub_l", __builtin__assn_sub__},
+        {"op/assn_sub_f", __builtin__assn_sub__},
+        {"op/assn_sub_d", __builtin__assn_sub__},
         {"op/assn_sub", __builtin__assn_sub__},
+
+        {"op/assn_mul_i", __builtin__assn_mul__},
+        {"op/assn_mul_l", __builtin__assn_mul__},
+        {"op/assn_mul_f", __builtin__assn_mul__},
+        {"op/assn_mul_d", __builtin__assn_mul__},
         {"op/assn_mul", __builtin__assn_mul__},
+
+        {"op/assn_div_i", __builtin__assn_div__},
+        {"op/assn_div_l", __builtin__assn_div__},
+        {"op/assn_div_f", __builtin__assn_div__},
+        {"op/assn_div_d", __builtin__assn_div__},
         {"op/assn_div", __builtin__assn_div__},
+
+        {"op/assn_mod_i", __builtin__assn_mod__},
+        {"op/assn_mod_l", __builtin__assn_mod__},
         {"op/assn_mod", __builtin__assn_mod__},
+
         {"op/assn_mat", __builtin__assn_mat__},
-        {"op/assn_exp", __builtin__assn_exp__},
+
+        {"op/assn_pow", __builtin__assn_pow__},
+
         {"op/assn_and", __builtin__assn_and__},
         {"op/assn_or", __builtin__assn_or__},
-        {"op/or", __builtin__or__},
         {"op/and", __builtin__and__},
+        {"op/or", __builtin__or__},
+
+        {"op/eq_i", __builtin__eq__},
+        {"op/eq_l", __builtin__eq__},
+        {"op/eq_f", __builtin__eq__},
+        {"op/eq_d", __builtin__eq__},
+        {"op/eq_b", __builtin__eq__},
+        {"op/eq_s", __builtin__eq__},
         {"op/eq", __builtin__eq__},
+
+        {"op/neq_i", __builtin__neq__},
+        {"op/neq_l", __builtin__neq__},
+        {"op/neq_f", __builtin__neq__},
+        {"op/neq_d", __builtin__neq__},
+        {"op/neq_b", __builtin__neq__},
+        {"op/neq_s", __builtin__neq__},
         {"op/neq", __builtin__neq__},
+
         {"op/strict_eq", __builtin__strict_eq__},
         {"op/strict_neq", __builtin__strict_neq__},
+
+        {"op/lt_i", __builtin__lt__},
+        {"op/lt_l", __builtin__lt__},
+        {"op/lt_f", __builtin__lt__},
+        {"op/lt_d", __builtin__lt__},
+        {"op/lt_s", __builtin__lt__},
         {"op/lt", __builtin__lt__},
+
+        {"op/le_i", __builtin__le__},
+        {"op/le_l", __builtin__le__},
+        {"op/le_f", __builtin__le__},
+        {"op/le_d", __builtin__le__},
+        {"op/le_s", __builtin__le__},
         {"op/le", __builtin__le__},
+
+        {"op/gt_i", __builtin__gt__},
+        {"op/gt_l", __builtin__gt__},
+        {"op/gt_f", __builtin__gt__},
+        {"op/gt_d", __builtin__gt__},
+        {"op/gt_s", __builtin__gt__},
         {"op/gt", __builtin__gt__},
+
+        {"op/ge_i", __builtin__ge__},
+        {"op/ge_l", __builtin__ge__},
+        {"op/ge_f", __builtin__ge__},
+        {"op/ge_d", __builtin__ge__},
+        {"op/ge_s", __builtin__ge__},
         {"op/ge", __builtin__ge__},
+
+        {"op/add_i", __builtin__add__},
+        {"op/add_l", __builtin__add__},
+        {"op/add_f", __builtin__add__},
+        {"op/add_d", __builtin__add__},
+        {"op/add_s", __builtin__add__},
         {"op/add", __builtin__add__},
+
+        {"op/sub_i", __builtin__sub__},
+        {"op/sub_l", __builtin__sub__},
+        {"op/sub_f", __builtin__sub__},
+        {"op/sub_d", __builtin__sub__},
         {"op/sub", __builtin__sub__},
+
+        {"op/mul_i", __builtin__mul__},
+        {"op/mul_l", __builtin__mul__},
+        {"op/mul_f", __builtin__mul__},
+        {"op/mul_d", __builtin__mul__},
         {"op/mul", __builtin__mul__},
+
+        {"op/div_i", __builtin__div__},
+        {"op/div_l", __builtin__div__},
+        {"op/div_f", __builtin__div__},
+        {"op/div_d", __builtin__div__},
         {"op/div", __builtin__div__},
+
+        {"op/mod_i", __builtin__mod__},
+        {"op/mod_l", __builtin__mod__},
         {"op/mod", __builtin__mod__},
-        {"op/mat", __builtin__mat__},
+
+        {"op/pow_i", __builtin__pow__},
+        {"op/pow_l", __builtin__pow__},
+        {"op/pow_f", __builtin__pow__},
+        {"op/pow_d", __builtin__pow__},
         {"op/pow", __builtin__pow__},
-        {"op/idx", __builtin__idx__},
+
+        {"op/mat", __builtin__mat__},
+
+        {"op/idx_arr", __builtin__idx__},
+        {"op/idx_vec", __builtin__idx__},
+        {"op/idx_map", __builtin__idx__},
+        {"op/idx_set", __builtin__idx__},
+        {"op/idx_str", __builtin__idx__},
+
         {"op/not", __builtin__not__},
+
+        {"op/neg_i", __builtin__neg__},
+        {"op/neg_l", __builtin__neg__},
+        {"op/neg_f", __builtin__neg__},
+        {"op/neg_d", __builtin__neg__},
         {"op/neg", __builtin__neg__},
+
+        {"op/inv_i", __builtin__inv__},
+        {"op/inv_l", __builtin__inv__},
         {"op/inv", __builtin__inv__},
+
+        {"io/input", __input__},
         {"io/print", __print__},
         {"io/println", __println__},
-        {"io/input", __input__},
-
-        // struct
-        {"struct/len", __len__},
-        {"struct/zip", __zip__},
-        {"struct/head", __head__},
-        {"struct/tail", __tail__},
-        {"struct/range", __range__},
-        {"struct/slice", __slice__},
-        {"struct/concat", __concat__},
-        {"struct/concat", __concat__},
-        {"struct/append", __append__},
-        {"struct/extend", __extend__},
-        {"struct/contains", __contains__},
 
         // os
         {"os/exit", __exit__},
@@ -95,19 +199,70 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"os/get_chars", __get_chars__},
         {"os/clear_input_buffer", __clear_input_buffer__},
 
-        // str
+        // string
         {"str/format", __format__},
+
+        {"str/join_arr", __join__},
+        {"str/join_vec", __join__},
         {"str/join", __join__},
 
+        // struct
+        {"struct/len_str", __len__},
+        {"struct/len_arr", __len__},
+        {"struct/len_vec", __len__},
+        {"struct/len_map", __len__},
+        {"struct/len_set", __len__},
+
+        {"struct/zip", __zip__},
+
+        {"struct/head_arr", __head__},
+        {"struct/head_vec", __head__},
+
+        {"struct/tail_arr", __tail__},
+        {"struct/tail_vec", __tail__},
+
+        {"struct/range", __range__},
+
+        {"struct/slice_arr", __slice__},
+        {"struct/slice_vec", __slice__},
+
+        {"struct/concat_arr", __concat__},
+        {"struct/concat_vec", __concat__},
+
+        {"struct/append_vec", __append__},
+
+        {"struct/extend_vec", __extend__},
+
+        {"struct/contains_str", __contains__},
+        {"struct/contains_arr", __contains__},
+        {"struct/contains_vec", __contains__},
+
         // math
-        {"math/abs", __abs__},
-        {"math/exp", __exp__},
-        {"math/round", __round__},
-        {"math/ceil", __ceil__},
-        {"math/floor", __floor__},
-        {"math/bin", __bin__},
-        {"math/oct", __oct__},
-        {"math/hex", __hex__},
+        {"math/abs_i", __abs__},
+        {"math/abs_l", __abs__},
+        {"math/abs_f", __abs__},
+        {"math/abs_d", __abs__},
+
+        {"math/exp_f", __exp__},
+        {"math/exp_d", __exp__},
+
+        {"math/round_f", __round__},
+        {"math/round_d", __round__},
+
+        {"math/ceil_f", __ceil__},
+        {"math/ceil_d", __ceil__},
+
+        {"math/floor_f", __floor__},
+        {"math/floor_d", __floor__},
+
+        {"math/bin_i", __bin__},
+        {"math/bin_l", __bin__},
+
+        {"math/oct_i", __oct__},
+        {"math/oct_l", __oct__},
+
+        {"math/hex_i", __hex__},
+        {"math/hex_l", __hex__},
 
         // time
         {"time/now", __now__},
@@ -124,12 +279,12 @@ const std::unordered_map<std::string, operator_t> &getOpsOpMap() {
         {"zen", __zen__},
 
         // macro
-        {"macro/bind", __cmp__},
+        {"macro/cmp", __cmp__},
     };
     return map;
 }
 
-BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsOpMap()) {};
+BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {};
 
 OperatorReturnCode
 BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {

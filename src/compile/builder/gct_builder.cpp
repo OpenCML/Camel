@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -574,7 +574,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__assn_mat__");
     } break;
     case AST::BinaryDataOp::AssignExp: {
-        opNode = createNodeAs<DRefLoad>("__assn_exp__");
+        opNode = createNodeAs<DRefLoad>("__assn_pow__");
     } break;
     case AST::BinaryDataOp::AssignAnd: {
         opNode = createNodeAs<DRefLoad>("__assn_and__");

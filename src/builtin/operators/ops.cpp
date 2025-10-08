@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -299,8 +299,8 @@ OperatorReturnCode __builtin__assn_mod__(GIR::node_ptr_t &self, Frame &frame, Co
     return eval_assignment_op(self, frame, ctx, "assn_mod", do_mod, false, true);
 }
 
-OperatorReturnCode __builtin__assn_exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    return eval_assignment_op(self, frame, ctx, "assn_exp", do_pow);
+OperatorReturnCode __builtin__assn_pow__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    return eval_assignment_op(self, frame, ctx, "assn_pow", do_pow);
 }
 
 OperatorReturnCode __builtin__assn_and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
