@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -222,9 +222,34 @@ int main(int argc, char *argv[]) {
                     }
                 }());
 
-                // FallbackExecSchedPass pass(ctx);
-                TaskflowExecSchedPass pass(ctx);
-                pass.apply(ctx->rootGraph());
+                if (Run::targetFiles.size() > 1) {
+                    std::vector<std::string> passes(
+                        Run::targetFiles.begin() + 1,
+                        Run::targetFiles.end());
+                    // GraphIR::graph_ptr_t entry = ctx->rootGraph();
+                    for (const auto &p : passes) {
+                        l.in("Main").info("Applying pass: {}", p);
+                        if (p == "std::graphviz") {
+                            GraphVizDumpPass pass(ctx);
+                            pass.apply(ctx->rootGraph());
+                        } else if (p == "std::topo_node_seq") {
+                            TopoNodeSeqDumpPass pass(ctx);
+                            pass.apply(ctx->mainGraph());
+                        } else if (p == "std::linear") {
+                            FallbackExecSchedPass pass(ctx);
+                            pass.apply(ctx->rootGraph());
+                        } else if (p == "std::parallel" || p == "std::taskflow") {
+                            TaskflowExecSchedPass pass(ctx);
+                            pass.apply(ctx->rootGraph());
+                        } else {
+                            throw CamelBaseException("Unknown pass: " + p);
+                        }
+                    }
+                } else {
+                    FallbackExecSchedPass pass(ctx);
+                    pass.apply(ctx->rootGraph());
+                }
+
                 // int exitCode = ctx->getExitCode();
                 const auto &diags = ctx->rtmDiags();
                 if (diags->hasErrors()) {
