@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,8 +49,6 @@ class Data : public std::enable_shared_from_this<Data> {
     virtual ~Data() = default;
 
     virtual type_ptr_t type() const;
-    entity_ptr_t entity();
-    void setEntity(const entity_ptr_t &entity);
 
     bool variable() const;
     void setVariable();

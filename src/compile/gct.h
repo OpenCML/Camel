@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,6 @@
 #include "common/ref.h"
 #include "common/tree.h"
 #include "core/data/data.h"
-#include "core/data/entity.h"
 #include "core/func.h"
 #include "utils/assert.h"
 

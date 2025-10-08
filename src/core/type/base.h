@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,13 +94,6 @@ using data_wptr_t = std::weak_ptr<Data>;
 using data_lst_t = std::list<data_ptr_t>;
 using data_vec_t = std::vector<data_ptr_t>;
 using data_list_t = std::initializer_list<data_ptr_t>;
-
-class Entity;
-using entity_ptr_t = std::shared_ptr<Entity>;
-using entity_wptr_t = std::weak_ptr<Entity>;
-using entity_lst_t = std::list<entity_ptr_t>;
-using entity_vec_t = std::vector<entity_ptr_t>;
-using entity_list_t = std::initializer_list<entity_ptr_t>;
 
 class Type {
   protected:
