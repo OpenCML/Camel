@@ -26,6 +26,7 @@
 #include "builtin/passes/sched/linear/dump/graphviz.h"
 #include "builtin/passes/sched/linear/dump/topo_node_seq.h"
 #include "builtin/passes/sched/linear/exec/fallback.h"
+#include "builtin/passes/sched/parallel/exec/taskflow.h"
 #include "codegen/source/generator.h"
 #include "config.h"
 #include "core/module/userdef.h"
@@ -221,7 +222,8 @@ int main(int argc, char *argv[]) {
                     }
                 }());
 
-                FallbackExecSchedPass pass(ctx);
+                // FallbackExecSchedPass pass(ctx);
+                TaskflowExecSchedPass pass(ctx);
                 pass.apply(ctx->rootGraph());
                 // int exitCode = ctx->getExitCode();
                 const auto &diags = ctx->rtmDiags();

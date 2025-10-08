@@ -35,6 +35,7 @@ file(GLOB_RECURSE SRC_FILES
 find_package(fmt REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(Taskflow REQUIRED)
 
 add_definitions(-DNOMINMAX)
 add_executable(${PROJECT_NAME} ${SRC_FILES})
@@ -87,4 +88,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     fmt::fmt
     gtest::gtest
     nlohmann_json::nlohmann_json
+    Taskflow::Taskflow
 )
