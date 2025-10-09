@@ -19,11 +19,11 @@
 
 #pragma once
 
-#include "../linear.h"
+#include "../trans.h"
 
 #include <unordered_set>
 
-class GraphVizDumpPass : public LinearSchedPass {
+class GraphVizDumpPass : public GraphTranslatePass {
     bool showRawPtr = false;
     std::unordered_map<std::string, size_t> ptrCnt_;
     std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
@@ -41,7 +41,7 @@ class GraphVizDumpPass : public LinearSchedPass {
     std::string dumpGraph(const GraphIR::graph_ptr_t &graph);
 
   public:
-    GraphVizDumpPass(const context_ptr_t &context) : LinearSchedPass(context) {};
+    GraphVizDumpPass(const context_ptr_t &context) : GraphTranslatePass(context) {};
     virtual ~GraphVizDumpPass() = default;
 
     GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;

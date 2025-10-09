@@ -19,10 +19,10 @@
 
 #include "pass.h"
 
-#include "builtin/passes/sched/linear/dump/graphviz.h"
-#include "builtin/passes/sched/linear/dump/topo_node_seq.h"
-#include "builtin/passes/sched/linear/exec/fallback.h"
-#include "builtin/passes/sched/parallel/exec/taskflow.h"
+#include "builtin/passes/sched/linear/fallback/fallback.h"
+#include "builtin/passes/sched/parallel/taskflow/taskflow.h"
+#include "builtin/passes/trans/dot/graphviz.h"
+#include "builtin/passes/trans/tns/topo_node_seq.h"
 
 using namespace GraphIR;
 
