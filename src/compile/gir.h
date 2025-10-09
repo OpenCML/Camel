@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -113,6 +113,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
         return newGraph;
     }
 
+    static graph_ptr_t null() { return nullptr; }
+
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     bool looped() const { return looped_; }
@@ -189,8 +191,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
         graph->dependents_.insert(shared_from_this());
     }
 
-    void addNode(const node_ptr_t &node); // 由Node::create调用
-    void addPort(const node_ptr_t &node); // 由PortNode::create调用
+    void addNode(const node_ptr_t &node);                      // 由Node::create调用
+    void addPort(const node_ptr_t &node, bool isWith = false); // 由PortNode::create调用
     void addCapture(const node_ptr_t &node);
 
     const node_ptr_t &exitNode() const {
@@ -200,6 +202,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool hasOutput() const { return output_ != nullptr; }
     void setOutput(const node_ptr_t &node);
 
+    size_t withPortCnt() const { return withPortCnt_; }
     const node_vec_t &ports() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
     const node_set_t &capture() const { return capture_; }
@@ -219,6 +222,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     data_vec_t staticDataArr_;
     size_t runtimeDataSize_ = 0;
 
+    size_t withPortCnt_ = 0;
     node_vec_t ports_;
     node_vec_t nodes_;
     node_ptr_t output_;
@@ -311,26 +315,31 @@ class DataNode : public Node {
 };
 
 class PortNode : public Node {
-    bool isWithArg_ = false;
+    std::string name_;
+    bool isVar_;
 
   public:
-    PortNode(Graph &graph, size_t index, bool isWith = false)
-        : Node(graph, NodeType::PORT, index), isWithArg_(isWith) {}
+    PortNode(Graph &graph, size_t index, const std::string &name, bool isVar)
+        : Node(graph, NodeType::PORT, index), name_(name), isVar_(isVar) {}
     ~PortNode() = default;
 
-    static node_ptr_t create(Graph &graph, bool isWithArg = false) {
+    static node_ptr_t create(Graph &graph, const std::string &name, bool isVar) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<PortNode>(graph, index, isWithArg);
-        graph.addPort(node);
+        auto node = std::make_shared<PortNode>(graph, index, name, isVar);
+        // 这里不会自动调用，需要手动添加，因为ports的顺序非常重要
+        // graph.addPort(node);
         return node;
     }
 
-    bool isWithArg() const { return isWithArg_; }
+    const std::string &name() const { return name_; }
+    bool isVar() const { return isVar_; }
 
-    virtual std::string toString() const override { return std::format("PORT({})", dataIndex_); }
+    virtual std::string toString() const override {
+        return std::format("PORT({}): {}{}", dataIndex_, name_, isVar_ ? " (var)" : "");
+    }
 
     virtual node_ptr_t clone(Graph &graph) const override {
-        return PortNode::create(graph, isWithArg_);
+        return PortNode::create(graph, name_, isVar_);
     }
 };
 

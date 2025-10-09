@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 26, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,8 +71,6 @@ string typeCodeToString(TypeCode code) {
         return "Tuple";
     case TypeCode::Vector:
         return "Vector";
-    case TypeCode::Params:
-        return "Params";
     case TypeCode::Tensor:
         return "Tensor";
         // special types
@@ -229,7 +227,8 @@ type_ptr_t Type::Void() {
 type_ptr_t Type::Func() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<FunctionType>(nullptr, nullptr, Any()));
+        type = tt::as_shared<Type>(
+            make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Any()));
     }
     return type;
 }

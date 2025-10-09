@@ -2,6 +2,7 @@
 fmt/11.2.0
 gtest/1.15.0
 nlohmann_json/3.11.3
+taskflow/3.10.0
 
 [generators]
 CMakeDeps

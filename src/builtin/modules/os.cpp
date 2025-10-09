@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,38 +22,38 @@
 OSBuiltinModule::OSBuiltinModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
     exportBuiltinOperator(
         "whoami",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":os/whoami");
     exportBuiltinOperator(
         "set_terminal_raw_mode",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":os/set_terminal_raw_mode");
     exportBuiltinOperator(
         "has_input",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":os/has_input");
     exportBuiltinOperator(
         "get_char",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":os/get_char");
     exportBuiltinOperator(
         "get_chars",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":os/get_chars");
     exportBuiltinOperator(
         "clear_input_buffer",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":os/clear_input_buffer");
 }

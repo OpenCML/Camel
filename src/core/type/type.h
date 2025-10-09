@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,6 @@
 #include "struct/dict.h"
 #include "struct/list.h"
 #include "struct/map.h"
-#include "struct/params.h"
 #include "struct/set.h"
 #include "struct/tensor.h"
 #include "struct/tuple.h"

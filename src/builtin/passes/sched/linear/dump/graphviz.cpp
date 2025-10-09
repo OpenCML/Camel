@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -163,7 +163,7 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
+std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         // Skip if the graph has already been visited to avoid duplication
         return string("");
@@ -174,7 +174,6 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     string funcId = pointerToIdent(graph.get(), "F");
     string funcName = graph->name();
     string res;
-    unordered_map<size_t, pair<string, bool>> portsNameMap;
 
     res += baseIndent_;
 
@@ -186,12 +185,6 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
-        for (size_t i = 0; i < graph->ports().size(); i++) {
-            const string name = type->argNameAt(i);
-            bool isVar = type->variableMap().at(name);
-            portsNameMap[i] = make_pair(name, isVar);
-        }
-
         res += std::format("subgraph cluster_{} {{\r\n", funcId);
         res += std::format("{}{}label=\"{}\";\r\n", baseIndent_, indent_, funcName);
     }
@@ -202,7 +195,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             l.in("GraphViz")
                 .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
         pushIndent();
-        res += any_cast<string>(apply(subGraph));
+        res += dumpGraph(subGraph);
         popIndent();
     }
 
@@ -212,7 +205,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             l.in("GraphViz")
                 .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
         pushIndent();
-        res += any_cast<string>(apply(dep));
+        res += dumpGraph(dep);
         popIndent();
     }
 
@@ -227,16 +220,15 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     // Draw nodes inside the graph
     const node_vec_t &ports = graph->ports();
-    for (size_t i = 0; i < ports.size(); ++i) {
-        ASSERT(portsNameMap.contains(i), "Port index out of range.");
-        string label = portsNameMap[i].first;
-        const auto &node = ports[i];
-        string tooltip = graph->name() + "::" + node->toString();
+    for (const auto &port : ports) {
+        const auto &portNode = tt::as_shared<PortNode>(port);
+        string label = portNode->name();
+        string tooltip = graph->name() + "::" + portNode->toString();
         res += std::format(
             "{}{}{} [label=\"{}\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
             baseIndent_,
             indent_,
-            pointerToIdent(node.get()),
+            pointerToIdent(portNode.get()),
             escape(wrapText(label, 7, 2)),
             std::format("{}\\n{}", escape(label), escape(tooltip)));
     }
@@ -252,11 +244,6 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             auto sourceNode = tt::as_shared<DataNode>(node);
             data_ptr_t data = sourceNode->data();
             label = data->toString();
-            break;
-        }
-        case NodeType::PORT: {
-            label = portsNameMap[i].first;
-            style = "dashed";
             break;
         }
         case NodeType::COPY: {
@@ -332,9 +319,9 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     // Connect ARGS node to port nodes
     size_t withIdx = 0, normIdx = 0;
-    for (const auto &node : graph->ports()) {
-        const auto &portNode = tt::as_shared<PortNode>(node);
-        bool isWithArg = portNode->isWithArg();
+    for (size_t i = 0; i < ports.size(); ++i) {
+        bool isWithArg = i < graph->withPortCnt();
+        const auto &portNode = tt::as_shared<PortNode>(ports[i]);
         string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", style={}];\r\n",
@@ -414,4 +401,9 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     res += baseIndent_ + "}\r\n";
     return res;
+}
+
+graph_ptr_t GraphVizDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+    os << dumpGraph(graph);
+    return graph;
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -72,7 +72,7 @@ enum class BinaryDataOp {
     Index
 };
 
-enum class ReservedDataOp { NullThen, ErrorThen, NotNullThen, Access, Call, With, Comp, As, Is };
+enum class ReservedDataOp { NullThen, ErrorThen, NotNullThen, Access, Call, Bind, Comp, As, Is };
 
 std::string to_string(DataType type);
 std::string to_string(UnaryDataOp op);

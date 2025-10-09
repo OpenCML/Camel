@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -25,7 +25,6 @@
 
 #include "builtin/passes/sched/linear/dump/graphviz.h"
 #include "builtin/passes/sched/linear/dump/topo_node_seq.h"
-#include "builtin/passes/sched/linear/exec/fallback.h"
 #include "codegen/source/generator.h"
 #include "config.h"
 #include "core/module/userdef.h"
@@ -187,14 +186,12 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
                     auto root = ctx->rootGraph();
-                    auto res = pass.apply(root);
-                    os << any_cast<string>(res);
+                    auto res = pass.apply(root, os);
                 }
-                if (Inspect::dumpTNS && ctx->mainGraph()) {
-                    auto entry = ctx->mainGraph();
+                if (Inspect::dumpTNS && ctx->rootGraph()) {
+                    auto entry = ctx->rootGraph();
                     TopoNodeSeqDumpPass pass(ctx);
-                    auto res = pass.apply(entry);
-                    os << any_cast<string>(res);
+                    auto res = pass.apply(entry, os);
                 }
                 return 0;
             }
@@ -221,13 +218,17 @@ int main(int argc, char *argv[]) {
                     }
                 }());
 
-                FallbackExecSchedPass pass(ctx);
-                pass.apply(ctx->rootGraph());
-                // int exitCode = ctx->getExitCode();
-                const auto &diags = ctx->rtmDiags();
-                if (diags->hasErrors()) {
-                    diags->dump(os, useJsonFormat);
-                    return 1;
+                std::vector<std::string> passes(
+                    Run::targetFiles.begin() + 1,
+                    Run::targetFiles.end());
+                int retCode = applyPasses(passes, ctx, os);
+
+                if (retCode != 0) {
+                    const auto &diags = ctx->rtmDiags();
+                    if (diags->hasErrors()) {
+                        diags->dump(os, useJsonFormat);
+                    }
+                    return retCode;
                 }
 
                 EXEC_WHEN_DEBUG([] {

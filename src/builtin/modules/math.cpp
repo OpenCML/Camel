@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,50 +22,50 @@
 MathBuiltinModule::MathBuiltinModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
     exportBuiltinOperator(
         "abs",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/abs");
     exportBuiltinOperator(
         "exp",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/exp");
     exportBuiltinOperator(
         "round",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/round");
     exportBuiltinOperator(
         "ceil",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/ceil");
     exportBuiltinOperator(
         "floor",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/floor");
     exportBuiltinOperator(
         "bin",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/bin");
     exportBuiltinOperator(
         "oct",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/oct");
     exportBuiltinOperator(
         "hex",
-        param_init_list{},
-        {{"value", Type::Any(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Any(), false}},
         Type::Void(),
         ":math/hex");
 }

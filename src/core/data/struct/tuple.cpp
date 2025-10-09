@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
-#include "params.h"
 #include "utils/scope.h"
 
 #include "../other/any.h"
@@ -150,11 +149,3 @@ const string TupleData::toString() const {
 }
 
 void TupleData::print(std::ostream &os) const { os << toString(); }
-
-data_ptr_t TupleData::convertToParams(const std::shared_ptr<ParamsType> &target) {
-    auto params = make_shared<ParamsData>();
-    for (const auto &e : data_) {
-        params->emplace(e);
-    }
-    return params->convertToParams(target);
-}

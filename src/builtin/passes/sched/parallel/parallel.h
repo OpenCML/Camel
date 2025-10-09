@@ -12,19 +12,20 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 05, 2025
+ * Created: Oct. 02, 2025
  * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../pass.h"
+#include "execute/sched/sched.h"
 
-class SchedulePass : public GraphIRPass {
+class ParallelSchedPass : public SchedulePass {
+
   public:
-    SchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~SchedulePass() = default;
+    ParallelSchedPass(const context_ptr_t &ctx) : SchedulePass(ctx) {};
+    virtual ~ParallelSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
 };

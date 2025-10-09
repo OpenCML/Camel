@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -432,13 +432,14 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
     return result;
 }
 
-any FallbackExecSchedPass::apply(const graph_ptr_t &graph) {
+graph_ptr_t FallbackExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     auto rootFrame = Frame::create(nullptr, *graph);
     auto optMainGraph = graph->getSubGraph("main");
     ASSERT(optMainGraph.has_value(), "Main graph not found.");
     auto mainGraph = optMainGraph.value();
     auto mainFrame = Frame::create(rootFrame, *mainGraph);
-    return evalGraph(mainGraph.get(), mainFrame);
+    evalGraph(mainGraph.get(), mainFrame);
+    return Graph::null();
 }
 
 void FallbackExecSchedPass::evalMarkedOperator(
@@ -476,7 +477,7 @@ void FallbackExecSchedPass::evalMarkedOperator_map(const node_ptr_t &node, frame
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
     }
     auto func = funcData->as<FunctionData>(Type::Func());
-    type_ptr_t funcRetType = func->funcType()->returnType();
+    type_ptr_t funcRetType = func->funcType()->exitType();
 
     auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
         data_vec_t res;

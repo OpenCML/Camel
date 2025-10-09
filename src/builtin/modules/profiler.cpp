@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,29 +67,29 @@ bool ProfilerBuiltinModule::load() {
 
     exportBuiltinOperator(
         "begin",
-        param_init_list{},
-        {{"name", Type::String(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::String(), false}},
         Type::Void(),
         ":profiler/begin");
 
     exportBuiltinOperator(
         "end",
-        param_init_list{},
-        {{"name", Type::String(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::String(), false}},
         Type::Void(),
         ":profiler/end");
 
     exportBuiltinOperator(
         "instant",
-        param_init_list{},
-        {{"name", Type::String(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::String(), false}},
         Type::Void(),
         ":profiler/instant");
 
     exportBuiltinOperator(
         "enable",
-        param_init_list{},
-        {{"enabled", Type::Bool(), nullptr, false}},
+        param_init_list_t{},
+        {{Type::Bool(), false}},
         Type::Void(),
         ":profiler/enable");
 

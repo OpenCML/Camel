@@ -12,19 +12,29 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 05, 2025
+ * Created: Oct. 03, 2024
  * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "resolver.h"
 
-#include "../pass.h"
+std::optional<func_type_ptr_t>
+StaticFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
+    if (!funcType_) {
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
 
-class SchedulePass : public GraphIRPass {
-  public:
-    SchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~SchedulePass() = default;
-
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
-};
+std::optional<func_type_ptr_t>
+DynamicFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
+    if (!resolver_) {
+        return std::nullopt;
+    }
+    auto res = resolver_(with, norm);
+    if (!res) {
+        return std::nullopt;
+    }
+    return std::nullopt;
+}

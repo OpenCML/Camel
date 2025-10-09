@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,20 +23,19 @@
 #include "core/impl.h"
 #include "special.h"
 
-using param_init_list =
-    std::initializer_list<std::tuple<std::string, type_ptr_t, data_ptr_t, bool>>;
+using param_t = std::pair<type_ptr_t, bool>; // bool表示是否为可变参数
+using param_init_list_t = std::initializer_list<param_t>;
+using param_vec_t = std::vector<param_t>;
 
 class FunctionType : public SpecialType {
   public:
     FunctionType();
     FunctionType(
-        const std::shared_ptr<ParamsType> &withParamsType,
-        const std::shared_ptr<ParamsType> &paramsType, const type_ptr_t &returnType);
-    FunctionType(
-        const param_init_list &withParamsList, const param_init_list &normParamsList,
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes,
         const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None);
-
-    const std::string &argNameAt(size_t idx) const;
+    FunctionType(
+        const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
+        const ModifierSet &modifiers = Modifier::None);
 
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
@@ -47,37 +46,47 @@ class FunctionType : public SpecialType {
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
     bool hasModifier(Modifier mod) const { return modifiers_.has(mod); }
-
+    bool hasSideEffect() const;
     bool checkModifiers() const;
 
-    bool addIdent(const std::string &ident, bool isVar);
-    bool hasSideEffect() const;
+    // 供编译期由GCT构造使用
+    bool addWithArg(const std::string &ident, const type_ptr_t type, bool isVar);
+    bool addNormArg(const std::string &ident, const type_ptr_t type, bool isVar);
+    void setExitType(const type_ptr_t &type) { exitType_ = type; }
 
-    type_ptr_t withParamsType() const;
-    type_ptr_t normParamsType() const;
-    type_ptr_t returnType() const;
+    const param_vec_t &withTypes() const { return withTypes_; }
+    const param_vec_t &normTypes() const { return normTypes_; }
+    type_ptr_t exitType() const;
 
-    std::vector<std::tuple<std::string, type_ptr_t, bool>> withParams() const;
-    std::vector<std::tuple<std::string, type_ptr_t, bool>> normParams() const;
-
-    const std::unordered_map<std::string, bool> &variableMap() const { return variableMap_; }
+    const std::string &argNameAt(size_t idx) const;
+    void setArgNames(const std::vector<std::string> &names) { argNames_ = names; }
+    const std::vector<std::string> &argNames() const { return argNames_; }
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> withArgsInfo() const;
+    std::vector<std::tuple<std::string, type_ptr_t, bool>> normArgsInfo() const;
 
     std::string toString() const override;
 
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
-    CastSafety castSafetyTo(const Type &other) const override;
+    CastSafety castSafetyTo(const Type &other) const override {
+        ASSERT(false, "FunctionType cannot be cast to other types");
+        return CastSafety::Forbidden;
+    };
 
   private:
     ImplMark implMark_ = ImplMark::Graph;
     std::string uri_;
     ModifierSet modifiers_ = Modifier::None;
-    std::shared_ptr<ParamsType> withParamsType_;
-    std::shared_ptr<ParamsType> normParamsType_;
-    std::unordered_map<std::string, bool> variableMap_;
     bool hasSideEffect_ = false;
-    type_ptr_t returnType_;
+
+    param_vec_t withTypes_;
+    param_vec_t normTypes_;
+    type_ptr_t exitType_;
+
+    // 只在编译期记录并使用
+    bool hasCompileInfo_ = true;
+    std::vector<std::string> argNames_;
 };
 
 using func_type_ptr_t = std::shared_ptr<FunctionType>;

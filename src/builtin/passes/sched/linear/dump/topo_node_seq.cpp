@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,10 +56,14 @@ string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, b
     return ss.str();
 }
 
-any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
+graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+    auto optMainGraph = graph->getSubGraph("main");
+    ASSERT(optMainGraph.has_value(), "Main graph not found.");
+    auto mainGraph = optMainGraph.value();
+
     // 收集所有被依赖的子图
     auto sortedGraphs =
-        findReachable(graph, [](const graph_ptr_t &g) { return g->dependencies(); });
+        findReachable(mainGraph, [](const graph_ptr_t &g) { return g->dependencies(); });
 
     ostringstream oss;
 
@@ -168,5 +172,7 @@ any TopoNodeSeqDumpPass::apply(const graph_ptr_t &graph) {
 
     oss << format("CALL: {}", graph->name()) << "\n";
 
-    return oss.str();
+    os << oss.str();
+
+    return graph;
 }
