@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -379,24 +379,30 @@ void TaskflowExecSchedPass::buildBranchJoinRegions(
         for (size_t i = 0; i < candidates.size(); ++i) {
             node_ptr_t candidate = candidates[i];
 
+            auto layer = flowLike.emplace([]() {}).name("BRCH_CAND_LAYER");
+
             // 子流任务：真正执行 candidate 的逻辑
-            auto task_do = candidate->type() == NodeType::FUNC
-                               ? buildFuncTask(flowLike, candidate, frame)
-                                     .name("BRCH_CAND_FUNC:" + candidate->toString())
-                           : candidate->type() == NodeType::CALL
-                               ? buildCallTask(flowLike, candidate, frame)
-                                     .name("BRCH_CAND_CALL:" + candidate->toString())
-                           : candidate->type() == NodeType::OPER
-                               ? buildOperTask(flowLike, candidate, frame)
-                                     .name("BRCH_CAND_OPER:" + candidate->toString())
-                               : tf::Task(); // 其他类型不支持
+            auto task_do = tf::Task();
+            if (candidate->type() == NodeType::FUNC)
+                task_do = buildFuncTask(flowLike, candidate, frame)
+                              .name("BRCH_CAND_FUNC:" + candidate->toString());
+            else if (candidate->type() == NodeType::CALL)
+                task_do = buildCallTask(flowLike, candidate, frame)
+                              .name("BRCH_CAND_CALL:" + candidate->toString());
+            else if (candidate->type() == NodeType::OPER)
+                task_do = buildOperTask(flowLike, candidate, frame)
+                              .name("BRCH_CAND_OPER:" + candidate->toString());
+            else
+                ASSERT(false, "Unsupported candidate node type in BRCH-JOIN.");
 
-            // 条件任务：仅为“保留 return 0 语义”，正常结束判断语句
-            auto task_cond = flowLike.emplace([]() { return 0; })
-                                 .name("BRCH_CAND_RET0:" + candidate->toString());
+            // 条件任务：return 0 确保之后的节点可以在其他条件未被执行的情况下执行
+            // 额外建一个任务是因为有 subflow 的 task 不能有返回值
+            auto task_cond =
+                flowLike.emplace([]() { return 0; }).name("BRCH_CAND_RET:" + candidate->toString());
 
-            // 连接：selector -> candidate_do -> candidate_cond -> joiner
-            selector.precede(task_do);
+            // 连接：selector -> layer -> candidate_do -> candidate_cond -> joiner
+            selector.precede(layer);
+            layer.precede(task_do);
             task_do.precede(task_cond);
             task_cond.precede(joiner);
 
