@@ -57,9 +57,13 @@ string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, b
 }
 
 graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+    auto optMainGraph = graph->getSubGraph("main");
+    ASSERT(optMainGraph.has_value(), "Main graph not found.");
+    auto mainGraph = optMainGraph.value();
+
     // 收集所有被依赖的子图
     auto sortedGraphs =
-        findReachable(graph, [](const graph_ptr_t &g) { return g->dependencies(); });
+        findReachable(mainGraph, [](const graph_ptr_t &g) { return g->dependencies(); });
 
     ostringstream oss;
 

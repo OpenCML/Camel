@@ -25,8 +25,6 @@
 
 #include "builtin/passes/sched/linear/dump/graphviz.h"
 #include "builtin/passes/sched/linear/dump/topo_node_seq.h"
-#include "builtin/passes/sched/linear/exec/fallback.h"
-#include "builtin/passes/sched/parallel/exec/taskflow.h"
 #include "codegen/source/generator.h"
 #include "config.h"
 #include "core/module/userdef.h"
@@ -190,8 +188,8 @@ int main(int argc, char *argv[]) {
                     auto root = ctx->rootGraph();
                     auto res = pass.apply(root, os);
                 }
-                if (Inspect::dumpTNS && ctx->mainGraph()) {
-                    auto entry = ctx->mainGraph();
+                if (Inspect::dumpTNS && ctx->rootGraph()) {
+                    auto entry = ctx->rootGraph();
                     TopoNodeSeqDumpPass pass(ctx);
                     auto res = pass.apply(entry, os);
                 }
