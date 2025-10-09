@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 10, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,12 +38,11 @@ class GraphVizDumpPass : public LinearSchedPass {
 
     std::string pointerToIdent(const void *ptr, const char *prefix = "N");
 
+    std::string dumpGraph(const GraphIR::graph_ptr_t &graph);
+
   public:
     GraphVizDumpPass(const context_ptr_t &context) : LinearSchedPass(context) {};
     virtual ~GraphVizDumpPass() = default;
 
-    std::any apply(GraphIR::graph_ptr_t &graph) override {
-        return apply(const_cast<const GraphIR::graph_ptr_t &>(graph));
-    }
-    std::any apply(const GraphIR::graph_ptr_t &graph) override;
+    GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };

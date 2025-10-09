@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,7 @@ StaticFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) 
     if (!funcType_) {
         return std::nullopt;
     }
+    return std::nullopt;
 }
 
 std::optional<func_type_ptr_t>
@@ -35,4 +36,5 @@ DynamicFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm)
     if (!res) {
         return std::nullopt;
     }
+    return std::nullopt;
 }

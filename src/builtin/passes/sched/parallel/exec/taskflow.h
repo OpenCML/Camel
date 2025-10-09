@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,10 +33,7 @@ class TaskflowExecSchedPass : public ParallelSchedPass {
         : ParallelSchedPass(ctx), executor_(max_concurrent_tasks) {}
     virtual ~TaskflowExecSchedPass() = default;
 
-    virtual std::any apply(GraphIR::graph_ptr_t &graph) override {
-        return apply(const_cast<const GraphIR::graph_ptr_t &>(graph));
-    }
-    virtual std::any apply(const GraphIR::graph_ptr_t &graph) override;
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 
     // 元信息（目前存 BRCH->JOIN 的配对关系）
     struct GraphInfos {

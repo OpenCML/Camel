@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -188,14 +188,12 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
                     auto root = ctx->rootGraph();
-                    auto res = pass.apply(root);
-                    os << any_cast<string>(res);
+                    auto res = pass.apply(root, os);
                 }
                 if (Inspect::dumpTNS && ctx->mainGraph()) {
                     auto entry = ctx->mainGraph();
                     TopoNodeSeqDumpPass pass(ctx);
-                    auto res = pass.apply(entry);
-                    os << any_cast<string>(res);
+                    auto res = pass.apply(entry, os);
                 }
                 return 0;
             }
@@ -222,39 +220,17 @@ int main(int argc, char *argv[]) {
                     }
                 }());
 
-                if (Run::targetFiles.size() > 1) {
-                    std::vector<std::string> passes(
-                        Run::targetFiles.begin() + 1,
-                        Run::targetFiles.end());
-                    // GraphIR::graph_ptr_t entry = ctx->rootGraph();
-                    for (const auto &p : passes) {
-                        l.in("Main").info("Applying pass: {}", p);
-                        if (p == "std::graphviz") {
-                            GraphVizDumpPass pass(ctx);
-                            pass.apply(ctx->rootGraph());
-                        } else if (p == "std::topo_node_seq") {
-                            TopoNodeSeqDumpPass pass(ctx);
-                            pass.apply(ctx->mainGraph());
-                        } else if (p == "std::linear") {
-                            FallbackExecSchedPass pass(ctx);
-                            pass.apply(ctx->rootGraph());
-                        } else if (p == "std::parallel" || p == "std::taskflow") {
-                            TaskflowExecSchedPass pass(ctx);
-                            pass.apply(ctx->rootGraph());
-                        } else {
-                            throw CamelBaseException("Unknown pass: " + p);
-                        }
-                    }
-                } else {
-                    FallbackExecSchedPass pass(ctx);
-                    pass.apply(ctx->rootGraph());
-                }
+                std::vector<std::string> passes(
+                    Run::targetFiles.begin() + 1,
+                    Run::targetFiles.end());
+                int retCode = applyPasses(passes, ctx, os);
 
-                // int exitCode = ctx->getExitCode();
-                const auto &diags = ctx->rtmDiags();
-                if (diags->hasErrors()) {
-                    diags->dump(os, useJsonFormat);
-                    return 1;
+                if (retCode != 0) {
+                    const auto &diags = ctx->rtmDiags();
+                    if (diags->hasErrors()) {
+                        diags->dump(os, useJsonFormat);
+                    }
+                    return retCode;
                 }
 
                 EXEC_WHEN_DEBUG([] {

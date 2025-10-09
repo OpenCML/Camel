@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 1, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,9 +117,9 @@ OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, 
     ASSERT(arg->type()->code() == TypeCode::Bool, "profiler.enable requires a boolean argument");
 
     auto boolData = std::dynamic_pointer_cast<PrimaryData<bool>>(arg);
-    const bool &enabled = boolData->data();
 
 #ifndef NDEBUG
+    const bool &enabled = boolData->data();
     if (enabled) {
         profiler::AdvancedTracer::Config config;
         config.enablePerfettoIntegration = true;

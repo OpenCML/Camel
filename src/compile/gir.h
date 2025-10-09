@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -112,6 +112,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
         }
         return newGraph;
     }
+
+    static graph_ptr_t null() { return nullptr; }
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }

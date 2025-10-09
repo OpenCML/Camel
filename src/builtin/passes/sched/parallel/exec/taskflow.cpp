@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,7 +35,7 @@
 using namespace std;
 using namespace GraphIR;
 
-std::any TaskflowExecSchedPass::apply(const graph_ptr_t &graph) {
+graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     auto rootFrame = Frame::create(nullptr, *graph);
     auto optMainGraph = graph->getSubGraph("main");
     ASSERT(optMainGraph.has_value(), "Main graph not found.");
@@ -46,8 +46,9 @@ std::any TaskflowExecSchedPass::apply(const graph_ptr_t &graph) {
 
     // 执行 main 子图实例，理论上来说应该是不存在修改父栈帧的情况的，否则会有线程冲突
     auto mainFrame = Frame::create(rootFrame, *mainGraph);
-    auto result = evalGraphTF(mainGraph.get(), mainFrame);
-    return result;
+    evalGraphTF(mainGraph.get(), mainFrame);
+
+    return Graph::null();
 }
 
 inline data_ptr_t get_graph_return(Graph *g, const frame_ptr_t &frame) {

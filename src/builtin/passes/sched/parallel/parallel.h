@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 02, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,5 @@ class ParallelSchedPass : public SchedulePass {
     ParallelSchedPass(const context_ptr_t &ctx) : SchedulePass(ctx) {};
     virtual ~ParallelSchedPass() = default;
 
-    virtual std::any apply(GraphIR::graph_ptr_t &graph) override = 0;
-    virtual std::any apply(const GraphIR::graph_ptr_t &graph) override = 0;
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
 };

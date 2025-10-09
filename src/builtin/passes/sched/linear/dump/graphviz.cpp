@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -163,7 +163,7 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
+std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         // Skip if the graph has already been visited to avoid duplication
         return string("");
@@ -195,7 +195,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             l.in("GraphViz")
                 .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
         pushIndent();
-        res += any_cast<string>(apply(subGraph));
+        res += dumpGraph(subGraph);
         popIndent();
     }
 
@@ -205,7 +205,7 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
             l.in("GraphViz")
                 .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
         pushIndent();
-        res += any_cast<string>(apply(dep));
+        res += dumpGraph(dep);
         popIndent();
     }
 
@@ -401,4 +401,9 @@ any GraphVizDumpPass::apply(const graph_ptr_t &graph) {
 
     res += baseIndent_ + "}\r\n";
     return res;
+}
+
+graph_ptr_t GraphVizDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+    os << dumpGraph(graph);
+    return graph;
 }
