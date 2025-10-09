@@ -61,9 +61,8 @@ inline data_ptr_t get_graph_return(Graph *g, const frame_ptr_t &frame) {
 
 data_ptr_t TaskflowExecSchedPass::evalGraphTF(Graph *graph, const frame_ptr_t &frame) {
     EXEC_WHEN_DEBUG(l.in("TF").debug("Evaluating graph (TF): {}", graph->name()));
-    tf::Taskflow flow;
-    instantiate_graph_instance_generic(flow, graph, frame);
-    executor_.run(flow).wait();
+    instantiate_graph_instance_generic(mainFlow_, graph, frame);
+    executor_.run(mainFlow_).wait();
     return get_graph_return(graph, frame);
 }
 
@@ -144,7 +143,7 @@ tf::Task TaskflowExecSchedPass::buildDataTask(
         .emplace([n, frame]() {
             ASSERT(frame->get(n) != nullptr, "DATA node should already have data.");
         })
-        .name("DATA:" + n->toString());
+        .name("DATA:" + regex_replace(n->toString(), regex("\""), "\\\""));
 }
 
 template <typename FlowT>
@@ -313,6 +312,10 @@ tf::Task TaskflowExecSchedPass::buildOperTask(
                     mark_reduce(n, frame, sf);
                 } else if (uri == ":mark/foreach") {
                     mark_foreach(n, frame, sf);
+                } else if (uri == ":mark/unordered_foreach") {
+                    mark_unordered_foreach(n, frame, sf);
+                } else if (uri == ":mark/unordered_reduce") {
+                    mark_unordered_reduce(n, frame, sf);
                 } else {
                     ASSERT(false, std::format("Mark Operator {} not implemented.", uri.substr(6)));
                 }
@@ -835,7 +838,142 @@ void TaskflowExecSchedPass::mark_reduce(
     frame->set(node, acc);
 }
 
-void TaskflowExecSchedPass::mark_foreach(
+void TaskflowExecSchedPass::mark_unordered_reduce(
+    const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 2) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<reduce>", 2, node->withInputs().size() + node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+
+    auto targetData = frame->get(node->withInputs().front());
+    auto funcData = frame->get(node->normInputs()[0]);
+    auto initData = frame->get(node->normInputs()[1]);
+    ASSERT(funcData->type()->code() == TypeCode::Func, "reduce expects a function.");
+    auto func = funcData->as<FunctionData>(Type::Func());
+
+    data_vec_t elements;
+    switch (targetData->type()->code()) {
+    case TypeCode::List:
+        elements = tt::as_shared<ListData>(targetData)->raw();
+        break;
+    case TypeCode::Array:
+        elements = tt::as_shared<ArrayData>(targetData)->raw();
+        break;
+    case TypeCode::Vector:
+        elements = tt::as_shared<VectorData>(targetData)->raw();
+        break;
+    case TypeCode::Tuple:
+        elements = tt::as_shared<TupleData>(targetData)->raw();
+        break;
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<reduce>", "List/Array/Vector/Tuple", targetData->type()->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidWithParameter,
+            "Unsupported input type.");
+    }
+
+    if (elements.empty()) {
+        frame->set(node, initData);
+        return;
+    }
+
+    constexpr size_t THRESH = 100;
+
+    // 分治：构建任务图计算 [l, r) 的折叠结果到 out
+    auto reduce_dc =
+        [&](auto &&self, size_t l, size_t r, std::shared_ptr<data_ptr_t> out) -> tf::Task {
+        const size_t n = r - l;
+        if (n <= THRESH) {
+            // 叶子：在线性顺序上在当前子流中逐步计算
+            return sf
+                .emplace([&, l, r, out](tf::Subflow &isf) {
+                    data_ptr_t res = elements[l];
+                    tf::Task prev;
+                    bool has_prev = false;
+                    for (size_t i = l + 1; i < r; ++i) {
+                        auto step =
+                            isf.emplace([&, i](tf::Subflow &lsf) {
+                                   auto &fg = func->graph();
+                                   auto fframe = Frame::create(frame, fg);
+                                   const auto &ports = fg.ports();
+                                   ASSERT(
+                                       ports.size() == 2,
+                                       "Binary function should have exactly two parameters.");
+                                   fframe->set(ports[0], res);
+                                   fframe->set(ports[1], elements[i]);
+
+                                   instantiate_graph_instance_generic(lsf, &fg, fframe);
+                                   lsf.join();
+
+                                   res = get_graph_return(&fg, fframe);
+                               })
+                                .name("REDUCE_STEP");
+                        if (has_prev)
+                            step.succeed(prev);
+                        prev = step;
+                        has_prev = true;
+                    }
+                    isf.join();
+                    *out = res;
+                })
+                .name("REDUCE_LEAF");
+        } else {
+            const size_t m = l + n / 2;
+            auto left_out = std::make_shared<data_ptr_t>();
+            auto right_out = std::make_shared<data_ptr_t>();
+
+            tf::Task tl = self(self, l, m, left_out);
+            tf::Task tr = self(self, m, r, right_out);
+
+            auto tc = sf.emplace([&, left_out, right_out, out](tf::Subflow &isf) {
+                            // 合并两个子区间：保持 left 在前、right 在后
+                            auto &fg = func->graph();
+                            auto fframe = Frame::create(frame, fg);
+                            const auto &ports = fg.ports();
+                            ASSERT(
+                                ports.size() == 2,
+                                "Binary function should have exactly two parameters.");
+                            fframe->set(ports[0], *left_out);
+                            fframe->set(ports[1], *right_out);
+
+                            instantiate_graph_instance_generic(isf, &fg, fframe);
+                            isf.join();
+
+                            *out = get_graph_return(&fg, fframe);
+                        }).name("REDUCE_COMBINE");
+            tc.succeed(tl, tr);
+            return tc;
+        }
+    };
+
+    auto total = std::make_shared<data_ptr_t>();
+    tf::Task root = reduce_dc(reduce_dc, 0, elements.size(), total);
+
+    // 最终与 initData 结合（init 在左，整体结果在右）
+    auto final =
+        sf.emplace([&, total](tf::Subflow &isf) {
+              auto &fg = func->graph();
+              auto fframe = Frame::create(frame, fg);
+              const auto &ports = fg.ports();
+              ASSERT(ports.size() == 2, "Binary function should have exactly two parameters.");
+              fframe->set(ports[0], initData);
+              fframe->set(ports[1], *total);
+
+              instantiate_graph_instance_generic(isf, &fg, fframe);
+              isf.join();
+
+              auto res = get_graph_return(&fg, fframe);
+              frame->set(node, res);
+          }).name("REDUCE_FINAL");
+    final.succeed(root);
+    sf.join();
+}
+
+void TaskflowExecSchedPass::mark_unordered_foreach(
     const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
     if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
         context_->rtmDiags()
@@ -913,4 +1051,84 @@ void TaskflowExecSchedPass::mark_foreach(
             RuntimeExceptionCode::InvalidWithParameter,
             "Unsupported type.");
     }
+}
+
+void TaskflowExecSchedPass::mark_foreach(
+    const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<foreach>", 1, node->withInputs().size() + node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+
+    auto targetData = frame->get(node->withInputs().front());
+    auto funcData = frame->get(node->normInputs().front());
+    ASSERT(funcData->type()->code() == TypeCode::Func, "foreach expects a function.");
+    auto func = funcData->as<FunctionData>(Type::Func());
+
+    auto add_step = [&](const data_ptr_t &arg, tf::Task &prev, bool &has_prev) {
+        auto step = sf.emplace([&, arg](tf::Subflow &isf) {
+                          auto &fg = func->graph();
+                          auto fframe = Frame::create(frame, fg);
+                          const auto &ports = fg.ports();
+                          ASSERT(ports.size() == 1, "foreach expects unary function.");
+                          fframe->set(ports[0], arg);
+
+                          instantiate_graph_instance_generic(isf, &fg, fframe);
+                          isf.join();
+
+                          (void)get_graph_return(&fg, fframe);
+                      }).name("FOREACH_ELEM_SYNC");
+        if (has_prev) {
+            step.succeed(prev);
+        }
+        prev = step;
+        has_prev = true;
+    };
+
+    tf::Task prev;
+    bool has_prev = false;
+
+    switch (targetData->type()->code()) {
+    case TypeCode::List: {
+        const auto &elems = tt::as_shared<ListData>(targetData)->raw();
+        for (const auto &e : elems)
+            add_step(e, prev, has_prev);
+        break;
+    }
+    case TypeCode::Array: {
+        const auto &elems = tt::as_shared<ArrayData>(targetData)->raw();
+        for (const auto &e : elems)
+            add_step(e, prev, has_prev);
+        break;
+    }
+    case TypeCode::Tuple: {
+        const auto &elems = tt::as_shared<TupleData>(targetData)->raw();
+        for (const auto &e : elems)
+            add_step(e, prev, has_prev);
+        break;
+    }
+    case TypeCode::Vector: {
+        const auto &elems = tt::as_shared<VectorData>(targetData)->raw();
+        for (const auto &e : elems)
+            add_step(e, prev, has_prev);
+        break;
+    }
+    case TypeCode::Dict: {
+        const auto &raw = tt::as_shared<DictData>(targetData)->raw();
+        for (const auto &kv : raw)
+            add_step(kv.second, prev, has_prev);
+        break;
+    }
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<foreach>", "List/Array/Tuple/Vector/Dict", targetData->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidWithParameter,
+            "Unsupported type.");
+    }
+    sf.join();
+    frame->set(node, Data::null());
 }

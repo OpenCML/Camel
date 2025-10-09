@@ -25,6 +25,7 @@
 #include "builtin/modules/json.h"
 #include "builtin/modules/math.h"
 #include "builtin/modules/os.h"
+#include "builtin/modules/para.h"
 #include "builtin/modules/profiler.h"
 #include "builtin/modules/random.h"
 #include "builtin/modules/re.h"
@@ -45,6 +46,7 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"json", [](context_ptr_t ctx) { return JsonBuiltinModule::create(ctx); }},
         {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
         {"this", [](context_ptr_t ctx) { return ThisBuiltinModule::create(ctx); }},
+        {"para", [](context_ptr_t ctx) { return ParaBuiltinModule::create(ctx); }},
 #ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},
 #endif

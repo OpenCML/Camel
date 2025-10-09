@@ -29,11 +29,13 @@
 
 class TaskflowExecSchedPass : public ParallelSchedPass {
   public:
-    TaskflowExecSchedPass(const context_ptr_t &ctx, size_t max_concurrent_tasks = 10)
+    TaskflowExecSchedPass(const context_ptr_t &ctx, size_t max_concurrent_tasks = 12)
         : ParallelSchedPass(ctx), executor_(max_concurrent_tasks) {}
     virtual ~TaskflowExecSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+
+    tf::Taskflow mainFlow_; // 主任务流
 
     // 元信息（目前存 BRCH->JOIN 的配对关系）
     struct GraphInfos {
@@ -130,4 +132,7 @@ class TaskflowExecSchedPass : public ParallelSchedPass {
     void mark_filter(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
     void mark_reduce(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
     void mark_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void
+    mark_unordered_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void mark_unordered_reduce(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
 };
