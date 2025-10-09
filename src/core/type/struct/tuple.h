@@ -32,6 +32,8 @@ class TupleType : public StructType {
 
     std::string toString() const override;
 
+    virtual std::string mangle() const override;
+
     std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
 
     bool operator==(const Type &other) const override;

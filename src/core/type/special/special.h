@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,8 @@ class SpecialType : public Type {
     SpecialType(TypeCode code) : Type(code) {}
 
     virtual std::string toString() const override { return typeCodeToString(code_); }
+
+    virtual std::string mangle() const override;
 
     virtual bool operator==(const Type &other) const override = 0;
     virtual bool operator!=(const Type &other) const override = 0;

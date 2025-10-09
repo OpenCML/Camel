@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,12 @@ SetType::SetType(const type_ptr_t &valueType) : StructType(TypeCode::Set), value
 type_ptr_t SetType::valueType() const { return valueType_; }
 
 string SetType::toString() const { return "Set<" + valueType_->toString() + ">"; }
+
+std::string SetType::mangle() const {
+    std::string result = "S";
+    result += valueType_->mangle();
+    return result;
+}
 
 std::optional<type_ptr_t> SetType::typeAt(struct_idx_t idx) const {
     ASSERT(false, "SetType does not support indexing");

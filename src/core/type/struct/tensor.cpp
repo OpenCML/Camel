@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,6 +50,17 @@ string TensorType::toString() const {
         result.pop_back();
     }
     result += "]>";
+    return result;
+}
+
+std::string TensorType::mangle() const {
+    std::string result = "T";
+    result += elementType_->mangle();
+    result += std::to_string(shape_.size());
+    result += "_";
+    for (const auto &dim : shape_) {
+        result += std::to_string(dim) + "_";
+    }
     return result;
 }
 

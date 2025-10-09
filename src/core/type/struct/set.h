@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,8 @@ class SetType : public StructType {
     type_ptr_t valueType() const;
 
     std::string toString() const override;
+
+    virtual std::string mangle() const override;
 
     std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
 

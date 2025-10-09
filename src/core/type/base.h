@@ -112,6 +112,7 @@ class Type {
     ImplMark implMark() const;
 
     virtual std::string toString() const;
+    virtual std::string mangle() const;
 
     virtual bool operator==(const Type &other) const = 0;
     virtual bool operator!=(const Type &other) const = 0;

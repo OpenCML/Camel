@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,6 +44,15 @@ string TupleType::toString() const {
         result.pop_back();
     }
     result += ">";
+    return result;
+}
+
+std::string TupleType::mangle() const {
+    std::string result = "P";
+    result += std::to_string(types_.size());
+    for (const auto &type : types_) {
+        result += type->mangle();
+    }
     return result;
 }
 

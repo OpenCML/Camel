@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,13 @@ type_ptr_t ArrayType::elementType() const { return elementType_; }
 
 string ArrayType::toString() const {
     return "Array<" + elementType_->toString() + ", " + to_string(size_) + ">";
+}
+
+std::string ArrayType::mangle() const {
+    std::string result = "A";
+    result += elementType_->mangle();
+    result += std::to_string(size_);
+    return result;
 }
 
 std::optional<type_ptr_t> ArrayType::typeAt(struct_idx_t idx) const {

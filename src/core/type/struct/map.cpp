@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,13 @@ type_ptr_t MapType::valueType() const { return valueType_; }
 
 string MapType::toString() const {
     return "Map<" + keyType_->toString() + ", " + valueType_->toString() + ">";
+}
+
+std::string MapType::mangle() const {
+    std::string result = "M";
+    result += keyType_->mangle();
+    result += valueType_->mangle();
+    return result;
 }
 
 std::optional<type_ptr_t> MapType::typeAt(struct_idx_t idx) const {

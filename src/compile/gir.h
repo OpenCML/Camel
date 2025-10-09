@@ -119,6 +119,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
+    const std::string &mangledName() const {
+        return name_ + std::format("({})", funcType_->mangle());
+    }
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
     graph_ptr_t outer() const {
@@ -161,7 +164,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     size_t staticDataSize() const { return staticDataArr_.size(); }
     size_t runtimeDataSize() const { return runtimeDataSize_; }
 
-    std::optional<graph_ptr_t> getSubGraph(const std::string &name) {
+    std::optional<std::unordered_set<graph_ptr_t>> getSubGraphsByName(const std::string &name) {
         if (subGraphs_.find(name) != subGraphs_.end()) {
             return subGraphs_[name];
         }
@@ -170,13 +173,20 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addSubGraph(const graph_ptr_t &graph) {
         ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
         ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
-        ASSERT(
-            subGraphs_.find(graph->name()) == subGraphs_.end(),
-            std::format("Graph '{}' already has a subgraph named '{}'.", name_, graph->name()));
-        subGraphs_[graph->name()] = graph;
+        if (subGraphs_.find(graph->name()) == subGraphs_.end()) {
+            subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>();
+        } else {
+            auto &existing = subGraphs_[graph->name()];
+            ASSERT(
+                existing.find(graph) == existing.end(),
+                std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
+            existing.insert(graph);
+        }
         graph->outer_ = shared_from_this();
     }
-    std::unordered_map<std::string, graph_ptr_t> &subGraphs() { return subGraphs_; }
+    std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> &subGraphs() {
+        return subGraphs_;
+    }
 
     std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> &dependents() {
         return dependents_;
@@ -216,7 +226,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::string name_;
     graph_wptr_t outer_;
 
-    std::unordered_map<std::string, graph_ptr_t> subGraphs_;
+    std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> subGraphs_;
     std::unordered_set<graph_ptr_t> dependencies_;
     std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> dependents_;
 

@@ -57,9 +57,12 @@ string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, b
 }
 
 graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    auto optMainGraph = graph->getSubGraph("main");
+    auto optMainGraph = graph->getSubGraphsByName("main");
     ASSERT(optMainGraph.has_value(), "Main graph not found.");
-    auto mainGraph = optMainGraph.value();
+    auto mainGraphSet = optMainGraph.value();
+    ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
+    ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
+    auto mainGraph = *mainGraphSet.begin();
 
     // 收集所有被依赖的子图
     auto sortedGraphs =

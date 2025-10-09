@@ -33,6 +33,8 @@ class StructType : public Type {
 
     virtual std::string toString() const override = 0;
 
+    virtual std::string mangle() const override = 0;
+
     virtual std::optional<type_ptr_t> typeAt(struct_idx_t idx) const = 0;
 
     virtual bool operator==(const Type &other) const override = 0;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,11 @@ using namespace std;
 ListType::ListType() : StructType(TypeCode::List) {}
 
 string ListType::toString() const { return "List"; }
+
+std::string ListType::mangle() const {
+    std::string result = "L";
+    return result;
+}
 
 std::optional<type_ptr_t> ListType::typeAt(struct_idx_t idx) const {
     ASSERT(false, "ListType does not support indexing");

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,16 @@ string DictType::toString() const {
     result.pop_back();
     result.pop_back();
     result += " }";
+    return result;
+}
+
+std::string DictType::mangle() const {
+    std::string result = "D";
+    result += std::to_string(fields_.size());
+    for (const auto &field : fields_) {
+        result += "K" + std::to_string(field.first.size()) + field.first;
+        result += "V" + field.second->mangle();
+    }
     return result;
 }
 

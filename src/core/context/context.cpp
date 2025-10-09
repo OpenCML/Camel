@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Sep. 25, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -231,11 +231,14 @@ GraphIR::graph_ptr_t Context::mainGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
-    const auto optMainGraph = gir->getSubGraph("main");
-    if (!optMainGraph.has_value()) {
+    const auto optMainGraphSet = gir->getSubGraphsByName("main");
+    if (!optMainGraphSet.has_value()) {
         throw CamelBaseException("Main graph not found in GraphIR of main module.");
     }
-    return optMainGraph.value();
+    if (optMainGraphSet->empty()) {
+        throw CamelBaseException("Main graph set is empty in GraphIR of main module.");
+    }
+    return *optMainGraphSet.value().begin();
 }
 
 void Context::registerExecutorFactory(std::string name, executor_factory_t fact) {

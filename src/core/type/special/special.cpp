@@ -13,11 +13,25 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "special.h"
+
+std::string SpecialType::mangle() const {
+    switch (code_) {
+    case TypeCode::Any:
+        return "a";
+    case TypeCode::Void:
+        return "v";
+    case TypeCode::Func:
+        ASSERT(false, "Function type mangle should be implemented in FunctionType.");
+        return "";
+    }
+    ASSERT(false, "Unknown SpecialType");
+    return ""; // unknown
+}
 
 CastSafety SpecialType::castSafetyTo(const Type &other) const {
     if (other.code() == code_) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -172,6 +172,30 @@ string FunctionType::toString() const {
         result += exitType_->toString();
     } else {
         result += "null";
+    }
+    return result;
+}
+
+std::string FunctionType::mangle() const {
+    std::string result = "F";
+    // with types
+    result += "W" + std::to_string(withTypes_.size());
+    for (const auto &[type, isVar] : withTypes_) {
+        result += isVar ? "V" : "";
+        result += type->mangle();
+    }
+    // norm types
+    result += "N" + std::to_string(normTypes_.size());
+    for (const auto &[type, isVar] : normTypes_) {
+        result += isVar ? "V" : "";
+        result += type->mangle();
+    }
+    // return type
+    result += "R";
+    if (exitType_) {
+        result += exitType_->mangle();
+    } else {
+        result += "v"; // void
     }
     return result;
 }

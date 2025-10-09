@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,8 @@ class PrimaryType : public Type {
   public:
     PrimaryType() = delete;
     PrimaryType(TypeCode code) : Type(code) {}
+
+    virtual std::string mangle() const override;
 
     CastSafety castSafetyTo(const Type &other) const override;
 };

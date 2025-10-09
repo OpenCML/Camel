@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,6 +86,8 @@ class FunctionType : public SpecialType {
     std::vector<std::tuple<std::string, type_ptr_t, bool>> normArgsInfo() const;
 
     std::string toString() const override;
+
+    virtual std::string mangle() const override;
 
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;

@@ -13,11 +13,32 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "primary.h"
+
+std::string PrimaryType::mangle() const {
+    switch (code_) {
+    case TypeCode::Int32:
+        return "i";
+    case TypeCode::Int64:
+        return "l";
+    case TypeCode::Float:
+        return "f";
+    case TypeCode::Double:
+        return "d";
+    case TypeCode::String:
+        return "s";
+    case TypeCode::Bool:
+        return "b";
+    case TypeCode::Char:
+        return "c";
+    }
+    ASSERT(false, "Unknown PrimaryType");
+    return ""; // unknown
+}
 
 CastSafety PrimaryType::castSafetyTo(const Type &other) const {
     const TypeCode otherCode = other.code();
