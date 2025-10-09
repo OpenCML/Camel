@@ -23,8 +23,8 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "builtin/passes/sched/linear/dump/graphviz.h"
-#include "builtin/passes/sched/linear/dump/topo_node_seq.h"
+#include "builtin/passes/trans/dot/graphviz.h"
+#include "builtin/passes/trans/tns/topo_node_seq.h"
 #include "codegen/source/generator.h"
 #include "config.h"
 #include "core/module/userdef.h"

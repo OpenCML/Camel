@@ -19,13 +19,22 @@
 
 #pragma once
 
-#include "../sched.h"
+#include "../trans.h"
 
-class LinearSchedPass : public GraphSchedulePass {
+#include <ostream>
+#include <string>
+#include <unordered_map>
+
+class TopoNodeSeqDumpPass : public GraphTranslatePass {
+    bool showRawPtr = false;
+    std::unordered_map<std::string, size_t> ptrCnt_;
+    std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
+    std::string pointerToIdent(const void *ptr, const char *prefix = "N");
+    std::string getPtrRepr(const std::string &prefix, uintptr_t ptrVal, bool showRawPtr);
 
   public:
-    LinearSchedPass(const context_ptr_t &ctx) : GraphSchedulePass(ctx) {};
-    virtual ~LinearSchedPass() = default;
+    TopoNodeSeqDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
+    virtual ~TopoNodeSeqDumpPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };

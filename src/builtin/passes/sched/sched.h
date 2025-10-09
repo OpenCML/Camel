@@ -19,12 +19,12 @@
 
 #pragma once
 
-#include "../pass.h"
+#include "execute/pass.h"
 
-class SchedulePass : public GraphIRPass {
+class GraphSchedulePass : public GraphIRPass {
   public:
-    SchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~SchedulePass() = default;
+    GraphSchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~GraphSchedulePass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
 };
