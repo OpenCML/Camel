@@ -171,6 +171,20 @@
                 "moduleLoad": false,
                 "trace": true
             }
+        },
+        {
+            "name": "Check",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["check", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
         }
     ]
 }

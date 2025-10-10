@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Sep. 12, 2025
+ * Updated: Oct. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,22 +54,15 @@ struct Diagnostic {
 // ---- Exception classes ----
 class DiagnosticsLimitExceededBaseException : public CamelBaseException {
   public:
-    DiagnosticsLimitExceededBaseException(const std::string &msg, const Diagnostic &lastDiag)
-        : CamelBaseException(msg), lastDiagnostic_(lastDiag) {}
-
-    const Diagnostic &lastDiagnostic() const { return lastDiagnostic_; }
-
-  private:
-    Diagnostic lastDiagnostic_;
+    DiagnosticsLimitExceededBaseException(const std::string &msg) : CamelBaseException(msg) {}
 };
 
 class DiagnosticsLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
-    DiagnosticsLimitExceededException(Severity sev, size_t limit, const Diagnostic &lastDiagnostic)
+    DiagnosticsLimitExceededException(Severity sev, size_t limit)
         : DiagnosticsLimitExceededBaseException(
               "Too many " + to_string(sev) +
-                  " diagnostics exceeded limit: " + std::to_string(limit),
-              lastDiagnostic),
+              " diagnostics exceeded limit: " + std::to_string(limit)),
           severity_(sev), limit_(limit) {}
 
     Severity severity() const { return severity_; }
@@ -82,9 +75,9 @@ class DiagnosticsLimitExceededException : public DiagnosticsLimitExceededBaseExc
 
 class DiagnosticsTotalLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
-    DiagnosticsTotalLimitExceededException(size_t total, const Diagnostic &lastDiagnostic)
+    DiagnosticsTotalLimitExceededException(size_t total)
         : DiagnosticsLimitExceededBaseException(
-              "Total diagnostic limit exceeded: " + std::to_string(total), lastDiagnostic),
+              "Total diagnostic limit exceeded: " + std::to_string(total)),
           total_limit_(total) {}
 
     size_t totalLimit() const { return total_limit_; }

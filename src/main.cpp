@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 10, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -87,19 +87,46 @@ int main(int argc, char *argv[]) {
         input = std::move(file);
         EXEC_WHEN_DEBUG(l.in("Main").info("Reading from file '{}'.", targetFile));
     }
+    diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
+    if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
+        diagnostics->setConfig(DiagsConfig{
+            .total_limit = -1,
+            .per_severity_limits = {{Severity::Error, 0}},
+        });
+    }
+
+    bool useJsonFormat = (errorFormat == "json");
+
+    fs::path camelPath = fs::current_path();
+    fs::path entryPath(targetFile);
+    // if targetFile is relative (or "stdin"), the entryDir is the current working directory
+    // if targetFile is absolute, the entryDir is the parent directory of targetFile
+    std::string entryDir = fs::absolute(entryPath).parent_path().string();
+
+    context_ptr_t ctx = Context::create(
+        EntryConfig{
+            .entryDir = entryDir,
+            .entryFile = targetFile,
+            .searchPaths =
+                {
+                    entryDir,
+                    fs::absolute(fs::path(
+                                     Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
+                                                             : Run::stdLibPath))
+                        .string(),
+                    getEnv("CAMEL_PACKAGES"),
+                    getEnv("CAMEL_HOME", camelPath.string()),
+                }},
+        DiagsConfig{
+            .total_limit = -1,
+            .per_severity_limits = {{Severity::Error, 0}},
+        });
+
+    parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
+    auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
+    ctx->setMainModule(mainModule);
 
     while (Run::repeat--) {
-        diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
-        if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-            diagnostics->setConfig(DiagsConfig{
-                .total_limit = -1,
-                .per_severity_limits = {{Severity::Error, 0}},
-            });
-        }
-
-        bool useJsonFormat = (errorFormat == "json");
-        parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
-
         try {
             parser->parse(*input);
 
@@ -138,35 +165,6 @@ int main(int argc, char *argv[]) {
                     return 0;
                 }
             }
-
-            fs::path camelPath = fs::current_path();
-            fs::path entryPath(targetFile);
-            // if targetFile is relative (or "stdin"), the entryDir is the current working directory
-            // if targetFile is absolute, the entryDir is the parent directory of targetFile
-            std::string entryDir = fs::absolute(entryPath).parent_path().string();
-
-            context_ptr_t ctx = Context::create(
-                EntryConfig{
-                    .entryDir = entryDir,
-                    .entryFile = targetFile,
-                    .searchPaths =
-                        {
-                            entryDir,
-                            fs::absolute(fs::path(
-                                             Run::stdLibPath.empty()
-                                                 ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                 : Run::stdLibPath))
-                                .string(),
-                            getEnv("CAMEL_PACKAGES"),
-                            getEnv("CAMEL_HOME", camelPath.string()),
-                        }},
-                DiagsConfig{
-                    .total_limit = -1,
-                    .per_severity_limits = {{Severity::Error, 0}},
-                });
-
-            auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
-            ctx->setMainModule(mainModule);
 
             if (selectedCommand == Command::Inspect) {
                 if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
@@ -240,11 +238,7 @@ int main(int argc, char *argv[]) {
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
-            auto lastDiag = e.lastDiagnostic();
-            // TODO: fetch range
-            RangeConverter conv(parser->getTokens());
-            lastDiag.fetchRange(conv);
-            os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
+            mainModule->diagnostics()->dump(os, useJsonFormat);
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (CamelBaseException &e) {
             os << e.what(useJsonFormat) << endl;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1147,13 +1147,13 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     case AST::TypeOp::ErrorThen: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
-            .commit("TypeOp::ErrorThen");
+            .commit("TypeOp::ErrorThen (a.k.a. T ? U)");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Specialize: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
-            .commit("TypeOp::Specialize");
+            .commit("TypeOp::Specialize (a.k.a. Generics or T<U, V, ...>)");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeOf: {
