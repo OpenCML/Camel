@@ -102,7 +102,7 @@ void Graph::addCapture(const node_ptr_t &node) {
 }
 
 void Graph::setOutput(const node_ptr_t &node) {
-    ASSERT(output_ == nullptr, "Output node has already been set.");
+    ASSERT(output_ == nullptr, std::format("Graph {} already has an output node.", name_));
     output_ = ExitNode::create(*this, node->dataType(), node->index());
     Node::link(LinkType::Norm, node, output_);
 }

@@ -137,6 +137,7 @@ void Builder::setGraphOutputAndExitType(const graph_ptr_t &graph, const node_ptr
         // If the function has no declared return type, set it to the actual return type
         graph->funcType()->setExitType(actualExitType);
     }
+    graph->setOutput(node);
 }
 
 any Builder::visit(const GCT::node_ptr_t &node) {
@@ -701,14 +702,14 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         graph_ptr_t subGraph = enterScope();
         subGraph->setFuncType(
             std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, nullptr));
-        node_ptr_t res = visitExecNode(caseExecNode);
+        node_ptr_t resNode = visitExecNode(caseExecNode);
         if (!subGraph->hasOutput()) {
-            if (res) {
-                setGraphOutputAndExitType(subGraph, res);
+            if (resNode) {
+                setGraphOutputAndExitType(subGraph, resNode);
             } else {
                 // function with no return value, setting null by default
-                node_ptr_t resNode = DataNode::create(*subGraph, Data::null());
-                setGraphOutputAndExitType(subGraph, resNode);
+                node_ptr_t nullNode = DataNode::create(*subGraph, Data::null());
+                setGraphOutputAndExitType(subGraph, nullNode);
             }
         }
         leaveScope();
@@ -764,7 +765,6 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter child of EXIT node.");
     node_ptr_t resNode = any_cast<node_ptr_t>(res);
-    currGraph_->setOutput(resNode);
     setGraphOutputAndExitType(currGraph_, resNode);
 
     if (nodeModifierMap_.count(resNode.get())) {

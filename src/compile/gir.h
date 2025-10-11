@@ -119,7 +119,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
-    std::string mangledName() const { return name_ + std::format("({})", funcType()->mangle()); }
+    std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
     graph_ptr_t outer() const {
@@ -172,7 +172,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
         ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
         ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
         if (subGraphs_.find(graph->name()) == subGraphs_.end()) {
-            subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>();
+            subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>({graph});
         } else {
             auto &existing = subGraphs_[graph->name()];
             ASSERT(
@@ -206,7 +206,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addCapture(const node_ptr_t &node);
 
     const node_ptr_t &exitNode() const {
-        ASSERT(output_ != nullptr, "Graph has no output node.");
+        ASSERT(output_ != nullptr, std::format("Graph {} has no exit node.", name_));
         return output_;
     }
     bool hasOutput() const { return output_ != nullptr; }
@@ -630,7 +630,10 @@ class FuncNode : public Node {
         return std::format(
             "FUNC({}, {}): {}",
             dataIndex_,
-            func_->name().empty() ? func_->graph().name() : func_->name(),
+            std::format(
+                "{}: {}",
+                func_->name().empty() ? func_->graph().name() : func_->name(),
+                funcType()->toString()),
             dataType()->toString());
     }
 
