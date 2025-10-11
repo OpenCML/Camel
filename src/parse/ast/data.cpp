@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,10 +40,10 @@ std::string to_string(DataType type) {
         return "TryExpr";
     case DataType::Literal:
         return "Literal";
-    case DataType::List:
+    case DataType::Array:
         return "List";
-    case DataType::Dict:
-        return "Dict";
+    case DataType::Struct:
+        return "Struct";
     case DataType::Tuple:
         return "Tuple";
     case DataType::Func:

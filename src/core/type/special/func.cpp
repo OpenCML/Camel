@@ -24,7 +24,7 @@
 
 using namespace std;
 
-FunctionType::FunctionType() : SpecialType(TypeCode::Func), exitType_(nullptr) {
+FunctionType::FunctionType() : SpecialType(TypeCode::Function), exitType_(nullptr) {
     // 默认空构造函数，需要通过addWithArg和addNormArg添加参数
     // 通过此方式构造的FunctionType，是有编译信息的
     hasCompileInfo_ = true;
@@ -33,7 +33,7 @@ FunctionType::FunctionType() : SpecialType(TypeCode::Func), exitType_(nullptr) {
 FunctionType::FunctionType(
     const param_init_list_t &withTypes, const param_init_list_t &normTypes,
     const type_ptr_t &returnType, const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(withTypes),
+    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(withTypes),
       normTypes_(normTypes), exitType_(returnType) {
     // 通过此方式构造的FunctionType，没有编译期信息
     hasCompileInfo_ = false;
@@ -42,7 +42,7 @@ FunctionType::FunctionType(
 FunctionType::FunctionType(
     const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
     const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(withTypes),
+    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(withTypes),
       normTypes_(normTypes), exitType_(returnType) {
     // 通过此方式构造的FunctionType，没有编译期信息
     hasCompileInfo_ = false;
@@ -51,7 +51,7 @@ FunctionType::FunctionType(
 FunctionType::FunctionType(
     const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
     const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(std::move(withTypes)),
+    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(std::move(withTypes)),
       normTypes_(std::move(normTypes)), exitType_(returnType) {
     // 通过此方式构造的FunctionType，没有编译期信息
     hasCompileInfo_ = false;
@@ -213,7 +213,7 @@ bool FunctionType::operator==(const Type &other) const {
     if (this == &other) {
         return true;
     }
-    if (other.code() != TypeCode::Func) {
+    if (other.code() != TypeCode::Function) {
         return false;
     }
     const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);

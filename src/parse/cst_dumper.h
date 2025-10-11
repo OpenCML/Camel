@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -267,7 +267,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     };
 
     std::any visitDictData(OpenCMLParser::DictDataContext *context) {
-        return dumpNode(context, "DictData");
+        return dumpNode(context, "StructData");
     };
 
     std::any visitListData(OpenCMLParser::ListDataContext *context) {
@@ -331,7 +331,7 @@ class CSTDumpVisitor : public OpenCMLVisitor {
     };
 
     std::any visitDictType(OpenCMLParser::DictTypeContext *context) {
-        return dumpNode(context, "DictType");
+        return dumpNode(context, "StructType");
     };
 
     std::any visitTypeList(OpenCMLParser::TypeListContext *context) {

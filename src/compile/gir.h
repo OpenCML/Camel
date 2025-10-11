@@ -26,7 +26,7 @@
 
 #include "core/context/arena.h"
 #include "core/data/data.h"
-#include "core/data/other/func.h"
+#include "core/data/special/func.h"
 #include "core/operator.h"
 #include "utils/log.h"
 #include "utils/type.h"

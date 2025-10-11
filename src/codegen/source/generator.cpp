@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 13, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -833,11 +833,11 @@ string Generator::generateDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     case AbstractSyntaxTree::DataType::Literal:
         result = generateLiteralLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::List:
-        // cout << "[generateDataLoad] calling generateListDataLoad for List data type" << endl;
+    case AbstractSyntaxTree::DataType::Array:
+        // cout << "[generateDataLoad] calling generateListDataLoad for Array data type" << endl;
         result = generateListDataLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::Dict:
+    case AbstractSyntaxTree::DataType::Struct:
         result = generateDictDataLoad(node);
         break;
     case AbstractSyntaxTree::DataType::Tuple:
@@ -1456,8 +1456,8 @@ string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     string baseType = typeLoad->geneCode();
 
     if (node->size() > 0) {
-        if (typeLoad->typeType() == AbstractSyntaxTree::TypeType::List) {
-            auto listTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::ListTypeLoad>(typeLoad);
+        if (typeLoad->typeType() == AbstractSyntaxTree::TypeType::Array) {
+            auto listTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::ArrayTypeLoad>(typeLoad);
             if (listTypeLoad) {
                 size_t dims = listTypeLoad->dims();
                 string arraySuffix = "";

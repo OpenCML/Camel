@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Jul. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -105,7 +105,7 @@ class Builder {
     type_ptr_t visitNullableType(const AST::node_ptr_t &ast);
     type_ptr_t visitTypeExpr(const AST::node_ptr_t &ast);
     type_ptr_t visitListType(const AST::node_ptr_t &ast);
-    type_ptr_t visitDictType(const AST::node_ptr_t &ast);
+    type_ptr_t visitStructType(const AST::node_ptr_t &ast);
     type_ptr_t visitTupleType(const AST::node_ptr_t &ast);
     type_ptr_t visitFuncType(const AST::node_ptr_t &ast);
     type_ptr_t visitUnitType(const AST::node_ptr_t &ast);

@@ -21,7 +21,6 @@
 
 #include "primary.h"
 #include "special/func.h"
-#include "struct/list.h"
 #include "utils/type.h"
 
 using namespace std;
@@ -39,6 +38,9 @@ const signed char primeTypeConvMatrix[7][7] = {
 
 string typeCodeToString(TypeCode code) {
     switch (code) {
+        // internal use
+    case TypeCode::Ref:
+        return "ref";
         // primitive types
     case TypeCode::Int32:
         return "int32";
@@ -54,34 +56,28 @@ string typeCodeToString(TypeCode code) {
         return "bool";
     case TypeCode::Char:
         return "char";
-        // structured types
-    case TypeCode::Set:
-        return "Set";
-    case TypeCode::Map:
-        return "Map";
-    case TypeCode::Dict:
-        return "Dict";
-    case TypeCode::List:
-        return "List";
-    case TypeCode::Union:
-        return "Union";
+        // composed types
     case TypeCode::Array:
-        return "Array";
+        return "array";
     case TypeCode::Tuple:
-        return "Tuple";
-    case TypeCode::Vector:
-        return "Vector";
-    case TypeCode::Tensor:
-        return "Tensor";
+        return "tuple";
+    case TypeCode::Union:
+        return "union";
+    case TypeCode::Struct:
+        return "struct";
+    case TypeCode::Function:
+        return "function";
         // special types
     case TypeCode::Any:
         return "any";
     case TypeCode::Void:
         return "void";
-    case TypeCode::Func:
-        return "functor";
-    case TypeCode::Ref:
-        return "REF";
+        // other types
+    default:
+        if ((static_cast<uint32_t>(code) & 0xF0000000) == 0xF0000000) {
+            return "other";
+        }
+        break;
     }
     return "Unknown";
 }
@@ -90,11 +86,15 @@ Type::Type(TypeCode type) : code_(type) {}
 
 const TypeCode &Type::code() const { return code_; }
 
-bool Type::primary() const { return (static_cast<int>(code_) & 0b11'000000) == 0b00'000000; }
+bool Type::internal() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x00000000; }
 
-bool Type::structured() const { return (static_cast<int>(code_) & 0b11'000000) == 0b01'000000; }
+bool Type::primary() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x10000000; }
 
-bool Type::special() const { return (static_cast<int>(code_) & 0b11'000000) == 0b10'000000; }
+bool Type::composed() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x20000000; }
+
+bool Type::special() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x30000000; }
+
+bool Type::other() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0xF0000000; }
 
 std::string Type::toString() const { return typeCodeToString(code_); }
 
@@ -114,11 +114,11 @@ bool Type::assignable(const type_ptr_t &type) const {
     if (code_ == TypeCode::Void || type->code_ == TypeCode::Void)
         return false;
 
-    if (code_ == TypeCode::Func && type->code_ == TypeCode::Func) {
+    if (code_ == TypeCode::Function && type->code_ == TypeCode::Function) {
         // TODO: 这里需要进一步设计
         return true;
     }
-    if (structured() && type->structured()) {
+    if (composed() && type->composed()) {
         return this->equals(type);
     }
 
@@ -217,16 +217,16 @@ type_ptr_t Type::List() {
     return type;
 }
 
-type_ptr_t Type::Array(const type_ptr_t &elementType, size_t size) {
-    return tt::as_shared<Type>(make_shared<ArrayType>(elementType, size));
+type_ptr_t Type::Array(const type_ptr_t &elementType) {
+    return tt::as_shared<Type>(make_shared<ArrayType>(elementType));
 }
 
 type_ptr_t Type::Tuple(const type_vec_t &types) {
     return tt::as_shared<Type>(make_shared<TupleType>(types));
 }
 
-type_ptr_t Type::Vector(const type_ptr_t &elementType) {
-    return tt::as_shared<Type>(make_shared<VectorType>(elementType));
+type_ptr_t Type::Vector(const type_ptr_t &elementType, size_t size) {
+    return tt::as_shared<Type>(make_shared<VectorType>(elementType, size));
 }
 
 type_ptr_t Type::Any() {

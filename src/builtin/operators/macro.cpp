@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,7 +42,7 @@ OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
     const type_ptr_t &lhsType = lhs->type();
     const type_ptr_t &rhsType = rhs->type();
 
-    if (lhsType->code() != TypeCode::Func || rhsType->code() != TypeCode::Func) {
+    if (lhsType->code() != TypeCode::Function || rhsType->code() != TypeCode::Function) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<cmp>", "functor", lhsType->toString() + " and " + rhsType->toString());

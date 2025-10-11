@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,20 +37,14 @@ OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
     int32_t len = 0;
 
     switch (arg->type()->code()) {
-    case TypeCode::List:
-        len = static_cast<int32_t>(tt::as_shared<ListData>(arg)->raw().size());
-        break;
     case TypeCode::Array:
         len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
-        break;
-    case TypeCode::Vector:
-        len = static_cast<int32_t>(tt::as_shared<VectorData>(arg)->raw().size());
         break;
     case TypeCode::Tuple:
         len = static_cast<int32_t>(tt::as_shared<TupleData>(arg)->raw().size());
         break;
-    case TypeCode::Dict:
-        len = static_cast<int32_t>(tt::as_shared<DictData>(arg)->raw().size());
+    case TypeCode::Struct:
+        len = static_cast<int32_t>(tt::as_shared<StructData>(arg)->raw().size());
         break;
     default:
         ctx.rtmDiags()
@@ -80,12 +74,8 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
 
     auto getElements = [](const data_ptr_t &data) -> std::optional<data_vec_t> {
         switch (data->type()->code()) {
-        case TypeCode::List:
-            return tt::as_shared<ListData>(data)->raw();
         case TypeCode::Array:
             return tt::as_shared<ArrayData>(data)->raw();
-        case TypeCode::Vector:
-            return tt::as_shared<VectorData>(data)->raw();
         case TypeCode::Tuple:
             return tt::as_shared<TupleData>(data)->raw();
         default:
@@ -120,14 +110,10 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
 
     for (size_t i = 0; i < aElems.size(); ++i) {
         data_vec_t pair{aElems[i], bElems[i]};
-        zipped.push_back(ArrayData::create(Type::Array(Type::Any(), 2), std::move(pair)));
+        zipped.push_back(ArrayData::create(Type::Array(Type::Any()), std::move(pair)));
     }
 
-    frame.set(
-        self,
-        ArrayData::create(
-            Type::Array(Type::Array(Type::Any(), 2), zipped.size()),
-            std::move(zipped)));
+    frame.set(self, ArrayData::create(Type::Array(Type::Array(Type::Any())), std::move(zipped)));
     return OperatorReturnCode::OK;
 }
 
@@ -162,14 +148,8 @@ OperatorReturnCode __head__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
     };
 
     switch (collect->type()->code()) {
-    case TypeCode::List:
-        frame.set(self, extract_first(tt::as_shared<ListData>(collect)->raw()));
-        break;
     case TypeCode::Array:
         frame.set(self, extract_first(tt::as_shared<ArrayData>(collect)->raw()));
-        break;
-    case TypeCode::Vector:
-        frame.set(self, extract_first(tt::as_shared<VectorData>(collect)->raw()));
         break;
     case TypeCode::Tuple:
         frame.set(self, extract_first(tt::as_shared<TupleData>(collect)->raw()));
@@ -224,23 +204,11 @@ OperatorReturnCode __tail__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
     };
 
     switch (collect->type()->code()) {
-    case TypeCode::List: {
-        auto vec = tt::as_shared<ListData>(collect)->raw();
-        frame.set(self, ListData::create(slice_tail(vec)));
-        break;
-    }
     case TypeCode::Array: {
         auto array = tt::as_shared<ArrayData>(collect)->raw();
         auto new_vec = slice_tail(array);
         auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
-        frame.set(
-            self,
-            ArrayData::create(Type::Array(elem_type, new_vec.size()), std::move(new_vec)));
-        break;
-    }
-    case TypeCode::Vector: {
-        auto vec = tt::as_shared<VectorData>(collect)->raw();
-        frame.set(self, VectorData::create(collect->type(), slice_tail(vec)));
+        frame.set(self, ArrayData::create(Type::Array(elem_type), std::move(new_vec)));
         break;
     }
     case TypeCode::Tuple: {
@@ -330,7 +298,7 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         }
     }
 
-    auto arrayType = std::make_shared<ArrayType>(Type::Int64(), values.size());
+    auto arrayType = std::make_shared<ArrayType>(Type::Int64());
     auto result = ArrayData::create(arrayType, std::move(values));
 
     frame.set(self, result);
@@ -383,13 +351,6 @@ OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     };
 
     switch (collect->type()->code()) {
-    case TypeCode::List: {
-        auto list = tt::as_shared<ListData>(collect)->raw();
-        slice_range(static_cast<int32_t>(list.size()), start, end);
-        data_vec_t sliced(list.begin() + start, list.begin() + end);
-        frame.set(self, ListData::create(std::move(sliced)));
-        break;
-    }
     case TypeCode::Array: {
         auto array = tt::as_shared<ArrayData>(collect)->raw();
         slice_range(static_cast<int32_t>(array.size()), start, end);
@@ -397,17 +358,8 @@ OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         frame.set(
             self,
             ArrayData::create(
-                Type::Array(
-                    tt::as_shared<ArrayType>(collect->type())->elementType(),
-                    sliced.size()),
+                Type::Array(tt::as_shared<ArrayType>(collect->type())->elementType()),
                 std::move(sliced)));
-        break;
-    }
-    case TypeCode::Vector: {
-        auto vec = tt::as_shared<VectorData>(collect)->raw();
-        slice_range(static_cast<int32_t>(vec.size()), start, end);
-        data_vec_t sliced(vec.begin() + start, vec.begin() + end);
-        frame.set(self, VectorData::create(collect->type(), std::move(sliced)));
         break;
     }
     default:
@@ -445,26 +397,12 @@ OperatorReturnCode __concat__(GraphIR::node_ptr_t &self, Frame &frame, Context &
     }
 
     switch (left->type()->code()) {
-    case TypeCode::List: {
-        auto l = tt::as_shared<ListData>(left)->raw();
-        auto r = tt::as_shared<ListData>(right)->raw();
-        l.insert(l.end(), r.begin(), r.end());
-        frame.set(self, ListData::create(std::move(l)));
-        break;
-    }
     case TypeCode::Array: {
         auto l = tt::as_shared<ArrayData>(left)->raw();
         auto r = tt::as_shared<ArrayData>(right)->raw();
         l.insert(l.end(), r.begin(), r.end());
         auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
-        frame.set(self, ArrayData::create(Type::Array(elemType, l.size()), std::move(l)));
-        break;
-    }
-    case TypeCode::Vector: {
-        auto l = tt::as_shared<VectorData>(left)->raw();
-        auto r = tt::as_shared<VectorData>(right)->raw();
-        l.insert(l.end(), r.begin(), r.end());
-        frame.set(self, VectorData::create(left->type(), std::move(l)));
+        frame.set(self, ArrayData::create(Type::Array(elemType), std::move(l)));
         break;
     }
     default:
@@ -495,25 +433,11 @@ OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &
     const data_ptr_t &element = frame.get(normIns[0]);
 
     switch (collection->type()->code()) {
-    case TypeCode::List: {
-        auto vec = tt::as_shared<ListData>(collection)->raw();
-        vec.push_back(element);
-        frame.set(collectNode, ListData::create(std::move(vec)));
-        break;
-    }
     case TypeCode::Array: {
         auto vec = tt::as_shared<ArrayData>(collection)->raw();
         vec.push_back(element);
         auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(
-            collectNode,
-            ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
-        break;
-    }
-    case TypeCode::Vector: {
-        auto vec = tt::as_shared<VectorData>(collection)->raw();
-        vec.push_back(element);
-        frame.set(collectNode, VectorData::create(collection->type(), std::move(vec)));
+        frame.set(collectNode, ArrayData::create(Type::Array(elemType), std::move(vec)));
         break;
     }
     default:
@@ -554,28 +478,12 @@ OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &
     }
 
     switch (collection->type()->code()) {
-    case TypeCode::List: {
-        auto vec = tt::as_shared<ListData>(collection)->raw();
-        auto ext = tt::as_shared<ListData>(other)->raw();
-        vec.insert(vec.end(), ext.begin(), ext.end());
-        frame.set(collectNode, ListData::create(std::move(vec)));
-        break;
-    }
     case TypeCode::Array: {
         auto vec = tt::as_shared<ArrayData>(collection)->raw();
         auto ext = tt::as_shared<ArrayData>(other)->raw();
         vec.insert(vec.end(), ext.begin(), ext.end());
         auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(
-            collectNode,
-            ArrayData::create(Type::Array(elemType, vec.size()), std::move(vec)));
-        break;
-    }
-    case TypeCode::Vector: {
-        auto vec = tt::as_shared<VectorData>(collection)->raw();
-        auto ext = tt::as_shared<VectorData>(other)->raw();
-        vec.insert(vec.end(), ext.begin(), ext.end());
-        frame.set(collectNode, VectorData::create(collection->type(), std::move(vec)));
+        frame.set(collectNode, ArrayData::create(Type::Array(elemType), std::move(vec)));
         break;
     }
     default:
@@ -623,14 +531,8 @@ OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context
     };
 
     switch (collection->type()->code()) {
-    case TypeCode::List:
-        checkInListLike(tt::as_shared<ListData>(collection));
-        break;
     case TypeCode::Array:
         checkInListLike(tt::as_shared<ArrayData>(collection));
-        break;
-    case TypeCode::Vector:
-        checkInListLike(tt::as_shared<VectorData>(collection));
         break;
     default:
         ctx.rtmDiags()

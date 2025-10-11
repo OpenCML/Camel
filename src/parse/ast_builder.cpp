@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -500,10 +500,10 @@ any Builder::visitCarrier(OpenCMLParser::CarrierContext *context) {
     } else if (context->parentIdents()) {
         refs = any_cast<vector<Reference>>(visitParentIdents(context->parentIdents()));
     } else if (context->bracedIdents()) {
-        type = UnpackType::Dict;
+        type = UnpackType::Struct;
         refs = any_cast<vector<Reference>>(visitBracedIdents(context->bracedIdents()));
     } else if (context->bracketIdents()) {
-        type = UnpackType::List;
+        type = UnpackType::Array;
         refs = any_cast<vector<Reference>>(visitBracketIdents(context->bracketIdents()));
     }
     LEAVE("Carrier");
@@ -1480,7 +1480,7 @@ dictData
     ;
 */
 any Builder::visitDictData(OpenCMLParser::DictDataContext *context) {
-    ENTER("DictData");
+    ENTER("StructData");
     node_ptr_t dataNode = createNodeAs<DictDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->pairedValues()) {
@@ -1488,7 +1488,7 @@ any Builder::visitDictData(OpenCMLParser::DictDataContext *context) {
     } else {
         *dataNode << createNodeAs<RepeatedLoad>("NamedData");
     }
-    LEAVE("DictData");
+    LEAVE("StructData");
     return dataNode;
 }
 
@@ -1752,7 +1752,7 @@ any Builder::visitListType(OpenCMLParser::ListTypeContext *context) {
     node_ptr_t res = any2node(visitSpecType(context->specType()));
     if (context->children.size() > 1) {
         size_t dims = (context->children.size() - 1) / 2;
-        node_ptr_t listTypeNode = createNodeAs<ListTypeLoad>(dims);
+        node_ptr_t listTypeNode = createNodeAs<ArrayTypeLoad>(dims);
         setNodeTokenRangeByContext(listTypeNode, context);
         *listTypeNode << res;
         res = listTypeNode;
@@ -1852,8 +1852,8 @@ dictType
     ;
 */
 any Builder::visitDictType(OpenCMLParser::DictTypeContext *context) {
-    ENTER("DictType");
-    node_ptr_t res = createNodeAs<DictTypeLoad>();
+    ENTER("StructType");
+    node_ptr_t res = createNodeAs<StructTypeLoad>();
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedType");
     setNodeTokenRangeByContext(repeatNode, context);
     for (auto &pair : context->keyTypePair()) {
@@ -1861,7 +1861,7 @@ any Builder::visitDictType(OpenCMLParser::DictTypeContext *context) {
         *repeatNode << pairNode;
     }
     *res << repeatNode;
-    LEAVE("DictType");
+    LEAVE("StructType");
     return res;
 }
 

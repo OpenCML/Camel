@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,10 +61,10 @@ const std::string DataDeclLoad::toString() const {
         std::string refs =
             strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); });
         switch (type_) {
-        case UnpackType::Dict:
+        case UnpackType::Struct:
             result += "{" + refs + "}";
             break;
-        case UnpackType::List:
+        case UnpackType::Array:
             result += "[" + refs + "]";
             break;
         case UnpackType::Tuple:
@@ -114,10 +114,10 @@ const std::string DataDeclLoad::geneCode() const {
         std::string refs =
             strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); });
         switch (type_) {
-        case UnpackType::Dict:
+        case UnpackType::Struct:
             result += "{" + refs + "}";
             break;
-        case UnpackType::List:
+        case UnpackType::Array:
             result += "[" + refs + "]";
             break;
         case UnpackType::Tuple:

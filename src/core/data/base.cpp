@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "base.h"
 
-#include "other/null.h"
+#include "special/null.h"
 #include "utils/assert.h"
 
 using namespace std;

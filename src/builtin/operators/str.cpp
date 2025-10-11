@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -120,8 +120,8 @@ OperatorReturnCode __join__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::ostringstream joined;
 
     const data_ptr_t &arr = frame.get(norm.front());
-    if (Type::castSafetyCheck(arr->type(), Type::Vector(Type::String()))) {
-        auto vecData = arr->as<VectorData>(Type::Vector(Type::String()));
+    if (Type::castSafetyCheck(arr->type(), Type::Array(Type::String()))) {
+        auto vecData = arr->as<ArrayData>(Type::Array(Type::String()));
         for (auto &arg : vecData->raw()) {
             if (joined.tellp() > 0)
                 joined << separator;

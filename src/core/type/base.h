@@ -32,31 +32,32 @@
 #include "../impl.h"
 #include "utils/assert.h"
 
-enum class TypeCode {
-    // primitive types
-    Int32 = 0b00'000000,
-    Int64 = 0b00'000001,
-    Float = 0b00'000010,
-    Double = 0b00'000011,
-    String = 0b00'000100,
-    Bool = 0b00'000101,
-    Char = 0b00'000110,
-    // structured types
-    Set = 0b01'000000,
-    Map = 0b01'000001,
-    Dict = 0b01'000010,
-    List = 0b01'000011,
-    Union = 0b01'000100,
-    Array = 0b01'000101,
-    Tuple = 0b01'000110,
-    Vector = 0b01'000111,
-    Tensor = 0b01'001000,
-    // special types
-    Any = 0b10'000000,
-    Void = 0b10'000001,
-    Func = 0b10'000010,
-    // for internal use
-    Ref = 0b11'000000,
+enum class TypeCode : uint32_t {
+    // internal use (P = 0x0)
+    Ref = 0x0'0000000,
+
+    // primitive types (P = 0x1)
+    Int32 = 0x1'0000000,
+    Int64 = 0x1'0000001,
+    Float = 0x1'0000002,
+    Double = 0x1'0000003,
+    String = 0x1'0000004,
+    Bool = 0x1'0000005,
+    Char = 0x1'0000006,
+
+    // composed types (P = 0x2)
+    Array = 0x2'0000001,
+    Tuple = 0x2'0000002,
+    Union = 0x2'0000003,
+    Struct = 0x2'0000004,
+    Function = 0x2'0000005,
+
+    // special types (P = 0x3)
+    Any = 0x3'0000000,
+    Void = 0x3'0000001,
+
+    // other types (P = 0xF)
+    Other = 0xF'0000000,
 };
 
 enum class CastSafety {
@@ -71,17 +72,17 @@ extern const signed char primeTypeConvMatrix[7][7];
 
 class Type;
 class PrimaryType;
-class StructType;
+class ComposedType;
 class SpecialType;
 
 class SetType;
 class MapType;
 class ListType;
-class DictType;
-class ArrayType;
+class StructType;
+class VectorType;
 class TupleType;
 class UnionType;
-class VectorType;
+class ArrayType;
 class TensorType;
 
 using type_ptr_t = std::shared_ptr<Type>;
@@ -106,10 +107,11 @@ class Type {
 
     const TypeCode &code() const;
 
+    bool internal() const;
     bool primary() const;
-    bool structured() const;
+    bool composed() const;
     bool special() const;
-    ImplMark implMark() const;
+    bool other() const;
 
     virtual std::string toString() const;
     virtual std::string mangle() const = 0;
@@ -140,9 +142,9 @@ class Type {
     static type_ptr_t Number();
 
     static type_ptr_t List();
-    static type_ptr_t Array(const type_ptr_t &elementType, size_t size);
+    static type_ptr_t Array(const type_ptr_t &elementType);
     static type_ptr_t Tuple(const type_vec_t &types);
-    static type_ptr_t Vector(const type_ptr_t &elementType);
+    static type_ptr_t Vector(const type_ptr_t &elementType, size_t size);
 
     static type_ptr_t Any();
     static type_ptr_t Func();

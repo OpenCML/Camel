@@ -18,9 +18,8 @@
  */
 
 #include "taskflow.h"
+#include "core/data/composed/array.h"
 #include "core/data/primary.h"
-#include "core/data/struct/array.h"
-#include "core/data/struct/vector.h"
 
 #include <fstream>
 #include <queue>
@@ -213,10 +212,6 @@ tf::Task TaskflowExecSchedPass::buildAccsTask(
                     auto t = tt::as_shared<TupleData>(source);
                     ASSERT(idx < t->size(), "Tuple index out of bounds.");
                     frame->set(n, t->raw()[idx]);
-                } else if (source->type()->code() == TypeCode::Vector) {
-                    auto v = tt::as_shared<VectorData>(source);
-                    ASSERT(idx < v->size(), "Vector index out of bounds.");
-                    frame->set(n, v->raw()[idx]);
                 } else {
                     context_->rtmDiags()
                         ->of(RuntimeDiag::IncompatibleArgType)
@@ -227,14 +222,14 @@ tf::Task TaskflowExecSchedPass::buildAccsTask(
                 }
             } else {
                 std::string key = acc->index<std::string>();
-                if (source->type()->code() == TypeCode::Dict) {
-                    auto d = tt::as_shared<DictData>(source);
-                    ASSERT(d->raw().contains(key), "Dict key not found.");
+                if (source->type()->code() == TypeCode::Struct) {
+                    auto d = tt::as_shared<StructData>(source);
+                    ASSERT(d->raw().contains(key), "Struct key not found.");
                     frame->set(n, d->raw().at(key));
                 } else {
                     context_->rtmDiags()
                         ->of(RuntimeDiag::IncompatibleArgType)
-                        .commit(0, "ACCS", "Dict", source->type()->toString());
+                        .commit(0, "ACCS", "Struct", source->type()->toString());
                     throw CamelRuntimeException(
                         RuntimeExceptionCode::InvalidWithParameter,
                         "Incorrect args.");
@@ -513,7 +508,7 @@ void TaskflowExecSchedPass::mark_map(const node_ptr_t &node, frame_ptr_t frame, 
     auto targetData = frame->get(node->withInputs().front());
     auto funcData = frame->get(node->normInputs().front());
 
-    if (funcData->type()->code() != TypeCode::Func) {
+    if (funcData->type()->code() != TypeCode::Function) {
         context_->rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
             .commit(0, "<map>", "Function", funcData->type()->toString());
@@ -539,17 +534,6 @@ void TaskflowExecSchedPass::mark_map(const node_ptr_t &node, frame_ptr_t frame, 
     };
 
     switch (targetData->type()->code()) {
-    case TypeCode::List: {
-        auto list = tt::as_shared<ListData>(targetData);
-        const auto &elements = list->raw();
-        data_vec_t results(elements.size());
-        for (size_t i = 0; i < elements.size(); ++i) {
-            spawn_unary(elements[i], results[i]);
-        }
-        sf.join();
-        frame->set(node, ListData::create(std::move(results)));
-        break;
-    }
     case TypeCode::Array: {
         auto arr = tt::as_shared<ArrayData>(targetData);
         const auto &elements = arr->raw();
@@ -559,22 +543,11 @@ void TaskflowExecSchedPass::mark_map(const node_ptr_t &node, frame_ptr_t frame, 
             spawn_unary(elements[i], results[i]);
         }
         sf.join();
-        frame->set(node, ArrayData::create(Type::Array(funcRetType, n), std::move(results)));
+        frame->set(node, ArrayData::create(Type::Array(funcRetType), std::move(results)));
         break;
     }
-    case TypeCode::Vector: {
-        auto vec = tt::as_shared<VectorData>(targetData);
-        const auto &elements = vec->raw();
-        data_vec_t results(elements.size());
-        for (size_t i = 0; i < elements.size(); ++i) {
-            spawn_unary(elements[i], results[i]);
-        }
-        sf.join();
-        frame->set(node, VectorData::create(Type::Vector(funcRetType), std::move(results)));
-        break;
-    }
-    case TypeCode::Dict: {
-        auto dict = tt::as_shared<DictData>(targetData);
+    case TypeCode::Struct: {
+        auto dict = tt::as_shared<StructData>(targetData);
         const auto &raw = dict->raw();
         std::vector<std::pair<std::string, data_ptr_t>> items;
         items.reserve(raw.size());
@@ -591,13 +564,13 @@ void TaskflowExecSchedPass::mark_map(const node_ptr_t &node, frame_ptr_t frame, 
         res.reserve(items.size());
         for (size_t i = 0; i < items.size(); ++i)
             res.emplace(items[i].first, values[i]);
-        frame->set(node, DictData::create(std::move(res)));
+        frame->set(node, StructData::create(std::move(res)));
         break;
     }
     default:
         context_->rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<map>", "List/Array/Tuple/Vector/Dict", targetData->type()->toString());
+            .commit(0, "<map>", "List/Array/Tuple/Vector/Struct", targetData->type()->toString());
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
     }
 }
@@ -612,7 +585,7 @@ void TaskflowExecSchedPass::mark_apply(const node_ptr_t &node, frame_ptr_t frame
 
     auto targetData = frame->get(node->withInputs().front());
     auto funcData = frame->get(node->normInputs().front());
-    ASSERT(funcData->type()->code() == TypeCode::Func, "apply expects a function.");
+    ASSERT(funcData->type()->code() == TypeCode::Function, "apply expects a function.");
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto spawn_unary = [&](data_ptr_t arg, data_ptr_t &out_slot) {
@@ -640,12 +613,6 @@ void TaskflowExecSchedPass::mark_apply(const node_ptr_t &node, frame_ptr_t frame
     };
 
     switch (targetData->type()->code()) {
-    case TypeCode::List: {
-        par_apply(tt::as_shared<ListData>(targetData)->raw(), [&](data_vec_t v) {
-            return ListData::create(std::move(v));
-        });
-        break;
-    }
     case TypeCode::Array: {
         auto arr = tt::as_shared<ArrayData>(targetData);
         par_apply(arr->raw(), [&](data_vec_t v) {
@@ -657,13 +624,6 @@ void TaskflowExecSchedPass::mark_apply(const node_ptr_t &node, frame_ptr_t frame
         auto tup = tt::as_shared<TupleData>(targetData);
         par_apply(tup->raw(), [&](data_vec_t v) {
             return TupleData::create(tup->type(), std::move(v));
-        });
-        break;
-    }
-    case TypeCode::Vector: {
-        auto vec = tt::as_shared<VectorData>(targetData);
-        par_apply(vec->raw(), [&](data_vec_t v) {
-            return VectorData::create(vec->type(), std::move(v));
         });
         break;
     }
@@ -688,7 +648,7 @@ void TaskflowExecSchedPass::mark_filter(
 
     auto targetData = frame->get(node->withInputs().front());
     auto funcData = frame->get(node->normInputs().front());
-    ASSERT(funcData->type()->code() == TypeCode::Func, "filter expects a function.");
+    ASSERT(funcData->type()->code() == TypeCode::Function, "filter expects a function.");
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto par_filter = [&](const data_vec_t &elements, auto createOut, auto elemType) {
@@ -726,14 +686,6 @@ void TaskflowExecSchedPass::mark_filter(
     };
 
     switch (targetData->type()->code()) {
-    case TypeCode::List: {
-        auto list = tt::as_shared<ListData>(targetData);
-        par_filter(
-            list->raw(),
-            [](auto, data_vec_t v) { return ListData::create(std::move(v)); },
-            nullptr);
-        break;
-    }
     case TypeCode::Array: {
         auto arr = tt::as_shared<ArrayData>(targetData);
         par_filter(
@@ -748,14 +700,6 @@ void TaskflowExecSchedPass::mark_filter(
             tup->raw(),
             [](auto t, data_vec_t v) { return TupleData::create(t, std::move(v)); },
             tup->type());
-        break;
-    }
-    case TypeCode::Vector: {
-        auto vec = tt::as_shared<VectorData>(targetData);
-        par_filter(
-            vec->raw(),
-            [](auto t, data_vec_t v) { return VectorData::create(t, std::move(v)); },
-            vec->type());
         break;
     }
     default:
@@ -780,19 +724,13 @@ void TaskflowExecSchedPass::mark_reduce(
     auto targetData = frame->get(node->withInputs().front());
     auto funcData = frame->get(node->normInputs()[0]);
     auto initData = frame->get(node->normInputs()[1]);
-    ASSERT(funcData->type()->code() == TypeCode::Func, "reduce expects a function.");
+    ASSERT(funcData->type()->code() == TypeCode::Function, "reduce expects a function.");
     auto func = funcData->as<FunctionData>(Type::Func());
 
     data_vec_t elements;
     switch (targetData->type()->code()) {
-    case TypeCode::List:
-        elements = tt::as_shared<ListData>(targetData)->raw();
-        break;
     case TypeCode::Array:
         elements = tt::as_shared<ArrayData>(targetData)->raw();
-        break;
-    case TypeCode::Vector:
-        elements = tt::as_shared<VectorData>(targetData)->raw();
         break;
     case TypeCode::Tuple:
         elements = tt::as_shared<TupleData>(targetData)->raw();
@@ -850,7 +788,7 @@ void TaskflowExecSchedPass::mark_foreach(
 
     auto targetData = frame->get(node->withInputs().front());
     auto funcData = frame->get(node->normInputs().front());
-    ASSERT(funcData->type()->code() == TypeCode::Func, "foreach expects a function.");
+    ASSERT(funcData->type()->code() == TypeCode::Function, "foreach expects a function.");
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto spawn_unary_void = [&](data_ptr_t arg) {
@@ -869,14 +807,6 @@ void TaskflowExecSchedPass::mark_foreach(
     };
 
     switch (targetData->type()->code()) {
-    case TypeCode::List: {
-        auto elems = tt::as_shared<ListData>(targetData)->raw();
-        for (auto &e : elems)
-            spawn_unary_void(e);
-        sf.join();
-        frame->set(node, Data::null());
-        break;
-    }
     case TypeCode::Array: {
         auto elems = tt::as_shared<ArrayData>(targetData)->raw();
         for (auto &e : elems)
@@ -893,16 +823,8 @@ void TaskflowExecSchedPass::mark_foreach(
         frame->set(node, Data::null());
         break;
     }
-    case TypeCode::Vector: {
-        auto elems = tt::as_shared<VectorData>(targetData)->raw();
-        for (auto &e : elems)
-            spawn_unary_void(e);
-        sf.join();
-        frame->set(node, Data::null());
-        break;
-    }
-    case TypeCode::Dict: {
-        auto dict = tt::as_shared<DictData>(targetData);
+    case TypeCode::Struct: {
+        auto dict = tt::as_shared<StructData>(targetData);
         for (const auto &kv : dict->raw())
             spawn_unary_void(kv.second);
         sf.join();
@@ -912,7 +834,7 @@ void TaskflowExecSchedPass::mark_foreach(
     default:
         context_->rtmDiags()
             ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<foreach>", "List/Array/Tuple/Vector/Dict", targetData->toString());
+            .commit(0, "<foreach>", "List/Array/Tuple/Vector/Struct", targetData->toString());
         throw CamelRuntimeException(
             RuntimeExceptionCode::InvalidWithParameter,
             "Unsupported type.");

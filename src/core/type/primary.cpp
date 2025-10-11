@@ -67,19 +67,11 @@ CastSafety PrimaryType::castSafetyTo(const Type &other) const {
         const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
         return static_cast<CastSafety>(primeTypeConvMatrix[thisIndex][otherIndex]);
     }
-    if (other.structured()) {
+    if (other.composed()) {
         switch (otherCode) {
         case TypeCode::Union:
             [[fallthrough]];
-        case TypeCode::List:
-            [[fallthrough]];
         case TypeCode::Array:
-            [[fallthrough]];
-        case TypeCode::Vector:
-            [[fallthrough]];
-        case TypeCode::Tensor:
-            [[fallthrough]];
-        case TypeCode::Set:
             return CastSafety::Safe;
         default:
             return CastSafety::Forbidden;

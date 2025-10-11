@@ -498,7 +498,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     } else {
         const auto &dataType = targetNode->dataType();
         ASSERT(
-            dataType->code() == TypeCode::Func,
+            dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");
         const auto &funcType = tt::as_shared<FunctionType>(dataType);
         StaticFuncTypeResolver resolver(funcType);
@@ -640,11 +640,11 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of ACCS node.");
     node_ptr_t tgtNode = any_cast<node_ptr_t>(res);
     ASSERT(tgtNode != nullptr, "Access node target is null.");
-    if (!tgtNode->dataType()->structured()) {
+    if (!tgtNode->dataType()->composed()) {
         diags_->of(SemanticDiag::TypeNotIndexable).commit(tgtNode->dataType()->toString());
         throw BuildAbortException();
     }
-    const auto tgtType = tt::as_shared<StructType>(tgtNode->dataType());
+    const auto tgtType = tt::as_shared<ComposedType>(tgtNode->dataType());
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     graph_ptr_t &graph = currGraph_;
     // TODO: here may need inplace access to the data

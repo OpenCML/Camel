@@ -25,7 +25,7 @@ std::string SpecialType::mangle() const {
         return "a";
     case TypeCode::Void:
         return "v";
-    case TypeCode::Func:
+    case TypeCode::Function:
         ASSERT(false, "Function type mangle should be implemented in FunctionType.");
         return "";
     default:
@@ -42,7 +42,7 @@ CastSafety SpecialType::castSafetyTo(const Type &other) const {
     if (other.code() == TypeCode::Any) {
         return CastSafety::Safe;
     }
-    if (other.primary() || other.structured()) {
+    if (other.primary() || other.composed()) {
         return CastSafety::Forbidden;
     }
     if (other.code() == TypeCode::Void) {

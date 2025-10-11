@@ -973,59 +973,16 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__idx__",
             {
                 {
-                    ":op/idx_vec",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(vec: Array<T, n>, index: int32) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Array ||
-                                norm[1]->code() != TypeCode::Int32)
-                                return nullopt;
-                            return tt::as_shared<ArrayType>(norm[0])->elementType();
-                        }),
-                },
-                {
                     ":op/idx_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(arr: T[], index: int32) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Vector ||
+                            if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Int32)
                                 return nullopt;
-                            return tt::as_shared<VectorType>(norm[0])->elementType();
-                        }),
-                },
-                {
-                    ":op/idx_map",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(map: Map<K, V>, key: K) => V",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Map)
-                                return nullopt;
-                            const auto &mapType = tt::as_shared<MapType>(norm[0]);
-                            if (!mapType->keyType()->equals(norm[1]))
-                                return nullopt;
-                            return mapType->valueType();
-                        }),
-                },
-                {
-                    ":op/idx_set",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(set: Set<T>, val: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Set)
-                                return nullopt;
-                            const auto &setType = tt::as_shared<SetType>(norm[0]);
-                            if (!setType->valueType()->equals(norm[1]))
-                                return nullopt;
-                            return setType->valueType();
+                            return tt::as_shared<ArrayType>(norm[0])->elementType();
                         }),
                 },
                 {
@@ -1187,31 +1144,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (!with[0]->equals(Type::String()))
                                 return nullopt;
                             const auto &type = norm[0];
-                            if (type->code() != TypeCode::Vector) {
-                                return nullopt;
-                            }
-                            const auto &vecType = tt::as_shared<VectorType>(type);
-                            if (vecType->elementType()->code() != TypeCode::String) {
-                                return nullopt;
-                            }
-                            return Type::String();
-                        }),
-                },
-                {
-                    ":str/join_vec",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {-1, {}}},
-                        "<sep: string> (vec: Array<string, n>) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (!with[0]->equals(Type::String()))
-                                return nullopt;
-                            const auto &type = norm[0];
                             if (type->code() != TypeCode::Array) {
                                 return nullopt;
                             }
-                            const auto &arrType = tt::as_shared<ArrayType>(type);
-                            if (arrType->elementType()->code() != TypeCode::String) {
+                            const auto &vecType = tt::as_shared<ArrayType>(type);
+                            if (vecType->elementType()->code() != TypeCode::String) {
                                 return nullopt;
                             }
                             return Type::String();
@@ -1244,49 +1181,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int32()),
                 },
                 {
-                    ":struct/len_vec",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(vec: Array<T, n>) => int32",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            return Type::Int32();
-                        }),
-                },
-                {
                     ":struct/len_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(arr: T[]) => int32",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Vector)
-                                return nullopt;
-                            return Type::Int32();
-                        }),
-                },
-                {
-                    ":struct/len_map",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(map: Map<K, V>) => int32",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Map)
-                                return nullopt;
-                            return Type::Int32();
-                        }),
-                },
-                {
-                    ":struct/len_set",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(set: Set<V>) => int32",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Set)
+                            if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             return Type::Int32();
                         }),
@@ -1299,22 +1200,22 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":struct/zip",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
-                        "(...args: Vector<typeas T>) => Vector<Tuple<T, T, ...>>",
+                        "(...args: (typeas T)[]) => (T, T, ...)[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm.size() < 2)
                                 return nullopt;
                             for (const auto &t : norm) {
-                                if (t->code() != TypeCode::Vector)
+                                if (t->code() != TypeCode::Array)
                                     return nullopt;
                             }
                             type_vec_t tupleTypes;
                             for (size_t i = 0; i < norm.size(); i++) {
                                 const auto &elemType =
-                                    tt::as_shared<VectorType>(norm[i])->elementType();
+                                    tt::as_shared<ArrayType>(norm[i])->elementType();
                                 tupleTypes.push_back(elemType);
                             }
-                            return Type::Vector(Type::Tuple(tupleTypes));
+                            return Type::Array(Type::Tuple(tupleTypes));
                         }),
                 },
             }),
@@ -1322,28 +1223,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "head",
             {
                 {
-                    ":struct/head_vec",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {0, {}}},
-                        "<vec: Array<T, n>> () => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(with[0]);
-                            return arrType->elementType();
-                        }),
-                },
-                {
                     ":struct/head_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {0, {}}},
                         "<arr: T[]> () => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
                             return vecType->elementType();
                         }),
                 },
@@ -1352,29 +1240,16 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "tail",
             {
                 {
-                    ":struct/tail_vec",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {0, {}}},
-                        "<vec: Array<T, n>> () => Array<T, m>",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(with[0]);
-                            return Type::Array(arrType->elementType(), arrType->size() - 1);
-                        }),
-                },
-                {
                     ":struct/tail_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {0, {}}},
                         "<arr: T[]> () => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            return Type::Vector(vecType->elementType());
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            return Type::Array(vecType->elementType());
                         }),
                 },
             }),
@@ -1392,7 +1267,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Int32)
                                 return nullopt;
-                            return Type::Vector(Type::Int32());
+                            return Type::Array(Type::Int32());
                         }),
                 },
             }),
@@ -1400,10 +1275,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "slice",
             {
                 {
-                    ":struct/slice_vec",
+                    ":struct/slice_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {2, {false, false}}},
-                        "<vec: Array<T, n>> (start: int32, end: int32) => Array<T, m>",
+                        "<arr: T[]> (start: int32, end: int32) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)
@@ -1412,25 +1287,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Int32)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(with[0]);
-                            return Type::Array(arrType->elementType(), -1);
-                        }),
-                },
-                {
-                    ":struct/slice_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {2, {false, false}}},
-                        "<arr: T[]> (start: int32, end: int32) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
-                                return nullopt;
-                            if (norm[0]->code() != TypeCode::Int32)
-                                return nullopt;
-                            if (norm[1]->code() != TypeCode::Int32)
-                                return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            return Type::Vector(vecType->elementType());
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            return Type::Array(vecType->elementType());
                         }),
                 },
             }),
@@ -1438,41 +1296,21 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "concat",
             {
                 {
-                    ":struct/concat_vec",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<vec: Array<T, n>> (other: Array<T, m>) => Array<T, m + n>",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(with[0]);
-                            const auto &otherArrType = tt::as_shared<ArrayType>(norm[0]);
-                            if (!arrType->elementType()->equals(otherArrType->elementType()))
-                                return nullopt;
-                            return Type::Array(
-                                arrType->elementType(),
-                                arrType->size() + otherArrType->size());
-                        }),
-                },
-                {
                     ":struct/concat_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<arr: T[]> (other: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            if (norm[0]->code() != TypeCode::Vector)
+                            if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            const auto &otherVecType = tt::as_shared<VectorType>(norm[0]);
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            const auto &otherVecType = tt::as_shared<ArrayType>(norm[0]);
                             if (!vecType->elementType()->equals(otherVecType->elementType()))
                                 return nullopt;
-                            return Type::Vector(vecType->elementType());
+                            return Type::Array(vecType->elementType());
                         }),
                 },
             }),
@@ -1486,12 +1324,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "<arr: T[]> (value: T) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
                             if (!vecType->elementType()->equals(norm[0]))
                                 return nullopt;
-                            return Type::Vector(vecType->elementType());
+                            return Type::Array(vecType->elementType());
                         }),
                 },
             }),
@@ -1505,15 +1343,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "<arr: T[]> (other: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            if (norm[0]->code() != TypeCode::Vector)
+                            if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            const auto &otherVecType = tt::as_shared<VectorType>(norm[0]);
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            const auto &otherVecType = tt::as_shared<ArrayType>(norm[0]);
                             if (!vecType->elementType()->equals(otherVecType->elementType()))
                                 return nullopt;
-                            return Type::Vector(vecType->elementType());
+                            return Type::Array(vecType->elementType());
                         }),
                 },
             }),
@@ -1528,30 +1366,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Bool()),
                 },
                 {
-                    ":struct/contains_vec",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(vec: Array<T, n>, value: T) => bool",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(with[0]);
-                            if (!arrType->elementType()->equals(norm[1]))
-                                return nullopt;
-                            return Type::Bool();
-                        }),
-                },
-                {
                     ":struct/contains_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(arr: T[], value: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
                             if (!vecType->elementType()->equals(norm[1]))
                                 return nullopt;
                             return Type::Bool();
@@ -1569,15 +1392,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "<collect: T[]> (func: (item: T) => U) => Vector<U>",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            if (norm[1]->code() != TypeCode::Func)
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            if (norm[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[1]);
                             if (!funcType->assignable(Type::Func()))
                                 return nullopt;
-                            return Type::Vector(funcType->exitType());
+                            return Type::Array(funcType->exitType());
                         }),
                 },
             }),
@@ -1591,10 +1414,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "<collect: T[]> (func: (item: T) => void) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            if (norm[1]->code() != TypeCode::Func)
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            if (norm[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[1]);
                             if (!funcType->assignable(Type::Func()))
@@ -1615,17 +1438,17 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "<collect: T[]> (func: (item: T) => bool) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            if (norm[1]->code() != TypeCode::Func)
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            if (norm[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[1]);
                             if (!funcType->assignable(Type::Func()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Bool()))
                                 return nullopt;
-                            return Type::Vector(vecType->elementType());
+                            return Type::Array(vecType->elementType());
                         }),
                 },
             }),
@@ -1639,10 +1462,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "<collect: T[]> (func: (acc: U, item: T) => U, initial: U) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            if (norm[0]->code() != TypeCode::Func)
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[0]);
                             const auto &withTypes = funcType->withTypes();
@@ -1668,10 +1491,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "<collect: T[]> (func: (item: T) => void) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (with[0]->code() != TypeCode::Vector)
+                            if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<VectorType>(with[0]);
-                            if (norm[1]->code() != TypeCode::Func)
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            if (norm[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[1]);
                             if (funcType->normTypes().size() != 1)
@@ -1696,9 +1519,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(lhs: (arg1: T1, arg2: T2, ...) => R, rhs: (arg: R) => U) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Func)
+                            if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            if (norm[1]->code() != TypeCode::Func)
+                            if (norm[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &lhsFuncType = tt::as_shared<FunctionType>(norm[0]);
                             const auto &rhsFuncType = tt::as_shared<FunctionType>(norm[1]);

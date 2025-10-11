@@ -198,3 +198,21 @@ using FloatData = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
 using BoolData = PrimaryData<bool>;
 using CharData = PrimaryData<char>;
+
+class StringData : public Data {
+  private:
+    std::string data_;
+
+  public:
+    StringData() = delete;
+    StringData(const std::string &data);
+
+    const std::string &data() const;
+
+    virtual bool equals(const data_ptr_t &other) const override;
+
+    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+    virtual data_ptr_t clone(bool deep = false) const override;
+    virtual const std::string toString() const override;
+    virtual void print(std::ostream &os) const override;
+};
