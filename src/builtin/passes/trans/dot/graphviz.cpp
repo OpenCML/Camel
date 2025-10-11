@@ -172,7 +172,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     }
 
     string funcId = pointerToIdent(graph.get(), "F");
-    string funcName = graph->mangledName();
+    string funcName = graph->name();
     string res;
 
     res += baseIndent_;
@@ -187,16 +187,19 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
         func_type_ptr_t type = graph->funcType();
         res += std::format("subgraph cluster_{} {{\r\n", funcId);
         res += std::format("{}{}label=\"{}\";\r\n", baseIndent_, indent_, funcName);
+        res += std::format(
+            "{}{}tooltip=\"{}\";\r\n",
+            baseIndent_,
+            indent_,
+            graph->funcType()->toString());
     }
 
     // Recursively dump subgraphs first
     for (auto &[_, subGraphs] : graph->subGraphs()) {
         for (const auto &subGraph : subGraphs) {
-            EXEC_WHEN_DEBUG(l.in("GraphViz")
-                                .debug(
-                                    "Dumping subgraph '{}' of graph '{}'",
-                                    subGraph->mangledName(),
-                                    graph->mangledName()));
+            EXEC_WHEN_DEBUG(
+                l.in("GraphViz")
+                    .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
             pushIndent();
             res += dumpGraph(subGraph);
             popIndent();
@@ -205,11 +208,9 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
 
     // Dump dependency graphs if any
     for (const auto &dep : graph->dependencies()) {
-        EXEC_WHEN_DEBUG(l.in("GraphViz")
-                            .debug(
-                                "Dumping dependency graph '{}' of graph '{}'",
-                                dep->mangledName(),
-                                graph->mangledName()));
+        EXEC_WHEN_DEBUG(
+            l.in("GraphViz")
+                .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
         pushIndent();
         res += dumpGraph(dep);
         popIndent();

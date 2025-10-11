@@ -973,10 +973,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__idx__",
             {
                 {
-                    ":op/idx_arr",
+                    ":op/idx_vec",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
-                        "(arr: Array<T, n>, index: int32) => T",
+                        "(vec: Array<T, n>, index: int32) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Array ||
@@ -986,10 +986,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":op/idx_vec",
+                    ":op/idx_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
-                        "(vec: Vector<T>, index: int32) => T",
+                        "(arr: T[], index: int32) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Vector ||
@@ -1178,7 +1178,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "join",
             {
                 {
-                    ":str/join_vec",
+                    ":str/join_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {-1, {}}},
                         "<sep: string> (vec: Vector<string>) => string",
@@ -1198,7 +1198,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":str/join_arr",
+                    ":str/join_vec",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {-1, {}}},
                         "<sep: string> (vec: Array<string, n>) => string",
@@ -1244,10 +1244,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int32()),
                 },
                 {
-                    ":struct/len_arr",
+                    ":struct/len_vec",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "(arr: Array<T, n>) => int32",
+                        "(vec: Array<T, n>) => int32",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -1256,10 +1256,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":struct/len_vec",
+                    ":struct/len_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "(vec: Vector<T>) => int32",
+                        "(arr: T[]) => int32",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Vector)
@@ -1322,10 +1322,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "head",
             {
                 {
-                    ":struct/head_arr",
+                    ":struct/head_vec",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {0, {}}},
-                        "<arr: Array<T, n>> () => T",
+                        "<vec: Array<T, n>> () => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)
@@ -1335,10 +1335,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":struct/head_vec",
+                    ":struct/head_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {0, {}}},
-                        "<vec: Vector<T>> () => T",
+                        "<arr: T[]> () => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1352,10 +1352,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "tail",
             {
                 {
-                    ":struct/tail_arr",
+                    ":struct/tail_vec",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {0, {}}},
-                        "<arr: Array<T, n>> () => Array<T, m>",
+                        "<vec: Array<T, n>> () => Array<T, m>",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)
@@ -1365,10 +1365,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":struct/tail_vec",
+                    ":struct/tail_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {0, {}}},
-                        "<vec: Vector<T>> () => Vector<T>",
+                        "<arr: T[]> () => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1400,10 +1400,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "slice",
             {
                 {
-                    ":struct/slice_arr",
+                    ":struct/slice_vec",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {2, {false, false}}},
-                        "<arr: Array<T, n>> (start: int32, end: int32) => Array<T, m>",
+                        "<vec: Array<T, n>> (start: int32, end: int32) => Array<T, m>",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)
@@ -1417,10 +1417,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":struct/slice_vec",
+                    ":struct/slice_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {2, {false, false}}},
-                        "<vec: Vector<T>> (start: int32, end: int32) => Vector<T>",
+                        "<arr: T[]> (start: int32, end: int32) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1438,10 +1438,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "concat",
             {
                 {
-                    ":struct/concat_arr",
+                    ":struct/concat_vec",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
-                        "<arr: Array<T, n>> (other: Array<T, m>) => Array<T, m + n>",
+                        "<vec: Array<T, n>> (other: Array<T, m>) => Array<T, m + n>",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)
@@ -1458,10 +1458,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":struct/concat_vec",
+                    ":struct/concat_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
-                        "<vec: Vector<T>> (other: Vector<T>) => Vector<T>",
+                        "<arr: T[]> (other: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1480,10 +1480,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "append",
             {
                 {
-                    ":struct/append_vec",
+                    ":struct/append_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {true}}, {1, {false}}},
-                        "<vec: Vector<T>> (value: T) => Vector<T>",
+                        "<arr: T[]> (value: T) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1499,10 +1499,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "extend",
             {
                 {
-                    ":struct/extend_vec",
+                    ":struct/extend_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {true}}, {1, {false}}},
-                        "<vec: Vector<T>> (other: Vector<T>) => Vector<T>",
+                        "<arr: T[]> (other: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1528,10 +1528,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Bool()),
                 },
                 {
-                    ":struct/contains_arr",
+                    ":struct/contains_vec",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
-                        "(arr: Array<T, n>, value: T) => bool",
+                        "(vec: Array<T, n>, value: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)
@@ -1543,10 +1543,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
-                    ":struct/contains_vec",
+                    ":struct/contains_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
-                        "(vec: Vector<T>, value: T) => bool",
+                        "(arr: T[], value: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1563,10 +1563,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "map",
             {
                 {
-                    ":mark/map_vec",
+                    ":mark/map_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
-                        "<collect: Vector<T>> (func: (item: T) => U) => Vector<U>",
+                        "<collect: T[]> (func: (item: T) => U) => Vector<U>",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1585,10 +1585,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "apply",
             {
                 {
-                    ":mark/apply_vec",
+                    ":mark/apply_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {true}}, {1, {false}}},
-                        "<collect: Vector<T>> (func: (item: T) => void) => void",
+                        "<collect: T[]> (func: (item: T) => void) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1609,10 +1609,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "filter",
             {
                 {
-                    ":mark/filter_vec",
+                    ":mark/filter_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
-                        "<collect: Vector<T>> (func: (item: T) => bool) => Vector<T>",
+                        "<collect: T[]> (func: (item: T) => bool) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1633,10 +1633,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "reduce",
             {
                 {
-                    ":mark/reduce_vec",
+                    ":mark/reduce_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {2, {false, false}}},
-                        "<collect: Vector<T>> (func: (acc: U, item: T) => U, initial: U) => U",
+                        "<collect: T[]> (func: (acc: U, item: T) => U, initial: U) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)
@@ -1662,10 +1662,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "foreach",
             {
                 {
-                    ":mark/foreach_vec",
+                    ":mark/foreach_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
-                        "<collect: Vector<T>> (func: (item: T) => void) => void",
+                        "<collect: T[]> (func: (item: T) => void) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Vector)

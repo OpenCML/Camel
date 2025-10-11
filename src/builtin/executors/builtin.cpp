@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -167,8 +167,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         {"op/mat", __builtin__mat__},
 
-        {"op/idx_arr", __builtin__idx__},
         {"op/idx_vec", __builtin__idx__},
+        {"op/idx_arr", __builtin__idx__},
         {"op/idx_map", __builtin__idx__},
         {"op/idx_set", __builtin__idx__},
         {"op/idx_str", __builtin__idx__},
@@ -202,40 +202,40 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // string
         {"str/format", __format__},
 
-        {"str/join_arr", __join__},
         {"str/join_vec", __join__},
+        {"str/join_arr", __join__},
         {"str/join", __join__},
 
         // struct
         {"struct/len_str", __len__},
-        {"struct/len_arr", __len__},
         {"struct/len_vec", __len__},
+        {"struct/len_arr", __len__},
         {"struct/len_map", __len__},
         {"struct/len_set", __len__},
 
         {"struct/zip", __zip__},
 
-        {"struct/head_arr", __head__},
         {"struct/head_vec", __head__},
+        {"struct/head_arr", __head__},
 
-        {"struct/tail_arr", __tail__},
         {"struct/tail_vec", __tail__},
+        {"struct/tail_arr", __tail__},
 
         {"struct/range", __range__},
 
-        {"struct/slice_arr", __slice__},
         {"struct/slice_vec", __slice__},
+        {"struct/slice_arr", __slice__},
 
-        {"struct/concat_arr", __concat__},
         {"struct/concat_vec", __concat__},
+        {"struct/concat_arr", __concat__},
 
-        {"struct/append_vec", __append__},
+        {"struct/append_arr", __append__},
 
-        {"struct/extend_vec", __extend__},
+        {"struct/extend_arr", __extend__},
 
         {"struct/contains_str", __contains__},
-        {"struct/contains_arr", __contains__},
         {"struct/contains_vec", __contains__},
+        {"struct/contains_arr", __contains__},
 
         // math
         {"math/abs_i", __abs__},

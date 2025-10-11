@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ TupleType::TupleType(const vector<type_ptr_t> &types)
     : StructType(TypeCode::Tuple), types_(types) {}
 
 string TupleType::toString() const {
-    string result = "Tuple<";
+    string result = "(";
     for (const auto &type : types_) {
         if (type) {
             result += type->toString() + ", ";
@@ -43,7 +43,7 @@ string TupleType::toString() const {
         result.pop_back();
         result.pop_back();
     }
-    result += ">";
+    result += ")";
     return result;
 }
 

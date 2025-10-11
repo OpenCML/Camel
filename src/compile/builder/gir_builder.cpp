@@ -217,7 +217,6 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
     graph_ptr_t graph = enterScope(name);
     if (!graph->hasFuncType()) {
-        // TODO: 非全局函数不会生成前置DECL节点，因此不会预设函数类型信息，需要从FUNC节点中获取
         type_ptr_t type = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
         func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
         graph->setFuncType(funcType);
@@ -446,9 +445,15 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     strutil::join(normInputTypes, ", ", [](const type_ptr_t &t) {
                         return t->toString();
                     }));
-                std::string overloadsStr = strutil::join(*graphs, "; ", [](const graph_ptr_t &g) {
-                    return g->name() + ": " + g->funcType()->toString();
-                });
+                std::string overloadsStr =
+                    "\n    " +
+                    strutil::join(
+                        *graphs,
+                        "\n    ",
+                        [](const graph_ptr_t &g) {
+                            return g->name() + ": " + g->funcType()->toString();
+                        }) +
+                    "\n";
                 diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
@@ -470,12 +475,15 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     strutil::join(normInputTypes, ", ", [](const type_ptr_t &t) {
                         return t->toString();
                     }));
-                std::string overloadsStr = strutil::join(
-                    ops->resolvers(),
-                    "; ",
-                    [](const std::pair<std::string, resolver_ptr_t> &p) {
-                        return "<" + p.first + ">: " + p.second->signature();
-                    });
+                std::string overloadsStr =
+                    "\n    " +
+                    strutil::join(
+                        ops->resolvers(),
+                        "\n    ",
+                        [](const std::pair<std::string, resolver_ptr_t> &p) {
+                            return "<" + p.first + ">: " + p.second->signature();
+                        }) +
+                    "\n";
                 diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }

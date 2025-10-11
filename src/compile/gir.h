@@ -628,12 +628,10 @@ class FuncNode : public Node {
 
     virtual std::string toString() const override {
         return std::format(
-            "FUNC({}, {}): {}",
+            "FUNC({}, {}: {}): {}",
             dataIndex_,
-            std::format(
-                "{}: {}",
-                func_->name().empty() ? func_->graph().name() : func_->name(),
-                funcType()->toString()),
+            func_->name().empty() ? func_->graph().name() : func_->name(),
+            funcType()->toString(),
             dataType()->toString());
     }
 
@@ -645,7 +643,7 @@ class OperNode : public Node {
 
   public:
     OperNode(Graph &graph, size_t index, oper_idx_ptr_t op)
-        : Node(graph, NodeType::OPER, op->funcType(), index), operator_(op) {}
+        : Node(graph, NodeType::OPER, op->funcType()->exitType(), index), operator_(op) {}
     ~OperNode() = default;
 
     static node_ptr_t create(Graph &graph, oper_idx_ptr_t op) {
@@ -663,9 +661,10 @@ class OperNode : public Node {
 
     virtual std::string toString() const override {
         return std::format(
-            "OPER({}, <{}>): {}",
+            "OPER({}, <{}>: {}): {}",
             dataIndex_,
             operator_->name(),
+            operator_->funcType()->toString(),
             dataType()->toString());
     }
 
