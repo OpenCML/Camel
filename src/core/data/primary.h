@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -118,7 +118,7 @@ template <typename T> class PrimaryData : public Data {
                     case TypeCode::Double:
                         return std::make_shared<PrimaryData<double>>(static_cast<double>(b));
                     case TypeCode::String:
-                        return std::dynamic_pointer_cast<Data>(
+                        return std::static_pointer_cast<Data>(
                             std::make_shared<StringData>(b ? "true" : "false"));
                     case TypeCode::Char:
                         return std::make_shared<PrimaryData<char>>(static_cast<char>(b));
@@ -130,22 +130,27 @@ template <typename T> class PrimaryData : public Data {
                     const char &c = data_;
                     switch (target->code()) {
                     case TypeCode::Int32:
-                        return std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(c));
+                        return std::static_pointer_cast<Data>(
+                            std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(c)));
                     case TypeCode::Int64:
-                        return std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(c));
+                        return std::static_pointer_cast<Data>(
+                            std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(c)));
                     case TypeCode::Float:
-                        return std::make_shared<PrimaryData<float>>(static_cast<float>(c));
+                        return std::static_pointer_cast<Data>(
+                            std::make_shared<PrimaryData<float>>(static_cast<float>(c)));
                     case TypeCode::Double:
-                        return std::make_shared<PrimaryData<double>>(static_cast<double>(c));
+                        return std::static_pointer_cast<Data>(
+                            std::make_shared<PrimaryData<double>>(static_cast<double>(c)));
                     case TypeCode::String:
-                        return std::dynamic_pointer_cast<Data>(
+                        return std::static_pointer_cast<Data>(
                             std::make_shared<StringData>(std::string(1, c)));
                     case TypeCode::Bool:
-                        return std::make_shared<PrimaryData<bool>>(c != 0);
-
+                        return std::static_pointer_cast<Data>(
+                            std::make_shared<PrimaryData<bool>>(c != 0));
                     default:
                         throw UnsupportedConvError();
                     }
+
                 } else {
                     static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
                 }

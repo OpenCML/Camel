@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,23 +35,23 @@ class FuncTypeResolver {
     virtual std::optional<func_type_ptr_t>
     resolve(const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const = 0;
 
-    virtual const std::string &signature() const = 0;
+    virtual std::string signature() const = 0;
 };
 
-using resolver_uptr_t = std::unique_ptr<FuncTypeResolver>;
+using resolver_ptr_t = std::shared_ptr<FuncTypeResolver>;
 
 class StaticFuncTypeResolver : public FuncTypeResolver {
   public:
     StaticFuncTypeResolver(const func_type_ptr_t &funcType) : funcType_(funcType) {}
     StaticFuncTypeResolver(const func_type_ptr_t &&funcType) : funcType_(std::move(funcType)) {}
 
-    static resolver_uptr_t create(const func_type_ptr_t &funcType) {
+    static resolver_ptr_t create(const func_type_ptr_t &funcType) {
         return std::make_unique<StaticFuncTypeResolver>(funcType);
     }
-    static resolver_uptr_t create(const func_type_ptr_t &&funcType) {
+    static resolver_ptr_t create(const func_type_ptr_t &&funcType) {
         return std::make_unique<StaticFuncTypeResolver>(std::move(funcType));
     }
-    static resolver_uptr_t create(
+    static resolver_ptr_t create(
         const param_init_list_t &withTypes, const param_init_list_t &normTypes,
         const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None) {
         return std::make_unique<StaticFuncTypeResolver>(
@@ -62,7 +62,7 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 
-    const std::string &signature() const override { return funcType_->toString(); }
+    std::string signature() const override { return funcType_->toString(); }
 
   private:
     func_type_ptr_t funcType_;
@@ -87,7 +87,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         }
     }
 
-    static resolver_uptr_t create(
+    static resolver_ptr_t create(
         const std::pair<var_declare_t, var_declare_t> &&vars, const std::string &&signature,
         const ResolverFunc &&resolver) {
         return std::make_unique<DynamicFuncTypeResolver>(
@@ -100,7 +100,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 
-    const std::string &signature() const override { return signature_; }
+    std::string signature() const override { return signature_; }
 
   private:
     std::string signature_;

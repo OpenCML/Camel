@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -119,9 +119,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
-    const std::string &mangledName() const {
-        return name_ + std::format("({})", funcType_->mangle());
-    }
+    std::string mangledName() const { return name_ + std::format("({})", funcType_->mangle()); }
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
     graph_ptr_t outer() const {
@@ -218,10 +216,13 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_vec_t &ports() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
     const node_set_t &capture() const { return capture_; }
+    const node_set_t &exposure() const { return exposure_; }
 
     graph_ptr_t clone() const;
 
   private:
+    friend class Node; // 允许Node修改capture和exposure
+
     bool looped_ = false;
     std::string name_;
     graph_wptr_t outer_;
@@ -238,8 +239,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     node_vec_t ports_;
     node_vec_t nodes_;
     node_ptr_t output_;
-    node_set_t capture_;
-    node_set_t exposure_;
+    node_set_t capture_;  // 不属于自己的外部节点
+    node_set_t exposure_; // 被外部图捕获的节点
 };
 
 class Node : public std::enable_shared_from_this<Node> {
@@ -276,20 +277,57 @@ class Node : public std::enable_shared_from_this<Node> {
     node_vec_t &withInputs() { return withInputs_; }
     node_vec_t &normInputs() { return normInputs_; }
     node_vec_t &ctrlInputs() { return ctrlInputs_; }
+    node_vec_t dataInputs() {
+        node_vec_t inputs;
+        inputs.reserve(withInputs_.size() + normInputs_.size());
+        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
+        inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
+        return inputs;
+    }
+    node_vec_t inputs() {
+        node_vec_t inputs;
+        inputs.reserve(withInputs_.size() + normInputs_.size() + ctrlInputs_.size());
+        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
+        inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
+        inputs.insert(inputs.end(), ctrlInputs_.begin(), ctrlInputs_.end());
+        return inputs;
+    }
 
-    node_vec_t &dataOutputs() { return dataOutputs_; }
+    node_vec_t &withOutputs() { return withOutputs_; }
+    node_vec_t &normOutputs() { return normOutputs_; }
     node_vec_t &ctrlOutputs() { return ctrlOutputs_; }
+    node_vec_t dataOutputs() {
+        node_vec_t outputs;
+        outputs.reserve(withOutputs_.size() + normOutputs_.size());
+        outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
+        outputs.insert(outputs.end(), normOutputs_.begin(), normOutputs_.end());
+        return outputs;
+    }
+    node_vec_t outputs() {
+        node_vec_t outputs;
+        outputs.reserve(withOutputs_.size() + normOutputs_.size() + ctrlOutputs_.size());
+        outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
+        outputs.insert(outputs.end(), normOutputs_.begin(), normOutputs_.end());
+        outputs.insert(outputs.end(), ctrlOutputs_.begin(), ctrlOutputs_.end());
+        return outputs;
+    }
 
     bool hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps = 99) const;
     bool hasLinkedTo(const node_ptr_t &node) const;
 
     size_t inDegree() const { return withInputs_.size() + normInputs_.size() + ctrlInputs_.size(); }
-    size_t outDegree() const { return dataOutputs_.size() + ctrlOutputs_.size(); }
+    size_t outDegree() const {
+        return withOutputs_.size() + normOutputs_.size() + ctrlOutputs_.size();
+    }
 
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
 
+    bool detach(bool force = false);
+
     static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to);
+    static bool unlink(const node_ptr_t &from, const node_ptr_t &to, bool force = false);
+    static bool replace(const node_ptr_t &oldNode, const node_ptr_t &newNode, bool force = false);
 
   protected:
     bool macro_ = false;
@@ -305,7 +343,8 @@ class Node : public std::enable_shared_from_this<Node> {
     node_vec_t normInputs_;
     node_vec_t ctrlInputs_;
 
-    node_vec_t dataOutputs_;
+    node_vec_t withOutputs_;
+    node_vec_t normOutputs_;
     node_vec_t ctrlOutputs_;
 };
 
@@ -570,13 +609,13 @@ class FuncNode : public Node {
     func_ptr_t func_;
 
   public:
-    FuncNode(Graph &graph, const type_ptr_t &type, size_t index, func_ptr_t func)
-        : Node(graph, NodeType::FUNC, type, index), func_(func) {}
+    FuncNode(Graph &graph, size_t index, func_ptr_t func)
+        : Node(graph, NodeType::FUNC, func->funcType()->exitType(), index), func_(func) {}
     ~FuncNode() = default;
 
-    static node_ptr_t create(Graph &graph, func_ptr_t func, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, func_ptr_t func) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<FuncNode>(graph, type, index, func);
+        auto node = std::make_shared<FuncNode>(graph, index, func);
         graph.addNode(node);
         return node;
     }
@@ -584,7 +623,7 @@ class FuncNode : public Node {
     func_ptr_t func() const { return func_; }
     func_type_ptr_t funcType() const {
         ASSERT(func_, "Function is not set for FunctionNode.");
-        return tt::as_shared<FunctionType>(func_->type());
+        return std::dynamic_pointer_cast<FunctionType>(func_->type());
     }
 
     virtual std::string toString() const override {
@@ -595,22 +634,20 @@ class FuncNode : public Node {
             dataType()->toString());
     }
 
-    virtual node_ptr_t clone(Graph &graph) const override {
-        return FuncNode::create(graph, func_, dataType_);
-    }
+    virtual node_ptr_t clone(Graph &graph) const override { return FuncNode::create(graph, func_); }
 };
 
 class OperNode : public Node {
     oper_idx_ptr_t operator_;
 
   public:
-    OperNode(Graph &graph, const type_ptr_t &type, size_t index, oper_idx_ptr_t op)
-        : Node(graph, NodeType::OPER, type, index), operator_(op) {}
+    OperNode(Graph &graph, size_t index, oper_idx_ptr_t op)
+        : Node(graph, NodeType::OPER, op->funcType(), index), operator_(op) {}
     ~OperNode() = default;
 
-    static node_ptr_t create(Graph &graph, oper_idx_ptr_t op, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, oper_idx_ptr_t op) {
         size_t index = graph.addRuntimeData();
-        auto node = std::make_shared<OperNode>(graph, type, index, op);
+        auto node = std::make_shared<OperNode>(graph, index, op);
         graph.addNode(node);
         return node;
     }
@@ -630,7 +667,7 @@ class OperNode : public Node {
     }
 
     virtual node_ptr_t clone(Graph &graph) const override {
-        return OperNode::create(graph, operator_, dataType_);
+        return OperNode::create(graph, operator_);
     }
 };
 
@@ -657,15 +694,20 @@ class ExitNode : public Node {
 
 class DrefNode : public Node {
   public:
-    DrefNode(Graph &graph) : Node(graph, NodeType::DREF, Type::Void(), 0) {}
+    using dref_target_t = std::variant<graph_vec_ptr_t, oper_group_ptr_t>;
+
+    DrefNode(Graph &graph, const dref_target_t &target)
+        : Node(graph, NodeType::DREF, Type::Void(), 0), target_(target) {}
     ~DrefNode() = default;
 
-    static node_ptr_t create(Graph &graph) {
-        auto node = std::make_shared<DrefNode>(graph);
+    static node_ptr_t create(Graph &graph, const dref_target_t &target) {
+        auto node = std::make_shared<DrefNode>(graph, target);
         // 虚拟节点，不加入graph，只在构造过程中临时使用
         // graph.addNode(node);
         return node;
     }
+
+    const dref_target_t &target() const { return target_; }
 
     virtual std::string toString() const override {
         return std::format("DREF({}): {}", graph_.name(), dataType()->toString());
@@ -675,6 +717,9 @@ class DrefNode : public Node {
         ASSERT(false, "DrefNode cannot be cloned.");
         return nullptr;
     }
+
+  private:
+    dref_target_t target_;
 };
 
 } // namespace GraphIR

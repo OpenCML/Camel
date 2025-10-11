@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -172,7 +172,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     }
 
     string funcId = pointerToIdent(graph.get(), "F");
-    string funcName = graph->name();
+    string funcName = graph->mangledName();
     string res;
 
     res += baseIndent_;
@@ -190,20 +190,26 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     }
 
     // Recursively dump subgraphs first
-    for (auto &[_, subGraph] : graph->subGraphs()) {
-        EXEC_WHEN_DEBUG(
-            l.in("GraphViz")
-                .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
-        pushIndent();
-        res += dumpGraph(subGraph);
-        popIndent();
+    for (auto &[_, subGraphs] : graph->subGraphs()) {
+        for (const auto &subGraph : subGraphs) {
+            EXEC_WHEN_DEBUG(l.in("GraphViz")
+                                .debug(
+                                    "Dumping subgraph '{}' of graph '{}'",
+                                    subGraph->mangledName(),
+                                    graph->mangledName()));
+            pushIndent();
+            res += dumpGraph(subGraph);
+            popIndent();
+        }
     }
 
     // Dump dependency graphs if any
     for (const auto &dep : graph->dependencies()) {
-        EXEC_WHEN_DEBUG(
-            l.in("GraphViz")
-                .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
+        EXEC_WHEN_DEBUG(l.in("GraphViz")
+                            .debug(
+                                "Dumping dependency graph '{}' of graph '{}'",
+                                dep->mangledName(),
+                                graph->mangledName()));
         pushIndent();
         res += dumpGraph(dep);
         popIndent();

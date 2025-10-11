@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -112,7 +112,7 @@ class Type {
     ImplMark implMark() const;
 
     virtual std::string toString() const;
-    virtual std::string mangle() const;
+    virtual std::string mangle() const = 0;
 
     virtual bool operator==(const Type &other) const = 0;
     virtual bool operator!=(const Type &other) const = 0;
@@ -141,15 +141,12 @@ class Type {
 
     static type_ptr_t List();
     static type_ptr_t Array(const type_ptr_t &elementType, size_t size);
-    static type_ptr_t Tuple(const std::vector<type_ptr_t> &types);
+    static type_ptr_t Tuple(const type_vec_t &types);
     static type_ptr_t Vector(const type_ptr_t &elementType);
 
     static type_ptr_t Any();
+    static type_ptr_t Func();
     static type_ptr_t Void();
-    static type_ptr_t Func(
-        const param_vec_t &&withTypes = {}, const param_vec_t &&normTypes = {},
-        const type_ptr_t &returnType = Type::Void(), const ModifierSet &modifiers = Modifier::None);
-    static type_ptr_t AnyFunc();
 
     static type_ptr_t Ref();
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1575,7 +1575,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[1]->code() != TypeCode::Func)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[1]);
-                            if (!funcType->assignable(Type::AnyFunc()))
+                            if (!funcType->assignable(Type::Func()))
                                 return nullopt;
                             return Type::Vector(funcType->exitType());
                         }),
@@ -1597,7 +1597,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[1]->code() != TypeCode::Func)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[1]);
-                            if (!funcType->assignable(Type::AnyFunc()))
+                            if (!funcType->assignable(Type::Func()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Void()))
                                 return nullopt;
@@ -1621,7 +1621,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[1]->code() != TypeCode::Func)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(norm[1]);
-                            if (!funcType->assignable(Type::AnyFunc()))
+                            if (!funcType->assignable(Type::Func()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Bool()))
                                 return nullopt;

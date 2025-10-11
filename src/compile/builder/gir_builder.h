@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,8 +36,6 @@ using node_scope_t = Scope<std::string, node_ptr_t>;
 using node_scope_ptr_t = std::shared_ptr<node_scope_t>;
 using graph_scope_t = Scope<std::string, std::shared_ptr<graph_vec_t>>;
 using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
-using operator_scope_t = Scope<std::string, std::shared_ptr<oper_idx_vec_t>>;
-using operator_scope_ptr_t = std::shared_ptr<operator_scope_t>;
 
 class Builder {
   public:
@@ -45,7 +43,6 @@ class Builder {
         : context_(context), module_(module) {
         nodeScope_ = node_scope_t::create();
         graphScope_ = graph_scope_t::create();
-        opScope_ = operator_scope_t::create();
         rootGraph_ = Graph::create(nullptr, "__root__");
         currGraph_ = rootGraph_;
     }
@@ -67,7 +64,6 @@ class Builder {
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
-    operator_scope_ptr_t opScope_;
 
     context_ptr_t context_;
     module_ptr_t module_;
@@ -78,23 +74,15 @@ class Builder {
     bool varied_;
 
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
-    // if a function node is marked as called,
-    // the node itself does not represent a function
-    // but the result of invoking the function
-    std::unordered_set<Node *> calledNodesSet_;
-    node_ptr_t lastCalledFuncNode_;
+    node_ptr_t lastSyncedNode_;
 
     std::optional<node_ptr_t> nodeAt(const std::string &name) { return nodeScope_->get(name); }
-    std::optional<std::shared_ptr<graph_vec_t>> graphAt(const std::string &name) {
+    std::optional<std::shared_ptr<graph_vec_t>> graphsAt(const std::string &name) {
         return graphScope_->get(name);
-    }
-    std::optional<std::shared_ptr<oper_idx_vec_t>> operatorAt(const std::string &name) {
-        return opScope_->get(name);
     }
 
     bool insertNode(const std::string &name, const node_ptr_t &node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
-    bool insertOperator(const std::string &name, const oper_idx_ptr_t &op);
 
     graph_ptr_t enterScope(const std::string &name = "");
     void leaveScope();

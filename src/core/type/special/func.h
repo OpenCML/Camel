@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,9 @@
 using param_t = std::pair<type_ptr_t, bool>; // bool表示是否为可变参数
 using param_init_list_t = std::initializer_list<param_t>;
 using param_vec_t = std::vector<param_t>;
+
+class FunctionType;
+using func_type_ptr_t = std::shared_ptr<FunctionType>;
 
 class FunctionType : public SpecialType {
   public:
@@ -109,5 +112,3 @@ class FunctionType : public SpecialType {
     bool hasCompileInfo_ = true;
     std::vector<std::string> argNames_;
 };
-
-using func_type_ptr_t = std::shared_ptr<FunctionType>;

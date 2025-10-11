@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,10 +36,13 @@ using namespace std;
 using namespace GraphIR;
 
 graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    auto rootFrame = Frame::create(nullptr, *graph);
-    auto optMainGraph = graph->getSubGraph("main");
+    auto optMainGraph = graph->getSubGraphsByName("main");
     ASSERT(optMainGraph.has_value(), "Main graph not found.");
-    auto mainGraph = optMainGraph.value();
+    auto mainGraphSet = optMainGraph.value();
+    ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
+    ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
+    auto mainGraph = *mainGraphSet.begin();
+    auto rootFrame = Frame::create(nullptr, *graph);
 
     // 构建元信息（目前是统计所有图中的 BRCH-JOIN 对）
     buildGraphsInfo(graph.get());
@@ -106,10 +109,11 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
         }
 
         // 子图
-        for (const auto &kv : g->subGraphs()) {
-            auto sub = kv.second.get();
-            if (sub && !visited.count(sub))
-                q.push(sub);
+        for (const auto &[_, graphsSet] : g->subGraphs()) {
+            for (const auto &g : graphsSet) {
+                if (!visited.count(g.get()))
+                    q.push(g.get());
+            }
         }
     }
 }

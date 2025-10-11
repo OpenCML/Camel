@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,9 @@ class PrimaryType : public Type {
   public:
     PrimaryType() = delete;
     PrimaryType(TypeCode code) : Type(code) {}
+
+    virtual bool operator==(const Type &other) const override;
+    virtual bool operator!=(const Type &other) const override;
 
     virtual std::string mangle() const override;
 

@@ -13,11 +13,25 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "primary.h"
+
+bool PrimaryType::operator==(const Type &other) const {
+    if (!other.primary()) {
+        return false;
+    }
+    return code_ == other.code();
+}
+
+bool PrimaryType::operator!=(const Type &other) const {
+    if (!other.primary()) {
+        return false;
+    }
+    return code_ == other.code();
+}
 
 std::string PrimaryType::mangle() const {
     switch (code_) {
@@ -35,6 +49,9 @@ std::string PrimaryType::mangle() const {
         return "b";
     case TypeCode::Char:
         return "c";
+    default:
+        ASSERT(false, "Unknown PrimaryType");
+        return "";
     }
     ASSERT(false, "Unknown PrimaryType");
     return ""; // unknown

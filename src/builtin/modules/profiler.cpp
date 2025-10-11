@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,7 +58,7 @@ void ProfilerBuiltinModule::enable(bool enabled) {
     }
 }
 
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "begin",

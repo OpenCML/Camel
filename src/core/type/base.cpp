@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -221,7 +221,7 @@ type_ptr_t Type::Array(const type_ptr_t &elementType, size_t size) {
     return tt::as_shared<Type>(make_shared<ArrayType>(elementType, size));
 }
 
-type_ptr_t Type::Tuple(const std::vector<type_ptr_t> &types) {
+type_ptr_t Type::Tuple(const type_vec_t &types) {
     return tt::as_shared<Type>(make_shared<TupleType>(types));
 }
 
@@ -245,20 +245,11 @@ type_ptr_t Type::Void() {
     return type;
 }
 
-type_ptr_t Type::Func(
-    const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
-    const ModifierSet &modifiers) {
-    return make_shared<FunctionType>(
-        std::move(withTypes),
-        std::move(normTypes),
-        returnType,
-        modifiers);
-}
-
-type_ptr_t Type::AnyFunc() {
+type_ptr_t Type::Func() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = Func({}, {}, Void(), Modifier::None);
+        type =
+            make_shared<FunctionType>(param_vec_t{}, param_vec_t{}, Type::Void(), Modifier::None);
     }
     return type;
 }

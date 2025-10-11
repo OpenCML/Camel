@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -144,6 +144,24 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Type '{0}' does not support index access.",
                 "Check the type and ensure it is an array, a tuple, or a dict, etc. that supports "
                 "indexing.",
+            },
+        },
+        {
+            SemanticDiag::NoMatchingFunction,
+            {
+                "NoMatchingFunction",
+                "No matching function found for argument types: {0}.",
+                "Check the number and types of arguments to ensure they match one of the available "
+                "overloaded function signatures. Available overloads: {1}",
+            },
+        },
+        {
+            SemanticDiag::ArgumentsMismatch,
+            {
+                "ArgumentsMismatch",
+                "Function of type '{0}' cannot be called with argument types: {1}.",
+                "Check that the function type '{0}' matches the number and types of arguments "
+                "provided ({1}).",
             },
         },
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 07, 2025
+ * Updated: Oct. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,8 @@ enum class SemanticDiag : uint32_t {
     BranchReturnTypeMismatch = 0x00000C,
     InvalidAccessIndex = 0x00000D,
     TypeNotIndexable = 0x00000E,
+    NoMatchingFunction = 0x00000F,
+    ArgumentsMismatch = 0x000010,
 
     // Warnings
     FeatureNotSupported = 0x100000,

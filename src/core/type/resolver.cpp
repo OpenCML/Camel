@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,10 +45,10 @@ std::optional<func_type_ptr_t> StaticFuncTypeResolver::resolve(
 
 std::optional<func_type_ptr_t> DynamicFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
-    if (withVars_.first != -1 && with.size() != withVars_.first) {
+    if (withVars_.first != -1 && static_cast<int>(with.size()) != withVars_.first) {
         return std::nullopt; // reject
     }
-    if (normVars_.first != -1 && norm.size() != normVars_.first) {
+    if (normVars_.first != -1 && static_cast<int>(norm.size()) != normVars_.first) {
         return std::nullopt; // reject
     }
     auto optResType = resolver_(with, norm, modifiers);
@@ -57,10 +57,14 @@ std::optional<func_type_ptr_t> DynamicFuncTypeResolver::resolve(
     }
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < with.size(); i++) {
-        withParams.emplace_back(with[i], i < withVars_.first ? withVars_.second[i] : false);
+        withParams.emplace_back(
+            with[i],
+            static_cast<int>(i) < withVars_.first ? withVars_.second[i] : false);
     }
     for (size_t i = 0; i < norm.size(); i++) {
-        normParams.emplace_back(norm[i], i < normVars_.first ? normVars_.second[i] : false);
+        normParams.emplace_back(
+            norm[i],
+            static_cast<int>(i) < normVars_.first ? normVars_.second[i] : false);
     }
     return FunctionType::create(
         std::move(withParams),

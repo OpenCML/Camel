@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "utils/log.h"
 #include "utils/scope.h"
+#include "utils/str.h"
 #include "utils/type.h"
 
 #define DEBUG_LEVEL -1
@@ -83,14 +84,12 @@ graph_ptr_t Builder::enterScope(const std::string &name) {
     }
     nodeScope_ = nodeScope_->enter(name);
     graphScope_ = graphScope_->enter(name);
-    opScope_ = opScope_->enter(name);
     return currGraph_;
 }
 
 void Builder::leaveScope() {
     nodeScope_ = nodeScope_->leave();
     graphScope_ = graphScope_->leave();
-    opScope_ = opScope_->leave();
     currGraph_ = currGraph_->outer();
 }
 
@@ -109,16 +108,6 @@ bool Builder::insertGraph(const std::string &name, const graph_ptr_t &graph) {
         graphs->push_back(graph);
     }
     graphScope_->insert(name, std::make_shared<graph_vec_t>(1, graph));
-    return true;
-}
-
-bool Builder::insertOperator(const std::string &name, const oper_idx_ptr_t &op) {
-    if (opScope_->has(name, false)) {
-        auto ops = opScope_->get(name).value();
-        // TODO: check if the operator is already in the list
-        ops->push_back(op);
-    }
-    opScope_->insert(name, std::make_shared<oper_idx_vec_t>(1, op));
     return true;
 }
 
@@ -302,28 +291,13 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return node;
     }
     graph_ptr_t &graph = currGraph_;
-    auto optGraph = graphAt(ident);
-    if (optGraph.has_value()) {
-        auto graphs = optGraph.value();
+    auto optGraphs = graphsAt(ident);
+    if (optGraphs.has_value()) {
+        auto graphs = optGraphs.value();
         if (!graphs->empty()) {
-            // TODO: generate data as the return value of a function
-            graph_ptr_t &tgtGraph = graphs->front();
-            currGraph_->addDependency(tgtGraph);
-            func_ptr_t funcData = FunctionData::create(*tgtGraph);
-            node_ptr_t funcNode =
-                FuncNode::create(*graph, funcData, funcData->funcType()->exitType());
+            node_ptr_t drefNode = DrefNode::create(*graph, graphs);
             LEAVE("DREF");
-            return funcNode;
-        }
-    }
-    auto optOp = operatorAt(ident);
-    if (optOp.has_value()) {
-        auto ops = optOp.value();
-        if (!ops->empty()) {
-            oper_idx_ptr_t &op = ops->front();
-            node_ptr_t opNode = OperNode::create(*graph, op, op->funcType()->exitType());
-            LEAVE("DREF");
-            return opNode;
+            return drefNode;
         }
     }
     if (module_->hasImportedRef(ident)) {
@@ -334,21 +308,14 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return node;
         } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
             auto graphs = std::get<graph_vec_ptr_t>(e);
-            ASSERT(!graphs->empty(), "Imported graph list is empty.");
-            auto tgtGraph = graphs->front();
-            currGraph_->addDependency(tgtGraph);
-            func_ptr_t funcData = FunctionData::create(*tgtGraph);
-            node_ptr_t funcNode =
-                FuncNode::create(*graph, funcData, funcData->funcType()->exitType());
+            node_ptr_t drefNode = DrefNode::create(*graph, graphs);
             LEAVE("DREF");
-            return funcNode;
-        } else if (std::holds_alternative<oper_idx_vec_ptr_t>(e)) {
-            auto ops = std::get<oper_idx_vec_ptr_t>(e);
-            ASSERT(!ops->empty(), "Imported operator list is empty.");
-            oper_idx_ptr_t op = ops->front();
-            node_ptr_t opNode = OperNode::create(*graph, op, op->funcType()->exitType());
+            return drefNode;
+        } else if (std::holds_alternative<oper_group_ptr_t>(e)) {
+            auto ops = std::get<oper_group_ptr_t>(e);
+            node_ptr_t drefNode = DrefNode::create(*graph, ops);
             LEAVE("DREF");
-            return opNode;
+            return drefNode;
         }
     }
     diags_->of(SemanticDiag::UnresolvedReference).commit(ident);
@@ -390,87 +357,173 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         targetNodeRes.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of LINK node.");
     node_ptr_t targetNode = any_cast<node_ptr_t>(targetNodeRes);
-    param_vec_t paramTypes;
-    if (targetNode->type() == NodeType::FUNC) {
-        const auto &funcNode = tt::as_shared<FuncNode>(targetNode);
-        func_type_ptr_t funcType = funcNode->funcType();
-        if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->exitType();
-            // if (retType->isFunction()) {
-            //     paramTypes = tt::as_shared<FunctionType>(retType)->normParams();
-            // } else {
-            //     diags_->of(SemanticDiag::NotCallable).commit();
-            //     throw BuildAbortException();
-            // }
-            node_ptr_t invokeNode = CallNode::create(*currGraph_, funcType->exitType());
-            Node::link(LinkType::With, targetNode, invokeNode);
-            targetNode = invokeNode;
-        } else {
-            paramTypes = funcType->normTypes();
-        }
-        // link capture nodes to the function node
-        // to ensure the function node is executed after the capture nodes
-        for (const auto &capNode : funcNode->func()->graph().capture()) {
-            if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
-                Node::link(LinkType::Ctrl, capNode, targetNode);
+
+    graph_ptr_t targetGraph = nullptr;
+    func_type_ptr_t targetFuncType = nullptr;
+    node_vec_t withInputNodes, normInputNodes;
+    type_vec_t withInputTypes, normInputTypes;
+
+    for (const auto &withInputNode : targetNode->withInputs()) {
+        withInputNodes.push_back(withInputNode);
+        withInputTypes.push_back(withInputNode->dataType());
+    }
+
+    for (size_t i = 1; i < gct->size(); i++) {
+        any dataRes = visit(gct->at(i));
+        if (dataRes.type() == typeid(graph_ptr_t)) {
+            // The subtree returned a subgraph,
+            // which means that a lambda function is passed as a parameter
+            graph_ptr_t inputGraph = any_cast<graph_ptr_t>(dataRes);
+            currGraph_->addDependency(inputGraph);
+            auto funcData = FunctionData::create(*inputGraph);
+            node_ptr_t inputNode = DataNode::create(*currGraph_, funcData);
+            for (const auto &inputCaptureNode : inputGraph->capture()) {
+                if (inputCaptureNode->type() != NodeType::DATA &&
+                    inputCaptureNode->type() != NodeType::PORT) {
+                    Node::link(LinkType::Ctrl, inputCaptureNode, inputNode);
+                }
             }
-        }
-    } else if (targetNode->type() == NodeType::OPER) {
-        func_type_ptr_t funcType = tt::as_shared<OperNode>(targetNode)->funcType();
-        if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->exitType();
-            // if (retType->isFunction()) {
-            //     paramTypes = tt::as_shared<FunctionType>(retType)->normParams();
-            // } else {
-            //     diags_->of(SemanticDiag::NotCallable).commit();
-            //     throw BuildAbortException();
-            // }
-            node_ptr_t invokeNode = CallNode::create(*currGraph_, funcType->exitType());
-            Node::link(LinkType::With, targetNode, invokeNode);
-            targetNode = invokeNode;
+            normInputNodes.push_back(inputNode);
+            normInputTypes.push_back(funcData->funcType());
+        } else if (dataRes.type() == typeid(node_ptr_t)) {
+            node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
+            normInputNodes.push_back(inputNode);
+            normInputTypes.push_back(inputNode->dataType());
         } else {
-            paramTypes = funcType->normTypes();
+            ASSERT(false, std::format("Unexpected result type from the {} child of LINK node", i));
         }
+    }
+
+    if (targetNode->type() == NodeType::DREF) {
+        const auto &drefNode = tt::as_shared<DrefNode>(targetNode);
+        if (std::holds_alternative<graph_vec_ptr_t>(drefNode->target())) {
+            auto graphs = std::get<graph_vec_ptr_t>(drefNode->target());
+            for (const auto &g : *graphs) {
+                StaticFuncTypeResolver resolver(g->funcType());
+                const auto &res = resolver.resolve(withInputTypes, normInputTypes, Modifier::None);
+                if (res.has_value()) {
+                    targetGraph = g;
+                    break;
+                }
+            }
+            if (!targetGraph) {
+                std::string argTypesStr = std::format(
+                    "<{}> ({})",
+                    strutil::join(
+                        withInputTypes,
+                        ", ",
+                        [](const type_ptr_t &t) { return t->toString(); }),
+                    strutil::join(normInputTypes, ", ", [](const type_ptr_t &t) {
+                        return t->toString();
+                    }));
+                std::string overloadsStr = strutil::join(*graphs, "; ", [](const graph_ptr_t &g) {
+                    return g->name() + ": " + g->funcType()->toString();
+                });
+                diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
+                throw BuildAbortException();
+            }
+            currGraph_->addDependency(targetGraph);
+            func_ptr_t funcData = FunctionData::create(*targetGraph);
+            node_ptr_t funcNode = FuncNode::create(*currGraph_, funcData);
+            targetNode = funcNode;
+            targetFuncType = targetGraph->funcType();
+        } else if (std::holds_alternative<oper_group_ptr_t>(drefNode->target())) {
+            auto ops = std::get<oper_group_ptr_t>(drefNode->target());
+            const auto &res = ops->resolve(withInputTypes, normInputTypes, Modifier::None);
+            if (!res.has_value()) {
+                std::string argTypesStr = std::format(
+                    "<{}> ({})",
+                    strutil::join(
+                        withInputTypes,
+                        ", ",
+                        [](const type_ptr_t &t) { return t->toString(); }),
+                    strutil::join(normInputTypes, ", ", [](const type_ptr_t &t) {
+                        return t->toString();
+                    }));
+                std::string overloadsStr = strutil::join(
+                    ops->resolvers(),
+                    "; ",
+                    [](const std::pair<std::string, resolver_ptr_t> &p) {
+                        return p.first + ": " + p.second->signature();
+                    });
+                diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
+                throw BuildAbortException();
+            }
+            oper_idx_ptr_t oper = *res;
+            node_ptr_t operNode = OperNode::create(*currGraph_, oper);
+            targetNode = operNode;
+            targetFuncType = oper->funcType();
+        } else {
+            ASSERT(false, "DrefNode must refer to a graph or an operator group.");
+        }
+        drefNode->detach();
     } else {
         const auto &dataType = targetNode->dataType();
         ASSERT(
             dataType->code() == TypeCode::Func,
             "Target node of LINK must be a function or operator node.");
         const auto &funcType = tt::as_shared<FunctionType>(dataType);
+        StaticFuncTypeResolver resolver(funcType);
+        const auto &res = resolver.resolve(withInputTypes, normInputTypes, Modifier::None);
+        if (!res.has_value()) {
+            std::string argTypesStr = std::format(
+                "<{}> ({})",
+                strutil::join(
+                    withInputTypes,
+                    ", ",
+                    [](const type_ptr_t &t) { return t->toString(); }),
+                strutil::join(normInputTypes, ", ", [](const type_ptr_t &t) {
+                    return t->toString();
+                }));
+            diags_->of(SemanticDiag::ArgumentsMismatch).commit(funcType->toString(), argTypesStr);
+            throw BuildAbortException();
+        }
         node_ptr_t invokeNode = CallNode::create(*currGraph_, funcType->exitType());
         Node::link(LinkType::With, targetNode, invokeNode);
         targetNode = invokeNode;
+        targetFuncType = funcType;
     }
-    calledNodesSet_.insert(targetNode.get());
-    // TODO: check if the number of parameters matches the number of inputs
-    vector<node_ptr_t> inputs;
-    for (size_t i = 1; i < gct->size(); i++) {
-        any dataRes = visit(gct->at(i));
-        if (dataRes.type() == typeid(graph_ptr_t)) {
-            // The subtree returned a subgraph,
-            // which means that a lambda function is passed as a parameter
-            graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
-            currGraph_->addDependency(subGraph);
-            auto funcData = FunctionData::create(*subGraph);
-            node_ptr_t inputNode = DataNode::create(*currGraph_, funcData);
-            for (const auto &capNode : subGraph->capture()) {
-                if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
-                    Node::link(LinkType::Ctrl, capNode, inputNode);
-                }
+
+    ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+
+    if (targetGraph) {
+        for (const auto &capNode : targetGraph->capture()) {
+            if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
+                Node::link(LinkType::Ctrl, capNode, targetNode);
             }
-            inputs.push_back(inputNode);
-        } else if (dataRes.type() == typeid(node_ptr_t)) {
-            node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
-            inputs.push_back(inputNode);
-        } else {
-            ASSERT(false, std::format("Unexpected result type from the {} child of LINK node", i));
         }
     }
-    for (size_t i = 0; i < inputs.size(); i++) {
-        const node_ptr_t &inputNode = inputs[i];
+
+    for (size_t i = 0; i < withInputNodes.size(); i++) {
+        const node_ptr_t &inputNode = withInputNodes[i];
         bool isVar = false;
-        if (i < paramTypes.size()) {
-            isVar = paramTypes[i].second;
+        const auto &withTypes = targetFuncType->withTypes();
+        if (i < withTypes.size()) {
+            isVar = withTypes[i].second;
+        }
+        tryRemoveCtrlLink(inputNode, targetNode);
+        Node::link(LinkType::With, inputNode, targetNode);
+        if (nodeModifierMap_.count(inputNode.get())) {
+            node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
+            if (modifierNode && linkCheek(modifierNode, targetNode)) {
+                Node::link(LinkType::Ctrl, modifierNode, targetNode);
+            }
+        }
+        if (isVar) {
+            if (!waited_) {
+                diags_->of(SemanticDiag::IgnoredSideEffect).commit();
+            }
+            // Mark this node as a modifier for the input node
+            nodeModifierMap_[inputNode.get()] = targetNode;
+        }
+    }
+
+    for (size_t i = 0; i < normInputNodes.size(); i++) {
+        const node_ptr_t &inputNode = normInputNodes[i];
+        bool isVar = false;
+        const auto &normTypes = targetFuncType->normTypes();
+        if (i < normTypes.size()) {
+            isVar = normTypes[i].second;
         }
         tryRemoveCtrlLink(inputNode, targetNode);
         Node::link(LinkType::Norm, inputNode, targetNode);
@@ -488,12 +541,14 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             nodeModifierMap_[inputNode.get()] = targetNode;
         }
     }
+
     if (synced_) {
-        if (lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, targetNode)) {
-            Node::link(LinkType::Ctrl, lastCalledFuncNode_, targetNode);
+        if (lastSyncedNode_ && linkCheek(lastSyncedNode_, targetNode)) {
+            Node::link(LinkType::Ctrl, lastSyncedNode_, targetNode);
         }
-        lastCalledFuncNode_ = targetNode;
+        lastSyncedNode_ = targetNode;
     }
+
     LEAVE("LINK");
     return targetNode;
 }
@@ -505,52 +560,6 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         targetNodeRes.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of WITH node.");
     node_ptr_t targetNode = any_cast<node_ptr_t>(targetNodeRes);
-    param_vec_t paramTypes;
-    if (targetNode->type() == NodeType::FUNC) {
-        const auto &funcNode = tt::as_shared<FuncNode>(targetNode);
-        func_type_ptr_t funcType = funcNode->funcType();
-        if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->exitType();
-            // if (retType->isFunction()) {
-            //     paramTypes = tt::as_shared<FunctionType>(retType)->withParams();
-            // }
-            node_ptr_t invokeNode = BindNode::create(*currGraph_, funcType->exitType());
-            Node::link(LinkType::Norm, targetNode, invokeNode);
-            targetNode = invokeNode;
-        } else {
-            paramTypes = funcType->withTypes();
-        }
-        // link capture nodes to the function node
-        // to ensure the function node is executed after the capture nodes
-        for (const auto &capNode : funcNode->func()->graph().capture()) {
-            if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
-                Node::link(LinkType::Ctrl, capNode, targetNode);
-            }
-        }
-    } else if (targetNode->type() == NodeType::OPER) {
-        func_type_ptr_t funcType = tt::as_shared<OperNode>(targetNode)->funcType();
-        if (calledNodesSet_.count(targetNode.get())) {
-            // const auto &retType = funcType->exitType();
-            // if (retType->isFunction()) {
-            //     paramTypes = tt::as_shared<FunctionType>(retType)->withParams();
-            // }
-            node_ptr_t invokeNode = BindNode::create(*currGraph_, funcType->exitType());
-            Node::link(LinkType::Norm, targetNode, invokeNode);
-            targetNode = invokeNode;
-        } else {
-            paramTypes = funcType->withTypes();
-        }
-    } else {
-        const auto &dataType = targetNode->dataType();
-        ASSERT(
-            dataType->code() == TypeCode::Func,
-            "Target node of WITH must be a function or operator node.");
-        const auto &funcType = tt::as_shared<FunctionType>(dataType);
-        node_ptr_t attachNode = BindNode::create(*currGraph_, funcType->exitType());
-        Node::link(LinkType::Norm, targetNode, attachNode);
-        targetNode = attachNode;
-    }
-    // TODO: check if the number of parameters matches the number of inputs
     vector<node_ptr_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
@@ -560,7 +569,8 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
             currGraph_->addDependency(subGraph);
             auto funcData = FunctionData::create(*subGraph);
-            node_ptr_t inputNode = DataNode::create(*currGraph_, funcData);
+            node_ptr_t inputNode =
+                DataNode::create(*currGraph_, std::static_pointer_cast<Data>(funcData));
             for (const auto &capNode : subGraph->capture()) {
                 if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
                     Node::link(LinkType::Ctrl, capNode, inputNode);
@@ -576,25 +586,8 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     }
     for (size_t i = 0; i < inputs.size(); i++) {
         const node_ptr_t &inputNode = inputs[i];
-        bool isVar = false;
-        if (i < paramTypes.size()) {
-            isVar = paramTypes[i].second;
-        }
         tryRemoveCtrlLink(inputNode, targetNode);
         Node::link(LinkType::With, inputNode, targetNode);
-        if (nodeModifierMap_.count(inputNode.get())) {
-            node_ptr_t modifierNode = nodeModifierMap_[inputNode.get()].lock();
-            if (modifierNode && linkCheek(modifierNode, targetNode)) {
-                Node::link(LinkType::Ctrl, modifierNode, targetNode);
-            }
-        }
-        if (isVar) {
-            if (!waited_) {
-                diags_->of(SemanticDiag::IgnoredSideEffect).commit();
-            }
-            // Mark this node as a modifier for the input node
-            nodeModifierMap_[inputNode.get()] = targetNode;
-        }
     }
     // with 操作不属于调用，所以这里不处理synced_和lastCalledFuncNode_
     LEAVE("WITH");
@@ -694,7 +687,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         currGraph_->addDependency(subGraph);
         func_ptr_t funcData = FunctionData::create(*subGraph);
         type_ptr_t exitType = funcData->funcType()->exitType();
-        node_ptr_t funcNode = FuncNode::create(*graph, funcData, exitType);
+        node_ptr_t funcNode = FuncNode::create(*graph, funcData);
 
         if (joinType == nullptr) {
             joinType = exitType;
@@ -715,6 +708,13 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         Node::link(LinkType::Ctrl, brchNode, funcNode);
         Node::link(LinkType::Ctrl, funcNode, joinNode);
+    }
+
+    if (synced_) {
+        if (lastSyncedNode_ && linkCheek(lastSyncedNode_, brchNode)) {
+            Node::link(LinkType::Ctrl, lastSyncedNode_, brchNode);
+        }
+        lastSyncedNode_ = joinNode;
     }
 
     LEAVE("BRCH");
@@ -744,8 +744,8 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         }
     }
     node_ptr_t exitNode = currGraph_->exitNode();
-    if (synced_ && lastCalledFuncNode_ && linkCheek(lastCalledFuncNode_, exitNode)) {
-        Node::link(LinkType::Ctrl, lastCalledFuncNode_, exitNode);
+    if (synced_ && lastSyncedNode_ && linkCheek(lastSyncedNode_, exitNode)) {
+        Node::link(LinkType::Ctrl, lastSyncedNode_, exitNode);
     }
     LEAVE("EXIT");
     return resNode;
@@ -755,9 +755,9 @@ node_ptr_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
     const auto &execLoad = gct->loadAs<GCT::ExecLoad>();
     bool old = synced_;
-    node_ptr_t oldFuncNode = lastCalledFuncNode_;
+    node_ptr_t oldFuncNode = lastSyncedNode_;
     synced_ = execLoad->synced();
-    lastCalledFuncNode_ = nullptr;
+    lastSyncedNode_ = nullptr;
     node_ptr_t res = nullptr;
     for (size_t i = 0; i < gct->size(); i++) {
         try {
@@ -770,7 +770,7 @@ node_ptr_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         }
     }
     synced_ = old;
-    lastCalledFuncNode_ = oldFuncNode;
+    lastSyncedNode_ = oldFuncNode;
     LEAVE("EXEC");
     return res;
 }
@@ -785,14 +785,9 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
             module_->exportEntity(ref, optNode.value());
             continue;
         }
-        auto optGraph = graphAt(ref);
+        auto optGraph = graphsAt(ref);
         if (optGraph.has_value()) {
             module_->exportEntity(ref, optGraph.value());
-            continue;
-        }
-        auto optOp = operatorAt(ref);
-        if (optOp.has_value()) {
-            module_->exportEntity(ref, optOp.value());
             continue;
         }
         diags_->of(SemanticDiag::UnresolvedReference).commit(ref.toString());

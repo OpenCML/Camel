@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,6 @@ class Data : public std::enable_shared_from_this<Data> {
   protected:
     bool mutable_ = false;
     type_ptr_t type_;
-    entity_wptr_t entity_;
 
   public:
     Data();

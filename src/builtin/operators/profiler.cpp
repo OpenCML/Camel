@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 1, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -119,7 +119,6 @@ OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, 
     auto boolData = std::dynamic_pointer_cast<PrimaryData<bool>>(arg);
 
 #ifndef NDEBUG
-    const bool &enabled = boolData->data();
     const bool &enabled = boolData->data();
     if (enabled) {
         profiler::AdvancedTracer::Config config;

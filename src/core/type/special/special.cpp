@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,8 @@ std::string SpecialType::mangle() const {
     case TypeCode::Func:
         ASSERT(false, "Function type mangle should be implemented in FunctionType.");
         return "";
+    default:
+        break;
     }
     ASSERT(false, "Unknown SpecialType");
     return ""; // unknown
