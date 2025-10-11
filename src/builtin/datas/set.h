@@ -19,21 +19,42 @@
 
 #pragma once
 
-#include "other.h"
+#include "builtin/types/set.h"
+#include "core/data/other/other.h"
 
-class TensorData : public OtherData {
+class SetData : public OtherData {
   private:
-    std::vector<data_ptr_t> refs_;
-    data_ptr_t data_; // TODO: support multi-dimensional tensor
+    std::vector<data_ptr_t> refDatas_;
+    // TODO: need to implement a hash function for data_ptr_t
+    std::unordered_set<data_ptr_t> data_;
 
   public:
-    TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape);
-    virtual ~TensorData() = default;
+    SetData(type_ptr_t elType);
+    SetData(type_ptr_t elType, data_list_t data);
+    SetData(type_ptr_t setType, std::unordered_set<data_ptr_t> &&data);
+    virtual ~SetData() = default;
 
-    data_ptr_t at(const std::vector<size_t> &index) const;
+    static std::shared_ptr<SetData> create(type_ptr_t elType) {
+        return std::make_shared<SetData>(elType);
+    }
+    static std::shared_ptr<SetData> create(type_ptr_t elType, data_list_t data) {
+        return std::make_shared<SetData>(elType, data);
+    }
+    static std::shared_ptr<SetData>
+    create(type_ptr_t setType, std::unordered_set<data_ptr_t> &&data) {
+        return std::make_shared<SetData>(setType, std::move(data));
+    }
+
+    // append element to the set during construction
+    bool emplace(const data_ptr_t &e);
+
+    bool add(const data_ptr_t &e);
+    bool del(const data_ptr_t &e);
+
+    std::unordered_set<data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual bool resolved() const override { return refDatas_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

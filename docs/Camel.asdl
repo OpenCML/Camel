@@ -176,10 +176,10 @@ NamedType(Ref ref, bool isVar) : Type type ;
 NamedPair(Ref ref, bool isVar) : Type type, Data? data ;
 
 Type(TypeType type) := 
-    NullableType | TypeExpr | ListType | StructType | TupleType
+    NullableType | TypeExpr | ArrayType | StructType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 
-ListType(siz dim) : Type type ;
+ArrayType(siz dim) : Type type ;
 StructType() : NamedType* types ;
 TupleType() : Type* types ;
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)

@@ -1003,19 +1003,6 @@ any Builder::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
     return dataNode;
 }
 
-// TODO: MODIFIED
-/*
-assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
-logicalOrExpr)?
-    ;
-*/
-/*
-assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
-logicalOrExpr)?
-    ;
-*/
 /*
 assignExpr
     : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
@@ -1475,13 +1462,13 @@ any Builder::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
 }
 
 /*
-dictData
-    : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
+structData
+    : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
     ;
 */
-any Builder::visitDictData(OpenCMLParser::DictDataContext *context) {
+any Builder::visitStructData(OpenCMLParser::StructDataContext *context) {
     ENTER("StructData");
-    node_ptr_t dataNode = createNodeAs<DictDataLoad>();
+    node_ptr_t dataNode = createNodeAs<StructDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->pairedValues()) {
         *dataNode << any2node(visitPairedValues(context->pairedValues()));
@@ -1493,13 +1480,13 @@ any Builder::visitDictData(OpenCMLParser::DictDataContext *context) {
 }
 
 /*
-listData
+arrayData
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 */
-any Builder::visitListData(OpenCMLParser::ListDataContext *context) {
-    ENTER("ListData");
-    node_ptr_t dataNode = createNodeAs<ListDataLoad>();
+any Builder::visitArrayData(OpenCMLParser::ArrayDataContext *context) {
+    ENTER("ArrayData");
+    node_ptr_t dataNode = createNodeAs<ArrayDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->indexValues()) {
         *dataNode << any2node(visitIndexValues(context->indexValues()));
@@ -1507,7 +1494,7 @@ any Builder::visitListData(OpenCMLParser::ListDataContext *context) {
         *dataNode << createNodeAs<RepeatedLoad>("Data");
         // TODO: Handle list comprehension
     }
-    LEAVE("ListData");
+    LEAVE("ArrayData");
     return dataNode;
 }
 
@@ -1533,8 +1520,8 @@ any Builder::visitTupleData(OpenCMLParser::TupleDataContext *context) {
 primaryData
     : identRef
     | literal
-    | listData
-    | dictData
+    | arrayData
+    | structData
     | '(' dataExpr ')'
     | tupleData
     | funcData
@@ -1728,36 +1715,36 @@ any Builder::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {
 }
 
 /*
-typeUnit : (identDef OF)? listType ;
+typeUnit : (identDef OF)? arrayType ;
 */
 any Builder::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
     ENTER("TypeUnit");
     node_ptr_t res = nullptr;
     if (context->identDef()) {
         throw std::runtime_error("visitTypeUnit: identDef is not implemented yet");
-    } else if (context->listType()) {
-        res = any2node(visitListType(context->listType()));
+    } else if (context->arrayType()) {
+        res = any2node(visitArrayType(context->arrayType()));
     }
     LEAVE("TypeUnit");
     return res;
 }
 
 /*
-listType
+arrayType
     : specType ('[' ']')*
     ;
 */
-any Builder::visitListType(OpenCMLParser::ListTypeContext *context) {
-    ENTER("ListType");
+any Builder::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
+    ENTER("ArrayType");
     node_ptr_t res = any2node(visitSpecType(context->specType()));
     if (context->children.size() > 1) {
         size_t dims = (context->children.size() - 1) / 2;
-        node_ptr_t listTypeNode = createNodeAs<ArrayTypeLoad>(dims);
-        setNodeTokenRangeByContext(listTypeNode, context);
-        *listTypeNode << res;
-        res = listTypeNode;
+        node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(dims);
+        setNodeTokenRangeByContext(arrayTypeNode, context);
+        *arrayTypeNode << res;
+        res = arrayTypeNode;
     }
-    LEAVE("ListType");
+    LEAVE("ArrayType");
     return res;
 }
 
@@ -1804,7 +1791,7 @@ any Builder::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
 /*
 primaryType
     : INNER_ATOM_TYPE
-    | dictType
+    | structType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -1820,8 +1807,8 @@ any Builder::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
         Reference ref(context->INNER_ATOM_TYPE()->getText());
         res = createNodeAs<RefTypeLoad>(ref);
         setNodeTokenRangeByContext(res, context);
-    } else if (context->dictType()) {
-        res = any2node(visitDictType(context->dictType()));
+    } else if (context->structType()) {
+        res = any2node(visitStructType(context->structType()));
     } else if (context->identRef()) {
         res = createNodeAs<RefTypeLoad>(any_cast<Reference>(visitIdentRef(context->identRef())));
         setNodeTokenRangeByContext(res, context->identRef());
@@ -1847,11 +1834,11 @@ any Builder::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
 }
 
 /*
-dictType
+structType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
     ;
 */
-any Builder::visitDictType(OpenCMLParser::DictTypeContext *context) {
+any Builder::visitStructType(OpenCMLParser::StructTypeContext *context) {
     ENTER("StructType");
     node_ptr_t res = createNodeAs<StructTypeLoad>();
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedType");

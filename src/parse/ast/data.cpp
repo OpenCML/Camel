@@ -176,9 +176,9 @@ const std::string TryExprLoad::geneCode() const { return "try"; }
 
 const std::string LiteralLoad::geneCode() const { return value_.toString(); }
 
-const std::string ListDataLoad::geneCode() const { return "[]"; }
+const std::string ArrayDataLoad::geneCode() const { return "[]"; }
 
-const std::string DictDataLoad::geneCode() const { return "{}"; }
+const std::string StructDataLoad::geneCode() const { return "{}"; }
 
 const std::string TupleDataLoad::geneCode() const { return "()"; }
 

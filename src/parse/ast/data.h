@@ -207,16 +207,16 @@ class LiteralLoad : public DataLoad {
     Literal value_;
 };
 
-class ListDataLoad : public DataLoad {
+class ArrayDataLoad : public DataLoad {
   public:
-    ListDataLoad() : DataLoad(DataType::Array) {}
-    const std::string toString() const override { return "ListData" + this->status(); }
+    ArrayDataLoad() : DataLoad(DataType::Array) {}
+    const std::string toString() const override { return "ArrayData" + this->status(); }
     const std::string geneCode() const override;
 };
 
-class DictDataLoad : public DataLoad {
+class StructDataLoad : public DataLoad {
   public:
-    DictDataLoad() : DataLoad(DataType::Struct) {}
+    StructDataLoad() : DataLoad(DataType::Struct) {}
     const std::string toString() const override { return "StructData" + this->status(); }
     const std::string geneCode() const override;
 };

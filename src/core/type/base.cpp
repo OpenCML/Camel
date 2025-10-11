@@ -209,24 +209,12 @@ type_ptr_t Type::Real() { return Float(); }
 
 type_ptr_t Type::Number() { return Double(); }
 
-type_ptr_t Type::List() {
-    static type_ptr_t type = nullptr;
-    if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<ListType>());
-    }
-    return type;
-}
-
 type_ptr_t Type::Array(const type_ptr_t &elementType) {
     return tt::as_shared<Type>(make_shared<ArrayType>(elementType));
 }
 
 type_ptr_t Type::Tuple(const type_vec_t &types) {
     return tt::as_shared<Type>(make_shared<TupleType>(types));
-}
-
-type_ptr_t Type::Vector(const type_ptr_t &elementType, size_t size) {
-    return tt::as_shared<Type>(make_shared<VectorType>(elementType, size));
 }
 
 type_ptr_t Type::Any() {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -984,11 +984,11 @@ any Formatter::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
 }
 
 /*
-dictData
-    : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
+structData
+    : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
     ;
 */
-any Formatter::visitDictData(OpenCMLParser::DictDataContext *context) {
+any Formatter::visitStructData(OpenCMLParser::StructDataContext *context) {
     const auto &pairedValues = context->pairedValues();
     if (pairedValues) {
         return "{" +
@@ -1005,11 +1005,11 @@ any Formatter::visitDictData(OpenCMLParser::DictDataContext *context) {
 }
 
 /*
-listData
+arrayData
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 */
-any Formatter::visitListData(OpenCMLParser::ListDataContext *context) {
+any Formatter::visitArrayData(OpenCMLParser::ArrayDataContext *context) {
     const auto &children = context->children;
     if (children.size() == 2) {
         return string("[]");
@@ -1049,8 +1049,8 @@ any Formatter::visitTupleData(OpenCMLParser::TupleDataContext *context) {
 primaryData
     : identRef
     | literal
-    | listData
-    | dictData
+    | arrayData
+    | structData
     | '(' dataExpr ')'
     | tupleData
     | funcData
@@ -1154,7 +1154,7 @@ any Formatter::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {
 }
 
 /*
-typeUnit : (identDef OF)? listType ;
+typeUnit : (identDef OF)? arrayType ;
 */
 any Formatter::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
     string result;
@@ -1162,16 +1162,16 @@ any Formatter::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
     if (identDef) {
         result += any_cast<string>(visitIdentDef(identDef)) + " of ";
     }
-    result += any_cast<string>(visitListType(context->listType()));
+    result += any_cast<string>(visitArrayType(context->arrayType()));
     return result;
 }
 
 /*
-listType
+arrayType
     : specType ('[' ']')*
     ;
 */
-any Formatter::visitListType(OpenCMLParser::ListTypeContext *context) {
+any Formatter::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
     string result = any_cast<string>(visitSpecType(context->specType()));
     const size_t size = (context->children.size() - 1) / 2;
     for (size_t i = 0; i < size; i++) {
@@ -1211,7 +1211,7 @@ any Formatter::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
 /*
 primaryType
     : INNER_ATOM_TYPE
-    | dictType
+    | structType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -1225,8 +1225,8 @@ any Formatter::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     case 1: // INNER_ATOM_TYPE
         return context->INNER_ATOM_TYPE()->getText();
         break;
-    case 2: // dictExprType
-        return any_cast<string>(visitDictType(context->dictType()));
+    case 2: // structExprType
+        return any_cast<string>(visitStructType(context->structType()));
         break;
     case 3: // identRef
         return any_cast<string>(visitIdentRef(context->identRef()));
@@ -1253,11 +1253,11 @@ any Formatter::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
 }
 
 /*
-dictType
+structType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
     ;
 */
-any Formatter::visitDictType(OpenCMLParser::DictTypeContext *context) {
+any Formatter::visitStructType(OpenCMLParser::StructTypeContext *context) {
     const auto &keyTypePairs = context->keyTypePair();
     return "{" + formatList(keyTypePairs, context, ", ", ",", PaddingNL | PaddingSP | PushScope) +
            "}";

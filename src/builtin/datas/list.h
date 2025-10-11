@@ -19,7 +19,8 @@
 
 #pragma once
 
-#include "other.h"
+#include "builtin/types/list.h"
+#include "core/data/other/other.h"
 
 class ListData : public OtherData {
   private:

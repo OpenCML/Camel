@@ -1187,7 +1187,7 @@ string Generator::generateLiteralLoad(const AbstractSyntaxTree::node_ptr_t &node
 string Generator::generateListDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
-    auto listDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::ListDataLoad>(node->load());
+    auto listDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::ArrayDataLoad>(node->load());
     if (!listDataLoad)
         return "";
 
@@ -1255,7 +1255,7 @@ string Generator::generateListDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
 string Generator::generateDictDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     if (!node)
         return "";
-    auto dictDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::DictDataLoad>(node->load());
+    auto dictDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::StructDataLoad>(node->load());
     if (!dictDataLoad)
         return "";
 
@@ -1457,9 +1457,9 @@ string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
 
     if (node->size() > 0) {
         if (typeLoad->typeType() == AbstractSyntaxTree::TypeType::Array) {
-            auto listTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::ArrayTypeLoad>(typeLoad);
-            if (listTypeLoad) {
-                size_t dims = listTypeLoad->dims();
+            auto arrayTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::ArrayTypeLoad>(typeLoad);
+            if (arrayTypeLoad) {
+                size_t dims = arrayTypeLoad->dims();
                 string arraySuffix = "";
                 for (size_t i = 0; i < dims; i++) {
                     arraySuffix += "[]";

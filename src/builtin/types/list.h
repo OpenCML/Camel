@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "other.h"
+#include "core/type/other/other.h"
 
 class ListType : public OtherType {
   public:

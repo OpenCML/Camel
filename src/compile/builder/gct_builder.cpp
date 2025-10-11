@@ -455,10 +455,10 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         dataNode = visitLiteral(ast);
         break;
     case AST::DataType::Array:
-        dataNode = visitListData(ast);
+        dataNode = visitArrayData(ast);
         break;
     case AST::DataType::Struct:
-        dataNode = visitDictData(ast);
+        dataNode = visitStructData(ast);
         break;
     case AST::DataType::Tuple:
         dataNode = visitTupleData(ast);
@@ -927,32 +927,32 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
 }
 
 /*
-ListData() : Data* data ;
+ArrayData() : Data* data ;
 */
-node_ptr_t Builder::visitListData(const AST::node_ptr_t &ast) {
-    ENTER("ListData");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ListData");
-    auto listData = make_shared<ListData>();
-    node_ptr_t res = createNodeAs<DataLoad>(listData);
+node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
+    ENTER("ArrayData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
+    auto arrayData = make_shared<ArrayData>(Type::Any());
+    node_ptr_t res = createNodeAs<DataLoad>(arrayData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         auto [data, _] = extractData(dataNode, execNode, dangling);
-        listData->emplace(data);
+        arrayData->emplace(data);
     }
     if (dangling) {
         *execNode << res;
         res = execNode;
     }
-    LEAVE("ListData");
+    LEAVE("ArrayData");
     return res;
 }
 
 /*
 StructData() : NamedData* dataList ;
 */
-node_ptr_t Builder::visitDictData(const AST::node_ptr_t &ast) {
+node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     ENTER("StructData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
     auto dictData = make_shared<StructData>();
@@ -1028,7 +1028,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 
 /*
 Type(TypeType type) :=
-    NullableType | TypeExpr | ListType | StructType | TupleType
+    NullableType | TypeExpr | ArrayType | StructType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 */
 type_ptr_t Builder::visitType(const AST::node_ptr_t &ast) {
@@ -1045,7 +1045,7 @@ type_ptr_t Builder::visitType(const AST::node_ptr_t &ast) {
         res = visitTypeExpr(ast);
         break;
     case AST::TypeType::Array:
-        res = visitListType(ast);
+        res = visitArrayType(ast);
         break;
     case AST::TypeType::Struct:
         res = visitStructType(ast);
@@ -1176,16 +1176,16 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 }
 
 /*
-ListType(siz dim) : Type type ;
+ArrayType(siz dim) : Type type ;
 */
-type_ptr_t Builder::visitListType(const AST::node_ptr_t &ast) {
-    ENTER("ListType");
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ListType");
+type_ptr_t Builder::visitArrayType(const AST::node_ptr_t &ast) {
+    ENTER("ArrayType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
     // TODO: 这里的dims信息暂时没用到
-    // const auto &listTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
+    // const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
     type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
     const auto &arrayType = Type::Array(type);
-    LEAVE("ListType");
+    LEAVE("ArrayType");
     return arrayType;
 }
 

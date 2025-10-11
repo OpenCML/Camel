@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "other.h"
+#include "core/type/other/other.h"
 
 class SetType : public OtherType {
   private:

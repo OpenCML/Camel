@@ -19,24 +19,23 @@
 
 #pragma once
 
-#include "other.h"
+#include "core/type/other/other.h"
 
-class VectorType : public OtherType {
+class TensorType : public OtherType {
   private:
-    size_t size_;
     type_ptr_t elementType_;
+    std::vector<size_t> shape_;
 
   public:
-    VectorType() = delete;
-    VectorType(const type_ptr_t &elementType, size_t size);
-    ~VectorType() noexcept = default;
+    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape);
+    ~TensorType() noexcept = default;
 
     static TypeCode typeCode() {
-        static TypeCode code = OtherTypeRegistry::registerType("Vector");
+        static TypeCode code = OtherTypeRegistry::registerType("Tensor");
         return code;
     }
 
-    size_t size() const;
+    std::vector<size_t> shape() const;
     type_ptr_t elementType() const;
 
     std::string toString() const override;

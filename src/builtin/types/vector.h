@@ -19,25 +19,25 @@
 
 #pragma once
 
-#include "other.h"
+#include "core/type/other/other.h"
 
-class MapType : public OtherType {
+class VectorType : public OtherType {
   private:
-    type_ptr_t keyType_;
-    type_ptr_t valueType_;
+    size_t size_;
+    type_ptr_t elementType_;
 
   public:
-    MapType() = delete;
-    MapType(const type_ptr_t &keyType, const type_ptr_t &valueType);
-    virtual ~MapType() noexcept = default;
+    VectorType() = delete;
+    VectorType(const type_ptr_t &elementType, size_t size);
+    ~VectorType() noexcept = default;
 
     static TypeCode typeCode() {
-        static TypeCode code = OtherTypeRegistry::registerType("Map");
+        static TypeCode code = OtherTypeRegistry::registerType("Vector");
         return code;
     }
 
-    type_ptr_t keyType() const;
-    type_ptr_t valueType() const;
+    size_t size() const;
+    type_ptr_t elementType() const;
 
     std::string toString() const override;
 

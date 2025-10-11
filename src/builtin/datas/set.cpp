@@ -20,9 +20,9 @@
 #include "set.h"
 #include "utils/scope.h"
 
-#include "../special/any.h"
-#include "../special/null.h"
-#include "../special/ref.h"
+#include "core/data/special/any.h"
+#include "core/data/special/null.h"
+#include "core/data/special/ref.h"
 
 using namespace std;
 

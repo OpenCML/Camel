@@ -17,54 +17,62 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "vector.h"
+#include "list.h"
 #include "utils/scope.h"
 
-#include "../special/any.h"
-#include "../special/null.h"
-#include "../special/ref.h"
+#include "core/data/special/any.h"
+#include "core/data/special/null.h"
+#include "core/data/special/ref.h"
 
 using namespace std;
 
-VectorData::VectorData(type_ptr_t type, size_t length, data_list_t data) : data_(data) {
+ListData::ListData() : OtherData(std::make_shared<ListType>()), data_() {}
+
+ListData::ListData(data_list_t data) : OtherData(std::make_shared<ListType>()), data_(data) {
     size_t i = 0;
     for (const auto &e : data) {
         if (e->type()->code() == TypeCode::Ref) {
-            refs_.push_back(i);
-        } else if (e->type()->castSafetyTo(*type) != CastSafety::Safe) {
-            throw DataConvError(
-                "Cannot convert " + e->type()->toString() + " to " + type->toString());
+            refIndices_.push_back(i);
         }
         i++;
     }
-    type_ = std::make_shared<VectorType>(type, length);
-    data_.resize(length);
 }
 
-VectorData::VectorData(type_ptr_t type, data_vec_t &&data)
-    : OtherData(type), data_(std::move(data)) {}
+ListData::ListData(data_vec_t &&data)
+    : OtherData(std::make_shared<ListType>()), data_(std::move(data)) {}
 
-bool VectorData::emplace(const data_ptr_t &e, size_t index) {
-    if (index >= data_.size()) {
-        return false;
-    }
-    data_[index] = e;
+void ListData::emplace(const data_ptr_t &e) {
+    data_.push_back(e);
     if (e->type()->code() == TypeCode::Ref) {
-        refs_.push_back(index);
+        refIndices_.push_back(data_.size() - 1);
     }
-    return true;
 }
 
-data_ptr_t VectorData::get(size_t index) const {
-    ASSERT(resolved(), "Cannot get data from unresolved VectorData");
+void ListData::pushBack(const data_ptr_t &e) {
+    ASSERT(resolved(), "Cannot push data to unresolved ListData");
+    data_.push_back(e);
+}
+
+data_ptr_t ListData::popBack() {
+    ASSERT(resolved(), "Cannot pop data from unresolved ListData");
+    if (data_.empty()) {
+        return nullptr;
+    }
+    data_ptr_t back = data_.back();
+    data_.pop_back();
+    return back;
+}
+
+data_ptr_t ListData::get(size_t index) const {
+    ASSERT(resolved(), "Cannot get data from unresolved ListData");
     if (index >= data_.size()) {
         return nullptr;
     }
     return data_[index];
 }
 
-bool VectorData::set(size_t index, const data_ptr_t &e) {
-    ASSERT(resolved(), "Cannot set data to unresolved VectorData");
+bool ListData::set(size_t index, const data_ptr_t &e) {
+    ASSERT(resolved(), "Cannot set data to unresolved ListData");
     if (index >= data_.size()) {
         return false;
     }
@@ -72,15 +80,12 @@ bool VectorData::set(size_t index, const data_ptr_t &e) {
     return true;
 }
 
-size_t VectorData::size() const { return data_.size(); }
-size_t VectorData::length() const { return data_.size(); }
-
-bool VectorData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for VectorData
+bool ListData::equals(const data_ptr_t &other) const {
+    // TODO: implement equals for ListData
     return true;
 }
 
-data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
+data_ptr_t ListData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || type_->equals(target)) {
         // same type, no need to convert
         return shared_from_this();
@@ -88,6 +93,7 @@ data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
     try {
         if (target->composed()) {
             switch (target->code()) {
+            // TODO: implement conversion to other composed types
             default:
                 throw UnsupportedConvError();
             }
@@ -114,37 +120,37 @@ data_ptr_t VectorData::convert(type_ptr_t target, bool inplace) {
         "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
 }
 
-vector<string> VectorData::refs() const {
+vector<string> ListData::refs() const {
     vector<string> res;
-    for (const auto &idx : refs_) {
+    res.reserve(refIndices_.size());
+    for (const auto &idx : refIndices_) {
         data_ptr_t ref = data_[idx];
-        res.push_back(dynamic_pointer_cast<RefData>(ref)->ref());
+        res.push_back(tt::as_shared<RefData>(ref)->ref());
     }
     return res;
 }
 
-void VectorData::resolve(const data_vec_t &dataList) {
-    if (refs_.empty()) {
+void ListData::resolve(const data_vec_t &dataList) {
+    if (refIndices_.empty()) {
         return;
     }
-    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refs_.size(); i++) {
-        size_t idx = refs_[i];
-        // TODO: need to check type compatibility
+    ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < refIndices_.size(); i++) {
+        size_t idx = refIndices_[i];
         data_[idx] = dataList[i];
     }
-    refs_.clear();
+    refIndices_.clear();
 }
 
-data_ptr_t VectorData::clone(bool deep) const {
-    auto res = make_shared<VectorData>(dynamic_pointer_cast<VectorType>(type_), data_.size());
-    for (size_t i = 0; i < data_.size(); i++) {
-        res->emplace(deep ? data_[i]->clone(true) : data_[i], i);
+data_ptr_t ListData::clone(bool deep) const {
+    auto res = make_shared<ListData>();
+    for (const auto &e : data_) {
+        res->emplace(e->clone(deep));
     }
     return res;
 }
 
-const string VectorData::toString() const {
+const string ListData::toString() const {
     string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";
@@ -157,4 +163,4 @@ const string VectorData::toString() const {
     return str;
 }
 
-void VectorData::print(std::ostream &os) const { os << toString(); }
+void ListData::print(std::ostream &os) const { os << toString(); }

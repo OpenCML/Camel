@@ -141,10 +141,8 @@ class Type {
     static type_ptr_t Real();
     static type_ptr_t Number();
 
-    static type_ptr_t List();
     static type_ptr_t Array(const type_ptr_t &elementType);
     static type_ptr_t Tuple(const type_vec_t &types);
-    static type_ptr_t Vector(const type_ptr_t &elementType, size_t size);
 
     static type_ptr_t Any();
     static type_ptr_t Func();

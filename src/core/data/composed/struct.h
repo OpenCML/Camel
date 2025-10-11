@@ -50,8 +50,8 @@ class StructData : public ComposedData {
     std::unordered_map<std::string, data_ptr_t> &raw() { return data_; }
 
     void clear() {
-        StructType &dictType = *static_cast<StructType *>(type_.get());
-        dictType.clear();
+        StructType &structType = *static_cast<StructType *>(type_.get());
+        structType.clear();
         data_.clear();
     }
 

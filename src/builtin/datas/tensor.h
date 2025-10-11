@@ -19,33 +19,19 @@
 
 #pragma once
 
-#include "other.h"
+#include "builtin/types/tensor.h"
+#include "core/data/other/other.h"
 
-class VectorData : public OtherData {
+class TensorData : public OtherData {
   private:
-    std::vector<size_t> refs_;
-    std::vector<data_ptr_t> data_;
+    std::vector<data_ptr_t> refs_;
+    data_ptr_t data_; // TODO: support multi-dimensional tensor
 
   public:
-    VectorData(type_ptr_t type, size_t length, data_list_t data = {});
-    VectorData(type_ptr_t type, data_vec_t &&data);
-    virtual ~VectorData() = default;
+    TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape);
+    virtual ~TensorData() = default;
 
-    static std::shared_ptr<VectorData>
-    create(type_ptr_t type, size_t length, data_list_t data = {}) {
-        return std::make_shared<VectorData>(type, length, data);
-    }
-    static std::shared_ptr<VectorData> create(type_ptr_t type, data_vec_t &&data) {
-        return std::make_shared<VectorData>(type, std::move(data));
-    }
-
-    bool emplace(const data_ptr_t &e, size_t index);
-
-    data_ptr_t get(size_t index) const;
-    bool set(size_t index, const data_ptr_t &e);
-    size_t size() const;
-    size_t length() const;
-    std::vector<data_ptr_t> &raw() { return data_; }
+    data_ptr_t at(const std::vector<size_t> &index) const;
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }

@@ -19,33 +19,34 @@
 
 #pragma once
 
-#include "other.h"
+#include "builtin/types/vector.h"
+#include "core/data/other/other.h"
 
-class MapData : public OtherData {
+class VectorData : public OtherData {
   private:
-    std::vector<std::pair<data_ptr_t, bool>> refs_; // bool indicates if the ptr is key
-    // TODO: need to implement a hash function for data_ptr_t
-    std::unordered_map<data_ptr_t, data_ptr_t> data_;
+    std::vector<size_t> refs_;
+    std::vector<data_ptr_t> data_;
 
   public:
-    MapData(type_ptr_t keyType, type_ptr_t dataType);
-    MapData(type_ptr_t mapType, std::unordered_map<data_ptr_t, data_ptr_t> &&data);
-    virtual ~MapData() = default;
+    VectorData(type_ptr_t type, size_t length, data_list_t data = {});
+    VectorData(type_ptr_t type, data_vec_t &&data);
+    virtual ~VectorData() = default;
 
-    static std::shared_ptr<MapData> create(type_ptr_t keyType, type_ptr_t dataType) {
-        return std::make_shared<MapData>(keyType, dataType);
+    static std::shared_ptr<VectorData>
+    create(type_ptr_t type, size_t length, data_list_t data = {}) {
+        return std::make_shared<VectorData>(type, length, data);
     }
-    static std::shared_ptr<MapData>
-    create(type_ptr_t mapType, std::unordered_map<data_ptr_t, data_ptr_t> &&data) {
-        return std::make_shared<MapData>(mapType, std::move(data));
+    static std::shared_ptr<VectorData> create(type_ptr_t type, data_vec_t &&data) {
+        return std::make_shared<VectorData>(type, std::move(data));
     }
 
-    bool emplace(const data_ptr_t &key, const data_ptr_t &val);
+    bool emplace(const data_ptr_t &e, size_t index);
 
-    bool set(const data_ptr_t &key, const data_ptr_t &val);
-    bool del(const data_ptr_t &key);
-    data_ptr_t get(const data_ptr_t &key) const;
-    std::unordered_map<data_ptr_t, data_ptr_t> &raw() { return data_; }
+    data_ptr_t get(size_t index) const;
+    bool set(size_t index, const data_ptr_t &e);
+    size_t size() const;
+    size_t length() const;
+    std::vector<data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refs_.empty(); }
