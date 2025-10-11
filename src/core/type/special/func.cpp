@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 
 using namespace std;
 
-FunctionType::FunctionType() : SpecialType(TypeCode::Func), exitType_(Type::Void()) {
+FunctionType::FunctionType() : SpecialType(TypeCode::Func), exitType_(nullptr) {
     // 默认空构造函数，需要通过addWithArg和addNormArg添加参数
     // 通过此方式构造的FunctionType，是有编译信息的
     hasCompileInfo_ = true;
@@ -91,7 +91,12 @@ bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool i
     return true;
 }
 
-type_ptr_t FunctionType::exitType() const { return dynamic_pointer_cast<Type>(exitType_); }
+const type_ptr_t &FunctionType::exitType() const {
+    ASSERT(
+        exitType_ != nullptr,
+        "Exit type is null. Did you forget to set the exit type for this function?");
+    return exitType_;
+}
 
 bool FunctionType::checkModifiers() const { return true; }
 
@@ -139,12 +144,12 @@ string FunctionType::toString() const {
                 result += ", ";
             }
             const auto &type = withTypes_[i];
+            if (type.second) {
+                result += "var ";
+            }
             if (hasCompileInfo_) {
                 const auto &name = argNames_.at(i);
                 result += name + ": ";
-            }
-            if (type.second) {
-                result += "var ";
             }
             result += type.first->toString();
         }
@@ -156,14 +161,14 @@ string FunctionType::toString() const {
             result += ", ";
         }
         const auto &type = normTypes_[i];
+        if (type.second) {
+            result += "var ";
+        }
         if (hasCompileInfo_) {
             size_t idx = i + withTypes_.size();
             ASSERT(idx < argNames_.size(), "Argument name index out of range");
             const auto &name = argNames_.at(idx);
             result += name + ": ";
-        }
-        if (type.second) {
-            result += "var ";
         }
         result += type.first->toString();
     }
@@ -171,7 +176,7 @@ string FunctionType::toString() const {
     if (exitType_) {
         result += exitType_->toString();
     } else {
-        result += "null";
+        result += "<null>";
     }
     return result;
 }

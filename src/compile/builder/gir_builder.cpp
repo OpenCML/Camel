@@ -120,6 +120,25 @@ node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
     return optSrcNode.value();
 }
 
+void Builder::setGraphOutputAndExitType(const graph_ptr_t &graph, const node_ptr_t &node) {
+    type_ptr_t actualExitType = node->dataType();
+    func_type_ptr_t funcType = graph->funcType();
+    if (funcType->hasExitType()) {
+        type_ptr_t declaredExitType = graph->funcType()->exitType();
+        if (!actualExitType->assignable(declaredExitType)) {
+            diags_->of(SemanticDiag::ReturnTypeMismatch)
+                .commit(
+                    actualExitType->toString(),
+                    declaredExitType->toString(),
+                    graph->name() + ": " + graph->funcType()->toString());
+            throw BuildAbortException();
+        }
+    } else {
+        // If the function has no declared return type, set it to the actual return type
+        graph->funcType()->setExitType(actualExitType);
+    }
+}
+
 any Builder::visit(const GCT::node_ptr_t &node) {
     switch (node->type()) {
     case GCT::LoadType::DECL:
@@ -216,11 +235,11 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (!graph->hasOutput()) {
         if (res) {
-            graph->setOutput(res);
+            setGraphOutputAndExitType(graph, res);
         } else {
             // function with no return value, setting null by default
             node_ptr_t resNode = DataNode::create(*graph, Data::null());
-            graph->setOutput(resNode);
+            setGraphOutputAndExitType(graph, resNode);
         }
     }
     leaveScope();
@@ -388,7 +407,17 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         } else if (dataRes.type() == typeid(node_ptr_t)) {
             node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
             normInputNodes.push_back(inputNode);
-            normInputTypes.push_back(inputNode->dataType());
+            if (inputNode->type() == NodeType::FUNC) {
+                const auto &funcNode = tt::as_shared<FuncNode>(inputNode);
+                const auto &fType = funcNode->funcType();
+                normInputTypes.push_back(fType->exitType());
+            } else if (inputNode->type() == NodeType::OPER) {
+                const auto &operNode = tt::as_shared<OperNode>(inputNode);
+                const auto &fType = operNode->funcType();
+                normInputTypes.push_back(fType->exitType());
+            } else {
+                normInputTypes.push_back(inputNode->dataType());
+            }
         } else {
             ASSERT(false, std::format("Unexpected result type from the {} child of LINK node", i));
         }
@@ -444,7 +473,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     ops->resolvers(),
                     "; ",
                     [](const std::pair<std::string, resolver_ptr_t> &p) {
-                        return p.first + ": " + p.second->signature();
+                        return "<" + p.first + ">: " + p.second->signature();
                     });
                 diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
@@ -670,16 +699,16 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         }
 
         graph_ptr_t subGraph = enterScope();
-        // TODO: set the function type properly
-        subGraph->setFuncType(std::make_shared<FunctionType>());
+        subGraph->setFuncType(
+            std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, nullptr));
         node_ptr_t res = visitExecNode(caseExecNode);
         if (!subGraph->hasOutput()) {
             if (res) {
-                subGraph->setOutput(res);
+                setGraphOutputAndExitType(subGraph, res);
             } else {
                 // function with no return value, setting null by default
                 node_ptr_t resNode = DataNode::create(*subGraph, Data::null());
-                subGraph->setOutput(resNode);
+                setGraphOutputAndExitType(subGraph, resNode);
             }
         }
         leaveScope();
@@ -736,6 +765,8 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter child of EXIT node.");
     node_ptr_t resNode = any_cast<node_ptr_t>(res);
     currGraph_->setOutput(resNode);
+    setGraphOutputAndExitType(currGraph_, resNode);
+
     if (nodeModifierMap_.count(resNode.get())) {
         node_ptr_t modifier = nodeModifierMap_[resNode.get()].lock();
         node_ptr_t returnNode = currGraph_->exitNode();
@@ -743,10 +774,12 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             Node::link(LinkType::Ctrl, modifier, returnNode);
         }
     }
+
     node_ptr_t exitNode = currGraph_->exitNode();
     if (synced_ && lastSyncedNode_ && linkCheek(lastSyncedNode_, exitNode)) {
         Node::link(LinkType::Ctrl, lastSyncedNode_, exitNode);
     }
+
     LEAVE("EXIT");
     return resNode;
 }

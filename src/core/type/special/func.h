@@ -80,7 +80,8 @@ class FunctionType : public SpecialType {
 
     const param_vec_t &withTypes() const { return withTypes_; }
     const param_vec_t &normTypes() const { return normTypes_; }
-    type_ptr_t exitType() const;
+    const type_ptr_t &exitType() const;
+    bool hasExitType() const { return exitType_ != nullptr; }
 
     const std::string &argNameAt(size_t idx) const;
     void setArgNames(const std::vector<std::string> &names) { argNames_ = names; }
@@ -106,7 +107,7 @@ class FunctionType : public SpecialType {
 
     param_vec_t withTypes_;
     param_vec_t normTypes_;
-    type_ptr_t exitType_;
+    type_ptr_t exitType_ = nullptr;
 
     // 只在编译期记录并使用
     bool hasCompileInfo_ = true;

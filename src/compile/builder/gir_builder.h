@@ -44,6 +44,8 @@ class Builder {
         nodeScope_ = node_scope_t::create();
         graphScope_ = graph_scope_t::create();
         rootGraph_ = Graph::create(nullptr, "__root__");
+        rootGraph_->setFuncType(
+            std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Type::Void()));
         currGraph_ = rootGraph_;
     }
 
@@ -88,6 +90,7 @@ class Builder {
     void leaveScope();
 
     node_ptr_t resolveNodeByRef(const std::string &name);
+    void setGraphOutputAndExitType(const graph_ptr_t &graph, const node_ptr_t &node);
 
     std::any visit(const GCT::node_ptr_t &gct);
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 10, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -281,9 +281,9 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
     ASSERT(from && to, "Cannot link null nodes.");
     ASSERT(from != to, "Cannot link a node to itself.");
     EXEC_WHEN_DEBUG(l.in("GIR").debug(
-        "Linking nodes: {} ->({}) {}",
+        "Linking nodes: {} -{}-> {}",
         from->toString(),
-        to_string(type),
+        (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
         to->toString()));
 
     switch (type) {
@@ -419,24 +419,36 @@ bool Node::replace(const node_ptr_t &oldNode, const node_ptr_t &newNode, bool fo
     EXEC_WHEN_DEBUG(
         l.in("GIR").debug("Replacing node: {} -> {}", oldNode->toString(), newNode->toString()));
 
-    for (const auto &in : oldNode->withInputs_) {
-        Node::link(LinkType::With, in, newNode);
-    }
-    for (const auto &in : oldNode->normInputs_) {
-        Node::link(LinkType::Norm, in, newNode);
-    }
-    for (const auto &in : oldNode->ctrlInputs_) {
-        Node::link(LinkType::Ctrl, in, newNode);
-    }
+    {
+        auto tempWithInputs = oldNode->withInputs_;
+        for (const auto &in : tempWithInputs) {
+            Node::link(LinkType::With, in, newNode);
+        }
 
-    for (const auto &out : oldNode->withInputs_) {
-        Node::link(LinkType::With, newNode, out);
-    }
-    for (const auto &out : oldNode->normInputs_) {
-        Node::link(LinkType::Norm, newNode, out);
-    }
-    for (const auto &out : oldNode->ctrlInputs_) {
-        Node::link(LinkType::Ctrl, newNode, out);
+        auto tempNormInputs = oldNode->normInputs_;
+        for (const auto &in : tempNormInputs) {
+            Node::link(LinkType::Norm, in, newNode);
+        }
+
+        auto tempCtrlInputs = oldNode->ctrlInputs_;
+        for (const auto &in : tempCtrlInputs) {
+            Node::link(LinkType::Ctrl, in, newNode);
+        }
+
+        auto tempWithOutputs = oldNode->withOutputs_;
+        for (const auto &out : tempWithOutputs) {
+            Node::link(LinkType::With, newNode, out);
+        }
+
+        auto tempNormOutputs = oldNode->normOutputs_;
+        for (const auto &out : tempNormOutputs) {
+            Node::link(LinkType::Norm, newNode, out);
+        }
+
+        auto tempCtrlOutputs = oldNode->ctrlOutputs_;
+        for (const auto &out : tempCtrlOutputs) {
+            Node::link(LinkType::Ctrl, newNode, out);
+        }
     }
 
     return oldNode->detach(force);
@@ -461,35 +473,43 @@ bool Node::detach(bool force) {
 
     node_ptr_t self = shared_from_this();
 
-    for (auto &input : withInputs_) {
-        if (!unlink(input, self, force)) {
-            return false;
+    {
+        auto tempWithInputs = withInputs_;
+        for (auto &input : tempWithInputs) {
+            if (!unlink(input, self, force)) {
+                return false;
+            }
         }
-    }
-    for (auto &input : normInputs_) {
-        if (!unlink(input, self, force)) {
-            return false;
+        auto tempNormInputs = normInputs_;
+        for (auto &input : tempNormInputs) {
+            if (!unlink(input, self, force)) {
+                return false;
+            }
         }
-    }
-    for (auto &input : ctrlInputs_) {
-        if (!unlink(input, self, force)) {
-            return false;
+        auto tempCtrlInputs = ctrlInputs_;
+        for (auto &input : tempCtrlInputs) {
+            if (!unlink(input, self, force)) {
+                return false;
+            }
         }
-    }
 
-    for (auto &output : withOutputs_) {
-        if (!unlink(self, output, force)) {
-            return false;
+        auto tempWithOutputs = withOutputs_;
+        for (auto &output : tempWithOutputs) {
+            if (!unlink(self, output, force)) {
+                return false;
+            }
         }
-    }
-    for (auto &output : normOutputs_) {
-        if (!unlink(self, output, force)) {
-            return false;
+        auto tempNormOutputs = normOutputs_;
+        for (auto &output : tempNormOutputs) {
+            if (!unlink(self, output, force)) {
+                return false;
+            }
         }
-    }
-    for (auto &output : ctrlOutputs_) {
-        if (!unlink(self, output, force)) {
-            return false;
+        auto tempCtrlOutputs = ctrlOutputs_;
+        for (auto &output : tempCtrlOutputs) {
+            if (!unlink(self, output, force)) {
+                return false;
+            }
         }
     }
 

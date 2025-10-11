@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1233,7 +1233,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
-    type_ptr_t exitType = Type::Void();
+    type_ptr_t exitType = nullptr;
 
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {
@@ -1312,7 +1312,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
                 .commit("default parameter values");
             throw BuildAbortException();
         }
-        bool success = funcType->addWithArg(name, type, isVar);
+        bool success = funcType->addNormArg(name, type, isVar);
         if (!success) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();

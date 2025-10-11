@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 10, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -162,6 +162,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Function of type '{0}' cannot be called with argument types: {1}.",
                 "Check that the function type '{0}' matches the number and types of arguments "
                 "provided ({1}).",
+            },
+        },
+        {
+            SemanticDiag::ReturnTypeMismatch,
+            {
+                "ReturnTypeMismatch",
+                "Return type '{0}' does not match the function's declared return type '{1}'.",
+                "Ensure that the value returned from the function matches the type specified in "
+                "the function signature: {2}.",
             },
         },
 

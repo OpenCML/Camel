@@ -70,9 +70,9 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
 
 class DynamicFuncTypeResolver : public FuncTypeResolver {
   public:
-    // int表示变量个数，vector<char>表示是否为可变参数
+    // int表示变量个数，vector<bool>表示是否为可变参数
     // int(-1) 表示不限制变量个数
-    using var_declare_t = std::pair<int, std::vector<char>>;
+    using var_declare_t = std::pair<int, std::vector<bool>>;
     DynamicFuncTypeResolver(
         const std::pair<var_declare_t, var_declare_t> &&vars, const std::string &&signature,
         const ResolverFunc &&resolver)

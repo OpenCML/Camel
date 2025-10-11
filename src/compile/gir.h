@@ -119,7 +119,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
-    std::string mangledName() const { return name_ + std::format("({})", funcType_->mangle()); }
+    std::string mangledName() const { return name_ + std::format("({})", funcType()->mangle()); }
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
     graph_ptr_t outer() const {
