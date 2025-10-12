@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.1.3"
+#define VERSION "0.1.4"
 
 #include <string>
 
