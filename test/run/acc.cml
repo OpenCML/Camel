@@ -15,10 +15,10 @@ func main(): int sync {
     let n = 100000  // number of terms
     let a = 1       // first term
     let d = 3       // common difference
-    println("Start computing arithmetic_sum(n={}, a={}, d={})...".format(n, a, d))
+    'Start computing arithmetic_sum(n={}, a={}, d={})...'->format<n, a, d>->println
     let start = now()
     let res = sum(n, a, d, 0)
     let duration = now() - start
-    println("Sum of arithmetic series = {} (computed in {} seconds)".format(res, duration))
+    'Sum of arithmetic series = {} (computed in {} seconds)'->format<res, duration>->println
     return 0
 }

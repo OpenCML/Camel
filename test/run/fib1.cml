@@ -15,11 +15,11 @@ func fibonacci(n: int): int sync {
 
 func main(): int sync {
     let idx = 25
-    println("Start computing fibonacci({})...".format(idx))
+    'Start computing fibonacci({})...'->format<idx>->println
     let start = now()
     let res = fibonacci(idx)
     let duration = now() - start
-    println("Total calls made: {}".format(cnt))
-    println("Fibonacci({}) = {} (computed in {} seconds)".format(idx, res, duration))
+    'Total calls made: {}'->format<cnt>->println
+    'Fibonacci({}) = {} (computed in {} seconds)'->format<idx, res, duration>->println
     return 0
 }

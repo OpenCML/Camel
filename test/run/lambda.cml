@@ -6,22 +6,22 @@ let WIDTH = 10
 let HEIGHT = 10
 
 // 自定义 my_filter 函数，用于测试 Lambda 表达式
-with <points: Point[]>
-func my_filter(predicate: (p: Point) => bool): Point[] sync {
+with <predicate: (p: Point) => bool>
+func my_filter(points: Point[]): Point[] sync {
     var result: Point[] = []
-    points.foreach((p: Point) => sync {
+    points->foreach<(p: Point) => sync {
         if predicate(p) then sync {
-            result.append(p)
+            result->append<p>
         }
-    })
+    }>
     return result
 }
 
 // 使用 Lambda 表达式过滤合法点
 func valid_points(points: Point[]): Point[] {
-    return points.my_filter((p: Point): bool => {
-        return p.$x >= 0 && p.$x < WIDTH && p.$y >= 0 && p.$y < HEIGHT
-    })
+    return points->my_filter<(p: Point): bool => {
+        return p.x >= 0 && p.x < WIDTH && p.y >= 0 && p.y < HEIGHT
+    }>
 }
 
 // 渲染函数：只渲染合法点
@@ -29,15 +29,15 @@ func render(snake: Point[]): void sync {
     let cleaned = valid_points(snake)
     let rows = range(0, HEIGHT)
 
-    rows.foreach((y: int) => sync {
+    rows->foreach<(y: int) => sync {
         let cols = range(0, WIDTH)
-        let lines = cols.map((x: int): string => {
+        cols->map<(x: int): string => {
             let p = {x: x, y: y}
-            return if cleaned.contains(p) then "O" else "."
-        })
-        println("".join(lines))
-    })
-    println("")
+            return if cleaned->contains<p> then 'O' else '.'
+        }>->join<''>->println
+    }>
+
+    println('')
 }
 
 // 主函数：提供带非法点的蛇

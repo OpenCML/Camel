@@ -8,10 +8,10 @@ func fib(n: int): int {
 
 func main(): int sync {
     let idx = 30
-    println("Start computing fibonacci({})...".format(idx))
+    'Start computing fibonacci({})...'->format<idx>->println
     let start = now()
     let res = fib(idx)
     let duration = now() - start
-    println("Fibonacci({}) = {} (computed in {} seconds)".format(idx, res, duration))
+    'Fibonacci({}) = {} (computed in {} seconds)'->format<idx, res, duration>->println
     return 0
 }
