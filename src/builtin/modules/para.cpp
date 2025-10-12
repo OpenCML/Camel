@@ -13,25 +13,79 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "para.h"
 
+using namespace std;
+
+static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "unordered_reduce",
+            {
+                {
+                    ":mark/unordered_reduce_arr",
+                    DynamicFuncTypeResolver::create(
+                        {{1, {false}}, {2, {false, false}}},
+                        "<collect: T[]> (func: (acc: U, item: T) => U, initial: U) => U",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (with[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            if (norm[0]->code() != TypeCode::Function)
+                                return nullopt;
+                            const auto &funcType = tt::as_shared<FunctionType>(norm[0]);
+                            const auto &normTypes = funcType->normTypes();
+                            if (!normTypes[1].first->equals(vecType->elementType()))
+                                return nullopt;
+                            if (!normTypes[0].first->equals(norm[1]))
+                                return nullopt;
+                            if (!funcType->exitType()->equals(norm[1]))
+                                return nullopt;
+                            return norm[1];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "unordered_foreach",
+            {
+                {
+                    ":mark/unordered_foreach_arr",
+                    DynamicFuncTypeResolver::create(
+                        {{1, {false}}, {1, {false}}},
+                        "<collect: T[]> (func: (item: T) => void) => void",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (with[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            if (norm[0]->code() != TypeCode::Function)
+                                return nullopt;
+                            const auto &funcType = tt::as_shared<FunctionType>(norm[0]);
+                            if (funcType->normTypes().size() != 1)
+                                return nullopt;
+                            const auto &normTypes = funcType->normTypes();
+                            if (!normTypes[0].first->equals(vecType->elementType()))
+                                return nullopt;
+                            if (!funcType->exitType()->equals(Type::Void()))
+                                return nullopt;
+                            return Type::Void();
+                        }),
+                },
+            }),
+    };
+
+    return groups;
+}
+
 ParaBuiltinModule::ParaBuiltinModule(context_ptr_t ctx) : BuiltinModule("para", ctx) {
-    exportBuiltinOperator(
-        "unordered_reduce",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":mark/unordered_reduce");
-    exportBuiltinOperator(
-        "unordered_foreach",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":mark/unordered_foreach");
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
 }
 
 bool ParaBuiltinModule::load() {

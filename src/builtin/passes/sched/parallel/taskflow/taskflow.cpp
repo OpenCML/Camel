@@ -23,6 +23,7 @@
 
 #include <fstream>
 #include <queue>
+#include <regex>
 #include <thread>
 #include <unordered_set>
 
@@ -311,9 +312,9 @@ tf::Task TaskflowExecSchedPass::buildOperTask(
                     mark_reduce(n, frame, sf);
                 } else if (uri == ":mark/foreach_arr") {
                     mark_foreach(n, frame, sf);
-                } else if (uri == ":mark/unordered_foreach") {
+                } else if (uri == ":mark/unordered_foreach_arr") {
                     mark_unordered_foreach(n, frame, sf);
-                } else if (uri == ":mark/unordered_reduce") {
+                } else if (uri == ":mark/unordered_reduce_arr") {
                     mark_unordered_reduce(n, frame, sf);
                 } else {
                     ASSERT(false, std::format("Mark Operator {} not implemented.", uri.substr(6)));
@@ -798,19 +799,12 @@ void TaskflowExecSchedPass::mark_unordered_reduce(
     auto targetData = frame->get(node->withInputs().front());
     auto funcData = frame->get(node->normInputs()[0]);
     auto initData = frame->get(node->normInputs()[1]);
-    ASSERT(funcData->type()->code() == TypeCode::Func, "reduce expects a function.");
     auto func = funcData->as<FunctionData>(Type::Func());
 
     data_vec_t elements;
     switch (targetData->type()->code()) {
-    case TypeCode::List:
-        elements = tt::as_shared<ListData>(targetData)->raw();
-        break;
     case TypeCode::Array:
         elements = tt::as_shared<ArrayData>(targetData)->raw();
-        break;
-    case TypeCode::Vector:
-        elements = tt::as_shared<VectorData>(targetData)->raw();
         break;
     case TypeCode::Tuple:
         elements = tt::as_shared<TupleData>(targetData)->raw();
@@ -919,6 +913,67 @@ void TaskflowExecSchedPass::mark_unordered_reduce(
           }).name("REDUCE_FINAL");
     final.succeed(root);
     sf.join();
+}
+
+void TaskflowExecSchedPass::mark_foreach(
+    const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
+    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncorrectArgsCount)
+            .commit("<foreach>", 1, node->withInputs().size() + node->normInputs().size());
+        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
+    }
+
+    auto targetData = frame->get(node->withInputs().front());
+    auto funcData = frame->get(node->normInputs().front());
+    auto func = funcData->as<FunctionData>(Type::Func());
+
+    auto add_step = [&](const data_ptr_t &arg, tf::Task &prev, bool &has_prev) {
+        auto step = sf.emplace([&, arg](tf::Subflow &isf) {
+                          auto &fg = func->graph();
+                          auto fframe = Frame::create(frame, fg);
+                          const auto &ports = fg.ports();
+                          ASSERT(ports.size() == 1, "foreach expects unary function.");
+                          fframe->set(ports[0], arg);
+
+                          instantiate_graph_instance_generic(isf, &fg, fframe);
+                          isf.join();
+
+                          (void)get_graph_return(&fg, fframe);
+                      }).name("FOREACH_ELEM_SYNC");
+        if (has_prev) {
+            step.succeed(prev);
+        }
+        prev = step;
+        has_prev = true;
+    };
+
+    tf::Task prev;
+    bool has_prev = false;
+
+    switch (targetData->type()->code()) {
+    case TypeCode::Array: {
+        const auto &elems = tt::as_shared<ArrayData>(targetData)->raw();
+        for (const auto &e : elems)
+            add_step(e, prev, has_prev);
+        break;
+    }
+    case TypeCode::Tuple: {
+        const auto &elems = tt::as_shared<TupleData>(targetData)->raw();
+        for (const auto &e : elems)
+            add_step(e, prev, has_prev);
+        break;
+    }
+    default:
+        context_->rtmDiags()
+            ->of(RuntimeDiag::IncompatibleArgType)
+            .commit(0, "<foreach>", "List/Array/Tuple/Vector/Dict", targetData->toString());
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidWithParameter,
+            "Unsupported type.");
+    }
+    sf.join();
+    frame->set(node, Data::null());
 }
 
 void TaskflowExecSchedPass::mark_unordered_foreach(
