@@ -122,13 +122,13 @@ enum DataType {
 Data(DataType type, bool notNull, bool waited)
     := UnaryExpr | BinaryExpr | ReservedExpr
     | IfExpr | MatchExpr | TryExpr
-    | Literal | ListData | DictData | TupleData | IndexData | FuncData | RefData ;
+    | Literal | ListData | StructData | TupleData | IndexData | FuncData | RefData ;
 
 IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 
 Literal(Value value) ;
 ListData() : Data* data ;
-DictData() : NamedData* dataList ;
+StructData() : NamedData* dataList ;
 TupleData() : Data* data ;
 FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 RefData(Ref ref) ;
@@ -176,11 +176,11 @@ NamedType(Ref ref, bool isVar) : Type type ;
 NamedPair(Ref ref, bool isVar) : Type type, Data? data ;
 
 Type(TypeType type) := 
-    NullableType | TypeExpr | ListType | DictType | TupleType
+    NullableType | TypeExpr | ArrayType | StructType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 
-ListType(siz dim) : Type type ;
-DictType() : NamedType* types ;
+ArrayType(siz dim) : Type type ;
+StructType() : NamedType* types ;
 TupleType() : Type* types ;
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;

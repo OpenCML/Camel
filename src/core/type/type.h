@@ -13,21 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "composed/array.h"
+#include "composed/struct.h"
+#include "composed/tuple.h"
+#include "composed/union.h"
 #include "primary.h"
+#include "resolver.h"
 #include "special/func.h"
-#include "struct/array.h"
-#include "struct/dict.h"
-#include "struct/list.h"
-#include "struct/map.h"
-#include "struct/set.h"
-#include "struct/tensor.h"
-#include "struct/tuple.h"
-#include "struct/union.h"
-#include "struct/vector.h"

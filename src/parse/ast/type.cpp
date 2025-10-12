@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,10 +28,10 @@ std::string to_string(TypeType type) {
         return "Null";
     case TypeType::Expr:
         return "Expr";
-    case TypeType::List:
+    case TypeType::Array:
         return "List";
-    case TypeType::Dict:
-        return "Dict";
+    case TypeType::Struct:
+        return "Struct";
     case TypeType::Tuple:
         return "Tuple";
     case TypeType::Func:
@@ -98,7 +98,7 @@ const std::string NullableTypeLoad::geneCode() const { return "?"; }
 
 const std::string TypeExprLoad::geneCode() const { return to_string(op_); }
 
-const std::string ListTypeLoad::geneCode() const {
+const std::string ArrayTypeLoad::geneCode() const {
     std::string result = "";
     for (size_t i = 0; i < dims_; i++) {
         result += "[]";
@@ -106,7 +106,7 @@ const std::string ListTypeLoad::geneCode() const {
     return result;
 }
 
-const std::string DictTypeLoad::geneCode() const { return "{}"; }
+const std::string StructTypeLoad::geneCode() const { return "{}"; }
 
 const std::string TupleTypeLoad::geneCode() const { return "()"; }
 

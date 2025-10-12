@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,6 @@
 #include "common/ref.h"
 #include "common/tree.h"
 #include "core/data/data.h"
-#include "core/data/entity.h"
 #include "core/func.h"
 #include "utils/assert.h"
 
@@ -50,6 +49,7 @@ enum class LoadType {
     ACCS,
     BRCH,
     CASE,
+    CAST,
     ANNO,
     EXIT,
     EXEC,
@@ -133,7 +133,7 @@ class TypeLoad : public Load {
     type_ptr_t dataType_;
 
   public:
-    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri)
+    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri = "")
         : Load(LoadType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
     type_ptr_t dataType() const { return dataType_; }
 
@@ -371,6 +371,18 @@ class CaseLoad : public Load {
 
   private:
     CaseType caseType_;
+};
+
+class CastLoad : public Load {
+  public:
+    CastLoad(const type_ptr_t &targetType) : Load(LoadType::CAST), targetType_(targetType) {}
+
+    const type_ptr_t &targetType() const { return targetType_; }
+
+    const std::string toString() const override { return "CAST: " + targetType_->toString(); }
+
+  private:
+    type_ptr_t targetType_;
 };
 
 } // namespace GraphConstructTree

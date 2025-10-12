@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,9 +32,9 @@ enum class DataType {
     MatchCase,
     TryExpr,
     Literal,
-    List,
-    Dict,
+    Array,
     Tuple,
+    Struct,
     Func,
     Ref
 };
@@ -207,17 +207,17 @@ class LiteralLoad : public DataLoad {
     Literal value_;
 };
 
-class ListDataLoad : public DataLoad {
+class ArrayDataLoad : public DataLoad {
   public:
-    ListDataLoad() : DataLoad(DataType::List) {}
-    const std::string toString() const override { return "ListData" + this->status(); }
+    ArrayDataLoad() : DataLoad(DataType::Array) {}
+    const std::string toString() const override { return "ArrayData" + this->status(); }
     const std::string geneCode() const override;
 };
 
-class DictDataLoad : public DataLoad {
+class StructDataLoad : public DataLoad {
   public:
-    DictDataLoad() : DataLoad(DataType::Dict) {}
-    const std::string toString() const override { return "DictData" + this->status(); }
+    StructDataLoad() : DataLoad(DataType::Struct) {}
+    const std::string toString() const override { return "StructData" + this->status(); }
     const std::string geneCode() const override;
 };
 

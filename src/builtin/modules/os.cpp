@@ -13,49 +13,71 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "os.h"
 
+static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "whoami",
+            {
+                {
+                    ":os/whoami",
+                    StaticFuncTypeResolver::create({}, {}, Type::String()),
+                },
+            }),
+        OperatorGroup::create(
+            "set_terminal_raw_mode",
+            {
+                {
+                    ":os/set_terminal_raw_mode",
+                    StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Void()),
+                },
+            }),
+        OperatorGroup::create(
+            "has_input",
+            {
+                {
+                    ":os/has_input",
+                    StaticFuncTypeResolver::create({}, {}, Type::Bool()),
+                },
+            }),
+        OperatorGroup::create(
+            "get_char",
+            {
+                {
+                    ":os/get_char",
+                    StaticFuncTypeResolver::create({}, {}, Type::String()),
+                },
+            }),
+        OperatorGroup::create(
+            "get_chars",
+            {
+                {
+                    ":os/get_chars",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                },
+            }),
+        OperatorGroup::create(
+            "clear_input_buffer",
+            {
+                {
+                    ":os/clear_input_buffer",
+                    StaticFuncTypeResolver::create({}, {}, Type::Void()),
+                },
+            }),
+    };
+
+    return groups;
+}
+
 OSBuiltinModule::OSBuiltinModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
-    exportBuiltinOperator(
-        "whoami",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":os/whoami");
-    exportBuiltinOperator(
-        "set_terminal_raw_mode",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":os/set_terminal_raw_mode");
-    exportBuiltinOperator(
-        "has_input",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":os/has_input");
-    exportBuiltinOperator(
-        "get_char",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":os/get_char");
-    exportBuiltinOperator(
-        "get_chars",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":os/get_chars");
-    exportBuiltinOperator(
-        "clear_input_buffer",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":os/clear_input_buffer");
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
 }
 
 bool OSBuiltinModule::load() {

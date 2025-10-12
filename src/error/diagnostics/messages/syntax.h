@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,4 +30,4 @@ enum class SyntaxDiag : uint32_t {
 
 constexpr DiagType diagTypeOf(SyntaxDiag) { return DiagType::SyntaxDiag; }
 
-const std::unordered_map<SyntaxDiag, DiagInfo> getSyntaxDiagInfoMap();
+const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap();

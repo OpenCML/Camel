@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,32 +30,34 @@
 #include <vector>
 
 #include "../impl.h"
+#include "utils/assert.h"
 
-enum class TypeCode {
-    // primitive types
-    Int32 = 0b00'000000,
-    Int64 = 0b00'000001,
-    Float = 0b00'000010,
-    Double = 0b00'000011,
-    String = 0b00'000100,
-    Bool = 0b00'000101,
-    Char = 0b00'000110,
-    // structured types
-    Set = 0b01'000000,
-    Map = 0b01'000001,
-    Dict = 0b01'000010,
-    List = 0b01'000011,
-    Union = 0b01'000100,
-    Array = 0b01'000101,
-    Tuple = 0b01'000110,
-    Vector = 0b01'000111,
-    Tensor = 0b01'001000,
-    // special types
-    Any = 0b10'000000,
-    Void = 0b10'000001,
-    Func = 0b10'000010,
-    // for internal use
-    Ref = 0b11'000000,
+enum class TypeCode : uint32_t {
+    // internal use (P = 0x0)
+    Ref = 0x0'0000000,
+
+    // primitive types (P = 0x1)
+    Int32 = 0x1'0000000,
+    Int64 = 0x1'0000001,
+    Float = 0x1'0000002,
+    Double = 0x1'0000003,
+    String = 0x1'0000004,
+    Bool = 0x1'0000005,
+    Char = 0x1'0000006,
+
+    // composed types (P = 0x2)
+    Array = 0x2'0000001,
+    Tuple = 0x2'0000002,
+    Union = 0x2'0000003,
+    Struct = 0x2'0000004,
+    Function = 0x2'0000005,
+
+    // special types (P = 0x3)
+    Any = 0x3'0000000,
+    Void = 0x3'0000001,
+
+    // other types (P = 0xF)
+    Other = 0xF'0000000,
 };
 
 enum class CastSafety {
@@ -70,18 +72,13 @@ extern const signed char primeTypeConvMatrix[7][7];
 
 class Type;
 class PrimaryType;
-class StructType;
+class ComposedType;
 class SpecialType;
+class FunctionType;
 
-class SetType;
-class MapType;
-class ListType;
-class DictType;
-class ArrayType;
 class TupleType;
-class UnionType;
-class VectorType;
-class TensorType;
+class ArrayType;
+class StructType;
 
 using type_ptr_t = std::shared_ptr<Type>;
 using type_vec_t = std::vector<type_ptr_t>;
@@ -94,13 +91,6 @@ using data_lst_t = std::list<data_ptr_t>;
 using data_vec_t = std::vector<data_ptr_t>;
 using data_list_t = std::initializer_list<data_ptr_t>;
 
-class Entity;
-using entity_ptr_t = std::shared_ptr<Entity>;
-using entity_wptr_t = std::weak_ptr<Entity>;
-using entity_lst_t = std::list<entity_ptr_t>;
-using entity_vec_t = std::vector<entity_ptr_t>;
-using entity_list_t = std::initializer_list<entity_ptr_t>;
-
 class Type {
   protected:
     TypeCode code_;
@@ -112,17 +102,20 @@ class Type {
 
     const TypeCode &code() const;
 
+    bool internal() const;
     bool primary() const;
-    bool structured() const;
+    bool composed() const;
     bool special() const;
-    ImplMark implMark() const;
+    bool other() const;
 
     virtual std::string toString() const;
+    virtual std::string mangle() const;
 
     virtual bool operator==(const Type &other) const;
     virtual bool operator!=(const Type &other) const;
 
     bool equals(const type_ptr_t &type) const;
+    bool assignable(const type_ptr_t &type) const;
 
     virtual CastSafety castSafetyTo(const Type &other) const;
 
@@ -131,26 +124,25 @@ class Type {
     static bool castSafetyCheck(
         const type_ptr_t &from, const type_ptr_t &to, CastSafety required = CastSafety::Safe);
 
-    static type_ptr_t Int32();
-    static type_ptr_t Int64();
-    static type_ptr_t Float();
-    static type_ptr_t Double();
-    static type_ptr_t String();
-    static type_ptr_t Bool();
-    static type_ptr_t Char();
+    static std::shared_ptr<PrimaryType> Int32();
+    static std::shared_ptr<PrimaryType> Int64();
+    static std::shared_ptr<PrimaryType> Float();
+    static std::shared_ptr<PrimaryType> Double();
+    static std::shared_ptr<PrimaryType> String();
+    static std::shared_ptr<PrimaryType> Bool();
+    static std::shared_ptr<PrimaryType> Char();
 
-    static type_ptr_t Int();
-    static type_ptr_t Real();
-    static type_ptr_t Number();
+    static std::shared_ptr<PrimaryType> Int();
+    static std::shared_ptr<PrimaryType> Real();
+    static std::shared_ptr<PrimaryType> Number();
 
-    static type_ptr_t List();
-    static type_ptr_t Array(const type_ptr_t &elementType, size_t size);
-    static type_ptr_t Tuple(const std::vector<type_ptr_t> &types);
-    static type_ptr_t Vector(const type_ptr_t &elementType);
+    static std::shared_ptr<ArrayType> Array(const type_ptr_t &elementType = nullptr);
+    static std::shared_ptr<TupleType> Tuple(const type_vec_t &types = {});
+    static std::shared_ptr<StructType> Struct();
 
-    static type_ptr_t Any();
-    static type_ptr_t Void();
-    static type_ptr_t Func();
+    static std::shared_ptr<SpecialType> Any();
+    static std::shared_ptr<SpecialType> Void();
+    static std::shared_ptr<FunctionType> Func();
 
     static type_ptr_t Ref();
 };

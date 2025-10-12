@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,41 +58,55 @@ void ProfilerBuiltinModule::enable(bool enabled) {
     }
 }
 
-ProfilerBuiltinModule::ProfilerBuiltinModule(context_ptr_t ctx) : BuiltinModule("profiler", ctx) {}
+static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "begin",
+            {
+                {
+                    ":profiler/begin",
+                    StaticFuncTypeResolver::create({}, {}, Type::Void()),
+                },
+            }),
+        OperatorGroup::create(
+            "end",
+            {
+                {
+                    ":profiler/end",
+                    StaticFuncTypeResolver::create({}, {}, Type::Void()),
+                },
+            }),
+        OperatorGroup::create(
+            "instant",
+            {
+                {
+                    ":profiler/instant",
+                    StaticFuncTypeResolver::create({}, {}, Type::Void()),
+                },
+            }),
+        OperatorGroup::create(
+            "enable",
+            {
+                {
+                    ":profiler/enable",
+                    StaticFuncTypeResolver::create({}, {}, Type::Void()),
+                },
+            }),
+    };
+
+    return groups;
+}
+
+ProfilerBuiltinModule::ProfilerBuiltinModule(context_ptr_t ctx) : BuiltinModule("profiler", ctx) {
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+}
 
 bool ProfilerBuiltinModule::load() {
     if (loaded_) {
         return true;
     }
-
-    exportBuiltinOperator(
-        "begin",
-        param_init_list_t{},
-        {{Type::String(), false}},
-        Type::Void(),
-        ":profiler/begin");
-
-    exportBuiltinOperator(
-        "end",
-        param_init_list_t{},
-        {{Type::String(), false}},
-        Type::Void(),
-        ":profiler/end");
-
-    exportBuiltinOperator(
-        "instant",
-        param_init_list_t{},
-        {{Type::String(), false}},
-        Type::Void(),
-        ":profiler/instant");
-
-    exportBuiltinOperator(
-        "enable",
-        param_init_list_t{},
-        {{Type::Bool(), false}},
-        Type::Void(),
-        ":profiler/enable");
-
     loaded_ = true;
     return true;
 }

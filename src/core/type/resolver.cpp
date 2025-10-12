@@ -13,28 +13,62 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "resolver.h"
 
-std::optional<func_type_ptr_t>
-StaticFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
-    if (!funcType_) {
-        return std::nullopt;
+#include "utils/assert.h"
+
+std::optional<func_type_ptr_t> StaticFuncTypeResolver::resolve(
+    const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
+    ASSERT(funcType_, "FunctionType is null");
+    const auto &withTypes = funcType_->withTypes();
+    const auto &normTypes = funcType_->normTypes();
+    if (withTypes.size() != with.size() || normTypes.size() != norm.size() ||
+        funcType_->modifiers() != modifiers) {
+        return std::nullopt; // reject
     }
-    return std::nullopt;
+    for (size_t i = 0; i < withTypes.size(); i++) {
+        if (!withTypes[i].first->assignable(with[i])) {
+            return std::nullopt; // reject
+        }
+    }
+    for (size_t i = 0; i < normTypes.size(); i++) {
+        if (!normTypes[i].first->assignable(norm[i])) {
+            return std::nullopt; // reject
+        }
+    }
+    return funcType_; // accept
 }
 
-std::optional<func_type_ptr_t>
-DynamicFuncTypeResolver::resolve(const type_vec_t &with, const type_vec_t &norm) const {
-    if (!resolver_) {
-        return std::nullopt;
+std::optional<func_type_ptr_t> DynamicFuncTypeResolver::resolve(
+    const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
+    if (withVars_.first != -1 && static_cast<int>(with.size()) != withVars_.first) {
+        return std::nullopt; // reject
     }
-    auto res = resolver_(with, norm);
-    if (!res) {
-        return std::nullopt;
+    if (normVars_.first != -1 && static_cast<int>(norm.size()) != normVars_.first) {
+        return std::nullopt; // reject
     }
-    return std::nullopt;
+    auto optResType = resolver_(with, norm, modifiers);
+    if (!optResType) {
+        return std::nullopt; // reject
+    }
+    param_vec_t withParams, normParams;
+    for (size_t i = 0; i < with.size(); i++) {
+        withParams.emplace_back(
+            with[i],
+            static_cast<int>(i) < withVars_.first ? withVars_.second[i] : false);
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        normParams.emplace_back(
+            norm[i],
+            static_cast<int>(i) < normVars_.first ? normVars_.second[i] : false);
+    }
+    return FunctionType::create(
+        std::move(withParams),
+        std::move(normParams),
+        *optResType,
+        modifiers);
 }

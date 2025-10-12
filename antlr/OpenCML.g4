@@ -73,8 +73,8 @@ funcDecl   :
         FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
-bracedIdents  : '{' identList? ','? '}' ;    // for dict unpacking
-bracketIdents : '[' identList? ','? ']' ;    // for list unpacking
+bracedIdents  : '{' identList? ','? '}' ;    // for struct unpacking
+bracketIdents : '[' identList? ','? ']' ;    // for array unpacking
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
@@ -191,11 +191,11 @@ accessExpr
     : primaryData ('.$' (IDENTIFIER | INTEGER))*
     ;
 
-dictData
-    : '{' (pairedValues ','?)? '}' // no list comprehension because the struct of dict is immutable
+structData
+    : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
     ;
 
-listData
+arrayData
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 
@@ -206,8 +206,8 @@ tupleData
 primaryData
     : identRef
     | literal
-    | listData
-    | dictData
+    | arrayData
+    | structData
     | '(' dataExpr ')'
     | tupleData
     | funcData
@@ -248,9 +248,9 @@ keyInterType
     : typeUnit ('^' typeUnit)*
     ;
 
-typeUnit : (identDef OF)? listType ;
+typeUnit : (identDef OF)? arrayType ;
 
-listType
+arrayType
     : specType ('[' ']')*
     ;
 
@@ -262,7 +262,7 @@ specType
 
 primaryType
     : INNER_ATOM_TYPE
-    | dictType
+    | structType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -271,7 +271,7 @@ primaryType
     | TYPEAS identDef
     ;
 
-dictType
+structType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
     ;
 

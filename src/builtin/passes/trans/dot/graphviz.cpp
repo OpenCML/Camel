@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -187,16 +187,23 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
         func_type_ptr_t type = graph->funcType();
         res += std::format("subgraph cluster_{} {{\r\n", funcId);
         res += std::format("{}{}label=\"{}\";\r\n", baseIndent_, indent_, funcName);
+        res += std::format(
+            "{}{}tooltip=\"{}\";\r\n",
+            baseIndent_,
+            indent_,
+            graph->funcType()->toString());
     }
 
     // Recursively dump subgraphs first
-    for (auto &[_, subGraph] : graph->subGraphs()) {
-        EXEC_WHEN_DEBUG(
-            l.in("GraphViz")
-                .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
-        pushIndent();
-        res += dumpGraph(subGraph);
-        popIndent();
+    for (auto &[_, subGraphs] : graph->subGraphs()) {
+        for (const auto &subGraph : subGraphs) {
+            EXEC_WHEN_DEBUG(
+                l.in("GraphViz")
+                    .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
+            pushIndent();
+            res += dumpGraph(subGraph);
+            popIndent();
+        }
     }
 
     // Dump dependency graphs if any

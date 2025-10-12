@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,4 +36,4 @@ enum class LexicalDiag : uint32_t {
 
 constexpr DiagType diagTypeOf(LexicalDiag) { return DiagType::LexicalDiag; }
 
-const std::unordered_map<LexicalDiag, DiagInfo> getLexicalDiagInfoMap();
+const std::unordered_map<LexicalDiag, DiagInfo> &getLexicalDiagInfoMap();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Sep. 12, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,8 +28,11 @@ class Diagnostics;
 // ---- DiagnosticBuilder ----
 class DiagnosticBuilder {
   public:
-    DiagnosticBuilder() = delete; // 不能默认构造，因为引用成员必须初始化
-    DiagnosticBuilder(Diagnostics &diag) : diagnostics_(diag) {}
+    DiagnosticBuilder() = default;
+    DiagnosticBuilder(Diagnostics *diag) : diagnostics_(diag) {}
+
+    template <typename DiagEnum>
+    static DiagnosticBuilder of(DiagEnum err, Diagnostics *diag = nullptr);
 
     // Position setting methods
     DiagnosticBuilder &at(const CharRange &range);
@@ -39,12 +42,12 @@ class DiagnosticBuilder {
     DiagnosticBuilder &at(antlr4::Token *token);
 
     // Message substitution + commit
-    template <typename... Args> Diagnostic &commit(Args &&...args);
+    template <typename... Args> Diagnostic commit(Args &&...args);
 
   private:
     friend class Diagnostics; // 允许 Diagnostics 访问私有成员
 
-    Diagnostics &diagnostics_;
+    Diagnostics *diagnostics_;
     SourceRange range_{};
     Severity severity_ = Severity::Error;
 

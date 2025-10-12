@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,14 @@ enum class SemanticDiag : uint32_t {
     DuplicateParameter = 0x000009,
     UnresolvedTypeReference = 0x00000A,
     UnresolvedReference = 0x00000B,
+    BranchReturnTypeMismatch = 0x00000C,
+    InvalidAccessIndex = 0x00000D,
+    TypeNotIndexable = 0x00000E,
+    NoMatchingFunction = 0x00000F,
+    ArgumentsMismatch = 0x000010,
+    ReturnTypeMismatch = 0x000011,
+    ElementTypeMismatch = 0x000012,
+    CallingIncompleteFunction = 0x000013,
 
     // Warnings
     FeatureNotSupported = 0x100000,
@@ -47,4 +55,4 @@ enum class SemanticDiag : uint32_t {
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
 
-const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap();
+const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap();

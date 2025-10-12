@@ -13,31 +13,53 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "time.h"
 
+static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "now",
+            {
+                {
+                    ":time/now",
+                    StaticFuncTypeResolver::create({}, {}, Type::Int32()),
+                },
+            }),
+        OperatorGroup::create(
+            "strftime",
+            {
+                {
+                    ":time/strftime",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::String(), false}},
+                        Type::String()),
+                },
+            }),
+        OperatorGroup::create(
+            "strptime",
+            {
+                {
+                    ":time/strptime",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), false}, {Type::String(), false}},
+                        Type::Int32()),
+                },
+            }),
+    };
+
+    return groups;
+}
+
 TimeBuiltinModule::TimeBuiltinModule(context_ptr_t ctx) : BuiltinModule("time", ctx) {
-    exportBuiltinOperator(
-        "now",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":time/now");
-    exportBuiltinOperator(
-        "strftime",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":time/strftime");
-    exportBuiltinOperator(
-        "strptime",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":time/strptime");
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
 }
 
 bool TimeBuiltinModule::load() {

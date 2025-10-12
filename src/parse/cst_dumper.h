@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -266,12 +266,12 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpNode(context, "AccessExpr");
     };
 
-    std::any visitDictData(OpenCMLParser::DictDataContext *context) {
-        return dumpNode(context, "DictData");
+    std::any visitStructData(OpenCMLParser::StructDataContext *context) {
+        return dumpNode(context, "StructData");
     };
 
-    std::any visitListData(OpenCMLParser::ListDataContext *context) {
-        return dumpNode(context, "ListData");
+    std::any visitArrayData(OpenCMLParser::ArrayDataContext *context) {
+        return dumpNode(context, "ArrayData");
     };
 
     std::any visitTupleData(OpenCMLParser::TupleDataContext *context) {
@@ -314,8 +314,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpNode(context, "TypeUnit");
     };
 
-    std::any visitListType(OpenCMLParser::ListTypeContext *context) {
-        return dumpNode(context, "ListType");
+    std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
+        return dumpNode(context, "ArrayType");
     };
 
     std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) {
@@ -330,8 +330,8 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpNode(context, "PrimaryType");
     };
 
-    std::any visitDictType(OpenCMLParser::DictTypeContext *context) {
-        return dumpNode(context, "DictType");
+    std::any visitStructType(OpenCMLParser::StructTypeContext *context) {
+        return dumpNode(context, "StructType");
     };
 
     std::any visitTypeList(OpenCMLParser::TypeListContext *context) {
