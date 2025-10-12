@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class StructType : public ComposedType {
   private:
-    // field name -> field type with default value
+    std::vector<std::string> refIndices_;
     std::unordered_map<std::string, type_ptr_t> fields_;
 
   public:
@@ -35,19 +35,22 @@ class StructType : public ComposedType {
 
     std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
 
+    virtual bool resolved() const override;
+    virtual void resolve(const type_vec_t &typeList) override;
+
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
     bool add(const std::string &name, const type_ptr_t &type);
-    bool del(const std::string &name);
     bool has(const std::string &name) const;
-    void set(const std::string &name, const type_ptr_t &type);
     type_ptr_t get(const std::string &name) const;
 
     void clear();
 
     type_ptr_t operator|(const StructType &other) const;
     type_ptr_t operator&(const StructType &other) const;
+
+    virtual std::shared_ptr<ComposedType> clone() const override;
 
     CastSafety castSafetyTo(const Type &other) const override;
 };

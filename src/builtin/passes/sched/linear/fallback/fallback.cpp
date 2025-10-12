@@ -500,9 +500,7 @@ void FallbackExecSchedPass::evalMarkedOperator_map(const node_ptr_t &node, frame
     switch (targetData->type()->code()) {
     case TypeCode::Array: {
         auto arrayData = tt::as_shared<ArrayData>(targetData);
-        currFrame->set(
-            node,
-            ArrayData::create(Type::Array(funcRetType), applyMap(arrayData->raw())));
+        currFrame->set(node, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
         break;
     }
     case TypeCode::Struct: {
@@ -556,7 +554,7 @@ void FallbackExecSchedPass::evalMarkedOperator_apply(
     switch (targetData->type()->code()) {
     case TypeCode::Array:
         applyToSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
-            return ArrayData::create(t, std::move(v));
+            return ArrayData::from(t, std::move(v));
         });
         break;
     case TypeCode::Tuple:
@@ -608,7 +606,7 @@ void FallbackExecSchedPass::evalMarkedOperator_filter(
     switch (targetData->type()->code()) {
     case TypeCode::Array:
         filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
-            return ArrayData::create(t, std::move(v));
+            return ArrayData::from(t, std::move(v));
         });
         break;
     case TypeCode::Tuple:

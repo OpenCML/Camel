@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,6 +44,7 @@ enum class SemanticDiag : uint32_t {
     NoMatchingFunction = 0x00000F,
     ArgumentsMismatch = 0x000010,
     ReturnTypeMismatch = 0x000011,
+    ElementTypeMismatch = 0x000012,
 
     // Warnings
     FeatureNotSupported = 0x100000,

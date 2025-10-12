@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -110,10 +110,10 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
 
     for (size_t i = 0; i < aElems.size(); ++i) {
         data_vec_t pair{aElems[i], bElems[i]};
-        zipped.push_back(ArrayData::create(Type::Array(Type::Any()), std::move(pair)));
+        zipped.push_back(ArrayData::from(Type::Array(Type::Any()), std::move(pair)));
     }
 
-    frame.set(self, ArrayData::create(Type::Array(Type::Array(Type::Any())), std::move(zipped)));
+    frame.set(self, ArrayData::from(Type::Array(Type::Array(Type::Any())), std::move(zipped)));
     return OperatorReturnCode::OK;
 }
 
@@ -208,7 +208,7 @@ OperatorReturnCode __tail__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
         auto array = tt::as_shared<ArrayData>(collect)->raw();
         auto new_vec = slice_tail(array);
         auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
-        frame.set(self, ArrayData::create(Type::Array(elem_type), std::move(new_vec)));
+        frame.set(self, ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
         break;
     }
     case TypeCode::Tuple: {
@@ -299,7 +299,7 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     }
 
     auto arrayType = std::make_shared<ArrayType>(Type::Int64());
-    auto result = ArrayData::create(arrayType, std::move(values));
+    auto result = ArrayData::from(arrayType, std::move(values));
 
     frame.set(self, result);
     return OperatorReturnCode::OK;
@@ -357,7 +357,7 @@ OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         data_vec_t sliced(array.begin() + start, array.begin() + end);
         frame.set(
             self,
-            ArrayData::create(
+            ArrayData::from(
                 Type::Array(tt::as_shared<ArrayType>(collect->type())->elementType()),
                 std::move(sliced)));
         break;
@@ -402,7 +402,7 @@ OperatorReturnCode __concat__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         auto r = tt::as_shared<ArrayData>(right)->raw();
         l.insert(l.end(), r.begin(), r.end());
         auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
-        frame.set(self, ArrayData::create(Type::Array(elemType), std::move(l)));
+        frame.set(self, ArrayData::from(Type::Array(elemType), std::move(l)));
         break;
     }
     default:
@@ -437,7 +437,7 @@ OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         auto vec = tt::as_shared<ArrayData>(collection)->raw();
         vec.push_back(element);
         auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(collectNode, ArrayData::create(Type::Array(elemType), std::move(vec)));
+        frame.set(collectNode, ArrayData::from(Type::Array(elemType), std::move(vec)));
         break;
     }
     default:
@@ -483,7 +483,7 @@ OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &
         auto ext = tt::as_shared<ArrayData>(other)->raw();
         vec.insert(vec.end(), ext.begin(), ext.end());
         auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(collectNode, ArrayData::create(Type::Array(elemType), std::move(vec)));
+        frame.set(collectNode, ArrayData::from(Type::Array(elemType), std::move(vec)));
         break;
     }
     default:

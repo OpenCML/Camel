@@ -135,11 +135,11 @@ char Diagnostic::hexNib(int v) {
 }
 
 Diagnostic &Diagnostics::add(Diagnostic &&d) {
+    d.moduleName = moduleName_;
+    d.modulePath = modulePath_;
     std::lock_guard<std::mutex> lk(mtx_);
     // Check limits before adding
     checkLimits(d);
-    d.moduleName = moduleName_;
-    d.modulePath = modulePath_;
     storage_.push_back(std::move(d));
     return storage_.back();
 }

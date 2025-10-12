@@ -932,7 +932,7 @@ ArrayData() : Data* data ;
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
-    auto arrayData = ArrayData::create(Type::Void());
+    auto arrayData = ArrayData::from(Type::Array(), {});
     node_ptr_t res = createNodeAs<DataLoad>(arrayData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
@@ -955,7 +955,7 @@ StructData() : NamedData* dataList ;
 node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     ENTER("StructData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
-    auto structData = make_shared<StructData>();
+    auto structData = tt::as_shared<StructData>(Type::Struct());
     node_ptr_t res = createNodeAs<DataLoad>(structData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -174,6 +174,8 @@ any Builder::visit(const GCT::node_ptr_t &node) {
         return visitExecNode(node);
     case GCT::LoadType::EXPT:
         return visitExptNode(node);
+    case GCT::LoadType::CAST:
+        return visitCastNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
     }
@@ -264,12 +266,21 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         }
     } else {
         node_ptr_t srcNode = DataNode::create(*currGraph_, data);
-        // Here, there is no need to use a copy node to handle the varied case,
-        // because the Fill node itself can be modified during runtime.
-        node = FillNode::create(*currGraph_, data->type());
+        ASSERT(data->type()->composed(), "Unresolved data must be of composed type");
+        const auto &dataType = tt::as_shared<ComposedType>(data->type());
+        type_vec_t refTypes;
+        node_vec_t refNodes;
+        for (const auto &ref : data->refs()) {
+            const auto &refNode = resolveNodeByRef(ref);
+            refTypes.push_back(refNode->dataType());
+            refNodes.push_back(refNode);
+        }
+        auto fillType = dataType->clone();
+        fillType->resolve(refTypes);
+        node = FillNode::create(*currGraph_, fillType);
         Node::link(LinkType::With, srcNode, node);
-        for (const string &ref : data->refs()) {
-            Node::link(LinkType::Norm, resolveNodeByRef(ref), node);
+        for (const auto &refNode : refNodes) {
+            Node::link(LinkType::Norm, refNode, node);
         }
     }
     LEAVE("DATA");
@@ -343,7 +354,9 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
+    node_ptr_t res = nullptr;
     LEAVE("CAST");
+    return res;
 }
 
 node_ptr_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {

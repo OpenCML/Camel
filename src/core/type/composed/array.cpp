@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
+
+#include "error/diagnostics/diagnostics.h"
 
 using namespace std;
 
@@ -35,6 +37,21 @@ std::string ArrayType::mangle() const {
 }
 
 std::optional<type_ptr_t> ArrayType::typeAt(struct_idx_t idx) const { return elementType_; }
+
+bool ArrayType::resolved() const { return elementType_->code() != TypeCode::Void; }
+
+void ArrayType::resolve(const type_vec_t &typeList) {
+    ASSERT(typeList.size() > 0, "Type list is empty");
+    ASSERT(!resolved(), "ArrayType is already resolved");
+    for (const auto &type : typeList) {
+        if (elementType_->code() == TypeCode::Void) {
+            elementType_ = type;
+        } else if (!elementType_->equals(type)) {
+            throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+                .commit("Array", type->toString(), elementType_->toString());
+        }
+    }
+}
 
 bool ArrayType::operator==(const Type &other) const {
     if (this == &other) {
@@ -55,6 +72,10 @@ bool ArrayType::operator!=(const Type &other) const {
     return !elementType_->equals(otherArr.elementType_);
 }
 
+std::shared_ptr<ComposedType> ArrayType::clone() const {
+    return std::make_shared<ArrayType>(elementType_);
+}
+
 CastSafety ArrayType::castSafetyTo(const Type &other) const {
     if (this == &other) {
         return CastSafety::Safe;
@@ -65,6 +86,9 @@ CastSafety ArrayType::castSafetyTo(const Type &other) const {
     if (other.composed()) {
         switch (other.code()) {
         case TypeCode::Array: {
+            if (elementType_->code() == TypeCode::Void) {
+                return CastSafety::Safe;
+            }
             const ArrayType &otherVector = dynamic_cast<const ArrayType &>(other);
             return elementType_->castSafetyTo(*otherVector.elementType());
         }

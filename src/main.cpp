@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -245,6 +245,11 @@ int main(int argc, char *argv[]) {
             RangeConverter conv(parser->getTokens());
             lastDiag.fetchRange(conv);
             os << (useJsonFormat ? lastDiag.toJson() : lastDiag.toText()) << endl;
+            return selectedCommand == Command::Check ? 0 : 1;
+        } catch (Diagnostic &d) {
+            RangeConverter conv(parser->getTokens());
+            d.fetchRange(conv);
+            os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (CamelBaseException &e) {
             os << e.what(useJsonFormat) << endl;

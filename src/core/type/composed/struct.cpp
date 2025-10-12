@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,22 @@ std::optional<type_ptr_t> StructType::typeAt(struct_idx_t idx) const {
     return get(key);
 }
 
+bool StructType::resolved() const { return refIndices_.empty(); }
+
+void StructType::resolve(const type_vec_t &typeList) {
+    ASSERT(typeList.size() > 0, "Type list is empty");
+    ASSERT(!resolved(), "StructType is already resolved");
+    ASSERT(
+        refIndices_.size() == typeList.size(),
+        "Type list size does not match number of unresolved fields");
+    for (size_t i = 0; i < refIndices_.size(); ++i) {
+        const std::string &ref = refIndices_[i];
+        const type_ptr_t &type = typeList[i];
+        fields_[ref] = type;
+    }
+    refIndices_.clear();
+}
+
 bool StructType::operator==(const Type &other) const {
     if (this == &other) {
         return true;
@@ -93,21 +109,21 @@ bool StructType::add(const string &name, const type_ptr_t &type) {
     if (has(name)) {
         return false;
     }
+    if (type->code() == TypeCode::Ref) {
+        refIndices_.push_back(name);
+    }
     fields_[name] = type;
     return true;
 }
 
-bool StructType::del(const string &name) { return fields_.erase(name) > 0; }
-
 bool StructType::has(const string &name) const { return fields_.find(name) != fields_.end(); }
-
-void StructType::set(const string &name, const type_ptr_t &type) { fields_.at(name) = type; }
 
 type_ptr_t StructType::get(const string &name) const { return fields_.at(name); }
 
 void StructType::clear() { fields_.clear(); }
 
 type_ptr_t StructType::operator|(const StructType &other) const {
+    ASSERT(resolved() && other.resolved(), "Cannot union with unresolved StructType");
     auto result = make_shared<StructType>();
     for (const auto &field : fields_) {
         result->add(field.first, field.second);
@@ -119,13 +135,14 @@ type_ptr_t StructType::operator|(const StructType &other) const {
             result->add(ident, type);
         } else {
             // if the field already exists, use the rhs type and value
-            result->set(ident, type);
+            result->fields_[ident] = type;
         }
     }
     return result;
 }
 
 type_ptr_t StructType::operator&(const StructType &other) const {
+    ASSERT(resolved() && other.resolved(), "Cannot intersect with unresolved StructType");
     auto result = make_shared<StructType>();
     for (const auto &field : fields_) {
         const auto &ident = field.first;
@@ -135,6 +152,14 @@ type_ptr_t StructType::operator&(const StructType &other) const {
         }
     }
     return result;
+}
+
+std::shared_ptr<ComposedType> StructType::clone() const {
+    auto newStruct = std::make_shared<StructType>();
+    for (const auto &field : fields_) {
+        newStruct->add(field.first, field.second);
+    }
+    return newStruct;
 }
 
 CastSafety StructType::castSafetyTo(const Type &other) const {

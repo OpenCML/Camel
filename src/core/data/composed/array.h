@@ -27,15 +27,15 @@ class ArrayData : public ComposedData {
     std::vector<data_ptr_t> data_;
 
   public:
-    ArrayData(type_ptr_t type, data_list_t data = {});
-    ArrayData(type_ptr_t type, data_vec_t &&data);
+    ArrayData(type_ptr_t arrType, data_list_t data = {});
+    ArrayData(type_ptr_t arrType, data_vec_t &&data);
     virtual ~ArrayData() = default;
 
-    static std::shared_ptr<ArrayData> create(type_ptr_t type, data_list_t data = {}) {
-        return std::make_shared<ArrayData>(type, data);
+    static std::shared_ptr<ArrayData> create(type_ptr_t arrType, data_list_t data = {}) {
+        return std::make_shared<ArrayData>(arrType, data);
     }
-    static std::shared_ptr<ArrayData> create(type_ptr_t type, data_vec_t &&data) {
-        return std::make_shared<ArrayData>(type, std::move(data));
+    static std::shared_ptr<ArrayData> from(type_ptr_t arrType, data_vec_t &&data) {
+        return std::make_shared<ArrayData>(arrType, std::move(data));
     }
 
     void emplace(const data_ptr_t &e);

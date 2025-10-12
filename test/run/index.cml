@@ -1,23 +1,23 @@
-type Signal = int[]
+type Signal = (int, int)
 
 func add(lft: int, rgt: int): int {
     return lft + rgt
 }
 
 func comp1(signal: Signal): Signal {
-    return [signal[0] + 1, signal[1] + 1]
+    return (signal.$0 + 1, signal.$1 + 1)
 }
 
 func comp2(signal: Signal): Signal {
-    return [signal[0] * 2, signal[1] * 2]
+    return (signal.$0 * 2, signal.$1 * 2)
 }
 
 func comp3(signal: Signal): Signal {
-    return [signal[0] - 1, signal[1] - 1]
+    return (signal.$0 - 1, signal.$1 - 1)
 }
 
-func analyzer1(signal: Signal) {
-    println('Analyzer1: {}'.format(signal))
+func analyzer1(result: int) {
+    println('Analyzer1: {}'.format(result))
 }
 
 func analyzer2(result: int) {
@@ -26,9 +26,9 @@ func analyzer2(result: int) {
 
 func process(signals: Signal[]) sync {
     let res1 = signals[0]->comp1->comp2
-    res1[0]->analyzer1
+    res1.$0->analyzer1
     let res2 = signals[1]->comp3
-    add(res1[1], res2[1])->analyzer2
+    add(res1.$1, res2.$1)->analyzer2
 }
 
 func main() {

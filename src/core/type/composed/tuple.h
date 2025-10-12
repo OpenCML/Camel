@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,6 +36,9 @@ class TupleType : public ComposedType {
 
     std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
 
+    virtual bool resolved() const override;
+    virtual void resolve(const type_vec_t &typeList) override;
+
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
@@ -46,6 +49,8 @@ class TupleType : public ComposedType {
     size_t size() const;
 
     const std::vector<type_ptr_t> &types() const;
+
+    virtual std::shared_ptr<ComposedType> clone() const override;
 
     CastSafety castSafetyTo(const Type &other) const override;
 };

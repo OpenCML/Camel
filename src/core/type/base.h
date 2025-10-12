@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,16 +74,11 @@ class Type;
 class PrimaryType;
 class ComposedType;
 class SpecialType;
+class FunctionType;
 
-class SetType;
-class MapType;
-class ListType;
-class StructType;
-class VectorType;
 class TupleType;
-class UnionType;
 class ArrayType;
-class TensorType;
+class StructType;
 
 using type_ptr_t = std::shared_ptr<Type>;
 using type_vec_t = std::vector<type_ptr_t>;
@@ -114,10 +109,10 @@ class Type {
     bool other() const;
 
     virtual std::string toString() const;
-    virtual std::string mangle() const = 0;
+    virtual std::string mangle() const;
 
-    virtual bool operator==(const Type &other) const = 0;
-    virtual bool operator!=(const Type &other) const = 0;
+    virtual bool operator==(const Type &other) const;
+    virtual bool operator!=(const Type &other) const;
 
     bool equals(const type_ptr_t &type) const;
     bool assignable(const type_ptr_t &type) const;
@@ -129,24 +124,25 @@ class Type {
     static bool castSafetyCheck(
         const type_ptr_t &from, const type_ptr_t &to, CastSafety required = CastSafety::Safe);
 
-    static type_ptr_t Int32();
-    static type_ptr_t Int64();
-    static type_ptr_t Float();
-    static type_ptr_t Double();
-    static type_ptr_t String();
-    static type_ptr_t Bool();
-    static type_ptr_t Char();
+    static std::shared_ptr<PrimaryType> Int32();
+    static std::shared_ptr<PrimaryType> Int64();
+    static std::shared_ptr<PrimaryType> Float();
+    static std::shared_ptr<PrimaryType> Double();
+    static std::shared_ptr<PrimaryType> String();
+    static std::shared_ptr<PrimaryType> Bool();
+    static std::shared_ptr<PrimaryType> Char();
 
-    static type_ptr_t Int();
-    static type_ptr_t Real();
-    static type_ptr_t Number();
+    static std::shared_ptr<PrimaryType> Int();
+    static std::shared_ptr<PrimaryType> Real();
+    static std::shared_ptr<PrimaryType> Number();
 
-    static type_ptr_t Array(const type_ptr_t &elementType);
-    static type_ptr_t Tuple(const type_vec_t &types);
+    static std::shared_ptr<ArrayType> Array(const type_ptr_t &elementType = nullptr);
+    static std::shared_ptr<TupleType> Tuple(const type_vec_t &types = {});
+    static std::shared_ptr<StructType> Struct();
 
-    static type_ptr_t Any();
-    static type_ptr_t Func();
-    static type_ptr_t Void();
+    static std::shared_ptr<SpecialType> Any();
+    static std::shared_ptr<SpecialType> Void();
+    static std::shared_ptr<FunctionType> Func();
 
     static type_ptr_t Ref();
 };

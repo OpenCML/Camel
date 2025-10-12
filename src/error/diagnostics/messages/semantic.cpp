@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -171,6 +171,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Return type '{0}' does not match the function's declared return type '{1}'.",
                 "Ensure that the value returned from the function matches the type specified in "
                 "the function signature: {2}.",
+            },
+        },
+        {
+            SemanticDiag::ElementTypeMismatch,
+            {
+                "ElementTypeMismatch",
+                "Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.",
+                "Ensure the data type matches the {0}'s element type, or convert the data to "
+                "the appropriate type before inserting.",
             },
         },
 

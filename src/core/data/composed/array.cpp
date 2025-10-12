@@ -24,25 +24,19 @@
 #include "../special/null.h"
 #include "../special/ref.h"
 
+#include "error/diagnostics/diagnostics.h"
+
 using namespace std;
 
-ArrayData::ArrayData(type_ptr_t type, data_list_t data) : data_(data) {
-    size_t i = 0;
+ArrayData::ArrayData(type_ptr_t arrType, data_list_t data) : ComposedData(arrType), data_(data) {
     for (const auto &e : data) {
-        if (e->type()->code() == TypeCode::Ref) {
-            refIndices_.push_back(i);
-        } else if (e->type()->castSafetyTo(*type) != CastSafety::Safe) {
-            throw DataConvError(
-                "Cannot convert " + e->type()->toString() + " to " + type->toString());
-        }
-        i++;
+        emplace(e);
     }
-    type_ = std::make_shared<ArrayType>(type);
 }
 
-ArrayData::ArrayData(type_ptr_t type, data_vec_t &&data)
-    : ComposedData(type), data_(std::move(data)) {
-    ASSERT(type->code() == TypeCode::Array, "Type is not ArrayType");
+ArrayData::ArrayData(type_ptr_t arrType, data_vec_t &&data)
+    : ComposedData(arrType), data_(std::move(data)) {
+    ASSERT(arrType->code() == TypeCode::Array, "Type is not ArrayType");
 }
 
 void ArrayData::emplace(const data_ptr_t &e) {
@@ -54,9 +48,9 @@ void ArrayData::emplace(const data_ptr_t &e) {
         const auto &elemType = arrType->elementType();
         if (elemType == Type::Void()) {
             type_ = std::make_shared<ArrayType>(e->type());
-        } else if (e->type()->castSafetyTo(*elemType) != CastSafety::Safe) {
-            throw DataConvError(
-                "Cannot convert " + e->type()->toString() + " to " + type_->toString());
+        } else if (!e->type()->assignable(elemType)) {
+            throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+                .commit("Array", e->type()->toString(), elemType->toString());
         }
     }
     data_.push_back(e);

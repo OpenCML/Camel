@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,7 +54,12 @@ class Builder {
         synced_ = false;
         varied_ = false;
         diags_ = diags;
-        visit(gct);
+        try {
+            visit(gct);
+        } catch (Diagnostic &d) {
+            diags_->add(std::move(d));
+            rootGraph_ = nullptr;
+        }
         return rootGraph_;
     }
 

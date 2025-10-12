@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,9 +43,7 @@ class StructData : public ComposedData {
     bool emplace(const std::string &key, const data_ptr_t &val);
 
     bool add(const std::string &key, const data_ptr_t &val);
-    bool del(const std::string &key);
     bool has(const std::string &key) const;
-    void set(const std::string &key, const data_ptr_t &val);
     data_ptr_t get(const std::string &key) const;
     std::unordered_map<std::string, data_ptr_t> &raw() { return data_; }
 

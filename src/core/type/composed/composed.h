@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,8 +37,19 @@ class ComposedType : public Type {
 
     virtual std::optional<type_ptr_t> typeAt(struct_idx_t idx) const = 0;
 
+    virtual bool resolved() const {
+        ASSERT(false, "resolved() not implemented");
+        return false;
+    };
+    virtual void resolve(const type_vec_t &typeList) { ASSERT(false, "resolve() not implemented"); }
+
     virtual bool operator==(const Type &other) const override = 0;
     virtual bool operator!=(const Type &other) const override = 0;
+
+    virtual std::shared_ptr<ComposedType> clone() const {
+        ASSERT(false, "clone() not implemented");
+        return nullptr;
+    }
 
     virtual CastSafety castSafetyTo(const Type &other) const override = 0;
 };

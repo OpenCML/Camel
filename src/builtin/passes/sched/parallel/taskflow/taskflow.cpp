@@ -543,7 +543,7 @@ void TaskflowExecSchedPass::mark_map(const node_ptr_t &node, frame_ptr_t frame, 
             spawn_unary(elements[i], results[i]);
         }
         sf.join();
-        frame->set(node, ArrayData::create(Type::Array(funcRetType), std::move(results)));
+        frame->set(node, ArrayData::from(Type::Array(funcRetType), std::move(results)));
         break;
     }
     case TypeCode::Struct: {
@@ -616,7 +616,7 @@ void TaskflowExecSchedPass::mark_apply(const node_ptr_t &node, frame_ptr_t frame
     case TypeCode::Array: {
         auto arr = tt::as_shared<ArrayData>(targetData);
         par_apply(arr->raw(), [&](data_vec_t v) {
-            return ArrayData::create(arr->type(), std::move(v));
+            return ArrayData::from(arr->type(), std::move(v));
         });
         break;
     }
@@ -690,7 +690,7 @@ void TaskflowExecSchedPass::mark_filter(
         auto arr = tt::as_shared<ArrayData>(targetData);
         par_filter(
             arr->raw(),
-            [](auto t, data_vec_t v) { return ArrayData::create(t, std::move(v)); },
+            [](auto t, data_vec_t v) { return ArrayData::from(t, std::move(v)); },
             arr->type());
         break;
     }

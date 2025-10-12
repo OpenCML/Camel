@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,6 +98,20 @@ bool Type::other() const { return (static_cast<uint32_t>(code_) & 0xF0000000) ==
 
 std::string Type::toString() const { return typeCodeToString(code_); }
 
+std::string Type::mangle() const {
+    ASSERT(false, "Type::mangle() not implemented");
+    return "";
+}
+
+bool Type::operator==(const Type &other) const {
+    if (this == &other) {
+        return true;
+    }
+    return code_ == other.code();
+}
+
+bool Type::operator!=(const Type &other) const { return !(*this == other); }
+
 bool Type::equals(const type_ptr_t &type) const { return type && *type == *this; }
 
 bool Type::assignable(const type_ptr_t &type) const {
@@ -147,94 +161,103 @@ bool Type::castSafetyCheck(const type_ptr_t &from, const type_ptr_t &to, CastSaf
     return castSafetyCheck(*from, *to, required);
 }
 
-type_ptr_t Type::Int32() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Int32() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Int32));
+        type = make_shared<PrimaryType>(TypeCode::Int32);
     }
     return type;
 }
 
-type_ptr_t Type::Int64() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Int64() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Int64));
+        type = make_shared<PrimaryType>(TypeCode::Int64);
     }
     return type;
 }
 
-type_ptr_t Type::Float() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Float() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Float));
+        type = make_shared<PrimaryType>(TypeCode::Float);
     }
     return type;
 }
 
-type_ptr_t Type::Double() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Double() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Double));
+        type = make_shared<PrimaryType>(TypeCode::Double);
     }
     return type;
 }
 
-type_ptr_t Type::String() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::String() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::String));
+        type = make_shared<PrimaryType>(TypeCode::String);
     }
     return type;
 }
 
-type_ptr_t Type::Bool() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Bool() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Bool));
+        type = make_shared<PrimaryType>(TypeCode::Bool);
     }
     return type;
 }
 
-type_ptr_t Type::Char() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Char() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Char));
+        type = make_shared<PrimaryType>(TypeCode::Char);
     }
     return type;
 }
 
-type_ptr_t Type::Int() { return Int32(); }
+std::shared_ptr<PrimaryType> Type::Int() { return Int32(); }
 
-type_ptr_t Type::Real() { return Float(); }
+std::shared_ptr<PrimaryType> Type::Real() { return Float(); }
 
-type_ptr_t Type::Number() { return Double(); }
+std::shared_ptr<PrimaryType> Type::Number() { return Double(); }
 
-type_ptr_t Type::Array(const type_ptr_t &elementType) {
-    return tt::as_shared<Type>(make_shared<ArrayType>(elementType));
+std::shared_ptr<ArrayType> Type::Array(const type_ptr_t &elementType) {
+    static std::shared_ptr<ArrayType> voidArrayType = nullptr;
+    if (!elementType) {
+        if (voidArrayType == nullptr) {
+            voidArrayType = make_shared<ArrayType>(Type::Void());
+        }
+        return voidArrayType;
+    }
+    return make_shared<ArrayType>(elementType);
 }
 
-type_ptr_t Type::Tuple(const type_vec_t &types) {
-    return tt::as_shared<Type>(make_shared<TupleType>(types));
+std::shared_ptr<TupleType> Type::Tuple(const type_vec_t &types) {
+    return make_shared<TupleType>(types);
 }
 
-type_ptr_t Type::Any() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<StructType> Type::Struct() { return make_shared<StructType>(); }
+
+std::shared_ptr<SpecialType> Type::Any() {
+    static std::shared_ptr<SpecialType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Any));
+        type = make_shared<SpecialType>(TypeCode::Any);
     }
     return type;
 }
 
-type_ptr_t Type::Void() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<SpecialType> Type::Void() {
+    static std::shared_ptr<SpecialType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Void));
+        type = make_shared<SpecialType>(TypeCode::Void);
     }
     return type;
 }
 
-type_ptr_t Type::Func() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<FunctionType> Type::Func() {
+    static std::shared_ptr<FunctionType> type = nullptr;
     if (type == nullptr) {
         type =
             make_shared<FunctionType>(param_vec_t{}, param_vec_t{}, Type::Void(), Modifier::None);
@@ -245,7 +268,7 @@ type_ptr_t Type::Func() {
 type_ptr_t Type::Ref() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Ref));
+        type = make_shared<Type>(TypeCode::Ref);
     }
     return type;
 }

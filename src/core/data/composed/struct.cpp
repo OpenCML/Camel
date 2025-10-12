@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,26 +67,9 @@ bool StructData::add(const string &key, const data_ptr_t &val) {
     return false;
 }
 
-bool StructData::del(const string &key) {
-    ASSERT(resolved(), "Cannot delete data from unresolved StructData");
-    StructType &structType = *static_cast<StructType *>(type_.get());
-    if (structType.del(key)) {
-        data_.erase(key);
-        return true;
-    }
-    return false;
-}
-
 bool StructData::has(const string &key) const {
     ASSERT(resolved(), "Cannot check data from unresolved StructData");
     return data_.find(key) != data_.end();
-}
-
-void StructData::set(const string &key, const data_ptr_t &val) {
-    ASSERT(resolved(), "Cannot set data to unresolved StructData");
-    StructType &structType = *static_cast<StructType *>(type_.get());
-    structType.set(key, val->type());
-    data_[key] = val;
 }
 
 data_ptr_t StructData::get(const string &key) const {
@@ -165,12 +148,10 @@ void StructData::resolve(const data_vec_t &dataList) {
         return;
     }
     ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
-    StructType &structType = *static_cast<StructType *>(type_.get());
     for (size_t i = 0; i < refIndices_.size(); i++) {
         const string &key = refIndices_[i];
         data_ptr_t data = dataList[i];
         data_[key] = data;
-        structType.set(key, data->type());
     }
     refIndices_.clear();
 }

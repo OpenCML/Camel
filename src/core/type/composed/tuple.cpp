@@ -13,12 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
 #include "utils/assert.h"
+
+#include "error/diagnostics/diagnostics.h"
 
 using namespace std;
 
@@ -65,6 +67,30 @@ std::optional<type_ptr_t> TupleType::typeAt(struct_idx_t idx) const {
     return types_[index];
 }
 
+bool TupleType::resolved() const {
+    for (const auto &type : types_) {
+        if (type->code() == TypeCode::Ref) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TupleType::resolve(const type_vec_t &typeList) {
+    ASSERT(typeList.size() > 0, "Type list is empty");
+    ASSERT(!resolved(), "TupleType is already resolved");
+    size_t i = 0, j = 0;
+    while (i < types_.size() && j < typeList.size()) {
+        if (types_[i]->code() == TypeCode::Ref) {
+            types_[i] = typeList[j];
+            j++;
+        }
+        i++;
+    }
+    ASSERT(j == typeList.size(), "Not all types in typeList are used");
+    ASSERT(resolved(), "TupleType is not fully resolved");
+}
+
 bool TupleType::operator==(const Type &other) const {
     if (this == &other) {
         return true;
@@ -99,6 +125,10 @@ std::shared_ptr<TupleType> TupleType::slice(size_t start, size_t end) const {
 size_t TupleType::size() const { return types_.size(); }
 
 const vector<type_ptr_t> &TupleType::types() const { return types_; }
+
+std::shared_ptr<ComposedType> TupleType::clone() const {
+    return std::make_shared<TupleType>(types_);
+}
 
 CastSafety TupleType::castSafetyTo(const Type &other) const {
     if (this == &other) {
