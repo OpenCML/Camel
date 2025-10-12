@@ -135,7 +135,10 @@ dataExpr
 waitExpr : WAIT? assignExpr ;
 
 assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
+    : logicalOrExpr (
+        ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
+        logicalOrExpr
+    )?
     ;
 
 logicalOrExpr
@@ -180,15 +183,11 @@ compExpr
     ;
 
 annoExpr
-    : withExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
-    ;
-
-withExpr
-    : accessExpr (('.' | '?.') accessExpr)*
+    : accessExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
     ;
 
 accessExpr
-    : primaryData ('.$' (IDENTIFIER | INTEGER))*
+    : primaryData ('.' (IDENTIFIER | INTEGER))*
     ;
 
 structData

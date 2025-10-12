@@ -814,8 +814,10 @@ any Formatter::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
 
 /*
 assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
-logicalOrExpr)?
+    : logicalOrExpr (
+        ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
+        logicalOrExpr
+    )?
     ;
 */
 any Formatter::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
@@ -936,11 +938,11 @@ any Formatter::visitCompExpr(OpenCMLParser::CompExprContext *context) {
 
 /*
 annoExpr
-    : withExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
+    : accessExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
     ;
 */
 any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
-    string result = any_cast<string>(visitWithExpr(context->withExpr()));
+    string result = any_cast<string>(visitAccessExpr(context->accessExpr()));
     for (size_t i = 1; i < context->children.size(); i++) {
         const auto &child = context->children[i];
         if (antlr4::tree::TerminalNode::is(child)) {
@@ -955,17 +957,8 @@ any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
 }
 
 /*
-withExpr
-    : accessExpr (('.' | '?.') accessExpr)*
-    ;
-*/
-any Formatter::visitWithExpr(OpenCMLParser::WithExprContext *context) {
-    return formatBiOpsList(context->accessExpr(), context->children, false);
-}
-
-/*
 accessExpr
-    : primaryData ('.$' (IDENTIFIER | INTEGER))*
+    : primaryData ('.' (IDENTIFIER | INTEGER))*
     ;
 */
 any Formatter::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
@@ -1083,7 +1076,6 @@ any Formatter::visitLiteral(OpenCMLParser::LiteralContext *context) {
     } else if (context->MULTI_STR()) {
         return formatStringLiteral(context->MULTI_STR()->getText(), true);
     } else if (context->FSTRING()) {
-        // TODO: format f-string
         return context->getText();
     } else {
         return context->getText();
