@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 17, 2025
+ * Updated: Oct. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,7 +69,7 @@ namespace Check {
 bool lexical = false;          // Whether to check lexical errors
 bool syntaxOnly = false;       // Whether to check syntax only
 bool ignoreDefiFile = false;   // Whether to ignore the definition file
-string outputFormat = "json";  // Output format (default to JSON)
+string outputFormat = "text";  // Output format (text or json)
 string configFilePath = "";    // Configuration file path
 unsigned int maxWaring = 1000; // Max warnings
 } // namespace Check

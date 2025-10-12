@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 09, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,6 @@ class Data : public std::enable_shared_from_this<Data> {
   protected:
     bool mutable_ = false;
     type_ptr_t type_;
-    entity_wptr_t entity_;
 
   public:
     Data();
@@ -49,8 +48,6 @@ class Data : public std::enable_shared_from_this<Data> {
     virtual ~Data() = default;
 
     virtual type_ptr_t type() const;
-    entity_ptr_t entity();
-    void setEntity(const entity_ptr_t &entity);
 
     bool variable() const;
     void setVariable();
@@ -84,10 +81,10 @@ class StringData;
 class StructData;
 class SetData;
 class MapData;
-class DictData;
+class StructData;
 class ListData;
-class ArrayData;
-class TupleData;
 class VectorData;
+class TupleData;
+class ArrayData;
 class ParamsData;
 class TensorData;

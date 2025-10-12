@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@ namespace AbstractSyntaxTree {
 
 enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block };
 
-enum class UnpackType { Dict, List, Tuple };
+enum class UnpackType { Array, Tuple, Struct };
 
 enum class ExitType { Yield, Raise, Return, Throw };
 

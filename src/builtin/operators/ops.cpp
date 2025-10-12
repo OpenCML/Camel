@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -299,8 +299,8 @@ OperatorReturnCode __builtin__assn_mod__(GIR::node_ptr_t &self, Frame &frame, Co
     return eval_assignment_op(self, frame, ctx, "assn_mod", do_mod, false, true);
 }
 
-OperatorReturnCode __builtin__assn_exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    return eval_assignment_op(self, frame, ctx, "assn_exp", do_pow);
+OperatorReturnCode __builtin__assn_pow__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    return eval_assignment_op(self, frame, ctx, "assn_pow", do_pow);
 }
 
 OperatorReturnCode __builtin__assn_and__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
@@ -900,20 +900,12 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
 
         if (containerType == TypeCode::Array) {
             auto arr = std::dynamic_pointer_cast<ArrayData>(container);
-            ASSERT(idx < arr->size(), "Array index out of bounds.");
+            ASSERT(idx < arr->raw().size(), "Array index out of bounds.");
             frame.set(self, arr->raw()[idx]);
         } else if (containerType == TypeCode::Tuple) {
             auto tup = std::dynamic_pointer_cast<TupleData>(container);
-            ASSERT(idx < tup->size(), "Tuple index out of bounds.");
+            ASSERT(idx < tup->raw().size(), "Tuple index out of bounds.");
             frame.set(self, tup->raw()[idx]);
-        } else if (containerType == TypeCode::Vector) {
-            auto vec = std::dynamic_pointer_cast<VectorData>(container);
-            ASSERT(idx < vec->size(), "Vector index out of bounds.");
-            frame.set(self, vec->raw()[idx]);
-        } else if (containerType == TypeCode::List) {
-            auto lst = std::dynamic_pointer_cast<ListData>(container);
-            ASSERT(idx < lst->size(), "List index out of bounds.");
-            frame.set(self, lst->raw()[idx]);
         } else {
             ctx.rtmDiags()
                 ->of(RuntimeDiag::IncompatibleArgType)
@@ -924,20 +916,20 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
         return OperatorReturnCode::OK;
     }
 
-    // 字符串索引：适用于 Dict
+    // 字符串索引：适用于 Struct
     if (index->type() == Type::String()) {
-        if (containerType == TypeCode::Dict) {
-            auto dict = std::dynamic_pointer_cast<DictData>(container);
+        if (containerType == TypeCode::Struct) {
+            auto dict = std::dynamic_pointer_cast<StructData>(container);
             const std::string &key = index->as<StringData>(Type::String())->data();
             const auto &map = dict->raw();
 
             auto it = map.find(key);
-            ASSERT(it != map.end(), "Dict key not found: " + key);
+            ASSERT(it != map.end(), "Struct key not found: " + key);
             frame.set(self, it->second);
         } else {
             ctx.rtmDiags()
                 ->of(RuntimeDiag::IncompatibleArgType)
-                .commit(0, "<idx>", "Dict", container->type()->toString());
+                .commit(0, "<idx>", "Struct", container->type()->toString());
             frame.set(self, Data::null());
         }
 

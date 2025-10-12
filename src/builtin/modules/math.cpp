@@ -13,61 +13,128 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "math.h"
 
+using namespace std;
+
+static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "abs",
+            {
+                {
+                    ":math/abs_i",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int32()),
+                },
+                {
+                    ":math/abs_l",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
+                },
+                {
+                    ":math/abs_f",
+                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                },
+                {
+                    ":math/abs_d",
+                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                },
+            }),
+        OperatorGroup::create(
+            "exp",
+            {
+                {
+                    ":math/exp_f",
+                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                },
+                {
+                    ":math/exp_d",
+                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                },
+            }),
+        OperatorGroup::create(
+            "round",
+            {
+                {
+                    ":math/round_f",
+                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                },
+                {
+                    ":math/round_d",
+                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                },
+            }),
+        OperatorGroup::create(
+            "ceil",
+            {
+                {
+                    ":math/ceil_f",
+                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                },
+                {
+                    ":math/ceil_d",
+                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                },
+            }),
+        OperatorGroup::create(
+            "floor",
+            {
+                {
+                    ":math/floor_f",
+                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                },
+                {
+                    ":math/floor_d",
+                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                },
+            }),
+        OperatorGroup::create(
+            "bin",
+            {
+                {
+                    ":math/bin_i",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                },
+                {
+                    ":math/bin_l",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
+                },
+            }),
+        OperatorGroup::create(
+            "oct",
+            {
+                {
+                    ":math/oct_i",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                },
+                {
+                    ":math/oct_l",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
+                },
+            }),
+        OperatorGroup::create(
+            "hex",
+            {
+                {
+                    ":math/hex_i",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                },
+                {
+                    ":math/hex_l",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
+                },
+            })};
+
+    return groups;
+}
+
 MathBuiltinModule::MathBuiltinModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
-    exportBuiltinOperator(
-        "abs",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/abs");
-    exportBuiltinOperator(
-        "exp",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/exp");
-    exportBuiltinOperator(
-        "round",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/round");
-    exportBuiltinOperator(
-        "ceil",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/ceil");
-    exportBuiltinOperator(
-        "floor",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/floor");
-    exportBuiltinOperator(
-        "bin",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/bin");
-    exportBuiltinOperator(
-        "oct",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/oct");
-    exportBuiltinOperator(
-        "hex",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Void(),
-        ":math/hex");
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
 }
 
 bool MathBuiltinModule::load() {

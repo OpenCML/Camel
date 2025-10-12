@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,9 @@ using param_t = std::pair<type_ptr_t, bool>; // bool表示是否为可变参数
 using param_init_list_t = std::initializer_list<param_t>;
 using param_vec_t = std::vector<param_t>;
 
+class FunctionType;
+using func_type_ptr_t = std::shared_ptr<FunctionType>;
+
 class FunctionType : public SpecialType {
   public:
     FunctionType();
@@ -34,19 +37,40 @@ class FunctionType : public SpecialType {
         const param_init_list_t &withTypes, const param_init_list_t &normTypes,
         const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None);
     FunctionType(
+        const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
+        const ModifierSet &modifiers = Modifier::None);
+    FunctionType(
         const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
         const ModifierSet &modifiers = Modifier::None);
+
+    virtual ~FunctionType() = default;
+
+    static func_type_ptr_t create(
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes,
+        const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None) {
+        return std::make_shared<FunctionType>(withTypes, normTypes, returnType, modifiers);
+    }
+    static func_type_ptr_t create(
+        const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
+        const ModifierSet &modifiers = Modifier::None) {
+        return std::make_shared<FunctionType>(withTypes, normTypes, returnType, modifiers);
+    }
+    static func_type_ptr_t create(
+        const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
+        const ModifierSet &modifiers = Modifier::None) {
+        return std::make_shared<FunctionType>(
+            std::move(withTypes),
+            std::move(normTypes),
+            returnType,
+            modifiers);
+    }
 
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
 
-    const std::string &uri() const { return uri_; }
-    void setUri(const std::string &uri) { uri_ = uri; }
-
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &mod) { modifiers_ = mod; }
     bool hasModifier(Modifier mod) const { return modifiers_.has(mod); }
-    bool hasSideEffect() const;
     bool checkModifiers() const;
 
     // 供编译期由GCT构造使用
@@ -56,7 +80,8 @@ class FunctionType : public SpecialType {
 
     const param_vec_t &withTypes() const { return withTypes_; }
     const param_vec_t &normTypes() const { return normTypes_; }
-    type_ptr_t exitType() const;
+    const type_ptr_t &exitType() const;
+    bool hasExitType() const { return exitType_ != nullptr; }
 
     const std::string &argNameAt(size_t idx) const;
     void setArgNames(const std::vector<std::string> &names) { argNames_ = names; }
@@ -65,6 +90,8 @@ class FunctionType : public SpecialType {
     std::vector<std::tuple<std::string, type_ptr_t, bool>> normArgsInfo() const;
 
     std::string toString() const override;
+
+    virtual std::string mangle() const override;
 
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
@@ -76,17 +103,13 @@ class FunctionType : public SpecialType {
 
   private:
     ImplMark implMark_ = ImplMark::Graph;
-    std::string uri_;
     ModifierSet modifiers_ = Modifier::None;
-    bool hasSideEffect_ = false;
 
     param_vec_t withTypes_;
     param_vec_t normTypes_;
-    type_ptr_t exitType_;
+    type_ptr_t exitType_ = nullptr;
 
     // 只在编译期记录并使用
     bool hasCompileInfo_ = true;
     std::vector<std::string> argNames_;
 };
-
-using func_type_ptr_t = std::shared_ptr<FunctionType>;

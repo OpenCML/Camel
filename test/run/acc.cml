@@ -7,7 +7,7 @@ module arithmetic_sum
 
 import { now } from time
 
-func sum(n: int64, a: int64, d: int64, acc: int64): int64 {
+func sum(n: int, a: int, d: int, acc: int): int {
     return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
 }
 

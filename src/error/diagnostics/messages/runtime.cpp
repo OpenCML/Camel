@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "runtime.h"
 
-const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap() {
-    return {
+const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
+    static const std::unordered_map<RuntimeDiag, DiagInfo> infoMap = {
         {
             RuntimeDiag::RuntimeError,
             {
@@ -89,4 +89,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap() {
             },
         },
     };
+
+    return infoMap;
 }

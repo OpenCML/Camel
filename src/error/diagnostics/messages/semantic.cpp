@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "semantic.h"
 
-const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
-    return {
+const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
+    static const std::unordered_map<SemanticDiag, DiagInfo> infoMap = {
         {
             SemanticDiag::UnknownSemanticError,
             {
@@ -120,6 +120,79 @@ const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
                 "Make sure the name is declared and in scope.",
             },
         },
+        {
+            SemanticDiag::BranchReturnTypeMismatch,
+            {
+                "BranchReturnTypeMismatch",
+                "Return type mismatch between branches: expected '{0}', found '{1}'.",
+                "Ensure all branches of if-else or match-case expressions return the same type.",
+            },
+        },
+        {
+            SemanticDiag::InvalidAccessIndex,
+            {
+                "InvalidAccessIndex",
+                "Invalid access index: '{0}'.",
+                "Ensure the index is within bounds for arrays or refers to a valid field in "
+                "structs.",
+            },
+        },
+        {
+            SemanticDiag::TypeNotIndexable,
+            {
+                "TypeNotIndexable",
+                "Type '{0}' does not support index access.",
+                "Check the type and ensure it is an array, a tuple, or a dict, etc. that supports "
+                "indexing.",
+            },
+        },
+        {
+            SemanticDiag::NoMatchingFunction,
+            {
+                "NoMatchingFunction",
+                "No matching function found for argument types: {0}.",
+                "Check the number and types of arguments to ensure they match one of the available "
+                "overloaded function signatures. Available overloads: {1}",
+            },
+        },
+        {
+            SemanticDiag::ArgumentsMismatch,
+            {
+                "ArgumentsMismatch",
+                "Function of type '{0}' cannot be called with argument types: {1}.",
+                "Check that the function type '{0}' matches the number and types of arguments "
+                "provided ({1}).",
+            },
+        },
+        {
+            SemanticDiag::ReturnTypeMismatch,
+            {
+                "ReturnTypeMismatch",
+                "Return type '{0}' does not match the function's declared return type '{1}'.",
+                "Ensure that the value returned from the function matches the type specified in "
+                "the function signature: {2}.",
+            },
+        },
+        {
+            SemanticDiag::ElementTypeMismatch,
+            {
+                "ElementTypeMismatch",
+                "Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.",
+                "Ensure the data type matches the {0}'s element type, or convert the data to "
+                "the appropriate type before inserting.",
+            },
+        },
+        {
+            SemanticDiag::CallingIncompleteFunction,
+            {
+                "CallingIncompleteFunction",
+                "Cannot call function '{0}' with type '{1}' as its type is not fully constructed "
+                "yet.",
+                "This often occurs when a function without an explicit return type calls itself, "
+                "preventing the compiler from inferring the actual return type. "
+                "Consider explicitly specifying the function's return type to avoid this issue.",
+            },
+        },
 
         // Warnings
         {
@@ -146,6 +219,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> getSemanticDiagInfoMap() {
                 "Consider waiting the function using the 'wait' keyword.",
             },
         },
-
     };
+
+    return infoMap;
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Jul. 09, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,7 +46,12 @@ class Builder {
         idIndex_ = 0;
         diags_ = diags;
         initInnerTypes();
-        root_ = visitModule(node);
+        try {
+            root_ = visitModule(node);
+        } catch (Diagnostic &d) {
+            diags_->add(std::move(d));
+            root_ = nullptr;
+        }
         return root_;
     }
 
@@ -94,8 +99,8 @@ class Builder {
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
-    node_ptr_t visitListData(const AST::node_ptr_t &ast);
-    node_ptr_t visitDictData(const AST::node_ptr_t &ast);
+    node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
+    node_ptr_t visitStructData(const AST::node_ptr_t &ast);
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
@@ -104,8 +109,8 @@ class Builder {
     type_ptr_t visitType(const AST::node_ptr_t &ast);
     type_ptr_t visitNullableType(const AST::node_ptr_t &ast);
     type_ptr_t visitTypeExpr(const AST::node_ptr_t &ast);
-    type_ptr_t visitListType(const AST::node_ptr_t &ast);
-    type_ptr_t visitDictType(const AST::node_ptr_t &ast);
+    type_ptr_t visitArrayType(const AST::node_ptr_t &ast);
+    type_ptr_t visitStructType(const AST::node_ptr_t &ast);
     type_ptr_t visitTupleType(const AST::node_ptr_t &ast);
     type_ptr_t visitFuncType(const AST::node_ptr_t &ast);
     type_ptr_t visitUnitType(const AST::node_ptr_t &ast);

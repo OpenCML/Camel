@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -496,9 +496,9 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitAccessExpr(OpenCMLParser::AccessExprContext *context);
 
-    std::any visitDictData(OpenCMLParser::DictDataContext *context);
+    std::any visitStructData(OpenCMLParser::StructDataContext *context);
 
-    std::any visitListData(OpenCMLParser::ListDataContext *context);
+    std::any visitArrayData(OpenCMLParser::ArrayDataContext *context);
 
     std::any visitTupleData(OpenCMLParser::TupleDataContext *context);
 
@@ -520,7 +520,7 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitTypeUnit(OpenCMLParser::TypeUnitContext *context);
 
-    std::any visitListType(OpenCMLParser::ListTypeContext *context);
+    std::any visitArrayType(OpenCMLParser::ArrayTypeContext *context);
 
     std::any visitTypeOrData(OpenCMLParser::TypeOrDataContext *context);
 
@@ -528,7 +528,7 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context);
 
-    std::any visitDictType(OpenCMLParser::DictTypeContext *context);
+    std::any visitStructType(OpenCMLParser::StructTypeContext *context);
 
     std::any visitTypeList(OpenCMLParser::TypeListContext *context);
 

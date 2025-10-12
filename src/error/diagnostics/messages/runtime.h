@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,4 +37,4 @@ enum class RuntimeDiag : uint32_t {
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }
 
-const std::unordered_map<RuntimeDiag, DiagInfo> getRuntimeDiagInfoMap();
+const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap();

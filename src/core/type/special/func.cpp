@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 
 using namespace std;
 
-FunctionType::FunctionType() : SpecialType(TypeCode::Func), exitType_(Type::Void()) {
+FunctionType::FunctionType() : SpecialType(TypeCode::Function), exitType_(nullptr) {
     // 默认空构造函数，需要通过addWithArg和addNormArg添加参数
     // 通过此方式构造的FunctionType，是有编译信息的
     hasCompileInfo_ = true;
@@ -33,13 +33,25 @@ FunctionType::FunctionType() : SpecialType(TypeCode::Func), exitType_(Type::Void
 FunctionType::FunctionType(
     const param_init_list_t &withTypes, const param_init_list_t &normTypes,
     const type_ptr_t &returnType, const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(withTypes),
-      normTypes_(normTypes), exitType_(returnType) {}
+    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(withTypes),
+      normTypes_(normTypes), exitType_(returnType) {
+    // 通过此方式构造的FunctionType，没有编译期信息
+    hasCompileInfo_ = false;
+}
+
+FunctionType::FunctionType(
+    const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
+    const ModifierSet &modifiers)
+    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(withTypes),
+      normTypes_(normTypes), exitType_(returnType) {
+    // 通过此方式构造的FunctionType，没有编译期信息
+    hasCompileInfo_ = false;
+}
 
 FunctionType::FunctionType(
     const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
     const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Func), modifiers_(modifiers), withTypes_(std::move(withTypes)),
+    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(std::move(withTypes)),
       normTypes_(std::move(normTypes)), exitType_(returnType) {
     // 通过此方式构造的FunctionType，没有编译期信息
     hasCompileInfo_ = false;
@@ -79,9 +91,15 @@ bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool i
     return true;
 }
 
-bool FunctionType::hasSideEffect() const { return hasSideEffect_; }
-
-type_ptr_t FunctionType::exitType() const { return dynamic_pointer_cast<Type>(exitType_); }
+const type_ptr_t &FunctionType::exitType() const {
+    ASSERT(
+        exitType_ != nullptr,
+        std::format(
+            "Exit type is null for function type: {}. "
+            "Did you forget to set the exit type for this function?",
+            toString()));
+    return exitType_;
+}
 
 bool FunctionType::checkModifiers() const { return true; }
 
@@ -125,29 +143,35 @@ string FunctionType::toString() const {
     if (withTypes_.size() > 0) {
         result += "<";
         for (size_t i = 0; i < withTypes_.size(); i++) {
+            if (i > 0) {
+                result += ", ";
+            }
             const auto &type = withTypes_[i];
+            if (type.second) {
+                result += "var ";
+            }
             if (hasCompileInfo_) {
                 const auto &name = argNames_.at(i);
                 result += name + ": ";
             }
-            if (type.second) {
-                result += "var ";
-            }
-            result += type.first->toString() + ", ";
+            result += type.first->toString();
         }
         result += "> ";
     }
     result += "(";
     for (size_t i = 0; i < normTypes_.size(); i++) {
+        if (i > 0) {
+            result += ", ";
+        }
         const auto &type = normTypes_[i];
+        if (type.second) {
+            result += "var ";
+        }
         if (hasCompileInfo_) {
             size_t idx = i + withTypes_.size();
             ASSERT(idx < argNames_.size(), "Argument name index out of range");
             const auto &name = argNames_.at(idx);
             result += name + ": ";
-        }
-        if (type.second) {
-            result += "var ";
         }
         result += type.first->toString();
     }
@@ -155,13 +179,44 @@ string FunctionType::toString() const {
     if (exitType_) {
         result += exitType_->toString();
     } else {
-        result += "NULL";
+        result += "<null>";
+    }
+    return result;
+}
+
+std::string FunctionType::mangle() const {
+    std::string result = "F";
+    // with types
+    if (!withTypes_.empty()) {
+        result += "W" + std::to_string(withTypes_.size());
+        for (const auto &[type, isVar] : withTypes_) {
+            result += isVar ? "V" : "";
+            result += type->mangle();
+        }
+    }
+    // norm types
+    if (!normTypes_.empty()) {
+        result += "N" + std::to_string(normTypes_.size());
+        for (const auto &[type, isVar] : normTypes_) {
+            result += isVar ? "V" : "";
+            result += type->mangle();
+        }
+    }
+    // return type
+    result += "R";
+    if (exitType_) {
+        result += exitType_->mangle();
+    } else {
+        result += "v"; // void
     }
     return result;
 }
 
 bool FunctionType::operator==(const Type &other) const {
-    if (other.code() != TypeCode::Func) {
+    if (this == &other) {
+        return true;
+    }
+    if (other.code() != TypeCode::Function) {
         return false;
     }
     const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);

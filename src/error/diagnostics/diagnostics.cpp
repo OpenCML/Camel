@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Sep. 12, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "utils/ascii.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 #include "utils/str.h"
 
 #include <format>
@@ -38,7 +39,7 @@ std::string Diagnostic::toText() const {
     int ln = -1, ch = -1;
 
     if (std::holds_alternative<TokenRange>(range)) {
-        ASSERT(false, "TokenRange should be converted to CharRange before toText()");
+        l.in("Diag").warn("TokenRange should be converted to CharRange before toText()");
     } else if (std::holds_alternative<CharRange>(range)) {
         CharRange r = std::get<CharRange>(range);
         ln = static_cast<int>(r.start.line + 1);
@@ -66,7 +67,7 @@ std::string Diagnostic::toJson() const {
     if (std::holds_alternative<CharRange>(range)) {
         r = std::get<CharRange>(range);
     } else if (std::holds_alternative<TokenRange>(range)) {
-        ASSERT(false, "TokenRange should be converted to CharRange before toJson()");
+        l.in("Diag").warn("TokenRange should be converted to CharRange before toJson()");
     }
     oss << "{"
         << "\"range\":{\"start\":{\"line\":" << r.start.line
@@ -135,11 +136,13 @@ char Diagnostic::hexNib(int v) {
 }
 
 Diagnostic &Diagnostics::add(Diagnostic &&d) {
+    d.moduleName = moduleName_;
+    d.modulePath = modulePath_;
     std::lock_guard<std::mutex> lk(mtx_);
     // Check limits before adding
     checkLimits(d);
-
     storage_.push_back(std::move(d));
+    checkLimits(d);
     return storage_.back();
 }
 
@@ -261,7 +264,7 @@ bool Diagnostics::hasErrors() const {
 void Diagnostics::checkLimits(const Diagnostic &d) {
     // Check total limit
     if (config_.hasTotalLimit() && static_cast<int>(storage_.size()) >= config_.total_limit) {
-        throw DiagnosticsTotalLimitExceededException(config_.total_limit, d);
+        throw DiagnosticsTotalLimitExceededException(config_.total_limit);
     }
 
     // Check per-severity limit
@@ -269,7 +272,7 @@ void Diagnostics::checkLimits(const Diagnostic &d) {
         size_t currentCount = countBySeverityInternal(d.severity) + 1;
         int limit = config_.getSeverityLimit(d.severity);
         if (static_cast<int>(currentCount) >= limit) {
-            throw DiagnosticsLimitExceededException(d.severity, limit, d);
+            throw DiagnosticsLimitExceededException(d.severity, limit);
         }
     }
 }

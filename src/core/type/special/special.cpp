@@ -13,11 +13,27 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "special.h"
+
+std::string SpecialType::mangle() const {
+    switch (code_) {
+    case TypeCode::Any:
+        return "a";
+    case TypeCode::Void:
+        return "v";
+    case TypeCode::Function:
+        ASSERT(false, "Function type mangle should be implemented in FunctionType.");
+        return "";
+    default:
+        break;
+    }
+    ASSERT(false, "Unknown SpecialType");
+    return ""; // unknown
+}
 
 CastSafety SpecialType::castSafetyTo(const Type &other) const {
     if (other.code() == code_) {
@@ -26,7 +42,7 @@ CastSafety SpecialType::castSafetyTo(const Type &other) const {
     if (other.code() == TypeCode::Any) {
         return CastSafety::Safe;
     }
-    if (other.primary() || other.structured()) {
+    if (other.primary() || other.composed()) {
         return CastSafety::Forbidden;
     }
     if (other.code() == TypeCode::Void) {

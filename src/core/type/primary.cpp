@@ -13,11 +13,49 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "primary.h"
+
+bool PrimaryType::operator==(const Type &other) const {
+    if (!other.primary()) {
+        return false;
+    }
+    return code_ == other.code();
+}
+
+bool PrimaryType::operator!=(const Type &other) const {
+    if (!other.primary()) {
+        return false;
+    }
+    return code_ == other.code();
+}
+
+std::string PrimaryType::mangle() const {
+    switch (code_) {
+    case TypeCode::Int32:
+        return "i";
+    case TypeCode::Int64:
+        return "l";
+    case TypeCode::Float:
+        return "f";
+    case TypeCode::Double:
+        return "d";
+    case TypeCode::String:
+        return "s";
+    case TypeCode::Bool:
+        return "b";
+    case TypeCode::Char:
+        return "c";
+    default:
+        ASSERT(false, "Unknown PrimaryType");
+        return "";
+    }
+    ASSERT(false, "Unknown PrimaryType");
+    return ""; // unknown
+}
 
 CastSafety PrimaryType::castSafetyTo(const Type &other) const {
     const TypeCode otherCode = other.code();
@@ -29,19 +67,11 @@ CastSafety PrimaryType::castSafetyTo(const Type &other) const {
         const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
         return static_cast<CastSafety>(primeTypeConvMatrix[thisIndex][otherIndex]);
     }
-    if (other.structured()) {
+    if (other.composed()) {
         switch (otherCode) {
         case TypeCode::Union:
             [[fallthrough]];
-        case TypeCode::List:
-            [[fallthrough]];
         case TypeCode::Array:
-            [[fallthrough]];
-        case TypeCode::Vector:
-            [[fallthrough]];
-        case TypeCode::Tensor:
-            [[fallthrough]];
-        case TypeCode::Set:
             return CastSafety::Safe;
         default:
             return CastSafety::Forbidden;

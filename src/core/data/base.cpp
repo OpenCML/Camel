@@ -13,14 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 15, 2024
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "base.h"
 
-#include "core/data/entity.h"
-#include "other/null.h"
+#include "special/null.h"
 #include "utils/assert.h"
 
 using namespace std;
@@ -30,17 +29,6 @@ Data::Data() {};
 Data::Data(type_ptr_t type) : type_(type) {}
 
 type_ptr_t Data::type() const { return type_; }
-
-entity_ptr_t Data::entity() {
-    if (entity_.expired()) {
-        entity_ptr_t entity = make_shared<Entity>(shared_from_this());
-        entity_ = entity;
-        return entity;
-    }
-    return entity_.lock();
-}
-
-void Data::setEntity(const entity_ptr_t &entity) { entity_ = entity; }
 
 bool Data::variable() const { return mutable_; }
 

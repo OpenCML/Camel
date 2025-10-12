@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,6 @@
 
 #include "primary.h"
 #include "special/func.h"
-#include "struct/list.h"
 #include "utils/type.h"
 
 using namespace std;
@@ -39,6 +38,9 @@ const signed char primeTypeConvMatrix[7][7] = {
 
 string typeCodeToString(TypeCode code) {
     switch (code) {
+        // internal use
+    case TypeCode::Ref:
+        return "ref";
         // primitive types
     case TypeCode::Int32:
         return "int32";
@@ -54,34 +56,28 @@ string typeCodeToString(TypeCode code) {
         return "bool";
     case TypeCode::Char:
         return "char";
-        // structured types
-    case TypeCode::Set:
-        return "Set";
-    case TypeCode::Map:
-        return "Map";
-    case TypeCode::Dict:
-        return "Dict";
-    case TypeCode::List:
-        return "List";
-    case TypeCode::Union:
-        return "Union";
+        // composed types
     case TypeCode::Array:
-        return "Array";
+        return "array";
     case TypeCode::Tuple:
-        return "Tuple";
-    case TypeCode::Vector:
-        return "Vector";
-    case TypeCode::Tensor:
-        return "Tensor";
+        return "tuple";
+    case TypeCode::Union:
+        return "union";
+    case TypeCode::Struct:
+        return "struct";
+    case TypeCode::Function:
+        return "function";
         // special types
     case TypeCode::Any:
         return "any";
     case TypeCode::Void:
         return "void";
-    case TypeCode::Func:
-        return "functor";
-    case TypeCode::Ref:
-        return "REF";
+        // other types
+    default:
+        if ((static_cast<uint32_t>(code) & 0xF0000000) == 0xF0000000) {
+            return "other";
+        }
+        break;
     }
     return "Unknown";
 }
@@ -90,19 +86,58 @@ Type::Type(TypeCode type) : code_(type) {}
 
 const TypeCode &Type::code() const { return code_; }
 
-bool Type::primary() const { return (static_cast<int>(code_) & 0b11'000000) == 0b00'000000; }
+bool Type::internal() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x00000000; }
 
-bool Type::structured() const { return (static_cast<int>(code_) & 0b11'000000) == 0b01'000000; }
+bool Type::primary() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x10000000; }
 
-bool Type::special() const { return (static_cast<int>(code_) & 0b11'000000) == 0b10'000000; }
+bool Type::composed() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x20000000; }
+
+bool Type::special() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x30000000; }
+
+bool Type::other() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0xF0000000; }
 
 std::string Type::toString() const { return typeCodeToString(code_); }
 
-bool Type::operator==(const Type &other) const { return code_ == other.code_; }
+std::string Type::mangle() const {
+    ASSERT(false, "Type::mangle() not implemented");
+    return "";
+}
 
-bool Type::operator!=(const Type &other) const { return code_ != other.code_; }
+bool Type::operator==(const Type &other) const {
+    if (this == &other) {
+        return true;
+    }
+    return code_ == other.code();
+}
+
+bool Type::operator!=(const Type &other) const { return !(*this == other); }
 
 bool Type::equals(const type_ptr_t &type) const { return type && *type == *this; }
+
+bool Type::assignable(const type_ptr_t &type) const {
+    if (!type)
+        return false;
+    if (this == type.get())
+        return true;
+
+    ASSERT(code_ != TypeCode::Ref && type->code_ != TypeCode::Ref, "Ref type cannot be assigned");
+    if (type->code_ == TypeCode::Any)
+        return true;
+    if (code_ == TypeCode::Any)
+        return false;
+    if (code_ == TypeCode::Void || type->code_ == TypeCode::Void)
+        return false;
+
+    if (code_ == TypeCode::Function && type->code_ == TypeCode::Function) {
+        // TODO: 这里需要进一步设计
+        return true;
+    }
+    if (composed() && type->composed()) {
+        return this->equals(type);
+    }
+
+    return code_ == type->code_;
+}
 
 CastSafety Type::castSafetyTo(const Type &other) const {
     if (code_ == other.code_) {
@@ -126,109 +161,106 @@ bool Type::castSafetyCheck(const type_ptr_t &from, const type_ptr_t &to, CastSaf
     return castSafetyCheck(*from, *to, required);
 }
 
-type_ptr_t Type::Int32() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Int32() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Int32));
+        type = make_shared<PrimaryType>(TypeCode::Int32);
     }
     return type;
 }
 
-type_ptr_t Type::Int64() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Int64() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Int64));
+        type = make_shared<PrimaryType>(TypeCode::Int64);
     }
     return type;
 }
 
-type_ptr_t Type::Float() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Float() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Float));
+        type = make_shared<PrimaryType>(TypeCode::Float);
     }
     return type;
 }
 
-type_ptr_t Type::Double() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Double() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Double));
+        type = make_shared<PrimaryType>(TypeCode::Double);
     }
     return type;
 }
 
-type_ptr_t Type::String() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::String() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::String));
+        type = make_shared<PrimaryType>(TypeCode::String);
     }
     return type;
 }
 
-type_ptr_t Type::Bool() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Bool() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Bool));
+        type = make_shared<PrimaryType>(TypeCode::Bool);
     }
     return type;
 }
 
-type_ptr_t Type::Char() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<PrimaryType> Type::Char() {
+    static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<PrimaryType>(TypeCode::Char));
+        type = make_shared<PrimaryType>(TypeCode::Char);
     }
     return type;
 }
 
-type_ptr_t Type::Int() { return Int32(); }
+std::shared_ptr<PrimaryType> Type::Int() { return Int32(); }
 
-type_ptr_t Type::Real() { return Float(); }
+std::shared_ptr<PrimaryType> Type::Real() { return Float(); }
 
-type_ptr_t Type::Number() { return Double(); }
+std::shared_ptr<PrimaryType> Type::Number() { return Double(); }
 
-type_ptr_t Type::List() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<ArrayType> Type::Array(const type_ptr_t &elementType) {
+    static std::shared_ptr<ArrayType> voidArrayType = nullptr;
+    if (!elementType) {
+        if (voidArrayType == nullptr) {
+            voidArrayType = make_shared<ArrayType>(Type::Void());
+        }
+        return voidArrayType;
+    }
+    return make_shared<ArrayType>(elementType);
+}
+
+std::shared_ptr<TupleType> Type::Tuple(const type_vec_t &types) {
+    return make_shared<TupleType>(types);
+}
+
+std::shared_ptr<StructType> Type::Struct() { return make_shared<StructType>(); }
+
+std::shared_ptr<SpecialType> Type::Any() {
+    static std::shared_ptr<SpecialType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<ListType>());
+        type = make_shared<SpecialType>(TypeCode::Any);
     }
     return type;
 }
 
-type_ptr_t Type::Array(const type_ptr_t &elementType, size_t size) {
-    return tt::as_shared<Type>(make_shared<ArrayType>(elementType, size));
-}
-
-type_ptr_t Type::Tuple(const std::vector<type_ptr_t> &types) {
-    return tt::as_shared<Type>(make_shared<TupleType>(types));
-}
-
-type_ptr_t Type::Vector(const type_ptr_t &elementType) {
-    return tt::as_shared<Type>(make_shared<VectorType>(elementType));
-}
-
-type_ptr_t Type::Any() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<SpecialType> Type::Void() {
+    static std::shared_ptr<SpecialType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Any));
+        type = make_shared<SpecialType>(TypeCode::Void);
     }
     return type;
 }
 
-type_ptr_t Type::Void() {
-    static type_ptr_t type = nullptr;
+std::shared_ptr<FunctionType> Type::Func() {
+    static std::shared_ptr<FunctionType> type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Void));
-    }
-    return type;
-}
-
-type_ptr_t Type::Func() {
-    static type_ptr_t type = nullptr;
-    if (type == nullptr) {
-        type = tt::as_shared<Type>(
-            make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Any()));
+        type =
+            make_shared<FunctionType>(param_vec_t{}, param_vec_t{}, Type::Void(), Modifier::None);
     }
     return type;
 }
@@ -236,7 +268,7 @@ type_ptr_t Type::Func() {
 type_ptr_t Type::Ref() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = tt::as_shared<Type>(make_shared<SpecialType>(TypeCode::Ref));
+        type = make_shared<Type>(TypeCode::Ref);
     }
     return type;
 }

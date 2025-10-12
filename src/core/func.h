@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 15, 2025
- * Updated: Jul. 15, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -108,6 +108,9 @@ class ModifierSet {
     bool macro() const { return has(Modifier::Macro); }
 
     bool empty() const { return mask == static_cast<ModifierMask>(Modifier::None); }
+
+    bool operator==(const ModifierSet &other) const { return mask == other.mask; }
+    bool operator!=(const ModifierSet &other) const { return mask != other.mask; }
 
     operator std::string() const {
         std::vector<std::string> result;

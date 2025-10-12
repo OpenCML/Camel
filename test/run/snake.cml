@@ -47,7 +47,7 @@ func hit_wall(p: Point): bool {
 }
 
 // Recursive game loop
-func game_loop(snake: Point[], dir: string, steps: int) sync {
+func game_loop(snake: Point[], dir: string, steps: int): void sync {
     render(snake)
     let new_snake = move_snake(snake, dir)
     let now_head = new_snake.head()

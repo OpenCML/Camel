@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 05, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -241,16 +241,16 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     node_ptr_t res = createNodeAs<ExecLoad>();
 
     switch (dataDeclLoad->unpackType()) {
-    case AST::UnpackType::Dict: {
+    case AST::UnpackType::Struct: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
-            .commit("Dict Unpacking");
+            .commit("Struct Unpacking");
         throw BuildAbortException();
     } break;
-    case AST::UnpackType::List: {
+    case AST::UnpackType::Array: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
-            .commit("List Unpacking");
+            .commit("Array Unpacking");
         throw BuildAbortException();
     } break;
     case AST::UnpackType::Tuple: {
@@ -454,11 +454,11 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::Literal:
         dataNode = visitLiteral(ast);
         break;
-    case AST::DataType::List:
-        dataNode = visitListData(ast);
+    case AST::DataType::Array:
+        dataNode = visitArrayData(ast);
         break;
-    case AST::DataType::Dict:
-        dataNode = visitDictData(ast);
+    case AST::DataType::Struct:
+        dataNode = visitStructData(ast);
         break;
     case AST::DataType::Tuple:
         dataNode = visitTupleData(ast);
@@ -574,7 +574,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = createNodeAs<DRefLoad>("__assn_mat__");
     } break;
     case AST::BinaryDataOp::AssignExp: {
-        opNode = createNodeAs<DRefLoad>("__assn_exp__");
+        opNode = createNodeAs<DRefLoad>("__assn_pow__");
     } break;
     case AST::BinaryDataOp::AssignAnd: {
         opNode = createNodeAs<DRefLoad>("__assn_and__");
@@ -899,7 +899,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         data = makeDataFromLiteral(parseNumber<int32_t>(str));
     } break;
     case LiteralType::Real: {
-        data = makeDataFromLiteral(parseNumber<double>(str));
+        data = makeDataFromLiteral(parseNumber<float>(str));
     } break;
     case LiteralType::Boolean: {
         if (str == "true") {
@@ -927,36 +927,36 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
 }
 
 /*
-ListData() : Data* data ;
+ArrayData() : Data* data ;
 */
-node_ptr_t Builder::visitListData(const AST::node_ptr_t &ast) {
-    ENTER("ListData");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ListData");
-    auto listData = make_shared<ListData>();
-    node_ptr_t res = createNodeAs<DataLoad>(listData);
+node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
+    ENTER("ArrayData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
+    auto arrayData = ArrayData::from(Type::Array(), {});
+    node_ptr_t res = createNodeAs<DataLoad>(arrayData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         auto [data, _] = extractData(dataNode, execNode, dangling);
-        listData->emplace(data);
+        arrayData->emplace(data);
     }
     if (dangling) {
         *execNode << res;
         res = execNode;
     }
-    LEAVE("ListData");
+    LEAVE("ArrayData");
     return res;
 }
 
 /*
-DictData() : NamedData* dataList ;
+StructData() : NamedData* dataList ;
 */
-node_ptr_t Builder::visitDictData(const AST::node_ptr_t &ast) {
-    ENTER("DictData");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for DictData");
-    auto dictData = make_shared<DictData>();
-    node_ptr_t res = createNodeAs<DataLoad>(dictData);
+node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
+    ENTER("StructData");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
+    auto structData = std::make_shared<StructData>();
+    node_ptr_t res = createNodeAs<DataLoad>(structData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
@@ -964,13 +964,13 @@ node_ptr_t Builder::visitDictData(const AST::node_ptr_t &ast) {
         const string &name = namedPair->ref().ident();
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
         auto [data, _] = extractData(dataNode, execNode, dangling);
-        dictData->emplace(name, data);
+        structData->emplace(name, data);
     }
     if (dangling) {
         *execNode << res;
         res = execNode;
     }
-    LEAVE("DictData");
+    LEAVE("StructData");
     return res;
 }
 
@@ -1006,7 +1006,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
     func_type_ptr_t funcType =
         tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
-    node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark(), funcType->uri());
+    node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode = createNodeAs<FuncLoad>(funcData->ref().ident());
     *funcNode << typeNode << stmtsNode;
@@ -1028,7 +1028,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 
 /*
 Type(TypeType type) :=
-    NullableType | TypeExpr | ListType | DictType | TupleType
+    NullableType | TypeExpr | ArrayType | StructType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 */
 type_ptr_t Builder::visitType(const AST::node_ptr_t &ast) {
@@ -1044,11 +1044,11 @@ type_ptr_t Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Expr:
         res = visitTypeExpr(ast);
         break;
-    case AST::TypeType::List:
-        res = visitListType(ast);
+    case AST::TypeType::Array:
+        res = visitArrayType(ast);
         break;
-    case AST::TypeType::Dict:
-        res = visitDictType(ast);
+    case AST::TypeType::Struct:
+        res = visitStructType(ast);
         break;
     case AST::TypeType::Tuple:
         res = visitTupleType(ast);
@@ -1147,13 +1147,13 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     case AST::TypeOp::ErrorThen: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
-            .commit("TypeOp::ErrorThen");
+            .commit("TypeOp::ErrorThen (a.k.a. T ? U)");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::Specialize: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
-            .commit("TypeOp::Specialize");
+            .commit("TypeOp::Specialize (a.k.a. Generics or T<U, V, ...>)");
         throw BuildAbortException();
     } break;
     case AST::TypeOp::TypeOf: {
@@ -1176,25 +1176,26 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 }
 
 /*
-ListType(siz dim) : Type type ;
+ArrayType(siz dim) : Type type ;
 */
-type_ptr_t Builder::visitListType(const AST::node_ptr_t &ast) {
-    ENTER("ListType");
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ListType");
-    const auto &listTypeLoad = ast->loadAs<AST::ListTypeLoad>();
+type_ptr_t Builder::visitArrayType(const AST::node_ptr_t &ast) {
+    ENTER("ArrayType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
+    // TODO: 这里的dims信息暂时没用到
+    // const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
     type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
-    const auto &arrayType = make_shared<ArrayType>(type, listTypeLoad->dims());
-    LEAVE("ListType");
+    const auto &arrayType = Type::Array(type);
+    LEAVE("ArrayType");
     return arrayType;
 }
 
 /*
-DictType() : NamedType* types ;
+StructType() : NamedType* types ;
 */
-type_ptr_t Builder::visitDictType(const AST::node_ptr_t &ast) {
-    ENTER("DictType");
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for DictType");
-    auto res = make_shared<DictType>();
+type_ptr_t Builder::visitStructType(const AST::node_ptr_t &ast) {
+    ENTER("StructType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StructType");
+    auto res = make_shared<StructType>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
         const string &name = namedType->getRef().ident();
@@ -1205,7 +1206,7 @@ type_ptr_t Builder::visitDictType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
     }
-    LEAVE("DictType");
+    LEAVE("StructType");
     return res;
 }
 /*
@@ -1219,7 +1220,7 @@ type_ptr_t Builder::visitTupleType(const AST::node_ptr_t &ast) {
         type_ptr_t type = visitType(child);
         types.push_back(type);
     }
-    type_ptr_t tupleType = make_shared<TupleType>(types);
+    type_ptr_t tupleType = Type::Tuple(types);
     LEAVE("TupleType");
     return tupleType;
 }
@@ -1233,7 +1234,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
-    type_ptr_t exitType = Type::Void();
+    type_ptr_t exitType = nullptr;
 
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {
@@ -1312,7 +1313,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
                 .commit("default parameter values");
             throw BuildAbortException();
         }
-        bool success = funcType->addWithArg(name, type, isVar);
+        bool success = funcType->addNormArg(name, type, isVar);
         if (!success) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();

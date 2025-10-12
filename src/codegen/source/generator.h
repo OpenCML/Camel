@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 13, 2025
- * Updated: Sep. 24, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -70,8 +70,8 @@ class Generator {
     std::string generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
     std::string generateNullableTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
     std::string generateTypeExprLoad(const AbstractSyntaxTree::node_ptr_t &node);
-    std::string generateListTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
-    std::string generateDictTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
+    std::string generateArrayTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
+    std::string generateStructTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
     std::string generateTupleTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
     std::string generateFuncTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);
     std::string generateUnitTypeLoad(const AbstractSyntaxTree::node_ptr_t &node);

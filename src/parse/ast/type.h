@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 
 namespace AbstractSyntaxTree {
 
-enum class TypeType { Null, Expr, List, Dict, Tuple, Func, Spec, Unit, Infer, Data, Ref };
+enum class TypeType { Null, Expr, Array, Tuple, Struct, Func, Spec, Unit, Infer, Data, Ref };
 
 enum class TypeOp {
     Union,
@@ -72,11 +72,11 @@ class TypeExprLoad : public TypeLoad {
     TypeOp op_;
 };
 
-class ListTypeLoad : public TypeLoad {
+class ArrayTypeLoad : public TypeLoad {
   public:
-    ListTypeLoad(size_t dims) : TypeLoad(TypeType::List), dims_(dims) {}
+    ArrayTypeLoad(size_t dims) : TypeLoad(TypeType::Array), dims_(dims) {}
     const std::string toString() const override {
-        return "ListType: [" + std::to_string(dims_) + "]";
+        return "ArrayType: [" + std::to_string(dims_) + "]";
     }
 
     size_t dims() const { return dims_; }
@@ -86,17 +86,17 @@ class ListTypeLoad : public TypeLoad {
     size_t dims_ = 0;
 };
 
-class DictTypeLoad : public TypeLoad {
-  public:
-    DictTypeLoad() : TypeLoad(TypeType::Dict) {}
-    const std::string toString() const override { return "DictType"; }
-    const std::string geneCode() const override;
-};
-
 class TupleTypeLoad : public TypeLoad {
   public:
     TupleTypeLoad() : TypeLoad(TypeType::Tuple) {}
     const std::string toString() const override { return "TupleType"; }
+    const std::string geneCode() const override;
+};
+
+class StructTypeLoad : public TypeLoad {
+  public:
+    StructTypeLoad() : TypeLoad(TypeType::Struct) {}
+    const std::string toString() const override { return "StructType"; }
     const std::string geneCode() const override;
 };
 

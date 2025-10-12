@@ -19,12 +19,12 @@
 
 #pragma once
 
-#include "execute/sched/sched.h"
+#include "../sched.h"
 
-class LinearSchedPass : public SchedulePass {
+class LinearSchedPass : public GraphSchedulePass {
 
   public:
-    LinearSchedPass(const context_ptr_t &ctx) : SchedulePass(ctx) {};
+    LinearSchedPass(const context_ptr_t &ctx) : GraphSchedulePass(ctx) {};
     virtual ~LinearSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
