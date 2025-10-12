@@ -61,7 +61,9 @@ bool ArrayType::operator==(const Type &other) const {
         return false;
     }
     const ArrayType &otherArr = dynamic_cast<const ArrayType &>(other);
-    return elementType_->equals(otherArr.elementType_);
+    return elementType_->code() == TypeCode::Void ||
+           otherArr.elementType_->code() == TypeCode::Void ||
+           elementType_->equals(otherArr.elementType_);
 }
 
 bool ArrayType::operator!=(const Type &other) const {

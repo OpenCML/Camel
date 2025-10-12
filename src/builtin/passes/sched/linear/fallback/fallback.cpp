@@ -451,15 +451,15 @@ graph_ptr_t FallbackExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
 void FallbackExecSchedPass::evalMarkedOperator(
     const std::string uri, const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame) {
-    if (uri == "map") {
+    if (uri == "map_arr") {
         evalMarkedOperator_map(node, currFrame);
-    } else if (uri == "apply") {
+    } else if (uri == "apply_arr") {
         evalMarkedOperator_apply(node, currFrame);
-    } else if (uri == "filter") {
+    } else if (uri == "filter_arr") {
         evalMarkedOperator_filter(node, currFrame);
-    } else if (uri == "reduce") {
+    } else if (uri == "reduce_arr") {
         evalMarkedOperator_reduce(node, currFrame);
-    } else if (uri == "foreach") {
+    } else if (uri == "foreach_arr") {
         evalMarkedOperator_foreach(node, currFrame);
     } else {
         ASSERT(false, std::format("Mark Operator {} not implemented.", uri));

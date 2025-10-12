@@ -446,7 +446,13 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (std::holds_alternative<graph_vec_ptr_t>(drefNode->target())) {
             auto graphs = std::get<graph_vec_ptr_t>(drefNode->target());
             for (const auto &g : *graphs) {
-                StaticFuncTypeResolver resolver(g->funcType());
+                const auto &funcType = g->funcType();
+                if (!funcType->hasExitType()) {
+                    diags_->of(SemanticDiag::CallingIncompleteFunction)
+                        .commit(g->name(), funcType->toString());
+                    throw BuildAbortException();
+                }
+                StaticFuncTypeResolver resolver(funcType);
                 const auto &res = resolver.resolve(withInputTypes, normInputTypes, Modifier::None);
                 if (res.has_value()) {
                     targetGraph = g;
@@ -512,7 +518,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         } else {
             ASSERT(false, "DrefNode must refer to a graph or an operator group.");
         }
-        drefNode->detach();
+        drefNode->detach(true);
     } else {
         const auto &dataType = targetNode->dataType();
         ASSERT(

@@ -45,6 +45,7 @@ enum class SemanticDiag : uint32_t {
     ArgumentsMismatch = 0x000010,
     ReturnTypeMismatch = 0x000011,
     ElementTypeMismatch = 0x000012,
+    CallingIncompleteFunction = 0x000013,
 
     // Warnings
     FeatureNotSupported = 0x100000,

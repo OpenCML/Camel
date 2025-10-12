@@ -182,6 +182,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "the appropriate type before inserting.",
             },
         },
+        {
+            SemanticDiag::CallingIncompleteFunction,
+            {
+                "CallingIncompleteFunction",
+                "Cannot call function '{0}' with type '{1}' as its type is not fully constructed "
+                "yet.",
+                "This often occurs when a function without an explicit return type calls itself, "
+                "preventing the compiler from inferring the actual return type. "
+                "Consider explicitly specifying the function's return type to avoid this issue.",
+            },
+        },
 
         // Warnings
         {

@@ -302,15 +302,15 @@ tf::Task TaskflowExecSchedPass::buildOperTask(
             auto opNode = tt::as_shared<OperNode>(n);
             const auto &uri = opNode->oper()->uri();
             if (uri.starts_with(":mark/")) {
-                if (uri == ":mark/map") {
+                if (uri == ":mark/map_arr") {
                     mark_map(n, frame, sf);
-                } else if (uri == ":mark/apply") {
+                } else if (uri == ":mark/apply_arr") {
                     mark_apply(n, frame, sf);
-                } else if (uri == ":mark/filter") {
+                } else if (uri == ":mark/filter_arr") {
                     mark_filter(n, frame, sf);
-                } else if (uri == ":mark/reduce") {
+                } else if (uri == ":mark/reduce_arr") {
                     mark_reduce(n, frame, sf);
-                } else if (uri == ":mark/foreach") {
+                } else if (uri == ":mark/foreach_arr") {
                     mark_foreach(n, frame, sf);
                 } else {
                     ASSERT(false, std::format("Mark Operator {} not implemented.", uri.substr(6)));

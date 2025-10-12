@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,7 +94,10 @@ bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool i
 const type_ptr_t &FunctionType::exitType() const {
     ASSERT(
         exitType_ != nullptr,
-        "Exit type is null. Did you forget to set the exit type for this function?");
+        std::format(
+            "Exit type is null for function type: {}. "
+            "Did you forget to set the exit type for this function?",
+            toString()));
     return exitType_;
 }
 

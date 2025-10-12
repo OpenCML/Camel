@@ -899,7 +899,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         data = makeDataFromLiteral(parseNumber<int32_t>(str));
     } break;
     case LiteralType::Real: {
-        data = makeDataFromLiteral(parseNumber<double>(str));
+        data = makeDataFromLiteral(parseNumber<float>(str));
     } break;
     case LiteralType::Boolean: {
         if (str == "true") {
@@ -955,7 +955,7 @@ StructData() : NamedData* dataList ;
 node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     ENTER("StructData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
-    auto structData = tt::as_shared<StructData>(Type::Struct());
+    auto structData = std::make_shared<StructData>();
     node_ptr_t res = createNodeAs<DataLoad>(structData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();

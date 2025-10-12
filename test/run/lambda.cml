@@ -8,7 +8,7 @@ let HEIGHT = 10
 // 自定义 my_filter 函数，用于测试 Lambda 表达式
 with <points: Point[]>
 func my_filter(predicate: (p: Point) => bool): Point[] sync {
-    var result = []
+    var result: Point[] = []
     points.foreach((p: Point) => sync {
         if predicate(p) then sync {
             result.append(p)
