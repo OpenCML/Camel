@@ -341,6 +341,11 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     throw BuildAbortException();
 }
 
+node_ptr_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
+    ENTER("CAST");
+    LEAVE("CAST");
+}
+
 node_ptr_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     ENTER("VARI");
     bool old = varied_;

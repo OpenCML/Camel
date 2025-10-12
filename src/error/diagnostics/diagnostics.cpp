@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Sep. 12, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -138,7 +138,8 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
     std::lock_guard<std::mutex> lk(mtx_);
     // Check limits before adding
     checkLimits(d);
-
+    d.moduleName = moduleName_;
+    d.modulePath = modulePath_;
     storage_.push_back(std::move(d));
     return storage_.back();
 }

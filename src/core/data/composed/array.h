@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,13 +39,6 @@ class ArrayData : public ComposedData {
     }
 
     void emplace(const data_ptr_t &e);
-
-    void pushBack(const data_ptr_t &e);
-    data_ptr_t popBack();
-    data_ptr_t get(size_t index) const;
-    bool set(size_t index, const data_ptr_t &e);
-    size_t size() const;
-    size_t length() const;
 
     std::vector<data_ptr_t> &raw() { return data_; }
 

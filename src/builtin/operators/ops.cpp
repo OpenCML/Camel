@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -900,11 +900,11 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
 
         if (containerType == TypeCode::Array) {
             auto arr = std::dynamic_pointer_cast<ArrayData>(container);
-            ASSERT(idx < arr->size(), "Array index out of bounds.");
+            ASSERT(idx < arr->raw().size(), "Array index out of bounds.");
             frame.set(self, arr->raw()[idx]);
         } else if (containerType == TypeCode::Tuple) {
             auto tup = std::dynamic_pointer_cast<TupleData>(container);
-            ASSERT(idx < tup->size(), "Tuple index out of bounds.");
+            ASSERT(idx < tup->raw().size(), "Tuple index out of bounds.");
             frame.set(self, tup->raw()[idx]);
         } else {
             ctx.rtmDiags()

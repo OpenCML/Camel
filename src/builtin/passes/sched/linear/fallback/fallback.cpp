@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -241,7 +241,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                     size_t idx = accessNode->index<size_t>();
                     if (source->type()->code() == TypeCode::Array) {
                         auto arrayData = tt::as_shared<ArrayData>(source);
-                        ASSERT(idx < arrayData->size(), "Array index out of bounds.");
+                        ASSERT(idx < arrayData->raw().size(), "Array index out of bounds.");
                         currFrame->set(n, arrayData->raw()[idx]);
                     } else if (source->type()->code() == TypeCode::Tuple) {
                         auto tupleData = tt::as_shared<TupleData>(source);

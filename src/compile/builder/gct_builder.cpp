@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -932,7 +932,7 @@ ArrayData() : Data* data ;
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
-    auto arrayData = make_shared<ArrayData>(Type::Any());
+    auto arrayData = ArrayData::create(Type::Void());
     node_ptr_t res = createNodeAs<DataLoad>(arrayData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
@@ -955,8 +955,8 @@ StructData() : NamedData* dataList ;
 node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     ENTER("StructData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
-    auto dictData = make_shared<StructData>();
-    node_ptr_t res = createNodeAs<DataLoad>(dictData);
+    auto structData = make_shared<StructData>();
+    node_ptr_t res = createNodeAs<DataLoad>(structData);
     bool dangling = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
@@ -964,7 +964,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
         const string &name = namedPair->ref().ident();
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
         auto [data, _] = extractData(dataNode, execNode, dangling);
-        dictData->emplace(name, data);
+        structData->emplace(name, data);
     }
     if (dangling) {
         *execNode << res;

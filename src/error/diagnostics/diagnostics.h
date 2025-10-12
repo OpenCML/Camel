@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Sep. 12, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -125,6 +125,9 @@ class Diagnostics {
     void dump(std::ostream &os, bool json = false) const;
     void clear();
 
+    const std::string &moduleName() const { return moduleName_; }
+    const std::string &modulePath() const { return modulePath_; }
+
     // Return a builder + Set the diagCode for builder (could infer severity from diagCode)
     template <typename DiagEnum> DiagnosticBuilder of(DiagEnum err);
 
@@ -174,9 +177,13 @@ class Diagnostics {
 };
 
 template <typename DiagEnum> DiagnosticBuilder Diagnostics::of(DiagEnum err) {
-    DiagnosticBuilder builder(*this);
+    return DiagnosticBuilder::of(err, this);
+}
 
-    static_assert(std::is_enum_v<DiagEnum>, "Must be an enum type");
+template <typename DiagEnum>
+DiagnosticBuilder DiagnosticBuilder::of(DiagEnum err, Diagnostics *diag) {
+    DiagnosticBuilder builder(diag);
+
     builder.type_ = diagTypeOf(err);
     uint32_t key = static_cast<uint32_t>(err);
     builder.severity_ = extractSeverity(key);
@@ -185,13 +192,13 @@ template <typename DiagEnum> DiagnosticBuilder Diagnostics::of(DiagEnum err) {
     builder.name_ = to_string(builder.type_) + "::" + info.name;
     builder.rawMessage_ = info.message;
     builder.rawSuggestion_ = info.suggestion;
-    builder.moduleName_ = moduleName_;
-    builder.modulePath_ = modulePath_;
+    builder.moduleName_ = diag ? diag->moduleName() : "";
+    builder.modulePath_ = diag ? diag->modulePath() : "";
 
     return builder;
 }
 
-template <typename... Args> Diagnostic &DiagnosticBuilder::commit(Args &&...args) {
+template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args) {
     Diagnostic d;
     d.range = range_;
     d.severity = severity_;
@@ -203,7 +210,11 @@ template <typename... Args> Diagnostic &DiagnosticBuilder::commit(Args &&...args
     d.moduleName = moduleName_;
     d.modulePath = modulePath_;
 
-    return diagnostics_.add(std::move(d));
+    if (diagnostics_) {
+        return diagnostics_->add(std::move(d));
+    } else {
+        return d;
+    }
 }
 
 using diagnostics_ptr_t = std::shared_ptr<Diagnostics>;

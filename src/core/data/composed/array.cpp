@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 11, 2025
+ * Updated: Oct. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,53 +48,19 @@ ArrayData::ArrayData(type_ptr_t type, data_vec_t &&data)
 void ArrayData::emplace(const data_ptr_t &e) {
     if (e->type()->code() == TypeCode::Ref) {
         refIndices_.push_back(data_.size());
-    } else if (e->type()->castSafetyTo(*type_) != CastSafety::Safe) {
-        throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
+    } else {
+        const auto &arrType = tt::as_shared<ArrayType>(type_);
+        ASSERT(arrType, "ArrayData type is not ArrayType");
+        const auto &elemType = arrType->elementType();
+        if (elemType == Type::Void()) {
+            type_ = std::make_shared<ArrayType>(e->type());
+        } else if (e->type()->castSafetyTo(*elemType) != CastSafety::Safe) {
+            throw DataConvError(
+                "Cannot convert " + e->type()->toString() + " to " + type_->toString());
+        }
     }
     data_.push_back(e);
 }
-
-void ArrayData::pushBack(const data_ptr_t &e) {
-    ASSERT(resolved(), "Cannot push data to unresolved ArrayData");
-    if (e->type()->castSafetyTo(*type_) != CastSafety::Safe) {
-        throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
-    }
-    data_.push_back(e);
-}
-
-data_ptr_t ArrayData::popBack() {
-    ASSERT(resolved(), "Cannot pop data from unresolved ArrayData");
-    if (data_.empty()) {
-        return nullptr;
-    }
-    data_ptr_t back = data_.back();
-    data_.pop_back();
-    return back;
-}
-
-data_ptr_t ArrayData::get(size_t index) const {
-    ASSERT(resolved(), "Cannot get data from unresolved ArrayData");
-    if (index >= data_.size()) {
-        return nullptr;
-    }
-    return data_[index];
-}
-
-bool ArrayData::set(size_t index, const data_ptr_t &e) {
-    ASSERT(resolved(), "Cannot set data to unresolved ArrayData");
-    if (index >= data_.size()) {
-        return false;
-    }
-    if (e->type()->castSafetyTo(*type_) != CastSafety::Safe) {
-        throw DataConvError("Cannot convert " + e->type()->toString() + " to " + type_->toString());
-    }
-    data_[index] = e;
-    return true;
-}
-
-size_t ArrayData::size() const { return data_.size(); }
-
-size_t ArrayData::length() const { return data_.size(); }
 
 bool ArrayData::equals(const data_ptr_t &other) const {
     // TODO: implement equals for ArrayData

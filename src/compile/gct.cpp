@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 06, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,6 +54,8 @@ std::string to_string(LoadType type) {
         return "BRCH";
     case LoadType::CASE:
         return "CASE";
+    case LoadType::CAST:
+        return "CAST";
     case LoadType::ANNO:
         return "ANNO";
     case LoadType::EXIT:

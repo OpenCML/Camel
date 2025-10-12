@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 08, 2025
+ * Updated: Oct. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,6 +49,7 @@ enum class LoadType {
     ACCS,
     BRCH,
     CASE,
+    CAST,
     ANNO,
     EXIT,
     EXEC,
@@ -370,6 +371,18 @@ class CaseLoad : public Load {
 
   private:
     CaseType caseType_;
+};
+
+class CastLoad : public Load {
+  public:
+    CastLoad(const type_ptr_t &targetType) : Load(LoadType::CAST), targetType_(targetType) {}
+
+    const type_ptr_t &targetType() const { return targetType_; }
+
+    const std::string toString() const override { return "CAST: " + targetType_->toString(); }
+
+  private:
+    type_ptr_t targetType_;
 };
 
 } // namespace GraphConstructTree
