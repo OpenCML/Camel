@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -163,20 +163,8 @@ namespace GIR = GraphIR;
 
 OperatorReturnCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    if (ins.size() != 1) {
-        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<sleep>", 1, ins.size());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
     const data_ptr_t &arg = frame.get(ins[0]);
-    if (!Type::castSafetyCheck(arg->type(), Type::Int64())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<sleep>", "int64", arg->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    auto pd = arg->as<Int64Data>(Type::Int64());
+    auto pd = arg->as<Int32Data>(Type::Int32());
     if (pd->data() < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
@@ -190,13 +178,6 @@ OperatorReturnCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
 }
 
 OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    if (!ins.empty()) {
-        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<whoami>", 0, ins.size());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     std::string username;
 
 #ifdef _WIN32
@@ -231,22 +212,7 @@ OperatorReturnCode __exit__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
 
 OperatorReturnCode __set_terminal_raw_mode__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    if (ins.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<set_terminal_raw_mode>", 1, ins.size());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     const data_ptr_t &arg = frame.get(ins[0]);
-    if (!Type::castSafetyCheck(arg->type(), Type::Bool())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<set_terminal_raw_mode>", "bool", arg->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     bool enable = arg->as<BoolData>(Type::Bool())->data();
     bool success = Terminal::setRawMode(enable);
@@ -262,13 +228,6 @@ OperatorReturnCode __set_terminal_raw_mode__(GIR::node_ptr_t &self, Frame &frame
 }
 
 OperatorReturnCode __has_input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    if (!ins.empty()) {
-        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<has_input>", 0, ins.size());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     bool available = Terminal::hasInput();
 
     frame.set(self, std::make_shared<BoolData>(available));
@@ -276,13 +235,6 @@ OperatorReturnCode __has_input__(GIR::node_ptr_t &self, Frame &frame, Context &c
 }
 
 OperatorReturnCode __get_char__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    if (!ins.empty()) {
-        ctx.rtmDiags()->of(RuntimeDiag::IncorrectArgsCount).commit("<get_char>", 0, ins.size());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     std::string input = Terminal::readInput(1);
 
     frame.set(self, std::make_shared<StringData>(input));
@@ -304,14 +256,6 @@ OperatorReturnCode __get_chars__(GIR::node_ptr_t &self, Frame &frame, Context &c
 }
 
 OperatorReturnCode __clear_input_buffer__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    if (!ins.empty()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<clear_input_buffer>", 0, ins.size());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     Terminal::clearInputBuffer();
 

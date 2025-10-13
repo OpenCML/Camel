@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 10, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -127,12 +127,13 @@ class TaskflowExecSchedPass : public ParallelSchedPass {
         std::unordered_map<GraphIR::Node *, tf::Task> &taskMap);
 
     // 标记算子（使用 Subflow 并行元素任务）
-    void mark_map(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
-    void mark_apply(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
-    void mark_filter(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
-    void mark_reduce(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
-    void mark_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void mark_map_arr(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void mark_apply_arr(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void mark_filter_arr(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void mark_reduce_arr(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void mark_foreach_arr(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
     void
-    mark_unordered_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
-    void mark_unordered_reduce(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    mark_unordered_foreach_arr(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
+    void
+    mark_unordered_reduce_arr(const GraphIR::node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf);
 };

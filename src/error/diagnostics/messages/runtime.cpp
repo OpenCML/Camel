@@ -54,38 +54,11 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::IncompatibleArgType,
-            {
-                "IncompatibleArgType",
-                "Argument {0} to function/operator {1} has incompatible type: expected '{2}', but "
-                "got '{3}'.",
-                "Check that the argument types match the function or operator signature.",
-            },
-        },
-        {
-            RuntimeDiag::IncorrectArgsCount,
-            {
-                "IncorrectArgsCount",
-                "Incorrect number of arguments passed to function/operator {0}: expected {1}, but "
-                "got {2}.",
-                "Ensure the number of arguments matches the function definition.",
-            },
-        },
-        {
             RuntimeDiag::MaxRecursionDepthExceeded,
             {
                 "MaxRecursionDepthExceeded",
                 "Maximum recursion depth exceeded when evaluating graph '{0}'.",
                 "Check for infinite recursion or excessively deep recursive calls.",
-            },
-        },
-        {
-            RuntimeDiag::MismatchedOperandTypes,
-            {
-                "MismatchedOperandTypes",
-                "Operand types do not match in function/operator '{0}', "
-                "trying to operate '{1}' with '{2}'.",
-                "Ensure that all operands are of compatible types for the operation.",
             },
         },
     };

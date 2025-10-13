@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -199,31 +199,30 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // string
         {"str/format", __format__},
 
-        {"str/join_arr", __join__},
         {"str/join", __join__},
 
         // struct
-        {"struct/len_str", __len__},
-        {"struct/len_arr", __len__},
+        {"struct/len_str", __len_str__},
+        {"struct/len_arr", __len_arr__},
 
         {"struct/zip", __zip__},
 
-        {"struct/head_arr", __head__},
+        {"struct/head_arr", __head_arr__},
 
-        {"struct/tail_arr", __tail__},
+        {"struct/tail_arr", __tail_arr__},
 
         {"struct/range", __range__},
 
-        {"struct/slice_arr", __slice__},
+        {"struct/slice_arr", __slice_arr__},
 
-        {"struct/concat_arr", __concat__},
+        {"struct/concat_arr", __concat_arr__},
 
-        {"struct/append_arr", __append__},
+        {"struct/append_arr", __append_arr__},
 
-        {"struct/extend_arr", __extend__},
+        {"struct/extend_arr", __extend_arr__},
 
-        {"struct/contains_str", __contains__},
-        {"struct/contains_arr", __contains__},
+        {"struct/contains_str", __not_implemented__},
+        {"struct/contains_arr", __contains_arr__},
 
         // math
         {"math/abs_i", __abs__},

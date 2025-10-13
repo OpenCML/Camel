@@ -6,19 +6,21 @@ func fib(idx: int): int sync {
     var cnt = 0
     func fibonacci(n: int): int sync {
         wait cnt += 1
-        return if n <= 1 then n else sync { fibonacci(n - 1) + fibonacci(n - 2) }
+        return if n <= 1 then n else sync {
+            fibonacci(n - 1) + fibonacci(n - 2)
+        }
     }
     let res = fibonacci(idx)
-    println("Total calls made: {}".format(cnt))
+    'Total calls made: {}'->format<cnt>->println
     return res
 }
 
 func main(): int sync {
     let idx = 25
-    println("Start computing fibonacci({})...".format(idx))
+    'Start computing fibonacci({})...'->format<idx>->println
     let start = now()
     let res = fib(idx)
     let duration = now() - start
-    println("Fibonacci({}) = {} (computed in {} seconds)".format(idx, res, duration))
+    'Fibonacci({}) = {} (computed in {} seconds)'->format<idx, res, duration>->println
     return 0
 }

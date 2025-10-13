@@ -29,10 +29,7 @@ enum class RuntimeDiag : uint32_t {
     DivisionByZero = 0x000001,
     IndexOutOfRange = 0x000002,
     KeyNotFound = 0x000003,
-    IncompatibleArgType = 0x000004,
-    IncorrectArgsCount = 0x000005,
-    MaxRecursionDepthExceeded = 0x000006,
-    MismatchedOperandTypes = 0x000007,
+    MaxRecursionDepthExceeded = 0x000004,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

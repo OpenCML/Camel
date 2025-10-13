@@ -166,8 +166,6 @@ class Builder : public OpenCMLVisitor {
 
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 
-    std::any visitWithExpr(OpenCMLParser::WithExprContext *context);
-
     std::any visitAccessExpr(OpenCMLParser::AccessExprContext *context);
 
     std::any visitStructData(OpenCMLParser::StructDataContext *context);

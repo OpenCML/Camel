@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -396,6 +396,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     node_ptr_t targetNode = any_cast<node_ptr_t>(targetNodeRes);
 
     graph_ptr_t targetGraph = nullptr;
+    oper_idx_ptr_t targetOperator = nullptr;
     func_type_ptr_t targetFuncType = nullptr;
     node_vec_t withInputNodes, normInputNodes;
     type_vec_t withInputTypes, normInputTypes;
@@ -511,10 +512,10 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
-            oper_idx_ptr_t oper = *res;
-            node_ptr_t operNode = OperNode::create(*currGraph_, oper);
+            targetOperator = *res;
+            node_ptr_t operNode = OperNode::create(*currGraph_, targetOperator);
             targetNode = operNode;
-            targetFuncType = oper->funcType();
+            targetFuncType = targetOperator->funcType();
         } else {
             ASSERT(false, "DrefNode must refer to a graph or an operator group.");
         }
@@ -556,6 +557,10 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    std::string targetName = targetGraph
+                                 ? targetGraph->name()
+                                 : (targetOperator ? "<" + targetOperator->name() + ">" : "");
+
     for (size_t i = 0; i < withInputNodes.size(); i++) {
         const node_ptr_t &inputNode = withInputNodes[i];
         bool isVar = false;
@@ -572,8 +577,9 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         }
         if (isVar) {
-            if (!waited_) {
-                diags_->of(SemanticDiag::IgnoredSideEffect).commit();
+            if (!waited_ && !synced_) {
+                diags_->of(SemanticDiag::IgnoredSideEffect)
+                    .commit(targetName + ": " + targetFuncType->toString());
             }
             // Mark this node as a modifier for the input node
             nodeModifierMap_[inputNode.get()] = targetNode;
@@ -596,8 +602,9 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         }
         if (isVar) {
-            if (!waited_) {
-                diags_->of(SemanticDiag::IgnoredSideEffect).commit();
+            if (!waited_ && !synced_) {
+                diags_->of(SemanticDiag::IgnoredSideEffect)
+                    .commit(targetName + ": " + targetFuncType->toString());
             }
             // Mark this node as a modifier for the input node
             nodeModifierMap_[inputNode.get()] = targetNode;
@@ -757,7 +764,10 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         } else {
             if (!exitType->equals(joinType)) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
-                    .commit(joinType->toString(), exitType->toString());
+                    .commit(
+                        currGraph_->location() + ": " + currGraph_->funcType()->toString(),
+                        joinType->toString(),
+                        exitType->toString());
                 throw BuildAbortException();
             }
         }

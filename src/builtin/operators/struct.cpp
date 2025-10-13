@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,37 +22,23 @@
 #include "core/context/context.h"
 #include "core/context/frame.h"
 
-OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->withInputs();
-    if (ins.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<len> operator requires exactly one argument");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+OperatorReturnCode __len_str__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
 
     const data_ptr_t &arg = frame.get(ins[0]);
 
-    int32_t len = 0;
+    int32_t len = static_cast<int32_t>(tt::as_shared<StringData>(arg)->data().size());
 
-    switch (arg->type()->code()) {
-    case TypeCode::Array:
-        len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
-        break;
-    case TypeCode::Tuple:
-        len = static_cast<int32_t>(tt::as_shared<TupleData>(arg)->raw().size());
-        break;
-    case TypeCode::Struct:
-        len = static_cast<int32_t>(tt::as_shared<StructData>(arg)->raw().size());
-        break;
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<len> not supported for type: " + arg->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    frame.set(self, std::make_shared<Int32Data>(len));
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __len_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &arg = frame.get(ins[0]);
+
+    int32_t len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
 
     frame.set(self, std::make_shared<Int32Data>(len));
     return OperatorReturnCode::OK;
@@ -117,139 +103,39 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __head__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withIns = self->withInputs();
+OperatorReturnCode __head_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &normIns = self->normInputs();
 
-    if (withIns.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<head> operator requires one with argument: (collection)");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    if (!normIns.empty()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<head> operator does not take normal arguments");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    const data_ptr_t &collect = frame.get(normIns[0]);
 
-    const data_ptr_t &collect = frame.get(withIns[0]);
-
-    if (!collect || collect->isNull()) {
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    auto extract_first = [&](const data_vec_t &vec) -> data_ptr_t {
-        return vec.empty() ? Data::null() : vec[0];
+    auto extract_first = [&](const data_vec_t &arr) -> data_ptr_t {
+        return arr.empty() ? Data::null() : arr[0];
     };
 
-    switch (collect->type()->code()) {
-    case TypeCode::Array:
-        frame.set(self, extract_first(tt::as_shared<ArrayData>(collect)->raw()));
-        break;
-    case TypeCode::Tuple:
-        frame.set(self, extract_first(tt::as_shared<TupleData>(collect)->raw()));
-        break;
-    case TypeCode::String: {
-        auto str = tt::as_shared<StringData>(collect)->data();
-        if (str.empty()) {
-            frame.set(self, Data::null());
-        } else {
-            frame.set(self, std::make_shared<StringData>(std::string(1, str[0])));
-        }
-    } break;
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<head> not supported for type: " + collect->type()->toString());
-        frame.set(self, Data::null());
-        break;
-    }
+    frame.set(self, extract_first(tt::as_shared<ArrayData>(collect)->raw()));
 
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __tail__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withIns = self->withInputs();
+OperatorReturnCode __tail_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &normIns = self->normInputs();
 
-    if (withIns.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<tail> operator requires one with argument: (collection)");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    if (!normIns.empty()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<tail> operator does not take normal arguments");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    const data_ptr_t &collect = frame.get(normIns[0]);
 
-    const data_ptr_t &collect = frame.get(withIns[0]);
-
-    if (!collect || collect->isNull()) {
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    auto slice_tail = [](const data_vec_t &vec) -> data_vec_t {
-        return vec.size() <= 1 ? data_vec_t{} : data_vec_t(vec.begin() + 1, vec.end());
+    auto slice_tail = [](const data_vec_t &arr) -> data_vec_t {
+        return arr.size() <= 1 ? data_vec_t{} : data_vec_t(arr.begin() + 1, arr.end());
     };
 
-    switch (collect->type()->code()) {
-    case TypeCode::Array: {
-        auto array = tt::as_shared<ArrayData>(collect)->raw();
-        auto new_vec = slice_tail(array);
-        auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
-        frame.set(self, ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
-        break;
-    }
-    case TypeCode::Tuple: {
-        auto vec = tt::as_shared<TupleData>(collect)->raw();
-        frame.set(
-            self,
-            TupleData::create(
-                tt::as_shared<TupleType>(collect->type())
-                    ->slice(1, tt::as_shared<TupleType>(collect->type())->size()),
-                slice_tail(vec)));
-        break;
-    }
-    case TypeCode::String: {
-        auto str = tt::as_shared<StringData>(collect)->data();
-        if (str.size() <= 1) {
-            frame.set(self, Data::null());
-        } else {
-            frame.set(self, std::make_shared<StringData>(str.substr(1)));
-        }
-        break;
-    }
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<tail> not supported for type: " + collect->type()->toString());
-        frame.set(self, Data::null());
-        break;
-    }
+    auto array = tt::as_shared<ArrayData>(collect)->raw();
+    auto new_vec = slice_tail(array);
+    auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
+    frame.set(self, ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
 
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    if (ins.size() < 2 || ins.size() > 3) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<range> requires 2 or 3 integer arguments: start, stop, [step]");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     const data_ptr_t &startData = frame.get(ins[0]);
     const data_ptr_t &stopData = frame.get(ins[1]);
@@ -259,30 +145,9 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         stepData = frame.get(ins[2]);
     }
 
-    auto extractInt32 = [&](const data_ptr_t &d) -> std::optional<int32_t> {
-        if (d->type() == Type::Int32()) {
-            return d->as<Int32Data>(Type::Int32())->data();
-        } else if (d->type() == Type::Int64()) {
-            return static_cast<int32_t>(d->as<Int64Data>(Type::Int64())->data());
-        }
-        return std::nullopt;
-    };
-
-    auto startOpt = extractInt32(startData);
-    auto stopOpt = extractInt32(stopData);
-    auto stepOpt = stepData ? extractInt32(stepData) : std::optional<int32_t>(1);
-
-    if (!startOpt || !stopOpt || !stepOpt) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<range> arguments must be Int32 or Int64");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    int32_t start = *startOpt;
-    int32_t stop = *stopOpt;
-    int32_t step = *stepOpt;
+    int32_t start = startData->as<Int32Data>(Type::Int32())->data();
+    int32_t stop = stopData->as<Int32Data>(Type::Int32())->data();
+    int32_t step = stepData ? stepData->as<Int32Data>(Type::Int32())->data() : 1;
 
     if (step == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<range> step cannot be zero");
@@ -298,43 +163,20 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
         }
     }
 
-    auto arrayType = std::make_shared<ArrayType>(Type::Int64());
+    auto arrayType = Type::Array(Type::Int64());
     auto result = ArrayData::from(arrayType, std::move(values));
 
     frame.set(self, result);
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __slice_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &withIns = self->withInputs();
     const auto &normIns = self->normInputs();
-    if (withIns.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<slice> operator requires one with argument: (collection)");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    if (normIns.size() != 2) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<slice> operator requires exactly three arguments: start, end");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
-    const data_ptr_t &collect = frame.get(withIns[0]);
-    const data_ptr_t &startArg = frame.get(normIns[0]);
-    const data_ptr_t &endArg = frame.get(normIns[1]);
-
-    if (!Type::castSafetyCheck(startArg->type(), Type::Int32()) ||
-        !Type::castSafetyCheck(endArg->type(), Type::Int32())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<slice> operator requires start and end to be integer");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    const data_ptr_t &collect = frame.get(normIns[0]);
+    const data_ptr_t &startArg = frame.get(withIns[0]);
+    const data_ptr_t &endArg = frame.get(withIns[1]);
 
     int32_t start = startArg->as<Int32Data>(Type::Int32())->data();
     int32_t end = endArg->as<Int32Data>(Type::Int32())->data();
@@ -350,196 +192,80 @@ OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
             end = start; // empty slice
     };
 
-    switch (collect->type()->code()) {
-    case TypeCode::Array: {
-        auto array = tt::as_shared<ArrayData>(collect)->raw();
-        slice_range(static_cast<int32_t>(array.size()), start, end);
-        data_vec_t sliced(array.begin() + start, array.begin() + end);
-        frame.set(
-            self,
-            ArrayData::from(
-                Type::Array(tt::as_shared<ArrayType>(collect->type())->elementType()),
-                std::move(sliced)));
-        break;
-    }
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<slice> not supported for type: " + collect->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    auto array = tt::as_shared<ArrayData>(collect)->raw();
+    slice_range(static_cast<int32_t>(array.size()), start, end);
+    data_vec_t sliced(array.begin() + start, array.begin() + end);
+    frame.set(
+        self,
+        ArrayData::from(
+            Type::Array(tt::as_shared<ArrayType>(collect->type())->elementType()),
+            std::move(sliced)));
 
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __concat__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withIns = self->withInputs();
+OperatorReturnCode __concat_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &normIns = self->normInputs();
 
-    if (withIns.size() != 1 || normIns.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<concat> operator requires one with argument and one normal argument");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    const data_ptr_t &left = frame.get(normIns[0]);
+    const data_ptr_t &right = frame.get(normIns[1]);
 
-    const data_ptr_t &left = frame.get(withIns[0]);
-    const data_ptr_t &right = frame.get(normIns[0]);
-
-    if (left->type()->code() != right->type()->code()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<concat> operator requires both arguments to be of same type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    switch (left->type()->code()) {
-    case TypeCode::Array: {
-        auto l = tt::as_shared<ArrayData>(left)->raw();
-        auto r = tt::as_shared<ArrayData>(right)->raw();
-        l.insert(l.end(), r.begin(), r.end());
-        auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
-        frame.set(self, ArrayData::from(Type::Array(elemType), std::move(l)));
-        break;
-    }
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<concat> not supported for type: " + left->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    auto l = tt::as_shared<ArrayData>(left)->raw();
+    auto r = tt::as_shared<ArrayData>(right)->raw();
+    l.insert(l.end(), r.begin(), r.end());
+    auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
+    frame.set(self, ArrayData::from(Type::Array(elemType), std::move(l)));
 
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __append_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &withIns = self->withInputs();
     const auto &normIns = self->normInputs();
 
-    if (withIns.size() != 1 || normIns.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<append> operator requires one with argument and one element to append");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    const auto &collectNode = withIns[0];
+    const auto &collectNode = normIns[0];
     const data_ptr_t &collection = frame.get(collectNode);
-    const data_ptr_t &element = frame.get(normIns[0]);
+    const data_ptr_t &element = frame.get(withIns[0]);
 
-    switch (collection->type()->code()) {
-    case TypeCode::Array: {
-        auto vec = tt::as_shared<ArrayData>(collection)->raw();
-        vec.push_back(element);
-        auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(collectNode, ArrayData::from(Type::Array(elemType), std::move(vec)));
-        break;
-    }
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<append> not supported for type: " + collection->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    auto arr = tt::as_shared<ArrayData>(collection)->raw();
+    arr.push_back(element);
+    auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
+    frame.set(collectNode, ArrayData::from(Type::Array(elemType), std::move(arr)));
 
-    frame.set(self, Data::null());
+    frame.set(self, collection);
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __extend_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &withIns = self->withInputs();
     const auto &normIns = self->normInputs();
 
-    if (withIns.size() != 1 || normIns.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(
-                "<extend> operator requires one with argument and one collection to extend from");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    const auto &collectNode = withIns[0];
+    const auto &collectNode = normIns[0];
     const data_ptr_t &collection = frame.get(collectNode);
-    const data_ptr_t &other = frame.get(normIns[0]);
+    const data_ptr_t &other = frame.get(withIns[0]);
 
-    if (collection->type()->code() != other->type()->code()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<extend> operator requires both operands to be of same type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    auto arr = tt::as_shared<ArrayData>(collection)->raw();
+    auto ext = tt::as_shared<ArrayData>(other)->raw();
+    arr.insert(arr.end(), ext.begin(), ext.end());
+    frame.set(collectNode, collection);
 
-    switch (collection->type()->code()) {
-    case TypeCode::Array: {
-        auto vec = tt::as_shared<ArrayData>(collection)->raw();
-        auto ext = tt::as_shared<ArrayData>(other)->raw();
-        vec.insert(vec.end(), ext.begin(), ext.end());
-        auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-        frame.set(collectNode, ArrayData::from(Type::Array(elemType), std::move(vec)));
-        break;
-    }
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<extend> not supported for type: " + collection->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __contains_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &withs = self->withInputs();
-    if (withs.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<contains> operator requires one with argument: (collection)");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
     const auto &norms = self->normInputs();
-    if (norms.size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<contains> operator requires one norm argument: (target)");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
-    const data_ptr_t &collection = frame.get(withs[0]);
-    const data_ptr_t &target = frame.get(norms[0]);
+    const data_ptr_t &collection = frame.get(norms[0]);
+    const data_ptr_t &target = frame.get(withs[0]);
 
     bool found = false;
 
-    auto checkInListLike = [&](const auto &container) {
-        for (const auto &item : container->raw()) {
-            if (item->equals(target)) {
-                found = true;
-                break;
-            }
+    for (const auto &item : tt::as_shared<ArrayData>(collection)->raw()) {
+        if (item->equals(target)) {
+            found = true;
+            break;
         }
-    };
-
-    switch (collection->type()->code()) {
-    case TypeCode::Array:
-        checkInListLike(tt::as_shared<ArrayData>(collection));
-        break;
-    default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<contains> not supported for type: " + collection->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
     }
 
     frame.set(self, std::make_shared<BoolData>(found));

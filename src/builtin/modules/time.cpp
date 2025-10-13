@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":time/now",
-                    StaticFuncTypeResolver::create({}, {}, Type::Int32()),
+                    StaticFuncTypeResolver::create({}, {}, Type::Double()),
                 },
             }),
         OperatorGroup::create(
@@ -36,7 +36,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":time/strftime",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Int32(), false}, {Type::String(), false}},
+                        {{Type::Double(), false}, {Type::String(), false}},
                         Type::String()),
                 },
             }),
@@ -48,7 +48,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
-                        Type::Int32()),
+                        Type::Double()),
                 },
             }),
     };
