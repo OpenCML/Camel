@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,13 +22,15 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-OperatorReturnCode __len__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __len_str__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __len_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
 OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __head__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __tail__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __head_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __tail_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __slice__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __concat__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __append__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __extend__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __contains__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __slice_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __concat_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __append_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __extend_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __contains_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

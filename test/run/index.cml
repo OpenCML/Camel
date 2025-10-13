@@ -17,11 +17,11 @@ func comp3(signal: Signal): Signal {
 }
 
 func analyzer1(result: int) {
-    println('Analyzer1: {}'.format(result))
+    'Analyzer1: {}'->format<result>->println
 }
 
 func analyzer2(result: int) {
-    println('Analyzer2: {}'.format(result))
+    'Analyzer2: {}'->format<result>->println
 }
 
 func process(signals: Signal[]) sync {

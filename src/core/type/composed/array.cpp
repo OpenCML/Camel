@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,9 @@ ArrayType::ArrayType(const type_ptr_t &elementType)
 
 type_ptr_t ArrayType::elementType() const { return elementType_; }
 
-string ArrayType::toString() const { return elementType_->toString() + "[]"; }
+string ArrayType::toString() const {
+    return (elementType_->code() == TypeCode::Void ? "" : elementType_->toString()) + "[]";
+}
 
 std::string ArrayType::mangle() const {
     std::string result = "V";

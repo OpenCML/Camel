@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,13 +91,12 @@ bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool i
     return true;
 }
 
-const type_ptr_t &FunctionType::exitType() const {
-    ASSERT(
-        exitType_ != nullptr,
-        std::format(
-            "Exit type is null for function type: {}. "
-            "Did you forget to set the exit type for this function?",
-            toString()));
+type_ptr_t FunctionType::exitType() const {
+    if (!exitType_) {
+        // 如果没有返回值类型，默认为void
+        // 但此时返回值仍然是未设置状态，以便编译器进行类型推导
+        return Type::Void();
+    }
     return exitType_;
 }
 

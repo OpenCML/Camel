@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -199,41 +199,19 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildAccsTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_ptr_t &frame) {
     return flowLike
-        .emplace([this, n, frame]() {
+        .emplace([n, frame]() {
             data_ptr_t source = frame->get(n->dataInputs().front());
             auto acc = tt::as_shared<AccsNode>(n);
             if (acc->isNum()) {
                 size_t idx = acc->index<size_t>();
-                if (source->type()->code() == TypeCode::Array) {
-                    auto a = tt::as_shared<ArrayData>(source);
-                    ASSERT(idx < a->raw().size(), "Array index out of bounds.");
-                    frame->set(n, a->raw()[idx]);
-                } else if (source->type()->code() == TypeCode::Tuple) {
-                    auto t = tt::as_shared<TupleData>(source);
-                    ASSERT(idx < t->raw().size(), "Tuple index out of bounds.");
-                    frame->set(n, t->raw()[idx]);
-                } else {
-                    context_->rtmDiags()
-                        ->of(RuntimeDiag::IncompatibleArgType)
-                        .commit(0, "ACCS", "Array/Tuple/Vector", source->type()->toString());
-                    throw CamelRuntimeException(
-                        RuntimeExceptionCode::InvalidWithParameter,
-                        "Incorrect args.");
-                }
+                auto a = tt::as_shared<ArrayData>(source);
+                ASSERT(idx < a->raw().size(), "Array index out of bounds.");
+                frame->set(n, a->raw()[idx]);
             } else {
                 std::string key = acc->index<std::string>();
-                if (source->type()->code() == TypeCode::Struct) {
-                    auto d = tt::as_shared<StructData>(source);
-                    ASSERT(d->raw().contains(key), "Struct key not found.");
-                    frame->set(n, d->raw().at(key));
-                } else {
-                    context_->rtmDiags()
-                        ->of(RuntimeDiag::IncompatibleArgType)
-                        .commit(0, "ACCS", "Struct", source->type()->toString());
-                    throw CamelRuntimeException(
-                        RuntimeExceptionCode::InvalidWithParameter,
-                        "Incorrect args.");
-                }
+                auto d = tt::as_shared<StructData>(source);
+                ASSERT(d->raw().contains(key), "Struct key not found.");
+                frame->set(n, d->raw().at(key));
             }
         })
         .name("ACCS:" + n->toString());
@@ -303,19 +281,19 @@ tf::Task TaskflowExecSchedPass::buildOperTask(
             const auto &uri = opNode->oper()->uri();
             if (uri.starts_with(":mark/")) {
                 if (uri == ":mark/map_arr") {
-                    mark_map(n, frame, sf);
+                    mark_map_arr(n, frame, sf);
                 } else if (uri == ":mark/apply_arr") {
-                    mark_apply(n, frame, sf);
+                    mark_apply_arr(n, frame, sf);
                 } else if (uri == ":mark/filter_arr") {
-                    mark_filter(n, frame, sf);
+                    mark_filter_arr(n, frame, sf);
                 } else if (uri == ":mark/reduce_arr") {
-                    mark_reduce(n, frame, sf);
+                    mark_reduce_arr(n, frame, sf);
                 } else if (uri == ":mark/foreach_arr") {
-                    mark_foreach(n, frame, sf);
+                    mark_foreach_arr(n, frame, sf);
                 } else if (uri == ":mark/unordered_foreach_arr") {
-                    mark_unordered_foreach(n, frame, sf);
+                    mark_unordered_foreach_arr(n, frame, sf);
                 } else if (uri == ":mark/unordered_reduce_arr") {
-                    mark_unordered_reduce(n, frame, sf);
+                    mark_unordered_reduce_arr(n, frame, sf);
                 } else {
                     ASSERT(false, std::format("Mark Operator {} not implemented.", uri.substr(6)));
                 }
@@ -507,23 +485,10 @@ void TaskflowExecSchedPass::connectDependencies(
     }
 }
 
-void TaskflowExecSchedPass::mark_map(const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
-    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<map>", 1, node->withInputs().size() + node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
-
-    auto targetData = frame->get(node->withInputs().front());
-    auto funcData = frame->get(node->normInputs().front());
-
-    if (funcData->type()->code() != TypeCode::Function) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<map>", "Function", funcData->type()->toString());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidNormParameter, "Incorrect args.");
-    }
+void TaskflowExecSchedPass::mark_map_arr(
+    const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
+    auto targetData = frame->get(node->normInputs().front());
+    auto funcData = frame->get(node->withInputs().front());
 
     auto func = funcData->as<FunctionData>(Type::Func());
     type_ptr_t funcRetType = func->funcType()->exitType();
@@ -543,59 +508,21 @@ void TaskflowExecSchedPass::mark_map(const node_ptr_t &node, frame_ptr_t frame, 
           }).name("MAP_ELEM");
     };
 
-    switch (targetData->type()->code()) {
-    case TypeCode::Array: {
-        auto arr = tt::as_shared<ArrayData>(targetData);
-        const auto &elements = arr->raw();
-        const size_t n = elements.size();
-        data_vec_t results(n);
-        for (size_t i = 0; i < n; ++i) {
-            spawn_unary(elements[i], results[i]);
-        }
-        sf.join();
-        frame->set(node, ArrayData::from(Type::Array(funcRetType), std::move(results)));
-        break;
+    auto arr = tt::as_shared<ArrayData>(targetData);
+    const auto &elements = arr->raw();
+    const size_t n = elements.size();
+    data_vec_t results(n);
+    for (size_t i = 0; i < n; ++i) {
+        spawn_unary(elements[i], results[i]);
     }
-    case TypeCode::Struct: {
-        auto dict = tt::as_shared<StructData>(targetData);
-        const auto &raw = dict->raw();
-        std::vector<std::pair<std::string, data_ptr_t>> items;
-        items.reserve(raw.size());
-        for (const auto &kv : raw)
-            items.emplace_back(kv.first, kv.second);
-
-        std::vector<data_ptr_t> values(items.size());
-        for (size_t i = 0; i < items.size(); ++i) {
-            spawn_unary(items[i].second, values[i]);
-        }
-        sf.join();
-
-        std::unordered_map<std::string, data_ptr_t> res;
-        res.reserve(items.size());
-        for (size_t i = 0; i < items.size(); ++i)
-            res.emplace(items[i].first, values[i]);
-        frame->set(node, StructData::create(std::move(res)));
-        break;
-    }
-    default:
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<map>", "List/Array/Tuple/Vector/Struct", targetData->type()->toString());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
+    sf.join();
+    frame->set(node, ArrayData::from(Type::Array(funcRetType), std::move(results)));
 }
 
-void TaskflowExecSchedPass::mark_apply(const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
-    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<apply>", 1, node->withInputs().size() + node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
-
-    auto targetData = frame->get(node->withInputs().front());
-    auto funcData = frame->get(node->normInputs().front());
-    ASSERT(funcData->type()->code() == TypeCode::Function, "apply expects a function.");
+void TaskflowExecSchedPass::mark_apply_arr(
+    const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
+    auto targetData = frame->get(node->normInputs().front());
+    auto funcData = frame->get(node->withInputs().front());
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto spawn_unary = [&](data_ptr_t arg, data_ptr_t &out_slot) {
@@ -622,43 +549,14 @@ void TaskflowExecSchedPass::mark_apply(const node_ptr_t &node, frame_ptr_t frame
         frame->set(node, createOut(std::move(results)));
     };
 
-    switch (targetData->type()->code()) {
-    case TypeCode::Array: {
-        auto arr = tt::as_shared<ArrayData>(targetData);
-        par_apply(arr->raw(), [&](data_vec_t v) {
-            return ArrayData::from(arr->type(), std::move(v));
-        });
-        break;
-    }
-    case TypeCode::Tuple: {
-        auto tup = tt::as_shared<TupleData>(targetData);
-        par_apply(tup->raw(), [&](data_vec_t v) {
-            return TupleData::create(tup->type(), std::move(v));
-        });
-        break;
-    }
-    default:
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<apply>", "List/Array/Tuple/Vector", targetData->toString());
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidWithParameter,
-            "Unsupported type.");
-    }
+    auto arr = tt::as_shared<ArrayData>(targetData);
+    par_apply(arr->raw(), [&](data_vec_t v) { return ArrayData::from(arr->type(), std::move(v)); });
 }
 
-void TaskflowExecSchedPass::mark_filter(
+void TaskflowExecSchedPass::mark_filter_arr(
     const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
-    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<filter>", 1, node->withInputs().size() + node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
-
-    auto targetData = frame->get(node->withInputs().front());
-    auto funcData = frame->get(node->normInputs().front());
-    ASSERT(funcData->type()->code() == TypeCode::Function, "filter expects a function.");
+    auto targetData = frame->get(node->normInputs().front());
+    auto funcData = frame->get(node->withInputs().front());
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto par_filter = [&](const data_vec_t &elements, auto createOut, auto elemType) {
@@ -695,64 +593,21 @@ void TaskflowExecSchedPass::mark_filter(
         frame->set(node, createOut(elemType, std::move(out)));
     };
 
-    switch (targetData->type()->code()) {
-    case TypeCode::Array: {
-        auto arr = tt::as_shared<ArrayData>(targetData);
-        par_filter(
-            arr->raw(),
-            [](auto t, data_vec_t v) { return ArrayData::from(t, std::move(v)); },
-            arr->type());
-        break;
-    }
-    case TypeCode::Tuple: {
-        auto tup = tt::as_shared<TupleData>(targetData);
-        par_filter(
-            tup->raw(),
-            [](auto t, data_vec_t v) { return TupleData::create(t, std::move(v)); },
-            tup->type());
-        break;
-    }
-    default:
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<filter>", "List/Array/Tuple/Vector", targetData->toString());
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidWithParameter,
-            "Unsupported type.");
-    }
+    auto arr = tt::as_shared<ArrayData>(targetData);
+    par_filter(
+        arr->raw(),
+        [](auto t, data_vec_t v) { return ArrayData::from(t, std::move(v)); },
+        arr->type());
 }
 
-void TaskflowExecSchedPass::mark_reduce(
+void TaskflowExecSchedPass::mark_reduce_arr(
     const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
-    if (node->withInputs().size() != 1 || node->normInputs().size() != 2) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<reduce>", 2, node->withInputs().size() + node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
-
-    auto targetData = frame->get(node->withInputs().front());
-    auto funcData = frame->get(node->normInputs()[0]);
-    auto initData = frame->get(node->normInputs()[1]);
-    ASSERT(funcData->type()->code() == TypeCode::Function, "reduce expects a function.");
+    auto targetData = frame->get(node->normInputs().front());
+    auto funcData = frame->get(node->withInputs()[0]);
+    auto initData = frame->get(node->withInputs()[1]);
     auto func = funcData->as<FunctionData>(Type::Func());
 
-    data_vec_t elements;
-    switch (targetData->type()->code()) {
-    case TypeCode::Array:
-        elements = tt::as_shared<ArrayData>(targetData)->raw();
-        break;
-    case TypeCode::Tuple:
-        elements = tt::as_shared<TupleData>(targetData)->raw();
-        break;
-    default:
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<reduce>", "List/Array/Vector/Tuple", targetData->type()->toString());
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidWithParameter,
-            "Unsupported input type.");
-    }
+    data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
 
     if (elements.empty()) {
         frame->set(node, initData);
@@ -787,36 +642,14 @@ void TaskflowExecSchedPass::mark_reduce(
     frame->set(node, acc);
 }
 
-void TaskflowExecSchedPass::mark_unordered_reduce(
+void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
-    if (node->withInputs().size() != 1 || node->normInputs().size() != 2) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<reduce>", 2, node->withInputs().size() + node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
-
-    auto targetData = frame->get(node->withInputs().front());
-    auto funcData = frame->get(node->normInputs()[0]);
-    auto initData = frame->get(node->normInputs()[1]);
+    auto targetData = frame->get(node->normInputs().front());
+    auto funcData = frame->get(node->withInputs()[0]);
+    auto initData = frame->get(node->withInputs()[1]);
     auto func = funcData->as<FunctionData>(Type::Func());
 
-    data_vec_t elements;
-    switch (targetData->type()->code()) {
-    case TypeCode::Array:
-        elements = tt::as_shared<ArrayData>(targetData)->raw();
-        break;
-    case TypeCode::Tuple:
-        elements = tt::as_shared<TupleData>(targetData)->raw();
-        break;
-    default:
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<reduce>", "List/Array/Vector/Tuple", targetData->type()->toString());
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidWithParameter,
-            "Unsupported input type.");
-    }
+    data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
 
     if (elements.empty()) {
         frame->set(node, initData);
@@ -915,17 +748,10 @@ void TaskflowExecSchedPass::mark_unordered_reduce(
     sf.join();
 }
 
-void TaskflowExecSchedPass::mark_foreach(
+void TaskflowExecSchedPass::mark_foreach_arr(
     const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
-    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<foreach>", 1, node->withInputs().size() + node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
-
-    auto targetData = frame->get(node->withInputs().front());
-    auto funcData = frame->get(node->normInputs().front());
+    auto targetData = frame->get(node->normInputs().front());
+    auto funcData = frame->get(node->withInputs().front());
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto add_step = [&](const data_ptr_t &arg, tf::Task &prev, bool &has_prev) {
@@ -951,42 +777,17 @@ void TaskflowExecSchedPass::mark_foreach(
     tf::Task prev;
     bool has_prev = false;
 
-    switch (targetData->type()->code()) {
-    case TypeCode::Array: {
-        const auto &elems = tt::as_shared<ArrayData>(targetData)->raw();
-        for (const auto &e : elems)
-            add_step(e, prev, has_prev);
-        break;
-    }
-    case TypeCode::Tuple: {
-        const auto &elems = tt::as_shared<TupleData>(targetData)->raw();
-        for (const auto &e : elems)
-            add_step(e, prev, has_prev);
-        break;
-    }
-    default:
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<foreach>", "List/Array/Tuple/Vector/Dict", targetData->toString());
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidWithParameter,
-            "Unsupported type.");
-    }
+    const auto &elems = tt::as_shared<ArrayData>(targetData)->raw();
+    for (const auto &e : elems)
+        add_step(e, prev, has_prev);
     sf.join();
     frame->set(node, Data::null());
 }
 
-void TaskflowExecSchedPass::mark_unordered_foreach(
+void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     const node_ptr_t &node, frame_ptr_t frame, tf::Subflow &sf) {
-    if (node->withInputs().size() != 1 || node->normInputs().size() != 1) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<foreach>", 1, node->withInputs().size() + node->normInputs().size());
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidWithParameter, "Incorrect args.");
-    }
-
-    auto targetData = frame->get(node->withInputs().front());
-    auto funcData = frame->get(node->normInputs().front());
+    auto targetData = frame->get(node->normInputs().front());
+    auto funcData = frame->get(node->withInputs().front());
     ASSERT(funcData->type()->code() == TypeCode::Function, "foreach expects a function.");
     auto func = funcData->as<FunctionData>(Type::Func());
 
@@ -1005,39 +806,9 @@ void TaskflowExecSchedPass::mark_unordered_foreach(
           }).name("FOREACH_ELEM");
     };
 
-    switch (targetData->type()->code()) {
-    case TypeCode::Array: {
-        auto elems = tt::as_shared<ArrayData>(targetData)->raw();
-        for (auto &e : elems)
-            spawn_unary_void(e);
-        sf.join();
-        frame->set(node, Data::null());
-        break;
-    }
-    case TypeCode::Tuple: {
-        auto elems = tt::as_shared<TupleData>(targetData)->raw();
-        for (auto &e : elems)
-            spawn_unary_void(e);
-        sf.join();
-        frame->set(node, Data::null());
-        break;
-    }
-    case TypeCode::Struct: {
-        auto dict = tt::as_shared<StructData>(targetData);
-        for (const auto &kv : dict->raw())
-            spawn_unary_void(kv.second);
-        sf.join();
-        frame->set(node, Data::null());
-        break;
-    }
-    default:
-        context_->rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<foreach>", "List/Array/Tuple/Vector/Struct", targetData->toString());
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidWithParameter,
-            "Unsupported type.");
-    }
+    auto elems = tt::as_shared<ArrayData>(targetData)->raw();
+    for (auto &e : elems)
+        spawn_unary_void(e);
     sf.join();
     frame->set(node, Data::null());
 }

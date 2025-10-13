@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,22 +59,6 @@ OperatorReturnCode eval_assignment_op(
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<" + opname + "> requires integer types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!lhs_type->primary() || !rhs_type->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<" + opname + "> requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!Type::castSafetyCheck(rhs_type, lhs_type)) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<" + opname + ">", lhs_type->toString(), rhs_type->toString());
         frame.set(self, Data::null());
         return OperatorReturnCode::OK;
     }
@@ -324,21 +308,6 @@ OperatorReturnCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!Type::castSafetyCheck(left->type(), Type::Bool())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<or>", "bool", left->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    if (!Type::castSafetyCheck(right->type(), Type::Bool())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<or>", "bool", right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     auto l = left->as<BoolData>(Type::Bool());
     if (l->data()) {
         frame.set(self, std::make_shared<BoolData>(true));
@@ -355,21 +324,6 @@ OperatorReturnCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context
 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
-
-    if (!Type::castSafetyCheck(left->type(), Type::Bool())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<and>", "bool", left->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    if (!Type::castSafetyCheck(right->type(), Type::Bool())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<and>", "bool", right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     auto l = left->as<BoolData>(Type::Bool());
     if (!l->data()) {
@@ -436,21 +390,6 @@ OperatorReturnCode __builtin__lt__(GIR::node_ptr_t &self, Frame &frame, Context 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!Type::castSafetyCheck(left->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<lt>", "double", left->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
-    if (!Type::castSafetyCheck(right->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<lt>", "double", right->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
-
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
@@ -464,21 +403,6 @@ OperatorReturnCode __builtin__le__(GIR::node_ptr_t &self, Frame &frame, Context 
 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
-
-    if (!Type::castSafetyCheck(left->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<le>", "double", left->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
-    if (!Type::castSafetyCheck(right->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<le>", "double", right->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
@@ -494,21 +418,6 @@ OperatorReturnCode __builtin__gt__(GIR::node_ptr_t &self, Frame &frame, Context 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!Type::castSafetyCheck(left->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<gt>", "double", left->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
-    if (!Type::castSafetyCheck(right->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<gt>", "double", right->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
-
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
@@ -523,21 +432,6 @@ OperatorReturnCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!Type::castSafetyCheck(left->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<ge>", "double", left->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
-    if (!Type::castSafetyCheck(right->type(), Type::Double())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<ge>", "double", right->type()->toString());
-        frame.set(self, std::make_shared<BoolData>(false));
-        return OperatorReturnCode::OK;
-    }
-
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
@@ -551,29 +445,6 @@ OperatorReturnCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context
 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
-
-    if (!left->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<add>", "primary types", left->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-    if (!right->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(1, "<add>", "primary types", right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!Type::castSafetyCheck(right->type(), left->type())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<add>", left->type()->toString(), right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     data_ptr_t result;
     if (left->type() == Type::Int32()) {
@@ -615,22 +486,6 @@ OperatorReturnCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!left->type()->primary() || !right->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<sub> operator requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!Type::castSafetyCheck(right->type(), left->type())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<sub>", left->type()->toString(), right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     data_ptr_t result;
     if (left->type() == Type::Int32()) {
         result = std::make_shared<Int32Data>(
@@ -667,22 +522,6 @@ OperatorReturnCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!left->type()->primary() || !right->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<mul> operator requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!Type::castSafetyCheck(right->type(), left->type())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<mul>", left->type()->toString(), right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     data_ptr_t result;
     if (left->type() == Type::Int32()) {
         result = std::make_shared<Int32Data>(
@@ -718,22 +557,6 @@ OperatorReturnCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context
 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
-
-    if (!left->type()->primary() || !right->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<div> operator requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!Type::castSafetyCheck(right->type(), left->type())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<div>", left->type()->toString(), right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     // 除以 0 检查
     if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
@@ -781,22 +604,6 @@ OperatorReturnCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
-    if (!left->type()->primary() || !right->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<mod> operator requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!Type::castSafetyCheck(right->type(), left->type())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<mod>", left->type()->toString(), right->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
         (right->type() == Type::Int64() && right->as<Int64Data>(Type::Int64())->data() == 0)) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
@@ -838,22 +645,6 @@ OperatorReturnCode __builtin__pow__(GIR::node_ptr_t &self, Frame &frame, Context
     const data_ptr_t &base = frame.get(ins[0]);
     const data_ptr_t &exponent = frame.get(ins[1]);
 
-    if (!base->type()->primary() || !exponent->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<pow> operator requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (!Type::castSafetyCheck(exponent->type(), base->type())) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::MismatchedOperandTypes)
-            .commit("<pow>", base->type()->toString(), exponent->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
     data_ptr_t result;
     if (base->type() == Type::Int32()) {
         result = std::make_shared<Int32Data>(static_cast<int32_t>(std::pow(
@@ -890,55 +681,29 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
     const data_ptr_t &container = frame.get(ins[0]);
     const data_ptr_t &index = frame.get(ins[1]);
 
-    const TypeCode containerType = container->type()->code();
-
-    // 数值索引：适用于 Array / Tuple / Vector / List
-    if (index->type() == Type::Int32() || index->type() == Type::Int64()) {
-        size_t idx = (index->type() == Type::Int32())
-                         ? static_cast<size_t>(index->as<Int32Data>(Type::Int32())->data())
-                         : static_cast<size_t>(index->as<Int64Data>(Type::Int64())->data());
-
-        if (containerType == TypeCode::Array) {
-            auto arr = std::dynamic_pointer_cast<ArrayData>(container);
-            ASSERT(idx < arr->raw().size(), "Array index out of bounds.");
-            frame.set(self, arr->raw()[idx]);
-        } else if (containerType == TypeCode::Tuple) {
-            auto tup = std::dynamic_pointer_cast<TupleData>(container);
-            ASSERT(idx < tup->raw().size(), "Tuple index out of bounds.");
-            frame.set(self, tup->raw()[idx]);
-        } else {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::IncompatibleArgType)
-                .commit(0, "<idx>", "Array/Tuple/Vector", container->type()->toString());
-            frame.set(self, Data::null());
-        }
+    // 数值索引：适用于 Array
+    if (index->type() == Type::Int32()) {
+        size_t idx = static_cast<size_t>(index->as<Int32Data>(Type::Int32())->data());
+        auto arr = std::dynamic_pointer_cast<ArrayData>(container);
+        ASSERT(idx < arr->raw().size(), "Array index out of bounds.");
+        frame.set(self, arr->raw()[idx]);
 
         return OperatorReturnCode::OK;
     }
 
     // 字符串索引：适用于 Struct
     if (index->type() == Type::String()) {
-        if (containerType == TypeCode::Struct) {
-            auto dict = std::dynamic_pointer_cast<StructData>(container);
-            const std::string &key = index->as<StringData>(Type::String())->data();
-            const auto &map = dict->raw();
+        auto dict = std::dynamic_pointer_cast<StructData>(container);
+        const std::string &key = index->as<StringData>(Type::String())->data();
+        const auto &map = dict->raw();
 
-            auto it = map.find(key);
-            ASSERT(it != map.end(), "Struct key not found: " + key);
-            frame.set(self, it->second);
-        } else {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::IncompatibleArgType)
-                .commit(0, "<idx>", "Struct", container->type()->toString());
-            frame.set(self, Data::null());
-        }
+        auto it = map.find(key);
+        ASSERT(it != map.end(), "Struct key not found: " + key);
+        frame.set(self, it->second);
 
         return OperatorReturnCode::OK;
     }
 
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::IncompatibleArgType)
-        .commit(1, "<idx>", "Int or String", index->type()->toString());
     frame.set(self, Data::null());
     return OperatorReturnCode::OK;
 }
@@ -948,14 +713,6 @@ OperatorReturnCode __builtin__not__(GIR::node_ptr_t &self, Frame &frame, Context
     ASSERT(ins.size() == 1, "not operator requires exactly one argument");
 
     const data_ptr_t &val = frame.get(ins[0]);
-
-    if (val->type() != Type::Bool()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<not> operator requires boolean type, got " + val->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     bool result = !val->as<BoolData>(Type::Bool())->data();
     frame.set(self, std::make_shared<BoolData>(result));
@@ -967,14 +724,6 @@ OperatorReturnCode __builtin__neg__(GIR::node_ptr_t &self, Frame &frame, Context
     ASSERT(ins.size() == 1, "neg operator requires exactly one argument");
 
     const data_ptr_t &val = frame.get(ins[0]);
-
-    if (!val->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<neg> operator requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     data_ptr_t result;
     if (val->type() == Type::Int32()) {
@@ -1002,14 +751,6 @@ OperatorReturnCode __builtin__inv__(GIR::node_ptr_t &self, Frame &frame, Context
     ASSERT(ins.size() == 1, "inv operator requires exactly one argument");
 
     const data_ptr_t &val = frame.get(ins[0]);
-
-    if (!val->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<inv> operator requires primary types");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     data_ptr_t result;
     if (val->type() == Type::Int32()) {

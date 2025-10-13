@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -124,7 +124,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::BranchReturnTypeMismatch,
             {
                 "BranchReturnTypeMismatch",
-                "Return type mismatch between branches: expected '{0}', found '{1}'.",
+                "Return type mismatch between branches (in function '{0}'): "
+                "expected '{1}', found '{2}'.",
                 "Ensure all branches of if-else or match-case expressions return the same type.",
             },
         },
@@ -215,7 +216,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
-                "Function with side effects is called but not waited.",
+                "Function '{0}' with side effects is called but not waited.",
                 "Consider waiting the function using the 'wait' keyword.",
             },
         },

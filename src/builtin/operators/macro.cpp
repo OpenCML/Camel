@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,27 +28,12 @@ using namespace GraphIR;
 
 OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    if (ins.size() != 2) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<cmp>", "2 args", std::to_string(ins.size()));
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     const data_ptr_t &lhs = frame.get(ins[0]);
     const data_ptr_t &rhs = frame.get(ins[1]);
 
     const type_ptr_t &lhsType = lhs->type();
     const type_ptr_t &rhsType = rhs->type();
-
-    if (lhsType->code() != TypeCode::Function || rhsType->code() != TypeCode::Function) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(0, "<cmp>", "functor", lhsType->toString() + " and " + rhsType->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     func_ptr_t lhsFunc = lhs->as<FunctionData>(Type::Func());
     func_type_ptr_t lhsFuncType = lhsFunc->funcType();
@@ -57,18 +42,6 @@ OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
     func_ptr_t rhsFunc = rhs->as<FunctionData>(Type::Func());
     func_type_ptr_t rhsFuncType = rhsFunc->funcType();
     // Graph &rhsGraph = rhs->as<FunctionData>(Type::Func())->graph();
-
-    if (rhsFuncType->normTypes().size() != 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncompatibleArgType)
-            .commit(
-                0,
-                "<cmp>",
-                "functor with 1 norm param",
-                "functor with " + std::to_string(rhsFuncType->normTypes().size()) + " norm params");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     return OperatorReturnCode::OK;
 }

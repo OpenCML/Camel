@@ -12,6 +12,7 @@ func my_filter(points: Point[]): Point[] sync {
     points->foreach<(p: Point) => sync {
         if predicate(p) then sync {
             result->append<p>
+            return null
         }
     }>
     return result
