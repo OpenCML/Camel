@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,7 +80,7 @@ class FunctionType : public SpecialType {
 
     const param_vec_t &withTypes() const { return withTypes_; }
     const param_vec_t &normTypes() const { return normTypes_; }
-    const type_ptr_t &exitType() const;
+    type_ptr_t exitType() const;
     bool hasExitType() const { return exitType_ != nullptr; }
 
     const std::string &argNameAt(size_t idx) const;

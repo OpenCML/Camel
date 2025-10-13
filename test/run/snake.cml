@@ -17,50 +17,49 @@ func render(snake: Point[]): void sync {
     print('\033[2J\033[H')  // Clear screen
     let rows = range(0, HEIGHT)
 
-    rows.foreach((y: int) => sync {
+    rows->foreach<(y: int) => sync {
         let cols = range(0, WIDTH)
-        let lines = cols.map((x: int): string => sync {
-            let p = { x: x, y: y }
-            return if snake.contains(p) then 'O' else '.'
-        })
-        println(''.join(lines))
-    })
+        cols->map<(x: int): string => {
+            let p = {x: x, y: y}
+            return if snake->contains<p> then "O" else "."
+        }>->join<"">->println
+    }>
 
-    println('')
+    println("")
 }
 
 func move_snake(snake: Point[], dir: string): Point[] {
-    let now_head = snake.head()
+    let now_head = head(snake)
     let new_head = match dir {
-        case 'w' => { x: now_head.$x, y: now_head.$y - 1 }  // Up
-        case 'a' => { x: now_head.$x - 1, y: now_head.$y }  // Left
-        case 's' => { x: now_head.$x, y: now_head.$y + 1 }  // Down
-        case 'd' => { x: now_head.$x + 1, y: now_head.$y }  // Right
+        case 'w' => { x: now_head.x, y: now_head.y - 1 }  // Up
+        case 'a' => { x: now_head.x - 1, y: now_head.y }  // Left
+        case 's' => { x: now_head.x, y: now_head.y + 1 }  // Down
+        case 'd' => { x: now_head.x + 1, y: now_head.y }  // Right
         case _ => now_head
     }
-    return [new_head].concat(snake.slice(0, snake.len() - 1))
+    return concat([new_head], snake->slice<0, len(snake) - 1>)
 }
 
 // Check if the snake hits the wall
 func hit_wall(p: Point): bool {
-    return p.$x < 0 || p.$x >= WIDTH || p.$y < 0 || p.$y >= HEIGHT
+    return p.x < 0 || p.x >= WIDTH || p.y < 0 || p.y >= HEIGHT
 }
 
 // Recursive game loop
 func game_loop(snake: Point[], dir: string, steps: int): void sync {
     render(snake)
     let new_snake = move_snake(snake, dir)
-    let now_head = new_snake.head()
+    let now_head = head(new_snake)
 
     if hit_wall(now_head) then {
-        println('Game over! You hit the wall after {} steps.'.format(steps))
+        'Game over! You hit the wall after {} steps.'->format<steps>->println
     } else sync {
         sleep(300)  // Delay for visual effect
         // Recursive call for next frame
         let d = if has_input() then sync {
             let ch = get_char()
             clear_input_buffer()
-            return if ['w', 'a', 's', 'd'].contains(ch) then ch else dir
+            return if ['w', 'a', 's', 'd']->contains<ch> then ch else dir
         } else dir
         game_loop(new_snake, d, steps + 1)
     }

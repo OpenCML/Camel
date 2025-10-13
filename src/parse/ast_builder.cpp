@@ -224,7 +224,6 @@ any Builder::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     node_ptr_t res = nullptr;
     if (context->dataDecl()) {
         res = any2node(visitDataDecl(context->dataDecl()));
-        // TODO: 这里需要处理导出数据声明的情况
     } else if (context->typeDecl()) {
         res = any2node(visitTypeDecl(context->typeDecl()));
     } else if (context->bracedIdents()) {
@@ -917,7 +916,6 @@ catchClause
     ;
 */
 any Builder::visitCatchClause(OpenCMLParser::CatchClauseContext *context) {
-    // TODO: catch clause
     ENTER("CatchClause");
     throw std::runtime_error("visitCatchClause: not implemented yet");
     LEAVE("CatchClause");
@@ -1005,8 +1003,10 @@ any Builder::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
 
 /*
 assignExpr
-    : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
-logicalOrExpr)?
+    : logicalOrExpr (
+        ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
+        logicalOrExpr
+    )?
     ;
 */
 any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
@@ -1040,7 +1040,6 @@ any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
         }
         node_ptr_t rhsNode = any2node(visitLogicalOrExpr(context->logicalOrExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
-        // TODO: set the token range for dataExprNode
         setNodeTokenRangeByContext(dataExprNode, context->logicalOrExpr(i));
         *dataExprNode << lhsNode << rhsNode;
         lhsNode = dataExprNode;
@@ -1363,12 +1362,12 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
 
 /*
 annoExpr
-    : withExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
+    : accessExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
     ;
 */
 any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
     ENTER("AnnoExpr");
-    node_ptr_t lhsNode = any2node(visitWithExpr(context->withExpr()));
+    node_ptr_t lhsNode = any2node(visitAccessExpr(context->accessExpr()));
     for (size_t i = 1; i < context->children.size(); i++) {
         auto child = context->children[i];
         if (antlr4::RuleContext::is(child)) {
@@ -1406,39 +1405,8 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
 }
 
 /*
-withExpr
-    : accessExpr (('.' | '?.') accessExpr)*
-    ;
-*/
-any Builder::visitWithExpr(OpenCMLParser::WithExprContext *context) {
-    ENTER("WithExpr");
-    node_ptr_t lhsNode = any2node(visitAccessExpr(context->accessExpr(0)));
-    for (size_t i = 1; i < context->accessExpr().size(); i++) {
-        string strOp = context->children[i * 2 - 1]->getText();
-        node_ptr_t withNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
-        setNodeTokenRangeByContext(withNode, context->accessExpr(i));
-        node_ptr_t rhsNode = any2node(visitAccessExpr(context->accessExpr(i)));
-        if (strOp == "?.") {
-            node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            setNodeTokenRangeByContext(notNullNode, context->accessExpr(i));
-            *notNullNode << lhsNode;
-            lhsNode = notNullNode;
-        }
-        node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
-        setNodeTokenRangeByContext(dataList, context->accessExpr(i));
-        node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
-        setNodeTokenRangeByContext(namedDataList, context->accessExpr(i));
-        *dataList << lhsNode;
-        *withNode << rhsNode << dataList << namedDataList;
-        lhsNode = withNode;
-    }
-    LEAVE("WithExpr");
-    return lhsNode;
-}
-
-/*
 accessExpr
-    : primaryData ('.$' (IDENTIFIER | INTEGER))*
+    : primaryData ('.' (IDENTIFIER | INTEGER))*
     ;
 */
 any Builder::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
@@ -1446,7 +1414,7 @@ any Builder::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
     node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData()));
     for (size_t i = 1; i < context->children.size(); i += 2) {
         string strOp = context->children[i]->getText();
-        if (strOp == ".$") {
+        if (strOp == ".") {
             node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Access);
             setNodeTokenRangeByContext(dataNode, context);
             Reference ref(context->children[i + 1]->getText());
@@ -1492,7 +1460,6 @@ any Builder::visitArrayData(OpenCMLParser::ArrayDataContext *context) {
         *dataNode << any2node(visitIndexValues(context->indexValues()));
     } else {
         *dataNode << createNodeAs<RepeatedLoad>("Data");
-        // TODO: Handle list comprehension
     }
     LEAVE("ArrayData");
     return dataNode;

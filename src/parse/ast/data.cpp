@@ -143,7 +143,7 @@ std::string to_string(ReservedDataOp op) {
     case ReservedDataOp::NotNullThen:
         return "?";
     case ReservedDataOp::Access:
-        return ".$";
+        return ".";
     case ReservedDataOp::Call:
         return "()";
     case ReservedDataOp::Bind:

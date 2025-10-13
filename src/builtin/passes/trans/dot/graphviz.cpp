@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -265,7 +265,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
         }
         case NodeType::ACCS: {
             auto accessNode = tt::as_shared<AccsNode>(node);
-            label = "$" + accessNode->index2String();
+            label = "." + accessNode->index2String();
             shape = "diamond";
             break;
         }

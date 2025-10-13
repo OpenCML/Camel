@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -120,6 +120,12 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
+    std::string location() const {
+        if (outer_.expired()) {
+            return name_.empty() ? "<anonymous>" : name_;
+        }
+        return outer_.lock()->location() + "::" + (name_.empty() ? "<anonymous>" : name_);
+    }
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
     graph_ptr_t outer() const {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,32 +47,9 @@ OperatorReturnCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
 
 OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &norm = self->normInputs();
-    if (norm.size() != 2) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<strftime>", "exactly 2 arguments", std::to_string(norm.size()));
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     const data_ptr_t &time_val = frame.get(norm[0]);
     const data_ptr_t &fmt_val = frame.get(norm[1]);
-
-    if (time_val->type() != Type::Double()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<strftime> first argument must be a float timestamp");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    if (fmt_val->type() != Type::String()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<strftime> second argument must be a string format");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     double timestamp = time_val->as<DoubleData>(Type::Double())->data();
 
@@ -120,24 +97,9 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
 
 OperatorReturnCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &norm = self->normInputs();
-    if (norm.size() != 2) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::IncorrectArgsCount)
-            .commit("<strptime>", "exactly 2 arguments", std::to_string(norm.size()));
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     const data_ptr_t &str_val = frame.get(norm[0]);
     const data_ptr_t &fmt_val = frame.get(norm[1]);
-
-    if (str_val->type() != Type::String() || fmt_val->type() != Type::String()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<strptime> requires two string arguments");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
 
     auto time_str = str_val->as<StringData>(Type::String())->data();
     auto fmt_str = fmt_val->as<StringData>(Type::String())->data();

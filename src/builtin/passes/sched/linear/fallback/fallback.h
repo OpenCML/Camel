@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,11 +36,11 @@ class FallbackExecSchedPass : public LinearSchedPass {
     void evalMarkedOperator(
         const std::string uri, const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
 
-    void evalMarkedOperator_map(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
-    void evalMarkedOperator_apply(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
-    void evalMarkedOperator_filter(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
-    void evalMarkedOperator_reduce(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
-    void evalMarkedOperator_foreach(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_map_arr(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_apply_arr(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_filter_arr(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_reduce_arr(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
+    void evalMarkedOperator_foreach_arr(const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame);
 
   public:
     FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
