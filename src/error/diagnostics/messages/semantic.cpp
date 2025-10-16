@@ -143,8 +143,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeNotIndexable",
                 "Type '{0}' does not support index access.",
-                "Check the type and ensure it is an array, a tuple, or a dict, etc. that supports "
-                "indexing.",
+                "Check the type and ensure it is a tuple or a struct that supports indexing.",
             },
         },
         {
