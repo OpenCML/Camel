@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -154,7 +154,7 @@ type_ptr_t StructType::operator&(const StructType &other) const {
     return result;
 }
 
-std::shared_ptr<ComposedType> StructType::clone() const {
+type_ptr_t StructType::clone() const {
     auto newStruct = std::make_shared<StructType>();
     for (const auto &field : fields_) {
         newStruct->add(field.first, field.second);

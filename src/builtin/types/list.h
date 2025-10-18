@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,11 @@ class ListType : public OtherType {
 
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
+
+    virtual type_ptr_t clone() const override {
+        ASSERT(false, "clone() not implemented");
+        return nullptr;
+    }
 
     CastSafety castSafetyTo(const Type &other) const override;
 };

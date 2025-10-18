@@ -13,11 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 08, 2025
- * Updated: Jul. 08, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
+
+#include "utils/assert.h"
+#include "utils/log.h"
+
 #include <memory>
 #include <type_traits>
 #include <typeinfo>
@@ -52,8 +56,23 @@ bool is_shared_instance_of(const std::shared_ptr<Source> &ptr) {
 }
 
 template <typename Target, typename Source>
-std::shared_ptr<Target> as_shared(const std::shared_ptr<Source> &ptr) {
+std::shared_ptr<Target> to_shared(const std::shared_ptr<Source> &ptr) {
     return std::dynamic_pointer_cast<Target>(ptr);
+}
+
+template <typename Target, typename Source>
+std::shared_ptr<Target> as_shared(const std::shared_ptr<Source> &ptr) {
+    EXEC_WHEN_DEBUG([&]() {
+        if (!is_shared_instance_of<Target, Source>(ptr)) {
+            ASSERT(
+                false,
+                std::format(
+                    "Shared pointer type cast failed: cannot cast from {} to {}",
+                    typeid(Source).name(),
+                    typeid(Target).name()));
+        }
+    }());
+    return std::static_pointer_cast<Target>(ptr);
 }
 
 template <template <typename...> class Template, typename T>

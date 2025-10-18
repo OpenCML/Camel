@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,9 +43,10 @@ class Builder {
         : context_(context), module_(module) {
         nodeScope_ = node_scope_t::create();
         graphScope_ = graph_scope_t::create();
-        rootGraph_ = Graph::create(nullptr, "__root__");
-        rootGraph_->setFuncType(
-            std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Type::Void()));
+        rootGraph_ = Graph::create(
+            std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Type::Int32()),
+            nullptr,
+            "__root__");
         currGraph_ = rootGraph_;
     }
 
@@ -91,11 +92,12 @@ class Builder {
     bool insertNode(const std::string &name, const node_ptr_t &node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
 
-    graph_ptr_t enterScope(const std::string &name = "");
+    graph_ptr_t enterScope(const func_type_ptr_t &funcType, const std::string &name = "");
     void leaveScope();
 
+    node_ptr_t
+    createFuncDataNode(const graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
     node_ptr_t resolveNodeByRef(const std::string &name);
-    void setGraphOutputAndExitType(const graph_ptr_t &graph, const node_ptr_t &node);
 
     std::any visit(const GCT::node_ptr_t &gct);
 

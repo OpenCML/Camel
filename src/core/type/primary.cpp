@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,8 @@ bool PrimaryType::operator!=(const Type &other) const {
     }
     return code_ == other.code();
 }
+
+type_ptr_t PrimaryType::clone() const { return std::make_shared<PrimaryType>(code_); }
 
 std::string PrimaryType::mangle() const {
     switch (code_) {

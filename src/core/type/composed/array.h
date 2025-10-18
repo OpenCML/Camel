@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,7 +42,7 @@ class ArrayType : public ComposedType {
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
-    virtual std::shared_ptr<ComposedType> clone() const override;
+    virtual type_ptr_t clone() const override;
 
     CastSafety castSafetyTo(const Type &other) const override;
 };

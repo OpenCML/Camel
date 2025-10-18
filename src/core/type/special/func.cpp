@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -89,6 +89,25 @@ bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool i
         return false;
     }
     return true;
+}
+
+bool FunctionType::addClosureArg(const std::string &ident, const type_ptr_t type, bool isVar) {
+    ASSERT(
+        hasCompileInfo_,
+        "Cannot add argument to FunctionType that is not constructed using default constructor");
+    closureTypes_.push_back({type, isVar});
+    // 确保argsNames没有重复
+    if (std::find(argNames_.begin(), argNames_.end(), ident) == argNames_.end()) {
+        argNames_.push_back(ident);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+void FunctionType::parametrizeClosure() {
+    withTypes_.insert(withTypes_.end(), closureTypes_.begin(), closureTypes_.end());
+    closureTypes_.clear();
 }
 
 type_ptr_t FunctionType::exitType() const {
@@ -246,3 +265,16 @@ bool FunctionType::operator==(const Type &other) const {
 }
 
 bool FunctionType::operator!=(const Type &other) const { return !(*this == other); }
+
+type_ptr_t FunctionType::clone() const {
+    auto res = std::make_shared<FunctionType>();
+    res->implMark_ = implMark_;
+    res->modifiers_ = modifiers_;
+    res->withTypes_ = withTypes_;
+    res->normTypes_ = normTypes_;
+    res->closureTypes_ = closureTypes_;
+    res->exitType_ = exitType_;
+    res->argNames_ = argNames_;
+    res->hasCompileInfo_ = hasCompileInfo_;
+    return res;
+}

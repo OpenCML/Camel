@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,15 +70,15 @@ inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     return true;
 }
 
-graph_ptr_t Builder::enterScope(const std::string &name) {
+graph_ptr_t Builder::enterScope(const func_type_ptr_t &funcType, const std::string &name) {
     if (name.empty()) {
-        currGraph_ = Graph::create(currGraph_);
+        currGraph_ = Graph::create(funcType, currGraph_);
     } else {
         auto graphs = graphScope_->get(name);
         if (graphs.has_value() && !graphs.value()->empty()) {
             currGraph_ = graphs.value()->front();
         } else {
-            currGraph_ = Graph::create(currGraph_, name);
+            currGraph_ = Graph::create(funcType, currGraph_, name);
             insertGraph(name, currGraph_);
         }
     }
@@ -117,27 +117,18 @@ node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
         diags_->of(SemanticDiag::UnresolvedReference).commit(name);
         throw BuildAbortException();
     }
-    return optSrcNode.value();
-}
-
-void Builder::setGraphOutputAndExitType(const graph_ptr_t &graph, const node_ptr_t &node) {
-    type_ptr_t actualExitType = node->dataType();
-    func_type_ptr_t funcType = graph->funcType();
-    if (funcType->hasExitType()) {
-        type_ptr_t declaredExitType = graph->funcType()->exitType();
-        if (!actualExitType->assignable(declaredExitType)) {
-            diags_->of(SemanticDiag::ReturnTypeMismatch)
-                .commit(
-                    actualExitType->toString(),
-                    declaredExitType->toString(),
-                    graph->name() + ": " + graph->funcType()->toString());
-            throw BuildAbortException();
-        }
-    } else {
-        // If the function has no declared return type, set it to the actual return type
-        graph->funcType()->setExitType(actualExitType);
+    node_ptr_t node = optSrcNode.value();
+    // 对于跨图节点引用，需要在每个中间图中创建对应的Port节点
+    // 这里并没有做循环处理，是因为每个图只处理自己的外部节点
+    // 对于多层嵌套的图结构，在处理闭包的时候会再次解引用，从而递归地处理
+    // 换言之，这里要被处理为闭包捕获
+    // 闭包节点默认是不可变的
+    if (node->graph() != *currGraph_) {
+        const auto &port = PortNode::create(*currGraph_, node->dataType(), name, false);
+        currGraph_->addClosure(port);
+        node = port;
     }
-    graph->setOutput(node);
+    return node;
 }
 
 any Builder::visit(const GCT::node_ptr_t &node) {
@@ -194,18 +185,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     type_ptr_t type = typeNode->loadAs<GCT::TypeLoad>()->dataType();
     func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
 
-    graph_ptr_t graph = enterScope(declLoad->ref().ident());
-    graph->setFuncType(funcType);
-    for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
-        node_ptr_t portNode = PortNode::create(*graph, type, name, isVar);
-        graph->addPort(portNode, true);
-        insertNode(name, portNode);
-    }
-    for (const auto &[name, type, isVar] : funcType->normArgsInfo()) {
-        node_ptr_t portNode = PortNode::create(*graph, type, name, isVar);
-        graph->addPort(portNode, false);
-        insertNode(name, portNode);
-    }
+    graph_ptr_t graph = enterScope(funcType, declLoad->ref().ident());
     leaveScope();
 
     LEAVE("DECL");
@@ -217,31 +197,25 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     // type_ptr_t type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
     std::string name = gct->loadAs<GCT::FuncLoad>()->name();
     GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
-    graph_ptr_t graph = enterScope(name);
-    if (!graph->hasFuncType()) {
-        type_ptr_t type = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
-        func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
-        graph->setFuncType(funcType);
-        for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
-            node_ptr_t portNode = PortNode::create(*graph, type, name, isVar);
-            graph->addPort(portNode, true);
-            insertNode(name, portNode);
-        }
-        for (const auto &[name, type, isVar] : funcType->normArgsInfo()) {
-            node_ptr_t portNode = PortNode::create(*graph, type, name, isVar);
-            graph->addPort(portNode, false);
-            insertNode(name, portNode);
-        }
+    type_ptr_t type = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
+    func_type_ptr_t funcType = tt::as_shared<FunctionType>(type);
+    graph_ptr_t graph = enterScope(funcType, name);
+    for (const auto &port : graph->withPorts()) {
+        const auto &portNode = tt::as_shared<PortNode>(port);
+        insertNode(portNode->name(), port);
     }
-    ASSERT(graph->hasFuncType(), "Function graph must have a function type.");
+    for (const auto &port : graph->normPorts()) {
+        const auto &portNode = tt::as_shared<PortNode>(port);
+        insertNode(portNode->name(), port);
+    }
     node_ptr_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (!graph->hasOutput()) {
         if (res) {
-            setGraphOutputAndExitType(graph, res);
+            graph->setOutput(res);
         } else {
             // function with no return value, setting null by default
             node_ptr_t resNode = DataNode::create(*graph, Data::null());
-            setGraphOutputAndExitType(graph, resNode);
+            graph->setOutput(resNode);
         }
     }
     leaveScope();
@@ -275,7 +249,7 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             refTypes.push_back(refNode->dataType());
             refNodes.push_back(refNode);
         }
-        auto fillType = dataType->clone();
+        auto fillType = tt::as_shared<ComposedType>(dataType->clone());
         fillType->resolve(refTypes);
         node = FillNode::create(*currGraph_, fillType);
         Node::link(LinkType::With, srcNode, node);
@@ -316,7 +290,17 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
     auto optNode = nodeAt(ident);
     if (optNode.has_value()) {
-        const auto &node = optNode.value();
+        node_ptr_t node = optNode.value();
+        // 对于跨图节点引用，需要在每个中间图中创建对应的Port节点
+        // 这里并没有做循环处理，是因为每个图只处理自己的外部节点
+        // 对于多层嵌套的图结构，在处理闭包的时候会再次解引用，从而递归地处理
+        // 换言之，这里要被处理为闭包捕获
+        // 闭包节点默认是不可变的
+        if (node->graph() != *currGraph_) {
+            const auto &port = PortNode::create(*currGraph_, node->dataType(), ident, false);
+            currGraph_->addClosure(port);
+            node = port;
+        }
         LEAVE("DREF");
         return node;
     }
@@ -333,6 +317,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (module_->hasImportedRef(ident)) {
         const auto &e = module_->getImportedEntity(ident);
         if (std::holds_alternative<node_ptr_t>(e)) {
+            ASSERT(false, "Cannot import a data node directly.");
             const auto &node = std::get<node_ptr_t>(e);
             LEAVE("DREF");
             return node;
@@ -387,6 +372,63 @@ node_ptr_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
+node_ptr_t Builder::createFuncDataNode(
+    const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
+    ASSERT(
+        !(callableAsResult && allowParameterization),
+        "Cannot enable both callableAsResult and allowParameterization options.");
+
+    auto funcData = FunctionData::create(*graph);
+
+    if (allowParameterization && !callableAsResult) {
+        if (funcData->resolved()) {
+            return FuncNode::create(*currGraph_, funcData);
+        }
+        auto funcNode = FuncNode::create(*currGraph_, funcData);
+        for (const auto &ref : funcData->refs()) {
+            const auto &refNode = resolveNodeByRef(ref);
+            Node::link(LinkType::With, refNode, funcNode);
+        }
+        funcData->graph().parametrizeClosure();
+        return funcNode;
+    }
+
+    // allowParameterization = false
+
+    if (funcData->resolved()) {
+        if (callableAsResult) {
+            // DataNode 节点对应的数据类型是可调用的函数
+            return DataNode::create(*currGraph_, funcData);
+        } else {
+            // FuncNode 节点对应的数据类型是函数调用后的结果
+            return FuncNode::create(*currGraph_, funcData);
+        }
+    }
+
+    // funcData not resolved, while parameterization not allowed
+
+    auto dataNode = DataNode::create(*currGraph_, funcData);
+    node_vec_t refNodes;
+    for (const auto &ref : funcData->refs()) {
+        const auto &refNode = resolveNodeByRef(ref);
+        refNodes.push_back(refNode);
+    }
+
+    auto fillNode = FillNode::create(*currGraph_, funcData->funcType());
+    Node::link(LinkType::With, dataNode, fillNode);
+    for (const auto &refNode : refNodes) {
+        Node::link(LinkType::Norm, refNode, fillNode);
+    }
+
+    if (callableAsResult) {
+        return fillNode;
+    } else {
+        auto callNode = CallNode::create(*currGraph_, graph->funcType()->exitType());
+        Node::link(LinkType::With, fillNode, callNode);
+        return callNode;
+    }
+}
+
 node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     any targetNodeRes = visit(gct->at(0));
@@ -413,16 +455,9 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // which means that a lambda function is passed as a parameter
             graph_ptr_t inputGraph = any_cast<graph_ptr_t>(dataRes);
             currGraph_->addDependency(inputGraph);
-            auto funcData = FunctionData::create(*inputGraph);
-            node_ptr_t inputNode = DataNode::create(*currGraph_, funcData);
-            for (const auto &inputCaptureNode : inputGraph->capture()) {
-                if (inputCaptureNode->type() != NodeType::DATA &&
-                    inputCaptureNode->type() != NodeType::PORT) {
-                    Node::link(LinkType::Ctrl, inputCaptureNode, inputNode);
-                }
-            }
+            auto inputNode = createFuncDataNode(inputGraph, true, false);
             normInputNodes.push_back(inputNode);
-            normInputTypes.push_back(funcData->funcType());
+            normInputTypes.push_back(inputNode->dataType());
         } else if (dataRes.type() == typeid(node_ptr_t)) {
             node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
             normInputNodes.push_back(inputNode);
@@ -483,9 +518,11 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             currGraph_->addDependency(targetGraph);
-            func_ptr_t funcData = FunctionData::create(*targetGraph);
-            node_ptr_t funcNode = FuncNode::create(*currGraph_, funcData);
-            targetNode = funcNode;
+            // 如果目标图是当前图的子图，说明其是在当前图作用域中定义的
+            // 这意味这它的闭包捕获在当前图中都能找到对应节点
+            // 因而可以允许将闭包捕获优化成参数传递
+            // 这样可以减少运行时对闭包捕获数据的维护开销
+            targetNode = createFuncDataNode(targetGraph, false, targetGraph->outer() == currGraph_);
             targetFuncType = targetGraph->funcType();
         } else if (std::holds_alternative<oper_group_ptr_t>(drefNode->target())) {
             auto ops = std::get<oper_group_ptr_t>(drefNode->target());
@@ -519,7 +556,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         } else {
             ASSERT(false, "DrefNode must refer to a graph or an operator group.");
         }
-        drefNode->detach(true);
+        drefNode->detach();
     } else {
         const auto &dataType = targetNode->dataType();
         ASSERT(
@@ -548,14 +585,6 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
-
-    if (targetGraph) {
-        for (const auto &capNode : targetGraph->capture()) {
-            if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
-                Node::link(LinkType::Ctrl, capNode, targetNode);
-            }
-        }
-    }
 
     std::string targetName = targetGraph
                                  ? targetGraph->name()
@@ -637,14 +666,7 @@ node_ptr_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             // which means that a lambda function is passed as a parameter
             graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
             currGraph_->addDependency(subGraph);
-            auto funcData = FunctionData::create(*subGraph);
-            node_ptr_t inputNode =
-                DataNode::create(*currGraph_, std::static_pointer_cast<Data>(funcData));
-            for (const auto &capNode : subGraph->capture()) {
-                if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
-                    Node::link(LinkType::Ctrl, capNode, inputNode);
-                }
-            }
+            auto inputNode = createFuncDataNode(subGraph, true, false);
             inputs.push_back(inputNode);
         } else if (dataRes.type() == typeid(node_ptr_t)) {
             node_ptr_t inputNode = any_cast<node_ptr_t>(dataRes);
@@ -695,14 +717,13 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
-    graph_ptr_t graph = currGraph_;
     const auto &res = visit(gct->at(0));
     ASSERT(
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of BRCH node.");
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
     node_ptr_t brchNode = BrchNode::create(*currGraph_, Type::Int32());
-    node_ptr_t joinNode = JoinNode::create(*graph, nullptr);
+    node_ptr_t joinNode = JoinNode::create(*currGraph_, nullptr);
 
     type_ptr_t joinType = nullptr;
 
@@ -738,25 +759,24 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             ASSERT(false, "Unknown case type in BRCH node.");
         }
 
-        graph_ptr_t subGraph = enterScope();
-        subGraph->setFuncType(
+        graph_ptr_t subGraph = enterScope(
             std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, nullptr));
         node_ptr_t resNode = visitExecNode(caseExecNode);
         if (!subGraph->hasOutput()) {
             if (resNode) {
-                setGraphOutputAndExitType(subGraph, resNode);
+                subGraph->setOutput(resNode);
             } else {
                 // function with no return value, setting null by default
                 node_ptr_t nullNode = DataNode::create(*subGraph, Data::null());
-                setGraphOutputAndExitType(subGraph, nullNode);
+                subGraph->setOutput(nullNode);
             }
         }
         leaveScope();
 
         currGraph_->addDependency(subGraph);
-        func_ptr_t funcData = FunctionData::create(*subGraph);
-        type_ptr_t exitType = funcData->funcType()->exitType();
-        node_ptr_t funcNode = FuncNode::create(*graph, funcData);
+        type_ptr_t exitType = subGraph->funcType()->exitType();
+        // 在分支中，默认允许闭包参数化
+        auto funcNode = createFuncDataNode(subGraph, false, true);
 
         if (joinType == nullptr) {
             joinType = exitType;
@@ -769,12 +789,6 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
                         joinType->toString(),
                         exitType->toString());
                 throw BuildAbortException();
-            }
-        }
-
-        for (const auto &capNode : subGraph->capture()) {
-            if (capNode->type() != NodeType::DATA && capNode->type() != NodeType::PORT) {
-                Node::link(LinkType::Ctrl, capNode, funcNode);
             }
         }
 
@@ -807,7 +821,7 @@ node_ptr_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter child of EXIT node.");
     node_ptr_t resNode = any_cast<node_ptr_t>(res);
-    setGraphOutputAndExitType(currGraph_, resNode);
+    currGraph_->setOutput(resNode);
 
     if (nodeModifierMap_.count(resNode.get())) {
         node_ptr_t modifier = nodeModifierMap_[resNode.get()].lock();
