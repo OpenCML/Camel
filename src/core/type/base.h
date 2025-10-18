@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -113,6 +113,8 @@ class Type {
 
     virtual bool operator==(const Type &other) const;
     virtual bool operator!=(const Type &other) const;
+
+    virtual type_ptr_t clone() const;
 
     bool equals(const type_ptr_t &type) const;
     bool assignable(const type_ptr_t &type) const;

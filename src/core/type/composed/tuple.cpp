@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,9 +126,7 @@ size_t TupleType::size() const { return types_.size(); }
 
 const vector<type_ptr_t> &TupleType::types() const { return types_; }
 
-std::shared_ptr<ComposedType> TupleType::clone() const {
-    return std::make_shared<TupleType>(types_);
-}
+type_ptr_t TupleType::clone() const { return std::make_shared<TupleType>(types_); }
 
 CastSafety TupleType::castSafetyTo(const Type &other) const {
     if (this == &other) {

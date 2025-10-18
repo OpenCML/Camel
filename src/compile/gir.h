@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,8 +25,8 @@
 #include <variant>
 
 #include "core/context/arena.h"
+#include "core/data/composed/func.h"
 #include "core/data/data.h"
-#include "core/data/special/func.h"
 #include "core/operator.h"
 #include "utils/log.h"
 #include "utils/type.h"
@@ -95,8 +95,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     Graph(Graph &&other) = delete;                 // 删除移动构造函数
     Graph &operator=(Graph &&other) = delete;      // 删除移动赋值运算
 
-    explicit Graph(const graph_ptr_t &graph = nullptr, const std::string &name = "") : name_(name) {
-        outer_ = graph;
+    explicit Graph(
+        const func_type_ptr_t &funcType, const graph_ptr_t &graph = nullptr,
+        const std::string &name = "")
+        : name_(name), outer_(graph), funcType_(funcType) {
         EXEC_WHEN_DEBUG(
             l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
     }
@@ -105,17 +107,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
             l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_));
     };
 
-    static graph_ptr_t create(const graph_ptr_t &graph = nullptr, const std::string &name = "") {
-        static int anonymousIdx = 0;
-        std::string graphName = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
-        const auto newGraph = std::make_shared<Graph>(graph, graphName);
-        if (graph) {
-            graph->addSubGraph(newGraph);
-        }
-        return newGraph;
-    }
+    static graph_ptr_t create(
+        const func_type_ptr_t &funcType, const graph_ptr_t &graph = nullptr,
+        const std::string &name = "");
 
     static graph_ptr_t null() { return nullptr; }
+
+    bool operator==(const Graph &other) const {
+        return this == &other; // 比较指针地址
+    }
+    bool operator!=(const Graph &other) const { return !(this == &other); }
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
@@ -147,8 +148,6 @@ class Graph : public std::enable_shared_from_this<Graph> {
             dependents_.size());
     }
 
-    void setFuncType(const func_type_ptr_t &type);
-    bool hasFuncType() const { return funcType_ != nullptr; }
     func_type_ptr_t funcType() const;
 
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
@@ -209,20 +208,30 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     void addNode(const node_ptr_t &node);                      // 由Node::create调用
     void addPort(const node_ptr_t &node, bool isWith = false); // 由PortNode::create调用
-    void addCapture(const node_ptr_t &node);
+    void addClosure(const node_ptr_t &node);
+    void parametrizeClosure(); // 将所有的闭包捕获节点转为参数节点
 
     const node_ptr_t &exitNode() const {
-        ASSERT(output_ != nullptr, std::format("Graph {} has no exit node.", name_));
-        return output_;
+        ASSERT(exitNode_ != nullptr, std::format("Graph {} has no exit node.", name_));
+        return exitNode_;
     }
-    bool hasOutput() const { return output_ != nullptr; }
+    bool hasOutput() const { return exitNode_ != nullptr; }
     void setOutput(const node_ptr_t &node);
 
-    size_t withPortCnt() const { return withPortCnt_; }
-    const node_vec_t &ports() const { return ports_; }
     const node_vec_t &nodes() { return nodes_; }
-    const node_set_t &capture() const { return capture_; }
-    const node_set_t &exposure() const { return exposure_; }
+    node_vec_t ports() {
+        node_vec_t ports;
+        ports.insert(ports.end(), withPorts_.begin(), withPorts_.end());
+        ports.insert(ports.end(), normPorts_.begin(), normPorts_.end());
+        ports.insert(ports.end(), closure_.begin(), closure_.end());
+        return ports;
+    }
+    bool hasPorts() const {
+        return !withPorts_.empty() || !normPorts_.empty() || !closure_.empty();
+    }
+    const node_vec_t &withPorts() { return withPorts_; }
+    const node_vec_t &normPorts() { return normPorts_; }
+    const node_vec_t &closure() { return closure_; }
 
     graph_ptr_t clone() const;
 
@@ -241,12 +250,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     data_vec_t staticDataArr_;
     size_t runtimeDataSize_ = 0;
 
-    size_t withPortCnt_ = 0;
-    node_vec_t ports_;
+    node_vec_t withPorts_, normPorts_, closure_;
     node_vec_t nodes_;
-    node_ptr_t output_;
-    node_set_t capture_;  // 不属于自己的外部节点
-    node_set_t exposure_; // 被外部图捕获的节点
+    node_ptr_t exitNode_;
 };
 
 class Node : public std::enable_shared_from_this<Node> {
@@ -266,6 +272,11 @@ class Node : public std::enable_shared_from_this<Node> {
     }
     virtual operator std::string() const { return toString(); }
     virtual node_ptr_t clone(Graph &graph) const = 0;
+
+    bool operator==(const Node &other) const {
+        return this == &other; // 比较指针地址
+    }
+    bool operator!=(const Node &other) const { return !(this == &other); }
 
     Graph &graph() const { return graph_; }
     size_t index() const { return dataIndex_; }
@@ -329,11 +340,11 @@ class Node : public std::enable_shared_from_this<Node> {
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
 
-    bool detach(bool force = false);
+    bool detach();
 
     static void link(LinkType type, const node_ptr_t &from, const node_ptr_t &to);
-    static bool unlink(const node_ptr_t &from, const node_ptr_t &to, bool force = false);
-    static bool replace(const node_ptr_t &oldNode, const node_ptr_t &newNode, bool force = false);
+    static bool unlink(const node_ptr_t &from, const node_ptr_t &to);
+    static bool replace(const node_ptr_t &oldNode, const node_ptr_t &newNode);
 
   protected:
     bool macro_ = false;

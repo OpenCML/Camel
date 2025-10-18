@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,6 +42,8 @@ class TupleType : public ComposedType {
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
+    virtual type_ptr_t clone() const override;
+
     void add(const type_ptr_t &type);
     void set(size_t index, const type_ptr_t &type);
     std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
@@ -49,8 +51,6 @@ class TupleType : public ComposedType {
     size_t size() const;
 
     const std::vector<type_ptr_t> &types() const;
-
-    virtual std::shared_ptr<ComposedType> clone() const override;
 
     CastSafety castSafetyTo(const Type &other) const override;
 };

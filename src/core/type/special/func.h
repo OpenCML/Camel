@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,6 +65,8 @@ class FunctionType : public SpecialType {
             modifiers);
     }
 
+    virtual type_ptr_t clone() const override;
+
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
 
@@ -76,10 +78,14 @@ class FunctionType : public SpecialType {
     // 供编译期由GCT构造使用
     bool addWithArg(const std::string &ident, const type_ptr_t type, bool isVar);
     bool addNormArg(const std::string &ident, const type_ptr_t type, bool isVar);
-    void setExitType(const type_ptr_t &type) { exitType_ = type; }
+    bool addClosureArg(const std::string &ident, const type_ptr_t type, bool isVar);
+    void parametrizeClosure();
 
     const param_vec_t &withTypes() const { return withTypes_; }
     const param_vec_t &normTypes() const { return normTypes_; }
+    const param_vec_t &closureTypes() const { return closureTypes_; }
+
+    void setExitType(const type_ptr_t &type) { exitType_ = type; }
     type_ptr_t exitType() const;
     bool hasExitType() const { return exitType_ != nullptr; }
 
@@ -107,6 +113,7 @@ class FunctionType : public SpecialType {
 
     param_vec_t withTypes_;
     param_vec_t normTypes_;
+    param_vec_t closureTypes_;
     type_ptr_t exitType_ = nullptr;
 
     // 只在编译期记录并使用

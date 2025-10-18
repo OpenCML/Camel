@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../base.h"
+#include "composed.h"
 
 class Frame;
 using frame_ptr_t = std::shared_ptr<Frame>;
@@ -37,9 +37,9 @@ using func_lst_t = std::list<func_ptr_t>;
 using func_vec_t = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
-class FunctionData : public Data {
+class FunctionData : public ComposedData {
     GraphIR::Graph &graph_;
-    // frame_ptr_t closure_;
+    data_vec_t closure_;
 
   public:
     FunctionData(GraphIR::Graph &graph);
@@ -51,6 +51,10 @@ class FunctionData : public Data {
     GraphIR::Graph &graph() const { return graph_; }
     // frame_ptr_t closure() const { return closure_; }
     func_type_ptr_t funcType() const;
+
+    virtual std::vector<std::string> refs() const override;
+    virtual bool resolved() const override;
+    virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;

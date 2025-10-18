@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "gir.h"
+#include "error/diagnostics/diagnostics.h"
 #include "utils/scope.h"
 
 using namespace std;
@@ -76,39 +77,70 @@ std::string to_string(LinkType type) {
 Graph
 */
 
-void Graph::setFuncType(const func_type_ptr_t &type) {
-    ASSERT(funcType_ == nullptr, "Function type has already been set.");
-    funcType_ = type;
+graph_ptr_t
+Graph::create(const func_type_ptr_t &funcType, const graph_ptr_t &graph, const std::string &name) {
+    static int anonymousIdx = 0;
+    std::string graphName = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
+    const auto newGraph = std::make_shared<Graph>(funcType, graph, graphName);
+    if (graph) {
+        graph->addSubGraph(newGraph);
+    }
+    for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
+        node_ptr_t portNode = PortNode::create(*newGraph, type, name, isVar);
+        newGraph->addPort(portNode, true);
+    }
+    for (const auto &[name, type, isVar] : funcType->normArgsInfo()) {
+        node_ptr_t portNode = PortNode::create(*newGraph, type, name, isVar);
+        newGraph->addPort(portNode, false);
+    }
+    return newGraph;
 }
 
-func_type_ptr_t Graph::funcType() const {
-    ASSERT(funcType_ != nullptr, "Graph has not been set to a function type.");
-    return funcType_;
-}
+func_type_ptr_t Graph::funcType() const { return funcType_; }
 
 void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
 void Graph::addPort(const node_ptr_t &node, bool isWith) {
-    ports_.push_back(node);
     if (isWith) {
-        withPortCnt_++;
+        withPorts_.push_back(node);
+    } else {
+        normPorts_.push_back(node);
     }
 }
 
-void Graph::addCapture(const node_ptr_t &node) {
-    ASSERT(&node->graph() != this, "Cannot capture a node from the same graph.");
-    capture_.insert(node);
-    node->graph().exposure_.insert(node);
+void Graph::addClosure(const node_ptr_t &node) { closure_.push_back(node); }
+
+void Graph::parametrizeClosure() {
+    withPorts_.insert(withPorts_.begin(), closure_.begin(), closure_.end());
+    closure_.clear();
+    funcType_->parametrizeClosure();
 }
 
 void Graph::setOutput(const node_ptr_t &node) {
-    ASSERT(output_ == nullptr, std::format("Graph {} already has an output node.", name_));
-    output_ = ExitNode::create(*this, node->dataType(), node->index());
-    Node::link(LinkType::Norm, node, output_);
+    ASSERT(exitNode_ == nullptr, std::format("Graph {} already has an output node.", name_));
+
+    type_ptr_t actualExitType = node->dataType();
+    if (funcType_->hasExitType()) {
+        type_ptr_t declaredExitType = funcType_->exitType();
+        if (!actualExitType->assignable(declaredExitType)) {
+            throw DiagnosticBuilder::of(SemanticDiag::ReturnTypeMismatch)
+                .commit(
+                    actualExitType->toString(),
+                    declaredExitType->toString(),
+                    name_ + ": " + funcType_->toString());
+        }
+    } else {
+        // If the function has no declared return type, set it to the actual return type
+        funcType_->setExitType(actualExitType);
+    }
+
+    exitNode_ = ExitNode::create(*this, node->dataType(), node->index());
+    Node::link(LinkType::Norm, node, exitNode_);
 }
 
 graph_ptr_t Graph::clone() const {
-    graph_ptr_t newGraph = Graph::create(outer_.lock(), name_);
+    graph_ptr_t newGraph =
+        Graph::create(tt::as_shared<FunctionType>(funcType_->clone()), outer_.lock(), name_);
     newGraph->looped_ = looped_;
 
     newGraph->funcType_ = funcType_;
@@ -126,10 +158,20 @@ graph_ptr_t Graph::clone() const {
 
     std::unordered_map<Node *, node_ptr_t> nodeMap;
 
-    for (const auto &port : ports_) {
+    for (const auto &port : withPorts_) {
         const auto &newPort = port->clone(*newGraph);
         nodeMap[port.get()] = newPort;
-        newGraph->ports_.push_back(newPort);
+        newGraph->withPorts_.push_back(newPort);
+    }
+    for (const auto &port : normPorts_) {
+        const auto &newPort = port->clone(*newGraph);
+        nodeMap[port.get()] = newPort;
+        newGraph->normPorts_.push_back(newPort);
+    }
+    for (const auto &closureNode : closure_) {
+        const auto &newClosureNode = closureNode->clone(*newGraph);
+        nodeMap[closureNode.get()] = newClosureNode;
+        newGraph->closure_.push_back(newClosureNode);
     }
     for (const auto &node : nodes_) {
         const auto &newNode = node->clone(*newGraph);
@@ -139,31 +181,32 @@ graph_ptr_t Graph::clone() const {
     // 重新建立节点之间的连接
     for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
         for (const auto &withInput : oldNodePtr->withInputs()) {
-            if (nodeMap.find(withInput.get()) == nodeMap.end()) { // capture
-                Node::link(LinkType::With, withInput, newNodePtr);
-            } else {
-                Node::link(LinkType::With, nodeMap[withInput.get()], newNodePtr);
-            }
+            ASSERT(
+                nodeMap.find(withInput.get()) != nodeMap.end(),
+                "Capture nodes should be handled separately.");
+            Node::link(LinkType::With, nodeMap[withInput.get()], newNodePtr);
         }
         for (const auto &normInput : oldNodePtr->normInputs()) {
-            if (nodeMap.find(normInput.get()) == nodeMap.end()) { // capture
-                Node::link(LinkType::Norm, normInput, newNodePtr);
-            } else {
-                Node::link(LinkType::Norm, nodeMap[normInput.get()], newNodePtr);
-            }
+            ASSERT(
+                nodeMap.find(normInput.get()) != nodeMap.end(),
+                "Capture nodes should be handled separately.");
+            Node::link(LinkType::Norm, nodeMap[normInput.get()], newNodePtr);
         }
         for (const auto &ctrlInput : oldNodePtr->ctrlInputs()) {
-            if (nodeMap.find(ctrlInput.get()) == nodeMap.end()) { // capture
-                Node::link(LinkType::Ctrl, ctrlInput, newNodePtr);
-            } else {
-                Node::link(LinkType::Ctrl, nodeMap[ctrlInput.get()], newNodePtr);
-            }
+            ASSERT(
+                nodeMap.find(ctrlInput.get()) != nodeMap.end(),
+                "Capture nodes should be handled separately.");
+            Node::link(LinkType::Ctrl, nodeMap[ctrlInput.get()], newNodePtr);
         }
     }
 
-    if (output_) {
-        newGraph->setOutput(nodeMap[output_.get()]);
-    }
+    ASSERT(exitNode_ != nullptr, "Cloning a graph without output node.");
+    const auto &outputNode = exitNode_->normInputs().front();
+    const auto &newOutput = nodeMap[outputNode.get()];
+    const auto &newExitNode =
+        ExitNode::create(*newGraph, newOutput->dataType(), newOutput->index());
+    Node::link(LinkType::Norm, newOutput, newExitNode);
+    newGraph->exitNode_ = newExitNode;
 
     return newGraph;
 }
@@ -318,7 +361,7 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         Graph *curr = &to->graph();
         while (curr != nullptr && &from->graph() != curr) {
             // the referenced node is from an outer scope, need to mark it as captured
-            curr->addCapture(from);
+            curr->addClosure(from);
             curr = curr->outer().get();
         }
     }
@@ -330,42 +373,17 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
  * 默认不允许跨图解除连接
  * 如果需要强制解除跨图连接，须设置force=true
  */
-bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to, bool force) {
+bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
     ASSERT(from && to, "Cannot unlink null nodes.");
     ASSERT(from != to, "Cannot unlink a node from itself.");
+    ASSERT(
+        &from->graph() == &to->graph(),
+        std::format(
+            "Cannot unlink nodes from different graphs: {} -X- {}. ",
+            from->toString(),
+            to->toString()));
     EXEC_WHEN_DEBUG(
         l.in("GIR").debug("Unlinking nodes: {} -X- {}", from->toString(), to->toString()));
-
-    if (&from->graph() != &to->graph()) {
-        if (force) {
-            auto &toGraphCapture = to->graph().capture_;
-            if (toGraphCapture.find(from) != toGraphCapture.end()) {
-                toGraphCapture.erase(from);
-                bool fromStillExposed = false;
-                for (const auto &out : from->outputs()) {
-                    if (&out->graph() != &from->graph() && &out->graph() != &to->graph()) {
-                        // 被引用的节点既不是from所在图的节点，也不是to所在图的节点
-                        // 说明from仍然被其他图捕获，不能移除exposure
-                        fromStillExposed = true;
-                        break;
-                    }
-                }
-                if (!fromStillExposed) {
-                    // 没有任何其他图捕获from，可以将其从exposure中移除
-                    from->graph().exposure_.erase(from);
-                }
-            }
-        } else {
-            ASSERT(
-                false,
-                std::format(
-                    "Cannot unlink nodes from different graphs: {} -X- {}. "
-                    "Use force=true to override.",
-                    from->toString(),
-                    to->toString()));
-            return false;
-        }
-    }
 
     auto &toNormInputs = to->normInputs_;
     if (std::find(toNormInputs.begin(), toNormInputs.end(), from) != toNormInputs.end()) {
@@ -413,101 +431,81 @@ bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to, bool force) {
     return false;
 }
 
-bool Node::replace(const node_ptr_t &oldNode, const node_ptr_t &newNode, bool force) {
+bool Node::replace(const node_ptr_t &oldNode, const node_ptr_t &newNode) {
     ASSERT(oldNode && newNode, "Cannot replace null nodes.");
     ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
     EXEC_WHEN_DEBUG(
         l.in("GIR").debug("Replacing node: {} -> {}", oldNode->toString(), newNode->toString()));
 
-    {
-        auto tempWithInputs = oldNode->withInputs_;
-        for (const auto &in : tempWithInputs) {
-            Node::link(LinkType::With, in, newNode);
-        }
-
-        auto tempNormInputs = oldNode->normInputs_;
-        for (const auto &in : tempNormInputs) {
-            Node::link(LinkType::Norm, in, newNode);
-        }
-
-        auto tempCtrlInputs = oldNode->ctrlInputs_;
-        for (const auto &in : tempCtrlInputs) {
-            Node::link(LinkType::Ctrl, in, newNode);
-        }
-
-        auto tempWithOutputs = oldNode->withOutputs_;
-        for (const auto &out : tempWithOutputs) {
-            Node::link(LinkType::With, newNode, out);
-        }
-
-        auto tempNormOutputs = oldNode->normOutputs_;
-        for (const auto &out : tempNormOutputs) {
-            Node::link(LinkType::Norm, newNode, out);
-        }
-
-        auto tempCtrlOutputs = oldNode->ctrlOutputs_;
-        for (const auto &out : tempCtrlOutputs) {
-            Node::link(LinkType::Ctrl, newNode, out);
-        }
+    for (const auto &in : oldNode->withInputs_) {
+        Node::link(LinkType::With, in, newNode);
     }
 
-    return oldNode->detach(force);
+    for (const auto &in : oldNode->normInputs_) {
+        Node::link(LinkType::Norm, in, newNode);
+    }
+
+    for (const auto &in : oldNode->ctrlInputs_) {
+        Node::link(LinkType::Ctrl, in, newNode);
+    }
+
+    for (const auto &out : oldNode->withOutputs_) {
+        Node::link(LinkType::With, newNode, out);
+    }
+
+    for (const auto &out : oldNode->normOutputs_) {
+        Node::link(LinkType::Norm, newNode, out);
+    }
+
+    for (const auto &out : oldNode->ctrlOutputs_) {
+        Node::link(LinkType::Ctrl, newNode, out);
+    }
+
+    return oldNode->detach();
 }
 
 /**
  * 默认不允许解除被其他图捕获的暴露节点的连接
  * 如果需要强制解除被暴露的节点，须设置force=true
  */
-bool Node::detach(bool force) {
-    if (!force) {
-        const auto &exposure = graph_.exposure();
-        if (exposure.find(shared_from_this()) != exposure.end()) {
-            ASSERT(
-                false,
-                std::format(
-                    "Cannot detach an exposed node: {}. Use force=true to override.",
-                    toString()));
-            return false;
-        }
-    }
-
+bool Node::detach() {
     node_ptr_t self = shared_from_this();
 
     {
         auto tempWithInputs = withInputs_;
         for (auto &input : tempWithInputs) {
-            if (!unlink(input, self, force)) {
+            if (!unlink(input, self)) {
                 return false;
             }
         }
         auto tempNormInputs = normInputs_;
         for (auto &input : tempNormInputs) {
-            if (!unlink(input, self, force)) {
+            if (!unlink(input, self)) {
                 return false;
             }
         }
         auto tempCtrlInputs = ctrlInputs_;
         for (auto &input : tempCtrlInputs) {
-            if (!unlink(input, self, force)) {
+            if (!unlink(input, self)) {
                 return false;
             }
         }
 
         auto tempWithOutputs = withOutputs_;
         for (auto &output : tempWithOutputs) {
-            if (!unlink(self, output, force)) {
+            if (!unlink(self, output)) {
                 return false;
             }
         }
         auto tempNormOutputs = normOutputs_;
         for (auto &output : tempNormOutputs) {
-            if (!unlink(self, output, force)) {
+            if (!unlink(self, output)) {
                 return false;
             }
         }
         auto tempCtrlOutputs = ctrlOutputs_;
         for (auto &output : tempCtrlOutputs) {
-            if (!unlink(self, output, force)) {
+            if (!unlink(self, output)) {
                 return false;
             }
         }
