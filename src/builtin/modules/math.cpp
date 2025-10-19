@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -143,4 +143,8 @@ bool MathBuiltinModule::load() {
     }
     loaded_ = true;
     return true;
+}
+
+module_ptr_t MathBuiltinModule::create(context_ptr_t ctx) {
+    return std::make_shared<MathBuiltinModule>(ctx);
 }

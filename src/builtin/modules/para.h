@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,5 @@ class ParaBuiltinModule : public BuiltinModule {
 
     virtual bool load() override;
 
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<ParaBuiltinModule>(ctx);
-    }
+    static module_ptr_t create(context_ptr_t ctx);
 };

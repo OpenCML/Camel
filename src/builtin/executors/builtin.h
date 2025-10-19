@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,9 +27,7 @@ class BasicBuiltinExecutor : public Executor {
     BasicBuiltinExecutor(context_ptr_t ctx);
     virtual ~BasicBuiltinExecutor() = default;
 
-    static executor_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<BasicBuiltinExecutor>(ctx);
-    }
+    static executor_ptr_t create(context_ptr_t ctx);
 
     virtual OperatorReturnCode
     eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override;

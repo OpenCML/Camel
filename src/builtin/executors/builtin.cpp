@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -272,6 +272,10 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {};
+
+executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
+    return std::make_shared<BasicBuiltinExecutor>(ctx);
+}
 
 OperatorReturnCode
 BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {

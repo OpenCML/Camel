@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 22, 2025
- * Updated: Sep. 22, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,5 @@ class ThisBuiltinModule : public BuiltinModule {
 
     virtual bool load() override;
 
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<ThisBuiltinModule>(ctx);
-    }
+    static module_ptr_t create(context_ptr_t ctx);
 };

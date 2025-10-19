@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,5 @@ class GlobalsBuiltinModule : public BuiltinModule {
     void exportBinaryOp(const std::string &name, const std::string &uri);
     void exportAssnOp(const std::string &name, const std::string &uri);
 
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<GlobalsBuiltinModule>(ctx);
-    }
+    static module_ptr_t create(context_ptr_t ctx);
 };

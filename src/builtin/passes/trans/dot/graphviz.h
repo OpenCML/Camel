@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,7 @@ class GraphVizDumpPass : public GraphTranslatePass {
     std::string dumpGraph(const GraphIR::graph_ptr_t &graph);
 
   public:
-    GraphVizDumpPass(const context_ptr_t &context) : GraphTranslatePass(context) {};
+    GraphVizDumpPass(const context_ptr_t &context);
     virtual ~GraphVizDumpPass() = default;
 
     GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;

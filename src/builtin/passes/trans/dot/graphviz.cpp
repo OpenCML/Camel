@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,14 +153,12 @@ string GraphVizDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
     return ss.str();
 }
 
-void GraphVizDumpPass::pushIndent() {
-    baseIndent_ += indent_;
-    depth_++;
-}
+void GraphVizDumpPass::pushIndent() { baseIndent_ += indent_; }
 
 void GraphVizDumpPass::popIndent() {
-    baseIndent_ = baseIndent_.substr(0, baseIndent_.size() - indent_.size());
-    depth_--;
+    if (!baseIndent_.empty()) {
+        baseIndent_.resize(baseIndent_.size() - indent_.size());
+    }
 }
 
 std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
@@ -178,10 +176,11 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format("digraph GraphIR {{\r\n"
-                           "    graph [rankdir=LR, fontsize=18];\r\n"
-                           "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-                           "    edge [minlen=2];\r\n");
+        res += std::format(
+            "digraph GraphIR {{\r\n"
+            "    graph [rankdir=LR, fontsize=18];\r\n"
+            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+            "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
@@ -410,7 +409,9 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     return res;
 }
 
-graph_ptr_t GraphVizDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context) : GraphTranslatePass(context) {}
+
+GraphIR::graph_ptr_t GraphVizDumpPass::apply(GraphIR::graph_ptr_t &graph, std::ostream &os) {
     os << dumpGraph(graph);
     return graph;
 }

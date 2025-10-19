@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 22, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,10 @@ ThisBuiltinModule::ThisBuiltinModule(context_ptr_t ctx) : BuiltinModule("this", 
     for (const auto &group : getOperatorGroups()) {
         exportEntity(group->name(), group);
     }
+}
+
+module_ptr_t ThisBuiltinModule::create(context_ptr_t ctx) {
+    return std::make_shared<ThisBuiltinModule>(ctx);
 }
 
 bool ThisBuiltinModule::load() {
