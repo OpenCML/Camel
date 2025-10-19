@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,12 +153,14 @@ string GraphVizDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
     return ss.str();
 }
 
-void GraphVizDumpPass::pushIndent() { baseIndent_ += indent_; }
+void GraphVizDumpPass::pushIndent() {
+    baseIndent_ += indent_;
+    depth_++;
+}
 
 void GraphVizDumpPass::popIndent() {
-    if (!baseIndent_.empty()) {
-        baseIndent_.resize(baseIndent_.size() - indent_.size());
-    }
+    baseIndent_ = baseIndent_.substr(0, baseIndent_.size() - indent_.size());
+    depth_--;
 }
 
 std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
@@ -411,7 +413,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
 
 GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context) : GraphTranslatePass(context) {}
 
-GraphIR::graph_ptr_t GraphVizDumpPass::apply(GraphIR::graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t GraphVizDumpPass::apply(GraphIR::graph_ptr_t &graph, std::ostream &os) {
     os << dumpGraph(graph);
     return graph;
 }
