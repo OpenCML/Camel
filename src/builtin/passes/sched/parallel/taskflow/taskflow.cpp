@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -202,8 +202,8 @@ tf::Task TaskflowExecSchedPass::buildAccsTask(
             auto acc = tt::as_shared<AccsNode>(n);
             if (acc->isNum()) {
                 size_t idx = acc->index<size_t>();
-                auto a = tt::as_shared<ArrayData>(source);
-                ASSERT(idx < a->raw().size(), "Array index out of bounds.");
+                auto a = tt::as_shared<TupleData>(source);
+                ASSERT(idx < a->raw().size(), "Tuple index out of bounds.");
                 frame->set(n, a->raw()[idx]);
             } else {
                 std::string key = acc->index<std::string>();
