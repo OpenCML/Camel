@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -79,6 +79,7 @@ Graph
 
 graph_ptr_t
 Graph::create(const func_type_ptr_t &funcType, const graph_ptr_t &graph, const std::string &name) {
+    ASSERT(funcType->hasCompileInfo(), "Trying to create a Graph with incomplete FunctionType.");
     static int anonymousIdx = 0;
     std::string graphName = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
     const auto newGraph = std::make_shared<Graph>(funcType, graph, graphName);
@@ -102,13 +103,24 @@ void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
 
 void Graph::addPort(const node_ptr_t &node, bool isWith) {
     if (isWith) {
+        ASSERT(
+            std::find(withPorts_.begin(), withPorts_.end(), node) == withPorts_.end(),
+            "With port node already exists in the graph.");
         withPorts_.push_back(node);
     } else {
+        ASSERT(
+            std::find(normPorts_.begin(), normPorts_.end(), node) == normPorts_.end(),
+            "Norm port node already exists in the graph.");
         normPorts_.push_back(node);
     }
 }
 
-void Graph::addClosure(const node_ptr_t &node) { closure_.push_back(node); }
+void Graph::addClosure(const node_ptr_t &node) {
+    ASSERT(
+        std::find(closure_.begin(), closure_.end(), node) == closure_.end(),
+        "Closure node already exists in the graph.");
+    closure_.push_back(node);
+}
 
 void Graph::parametrizeClosure() {
     withPorts_.insert(withPorts_.begin(), closure_.begin(), closure_.end());

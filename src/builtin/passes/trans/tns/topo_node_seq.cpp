@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -159,7 +159,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             }
             case NodeType::JOIN: {
                 auto joinNode = tt::as_shared<JoinNode>(n);
-                const auto &ins = joinNode->ctrlInputs();
+                const auto &ins = joinNode->withInputs();
                 res = format(
                     "JOIN: {}, {}",
                     pointerToIdent(ins[0].get()),

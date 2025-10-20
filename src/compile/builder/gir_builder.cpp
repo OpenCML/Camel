@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,6 +126,7 @@ node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
     if (node->graph() != *currGraph_) {
         const auto &port = PortNode::create(*currGraph_, node->dataType(), name, false);
         currGraph_->addClosure(port);
+        insertNode(name, port);
         node = port;
     }
     return node;
@@ -299,6 +300,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         if (node->graph() != *currGraph_) {
             const auto &port = PortNode::create(*currGraph_, node->dataType(), ident, false);
             currGraph_->addClosure(port);
+            insertNode(ident, port);
             node = port;
         }
         LEAVE("DREF");
@@ -759,8 +761,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             ASSERT(false, "Unknown case type in BRCH node.");
         }
 
-        graph_ptr_t subGraph = enterScope(
-            std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, nullptr));
+        graph_ptr_t subGraph = enterScope(std::make_shared<FunctionType>());
         node_ptr_t resNode = visitExecNode(caseExecNode);
         if (!subGraph->hasOutput()) {
             if (resNode) {
@@ -775,6 +776,20 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         currGraph_->addDependency(subGraph);
         type_ptr_t exitType = subGraph->funcType()->exitType();
+
+        // 保证所有捕获的变量都在 BRCH 节点执行之前准备好
+        // 这样的好处是，保证 BRCH 节点到 JOIN 节点之间的各条分支路径上
+        // 所有的节点在拓扑排序时会被紧密地排列在一起
+        // 而不会有其他外部节点插入到中间
+        // 进而便于图调度算法的实现（可以直接跳转而不需要频繁判断）
+        for (const auto &port : subGraph->closure()) {
+            const auto &portNode = tt::as_shared<PortNode>(port);
+            const auto &refNode = resolveNodeByRef(portNode->name());
+            if (linkCheek(refNode, brchNode)) {
+                Node::link(LinkType::Ctrl, refNode, brchNode);
+            }
+        }
+
         // 在分支中，默认允许闭包参数化
         auto funcNode = createFuncDataNode(subGraph, false, true);
 
@@ -793,7 +808,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         }
 
         Node::link(LinkType::Ctrl, brchNode, funcNode);
-        Node::link(LinkType::Ctrl, funcNode, joinNode);
+        Node::link(LinkType::With, funcNode, joinNode);
     }
 
     if (synced_) {

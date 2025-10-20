@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,6 +76,7 @@ class FunctionType : public SpecialType {
     bool checkModifiers() const;
 
     // 供编译期由GCT构造使用
+    bool hasCompileInfo() const { return hasCompileInfo_; }
     bool addWithArg(const std::string &ident, const type_ptr_t type, bool isVar);
     bool addNormArg(const std::string &ident, const type_ptr_t type, bool isVar);
     bool addClosureArg(const std::string &ident, const type_ptr_t type, bool isVar);

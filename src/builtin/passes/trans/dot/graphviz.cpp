@@ -178,11 +178,10 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format(
-            "digraph GraphIR {{\r\n"
-            "    graph [rankdir=LR, fontsize=18];\r\n"
-            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-            "    edge [minlen=2];\r\n");
+        res += std::format("digraph GraphIR {{\r\n"
+                           "    graph [rankdir=LR, fontsize=18];\r\n"
+                           "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
+                           "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
         func_type_ptr_t type = graph->funcType();
@@ -325,35 +324,36 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             std::format("{}\\n{}", escape(label), escape(tooltip)));
     }
 
+    // Connect ARGS node to ports
     const auto &withPorts = graph->withPorts();
     const auto &normPorts = graph->normPorts();
     const auto &closurePorts = graph->closure();
     for (size_t i = 0; i < withPorts.size(); ++i) {
         const auto &portNode = tt::as_shared<PortNode>(withPorts[i]);
         res += std::format(
-            "{}{}{} -> {} [label=\"C|{}\", style=dashed, arrowhead=empty];\r\n",
+            "{}{}{} -> {} [label=\"{}\", style=dashed, arrowhead=empty];\r\n",
             baseIndent_,
             indent_,
+            funcId,
             pointerToIdent(portNode.get()),
-            pointerToIdent(closurePorts[i].get()),
             i);
     }
     for (size_t i = 0; i < normPorts.size(); ++i) {
         const auto &portNode = tt::as_shared<PortNode>(normPorts[i]);
         res += std::format(
-            "{}{}{} -> {} [label=\"C|{}\", style=solid];\r\n",
+            "{}{}{} -> {} [label=\"{}\", style=solid];\r\n",
             baseIndent_,
             indent_,
+            funcId,
             pointerToIdent(portNode.get()),
-            pointerToIdent(closurePorts[i + withPorts.size()].get()),
             i);
     }
     for (size_t i = 0; i < closurePorts.size(); ++i) {
         res += std::format(
-            "{}{}{} [label=\"CLOSURE|{}\", shape=box, style=filled, fillcolor=lightgrey];\r\n",
+            "{}{}{} [label=\"{}\", shape=box, style=filled, fillcolor=lightgrey];\r\n",
             baseIndent_,
             indent_,
-            pointerToIdent(closurePorts[i].get()),
+            funcId,
             i);
     }
 

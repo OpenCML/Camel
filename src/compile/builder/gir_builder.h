@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,10 +43,7 @@ class Builder {
         : context_(context), module_(module) {
         nodeScope_ = node_scope_t::create();
         graphScope_ = graph_scope_t::create();
-        rootGraph_ = Graph::create(
-            std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Type::Int32()),
-            nullptr,
-            "__root__");
+        rootGraph_ = Graph::create(std::make_shared<FunctionType>(), nullptr, "__root__");
         currGraph_ = rootGraph_;
     }
 
