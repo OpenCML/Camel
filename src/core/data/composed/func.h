@@ -13,16 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "composed.h"
-
-class Frame;
-using frame_ptr_t = std::shared_ptr<Frame>;
 
 namespace GraphIR {
 class Graph;
@@ -49,7 +46,6 @@ class FunctionData : public ComposedData {
 
     std::string name() const;
     GraphIR::Graph &graph() const { return graph_; }
-    // frame_ptr_t closure() const { return closure_; }
     func_type_ptr_t funcType() const;
     const data_vec_t &closure() const { return closure_; }
 
