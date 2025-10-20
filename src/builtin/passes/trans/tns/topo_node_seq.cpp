@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,8 @@
 
 using namespace std;
 using namespace GraphIR;
+
+TopoNodeSeqDumpPass::TopoNodeSeqDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
 
 string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
     return getPtrRepr(prefix, reinterpret_cast<uintptr_t>(ptr), showRawPtr);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -78,6 +78,10 @@ OSBuiltinModule::OSBuiltinModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
     for (const auto &group : getOperatorGroups()) {
         exportEntity(group->name(), group);
     }
+}
+
+module_ptr_t OSBuiltinModule::create(context_ptr_t ctx) {
+    return std::make_shared<OSBuiltinModule>(ctx);
 }
 
 bool OSBuiltinModule::load() {
