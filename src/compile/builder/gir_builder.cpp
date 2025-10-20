@@ -70,6 +70,36 @@ inline bool linkCheek(const node_ptr_t &from, const node_ptr_t &to) {
     return true;
 }
 
+graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
+    waited_ = false;
+    synced_ = false;
+    varied_ = false;
+    diags_ = diags;
+
+    nodeScope_ = node_scope_t::create();
+    graphScope_ = graph_scope_t::create();
+    rootGraph_ = Graph::create(std::make_shared<FunctionType>(), nullptr, "__root__");
+    currGraph_ = rootGraph_;
+
+    try {
+        visit(gct);
+        auto optMainGraph = currGraph_->getSubGraphsByName("main");
+        if (optMainGraph.has_value()) {
+            auto mainGraphSet = optMainGraph.value();
+            ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
+            ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
+            auto mainGraph = *mainGraphSet.begin();
+            auto funcNode = createFuncDataNode(mainGraph, false, false);
+            currGraph_->setOutput(funcNode);
+        }
+    } catch (Diagnostic &d) {
+        diags_->add(std::move(d));
+        rootGraph_ = nullptr;
+    }
+
+    return rootGraph_;
+}
+
 graph_ptr_t Builder::enterScope(const func_type_ptr_t &funcType, const std::string &name) {
     if (name.empty()) {
         currGraph_ = Graph::create(funcType, currGraph_);

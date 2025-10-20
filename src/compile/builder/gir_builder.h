@@ -40,26 +40,9 @@ using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
 class Builder {
   public:
     Builder(const context_ptr_t &context, const module_ptr_t &module)
-        : context_(context), module_(module) {
-        nodeScope_ = node_scope_t::create();
-        graphScope_ = graph_scope_t::create();
-        rootGraph_ = Graph::create(std::make_shared<FunctionType>(), nullptr, "__root__");
-        currGraph_ = rootGraph_;
-    }
+        : context_(context), module_(module) {}
 
-    graph_ptr_t build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
-        waited_ = false;
-        synced_ = false;
-        varied_ = false;
-        diags_ = diags;
-        try {
-            visit(gct);
-        } catch (Diagnostic &d) {
-            diags_->add(std::move(d));
-            rootGraph_ = nullptr;
-        }
-        return rootGraph_;
-    }
+    graph_ptr_t build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags);
 
     graph_ptr_t rootGraph() const { return rootGraph_; }
 

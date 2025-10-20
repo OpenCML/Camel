@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -223,12 +223,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
         node_vec_t ports;
         ports.insert(ports.end(), withPorts_.begin(), withPorts_.end());
         ports.insert(ports.end(), normPorts_.begin(), normPorts_.end());
-        ports.insert(ports.end(), closure_.begin(), closure_.end());
         return ports;
     }
-    bool hasPorts() const {
-        return !withPorts_.empty() || !normPorts_.empty() || !closure_.empty();
-    }
+    bool hasPorts() const { return !withPorts_.empty() || !normPorts_.empty(); }
     const node_vec_t &withPorts() { return withPorts_; }
     const node_vec_t &normPorts() { return normPorts_; }
     const node_vec_t &closure() { return closure_; }
@@ -678,9 +675,10 @@ class OperNode : public Node {
 
     virtual std::string toString() const override {
         return std::format(
-            "OPER({}, <{}>: {}): {}",
+            "OPER({}, <{}>, {}: {}): {}",
             dataIndex_,
             operator_->name(),
+            operator_->uri(),
             operator_->funcType()->toString(),
             dataType()->toString());
     }

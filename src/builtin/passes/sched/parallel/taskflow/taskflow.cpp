@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,20 +36,18 @@ using namespace std;
 using namespace GraphIR;
 
 graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    auto optMainGraph = graph->getSubGraphsByName("main");
-    ASSERT(optMainGraph.has_value(), "Main graph not found.");
-    auto mainGraphSet = optMainGraph.value();
-    ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
-    ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
-    auto mainGraph = *mainGraphSet.begin();
+    if (!graph->hasOutput()) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::MissingMainFunction)
+            .commit(context_->mainModule()->name());
+    }
     auto rootFrame = Frame::create(nullptr, *graph);
 
     // 构建元信息（目前是统计所有图中的 BRCH-JOIN 对）
     buildGraphsInfo(graph.get());
 
     // 执行 main 子图实例，理论上来说应该是不存在修改父栈帧的情况的，否则会有线程冲突
-    auto mainFrame = Frame::create(rootFrame, *mainGraph);
-    evalGraphTF(mainGraph.get(), mainFrame);
+    evalGraphTF(graph.get(), rootFrame);
 
     return Graph::null();
 }

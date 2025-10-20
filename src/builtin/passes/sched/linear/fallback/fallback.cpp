@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -415,15 +415,13 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
 }
 
 graph_ptr_t FallbackExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    auto optMainGraph = graph->getSubGraphsByName("main");
-    ASSERT(optMainGraph.has_value(), "Main graph not found.");
-    auto mainGraphSet = optMainGraph.value();
-    ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
-    ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
-    auto mainGraph = *mainGraphSet.begin();
+    if (!graph->hasOutput()) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::MissingMainFunction)
+            .commit(context_->mainModule()->name());
+    }
     auto rootFrame = Frame::create(nullptr, *graph);
-    auto mainFrame = Frame::create(rootFrame, *mainGraph);
-    evalGraph(mainGraph.get(), mainFrame);
+    evalGraph(graph.get(), rootFrame);
     return Graph::null();
 }
 

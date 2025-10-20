@@ -225,9 +225,8 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             funcId);
     }
 
-    // Draw nodes inside the graph
-    const node_vec_t &ports = graph->ports();
-    for (const auto &port : ports) {
+    // Draw ports of the graph
+    for (const auto &port : graph->ports()) {
         const auto &portNode = tt::as_shared<PortNode>(port);
         string label = portNode->name();
         string tooltip = graph->name() + "::" + portNode->toString();
@@ -239,7 +238,20 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             escape(wrapText(label, 7, 2)),
             std::format("{}\\n{}", escape(label), escape(tooltip)));
     }
+    for (const auto &port : graph->closure()) {
+        const auto &portNode = tt::as_shared<PortNode>(port);
+        string label = portNode->name();
+        string tooltip = graph->name() + "::" + portNode->toString();
+        res += std::format(
+            "{}{}{} [label=\"{}\", shape=circle, style=dashed, tooltip=\"{}\"];\r\n",
+            baseIndent_,
+            indent_,
+            pointerToIdent(portNode.get()),
+            escape(wrapText(label, 7, 2)),
+            std::format("{}\\n{}", escape(label), escape(tooltip)));
+    }
 
+    // Draw nodes inside the graph
     const node_vec_t &nodes = graph->nodes();
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
@@ -327,7 +339,6 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     // Connect ARGS node to ports
     const auto &withPorts = graph->withPorts();
     const auto &normPorts = graph->normPorts();
-    const auto &closurePorts = graph->closure();
     for (size_t i = 0; i < withPorts.size(); ++i) {
         const auto &portNode = tt::as_shared<PortNode>(withPorts[i]);
         res += std::format(
@@ -346,14 +357,6 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             indent_,
             funcId,
             pointerToIdent(portNode.get()),
-            i);
-    }
-    for (size_t i = 0; i < closurePorts.size(); ++i) {
-        res += std::format(
-            "{}{}{} [label=\"{}\", shape=box, style=filled, fillcolor=lightgrey];\r\n",
-            baseIndent_,
-            indent_,
-            funcId,
             i);
     }
 
