@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,4 +94,8 @@ bool ParaBuiltinModule::load() {
     }
     loaded_ = true;
     return true;
+}
+
+module_ptr_t ParaBuiltinModule::create(context_ptr_t ctx) {
+    return std::make_shared<ParaBuiltinModule>(ctx);
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Sep. 30, 2025
+ * Updated: Oct. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,47 +43,14 @@ inline std::string formatAddress(void *ptr) {
     return "0x" + formatted;
 }
 
-Frame::Frame(const frame_ptr_t &parent, Graph &graph)
-    : parent_(parent), graph_(graph), dataArr_(graph.runtimeDataSize(), nullptr) {
-    EXEC_WHEN_DEBUG(l.in("Frame").debug(
-        "Created Frame for Graph: {} (Parent: {})",
-        graph_.name(),
-        parent_ ? parent_->graph().name() : "none"));
-}
-
-Frame::~Frame() {
-    EXEC_WHEN_DEBUG(l.in("Frame").debug(
-        "Destroyed Frame for Graph: {} (Parent: {})",
-        graph_.name(),
-        parent_ ? parent_->graph().name() : "none"));
-}
-
-frame_ptr_t Frame::create(const frame_ptr_t &parent, Graph &graph) {
-    return std::make_shared<Frame>(parent, graph);
+Frame::Frame(Graph *graph) : graph_(graph), dataArr_(graph->runtimeDataSize(), nullptr) {
+    EXEC_WHEN_DEBUG(l.in("Frame").debug("Created Frame for Graph: {}", graph->name()));
 }
 
 data_ptr_t Frame::get(const node_ptr_t &node) {
-    if (&(node->graph()) != &graph_) {
-        EXEC_WHEN_DEBUG(l.in("Frame").debug(
-            "Getting data for node {}::{} from parent ({}) of current frame {}. {} != {}",
-            node->graph().name(),
-            node->toString(),
-            parent_ ? parent_->graph().name() : "none",
-            graph_.name(),
-            formatAddress(&(node->graph())),
-            formatAddress(&graph_)));
-        ASSERT(
-            parent_,
-            std::format(
-                "Node {} of graph {} does not belong to the current frame's graph {}",
-                node->toString(),
-                node->graph().name(),
-                graph_.name()));
-        return parent_->get(node);
-    }
     data_ptr_t res;
     if (node->type() == NodeType::DATA) {
-        res = graph_.getStaticData(node->index());
+        res = graph_->getStaticData(node->index());
     } else {
         ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
         res = dataArr_[node->index()];
@@ -92,44 +59,26 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
         res != nullptr,
         std::format(
             "Accessing uninitialized data of node: {}::{}",
-            graph_.name(),
+            graph_->name(),
             node->toString()));
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Getting data for node {}::{} from frame {}: {}",
         node->graph().name(),
         node->toString(),
-        graph_.name(),
+        graph_->name(),
         res->toString()));
     return res;
 }
 
 void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
-    if (&(node->graph()) != &graph_) {
-        EXEC_WHEN_DEBUG(l.in("Frame").debug(
-            "Setting data for node {}::{} from parent ({}) of current frame {}. {} != {}",
-            node->graph().name(),
-            node->toString(),
-            parent_ ? parent_->graph().name() : "none",
-            graph_.name(),
-            formatAddress(&(node->graph())),
-            formatAddress(&graph_)));
-        ASSERT(
-            parent_,
-            std::format(
-                "Node {} of graph {} does not belong to the current frame's graph {}",
-                node->toString(),
-                node->graph().name(),
-                graph_.name()));
-        return parent_->set(node, data);
-    }
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Setting data for node {}::{} in frame {}: {}",
         node->graph().name(),
         node->toString(),
-        graph_.name(),
+        graph_->name(),
         data ? data->toString() : "null"));
     if (node->type() == NodeType::DATA) {
-        return graph_.setStaticData(node->index(), data);
+        return graph_->setStaticData(node->index(), data);
     } else {
         ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
         // ASSERT(
@@ -143,17 +92,6 @@ void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
         dataArr_[node->index()] = data;
         return;
     }
-}
-
-frame_ptr_t Frame::push(Graph &graph) {
-    ASSERT(&graph != &graph_, "Cannot push the same graph as the current frame's graph.");
-    return Frame::create(shared_from_this(), graph);
-}
-
-frame_ptr_t Frame::pop() {
-    auto p = parent_;
-    parent_ = nullptr;
-    return p;
 }
 
 std::string Frame::toString() const {
@@ -175,12 +113,9 @@ std::string Frame::toString() const {
         return oss.str();
     };
 
-    oss << std::format(
-        "Frame(Graph: {}, Parent: {})): (static)[",
-        graph_.name(),
-        parent_ ? parent_->graph().name() : "none");
+    oss << std::format("Frame({})): (static)[", graph_->name());
 
-    printDataArr(graph_.staticDataArr());
+    printDataArr(graph_->staticDataArr());
 
     oss << std::format("] (runtime)[");
 

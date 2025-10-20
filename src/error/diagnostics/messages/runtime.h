@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,7 @@ enum class RuntimeDiag : uint32_t {
     IndexOutOfRange = 0x000002,
     KeyNotFound = 0x000003,
     MaxRecursionDepthExceeded = 0x000004,
+    MissingMainFunction = 0x000005,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

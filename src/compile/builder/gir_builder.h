@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,28 +40,9 @@ using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
 class Builder {
   public:
     Builder(const context_ptr_t &context, const module_ptr_t &module)
-        : context_(context), module_(module) {
-        nodeScope_ = node_scope_t::create();
-        graphScope_ = graph_scope_t::create();
-        rootGraph_ = Graph::create(nullptr, "__root__");
-        rootGraph_->setFuncType(
-            std::make_shared<FunctionType>(param_init_list_t{}, param_init_list_t{}, Type::Void()));
-        currGraph_ = rootGraph_;
-    }
+        : context_(context), module_(module) {}
 
-    graph_ptr_t build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
-        waited_ = false;
-        synced_ = false;
-        varied_ = false;
-        diags_ = diags;
-        try {
-            visit(gct);
-        } catch (Diagnostic &d) {
-            diags_->add(std::move(d));
-            rootGraph_ = nullptr;
-        }
-        return rootGraph_;
-    }
+    graph_ptr_t build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags);
 
     graph_ptr_t rootGraph() const { return rootGraph_; }
 
@@ -80,6 +61,7 @@ class Builder {
     bool synced_;
     bool varied_;
 
+    std::unordered_set<Graph *> usedGraphs_;
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastSyncedNode_;
 
@@ -91,11 +73,12 @@ class Builder {
     bool insertNode(const std::string &name, const node_ptr_t &node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
 
-    graph_ptr_t enterScope(const std::string &name = "");
+    graph_ptr_t enterScope(const func_type_ptr_t &funcType, const std::string &name = "");
     void leaveScope();
 
+    node_ptr_t
+    createFuncDataNode(const graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
     node_ptr_t resolveNodeByRef(const std::string &name);
-    void setGraphOutputAndExitType(const graph_ptr_t &graph, const node_ptr_t &node);
 
     std::any visit(const GCT::node_ptr_t &gct);
 

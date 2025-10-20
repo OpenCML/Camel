@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,10 @@
 #include "utils/log.h"
 
 using namespace std;
+
+module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
+    return std::make_shared<GlobalsBuiltinModule>(ctx);
+}
 
 const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {

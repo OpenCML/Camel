@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -217,7 +217,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     }
 
     // Draw ARGS node to represent function arguments
-    if (!graph->isRoot() && !graph->ports().empty()) {
+    if (!graph->isRoot() && graph->hasPorts()) {
         res += std::format(
             "{}{}{} [label=\"ARGS\", style=dashed, shape=circle];\r\n",
             baseIndent_,
@@ -225,9 +225,8 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             funcId);
     }
 
-    // Draw nodes inside the graph
-    const node_vec_t &ports = graph->ports();
-    for (const auto &port : ports) {
+    // Draw ports of the graph
+    for (const auto &port : graph->ports()) {
         const auto &portNode = tt::as_shared<PortNode>(port);
         string label = portNode->name();
         string tooltip = graph->name() + "::" + portNode->toString();
@@ -239,8 +238,23 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             escape(wrapText(label, 7, 2)),
             std::format("{}\\n{}", escape(label), escape(tooltip)));
     }
+    for (const auto &port : graph->closure()) {
+        const auto &portNode = tt::as_shared<PortNode>(port);
+        string label = portNode->name();
+        string tooltip = graph->name() + "::" + portNode->toString();
+        res += std::format(
+            "{}{}{} [label=\"{}\", shape=circle, style=dashed, tooltip=\"{}\"];\r\n",
+            baseIndent_,
+            indent_,
+            pointerToIdent(portNode.get()),
+            escape(wrapText(label, 7, 2)),
+            std::format("{}\\n{}", escape(label), escape(tooltip)));
+    }
 
-    const node_vec_t &nodes = graph->nodes();
+    // Draw nodes inside the graph
+    node_vec_t nodes = graph->nodes();
+    nodes.push_back(graph->exitNode()); // 包含ExitNode
+
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
         string label, tooltip, shape = "circle", style = "solid", size;
@@ -324,24 +338,32 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             std::format("{}\\n{}", escape(label), escape(tooltip)));
     }
 
-    // Connect ARGS node to port nodes
-    size_t withIdx = 0, normIdx = 0;
-    for (size_t i = 0; i < ports.size(); ++i) {
-        bool isWithArg = i < graph->withPortCnt();
-        const auto &portNode = tt::as_shared<PortNode>(ports[i]);
-        string style = isWithArg ? "dashed, arrowhead=empty" : "solid";
+    // Connect ARGS node to ports
+    const auto &withPorts = graph->withPorts();
+    const auto &normPorts = graph->normPorts();
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        const auto &portNode = tt::as_shared<PortNode>(withPorts[i]);
         res += std::format(
-            "{}{}{} -> {} [label=\"{}\", style={}];\r\n",
+            "{}{}{} -> {} [label=\"{}\", style=dashed, arrowhead=empty];\r\n",
             baseIndent_,
             indent_,
             funcId,
             pointerToIdent(portNode.get()),
-            isWithArg ? withIdx++ : normIdx++,
-            style);
+            i);
+    }
+    for (size_t i = 0; i < normPorts.size(); ++i) {
+        const auto &portNode = tt::as_shared<PortNode>(normPorts[i]);
+        res += std::format(
+            "{}{}{} -> {} [label=\"{}\", style=solid];\r\n",
+            baseIndent_,
+            indent_,
+            funcId,
+            pointerToIdent(portNode.get()),
+            i);
     }
 
     // Connect nodes via input edges
-    for (const auto &node : graph->nodes()) {
+    for (const auto &node : nodes) {
         auto withInputs = node->withInputs();
         for (size_t i = 0; i < withInputs.size(); ++i) {
             if (withInputs[i]) {
@@ -410,7 +432,9 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     return res;
 }
 
-graph_ptr_t GraphVizDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context) : GraphTranslatePass(context) {}
+
+graph_ptr_t GraphVizDumpPass::apply(GraphIR::graph_ptr_t &graph, std::ostream &os) {
     os << dumpGraph(graph);
     return graph;
 }

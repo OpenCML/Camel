@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,9 +76,7 @@ bool ArrayType::operator!=(const Type &other) const {
     return !elementType_->equals(otherArr.elementType_);
 }
 
-std::shared_ptr<ComposedType> ArrayType::clone() const {
-    return std::make_shared<ArrayType>(elementType_);
-}
+type_ptr_t ArrayType::clone() const { return std::make_shared<ArrayType>(elementType_); }
 
 CastSafety ArrayType::castSafetyTo(const Type &other) const {
     if (this == &other) {

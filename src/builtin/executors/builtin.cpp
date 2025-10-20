@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -130,18 +130,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/ge_s", __builtin__ge__},
         {"op/ge", __builtin__ge__},
 
-        {"op/add_i", __builtin__add__},
-        {"op/add_l", __builtin__add__},
-        {"op/add_f", __builtin__add__},
-        {"op/add_d", __builtin__add__},
-        {"op/add_s", __builtin__add__},
-        {"op/add", __builtin__add__},
+        {"op/add_i", __builtin__add_ii__},
+        {"op/add_l", __builtin__add_ll__},
+        {"op/add_f", __builtin__add_ff__},
+        {"op/add_d", __builtin__add_dd__},
+        {"op/add_s", __builtin__add_ss__},
 
-        {"op/sub_i", __builtin__sub__},
-        {"op/sub_l", __builtin__sub__},
-        {"op/sub_f", __builtin__sub__},
-        {"op/sub_d", __builtin__sub__},
-        {"op/sub", __builtin__sub__},
+        {"op/sub_i", __builtin__sub_ii__},
+        {"op/sub_l", __builtin__sub_ll__},
+        {"op/sub_f", __builtin__sub_ff__},
+        {"op/sub_d", __builtin__sub_dd__},
 
         {"op/mul_i", __builtin__mul__},
         {"op/mul_l", __builtin__mul__},
@@ -272,6 +270,10 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {};
+
+executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
+    return std::make_shared<BasicBuiltinExecutor>(ctx);
+}
 
 OperatorReturnCode
 BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,9 +43,7 @@ class ProfilerBuiltinModule : public BuiltinModule {
     void instant(const std::string &name);
     void enable(bool enabled);
 
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<ProfilerBuiltinModule>(ctx);
-    }
+    static module_ptr_t create(context_ptr_t ctx);
 };
 #else
 class ProfilerBuiltinModule : public BuiltinModule {

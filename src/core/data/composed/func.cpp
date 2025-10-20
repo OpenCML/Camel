@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 
 using namespace std;
 
-FunctionData::FunctionData(GraphIR::Graph &graph) : Data(graph.funcType()), graph_(graph) {}
+FunctionData::FunctionData(GraphIR::Graph &graph) : ComposedData(graph.funcType()), graph_(graph) {}
 
 func_ptr_t FunctionData::create(GraphIR::Graph &graph) {
     ASSERT(graph.funcType() != nullptr, "Graph must have a function type for FunctionData.");
@@ -32,6 +32,29 @@ func_ptr_t FunctionData::create(GraphIR::Graph &graph) {
 std::string FunctionData::name() const { return graph_.name(); }
 
 func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<FunctionType>(type_); }
+
+std::vector<std::string> FunctionData::refs() const {
+    std::vector<std::string> refNames;
+    for (const auto &node : graph_.closure()) {
+        const auto &portNode = tt::as_shared<GraphIR::PortNode>(node);
+        refNames.push_back(portNode->name());
+    }
+    return refNames;
+}
+
+bool FunctionData::resolved() const { return graph_.closure().empty() || !closure_.empty(); }
+
+void FunctionData::resolve(const data_vec_t &dataList) {
+    ASSERT(closure_.size() == 0, "FunctionData closure has already been resolved.");
+    ASSERT(
+        dataList.size() == graph_.closure().size(),
+        std::format(
+            "Cannot resolve closure of function '{}': expected {} data, got {}.",
+            graph_.name(),
+            graph_.closure().size(),
+            dataList.size()));
+    closure_.insert(closure_.end(), dataList.begin(), dataList.end());
+}
 
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
 
@@ -47,7 +70,11 @@ data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<Functi
 
 const std::string FunctionData::toString() const {
     FunctionType *type = dynamic_cast<FunctionType *>(type_.get());
-    return graph_.name() + ": " + type->toString();
+    return std::format(
+        "{}: {} ({})",
+        graph_.name(),
+        type->toString(),
+        strutil::join(refs(), ", ", [](const std::string &s) { return s; }));
 }
 
 void FunctionData::print(std::ostream &os) const { os << toString(); }
