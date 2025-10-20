@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -157,11 +157,25 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
     size_t addRuntimeData() { return runtimeDataSize_++; }
     void setStaticData(size_t index, const data_ptr_t &data) {
-        ASSERT(index < staticDataArr_.size(), "Static data index out of range.");
+        ASSERT(
+            index < staticDataArr_.size(),
+            std::format(
+                "Static data index out of range when setting data of graph ({}) at index {}. "
+                "(total size: {})",
+                name_,
+                index,
+                staticDataArr_.size()));
         staticDataArr_[index] = data;
     }
     data_ptr_t getStaticData(size_t index) const {
-        ASSERT(index < staticDataArr_.size(), "Static data index out of range.");
+        ASSERT(
+            index < staticDataArr_.size(),
+            std::format(
+                "Static data index out of range when getting data of graph ({}) at index {}. "
+                "(total size: {})",
+                name_,
+                index,
+                staticDataArr_.size()));
         return staticDataArr_[index];
     }
     size_t staticDataSize() const { return staticDataArr_.size(); }

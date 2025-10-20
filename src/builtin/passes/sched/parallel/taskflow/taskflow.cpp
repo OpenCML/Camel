@@ -41,7 +41,7 @@ graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             ->of(RuntimeDiag::MissingMainFunction)
             .commit(context_->mainModule()->name());
     }
-    auto rootFrame = new Frame(*graph);
+    auto rootFrame = new Frame(graph.get());
 
     // 构建元信息（目前是统计所有图中的 BRCH-JOIN 对）
     buildGraphsInfo(graph.get());
@@ -130,7 +130,7 @@ tf::Task TaskflowExecSchedPass::buildExitTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     auto t =
         flowLike
-            .emplace([n]() {
+            .emplace([&]() {
                 ASSERT(n->withInputs().size() == 0, "Exit node cant have with inputs.");
                 ASSERT(n->normInputs().size() <= 1, "Exit node cant have multiple norm inputs.");
             })
@@ -142,7 +142,7 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildDataTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
-        .emplace([n]() { ASSERT(frame->get(n) != nullptr, "DATA node should already have data."); })
+        .emplace([&]() { ASSERT(frame->get(n) != nullptr, "DATA node should already have data."); })
         .name("DATA:" + regex_replace(n->toString(), regex("\""), "\\\""));
 }
 
@@ -150,7 +150,7 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildPortTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
-        .emplace([n]() { ASSERT(frame->get(n) != nullptr, "PORT node should already have data."); })
+        .emplace([&]() { ASSERT(frame->get(n) != nullptr, "PORT node should already have data."); })
         .name("PORT:" + n->toString());
 }
 
@@ -158,7 +158,7 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildCopyTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
-        .emplace([n, frame]() {
+        .emplace([&]() {
             auto src = n->withInputs().front();
             auto v = frame->get(src);
             if (v == nullptr) {
@@ -174,7 +174,7 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildFillTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
-        .emplace([n, frame]() {
+        .emplace([&]() {
             const auto &srcNode = n->withInputs().front();
             const auto &dataInputs = n->normInputs();
             data_ptr_t data = frame->get(srcNode)->clone();
@@ -193,7 +193,7 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildAccsTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
-        .emplace([n, frame]() {
+        .emplace([&]() {
             data_ptr_t source = frame->get(n->dataInputs().front());
             auto acc = tt::as_shared<AccsNode>(n);
             if (acc->isNum()) {
@@ -216,7 +216,7 @@ tf::Task TaskflowExecSchedPass::buildFuncTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     // 使用动态子流递归展开子图
     return flowLike
-        .emplace([this, n, frame](tf::Subflow &sf) {
+        .emplace([&](tf::Subflow &sf) {
             auto func = tt::as_shared<FuncNode>(n)->func();
             auto &tgtGraph = func->graph();
             data_vec_t args;
@@ -225,7 +225,7 @@ tf::Task TaskflowExecSchedPass::buildFuncTask(
             const auto &ports = tgtGraph.ports();
             ASSERT(ports.size() == args.size(), "Argument count mismatch.");
 
-            auto nextFrame = new Frame(tgtGraph);
+            auto nextFrame = new Frame(&tgtGraph);
             for (size_t i = 0; i < ports.size(); ++i)
                 nextFrame->set(ports[i], args[i]);
 
@@ -242,7 +242,7 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildCallTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
-        .emplace([this, n, frame](tf::Subflow &sf) {
+        .emplace([&](tf::Subflow &sf) {
             const auto &funcNode = n->withInputs().front();
             const auto &funcData = frame->get(funcNode);
             auto &tgtGraph = tt::as_shared<FunctionData>(funcData)->graph();
@@ -253,7 +253,7 @@ tf::Task TaskflowExecSchedPass::buildCallTask(
             const auto &ports = tgtGraph.ports();
             ASSERT(ports.size() == args.size(), "Argument count mismatch.");
 
-            auto funcFrame = new Frame(tgtGraph);
+            auto funcFrame = new Frame(&tgtGraph);
             for (size_t i = 0; i < ports.size(); ++i)
                 funcFrame->set(ports[i], args[i]);
 
@@ -270,7 +270,7 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildOperTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
-        .emplace([this, n, frame](tf::Subflow &sf) {
+        .emplace([&](tf::Subflow &sf) {
             auto opNode = tt::as_shared<OperNode>(n);
             const auto &uri = opNode->oper()->uri();
             if (uri.starts_with(":mark/")) {
@@ -314,7 +314,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegions(
         node_ptr_t join = candidates.front()->ctrlOutputs().front();
 
         auto selector = flowLike
-                            .emplace([brch, frame]() {
+                            .emplace([&]() {
                                 auto condNode = brch->withInputs().front();
                                 auto condData = frame->get(condNode);
                                 auto normIns = brch->normInputs();
@@ -490,7 +490,7 @@ void TaskflowExecSchedPass::mark_map_arr(
     auto spawn_unary = [&](data_ptr_t arg, data_ptr_t &out_slot) {
         sf.emplace([&, arg](tf::Subflow &isf) {
               auto &fg = func->graph();
-              auto fframe = new Frame(fg);
+              auto fframe = new Frame(&fg);
               const auto &ports = fg.ports();
               ASSERT(ports.size() == 1, "Function should have exactly one parameter for map.");
               fframe->set(ports[0], arg);
@@ -522,7 +522,7 @@ void TaskflowExecSchedPass::mark_apply_arr(
     auto spawn_unary = [&](data_ptr_t arg, data_ptr_t &out_slot) {
         sf.emplace([&, arg](tf::Subflow &isf) {
               auto &fg = func->graph();
-              auto fframe = new Frame(fg);
+              auto fframe = new Frame(&fg);
               const auto &ports = fg.ports();
               ASSERT(ports.size() == 1, "apply expects unary function.");
               fframe->set(ports[0], arg);
@@ -561,7 +561,7 @@ void TaskflowExecSchedPass::mark_filter_arr(
         auto spawn_pred = [&](data_ptr_t arg, size_t idx) {
             sf.emplace([&, arg, idx](tf::Subflow &isf) {
                   auto &fg = func->graph();
-                  auto fframe = new Frame(fg);
+                  auto fframe = new Frame(&fg);
                   const auto &ports = fg.ports();
                   ASSERT(ports.size() == 1, "filter expects unary predicate.");
                   fframe->set(ports[0], arg);
@@ -616,7 +616,7 @@ void TaskflowExecSchedPass::mark_reduce_arr(
         auto step =
             sf.emplace([&, i](tf::Subflow &isf) {
                   auto &fg = func->graph();
-                  auto fframe = new Frame(fg);
+                  auto fframe = new Frame(&fg);
                   const auto &ports = fg.ports();
                   ASSERT(ports.size() == 2, "Binary function should have exactly two parameters.");
                   fframe->set(ports[0], acc);
@@ -667,7 +667,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
                         auto step =
                             isf.emplace([&, i](tf::Subflow &lsf) {
                                    auto &fg = func->graph();
-                                   auto fframe = new Frame(fg);
+                                   auto fframe = new Frame(&fg);
                                    const auto &ports = fg.ports();
                                    ASSERT(
                                        ports.size() == 2,
@@ -701,7 +701,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
             auto tc = sf.emplace([&, left_out, right_out, out](tf::Subflow &isf) {
                             // 合并两个子区间：保持 left 在前、right 在后
                             auto &fg = func->graph();
-                            auto fframe = new Frame(fg);
+                            auto fframe = new Frame(&fg);
                             const auto &ports = fg.ports();
                             ASSERT(
                                 ports.size() == 2,
@@ -726,7 +726,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     auto final =
         sf.emplace([&, total](tf::Subflow &isf) {
               auto &fg = func->graph();
-              auto fframe = new Frame(fg);
+              auto fframe = new Frame(&fg);
               const auto &ports = fg.ports();
               ASSERT(ports.size() == 2, "Binary function should have exactly two parameters.");
               fframe->set(ports[0], initData);
@@ -751,7 +751,7 @@ void TaskflowExecSchedPass::mark_foreach_arr(
     auto add_step = [&](const data_ptr_t &arg, tf::Task &prev, bool &has_prev) {
         auto step = sf.emplace([&, arg](tf::Subflow &isf) {
                           auto &fg = func->graph();
-                          auto fframe = new Frame(fg);
+                          auto fframe = new Frame(&fg);
                           const auto &ports = fg.ports();
                           ASSERT(ports.size() == 1, "foreach expects unary function.");
                           fframe->set(ports[0], arg);
@@ -788,7 +788,7 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     auto spawn_unary_void = [&](data_ptr_t arg) {
         sf.emplace([&, arg](tf::Subflow &isf) {
               auto &fg = func->graph();
-              auto fframe = new Frame(fg);
+              auto fframe = new Frame(&fg);
               const auto &ports = fg.ports();
               ASSERT(ports.size() == 1, "foreach expects unary function.");
               fframe->set(ports[0], arg);

@@ -30,17 +30,17 @@ class FallbackExecSchedPass : public LinearSchedPass {
     std::stack<GraphIR::node_ptr_t> brInfoStack_;
     std::unordered_map<GraphIR::Graph *, std::shared_ptr<GraphIR::node_vec_t>> graphTopoNodesCache_;
 
-    data_ptr_t evalGraph(GraphIR::Graph *graph, const frame_rptr_t &frame);
+    data_ptr_t evalGraph(GraphIR::Graph *graph, Frame &frame);
     std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(GraphIR::Graph *graph);
 
-    void evalMarkedOperator(
-        const std::string uri, const GraphIR::node_ptr_t &node, frame_rptr_t &currFrame);
+    void
+    evalMarkedOperator(const std::string uri, const GraphIR::node_ptr_t &node, Frame &currFrame);
 
-    void evalMarkedOperator_map_arr(const GraphIR::node_ptr_t &node, frame_rptr_t &currFrame);
-    void evalMarkedOperator_apply_arr(const GraphIR::node_ptr_t &node, frame_rptr_t &currFrame);
-    void evalMarkedOperator_filter_arr(const GraphIR::node_ptr_t &node, frame_rptr_t &currFrame);
-    void evalMarkedOperator_reduce_arr(const GraphIR::node_ptr_t &node, frame_rptr_t &currFrame);
-    void evalMarkedOperator_foreach_arr(const GraphIR::node_ptr_t &node, frame_rptr_t &currFrame);
+    void evalMarkedOperator_map_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
+    void evalMarkedOperator_apply_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
+    void evalMarkedOperator_filter_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
+    void evalMarkedOperator_reduce_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
+    void evalMarkedOperator_foreach_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
 
   public:
     FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};

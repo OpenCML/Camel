@@ -34,11 +34,19 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 
 class Frame {
   public:
-    Frame(GraphIR::Graph &graph);
+    Frame(GraphIR::Graph *graph);
     ~Frame() = default;
 
-    const GraphIR::Graph &graph() const { return graph_; }
+    const GraphIR::Graph *graph() const { return graph_; }
     void reset() { std::fill(dataArr_.begin(), dataArr_.end(), nullptr); }
+
+    Frame &operator=(const Frame &other) {
+        if (this != &other) {
+            graph_ = other.graph_;
+            dataArr_ = other.dataArr_;
+        }
+        return *this;
+    }
 
     data_ptr_t get(const GraphIR::node_ptr_t &node);
     void set(const GraphIR::node_ptr_t &node, const data_ptr_t &data);
@@ -46,6 +54,6 @@ class Frame {
     std::string toString() const;
 
   private:
-    GraphIR::Graph &graph_;
+    GraphIR::Graph *graph_;
     data_vec_t dataArr_;
 };

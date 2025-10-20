@@ -43,14 +43,14 @@ inline std::string formatAddress(void *ptr) {
     return "0x" + formatted;
 }
 
-Frame::Frame(Graph &graph) : graph_(graph), dataArr_(graph.runtimeDataSize(), nullptr) {
-    EXEC_WHEN_DEBUG(l.in("Frame").debug("Created Frame for Graph: {}", graph.name()));
+Frame::Frame(Graph *graph) : graph_(graph), dataArr_(graph->runtimeDataSize(), nullptr) {
+    EXEC_WHEN_DEBUG(l.in("Frame").debug("Created Frame for Graph: {}", graph->name()));
 }
 
 data_ptr_t Frame::get(const node_ptr_t &node) {
     data_ptr_t res;
     if (node->type() == NodeType::DATA) {
-        res = graph_.getStaticData(node->index());
+        res = graph_->getStaticData(node->index());
     } else {
         ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
         res = dataArr_[node->index()];
@@ -59,13 +59,13 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
         res != nullptr,
         std::format(
             "Accessing uninitialized data of node: {}::{}",
-            graph_.name(),
+            graph_->name(),
             node->toString()));
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Getting data for node {}::{} from frame {}: {}",
         node->graph().name(),
         node->toString(),
-        graph_.name(),
+        graph_->name(),
         res->toString()));
     return res;
 }
@@ -75,10 +75,10 @@ void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
         "Setting data for node {}::{} in frame {}: {}",
         node->graph().name(),
         node->toString(),
-        graph_.name(),
+        graph_->name(),
         data ? data->toString() : "null"));
     if (node->type() == NodeType::DATA) {
-        return graph_.setStaticData(node->index(), data);
+        return graph_->setStaticData(node->index(), data);
     } else {
         ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
         // ASSERT(
@@ -113,9 +113,9 @@ std::string Frame::toString() const {
         return oss.str();
     };
 
-    oss << std::format("Frame({})): (static)[", graph_.name());
+    oss << std::format("Frame({})): (static)[", graph_->name());
 
-    printDataArr(graph_.staticDataArr());
+    printDataArr(graph_->staticDataArr());
 
     oss << std::format("] (runtime)[");
 
