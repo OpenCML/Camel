@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,6 +88,14 @@ bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool i
     } else {
         return false;
     }
+    return true;
+}
+
+bool FunctionType::addClosureRef(const std::string &ident) {
+    ASSERT(
+        hasCompileInfo_,
+        "Cannot add closure ref to FunctionType that is not constructed using default constructor");
+    closureRefs_.push_back(ident);
     return true;
 }
 
@@ -246,3 +254,16 @@ bool FunctionType::operator==(const Type &other) const {
 }
 
 bool FunctionType::operator!=(const Type &other) const { return !(*this == other); }
+
+type_ptr_t FunctionType::clone() const {
+    auto res = std::make_shared<FunctionType>();
+    res->implMark_ = implMark_;
+    res->modifiers_ = modifiers_;
+    res->withTypes_ = withTypes_;
+    res->normTypes_ = normTypes_;
+    res->exitType_ = exitType_;
+    res->argNames_ = argNames_;
+    res->closureRefs_ = closureRefs_;
+    res->hasCompileInfo_ = hasCompileInfo_;
+    return res;
+}

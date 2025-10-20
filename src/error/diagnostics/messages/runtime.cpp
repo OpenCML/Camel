@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,6 +59,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "MaxRecursionDepthExceeded",
                 "Maximum recursion depth exceeded when evaluating graph '{0}'.",
                 "Check for infinite recursion or excessively deep recursive calls.",
+            },
+        },
+        {
+            RuntimeDiag::MissingMainFunction,
+            {
+                "MissingMainFunction",
+                "No 'main' function found in module '{0}'.",
+                "Define a 'main' function in module '{0}' to serve as the program entry point.",
             },
         },
     };

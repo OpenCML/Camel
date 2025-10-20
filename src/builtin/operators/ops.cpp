@@ -439,78 +439,130 @@ OperatorReturnCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context 
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __builtin__add__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__add_ii__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 2, "add operator requires exactly two arguments");
 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
     data_ptr_t result;
-    if (left->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(
-            left->as<Int32Data>(Type::Int32())->data() +
-            right->as<Int32Data>(Type::Int32())->data());
-    } else if (left->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(
-            left->as<Int64Data>(Type::Int64())->data() +
-            right->as<Int64Data>(Type::Int64())->data());
-    } else if (left->type() == Type::Float()) {
-        result = std::make_shared<FloatData>(
-            left->as<FloatData>(Type::Float())->data() +
-            right->as<FloatData>(Type::Float())->data());
-    } else if (left->type() == Type::Double()) {
-        result = std::make_shared<DoubleData>(
-            left->as<DoubleData>(Type::Double())->data() +
-            right->as<DoubleData>(Type::Double())->data());
-    } else if (left->type() == Type::String()) {
-        result = std::make_shared<StringData>(
-            left->as<StringData>(Type::String())->data() +
-            right->as<StringData>(Type::String())->data());
-    } else {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<add> operator not supported for type " + left->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    result = std::make_shared<Int32Data>(
+        left->as<Int32Data>(Type::Int32())->data() + right->as<Int32Data>(Type::Int32())->data());
 
     frame.set(self, result);
     return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __builtin__sub__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+OperatorReturnCode __builtin__add_ll__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 2, "sub operator requires exactly two arguments");
 
     const data_ptr_t &left = frame.get(ins[0]);
     const data_ptr_t &right = frame.get(ins[1]);
 
     data_ptr_t result;
-    if (left->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(
-            left->as<Int32Data>(Type::Int32())->data() -
-            right->as<Int32Data>(Type::Int32())->data());
-    } else if (left->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(
-            left->as<Int64Data>(Type::Int64())->data() -
-            right->as<Int64Data>(Type::Int64())->data());
-    } else if (left->type() == Type::Float()) {
-        result = std::make_shared<FloatData>(
-            left->as<FloatData>(Type::Float())->data() -
-            right->as<FloatData>(Type::Float())->data());
-    } else if (left->type() == Type::Double()) {
-        result = std::make_shared<DoubleData>(
-            left->as<DoubleData>(Type::Double())->data() -
-            right->as<DoubleData>(Type::Double())->data());
-    } else {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<sub> operator not supported for type " + left->type()->toString());
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    result = std::make_shared<Int64Data>(
+        left->as<Int64Data>(Type::Int64())->data() + right->as<Int64Data>(Type::Int64())->data());
 
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__add_ff__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &left = frame.get(ins[0]);
+    const data_ptr_t &right = frame.get(ins[1]);
+
+    data_ptr_t result;
+    result = std::make_shared<FloatData>(
+        left->as<FloatData>(Type::Float())->data() + right->as<FloatData>(Type::Float())->data());
+
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__add_dd__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &left = frame.get(ins[0]);
+    const data_ptr_t &right = frame.get(ins[1]);
+
+    data_ptr_t result;
+    result = std::make_shared<DoubleData>(
+        left->as<DoubleData>(Type::Double())->data() +
+        right->as<DoubleData>(Type::Double())->data());
+
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__add_ss__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &left = frame.get(ins[0]);
+    const data_ptr_t &right = frame.get(ins[1]);
+
+    data_ptr_t result;
+    result = std::make_shared<DoubleData>(
+        left->as<DoubleData>(Type::Double())->data() +
+        right->as<DoubleData>(Type::Double())->data());
+
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__sub_ii__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &left = frame.get(ins[0]);
+    const data_ptr_t &right = frame.get(ins[1]);
+
+    int32_t lval = left->as<Int32Data>(Type::Int32())->data();
+    int32_t rval = right->as<Int32Data>(Type::Int32())->data();
+
+    data_ptr_t result = std::make_shared<Int32Data>(lval - rval);
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__sub_ll__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &left = frame.get(ins[0]);
+    const data_ptr_t &right = frame.get(ins[1]);
+
+    int64_t lval = left->as<Int64Data>(Type::Int64())->data();
+    int64_t rval = right->as<Int64Data>(Type::Int64())->data();
+
+    data_ptr_t result = std::make_shared<Int64Data>(lval - rval);
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__sub_ff__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &left = frame.get(ins[0]);
+    const data_ptr_t &right = frame.get(ins[1]);
+
+    float lval = left->as<FloatData>(Type::Float())->data();
+    float rval = right->as<FloatData>(Type::Float())->data();
+
+    data_ptr_t result = std::make_shared<FloatData>(lval - rval);
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __builtin__sub_dd__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    const auto &ins = self->normInputs();
+
+    const data_ptr_t &left = frame.get(ins[0]);
+    const data_ptr_t &right = frame.get(ins[1]);
+
+    double lval = left->as<DoubleData>(Type::Double())->data();
+    double rval = right->as<DoubleData>(Type::Double())->data();
+
+    data_ptr_t result = std::make_shared<DoubleData>(lval - rval);
     frame.set(self, result);
     return OperatorReturnCode::OK;
 }

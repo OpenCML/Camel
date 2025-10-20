@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 21, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,9 +31,9 @@ using namespace GraphIR;
 
 std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
     if (graphTopoNodesCache_.find(graph) == graphTopoNodesCache_.end()) {
-        node_ptr_t retNode = graph->exitNode();
+        node_ptr_t exitNode = graph->exitNode();
         auto sortedNodes = findReachable(
-            retNode,
+            exitNode,
             [](const node_ptr_t &n) {
                 vector<node_ptr_t> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
@@ -55,10 +55,12 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
             for (const auto &n : sortedNodes) {
                 l.in("Topo").debug("  {}", n->toString());
             }
-            if (sortedNodes.size() != graph->nodes().size() - 1) {
+            size_t totalNodeCnt =
+                graph->nodes().size() + graph->ports().size() + graph->closure().size();
+            if (sortedNodes.size() != totalNodeCnt) {
                 GraphIR::node_vec_t unreachableNodes;
                 for (const auto &n : graph->nodes()) {
-                    if (n != retNode &&
+                    if (n != exitNode &&
                         std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
                         unreachableNodes.push_back(n);
                     }
@@ -84,7 +86,7 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
     }
 }
 
-data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &frame) {
+data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
 
     EXEC_WHEN_DEBUG([&]() {
@@ -99,16 +101,18 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
 
     bool loop = false;
     auto nodesPtr = getTopoNodes(graph);
-    frame_ptr_t currFrame = frame, tailFrame = nullptr;
+
+    Frame targetFrame(graph);
+    frame_rptr_t currFrame = &frame, tailFrame = nullptr;
 
     auto evalFuncNode = [&](const node_ptr_t &n, bool isTailCall) {
         auto func = tt::as_shared<FuncNode>(n)->func();
-        auto &tgtGraph = func->graph();
+        auto &targetGraph = func->graph();
         EXEC_WHEN_DEBUG(l.in("Eval").debug(
             "Calling function: {} (tail-call: {})",
-            func->name().empty() ? tgtGraph.name() : func->name(),
+            func->name().empty() ? targetGraph.name() : func->name(),
             isTailCall ? "yes" : "no"));
-        frame_ptr_t nextFrame;
+        frame_rptr_t nextFrame = nullptr;
 
         data_vec_t args;
         const auto &inNodes = n->dataInputs();
@@ -117,37 +121,38 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
             args.push_back(currFrame->get(inNode));
         }
 
-        const auto &portNodes = tgtGraph.ports();
+        auto portNodes = targetGraph.ports();
         ASSERT(
             inNodes.size() == portNodes.size(),
             std::format(
                 "Function {} expects {} arguments, but got {}.",
-                func->name().empty() ? tgtGraph.name() : func->name(),
+                func->name().empty() ? targetGraph.name() : func->name(),
                 portNodes.size(),
                 inNodes.size()));
 
         if (isTailCall) {
             // Tail-call optimization
             loop = true;
-            frame_ptr_t lastFrame = currFrame;
+            frame_rptr_t lastFrame = currFrame;
 
-            if (&tgtGraph == &currFrame->graph()) {
+            if (&targetGraph == currFrame->graph()) {
                 // Self-recursion optimization
                 currFrame = lastFrame;
                 EXEC_WHEN_DEBUG(l.in("Eval").debug(
                     "Optimizing self-recursion for graph: {}",
-                    currFrame->graph().name()));
+                    currFrame->graph()->name()));
             } else {
-                nodesPtr = getTopoNodes(&tgtGraph);
+                nodesPtr = getTopoNodes(&targetGraph);
 
-                if (tailFrame && &tailFrame->graph() == &tgtGraph) {
+                if (tailFrame && tailFrame->graph() == &targetGraph) {
                     // Mutual-tail-recursion optimization
                     EXEC_WHEN_DEBUG(l.in("Eval").debug(
                         "Optimizing mutual-tail-recursion for graph: {}",
-                        currFrame->graph().name()));
+                        currFrame->graph()->name()));
                     currFrame = tailFrame;
                 } else {
-                    currFrame = Frame::create(currFrame, tgtGraph);
+                    targetFrame = Frame(&targetGraph);
+                    currFrame = &targetFrame;
                 }
             }
 
@@ -163,14 +168,15 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 nextFrame->set(portNodes[i], args[i]);
             }
         } else {
-            nextFrame = Frame::create(currFrame, tgtGraph);
+            Frame tmpFrame(&targetGraph);
+            nextFrame = &tmpFrame;
 
             for (size_t i = 0; i < portNodes.size(); ++i) {
                 nextFrame->set(portNodes[i], args[i]);
             }
 
             // evaluate the target graph
-            data_ptr_t res = evalGraph(&tgtGraph, nextFrame);
+            data_ptr_t res = evalGraph(&targetGraph, *nextFrame);
             currFrame->set(n, res);
         }
     };
@@ -239,9 +245,9 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 auto accessNode = tt::as_shared<AccsNode>(n);
                 if (accessNode->isNum()) {
                     size_t idx = accessNode->index<size_t>();
-                    auto arrayData = tt::as_shared<ArrayData>(source);
-                    ASSERT(idx < arrayData->raw().size(), "Tuple index out of bounds.");
-                    currFrame->set(n, arrayData->raw()[idx]);
+                    auto tupleData = tt::as_shared<TupleData>(source);
+                    ASSERT(idx < tupleData->raw().size(), "Tuple index out of bounds.");
+                    currFrame->set(n, tupleData->raw()[idx]);
                 } else {
                     std::string key = accessNode->index<std::string>();
                     auto structData = tt::as_shared<StructData>(source);
@@ -319,8 +325,8 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
             case NodeType::CALL: {
                 const auto &funcNode = n->withInputs().front();
                 const auto &funcData = currFrame->get(funcNode);
-                auto &tgtGraph = tt::as_shared<FunctionData>(funcData)->graph();
-                frame_ptr_t funcFrame = Frame::create(currFrame, tgtGraph);
+                auto &targetGraph = tt::as_shared<FunctionData>(funcData)->graph();
+                Frame funcFrame(&targetGraph);
 
                 data_vec_t args;
                 const auto &inNodes = n->normInputs();
@@ -329,12 +335,29 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                     args.push_back(currFrame->get(inNode));
                 }
 
-                const auto &portNodes = tgtGraph.ports();
-                for (size_t i = 0; i < portNodes.size(); ++i) {
-                    funcFrame->set(portNodes[i], args[i]);
+                auto portNodes = targetGraph.ports();
+
+                // 处理闭包参数
+                if (targetGraph.hasClosure()) {
+                    const auto &functionData = tt::as_shared<FunctionData>(funcData);
+                    const auto &closureNodes = targetGraph.closure();
+                    const auto &closureData = functionData->closure();
+                    ASSERT(
+                        functionData->closure().size() == closureNodes.size(),
+                        "Function closure size mismatch.");
+                    portNodes.reserve(portNodes.size() + closureNodes.size());
+                    for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
+                        auto closureNode = closureNodes[ci];
+                        portNodes.push_back(closureNode);
+                        args.push_back(closureData[ci]);
+                    }
                 }
 
-                const auto &res = evalGraph(&tgtGraph, funcFrame);
+                for (size_t i = 0; i < portNodes.size(); ++i) {
+                    funcFrame.set(portNodes[i], args[i]);
+                }
+
+                const auto &res = evalGraph(&targetGraph, funcFrame);
                 currFrame->set(n, res);
                 break;
             }
@@ -351,7 +374,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                 const auto &uri = opNode->oper()->uri();
 
                 if (uri.starts_with(":mark/")) {
-                    evalMarkedOperator(uri.substr(6), n, currFrame);
+                    evalMarkedOperator(uri.substr(6), n, *currFrame);
                     break;
                 }
 
@@ -384,7 +407,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
 
     currRecursionDepth_--;
 
-    const auto &retNode = currFrame->graph().exitNode();
+    const auto &retNode = currFrame->graph()->exitNode();
     ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
@@ -415,20 +438,18 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
 }
 
 graph_ptr_t FallbackExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    auto optMainGraph = graph->getSubGraphsByName("main");
-    ASSERT(optMainGraph.has_value(), "Main graph not found.");
-    auto mainGraphSet = optMainGraph.value();
-    ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
-    ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
-    auto mainGraph = *mainGraphSet.begin();
-    auto rootFrame = Frame::create(nullptr, *graph);
-    auto mainFrame = Frame::create(rootFrame, *mainGraph);
-    evalGraph(mainGraph.get(), mainFrame);
+    if (!graph->hasOutput()) {
+        context_->rtmDiags()
+            ->of(RuntimeDiag::MissingMainFunction)
+            .commit(context_->mainModule()->name());
+    }
+    Frame rootFrame(graph.get());
+    evalGraph(graph.get(), rootFrame);
     return Graph::null();
 }
 
 void FallbackExecSchedPass::evalMarkedOperator(
-    const std::string uri, const GraphIR::node_ptr_t &node, frame_ptr_t &currFrame) {
+    const std::string uri, const GraphIR::node_ptr_t &node, Frame &currFrame) {
     if (uri == "map_arr") {
         evalMarkedOperator_map_arr(node, currFrame);
     } else if (uri == "apply_arr") {
@@ -444,10 +465,9 @@ void FallbackExecSchedPass::evalMarkedOperator(
     }
 }
 
-void FallbackExecSchedPass::evalMarkedOperator_map_arr(
-    const node_ptr_t &node, frame_ptr_t &currFrame) {
-    auto targetData = currFrame->get(node->normInputs().front());
-    auto funcData = currFrame->get(node->withInputs().front());
+void FallbackExecSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &currFrame) {
+    auto targetData = currFrame.get(node->normInputs().front());
+    auto funcData = currFrame.get(node->withInputs().front());
 
     auto func = funcData->as<FunctionData>(Type::Func());
     type_ptr_t funcRetType = func->funcType()->exitType();
@@ -456,46 +476,84 @@ void FallbackExecSchedPass::evalMarkedOperator_map_arr(
         data_vec_t res;
         res.reserve(inputVec.size());
         for (const auto &item : inputVec) {
-            auto mapFrame = Frame::create(currFrame, func->graph());
-            mapFrame->set(func->graph().ports().front(), item);
-            res.push_back(evalGraph(&func->graph(), mapFrame));
+            auto &targetGraph = func->graph();
+            Frame frame(&targetGraph);
+            if (targetGraph.hasClosure()) {
+                const auto &functionData = tt::as_shared<FunctionData>(funcData);
+                const auto &closureNodes = targetGraph.closure();
+                const auto &closureData = functionData->closure();
+                ASSERT(
+                    functionData->closure().size() == closureNodes.size(),
+                    "Function closure size mismatch.");
+                for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
+                    auto closureNode = closureNodes[ci];
+                    frame.set(closureNode, closureData[ci]);
+                }
+            }
+            frame.set(targetGraph.ports().front(), item);
+            res.push_back(evalGraph(&targetGraph, frame));
         }
         return res;
     };
 
     auto arrayData = tt::as_shared<ArrayData>(targetData);
-    currFrame->set(node, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
+    currFrame.set(node, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
 }
 
-void FallbackExecSchedPass::evalMarkedOperator_apply_arr(
-    const node_ptr_t &node, frame_ptr_t &currFrame) {
-    auto targetData = currFrame->get(node->normInputs().front());
-    auto funcData = currFrame->get(node->withInputs().front());
+void FallbackExecSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame &currFrame) {
+    auto targetData = currFrame.get(node->normInputs().front());
+    auto funcData = currFrame.get(node->withInputs().front());
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
-        auto frame = Frame::create(currFrame, func->graph());
-        frame->set(func->graph().ports().front(), item);
-        return evalGraph(&func->graph(), frame);
+        auto &targetGraph = func->graph();
+        Frame frame(&targetGraph);
+        if (targetGraph.hasClosure()) {
+            const auto &functionData = tt::as_shared<FunctionData>(funcData);
+            const auto &closureNodes = targetGraph.closure();
+            const auto &closureData = functionData->closure();
+            ASSERT(
+                functionData->closure().size() == closureNodes.size(),
+                "Function closure size mismatch.");
+            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
+                auto closureNode = closureNodes[ci];
+                frame.set(closureNode, closureData[ci]);
+            }
+        }
+        frame.set(targetGraph.ports().front(), item);
+        return evalGraph(&targetGraph, frame);
     };
 
     for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
         item = applyFunc(item);
     }
 
-    currFrame->set(node, targetData);
+    currFrame.set(node, targetData);
 }
 
 void FallbackExecSchedPass::evalMarkedOperator_filter_arr(
-    const node_ptr_t &node, frame_ptr_t &currFrame) {
-    auto targetData = currFrame->get(node->normInputs().front());
-    auto funcData = currFrame->get(node->withInputs().front());
+    const node_ptr_t &node, Frame &currFrame) {
+    auto targetData = currFrame.get(node->normInputs().front());
+    auto funcData = currFrame.get(node->withInputs().front());
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto shouldKeep = [&](const data_ptr_t &item) -> bool {
-        auto frame = Frame::create(currFrame, func->graph());
-        frame->set(func->graph().ports().front(), item);
-        auto result = evalGraph(&func->graph(), frame);
+        auto &targetGraph = func->graph();
+        Frame frame(&targetGraph);
+        if (targetGraph.hasClosure()) {
+            const auto &functionData = tt::as_shared<FunctionData>(funcData);
+            const auto &closureNodes = targetGraph.closure();
+            const auto &closureData = functionData->closure();
+            ASSERT(
+                functionData->closure().size() == closureNodes.size(),
+                "Function closure size mismatch.");
+            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
+                auto closureNode = closureNodes[ci];
+                frame.set(closureNode, closureData[ci]);
+            }
+        }
+        frame.set(targetGraph.ports().front(), item);
+        auto result = evalGraph(&targetGraph, frame);
         return result->as<BoolData>(Type::Bool())->data();
     };
 
@@ -506,7 +564,7 @@ void FallbackExecSchedPass::evalMarkedOperator_filter_arr(
             if (shouldKeep(item))
                 res.push_back(item);
         }
-        currFrame->set(node, createFunc(containerData->type(), std::move(res)));
+        currFrame.set(node, createFunc(containerData->type(), std::move(res)));
     };
 
     filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
@@ -515,44 +573,71 @@ void FallbackExecSchedPass::evalMarkedOperator_filter_arr(
 }
 
 void FallbackExecSchedPass::evalMarkedOperator_reduce_arr(
-    const node_ptr_t &node, frame_ptr_t &currFrame) {
-    auto targetData = currFrame->get(node->normInputs().front());
-    auto funcData = currFrame->get(node->withInputs()[0]);
-    auto initData = currFrame->get(node->withInputs()[1]);
+    const node_ptr_t &node, Frame &currFrame) {
+    auto targetData = currFrame.get(node->normInputs().front());
+    auto funcData = currFrame.get(node->withInputs()[0]);
+    auto initData = currFrame.get(node->withInputs()[1]);
 
     auto func = funcData->as<FunctionData>(Type::Func());
 
     data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
 
     if (elements.empty()) {
-        currFrame->set(node, initData);
+        currFrame.set(node, initData);
         return;
     }
 
     data_ptr_t result = initData;
     for (const auto &item : elements) {
-        auto frame = Frame::create(currFrame, func->graph());
+        auto &targetGraph = func->graph();
+        Frame frame(&targetGraph);
 
-        const auto &ports = func->graph().ports();
-        frame->set(ports[0], result); // acc
-        frame->set(ports[1], item);   // cur
+        if (targetGraph.hasClosure()) {
+            const auto &functionData = tt::as_shared<FunctionData>(funcData);
+            const auto &closureNodes = targetGraph.closure();
+            const auto &closureData = functionData->closure();
+            ASSERT(
+                functionData->closure().size() == closureNodes.size(),
+                "Function closure size mismatch.");
+            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
+                auto closureNode = closureNodes[ci];
+                frame.set(closureNode, closureData[ci]);
+            }
+        }
 
-        result = evalGraph(&func->graph(), frame); // 更新 result
+        const auto &ports = targetGraph.ports();
+        frame.set(ports[0], result); // acc
+        frame.set(ports[1], item);   // cur
+
+        result = evalGraph(&targetGraph, frame); // 更新 result
     }
 
-    currFrame->set(node, result);
+    currFrame.set(node, result);
 }
 
 void FallbackExecSchedPass::evalMarkedOperator_foreach_arr(
-    const node_ptr_t &node, frame_ptr_t &currFrame) {
-    auto targetData = currFrame->get(node->normInputs().front());
-    auto funcData = currFrame->get(node->withInputs().front());
+    const node_ptr_t &node, Frame &currFrame) {
+    auto targetData = currFrame.get(node->normInputs().front());
+    auto funcData = currFrame.get(node->withInputs().front());
     auto func = funcData->as<FunctionData>(Type::Func());
 
     auto applyFunc = [&](const data_ptr_t &item) {
-        auto frame = Frame::create(currFrame, func->graph());
-        frame->set(func->graph().ports().front(), item);
-        evalGraph(&func->graph(), frame); // 忽略返回值
+        auto &targetGraph = func->graph();
+        Frame frame(&targetGraph);
+        if (targetGraph.hasClosure()) {
+            const auto &functionData = tt::as_shared<FunctionData>(funcData);
+            const auto &closureNodes = targetGraph.closure();
+            const auto &closureData = functionData->closure();
+            ASSERT(
+                functionData->closure().size() == closureNodes.size(),
+                "Function closure size mismatch.");
+            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
+                auto closureNode = closureNodes[ci];
+                frame.set(closureNode, closureData[ci]);
+            }
+        }
+        frame.set(targetGraph.ports().front(), item);
+        evalGraph(&targetGraph, frame); // 忽略返回值
     };
 
     for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {

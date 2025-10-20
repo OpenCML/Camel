@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,8 @@ class StructType : public ComposedType {
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
+    virtual type_ptr_t clone() const override;
+
     bool add(const std::string &name, const type_ptr_t &type);
     bool has(const std::string &name) const;
     type_ptr_t get(const std::string &name) const;
@@ -49,8 +51,6 @@ class StructType : public ComposedType {
 
     type_ptr_t operator|(const StructType &other) const;
     type_ptr_t operator&(const StructType &other) const;
-
-    virtual std::shared_ptr<ComposedType> clone() const override;
 
     CastSafety castSafetyTo(const Type &other) const override;
 };

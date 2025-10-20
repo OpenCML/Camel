@@ -91,8 +91,10 @@ module main
 
 import { whoami } from os
 
-func main() {
-    println('Hello, {}!'.format(whoami()))
+func main() sync {
+    let i = whoami()
+    println(format<i>('Hello, {}!'))
+    return 0
 }
 ```
 
@@ -113,7 +115,7 @@ module arithmetic_sum
 
 import { now } from time
 
-func sum(n: int64, a: int64, d: int64, acc: int64): int64 {
+func sum(n: int, a: int, d: int, acc: int): int {
     return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
 }
 
@@ -121,11 +123,11 @@ func main(): int sync {
     let n = 100000  // number of terms
     let a = 1       // first term
     let d = 3       // common difference
-    println("Start computing arithmetic_sum(n={}, a={}, d={})...".format(n, a, d))
+    'Start computing arithmetic_sum(n={}, a={}, d={})...'->format<n, a, d>->println
     let start = now()
     let res = sum(n, a, d, 0)
     let duration = now() - start
-    println("Sum of arithmetic series = {} (computed in {} seconds)".format(res, duration))
+    'Sum of arithmetic series = {} (computed in {} seconds)'->format<res, duration>->println
     return 0
 }
 ```

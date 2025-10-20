@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,13 +44,27 @@ OperatorReturnCode __builtin__le__(GraphIR::node_ptr_t &self, Frame &frame, Cont
 OperatorReturnCode __builtin__gt__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 OperatorReturnCode __builtin__ge__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 
-OperatorReturnCode __builtin__add__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __builtin__sub__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__add_ii__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__add_ll__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__add_ff__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__add_dd__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__add_ss__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
+OperatorReturnCode __builtin__sub_ii__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__sub_ll__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__sub_ff__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+OperatorReturnCode __builtin__sub_dd__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
 OperatorReturnCode __builtin__mul__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
 OperatorReturnCode __builtin__div__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
 OperatorReturnCode __builtin__mod__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
 OperatorReturnCode __builtin__mat__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
 OperatorReturnCode __builtin__pow__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+
 OperatorReturnCode __builtin__idx__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
 
 OperatorReturnCode __builtin__not__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);

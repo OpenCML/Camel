@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -75,9 +75,9 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
-        node_ptr_t retNode = g->exitNode();
+        node_ptr_t exitNode = g->exitNode();
         auto sortedNodes = findReachable(
-            retNode,
+            exitNode,
             [](const node_ptr_t &n) {
                 vector<node_ptr_t> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
@@ -100,7 +100,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             if (sortedNodes.size() != graph->nodes().size() - 1) {
                 GraphIR::node_vec_t unreachableNodes;
                 for (const auto &n : graph->nodes()) {
-                    if (n != retNode &&
+                    if (n != exitNode &&
                         std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
                         unreachableNodes.push_back(n);
                     }
@@ -159,7 +159,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             }
             case NodeType::JOIN: {
                 auto joinNode = tt::as_shared<JoinNode>(n);
-                const auto &ins = joinNode->ctrlInputs();
+                const auto &ins = joinNode->withInputs();
                 res = format(
                     "JOIN: {}, {}",
                     pointerToIdent(ins[0].get()),
