@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 17, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,6 +51,7 @@ class FunctionData : public ComposedData {
     GraphIR::Graph &graph() const { return graph_; }
     // frame_ptr_t closure() const { return closure_; }
     func_type_ptr_t funcType() const;
+    const data_vec_t &closure() const { return closure_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override;

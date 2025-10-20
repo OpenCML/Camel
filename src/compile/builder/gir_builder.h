@@ -61,6 +61,7 @@ class Builder {
     bool synced_;
     bool varied_;
 
+    std::unordered_set<Graph *> usedGraphs_;
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastSyncedNode_;
 

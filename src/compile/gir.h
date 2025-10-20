@@ -209,6 +209,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addNode(const node_ptr_t &node);                      // 由Node::create调用
     void addPort(const node_ptr_t &node, bool isWith = false); // 由PortNode::create调用
     void addClosure(const node_ptr_t &node);
+    bool parameterized() const { return parameterized_; }
     void parametrizeClosure(); // 将所有的闭包捕获节点转为参数节点
 
     const node_ptr_t &exitNode() const {
@@ -226,6 +227,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
         return ports;
     }
     bool hasPorts() const { return !withPorts_.empty() || !normPorts_.empty(); }
+    bool hasClosure() const { return !closure_.empty(); }
     const node_vec_t &withPorts() { return withPorts_; }
     const node_vec_t &normPorts() { return normPorts_; }
     const node_vec_t &closure() { return closure_; }
@@ -233,9 +235,6 @@ class Graph : public std::enable_shared_from_this<Graph> {
     graph_ptr_t clone() const;
 
   private:
-    friend class Node; // 允许Node修改capture和exposure
-
-    bool looped_ = false;
     std::string name_;
     graph_wptr_t outer_;
 
@@ -250,6 +249,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     node_vec_t withPorts_, normPorts_, closure_;
     node_vec_t nodes_;
     node_ptr_t exitNode_;
+
+    bool looped_ = false;
+    bool parameterized_ = false;
 };
 
 class Node : public std::enable_shared_from_this<Node> {
@@ -696,7 +698,6 @@ class ExitNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type, size_t index = 0) {
         auto node = std::make_shared<ExitNode>(graph, type, index);
-        graph.addNode(node);
         return node;
     }
 

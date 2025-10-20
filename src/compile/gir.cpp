@@ -119,13 +119,15 @@ void Graph::addClosure(const node_ptr_t &node) {
     ASSERT(
         std::find(closure_.begin(), closure_.end(), node) == closure_.end(),
         "Closure node already exists in the graph.");
+    const auto &portNode = tt::as_shared<PortNode>(node);
     closure_.push_back(node);
+    funcType_->addClosureRef(portNode->name());
 }
 
 void Graph::parametrizeClosure() {
     withPorts_.insert(withPorts_.begin(), closure_.begin(), closure_.end());
     closure_.clear();
-    funcType_->parametrizeClosure();
+    parameterized_ = true;
 }
 
 void Graph::setOutput(const node_ptr_t &node) {
@@ -154,6 +156,7 @@ graph_ptr_t Graph::clone() const {
     graph_ptr_t newGraph =
         Graph::create(tt::as_shared<FunctionType>(funcType_->clone()), outer_.lock(), name_);
     newGraph->looped_ = looped_;
+    newGraph->parameterized_ = parameterized_;
 
     newGraph->funcType_ = funcType_;
     newGraph->staticDataArr_ = staticDataArr_;

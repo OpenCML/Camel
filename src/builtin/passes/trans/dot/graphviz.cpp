@@ -252,7 +252,9 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     }
 
     // Draw nodes inside the graph
-    const node_vec_t &nodes = graph->nodes();
+    node_vec_t nodes = graph->nodes();
+    nodes.push_back(graph->exitNode()); // 包含ExitNode
+
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
         string label, tooltip, shape = "circle", style = "solid", size;
@@ -361,7 +363,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     }
 
     // Connect nodes via input edges
-    for (const auto &node : graph->nodes()) {
+    for (const auto &node : nodes) {
         auto withInputs = node->withInputs();
         for (size_t i = 0; i < withInputs.size(); ++i) {
             if (withInputs[i]) {

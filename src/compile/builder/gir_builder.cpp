@@ -75,6 +75,7 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     synced_ = false;
     varied_ = false;
     diags_ = diags;
+    usedGraphs_.clear();
 
     nodeScope_ = node_scope_t::create();
     graphScope_ = graph_scope_t::create();
@@ -154,6 +155,10 @@ node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
     // 换言之，这里要被处理为闭包捕获
     // 闭包节点默认是不可变的
     if (node->graph() != *currGraph_) {
+        if (usedGraphs_.find(currGraph_.get()) != usedGraphs_.end()) {
+            diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, currGraph_->name());
+            throw BuildAbortException();
+        }
         const auto &port = PortNode::create(*currGraph_, node->dataType(), name, false);
         currGraph_->addClosure(port);
         insertNode(name, port);
@@ -318,8 +323,8 @@ node_ptr_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
-    const string &ident = gct->loadAs<GCT::DRefLoad>()->ref();
-    auto optNode = nodeAt(ident);
+    const string &name = gct->loadAs<GCT::DRefLoad>()->ref();
+    auto optNode = nodeAt(name);
     if (optNode.has_value()) {
         node_ptr_t node = optNode.value();
         // 对于跨图节点引用，需要在每个中间图中创建对应的Port节点
@@ -328,16 +333,22 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         // 换言之，这里要被处理为闭包捕获
         // 闭包节点默认是不可变的
         if (node->graph() != *currGraph_) {
-            const auto &port = PortNode::create(*currGraph_, node->dataType(), ident, false);
+            if (usedGraphs_.find(currGraph_.get()) != usedGraphs_.end()) {
+                diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall)
+                    .commit(name, currGraph_->name());
+                throw BuildAbortException();
+                throw BuildAbortException();
+            }
+            const auto &port = PortNode::create(*currGraph_, node->dataType(), name, false);
             currGraph_->addClosure(port);
-            insertNode(ident, port);
+            insertNode(name, port);
             node = port;
         }
         LEAVE("DREF");
         return node;
     }
     graph_ptr_t &graph = currGraph_;
-    auto optGraphs = graphsAt(ident);
+    auto optGraphs = graphsAt(name);
     if (optGraphs.has_value()) {
         auto graphs = optGraphs.value();
         if (!graphs->empty()) {
@@ -346,8 +357,8 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         }
     }
-    if (module_->hasImportedRef(ident)) {
-        const auto &e = module_->getImportedEntity(ident);
+    if (module_->hasImportedRef(name)) {
+        const auto &e = module_->getImportedEntity(name);
         if (std::holds_alternative<node_ptr_t>(e)) {
             ASSERT(false, "Cannot import a data node directly.");
             const auto &node = std::get<node_ptr_t>(e);
@@ -365,7 +376,7 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         }
     }
-    diags_->of(SemanticDiag::UnresolvedReference).commit(ident);
+    diags_->of(SemanticDiag::UnresolvedReference).commit(name);
     throw BuildAbortException();
 }
 
@@ -410,9 +421,11 @@ node_ptr_t Builder::createFuncDataNode(
         !(callableAsResult && allowParameterization),
         "Cannot enable both callableAsResult and allowParameterization options.");
 
+    bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
+    usedGraphs_.insert(graph.get());
     auto funcData = FunctionData::create(*graph);
 
-    if (allowParameterization && !callableAsResult) {
+    if (allowParameterization && !callableAsResult && !graphUsedBefore) {
         if (funcData->resolved()) {
             return FuncNode::create(*currGraph_, funcData);
         }
@@ -433,7 +446,14 @@ node_ptr_t Builder::createFuncDataNode(
             return DataNode::create(*currGraph_, funcData);
         } else {
             // FuncNode 节点对应的数据类型是函数调用后的结果
-            return FuncNode::create(*currGraph_, funcData);
+            auto funcNode = FuncNode::create(*currGraph_, funcData);
+            if (graph->parameterized()) {
+                for (const auto &ref : graph->funcType()->closureRefs()) {
+                    const auto &refNode = resolveNodeByRef(ref);
+                    Node::link(LinkType::With, refNode, funcNode);
+                }
+            }
+            return funcNode;
         }
     }
 
@@ -554,7 +574,7 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // 这意味这它的闭包捕获在当前图中都能找到对应节点
             // 因而可以允许将闭包捕获优化成参数传递
             // 这样可以减少运行时对闭包捕获数据的维护开销
-            targetNode = createFuncDataNode(targetGraph, false, targetGraph->outer() == currGraph_);
+            targetNode = createFuncDataNode(targetGraph, false, true);
             targetFuncType = targetGraph->funcType();
         } else if (std::holds_alternative<oper_group_ptr_t>(drefNode->target())) {
             auto ops = std::get<oper_group_ptr_t>(drefNode->target());

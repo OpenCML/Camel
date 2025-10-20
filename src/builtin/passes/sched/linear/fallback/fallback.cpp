@@ -31,9 +31,9 @@ using namespace GraphIR;
 
 std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
     if (graphTopoNodesCache_.find(graph) == graphTopoNodesCache_.end()) {
-        node_ptr_t retNode = graph->exitNode();
+        node_ptr_t exitNode = graph->exitNode();
         auto sortedNodes = findReachable(
-            retNode,
+            exitNode,
             [](const node_ptr_t &n) {
                 vector<node_ptr_t> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
@@ -55,10 +55,12 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
             for (const auto &n : sortedNodes) {
                 l.in("Topo").debug("  {}", n->toString());
             }
-            if (sortedNodes.size() != graph->nodes().size() - 1) {
+            size_t totalNodeCnt =
+                graph->nodes().size() + graph->ports().size() + graph->closure().size();
+            if (sortedNodes.size() != totalNodeCnt) {
                 GraphIR::node_vec_t unreachableNodes;
                 for (const auto &n : graph->nodes()) {
-                    if (n != retNode &&
+                    if (n != exitNode &&
                         std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
                         unreachableNodes.push_back(n);
                     }
@@ -117,7 +119,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
             args.push_back(currFrame->get(inNode));
         }
 
-        const auto &portNodes = tgtGraph.ports();
+        auto portNodes = tgtGraph.ports();
         ASSERT(
             inNodes.size() == portNodes.size(),
             std::format(
@@ -329,7 +331,22 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, const frame_ptr_t &fra
                     args.push_back(currFrame->get(inNode));
                 }
 
-                const auto &portNodes = tgtGraph.ports();
+                auto portNodes = tgtGraph.ports();
+
+                // 处理闭包参数
+                if (tgtGraph.hasClosure()) {
+                    const auto &functionData = tt::as_shared<FunctionData>(funcData);
+                    ASSERT(
+                        functionData->closure().size() == tgtGraph.closure().size(),
+                        "Function closure size mismatch.");
+                    portNodes.reserve(portNodes.size() + tgtGraph.closure().size());
+                    for (size_t ci = 0; ci < tgtGraph.closure().size(); ++ci) {
+                        auto closureNode = tgtGraph.closure()[ci];
+                        portNodes.push_back(closureNode);
+                        args.push_back(functionData->closure()[ci]);
+                    }
+                }
+
                 for (size_t i = 0; i < portNodes.size(); ++i) {
                     funcFrame->set(portNodes[i], args[i]);
                 }

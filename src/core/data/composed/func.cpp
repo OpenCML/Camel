@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 17, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,10 +45,14 @@ std::vector<std::string> FunctionData::refs() const {
 bool FunctionData::resolved() const { return graph_.closure().empty() || !closure_.empty(); }
 
 void FunctionData::resolve(const data_vec_t &dataList) {
+    ASSERT(closure_.size() == 0, "FunctionData closure has already been resolved.");
     ASSERT(
         dataList.size() == graph_.closure().size(),
-        "Data list size does not match closure size.");
-    closure_.clear();
+        std::format(
+            "Cannot resolve closure of function '{}': expected {} data, got {}.",
+            graph_.name(),
+            graph_.closure().size(),
+            dataList.size()));
     closure_.insert(closure_.end(), dataList.begin(), dataList.end());
 }
 

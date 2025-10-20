@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -191,6 +191,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "This often occurs when a function without an explicit return type calls itself, "
                 "preventing the compiler from inferring the actual return type. "
                 "Consider explicitly specifying the function's return type to avoid this issue.",
+            },
+        },
+        {
+            SemanticDiag::ClosureCaptureAfterSelfCall,
+            {
+                "ClosureCaptureAfterSelfCall",
+                "Closure variable '{0}' declared after the function '{1}' has already called "
+                "itself.",
+                "All closure captures must be declared before the first call to the function. "
+                "If the function is recursive, ensure closure captures are declared before any "
+                "self-call to avoid changes in its calling convention.",
             },
         },
 

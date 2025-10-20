@@ -79,12 +79,11 @@ class FunctionType : public SpecialType {
     bool hasCompileInfo() const { return hasCompileInfo_; }
     bool addWithArg(const std::string &ident, const type_ptr_t type, bool isVar);
     bool addNormArg(const std::string &ident, const type_ptr_t type, bool isVar);
-    bool addClosureArg(const std::string &ident, const type_ptr_t type, bool isVar);
-    void parametrizeClosure();
+    bool addClosureRef(const std::string &ident);
 
     const param_vec_t &withTypes() const { return withTypes_; }
     const param_vec_t &normTypes() const { return normTypes_; }
-    const param_vec_t &closureTypes() const { return closureTypes_; }
+    const std::vector<std::string> &closureRefs() const { return closureRefs_; }
 
     void setExitType(const type_ptr_t &type) { exitType_ = type; }
     type_ptr_t exitType() const;
@@ -114,10 +113,10 @@ class FunctionType : public SpecialType {
 
     param_vec_t withTypes_;
     param_vec_t normTypes_;
-    param_vec_t closureTypes_;
     type_ptr_t exitType_ = nullptr;
 
     // 只在编译期记录并使用
     bool hasCompileInfo_ = true;
     std::vector<std::string> argNames_;
+    std::vector<std::string> closureRefs_;
 };
