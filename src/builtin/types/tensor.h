@@ -13,29 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 15, 2024
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/type/other/other.h"
+#include "core/type/struct/struct.h"
 
 class TensorType : public OtherType {
   private:
-    type_ptr_t elementType_;
     std::vector<size_t> shape_;
+    static std::unordered_map<std::string, std::string> staticMethods_;
 
   public:
-    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape);
-    ~TensorType() noexcept = default;
-
-    static TypeCode typeCode() {
-        static TypeCode code = OtherTypeRegistry::registerType("Tensor");
-        return code;
-    }
+    TensorType(const std::vector<size_t> &shape);
 
     std::vector<size_t> shape() const;
+    
     type_ptr_t elementType() const;
 
     std::string toString() const override;
@@ -51,4 +46,10 @@ class TensorType : public OtherType {
     }
 
     CastSafety castSafetyTo(const Type &other) const override;
+    static void registerStaticMethod(const std::string& methodName, const std::string& operatorUri);
+
+    static std::string getStaticMethodUri(const std::string& methodName);
+    static bool hasStaticMethod(const std::string& methodName);
+
+    static type_ptr_t Tensor(const std::vector<size_t>& shape);
 };

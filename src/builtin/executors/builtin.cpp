@@ -29,6 +29,7 @@
 #include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
+#include "../operators/tensor.h"
 #include "../operators/this.h"
 #include "../operators/time.h"
 
@@ -183,6 +184,49 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"io/input", __input__},
         {"io/print", __print__},
         {"io/println", __println__},
+
+        // tensor
+        {"tensor/eye", __eye__},
+        {"tensor/zeros", __zeros__},
+        {"tensor/ones", __ones__},
+        {"tensor/diag", __diag__},
+        {"tensor/linspace", __linspace__},
+        {"tensor/arange", __arange__},
+        {"tensor/shape", __shape__},
+
+        {"tensor/add", __tensor_add__},
+        {"tensor/subtract", __tensor_subtract__},
+        {"tensor/multiply", __tensor_multiply__},
+        {"tensor/divide", __tensor_divide__},
+
+        {"tensor/reshape", __tensor_reshape__},
+        {"tensor/transpose", __tensor_transpose__},
+        {"tensor/flatten", __tensor_flatten__},
+
+        {"tensor/concat", __tensor_concat__},
+        {"tensor/stack", __tensor_stack__},
+
+        {"tensor/sum", __tensor_sum__},
+        {"tensor/mean", __tensor_mean__},
+        {"tensor/min", __tensor_min__},
+        {"tensor/max", __tensor_max__},
+        {"tensor/argmin", __tensor_argmin__},
+        {"tensor/argmax", __tensor_argmax__},
+        {"tensor/std", __tensor_std__},
+
+        {"tensor/norm_l1", __tensor_norm_l1__},
+        {"tensor/norm_l2", __tensor_norm_l2__},
+        {"tensor/norm_squared_l2", __tensor_norm_squared_l2__},
+
+        {"tensor/sin", __tensor_sin__},
+        {"tensor/cos", __tensor_cos__},
+        {"tensor/exp", __tensor_exp__},
+        {"tensor/log", __tensor_log__},
+        {"tensor/sqrt", __tensor_sqrt__},
+
+        {"tensor/sinh", __tensor_sinh__},
+        {"tensor/cosh", __tensor_cosh__},
+        {"tensor/tanh", __tensor_tanh__},
 
         // os
         {"os/exit", __exit__},

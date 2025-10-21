@@ -141,6 +141,9 @@ class Type {
     static std::shared_ptr<ArrayType> Array(const type_ptr_t &elementType = nullptr);
     static std::shared_ptr<TupleType> Tuple(const type_vec_t &types = {});
     static std::shared_ptr<StructType> Struct();
+    static type_ptr_t List();
+    static type_ptr_t Vector(const type_ptr_t &elementType);
+    static type_ptr_t Tensor(const type_ptr_t &elementType, const std::vector<size_t> &shape);
 
     static std::shared_ptr<SpecialType> Any();
     static std::shared_ptr<SpecialType> Void();

@@ -1,0 +1,20 @@
+import {add} from tensor;
+
+func printTensor(t: any, size: int, index: int): void {
+    if index < size then {
+        println(t[index]);
+        printTensor(t, size, index + 1);
+    }
+}
+
+func main(): int sync{
+    let a = ones([3,3]);
+    println("a is created");
+    let b = ones([3,3]);
+    println("b is created");
+    let res = add(a, b);
+    println("res:")
+    // printTensor(res, 3, 0);
+    
+    return 0;
+}

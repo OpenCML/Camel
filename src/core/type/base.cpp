@@ -253,8 +253,24 @@ std::shared_ptr<SpecialType> Type::Any() {
     return type;
 }
 
-std::shared_ptr<SpecialType> Type::Void() {
-    static std::shared_ptr<SpecialType> type = nullptr;
+type_ptr_t Type::Array(const type_ptr_t &elementType, size_t size) {
+    return tt::as_shared<Type>(make_shared<ArrayType>(elementType, size));
+}
+
+type_ptr_t Type::Tuple(const std::vector<type_ptr_t> &types) {
+    return tt::as_shared<Type>(make_shared<TupleType>(types));
+}
+
+type_ptr_t Type::Vector(const type_ptr_t &elementType) {
+    return tt::as_shared<Type>(make_shared<VectorType>(elementType));
+}
+
+type_ptr_t Type::Tensor(const type_ptr_t &elementType, const std::vector<size_t> &shape) {
+    return tt::as_shared<Type>(make_shared<TensorType>(shape));
+}
+
+type_ptr_t Type::Any() {
+    static type_ptr_t type = nullptr;
     if (type == nullptr) {
         type = make_shared<SpecialType>(TypeCode::Void);
     }

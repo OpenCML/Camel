@@ -29,17 +29,21 @@ endif()
 
 file(GLOB_RECURSE SRC_FILES
 	"${PROJECT_SOURCE_DIR}/src/*.cpp"
-	"${PROJECT_SOURCE_DIR}/third_party/*.cpp"
+	"${PROJECT_SOURCE_DIR}/third_party/antlr4-runtime/*.cpp"
 )
+
 
 find_package(fmt REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 add_definitions(-DNOMINMAX)
-add_executable(${PROJECT_NAME} ${SRC_FILES})
 
+add_compile_options(-Wno-nan-infinity-disabled)
+
+add_executable(${PROJECT_NAME} ${SRC_FILES})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD 23
@@ -70,6 +74,9 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     -Wno-dollar-in-identifier-extension # for antlr4-runtime
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
+    -march=native  
+    -mfma          
+    -ffast-math
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ANTLR4CPP_STATIC)
@@ -89,4 +96,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     gtest::gtest
     nlohmann_json::nlohmann_json
     Taskflow::Taskflow
+    Eigen3::Eigen
 )

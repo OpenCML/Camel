@@ -24,23 +24,24 @@
 
 using namespace std;
 
-TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shape)
-    : OtherType(typeCode()), elementType_(elementType), shape_(shape) {
+unordered_map<string, string> TensorType::staticMethods_;
+
+TensorType::TensorType(const vector<size_t> &shape)
+    : StructType(TypeCode::Tensor), shape_(shape) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
-    }
-    // element type must be a primitive type
-    if (!elementType->primary()) {
-        throw invalid_argument("Tensor element type must be primitive");
     }
 }
 
 vector<size_t> TensorType::shape() const { return shape_; }
 
-type_ptr_t TensorType::elementType() const { return elementType_; }
+type_ptr_t TensorType::elementType() const { 
+    // TODO: element type
+    return Type::Any();
+}
 
 string TensorType::toString() const {
-    string result = "Tensor<" + elementType_->toString() + ", [";
+    string result = "Tensor<[";
     for (const auto &dim : shape_) {
         result += to_string(dim) + ", ";
     }
@@ -71,7 +72,7 @@ bool TensorType::operator==(const Type &other) const {
         return false;
     }
     const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
-    return shape_ == otherMatrix.shape_ && elementType_->equals(otherMatrix.elementType_);
+    return shape_ == otherMatrix.shape_;
 }
 
 bool TensorType::operator!=(const Type &other) const {
@@ -79,7 +80,7 @@ bool TensorType::operator!=(const Type &other) const {
         return true;
     }
     const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
-    return shape_ != otherMatrix.shape_ || !elementType_->equals(otherMatrix.elementType_);
+    return shape_ != otherMatrix.shape_;
 }
 
 CastSafety TensorType::castSafetyTo(const Type &other) const {
@@ -91,6 +92,31 @@ CastSafety TensorType::castSafetyTo(const Type &other) const {
     }
     if (other.composed()) {
         switch (other.code()) {
+        case TypeCode::Tensor: {
+            const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
+            if (shape_ == otherMatrix.shape()) {
+                return CastSafety::Safe;
+            }
+            return CastSafety::Forbidden;
+        }
+        case TypeCode::List:
+            return CastSafety::Safe;
+        case TypeCode::Vector: {
+            return CastSafety::Safe;
+        }
+        case TypeCode::Array: {
+            return CastSafety::Safe;
+        }
+        case TypeCode::Set: {
+            return CastSafety::Safe;
+        }
+        case TypeCode::Map:
+            [[fallthrough]];
+        case TypeCode::Dict:
+            [[fallthrough]];
+        case TypeCode::Union:
+            return CastSafety::Forbidden;
+
         default:
             return CastSafety::Forbidden;
         }
@@ -98,6 +124,25 @@ CastSafety TensorType::castSafetyTo(const Type &other) const {
     if (other.code() == TypeCode::Any) {
         return CastSafety::Safe;
     }
-    // primitive types and special types are forbidden
     return CastSafety::Forbidden;
+}
+void TensorType::registerStaticMethod(const std::string& methodName, const std::string& operatorUri) {
+    staticMethods_[methodName] = operatorUri;
+}
+
+
+std::string TensorType::getStaticMethodUri(const std::string& methodName) {
+    auto it = staticMethods_.find(methodName);
+    if (it != staticMethods_.end()) {
+        return it->second;
+    }
+    return "";
+}
+
+bool TensorType::hasStaticMethod(const std::string& methodName) {
+    return staticMethods_.find(methodName) != staticMethods_.end();
+}
+
+type_ptr_t TensorType::Tensor(const std::vector<size_t>& shape) {
+    return std::make_shared<TensorType>(shape);
 }

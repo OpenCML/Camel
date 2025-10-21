@@ -1535,6 +1535,76 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
     return groups;
 }
 
+static const std::pair<std::string, std::string> assnOps[] = {
+    {"__assn__", ":op/assn"},
+    {"__assn_add__", ":op/assn_add"},
+    {"__assn_sub__", ":op/assn_sub"},
+    {"__assn_mul__", ":op/assn_mul"},
+    {"__assn_div__", ":op/assn_div"},
+    {"__assn_mod__", ":op/assn_mod"},
+    {"__assn_mat__", ":op/assn_mat"},
+    {"__assn_exp__", ":op/assn_exp"},
+    {"__assn_and__", ":op/assn_and"},
+    {"__assn_or__", ":op/assn_or"}};
+
+static const std::pair<std::string, std::string> binaryOps[] = {
+    {"__or__", ":op/or"},
+    {"__and__", ":op/and"},
+    {"__eq__", ":op/eq"},
+    {"__neq__", ":op/neq"},
+    {"__strict_eq__", ":op/strict_eq"},
+    {"__strict_neq__", ":op/strict_neq"},
+    {"__lt__", ":op/lt"},
+    {"__le__", ":op/le"},
+    {"__gt__", ":op/gt"},
+    {"__ge__", ":op/ge"},
+    {"__add__", ":op/add"},
+    {"__sub__", ":op/sub"},
+    {"__mul__", ":op/mul"},
+    {"__div__", ":op/div"},
+    {"__mod__", ":op/mod"},
+    {"__mat__", ":op/mat"},
+    {"__pow__", ":op/pow"},
+    {"__idx__", ":op/idx"},
+    {"__not__", ":op/not"},
+    {"__neg__", ":op/neg"},
+    {"__inv__", ":op/inv"},
+};
+
+static const std::pair<std::string, std::string> others[] = {
+    {"print", ":io/print"},
+    {"println", ":io/println"},
+    {"input", ":io/input"},
+    {"sleep", ":os/sleep"},
+    {"format", ":str/format"},
+    {"join", ":str/join"},
+    {"exit", ":os/exit"},
+    // struct
+    {"len", ":struct/len"},
+    {"zip", ":struct/zip"},
+    {"head", ":struct/head"},
+    {"tail", ":struct/tail"},
+    {"range", ":struct/range"},
+    {"slice", ":struct/slice"},
+    {"concat", ":struct/concat"},
+    {"append", ":struct/append"},
+    {"extend", ":struct/extend"},
+    {"contains", ":struct/contains"},
+    // Marked Operators
+    {"map", ":mark/map"},
+    {"apply", ":mark/apply"},
+    {"filter", ":mark/filter"},
+    {"reduce", ":mark/reduce"},
+    {"foreach", ":mark/foreach"},
+     // Tensor functions
+    {"eye", ":tensor/eye"},
+    {"zeros", ":tensor/zeros"},
+    {"ones", ":tensor/ones"},
+    {"diag", ":tensor/diag"},
+    {"linspace", ":tensor/linspace"},
+    {"arange", ":tensor/arange"}
+};
+
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     for (const auto &group : getGlobalOperatorGroups()) {
         exportEntity(group->name(), group);

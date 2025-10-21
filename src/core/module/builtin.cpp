@@ -32,6 +32,7 @@
 #include "builtin/modules/sys.h"
 #include "builtin/modules/this.h"
 #include "builtin/modules/time.h"
+#include "builtin/modules/tensor.h"
 
 std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories = {
@@ -47,6 +48,8 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
         {"this", [](context_ptr_t ctx) { return ThisBuiltinModule::create(ctx); }},
         {"para", [](context_ptr_t ctx) { return ParaBuiltinModule::create(ctx); }},
+        {"tensor", [](context_ptr_t ctx) { return TensorBuiltinModule::create(ctx); }},
+
 #ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},
 #endif
