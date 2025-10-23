@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,6 +67,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "MissingMainFunction",
                 "No 'main' function found in module '{0}'.",
                 "Define a 'main' function in module '{0}' to serve as the program entry point.",
+            },
+        },
+        {
+            RuntimeDiag::UnrecognizedOperatorURI,
+            {
+                "UnrecognizedOperatorURI",
+                "Unrecognized operator URI: '{0}'.",
+                "Ensure the operator URI is correctly specified and supported by the runtime.",
             },
         },
     };

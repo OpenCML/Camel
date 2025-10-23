@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -779,7 +779,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
     type_ptr_t joinType = nullptr;
 
-    Node::link(LinkType::With, condNode, brchNode);
+    Node::link(LinkType::Norm, condNode, brchNode);
 
     for (size_t i = 1; i < gct->size(); i++) {
         const auto &caseNode = gct->atAs<GCT::CaseLoad>(i);
@@ -803,7 +803,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
                 res.type() == typeid(node_ptr_t),
                 "Unexpected result type from visiting the case node.");
             node_ptr_t valueNode = any_cast<node_ptr_t>(res);
-            Node::link(LinkType::Norm, valueNode, brchNode);
+            Node::link(LinkType::With, valueNode, brchNode);
             caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
             break;
         }
@@ -860,6 +860,8 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         Node::link(LinkType::Ctrl, brchNode, funcNode);
         Node::link(LinkType::With, funcNode, joinNode);
     }
+
+    Node::link(LinkType::Norm, brchNode, joinNode);
 
     if (synced_) {
         if (lastSyncedNode_ && linkCheek(lastSyncedNode_, brchNode)) {

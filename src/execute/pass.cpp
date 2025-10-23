@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "builtin/passes/sched/linear/fallback/fallback.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
+#include "builtin/passes/trans/bytecode/bytecode.h"
 #include "builtin/passes/trans/dot/graphviz.h"
 #include "builtin/passes/trans/tns/topo_node_seq.h"
 
@@ -41,6 +42,10 @@ std::unordered_map<
         {
             "std::graphviz",
             [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+        },
+        {
+            "std::bytecode",
+            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
         },
         {
             "std::tns",

@@ -1,3 +1,4 @@
+
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
@@ -12,28 +13,19 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 11, 2025
- * Updated: Oct. 22, 2025
+ * Created: Oct. 21, 2025
+ * Updated: Oct. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <cstdint>
-#include <unordered_map>
+#include "../trans.h"
 
-#include "../base.h"
+class BytecodeDumpPass : public GraphTranslatePass {
+  public:
+    BytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
+    virtual ~BytecodeDumpPass() = default;
 
-enum class RuntimeDiag : uint32_t {
-    RuntimeError = 0x000000,
-    DivisionByZero = 0x000001,
-    IndexOutOfRange = 0x000002,
-    KeyNotFound = 0x000003,
-    MaxRecursionDepthExceeded = 0x000004,
-    MissingMainFunction = 0x000005,
-    UnrecognizedOperatorURI = 0x000006,
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };
-
-constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }
-
-const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap();

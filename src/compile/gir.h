@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -349,6 +349,8 @@ class Node : public std::enable_shared_from_this<Node> {
     size_t outDegree() const {
         return withOutputs_.size() + normOutputs_.size() + ctrlOutputs_.size();
     }
+    size_t dataInDegree() const { return withInputs_.size() + normInputs_.size(); }
+    size_t dataOutDegree() const { return withOutputs_.size() + normOutputs_.size(); }
 
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
