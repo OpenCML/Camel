@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,7 @@ enum class OperatorReturnCode {
     RuntimeError = 4,
 };
 
-using operator_t = std::function<OperatorReturnCode(GraphIR::node_ptr_t &, Frame &, Context &)>;
+using operator_t = OperatorReturnCode (*)(GraphIR::node_ptr_t &, Frame &, Context &);
 
 using oper_idx_ptr_t = std::shared_ptr<OperatorIndex>;
 using oper_idx_vec_t = std::vector<oper_idx_ptr_t>;

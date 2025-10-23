@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -260,12 +260,12 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
             case NodeType::BRCH: {
                 ASSERT(
-                    n->withInputs().size() == 1,
-                    "Branch node must have exactly one with input.");
-                auto condData = currFrame->get(n->withInputs().front());
-                const auto &normIns = n->normInputs();
+                    n->normInputs().size() == 1,
+                    "Branch node must have exactly one norm input.");
+                auto condData = currFrame->get(n->normInputs().front());
+                const auto &withIns = n->withInputs();
                 const auto &ctrlOuts = n->ctrlOutputs();
-                if (normIns.size() == 0) {
+                if (withIns.size() == 0) {
                     // if-else branch
                     ASSERT(
                         ctrlOuts.size() == 2,
@@ -280,12 +280,12 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 } else {
                     // match-case branch
                     ASSERT(
-                        normIns.size() == ctrlOuts.size() - 1,
+                        withIns.size() == ctrlOuts.size() - 1,
                         "Match-case branch node must have exactly one more ctrl output than "
                         "norm inputs.");
                     size_t j = 0;
-                    for (; j < normIns.size(); ++j) {
-                        auto caseData = currFrame->get(normIns[j]);
+                    for (; j < withIns.size(); ++j) {
+                        auto caseData = currFrame->get(withIns[j]);
                         EXEC_WHEN_DEBUG(l.in("Eval").debug(
                             "Matching case: {} with condition: {}",
                             caseData->toString(),
@@ -295,7 +295,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, Frame &frame) {
                             break;
                         }
                     }
-                    if (j == normIns.size()) {
+                    if (j == withIns.size()) {
                         // fallthrough to else case if no match
                         brInfoStack_.push(ctrlOuts.back());
                     }

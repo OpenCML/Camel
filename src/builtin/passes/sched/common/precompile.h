@@ -12,28 +12,15 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 11, 2025
- * Updated: Oct. 22, 2025
+ * Created: Oct. 21, 2025
+ * Updated: Oct. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "bytecode.h"
+#include "compile/gir.h"
+#include "core/context/context.h"
 
-#include <cstdint>
-#include <unordered_map>
+#include <memory>
 
-#include "../base.h"
-
-enum class RuntimeDiag : uint32_t {
-    RuntimeError = 0x000000,
-    DivisionByZero = 0x000001,
-    IndexOutOfRange = 0x000002,
-    KeyNotFound = 0x000003,
-    MaxRecursionDepthExceeded = 0x000004,
-    MissingMainFunction = 0x000005,
-    UnrecognizedOperatorURI = 0x000006,
-};
-
-constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }
-
-const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap();
+std::shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, GraphIR::Graph *graph);
