@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -315,22 +315,22 @@ void TaskflowExecSchedPass::buildBranchJoinRegions(
 
         auto selector = flowLike
                             .emplace([&]() {
-                                auto condNode = brch->withInputs().front();
+                                auto condNode = brch->normInputs().front();
                                 auto condData = frame->get(condNode);
-                                auto normIns = brch->normInputs();
+                                auto withIns = brch->withInputs();
                                 int tar = -1;
-                                if (normIns.empty()) {
+                                if (withIns.empty()) {
                                     tar = (int)(condData->as<BoolData>(Type::Bool())->data());
                                     tar = tar ? 0 : 1;
                                 } else {
-                                    for (size_t j = 0; j < normIns.size(); ++j) {
-                                        if (condData->equals(frame->get(normIns[j]))) {
+                                    for (size_t j = 0; j < withIns.size(); ++j) {
+                                        if (condData->equals(frame->get(withIns[j]))) {
                                             tar = (int)j;
                                             break;
                                         }
                                     }
                                     if (tar == -1)
-                                        tar = (int)normIns.size(); // default
+                                        tar = (int)withIns.size(); // default
                                 }
                                 ASSERT(tar >= 0, "Invalid branch target.");
                                 frame->set(brch, std::make_shared<Int32Data>(tar));
