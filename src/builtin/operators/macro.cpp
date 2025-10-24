@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,8 +29,8 @@ using namespace GraphIR;
 OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &lhs = frame.get(ins[0]);
-    const data_ptr_t &rhs = frame.get(ins[1]);
+    const data_ptr_t &lhs = frame.get(ins[0]->index());
+    const data_ptr_t &rhs = frame.get(ins[1]->index());
 
     const type_ptr_t &lhsType = lhs->type();
     const type_ptr_t &rhsType = rhs->type();

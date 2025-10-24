@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,7 @@ using frame_rptr_t = Frame *;
 namespace GraphIR {
 class Node;
 class Graph;
+using data_idx_t = int64_t;
 using node_ptr_t = std::shared_ptr<Node>;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
@@ -48,8 +49,8 @@ class Frame {
         return *this;
     }
 
-    data_ptr_t get(const GraphIR::node_ptr_t &node);
-    void set(const GraphIR::node_ptr_t &node, const data_ptr_t &data);
+    data_ptr_t get(const GraphIR::data_idx_t &index);
+    void set(const GraphIR::data_idx_t &index, const data_ptr_t &data);
 
     std::string toString() const;
 

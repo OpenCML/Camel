@@ -54,7 +54,7 @@ std::string BytecodeHeader::toString() const {
         return std::format("{} ({}) [{}]", to_string(opcode), opsize, formatIndex(result));
     } else {
         return std::format(
-            "{} ({}) [{}]: [{}, {}]",
+            "{} ({}) [{}] | [{}, {}]",
             to_string(opcode),
             opsize,
             formatIndex(result),

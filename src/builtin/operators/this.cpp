@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 22, 2025
- * Updated: Sep. 22, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,6 @@ OperatorReturnCode __zen__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
     std::string zen =
 #include "ZEN"
         ;
-    frame.set(self, std::make_shared<StringData>(zen));
+    frame.set(self->index(), std::make_shared<StringData>(zen));
     return OperatorReturnCode::OK;
 }

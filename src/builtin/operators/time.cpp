@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,15 +41,15 @@ OperatorReturnCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     // Add 8 hours offset (UTC+8)
     seconds += 8 * 3600;
 
-    frame.set(self, std::make_shared<DoubleData>(seconds));
+    frame.set(self->index(), std::make_shared<DoubleData>(seconds));
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &norm = self->normInputs();
 
-    const data_ptr_t &time_val = frame.get(norm[0]);
-    const data_ptr_t &fmt_val = frame.get(norm[1]);
+    const data_ptr_t &time_val = frame.get(norm[0]->index());
+    const data_ptr_t &fmt_val = frame.get(norm[1]->index());
 
     double timestamp = time_val->as<DoubleData>(Type::Double())->data();
 
@@ -66,7 +66,7 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> failed to convert time using localtime_s");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 #else
@@ -75,7 +75,7 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> failed to convert time using localtime_r");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 #endif
@@ -87,19 +87,19 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> formatting failed (buffer too small or invalid format)");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, std::make_shared<StringData>(std::string(buffer)));
+    frame.set(self->index(), std::make_shared<StringData>(std::string(buffer)));
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &norm = self->normInputs();
 
-    const data_ptr_t &str_val = frame.get(norm[0]);
-    const data_ptr_t &fmt_val = frame.get(norm[1]);
+    const data_ptr_t &str_val = frame.get(norm[0]->index());
+    const data_ptr_t &fmt_val = frame.get(norm[1]->index());
 
     auto time_str = str_val->as<StringData>(Type::String())->data();
     auto fmt_str = fmt_val->as<StringData>(Type::String())->data();
@@ -109,20 +109,20 @@ OperatorReturnCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strptime> failed to parse time string with format: " + fmt_str);
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
     std::time_t time_epoch = std::mktime(&tm);
     if (time_epoch == -1) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strptime> mktime conversion failed");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
     // Add UTC+8 offset
     double seconds = static_cast<double>(time_epoch) + 8 * 3600;
 
-    frame.set(self, std::make_shared<DoubleData>(seconds));
+    frame.set(self->index(), std::make_shared<DoubleData>(seconds));
     return OperatorReturnCode::OK;
 }

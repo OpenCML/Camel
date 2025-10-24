@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,12 +30,12 @@ OperatorReturnCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "abs operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> operator requires a primary type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -56,11 +56,11 @@ OperatorReturnCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -68,13 +68,13 @@ OperatorReturnCode __exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "<exp> operator requires exactly one argument");
 
-    const data_ptr_t &x = frame.get(ins[0]);
+    const data_ptr_t &x = frame.get(ins[0]->index());
 
     if (!x->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<exp> operator requires a primary type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -96,11 +96,11 @@ OperatorReturnCode __exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<exp> operator not supported for type " + x->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -108,12 +108,12 @@ OperatorReturnCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "round operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<round> operator requires a primary type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -128,11 +128,11 @@ OperatorReturnCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<round> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -140,12 +140,12 @@ OperatorReturnCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "ceil operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<ceil> operator requires a primary type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -160,11 +160,11 @@ OperatorReturnCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<ceil> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -172,12 +172,12 @@ OperatorReturnCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "floor operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
     if (!val->type()->primary()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<floor> operator requires a primary type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -192,11 +192,11 @@ OperatorReturnCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<floor> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -204,12 +204,12 @@ OperatorReturnCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "bin operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<bin> operator requires integer type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -222,7 +222,7 @@ OperatorReturnCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
 
     std::string result = "0b" + std::bitset<64>(number).to_string();
     result.erase(2, result.find('1') - 2); // remove leading zeros
-    frame.set(self, std::make_shared<StringData>(result));
+    frame.set(self->index(), std::make_shared<StringData>(result));
     return OperatorReturnCode::OK;
 }
 
@@ -230,12 +230,12 @@ OperatorReturnCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "oct operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<oct> operator requires integer type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -247,7 +247,7 @@ OperatorReturnCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         oss << val->as<Int64Data>(Type::Int64())->data();
     }
 
-    frame.set(self, std::make_shared<StringData>(oss.str()));
+    frame.set(self->index(), std::make_shared<StringData>(oss.str()));
     return OperatorReturnCode::OK;
 }
 
@@ -255,12 +255,12 @@ OperatorReturnCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "hex operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<hex> operator requires integer type");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -272,6 +272,6 @@ OperatorReturnCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
         oss << val->as<Int64Data>(Type::Int64())->data();
     }
 
-    frame.set(self, std::make_shared<StringData>(oss.str()));
+    frame.set(self->index(), std::make_shared<StringData>(oss.str()));
     return OperatorReturnCode::OK;
 }

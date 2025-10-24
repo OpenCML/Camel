@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,10 +33,10 @@ OperatorReturnCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
         if (i > 0) {
             std::cout << " ";
         }
-        const data_ptr_t &data = frame.get(ins[i]);
+        const data_ptr_t &data = frame.get(ins[i]->index());
         data->print(std::cout);
     }
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
 
@@ -46,11 +46,11 @@ OperatorReturnCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx
         if (i > 0) {
             std::cout << " ";
         }
-        const data_ptr_t &data = frame.get(ins[i]);
+        const data_ptr_t &data = frame.get(ins[i]->index());
         data->print(std::cout);
     }
     std::cout << std::endl;
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
 
@@ -64,7 +64,7 @@ OperatorReturnCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
         if (i > 0) {
             oss << " ";
         }
-        const data_ptr_t &data = frame.get(with[i]);
+        const data_ptr_t &data = frame.get(with[i]->index());
         data->print(oss);
     }
 
@@ -72,7 +72,7 @@ OperatorReturnCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
         if (i > 0 || !with.empty()) {
             oss << " ";
         }
-        const data_ptr_t &data = frame.get(norm[i]);
+        const data_ptr_t &data = frame.get(norm[i]->index());
         data->print(oss);
     }
 
@@ -81,6 +81,6 @@ OperatorReturnCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
     std::string input;
     std::getline(std::cin, input);
 
-    frame.set(self, std::make_shared<StringData>(input));
+    frame.set(self->index(), std::make_shared<StringData>(input));
     return OperatorReturnCode::OK;
 }

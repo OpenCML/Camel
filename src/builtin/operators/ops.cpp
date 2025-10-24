@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,8 +48,8 @@ OperatorReturnCode eval_assignment_op(
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, opname + " requires exactly two arguments");
 
-    const data_ptr_t &lhs = frame.get(ins[0]);
-    const data_ptr_t &rhs = frame.get(ins[1]);
+    const data_ptr_t &lhs = frame.get(ins[0]->index());
+    const data_ptr_t &rhs = frame.get(ins[1]->index());
 
     const type_ptr_t &lhs_type = lhs->type();
     const type_ptr_t &rhs_type = rhs->type();
@@ -59,24 +59,24 @@ OperatorReturnCode eval_assignment_op(
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<" + opname + "> requires integer types");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
     if (check_div_zero && rhs->isZero()) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<" + opname + "> division by zero");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
     data_ptr_t result = op_func(lhs, rhs, lhs_type, ctx);
     if (!result) {
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(ins[0], result);
-    frame.set(self, result);
+    frame.set(ins[0]->index(), result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -257,9 +257,9 @@ do_or(const data_ptr_t &lhs, const data_ptr_t &rhs, const type_ptr_t &type, Cont
 OperatorReturnCode __builtin__assn__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "assn requires exactly two arguments");
-    const data_ptr_t &rhs = frame.get(ins[1]);
-    frame.set(ins[0], rhs);
-    frame.set(self, rhs);
+    const data_ptr_t &rhs = frame.get(ins[1]->index());
+    frame.set(ins[0]->index(), rhs);
+    frame.set(self->index(), rhs);
     return OperatorReturnCode::OK;
 }
 
@@ -297,7 +297,7 @@ OperatorReturnCode __builtin__assn_or__(GIR::node_ptr_t &self, Frame &frame, Con
 
 OperatorReturnCode __builtin__assn_mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<assn_mat> not implemented");
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
 
@@ -305,15 +305,15 @@ OperatorReturnCode __builtin__or__(GIR::node_ptr_t &self, Frame &frame, Context 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "or operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     auto l = left->as<BoolData>(Type::Bool());
     if (l->data()) {
-        frame.set(self, std::make_shared<BoolData>(true));
+        frame.set(self->index(), std::make_shared<BoolData>(true));
     } else {
         auto r = right->as<BoolData>(Type::Bool());
-        frame.set(self, std::make_shared<BoolData>(r->data()));
+        frame.set(self->index(), std::make_shared<BoolData>(r->data()));
     }
     return OperatorReturnCode::OK;
 }
@@ -322,15 +322,15 @@ OperatorReturnCode __builtin__and__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "and operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     auto l = left->as<BoolData>(Type::Bool());
     if (!l->data()) {
-        frame.set(self, std::make_shared<BoolData>(false));
+        frame.set(self->index(), std::make_shared<BoolData>(false));
     } else {
         auto r = right->as<BoolData>(Type::Bool());
-        frame.set(self, std::make_shared<BoolData>(r->data()));
+        frame.set(self->index(), std::make_shared<BoolData>(r->data()));
     }
     return OperatorReturnCode::OK;
 }
@@ -339,11 +339,11 @@ OperatorReturnCode __builtin__eq__(GIR::node_ptr_t &self, Frame &frame, Context 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "eq operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     bool res = left->equals(right);
-    frame.set(self, std::make_shared<BoolData>(res));
+    frame.set(self->index(), std::make_shared<BoolData>(res));
     return OperatorReturnCode::OK;
 }
 
@@ -351,11 +351,11 @@ OperatorReturnCode __builtin__neq__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "neq operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     bool res = !left->equals(right);
-    frame.set(self, std::make_shared<BoolData>(res));
+    frame.set(self->index(), std::make_shared<BoolData>(res));
     return OperatorReturnCode::OK;
 }
 
@@ -363,11 +363,11 @@ OperatorReturnCode __builtin__strict_eq__(GIR::node_ptr_t &self, Frame &frame, C
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "strict_eq operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     bool res = left->equals(right);
-    frame.set(self, std::make_shared<BoolData>(res));
+    frame.set(self->index(), std::make_shared<BoolData>(res));
     return OperatorReturnCode::OK;
 }
 
@@ -375,11 +375,11 @@ OperatorReturnCode __builtin__strict_neq__(GIR::node_ptr_t &self, Frame &frame, 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "strict_neq operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     bool res = !left->equals(right);
-    frame.set(self, std::make_shared<BoolData>(res));
+    frame.set(self->index(), std::make_shared<BoolData>(res));
     return OperatorReturnCode::OK;
 }
 
@@ -387,13 +387,13 @@ OperatorReturnCode __builtin__lt__(GIR::node_ptr_t &self, Frame &frame, Context 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "lt operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
-    frame.set(self, std::make_shared<BoolData>(l->data() < r->data()));
+    frame.set(self->index(), std::make_shared<BoolData>(l->data() < r->data()));
     return OperatorReturnCode::OK;
 }
 
@@ -401,13 +401,13 @@ OperatorReturnCode __builtin__le__(GIR::node_ptr_t &self, Frame &frame, Context 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "le operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
-    frame.set(self, std::make_shared<BoolData>(l->data() <= r->data()));
+    frame.set(self->index(), std::make_shared<BoolData>(l->data() <= r->data()));
     return OperatorReturnCode::OK;
 }
 
@@ -415,13 +415,13 @@ OperatorReturnCode __builtin__gt__(GIR::node_ptr_t &self, Frame &frame, Context 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "gt operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
-    frame.set(self, std::make_shared<BoolData>(l->data() > r->data()));
+    frame.set(self->index(), std::make_shared<BoolData>(l->data() > r->data()));
     return OperatorReturnCode::OK;
 }
 
@@ -429,141 +429,141 @@ OperatorReturnCode __builtin__ge__(GIR::node_ptr_t &self, Frame &frame, Context 
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "ge operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
 
-    frame.set(self, std::make_shared<BoolData>(l->data() >= r->data()));
+    frame.set(self->index(), std::make_shared<BoolData>(l->data() >= r->data()));
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__add_ii__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     data_ptr_t result;
     result = std::make_shared<Int32Data>(
         left->as<Int32Data>(Type::Int32())->data() + right->as<Int32Data>(Type::Int32())->data());
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__add_ll__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     data_ptr_t result;
     result = std::make_shared<Int64Data>(
         left->as<Int64Data>(Type::Int64())->data() + right->as<Int64Data>(Type::Int64())->data());
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__add_ff__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     data_ptr_t result;
     result = std::make_shared<FloatData>(
         left->as<FloatData>(Type::Float())->data() + right->as<FloatData>(Type::Float())->data());
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__add_dd__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     data_ptr_t result;
     result = std::make_shared<DoubleData>(
         left->as<DoubleData>(Type::Double())->data() +
         right->as<DoubleData>(Type::Double())->data());
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__add_ss__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     data_ptr_t result;
     result = std::make_shared<DoubleData>(
         left->as<DoubleData>(Type::Double())->data() +
         right->as<DoubleData>(Type::Double())->data());
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__sub_ii__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     int32_t lval = left->as<Int32Data>(Type::Int32())->data();
     int32_t rval = right->as<Int32Data>(Type::Int32())->data();
 
     data_ptr_t result = std::make_shared<Int32Data>(lval - rval);
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__sub_ll__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     int64_t lval = left->as<Int64Data>(Type::Int64())->data();
     int64_t rval = right->as<Int64Data>(Type::Int64())->data();
 
     data_ptr_t result = std::make_shared<Int64Data>(lval - rval);
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__sub_ff__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     float lval = left->as<FloatData>(Type::Float())->data();
     float rval = right->as<FloatData>(Type::Float())->data();
 
     data_ptr_t result = std::make_shared<FloatData>(lval - rval);
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__sub_dd__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     double lval = left->as<DoubleData>(Type::Double())->data();
     double rval = right->as<DoubleData>(Type::Double())->data();
 
     data_ptr_t result = std::make_shared<DoubleData>(lval - rval);
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -571,8 +571,8 @@ OperatorReturnCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "mul operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     data_ptr_t result;
     if (left->type() == Type::Int32()) {
@@ -595,11 +595,11 @@ OperatorReturnCode __builtin__mul__(GIR::node_ptr_t &self, Frame &frame, Context
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<mul> operator not supported for type " + left->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -607,8 +607,8 @@ OperatorReturnCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "div operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     // 除以 0 检查
     if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
@@ -616,7 +616,7 @@ OperatorReturnCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context
         (right->type() == Type::Float() && right->as<FloatData>(Type::Float())->data() == 0.0f) ||
         (right->type() == Type::Double() && right->as<DoubleData>(Type::Double())->data() == 0.0)) {
         ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -641,11 +641,11 @@ OperatorReturnCode __builtin__div__(GIR::node_ptr_t &self, Frame &frame, Context
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<div> operator not supported for type " + left->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -653,13 +653,13 @@ OperatorReturnCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "mod operator requires exactly two arguments");
 
-    const data_ptr_t &left = frame.get(ins[0]);
-    const data_ptr_t &right = frame.get(ins[1]);
+    const data_ptr_t &left = frame.get(ins[0]->index());
+    const data_ptr_t &right = frame.get(ins[1]->index());
 
     if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
         (right->type() == Type::Int64() && right->as<Int64Data>(Type::Int64())->data() == 0)) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
@@ -676,17 +676,17 @@ OperatorReturnCode __builtin__mod__(GIR::node_ptr_t &self, Frame &frame, Context
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<mod> operator only supports integer types");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __builtin__mat__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     ASSERT(false, "mat operator not implemented");
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
 
@@ -694,8 +694,8 @@ OperatorReturnCode __builtin__pow__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "pow operator requires exactly two arguments");
 
-    const data_ptr_t &base = frame.get(ins[0]);
-    const data_ptr_t &exponent = frame.get(ins[1]);
+    const data_ptr_t &base = frame.get(ins[0]->index());
+    const data_ptr_t &exponent = frame.get(ins[1]->index());
 
     data_ptr_t result;
     if (base->type() == Type::Int32()) {
@@ -718,11 +718,11 @@ OperatorReturnCode __builtin__pow__(GIR::node_ptr_t &self, Frame &frame, Context
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<pow> operator not supported for type " + base->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -730,15 +730,15 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 2, "idx operator requires exactly two arguments");
 
-    const data_ptr_t &container = frame.get(ins[0]);
-    const data_ptr_t &index = frame.get(ins[1]);
+    const data_ptr_t &container = frame.get(ins[0]->index());
+    const data_ptr_t &index = frame.get(ins[1]->index());
 
     // 数值索引：适用于 Array
     if (index->type() == Type::Int32()) {
         size_t idx = static_cast<size_t>(index->as<Int32Data>(Type::Int32())->data());
         auto arr = std::dynamic_pointer_cast<ArrayData>(container);
         ASSERT(idx < arr->raw().size(), "Array index out of bounds.");
-        frame.set(self, arr->raw()[idx]);
+        frame.set(self->index(), arr->raw()[idx]);
 
         return OperatorReturnCode::OK;
     }
@@ -751,12 +751,12 @@ OperatorReturnCode __builtin__idx__(GIR::node_ptr_t &self, Frame &frame, Context
 
         auto it = map.find(key);
         ASSERT(it != map.end(), "Struct key not found: " + key);
-        frame.set(self, it->second);
+        frame.set(self->index(), it->second);
 
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
 
@@ -764,10 +764,10 @@ OperatorReturnCode __builtin__not__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "not operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
 
     bool result = !val->as<BoolData>(Type::Bool())->data();
-    frame.set(self, std::make_shared<BoolData>(result));
+    frame.set(self->index(), std::make_shared<BoolData>(result));
     return OperatorReturnCode::OK;
 }
 
@@ -775,7 +775,7 @@ OperatorReturnCode __builtin__neg__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "neg operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
 
     data_ptr_t result;
     if (val->type() == Type::Int32()) {
@@ -790,11 +790,11 @@ OperatorReturnCode __builtin__neg__(GIR::node_ptr_t &self, Frame &frame, Context
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<neg> operator not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -802,7 +802,7 @@ OperatorReturnCode __builtin__inv__(GIR::node_ptr_t &self, Frame &frame, Context
     const auto &ins = self->normInputs();
     ASSERT(ins.size() == 1, "inv operator requires exactly one argument");
 
-    const data_ptr_t &val = frame.get(ins[0]);
+    const data_ptr_t &val = frame.get(ins[0]->index());
 
     data_ptr_t result;
     if (val->type() == Type::Int32()) {
@@ -815,10 +815,10 @@ OperatorReturnCode __builtin__inv__(GIR::node_ptr_t &self, Frame &frame, Context
             .commit(
                 "<inv> operator only supported for integer types (Int32 / Int64), got " +
                 val->type()->toString());
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }

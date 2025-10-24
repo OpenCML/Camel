@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -163,17 +163,17 @@ namespace GIR = GraphIR;
 
 OperatorReturnCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    const data_ptr_t &arg = frame.get(ins[0]);
+    const data_ptr_t &arg = frame.get(ins[0]->index());
     auto pd = arg->as<Int32Data>(Type::Int32());
     if (pd->data() < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sleep> requires a non-negative integer");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
 
@@ -187,7 +187,7 @@ OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx)
         username = buffer;
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
-        frame.set(self, Data::null());
+        frame.set(self->index(), Data::null());
         return OperatorReturnCode::OK;
     }
 #else
@@ -202,7 +202,7 @@ OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx)
 #endif
 
     data_ptr_t result = std::make_shared<StringData>(username);
-    frame.set(self, result);
+    frame.set(self->index(), result);
     return OperatorReturnCode::OK;
 }
 
@@ -212,7 +212,7 @@ OperatorReturnCode __exit__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
 
 OperatorReturnCode __set_terminal_raw_mode__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     const auto &ins = self->normInputs();
-    const data_ptr_t &arg = frame.get(ins[0]);
+    const data_ptr_t &arg = frame.get(ins[0]->index());
 
     bool enable = arg->as<BoolData>(Type::Bool())->data();
     bool success = Terminal::setRawMode(enable);
@@ -223,21 +223,21 @@ OperatorReturnCode __set_terminal_raw_mode__(GIR::node_ptr_t &self, Frame &frame
             .commit("<set_terminal_raw_mode> failed to modify terminal mode");
     }
 
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __has_input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     bool available = Terminal::hasInput();
 
-    frame.set(self, std::make_shared<BoolData>(available));
+    frame.set(self->index(), std::make_shared<BoolData>(available));
     return OperatorReturnCode::OK;
 }
 
 OperatorReturnCode __get_char__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::string input = Terminal::readInput(1);
 
-    frame.set(self, std::make_shared<StringData>(input));
+    frame.set(self->index(), std::make_shared<StringData>(input));
     return OperatorReturnCode::OK;
 }
 
@@ -246,12 +246,12 @@ OperatorReturnCode __get_chars__(GIR::node_ptr_t &self, Frame &frame, Context &c
 
     int maxChars = -1; // Default to read all available characters
     if (ins.size() == 1) {
-        maxChars = frame.get(ins[0])->as<Int32Data>(Type::Int32())->data();
+        maxChars = frame.get(ins[0]->index())->as<Int32Data>(Type::Int32())->data();
     }
 
     std::string input = Terminal::readInput(maxChars);
 
-    frame.set(self, std::make_shared<StringData>(input));
+    frame.set(self->index(), std::make_shared<StringData>(input));
     return OperatorReturnCode::OK;
 }
 
@@ -259,6 +259,6 @@ OperatorReturnCode __clear_input_buffer__(GIR::node_ptr_t &self, Frame &frame, C
 
     Terminal::clearInputBuffer();
 
-    frame.set(self, Data::null());
+    frame.set(self->index(), Data::null());
     return OperatorReturnCode::OK;
 }
