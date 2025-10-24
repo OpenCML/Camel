@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "fallback.h"
+#include "nodevm.h"
 #include "builtin/algo/topo.h"
 #include "core/data/primary.h"
 
@@ -29,7 +29,7 @@
 using namespace std;
 using namespace GraphIR;
 
-std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
+std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
     if (graphTopoNodesCache_.find(graph) == graphTopoNodesCache_.end()) {
         node_ptr_t exitNode = graph->exitNode();
         auto sortedNodes = findReachable(
@@ -86,7 +86,7 @@ std::shared_ptr<node_vec_t> FallbackExecSchedPass::getTopoNodes(Graph *graph) {
     }
 }
 
-data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, Frame &frame) {
+data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
 
     EXEC_WHEN_DEBUG([&]() {
@@ -437,7 +437,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, Frame &frame) {
     return result;
 }
 
-graph_ptr_t FallbackExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     if (!graph->hasOutput()) {
         context_->rtmDiags()
             ->of(RuntimeDiag::MissingMainFunction)
@@ -448,7 +448,7 @@ graph_ptr_t FallbackExecSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     return Graph::null();
 }
 
-void FallbackExecSchedPass::evalMarkedOperator(
+void NodeVMSchedPass::evalMarkedOperator(
     const std::string uri, const GraphIR::node_ptr_t &node, Frame &currFrame) {
     if (uri == "map_arr") {
         evalMarkedOperator_map_arr(node, currFrame);
@@ -465,7 +465,7 @@ void FallbackExecSchedPass::evalMarkedOperator(
     }
 }
 
-void FallbackExecSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &currFrame) {
     auto targetData = currFrame.get(node->normInputs().front()->index());
     auto funcData = currFrame.get(node->withInputs().front()->index());
 
@@ -502,7 +502,7 @@ void FallbackExecSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, F
         ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
 }
 
-void FallbackExecSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame &currFrame) {
     auto targetData = currFrame.get(node->normInputs().front()->index());
     auto funcData = currFrame.get(node->withInputs().front()->index());
     auto func = funcData->as<FunctionData>(Type::Func());
@@ -533,8 +533,7 @@ void FallbackExecSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node,
     currFrame.set(node->index(), targetData);
 }
 
-void FallbackExecSchedPass::evalMarkedOperator_filter_arr(
-    const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Frame &currFrame) {
     auto targetData = currFrame.get(node->normInputs().front()->index());
     auto funcData = currFrame.get(node->withInputs().front()->index());
     auto func = funcData->as<FunctionData>(Type::Func());
@@ -574,8 +573,7 @@ void FallbackExecSchedPass::evalMarkedOperator_filter_arr(
     });
 }
 
-void FallbackExecSchedPass::evalMarkedOperator_reduce_arr(
-    const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Frame &currFrame) {
     auto targetData = currFrame.get(node->normInputs().front()->index());
     auto funcData = currFrame.get(node->withInputs()[0]->index());
     auto initData = currFrame.get(node->withInputs()[1]->index());
@@ -617,8 +615,7 @@ void FallbackExecSchedPass::evalMarkedOperator_reduce_arr(
     currFrame.set(node->index(), result);
 }
 
-void FallbackExecSchedPass::evalMarkedOperator_foreach_arr(
-    const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_foreach_arr(const node_ptr_t &node, Frame &currFrame) {
     auto targetData = currFrame.get(node->normInputs().front()->index());
     auto funcData = currFrame.get(node->withInputs().front()->index());
     auto func = funcData->as<FunctionData>(Type::Func());

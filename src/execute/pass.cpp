@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 23, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "pass.h"
 
-#include "builtin/passes/sched/linear/fallback/fallback.h"
+#include "builtin/passes/sched/linear/fastvm/fastvm.h"
+#include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
 #include "builtin/passes/trans/bytecode/bytecode.h"
 #include "builtin/passes/trans/dot/graphviz.h"
@@ -53,7 +54,15 @@ std::unordered_map<
         },
         {
             "std::linear",
-            [](const context_ptr_t &ctx) { return std::make_unique<FallbackExecSchedPass>(ctx); },
+            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
+        },
+        {
+            "std::fastvm",
+            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
+        },
+        {
+            "std::nodevm",
+            [](const context_ptr_t &ctx) { return std::make_unique<NodeVMSchedPass>(ctx); },
         },
         {
             "std::parallel",
@@ -65,7 +74,7 @@ std::unordered_map<
         },
         {
             "std::default",
-            [](const context_ptr_t &ctx) { return std::make_unique<FallbackExecSchedPass>(ctx); },
+            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
         },
         {
             "std::null",
@@ -94,7 +103,7 @@ int applyPasses(
     }
 
     if (entry != Graph::null()) {
-        auto fallback = std::make_unique<FallbackExecSchedPass>(ctx);
+        auto fallback = std::make_unique<FastVMSchedPass>(ctx);
         fallback->apply(entry, os);
     }
 

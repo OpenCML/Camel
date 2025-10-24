@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 
 #include <stack>
 
-class FallbackExecSchedPass : public LinearSchedPass {
+class NodeVMSchedPass : public LinearSchedPass {
     static const size_t maxRecursionDepth_ = 1000; // default max recursion depth
     size_t currRecursionDepth_ = 0;
     std::stack<GraphIR::node_ptr_t> brInfoStack_;
@@ -43,8 +43,8 @@ class FallbackExecSchedPass : public LinearSchedPass {
     void evalMarkedOperator_foreach_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
 
   public:
-    FallbackExecSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
-    virtual ~FallbackExecSchedPass() = default;
+    NodeVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
+    virtual ~NodeVMSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };
