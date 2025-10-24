@@ -99,7 +99,7 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             brchTargetMap.erase(node.get());
         }
 
-        vector<index_t> withOps, normOps;
+        vector<data_idx_t> withOps, normOps;
         for (const auto &in : node->withInputs()) {
             withOps.push_back(in->index());
         }
@@ -219,8 +219,22 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             break;
         }
 
-        default:
+        case NodeType::DATA:
+            [[fallthrough]];
+        case NodeType::PORT:
+            [[fallthrough]];
+        case NodeType::EXIT:
+            [[fallthrough]];
+        case NodeType::DREF:
+            // 这些节点类型不生成字节码
             continue;
+
+        default:
+            ASSERT(
+                false,
+                std::format(
+                    "Unsupported node type encountered in bytecode generation: {}",
+                    to_string(node->type())));
         }
 
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP

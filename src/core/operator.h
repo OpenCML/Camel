@@ -38,7 +38,7 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 
 using data_idx_t = int16_t;
-using arr_size_t = int16_t;
+using arr_size_t = uint16_t;
 
 using operator_t = void (*)(data_idx_t, data_idx_t *, arr_size_t, arr_size_t, Frame &, Context &);
 

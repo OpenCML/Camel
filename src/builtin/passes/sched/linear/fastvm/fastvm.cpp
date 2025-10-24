@@ -19,6 +19,7 @@
 
 #include "fastvm.h"
 #include "builtin/algo/topo.h"
+#include "builtin/passes/sched/common/precompile.h"
 #include "core/data/primary.h"
 
 #ifndef NDEBUG
@@ -29,78 +30,25 @@
 using namespace std;
 using namespace GraphIR;
 
-std::shared_ptr<node_vec_t> FastVMSchedPass::getTopoNodes(Graph *graph) {
-    if (graphTopoNodesCache_.find(graph) == graphTopoNodesCache_.end()) {
-        node_ptr_t exitNode = graph->exitNode();
-        auto sortedNodes = findReachable(
-            exitNode,
-            [](const node_ptr_t &n) {
-                vector<node_ptr_t> ins;
-                ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-                for (const auto &in : n->ctrlInputs()) {
-                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
-                        ins.push_back(in);
-                }
-                // Put value computation nodes at the back for correct tail-call optimization
-                for (const auto &in : n->dataInputs()) {
-                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
-                        ins.push_back(in);
-                }
-                return ins;
-            },
-            true // skip the start node itself
-        );
-        EXEC_WHEN_DEBUG([&]() {
-            l.in("Topo").debug("Topologically sorted nodes for graph {}:", graph->name());
-            for (const auto &n : sortedNodes) {
-                l.in("Topo").debug("  {}", n->toString());
-            }
-            size_t totalNodeCnt =
-                graph->nodes().size() + graph->ports().size() + graph->closure().size();
-            if (sortedNodes.size() != totalNodeCnt) {
-                GraphIR::node_vec_t unreachableNodes;
-                for (const auto &n : graph->nodes()) {
-                    if (n != exitNode &&
-                        std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
-                        unreachableNodes.push_back(n);
-                    }
-                }
-                std::string nodeStrs;
-                for (const auto &node : unreachableNodes) {
-                    if (!nodeStrs.empty()) {
-                        nodeStrs += ", ";
-                    }
-                    nodeStrs += node->toString();
-                }
-                l.in("Topo").warn(
-                    "Unreachable nodes in graph {} detected: {}",
-                    graph->name(),
-                    nodeStrs);
-            }
-        }());
-        const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
-        graphTopoNodesCache_[graph] = sortedNodesPtr;
-        return sortedNodesPtr;
+std::shared_ptr<bytecode_vec_t> FastVMSchedPass::getCodeOfGraph(Graph *graph) {
+    if (codes_.find(graph) == codes_.end()) {
+        auto code = precompile(context_, graph);
+        codes_[graph] = code;
+        return code;
     } else {
-        return graphTopoNodesCache_[graph];
+        return codes_[graph];
     }
 }
 
 data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
 
-    EXEC_WHEN_DEBUG([&]() {
-        if (profiler::AdvancedTracer::getInstance().isTracing()) {
-            profiler::AdvancedTracer::getInstance().traceFunctionCall("evalGraph:" + graph->name());
-        }
-    }());
-
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
     }
 
     bool loop = false;
-    auto nodesPtr = getTopoNodes(graph);
+    auto bytecodes = getCodeOfGraph(graph);
 
     Frame targetFrame(graph);
     frame_rptr_t currFrame = &frame, tailFrame = nullptr;
@@ -142,7 +90,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     "Optimizing self-recursion for graph: {}",
                     currFrame->graph()->name()));
             } else {
-                nodesPtr = getTopoNodes(&targetGraph);
+                bytecodes = getCodeOfGraph(&targetGraph);
 
                 if (tailFrame && tailFrame->graph() == &targetGraph) {
                     // Mutual-tail-recursion optimization
@@ -185,224 +133,82 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     // reuse the current frame for tail-recursive calls
     do {
         loop = false;
-        auto &nodes = *nodesPtr;
-        EXEC_WHEN_DEBUG([&]() {
-            if (profiler::AdvancedTracer::getInstance().isTracing()) {
-                profiler::AdvancedTracer::getInstance().traceFunctionCall(
-                    "topoExecution:" + graph->name());
-            }
-        }());
-        for (size_t i = 0; i < nodes.size(); ++i) {
-            auto &n = nodes[i];
-            EXEC_WHEN_DEBUG([&]() {
-                if (profiler::AdvancedTracer::getInstance().isTracing()) {
-                    std::string nodeName = "node:" + n->toString();
-                    profiler::AdvancedTracer::getInstance().traceFunctionCall(nodeName);
-                }
-            }());
-            switch (n->type()) {
-            case NodeType::DATA: {
-                ASSERT(currFrame->get(n->index()) != nullptr, "DATA data is null.");
-                break;
-            }
-            case NodeType::PORT: {
-                ASSERT(currFrame->get(n->index()) != nullptr, "PORT data is null.");
-                break;
-            }
-            case NodeType::CAST: {
-                ASSERT(false, "CAST node not implemented yet.");
-                break;
-            }
-            case NodeType::COPY: {
-                auto inputNode = n->normInputs().front();
-                auto inputData = currFrame->get(inputNode->index());
-                if (inputData == nullptr) {
-                    // If input data is not initialized, create a default integer value 0
-                    // For counters in recursive functions, this is typically an integer type
-                    inputData = std::make_shared<Int32Data>(0);
-                    currFrame->set(inputNode->index(), inputData);
-                }
-                currFrame->set(n->index(), inputData->clone());
-                break;
-            }
-            case NodeType::FILL: {
-                auto structNode = tt::as_shared<FillNode>(n);
-                const auto &srcNode = n->withInputs().front();
-                const auto &dataInputs = n->normInputs();
-                data_ptr_t data = currFrame->get(srcNode->index())->clone();
-                ASSERT(data != nullptr, "FILL data is null.");
-                data_vec_t inputs;
-                inputs.reserve(dataInputs.size());
-                for (const auto &input : dataInputs) {
-                    inputs.push_back(currFrame->get(input->index()));
-                }
-                data->resolve(inputs);
-                currFrame->set(n->index(), data);
-                break;
-            }
-            case NodeType::ACCS: {
-                data_ptr_t source = currFrame->get(n->dataInputs().front()->index());
-                auto accessNode = tt::as_shared<AccsNode>(n);
-                if (accessNode->isNum()) {
-                    size_t idx = accessNode->index<size_t>();
-                    auto tupleData = tt::as_shared<TupleData>(source);
-                    ASSERT(idx < tupleData->raw().size(), "Tuple index out of bounds.");
-                    currFrame->set(n->index(), tupleData->raw()[idx]);
-                } else {
-                    std::string key = accessNode->index<std::string>();
-                    auto structData = tt::as_shared<StructData>(source);
-                    ASSERT(
-                        structData->raw().find(key) != structData->raw().end(),
-                        "Struct key not found: " + key);
-                    currFrame->set(n->index(), structData->raw().at(key));
-                }
-                break;
-            }
-            case NodeType::BRCH: {
-                ASSERT(
-                    n->normInputs().size() == 1,
-                    "Branch node must have exactly one norm input.");
-                auto condData = currFrame->get(n->normInputs().front()->index());
-                const auto &withIns = n->withInputs();
-                const auto &ctrlOuts = n->ctrlOutputs();
-                if (withIns.size() == 0) {
-                    // if-else branch
-                    ASSERT(
-                        ctrlOuts.size() == 2,
-                        "If-else branch node must have exactly two outputs.");
-                    auto boolCondData = condData->as<BoolData>(Type::Bool());
-                    bool cond = boolCondData->data();
-                    if (cond) {
-                        brInfoStack_.push(ctrlOuts.front());
-                    } else {
-                        brInfoStack_.push(ctrlOuts.back());
-                    }
-                } else {
-                    // match-case branch
-                    ASSERT(
-                        withIns.size() == ctrlOuts.size() - 1,
-                        "Match-case branch node must have exactly one more ctrl output than "
-                        "norm inputs.");
-                    size_t j = 0;
-                    for (; j < withIns.size(); ++j) {
-                        auto caseData = currFrame->get(withIns[j]->index());
-                        EXEC_WHEN_DEBUG(l.in("Eval").debug(
-                            "Matching case: {} with condition: {}",
-                            caseData->toString(),
-                            condData->toString()));
-                        if (condData->equals(caseData)) {
-                            brInfoStack_.push(ctrlOuts[j]);
-                            break;
-                        }
-                    }
-                    if (j == withIns.size()) {
-                        // fallthrough to else case if no match
-                        brInfoStack_.push(ctrlOuts.back());
-                    }
-                }
-                i += ctrlOuts.size(); // skip all cases
-                break;
-            }
-            case NodeType::JOIN: {
-                auto execNode = brInfoStack_.top();
-                brInfoStack_.pop();
-                // Here, the branch function node is delayed to be executed at the JOIN
-                // node, which facilitates tail-call optimization. This is because when the
-                // JOIN node is the last node of the current execution sequence, the
-                // function call can be optimized as a tail-call. If the branch function
-                // call is executed earlier, it is difficult to determine whether it is a
-                // tail-call.
-                if (i == nodes.size() - 1) {
-                    evalFuncNode(execNode, true);
-                    // no need to set currFrame->set(n, ...)
-                    // as the tail-call function will reset the frame
-                } else {
-                    evalFuncNode(execNode, false);
-                    currFrame->set(n->index(), currFrame->get(execNode->index()));
-                }
-                break;
-            }
-            case NodeType::CALL: {
-                const auto &funcNode = n->withInputs().front();
-                const auto &funcData = currFrame->get(funcNode->index());
-                auto &targetGraph = tt::as_shared<FunctionData>(funcData)->graph();
-                Frame funcFrame(&targetGraph);
+        const Bytecode *code = bytecodes->data();
+        arr_size_t codeSize = static_cast<arr_size_t>(bytecodes->size());
 
-                data_vec_t args;
-                const auto &inNodes = n->normInputs();
-                args.reserve(inNodes.size());
-                for (const auto &inNode : inNodes) {
-                    args.push_back(currFrame->get(inNode->index()));
-                }
+        arr_size_t i = 0;
+        while (i < codeSize) {
+            const Bytecode &bc = code[i];
+            switch (bc.opcode) {
 
-                auto portNodes = targetGraph.ports();
-
-                // 处理闭包参数
-                if (targetGraph.hasClosure()) {
-                    const auto &functionData = tt::as_shared<FunctionData>(funcData);
-                    const auto &closureNodes = targetGraph.closure();
-                    const auto &closureData = functionData->closure();
-                    ASSERT(
-                        functionData->closure().size() == closureNodes.size(),
-                        "Function closure size mismatch.");
-                    portNodes.reserve(portNodes.size() + closureNodes.size());
-                    for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
-                        auto closureNode = closureNodes[ci];
-                        portNodes.push_back(closureNode);
-                        args.push_back(closureData[ci]);
-                    }
-                }
-
-                for (size_t i = 0; i < portNodes.size(); ++i) {
-                    funcFrame.set(portNodes[i]->index(), args[i]);
-                }
-
-                const auto &res = evalGraph(&targetGraph, funcFrame);
-                currFrame->set(n->index(), res);
+            case OpCode::NOOP: {
+                // do nothing
                 break;
             }
-            case NodeType::BIND: {
-                ASSERT(false, "BIND node not implemented yet.");
-                break;
-            }
-            case NodeType::FUNC: {
-                evalFuncNode(n, i == nodes.size() - 1);
-                break;
-            }
-            case NodeType::OPER: {
-                auto opNode = tt::as_shared<OperNode>(n);
-                const auto &uri = opNode->oper()->uri();
 
-                if (uri.starts_with(":mark/")) {
-                    evalMarkedOperator(uri.substr(6), n, *currFrame);
-                    break;
-                }
+            case OpCode::CAST: {
+                ASSERT(false, "CAST opcode not implemented in FastVM.");
+                break;
+            }
 
-                context_->eval(uri, n, *currFrame);
+            case OpCode::COPY: {
+                auto srcData = currFrame->get(bc.fastop[0]);
+                currFrame->set(bc.result, srcData);
                 break;
             }
-            case NodeType::EXIT: {
-                ASSERT(false, "EXIT node should not appear in the execution sequence.");
+
+            case OpCode::ACCS: {
+                ASSERT(false, "ACCS opcode not implemented in FastVM.");
                 break;
             }
-            case NodeType::DREF: {
-                ASSERT(false, "DREF node should not appear in the execution sequence.");
+
+            case OpCode::JUMP: {
+                i = static_cast<arr_size_t>(bc.fastop[0]);
+                continue; // skip i increment
+            }
+
+            case OpCode::BRCH: {
+                ASSERT(false, "BRCH opcode not implemented in FastVM.");
                 break;
             }
+
+            case OpCode::JOIN: {
+                ASSERT(false, "JOIN opcode not implemented in FastVM.");
+                break;
             }
-            EXEC_WHEN_DEBUG([&]() {
-                if (profiler::AdvancedTracer::getInstance().isTracing()) {
-                    std::string nodeName = "node:" + n->toString();
-                    profiler::AdvancedTracer::getInstance().traceFunctionReturn(nodeName);
-                }
-            }());
+
+            case OpCode::FILL: {
+                ASSERT(false, "FILL opcode not implemented in FastVM.");
+                break;
+            }
+
+            case OpCode::CALL: {
+                break;
+            }
+
+            case OpCode::FUNC: {
+                ASSERT(false, "FUNC opcode not implemented in FastVM.");
+                break;
+            }
+
+            case OpCode::OPER: {
+                ASSERT(false, "OPER opcode not implemented in FastVM.");
+                break;
+            }
+
+            case OpCode::SCHD: {
+                ASSERT(false, "SCHD opcode not implemented in FastVM.");
+                break;
+            }
+
+            default:
+                ASSERT(false, "Unsupported opcode in FastVM.");
+            }
+
+            // move to the next bytecode
+            i += bc.opsize;
         }
-        EXEC_WHEN_DEBUG([&]() {
-            if (profiler::AdvancedTracer::getInstance().isTracing()) {
-                profiler::AdvancedTracer::getInstance().traceFunctionReturn(
-                    "topoExecution:" + graph->name());
-            }
-        }());
+
     } while (loop);
 
     currRecursionDepth_--;
@@ -426,13 +232,6 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
         }
         result = inputData;
     }
-
-    EXEC_WHEN_DEBUG([&]() {
-        if (profiler::AdvancedTracer::getInstance().isTracing()) {
-            profiler::AdvancedTracer::getInstance().traceFunctionReturn(
-                "evalGraph:" + graph->name());
-        }
-    }());
 
     return result;
 }

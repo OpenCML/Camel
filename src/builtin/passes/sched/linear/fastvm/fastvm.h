@@ -20,6 +20,7 @@
 #pragma once
 
 #include "../linear.h"
+#include "builtin/passes/sched/common/bytecode.h"
 #include "core/context/frame.h"
 
 #include <stack>
@@ -27,11 +28,10 @@
 class FastVMSchedPass : public LinearSchedPass {
     static const size_t maxRecursionDepth_ = 1000; // default max recursion depth
     size_t currRecursionDepth_ = 0;
-    std::stack<GraphIR::node_ptr_t> brInfoStack_;
-    std::unordered_map<GraphIR::Graph *, std::shared_ptr<GraphIR::node_vec_t>> graphTopoNodesCache_;
+    std::unordered_map<GraphIR::Graph *, std::shared_ptr<bytecode_vec_t>> codes_;
 
     data_ptr_t evalGraph(GraphIR::Graph *graph, Frame &frame);
-    std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(GraphIR::Graph *graph);
+    std::shared_ptr<bytecode_vec_t> getCodeOfGraph(GraphIR::Graph *graph);
 
     void
     evalMarkedOperator(const std::string uri, const GraphIR::node_ptr_t &node, Frame &currFrame);

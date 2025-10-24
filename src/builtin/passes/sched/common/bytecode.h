@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,24 +49,25 @@ inline bool isOpCodeWithFixedOperands(OpCode opcode) {
 }
 
 // 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
-using index_t = int16_t;
+using data_idx_t = int16_t;
+using arr_size_t = uint16_t;
 
 inline bool isSafeSizeTForIndexT(size_t value) {
-    return value <= static_cast<size_t>(std::numeric_limits<index_t>::max());
+    return value <= static_cast<size_t>(std::numeric_limits<data_idx_t>::max());
 }
 
-template <typename T> inline index_t as_index(T value) {
+template <typename T> inline data_idx_t as_index(T value) {
     if constexpr (std::is_same_v<T, size_t>) {
         ASSERT(
             isSafeSizeTForIndexT(value),
-            "Value exceeds int16_t range when converting to index_t.");
+            "Value exceeds int16_t range when converting to data_idx_t.");
     } else {
-        static_assert(false, "Unsupported type for index_t conversion.");
+        static_assert(false, "Unsupported type for data_idx_t conversion.");
     }
-    return static_cast<index_t>(value);
+    return static_cast<data_idx_t>(value);
 }
 
-inline std::string formatIndex(index_t value) {
+inline std::string formatIndex(data_idx_t value) {
     int width = 0;
     if (value == 0) {
         width = 1;
@@ -116,11 +117,11 @@ union BytecodeExtra;
 //
 // total_size = opsize * 8 bytes
 
-struct BytecodeHeader {           // 8 bytes
-    OpCode opcode = OpCode::NOOP; // 1 byte
-    uint8_t opsize = 0;           // 1 byte，单位为 8 字节
-    index_t result = 0;           // 2 bytes
-    index_t fastop[2] = {0, 0};   // 4 bytes
+struct BytecodeHeader {            // 8 bytes
+    OpCode opcode = OpCode::NOOP;  // 1 byte
+    uint8_t opsize = 0;            // 1 byte，单位为 8 字节
+    data_idx_t result = 0;         // 2 bytes
+    data_idx_t fastop[2] = {0, 0}; // 4 bytes
 
     std::string toString() const;
 
@@ -135,14 +136,14 @@ struct BytecodeHeader {           // 8 bytes
         return static_cast<size_t>(fastop[1]);
     }
 
-    inline index_t *operands() {
+    inline data_idx_t *operands() {
         ASSERT(hasOperands(), "No operands available.");
-        return reinterpret_cast<index_t *>(this + 1);
+        return reinterpret_cast<data_idx_t *>(this + 1);
     }
 
-    inline const index_t *operands() const {
+    inline const data_idx_t *operands() const {
         ASSERT(hasOperands(), "No operands available.");
-        return reinterpret_cast<const index_t *>(this + 1);
+        return reinterpret_cast<const data_idx_t *>(this + 1);
     }
 
     inline BytecodeExtra *extra() { return reinterpret_cast<BytecodeExtra *>(this + opsize - 1); }
@@ -171,6 +172,7 @@ using bytecode_vec_t = std::vector<Bytecode>;
 inline size_t roundUp8(size_t n) { return (n + 7) & ~static_cast<size_t>(7); }
 
 void appendBytecode(
-    bytecode_vec_t &vec, OpCode opcode, index_t result, const std::vector<index_t> &fastops = {},
-    const std::vector<index_t> &withOperands = {}, const std::vector<index_t> &normOperands = {},
-    bool hasExtra = false, const BytecodeExtra &extra = {});
+    bytecode_vec_t &vec, OpCode opcode, data_idx_t result,
+    const std::vector<data_idx_t> &fastops = {}, const std::vector<data_idx_t> &withOperands = {},
+    const std::vector<data_idx_t> &normOperands = {}, bool hasExtra = false,
+    const BytecodeExtra &extra = {});

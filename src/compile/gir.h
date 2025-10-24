@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,7 +74,7 @@ using node_set_t = std::unordered_set<node_ptr_t>;
 
 // 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
 using data_idx_t = int16_t;
-using arr_size_t = int16_t;
+using arr_size_t = uint16_t;
 
 struct WeakPtrHash {
     template <typename T> std::size_t operator()(const std::weak_ptr<T> &wp) const {

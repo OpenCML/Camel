@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,18 +77,18 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
 }
 
 void appendBytecode(
-    bytecode_vec_t &vec, OpCode opcode, index_t result, const std::vector<index_t> &fastops,
-    const std::vector<index_t> &withOperands, const std::vector<index_t> &normOperands,
+    bytecode_vec_t &vec, OpCode opcode, data_idx_t result, const std::vector<data_idx_t> &fastops,
+    const std::vector<data_idx_t> &withOperands, const std::vector<data_idx_t> &normOperands,
     bool hasExtra, const BytecodeExtra &extra) {
 
-    index_t normCnt = as_index(normOperands.size());
-    index_t withCnt = as_index(withOperands.size());
+    data_idx_t normCnt = as_index(normOperands.size());
+    data_idx_t withCnt = as_index(withOperands.size());
 
     size_t operandCount = withCnt + normCnt;
 
     size_t operandUnits = 0;
     if (fastops.empty()) {
-        size_t operandBytes = operandCount * sizeof(index_t);
+        size_t operandBytes = operandCount * sizeof(data_idx_t);
         size_t paddedOperandBytes = roundUp8(operandBytes);
         operandUnits = paddedOperandBytes / sizeof(Bytecode);
     }
@@ -115,12 +115,12 @@ void appendBytecode(
         header->fastop[0] = withCnt;
         header->fastop[1] = normCnt;
         uint8_t *raw = reinterpret_cast<uint8_t *>(&vec[offset + 1]);
-        index_t *ops = reinterpret_cast<index_t *>(raw);
+        data_idx_t *ops = reinterpret_cast<data_idx_t *>(raw);
 
-        for (index_t idx : withOperands) {
+        for (data_idx_t idx : withOperands) {
             *ops++ = idx;
         }
-        for (index_t idx : normOperands) {
+        for (data_idx_t idx : normOperands) {
             *ops++ = idx;
         }
     }
