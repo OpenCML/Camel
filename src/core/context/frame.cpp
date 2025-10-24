@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,8 +52,9 @@ data_ptr_t Frame::get(const node_ptr_t &node) {
     if (node->type() == NodeType::DATA) {
         res = graph_->getStaticData(node->index());
     } else {
-        ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
-        res = dataArr_[node->index()];
+        size_t idx = static_cast<size_t>(node->index());
+        ASSERT(idx < dataArr_.size(), "Data index out of range.");
+        res = dataArr_[idx];
     }
     ASSERT(
         res != nullptr,
@@ -80,16 +81,17 @@ void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
     if (node->type() == NodeType::DATA) {
         return graph_->setStaticData(node->index(), data);
     } else {
-        ASSERT(node->index() < dataArr_.size(), "Data index out of range.");
+        size_t idx = static_cast<size_t>(node->index());
+        ASSERT(idx < dataArr_.size(), "Data index out of range.");
         // ASSERT(
-        //     dataArr_[node->index()] == nullptr,
+        //     dataArr_[idx] == nullptr,
         //     std::format(
         //         "Overwriting initialized data of node: {}::{} in frame {}: {}",
         //         graph_.name(),
         //         node->toString(),
         //         graph_.name(),
-        //         dataArr_[node->index()]->toString()));
-        dataArr_[node->index()] = data;
+        //         dataArr_[idx]->toString()));
+        dataArr_[idx] = data;
         return;
     }
 }

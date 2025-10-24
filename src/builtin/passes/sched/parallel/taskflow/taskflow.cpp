@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 23, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -159,7 +159,7 @@ tf::Task TaskflowExecSchedPass::buildCopyTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
         .emplace([&]() {
-            auto src = n->withInputs().front();
+            auto src = n->normInputs().front();
             auto v = frame->get(src);
             if (v == nullptr) {
                 v = std::make_shared<Int32Data>(0);

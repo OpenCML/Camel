@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 22, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,6 +71,9 @@ using node_wptr_t = std::weak_ptr<Node>;
 using node_lst_t = std::list<node_ptr_t>;
 using node_vec_t = std::vector<node_ptr_t>;
 using node_set_t = std::unordered_set<node_ptr_t>;
+
+// 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
+using data_idx_t = int64_t;
 
 struct WeakPtrHash {
     template <typename T> std::size_t operator()(const std::weak_ptr<T> &wp) const {
@@ -151,32 +154,44 @@ class Graph : public std::enable_shared_from_this<Graph> {
     func_type_ptr_t funcType() const;
 
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
-    size_t addStaticData(const data_ptr_t &data) {
+    data_idx_t addStaticData(const data_ptr_t &data) {
         staticDataArr_.push_back(data);
-        return staticDataArr_.size() - 1;
+        if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<int64_t>::max())) {
+            throw std::overflow_error("staticDataArr_ exceeds int64_t max value");
+        }
+        return -static_cast<data_idx_t>(staticDataArr_.size() - 1);
     }
-    size_t addRuntimeData() { return runtimeDataSize_++; }
-    void setStaticData(size_t index, const data_ptr_t &data) {
+    data_idx_t addRuntimeData() {
+        if (runtimeDataSize_ > static_cast<size_t>(std::numeric_limits<int64_t>::max())) {
+            throw std::overflow_error("runtimeDataSize_ exceeds int64_t max value");
+        }
+        return static_cast<data_idx_t>(runtimeDataSize_++);
+    }
+    void setStaticData(data_idx_t index, const data_ptr_t &data) {
+        ASSERT(index < 0, "Static data index must be negative.");
+        size_t idx = static_cast<size_t>(-index);
         ASSERT(
-            index < staticDataArr_.size(),
+            idx < staticDataArr_.size(),
             std::format(
                 "Static data index out of range when setting data of graph ({}) at index {}. "
                 "(total size: {})",
                 name_,
                 index,
                 staticDataArr_.size()));
-        staticDataArr_[index] = data;
+        staticDataArr_[idx] = data;
     }
-    data_ptr_t getStaticData(size_t index) const {
+    data_ptr_t getStaticData(data_idx_t index) const {
+        ASSERT(index < 0, "Static data index must be negative.");
+        size_t idx = static_cast<size_t>(-index);
         ASSERT(
-            index < staticDataArr_.size(),
+            idx < staticDataArr_.size(),
             std::format(
                 "Static data index out of range when getting data of graph ({}) at index {}. "
                 "(total size: {})",
                 name_,
                 index,
                 staticDataArr_.size()));
-        return staticDataArr_[index];
+        return staticDataArr_[idx];
     }
     size_t staticDataSize() const { return staticDataArr_.size(); }
     size_t runtimeDataSize() const { return runtimeDataSize_; }
@@ -257,8 +272,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> dependents_;
 
     func_type_ptr_t funcType_;
-    data_vec_t staticDataArr_;
-    size_t runtimeDataSize_ = 0;
+    data_vec_t staticDataArr_ = {nullptr}; // 静态数据段，索引0保留为空
+    size_t runtimeDataSize_ = 1;           // 动态数据尺寸，从1开始，0保留为空
 
     node_vec_t withPorts_, normPorts_, closure_;
     node_vec_t nodes_;
@@ -270,7 +285,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
 class Node : public std::enable_shared_from_this<Node> {
   public:
-    Node(Graph &graph, NodeType nodeType, const type_ptr_t &dataType, size_t index)
+    Node(Graph &graph, NodeType nodeType, const type_ptr_t &dataType, data_idx_t index)
         : graph_(graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index) {}
     virtual ~Node() = default;
 
@@ -292,7 +307,7 @@ class Node : public std::enable_shared_from_this<Node> {
     bool operator!=(const Node &other) const { return !(this == &other); }
 
     Graph &graph() const { return graph_; }
-    size_t index() const { return dataIndex_; }
+    data_idx_t index() const { return dataIndex_; }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
     void setMacro(bool m) { macro_ = m; }
@@ -369,7 +384,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
     NodeType nodeType_;
     type_ptr_t dataType_;
-    size_t dataIndex_;
+    data_idx_t dataIndex_;
 
     node_vec_t withInputs_;
     node_vec_t normInputs_;
@@ -382,12 +397,12 @@ class Node : public std::enable_shared_from_this<Node> {
 
 class DataNode : public Node {
   public:
-    DataNode(Graph &graph, const type_ptr_t &type, size_t index)
+    DataNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::DATA, type, index) {}
     ~DataNode() = default;
 
     static node_ptr_t create(Graph &graph, const data_ptr_t &data) {
-        size_t index = graph.addStaticData(data);
+        data_idx_t index = graph.addStaticData(data);
         auto node = std::make_shared<DataNode>(graph, data->type(), index);
         graph.addNode(node);
         return node;
@@ -414,13 +429,13 @@ class PortNode : public Node {
 
   public:
     PortNode(
-        Graph &graph, const type_ptr_t &type, size_t index, const std::string &name, bool isVar)
+        Graph &graph, const type_ptr_t &type, data_idx_t index, const std::string &name, bool isVar)
         : Node(graph, NodeType::PORT, type, index), name_(name), isVar_(isVar) {}
     ~PortNode() = default;
 
     static node_ptr_t
     create(Graph &graph, const type_ptr_t &type, const std::string &name, bool isVar) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<PortNode>(graph, type, index, name, isVar);
         // 这里不会自动调用，需要手动添加，因为ports的顺序非常重要
         // graph.addPort(node);
@@ -446,12 +461,12 @@ class PortNode : public Node {
 
 class CastNode : public Node {
   public:
-    CastNode(Graph &graph, const type_ptr_t &type, size_t index)
+    CastNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::CAST, type, index) {}
     ~CastNode() = default;
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<CastNode>(graph, type, index);
         graph.addNode(node);
         return node;
@@ -468,12 +483,12 @@ class CastNode : public Node {
 
 class CopyNode : public Node {
   public:
-    CopyNode(Graph &graph, const type_ptr_t &type, size_t index)
+    CopyNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::COPY, type, index) {}
     ~CopyNode() = default;
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<CopyNode>(graph, type, index);
         graph.addNode(node);
         return node;
@@ -491,12 +506,12 @@ class CopyNode : public Node {
 class FillNode : public Node {
 
   public:
-    FillNode(Graph &graph, const type_ptr_t &type, size_t index)
+    FillNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::FILL, type, index) {}
     ~FillNode() = default;
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<FillNode>(graph, type, index);
         graph.addNode(node);
         return node;
@@ -514,14 +529,14 @@ class FillNode : public Node {
 class AccsNode : public Node {
   public:
     AccsNode(
-        Graph &graph, const type_ptr_t &type, size_t index,
+        Graph &graph, const type_ptr_t &type, data_idx_t index,
         const std::variant<std::string, size_t> &accsIdx)
         : Node(graph, NodeType::ACCS, type, index), accsIndex_(accsIdx) {}
     ~AccsNode() = default;
 
     static node_ptr_t
     create(Graph &graph, const type_ptr_t &type, const std::variant<std::string, size_t> &accsIdx) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<AccsNode>(graph, type, index, accsIdx);
         graph.addNode(node);
         return node;
@@ -551,12 +566,12 @@ class AccsNode : public Node {
 
 class BrchNode : public Node {
   public:
-    BrchNode(Graph &graph, const type_ptr_t &type, size_t index)
+    BrchNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::BRCH, type, index) {}
     ~BrchNode() = default;
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<BrchNode>(graph, type, index);
         graph.addNode(node);
         return node;
@@ -573,12 +588,12 @@ class BrchNode : public Node {
 
 class JoinNode : public Node {
   public:
-    JoinNode(Graph &graph, const type_ptr_t &type, size_t index)
+    JoinNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::JOIN, type, index) {}
     ~JoinNode() = default;
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<JoinNode>(graph, type, index);
         graph.addNode(node);
         return node;
@@ -595,12 +610,12 @@ class JoinNode : public Node {
 
 class CallNode : public Node {
   public:
-    CallNode(Graph &graph, const type_ptr_t &type, size_t index)
+    CallNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::CALL, type, index) {}
     ~CallNode() = default;
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<CallNode>(graph, type, index);
         graph.addNode(node);
         return node;
@@ -617,12 +632,12 @@ class CallNode : public Node {
 
 class BindNode : public Node {
   public:
-    BindNode(Graph &graph, const type_ptr_t &type, size_t index)
+    BindNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::BIND, type, index) {}
     ~BindNode() = default;
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<BindNode>(graph, type, index);
         graph.addNode(node);
         return node;
@@ -641,12 +656,12 @@ class FuncNode : public Node {
     func_ptr_t func_;
 
   public:
-    FuncNode(Graph &graph, size_t index, func_ptr_t func)
+    FuncNode(Graph &graph, data_idx_t index, func_ptr_t func)
         : Node(graph, NodeType::FUNC, func->funcType()->exitType(), index), func_(func) {}
     ~FuncNode() = default;
 
     static node_ptr_t create(Graph &graph, func_ptr_t func) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<FuncNode>(graph, index, func);
         graph.addNode(node);
         return node;
@@ -674,12 +689,12 @@ class OperNode : public Node {
     oper_idx_ptr_t operator_;
 
   public:
-    OperNode(Graph &graph, size_t index, oper_idx_ptr_t op)
+    OperNode(Graph &graph, data_idx_t index, oper_idx_ptr_t op)
         : Node(graph, NodeType::OPER, op->funcType()->exitType(), index), operator_(op) {}
     ~OperNode() = default;
 
     static node_ptr_t create(Graph &graph, oper_idx_ptr_t op) {
-        size_t index = graph.addRuntimeData();
+        data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<OperNode>(graph, index, op);
         graph.addNode(node);
         return node;
@@ -708,11 +723,11 @@ class OperNode : public Node {
 
 class ExitNode : public Node {
   public:
-    ExitNode(Graph &graph, const type_ptr_t &type, size_t index)
+    ExitNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::EXIT, type, index) {}
     ~ExitNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type, size_t index = 0) {
+    static node_ptr_t create(Graph &graph, const type_ptr_t &type, data_idx_t index = 0) {
         auto node = std::make_shared<ExitNode>(graph, type, index);
         return node;
     }
