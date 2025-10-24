@@ -19,15 +19,20 @@
 
 #pragma once
 
-#include "core/type/struct/struct.h"
+#include "core/data/other/other.h"
+#include "core/type/other/other.h"
+
 
 class TensorType : public OtherType {
   private:
     std::vector<size_t> shape_;
+    type_ptr_t element_type_;
     static std::unordered_map<std::string, std::string> staticMethods_;
 
   public:
     TensorType(const std::vector<size_t> &shape);
+    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape);
+    virtual ~TensorType() noexcept = default;
 
     std::vector<size_t> shape() const;
     
@@ -35,12 +40,12 @@ class TensorType : public OtherType {
 
     std::string toString() const override;
 
-    virtual std::string mangle() const override;
+    std::string mangle() const override;
 
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
 
-    virtual type_ptr_t clone() const override {
+    type_ptr_t clone() const override {
         ASSERT(false, "clone() not implemented");
         return nullptr;
     }

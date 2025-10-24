@@ -51,7 +51,10 @@ enum class TypeCode : uint32_t {
     Union = 0x2'0000003,
     Struct = 0x2'0000004,
     Function = 0x2'0000005,
-
+    Vector = 0x2'0000006,
+    Tensor = 0x2'0000007,
+    List = 0x2'0000008,
+    Set = 0x2'0000009,
     // special types (P = 0x3)
     Any = 0x3'0000000,
     Void = 0x3'0000001,
@@ -79,6 +82,10 @@ class FunctionType;
 class TupleType;
 class ArrayType;
 class StructType;
+class VectorType;
+class TensorType;
+class ListType;
+class SetType;
 
 using type_ptr_t = std::shared_ptr<Type>;
 using type_vec_t = std::vector<type_ptr_t>;

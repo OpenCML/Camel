@@ -26,8 +26,15 @@ using namespace std;
 
 unordered_map<string, string> TensorType::staticMethods_;
 
-TensorType::TensorType(const vector<size_t> &shape)
-    : StructType(TypeCode::Tensor), shape_(shape) {
+TensorType::TensorType(const vector<size_t> &shape) 
+    : OtherType(TypeCode::Tensor), shape_(shape), element_type_(Type::Double()) {
+    if (shape_.size() == 0) {
+        throw invalid_argument("Tensor shape must at least have 1 dim");
+    }
+}
+
+TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shape) 
+    : OtherType(TypeCode::Tensor), shape_(shape), element_type_(elementType) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
     }
@@ -35,10 +42,7 @@ TensorType::TensorType(const vector<size_t> &shape)
 
 vector<size_t> TensorType::shape() const { return shape_; }
 
-type_ptr_t TensorType::elementType() const { 
-    // TODO: element type
-    return Type::Any();
-}
+type_ptr_t TensorType::elementType() const { return element_type_; }
 
 string TensorType::toString() const {
     string result = "Tensor<[";
@@ -49,18 +53,32 @@ string TensorType::toString() const {
         result.pop_back();
         result.pop_back();
     }
-    result += "]>";
+    result += "]";
+    
+    if (element_type_ && !element_type_->equals(Type::Double())) {
+        result += ", " + element_type_->toString();
+    }
+    
+    result += ">";
     return result;
 }
 
 std::string TensorType::mangle() const {
     std::string result = "T";
-    result += elementType_->mangle();
-    result += std::to_string(shape_.size());
-    result += "_";
-    for (const auto &dim : shape_) {
-        result += std::to_string(dim) + "_";
+    for (size_t dim : shape_) {
+        result += std::to_string(dim) + ",";
     }
+    if (!shape_.empty()) {
+        result.pop_back();
+    }
+    result += ";";
+    
+    if (element_type_) {
+        result += element_type_->mangle();
+    } else {
+        result += "D";  
+    }
+    
     return result;
 }
 
@@ -68,37 +86,39 @@ bool TensorType::operator==(const Type &other) const {
     if (this == &other) {
         return true;
     }
-    if (other.code() != typeCode()) {
+    if (other.code() != TypeCode::Tensor) {
         return false;
     }
     const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
-    return shape_ == otherMatrix.shape_;
+    return shape_ == otherMatrix.shape_ && 
+           (element_type_ == otherMatrix.element_type_ ||
+            (element_type_ && otherMatrix.element_type_ && 
+             element_type_->equals(otherMatrix.element_type_)));
 }
 
 bool TensorType::operator!=(const Type &other) const {
-    if (other.code() != typeCode()) {
-        return true;
-    }
-    const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
-    return shape_ != otherMatrix.shape_;
+    return !(*this == other);
 }
 
 CastSafety TensorType::castSafetyTo(const Type &other) const {
     if (this == &other) {
         return CastSafety::Safe;
     }
-    if (other.code() == typeCode()) {
-        return CastSafety::Safe;
+    if (other.code() == TypeCode::Tensor) {
+        const TensorType &otherTensor = dynamic_cast<const TensorType &>(other);
+        if (shape_ == otherTensor.shape_) {
+            if (!element_type_ && !otherTensor.element_type_) {
+                return CastSafety::Safe;
+            }
+            if (element_type_ && otherTensor.element_type_) {
+                return element_type_->castSafetyTo(*otherTensor.element_type_);
+            }
+            return CastSafety::Unsafe;
+        }
+        return CastSafety::Forbidden;
     }
     if (other.composed()) {
         switch (other.code()) {
-        case TypeCode::Tensor: {
-            const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
-            if (shape_ == otherMatrix.shape()) {
-                return CastSafety::Safe;
-            }
-            return CastSafety::Forbidden;
-        }
         case TypeCode::List:
             return CastSafety::Safe;
         case TypeCode::Vector: {
@@ -110,13 +130,6 @@ CastSafety TensorType::castSafetyTo(const Type &other) const {
         case TypeCode::Set: {
             return CastSafety::Safe;
         }
-        case TypeCode::Map:
-            [[fallthrough]];
-        case TypeCode::Dict:
-            [[fallthrough]];
-        case TypeCode::Union:
-            return CastSafety::Forbidden;
-
         default:
             return CastSafety::Forbidden;
         }
@@ -126,12 +139,13 @@ CastSafety TensorType::castSafetyTo(const Type &other) const {
     }
     return CastSafety::Forbidden;
 }
-void TensorType::registerStaticMethod(const std::string& methodName, const std::string& operatorUri) {
+
+void TensorType::registerStaticMethod(
+    const std::string &methodName, const std::string &operatorUri) {
     staticMethods_[methodName] = operatorUri;
 }
 
-
-std::string TensorType::getStaticMethodUri(const std::string& methodName) {
+std::string TensorType::getStaticMethodUri(const std::string &methodName) {
     auto it = staticMethods_.find(methodName);
     if (it != staticMethods_.end()) {
         return it->second;
@@ -139,10 +153,10 @@ std::string TensorType::getStaticMethodUri(const std::string& methodName) {
     return "";
 }
 
-bool TensorType::hasStaticMethod(const std::string& methodName) {
+bool TensorType::hasStaticMethod(const std::string &methodName) {
     return staticMethods_.find(methodName) != staticMethods_.end();
 }
 
-type_ptr_t TensorType::Tensor(const std::vector<size_t>& shape) {
+type_ptr_t TensorType::Tensor(const std::vector<size_t> &shape) {
     return std::make_shared<TensorType>(shape);
 }

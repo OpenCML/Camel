@@ -19,23 +19,21 @@
 
 #pragma once
 
-#include "core/data/primary.h"
-#include "struct.h"
+#include "core/data/other/other.h"
+#include "core/type/other/other.h"
 
 #include <memory>
 #include <vector>
 
 #include <Eigen/Dense>
 
-class TensorData : public StructData {
+class TensorData : public OtherData {
   private:
     std::vector<data_ptr_t> refs_;
     std::vector<size_t> shape_;
-    Eigen::VectorXd data_;  // 使用Eigen向量替代std::vector<double>
-
+    Eigen::VectorXd data_;
     size_t calculate_linear_index(const std::vector<size_t> &index) const;
 
-    // Helper functions for tensor multiplication
     static size_t
     calculate_linear_index(const std::vector<size_t> &indices, const std::vector<size_t> &shape);
     static bool
@@ -57,11 +55,9 @@ class TensorData : public StructData {
     static std::string shape_to_string(const std::vector<size_t> &shape);
 
   public:
-    // Constructors and Destructors
     TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape);
     ~TensorData();
-
-    TensorData(TensorData &&other) noexcept;
+    TensorData(TensorData &&otheor) noexcept;
     TensorData &operator=(TensorData &&other) noexcept;
 
     TensorData(const TensorData &) = delete;

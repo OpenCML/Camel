@@ -20,10 +20,10 @@
 #include "tensor.h"
 #include "utils/log.h"
 
-#include "core/data/struct/tensor.h"
-#include "core/type/struct/tensor.h"
+#include "builtin/datas/list.h"
+#include "builtin/datas/tensor.h"
+#include "builtin/types/tensor.h"
 
-// Tensor static factory methods
 OperatorReturnCode __eye__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.eye"));
 
@@ -74,24 +74,35 @@ OperatorReturnCode __zeros__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     }
 
     auto shapeArg = frame.get(args[0]);
-    if (shapeArg->type()->code() != TypeCode::List) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::UnknownError,
-            std::format("tensor.zeros expects List argument"));
-    }
-
-    auto listData = std::dynamic_pointer_cast<ListData>(shapeArg);
     std::vector<size_t> shape;
 
-    for (size_t i = 0; i < listData->size(); ++i) {
-        auto element = listData->get(i);
-        if (!element->type()->equals(Type::Int32())) {
-            throw CamelRuntimeException(
-                RuntimeExceptionCode::UnknownError,
-                std::format("tensor.zeros expects List of Int32 arguments"));
+    if (shapeArg->type()->code() == TypeCode::List) {
+        auto listData = std::dynamic_pointer_cast<ListData>(shapeArg);
+        for (size_t i = 0; i < listData->size(); ++i) {
+            auto element = listData->get(i);
+            if (!element->type()->equals(Type::Int32())) {
+                throw CamelRuntimeException(
+                    RuntimeExceptionCode::UnknownError,
+                    std::format("tensor.zeros expects List of Int32 arguments"));
+            }
+            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            shape.push_back(static_cast<size_t>(intData->data()));
         }
-        auto intData = std::dynamic_pointer_cast<Int32Data>(element);
-        shape.push_back(static_cast<size_t>(intData->data()));
+    } else if (shapeArg->type()->code() == TypeCode::Array) {
+        auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
+        for (const auto &element : arrayData->raw()) {
+            if (!element->type()->equals(Type::Int32())) {
+                throw CamelRuntimeException(
+                    RuntimeExceptionCode::UnknownError,
+                    std::format("tensor.zeros expects Array of Int32 arguments"));
+            }
+            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            shape.push_back(static_cast<size_t>(intData->data()));
+        }
+    } else {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.zeros expects List or Array argument"));
     }
 
     auto tensor = TensorData::zeros(shape);
@@ -110,31 +121,41 @@ OperatorReturnCode __ones__(GraphIR::node_ptr_t &self, Frame &frame, Context &ct
     }
 
     auto shapeArg = frame.get(args[0]);
-    if (shapeArg->type()->code() != TypeCode::List) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::UnknownError,
-            std::format("tensor.ones expects List argument"));
-    }
-
-    auto listData = std::dynamic_pointer_cast<ListData>(shapeArg);
     std::vector<size_t> shape;
 
-    for (size_t i = 0; i < listData->size(); ++i) {
-        auto element = listData->get(i);
-        if (!element->type()->equals(Type::Int32())) {
-            throw CamelRuntimeException(
-                RuntimeExceptionCode::UnknownError,
-                std::format("tensor.ones expects List of Int32 arguments"));
+    if (shapeArg->type()->code() == TypeCode::List) {
+        auto listData = std::dynamic_pointer_cast<ListData>(shapeArg);
+        for (size_t i = 0; i < listData->size(); ++i) {
+            auto element = listData->get(i);
+            if (!element->type()->equals(Type::Int32())) {
+                throw CamelRuntimeException(
+                    RuntimeExceptionCode::UnknownError,
+                    std::format("tensor.ones expects List of Int32 arguments"));
+            }
+            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            shape.push_back(static_cast<size_t>(intData->data()));
         }
-        auto intData = std::dynamic_pointer_cast<Int32Data>(element);
-        shape.push_back(static_cast<size_t>(intData->data()));
+    } else if (shapeArg->type()->code() == TypeCode::Array) {
+        auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
+        for (const auto &element : arrayData->raw()) {
+            if (!element->type()->equals(Type::Int32())) {
+                throw CamelRuntimeException(
+                    RuntimeExceptionCode::UnknownError,
+                    std::format("tensor.ones expects Array of Int32 arguments"));
+            }
+            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            shape.push_back(static_cast<size_t>(intData->data()));
+        }
+    } else {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.ones expects List or Array argument"));
     }
 
     auto tensor = TensorData::ones(shape);
     frame.set(self, tensor);
     return OperatorReturnCode::OK;
 }
-
 OperatorReturnCode __linspace__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.linspace"));
 
@@ -210,7 +231,9 @@ OperatorReturnCode __tensor_add__(GraphIR::node_ptr_t &self, Frame &frame, Conte
     EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Calling tensor.add"));
 
     auto args = self->dataInputs();
-    EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("tensor.add called with {} arguments", args.size()));
+    EXEC_WHEN_DEBUG(
+        auto l = Logger();
+        l.in("TensorOps").debug("tensor.add called with {} arguments", args.size()));
 
     if (args.size() != 2) {
         EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Argument count check failed"));
@@ -224,38 +247,55 @@ OperatorReturnCode __tensor_add__(GraphIR::node_ptr_t &self, Frame &frame, Conte
     EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Getting second argument"));
     auto tensor2 = frame.get(args[1]);
 
-    EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("tensor1 type: {}, tensor2 type: {}", 
-        tensor1->type()->toString(), tensor2->type()->toString()));
+    EXEC_WHEN_DEBUG(
+        auto l = Logger(); l.in("TensorOps")
+                               .debug(
+                                   "tensor1 type: {}, tensor2 type: {}",
+                                   tensor1->type()->toString(),
+                                   tensor2->type()->toString()));
 
-    // 检查类型是否为Tensor类型
     if (tensor1->type()->code() != TypeCode::Tensor) {
-        EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").error("First argument is not a tensor, type: {}", tensor1->type()->toString()));
+        EXEC_WHEN_DEBUG(
+            auto l = Logger();
+            l.in("TensorOps")
+                .error("First argument is not a tensor, type: {}", tensor1->type()->toString()));
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
-            std::format("tensor.add expects first argument to be Tensor, got {}", 
+            std::format(
+                "tensor.add expects first argument to be Tensor, got {}",
                 tensor1->type()->toString()));
     }
 
     if (tensor2->type()->code() != TypeCode::Tensor) {
-        EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").error("Second argument is not a tensor, type: {}", tensor2->type()->toString()));
+        EXEC_WHEN_DEBUG(
+            auto l = Logger();
+            l.in("TensorOps")
+                .error("Second argument is not a tensor, type: {}", tensor2->type()->toString()));
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
-            std::format("tensor.add expects second argument to be Tensor, got {}", 
+            std::format(
+                "tensor.add expects second argument to be Tensor, got {}",
                 tensor2->type()->toString()));
     }
 
-    EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Both arguments are Tensor types, performing addition"));
+    EXEC_WHEN_DEBUG(
+        auto l = Logger();
+        l.in("TensorOps").debug("Both arguments are Tensor types, performing addition"));
 
     try {
-        EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Calling TensorData::add method"));
+        EXEC_WHEN_DEBUG(
+            auto l = Logger(); l.in("TensorOps").debug("Calling TensorData::add method"));
         auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->add(tensor2);
-        EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Addition completed successfully"));
+        EXEC_WHEN_DEBUG(
+            auto l = Logger(); l.in("TensorOps").debug("Addition completed successfully"));
         frame.set(self, result);
-    } catch (const std::exception& e) {
-        EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").error("Exception during tensor addition: {}", e.what()));
+    } catch (const std::exception &e) {
+        EXEC_WHEN_DEBUG(
+            auto l = Logger();
+            l.in("TensorOps").error("Exception during tensor addition: {}", e.what()));
         throw;
     }
-    
+
     EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Returning from tensor.add"));
     return OperatorReturnCode::OK;
 }
@@ -297,17 +337,32 @@ OperatorReturnCode __tensor_multiply__(GraphIR::node_ptr_t &self, Frame &frame, 
     auto tensor1 = frame.get(args[0]);
     auto tensor2 = frame.get(args[1]);
 
-    // 检查类型是否为Tensor类型
-    if (tensor1->type()->code() != TypeCode::Tensor ||
-        tensor2->type()->code() != TypeCode::Tensor) {
+    bool first_is_tensor = (tensor1->type()->code() == TypeCode::Tensor);
+    bool second_is_tensor = (tensor2->type()->code() == TypeCode::Tensor);
+
+    if (!first_is_tensor && !second_is_tensor) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
-            std::format("tensor.multiply expects Tensor arguments"));
+            std::format("tensor.multiply expects at least one Tensor argument"));
     }
 
-    auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->multiply(tensor2);
-    frame.set(self, result);
-    return OperatorReturnCode::OK;
+    if (first_is_tensor) {
+        auto tensor_data = std::dynamic_pointer_cast<TensorData>(tensor1);
+        auto result = tensor_data->multiply(tensor2);
+        frame.set(self, result);
+        return OperatorReturnCode::OK;
+    }
+
+    if (second_is_tensor) {
+        auto tensor_data = std::dynamic_pointer_cast<TensorData>(tensor2);
+        auto result = tensor_data->multiply(tensor1);
+        frame.set(self, result);
+        return OperatorReturnCode::OK;
+    }
+
+    throw CamelRuntimeException(
+        RuntimeExceptionCode::UnknownError,
+        std::format("tensor.multiply expects Tensor arguments"));
 }
 
 OperatorReturnCode __tensor_divide__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
@@ -323,7 +378,6 @@ OperatorReturnCode __tensor_divide__(GraphIR::node_ptr_t &self, Frame &frame, Co
     auto tensor1 = frame.get(args[0]);
     auto tensor2 = frame.get(args[1]);
 
-    // 检查类型是否为Tensor类型
     if (tensor1->type()->code() != TypeCode::Tensor ||
         tensor2->type()->code() != TypeCode::Tensor) {
         throw CamelRuntimeException(
@@ -395,16 +449,24 @@ OperatorReturnCode __tensor_flatten__(GraphIR::node_ptr_t &self, Frame &frame, C
             std::format("tensor.flatten expects 1 argument, got {}", args.size()));
     }
 
-    auto tensor = frame.get(args[0]);
+    auto tensor_data = frame.get(args[0]);
 
-    if (tensor->type()->code() != TypeCode::Tensor) {
+    if (tensor_data->type()->code() != TypeCode::Tensor) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
             std::format("tensor.flatten expects Tensor argument"));
     }
 
-    auto result = std::dynamic_pointer_cast<TensorData>(tensor)->flatten();
-    frame.set(self, result);
+    auto tensor_ptr = std::dynamic_pointer_cast<TensorData>(tensor_data);
+    if (!tensor_ptr) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("Failed to cast TensorData"));
+    }
+
+    auto result_tensor = tensor_ptr->flatten();
+
+    frame.set(self, result_tensor);
     return OperatorReturnCode::OK;
 }
 
@@ -907,6 +969,86 @@ OperatorReturnCode __shape__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     }
 
     auto result = std::make_shared<ListData>(std::move(shape_list));
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __tensor_idx__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor index"));
+
+    auto args = self->dataInputs();
+    if (args.size() != 2) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidNormParameter,
+            std::format("tensor index expects 2 arguments (tensor, index), got {}", args.size()));
+    }
+
+    auto tensor = frame.get(args[0]);
+    auto index = frame.get(args[1]);
+
+    if (tensor->type()->code() != TypeCode::Tensor) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format(
+                "tensor index expects first argument to be Tensor, got {}",
+                tensor->type()->toString()));
+    }
+
+    if (!index->type()->equals(Type::Int32())) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format(
+                "tensor index expects second argument to be Int32, got {}",
+                index->type()->toString()));
+    }
+
+    auto tensorData = std::dynamic_pointer_cast<TensorData>(tensor);
+    auto indexData = std::dynamic_pointer_cast<Int32Data>(index);
+
+    auto result = tensorData->at({static_cast<size_t>(indexData->data())});
+    frame.set(self, result);
+    return OperatorReturnCode::OK;
+}
+
+OperatorReturnCode __tensor_idx2d__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor 2d index"));
+
+    auto args = self->dataInputs();
+    if (args.size() != 3) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::InvalidNormParameter,
+            std::format(
+                "tensor 2d index expects 3 arguments (tensor, row, col), got {}",
+                args.size()));
+    }
+
+    auto tensor = frame.get(args[0]);
+    auto rowIndex = frame.get(args[1]);
+    auto colIndex = frame.get(args[2]);
+
+    if (tensor->type()->code() != TypeCode::Tensor) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format(
+                "tensor 2d index expects first argument to be Tensor, got {}",
+                tensor->type()->toString()));
+    }
+
+    if (!rowIndex->type()->equals(Type::Int32()) || !colIndex->type()->equals(Type::Int32())) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format(
+                "tensor 2d index expects second and third arguments to be Int32, got {} and {}",
+                rowIndex->type()->toString(),
+                colIndex->type()->toString()));
+    }
+
+    auto tensorData = std::dynamic_pointer_cast<TensorData>(tensor);
+    auto rowIndexData = std::dynamic_pointer_cast<Int32Data>(rowIndex);
+    auto colIndexData = std::dynamic_pointer_cast<Int32Data>(colIndex);
+
+    auto result = tensorData->at(
+        {static_cast<size_t>(rowIndexData->data()), static_cast<size_t>(colIndexData->data())});
     frame.set(self, result);
     return OperatorReturnCode::OK;
 }

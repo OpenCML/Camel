@@ -18,6 +18,8 @@
  */
 
 #include "builtin.h"
+#include "core/operator.h"
+#include "core/data/composed/func.h"
 
 #include "builtin/modules/fs.h"
 #include "builtin/modules/globals.h"
@@ -54,3 +56,4 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},
 #endif
 };
+

@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "core/data/struct/tensor.h"
+#include "src/builtin/datas/tensor.h"
 #include "core/operator.h"
 #include "compile/gir.h"
 #include "core/context/frame.h"

@@ -854,6 +854,34 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return norm[0];
                         }),
                 },
+                {
+                    ":tensor/multiply",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(self: tensor, other: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[1];
+                            }
+                            return nullopt;
+                        }),
+                },
             }),
         OperatorGroup::create(
             "__div__",
@@ -1531,6 +1559,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
+        OperatorGroup::create(
+            "Tensor",
+            {
+                {
+                    ":type/tensor",
+                    StaticFuncTypeResolver::create({}, {}, Type::Tensor(Type::Double(), {0})),
+                },
+            }),
     };
     return groups;
 }
@@ -1596,19 +1632,19 @@ static const std::pair<std::string, std::string> others[] = {
     {"filter", ":mark/filter"},
     {"reduce", ":mark/reduce"},
     {"foreach", ":mark/foreach"},
-     // Tensor functions
+    // Tensor functions
     {"eye", ":tensor/eye"},
     {"zeros", ":tensor/zeros"},
     {"ones", ":tensor/ones"},
     {"diag", ":tensor/diag"},
     {"linspace", ":tensor/linspace"},
-    {"arange", ":tensor/arange"}
-};
+    {"arange", ":tensor/arange"}};
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     for (const auto &group : getGlobalOperatorGroups()) {
         exportEntity(group->name(), group);
     }
+    exportType("Tensor", Type::Tensor(Type::Double(), {0}));
 }
 
 bool GlobalsBuiltinModule::load() {

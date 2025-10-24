@@ -19,6 +19,13 @@
 
 #include "base.h"
 
+#include "builtin/types/list.h"
+#include "builtin/types/tensor.h"
+#include "builtin/types/vector.h"
+#include "composed/array.h"
+#include "composed/struct.h"
+#include "composed/tuple.h"
+#include "other/other.h"
 #include "primary.h"
 #include "special/func.h"
 #include "utils/type.h"
@@ -232,11 +239,11 @@ std::shared_ptr<ArrayType> Type::Array(const type_ptr_t &elementType) {
     static std::shared_ptr<ArrayType> voidArrayType = nullptr;
     if (!elementType) {
         if (voidArrayType == nullptr) {
-            voidArrayType = make_shared<ArrayType>(Type::Void());
+            voidArrayType = std::make_shared<ArrayType>(Type::Void());
         }
         return voidArrayType;
     }
-    return make_shared<ArrayType>(elementType);
+    return std::make_shared<ArrayType>(elementType);
 }
 
 std::shared_ptr<TupleType> Type::Tuple(const type_vec_t &types) {
@@ -253,29 +260,22 @@ std::shared_ptr<SpecialType> Type::Any() {
     return type;
 }
 
-type_ptr_t Type::Array(const type_ptr_t &elementType, size_t size) {
-    return tt::as_shared<Type>(make_shared<ArrayType>(elementType, size));
-}
-
-type_ptr_t Type::Tuple(const std::vector<type_ptr_t> &types) {
-    return tt::as_shared<Type>(make_shared<TupleType>(types));
-}
-
-type_ptr_t Type::Vector(const type_ptr_t &elementType) {
-    return tt::as_shared<Type>(make_shared<VectorType>(elementType));
-}
-
-type_ptr_t Type::Tensor(const type_ptr_t &elementType, const std::vector<size_t> &shape) {
-    return tt::as_shared<Type>(make_shared<TensorType>(shape));
-}
-
-type_ptr_t Type::Any() {
+type_ptr_t Type::List() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = make_shared<SpecialType>(TypeCode::Void);
+        type = std::make_shared<ListType>();
     }
     return type;
 }
+
+type_ptr_t Type::Vector(const type_ptr_t &elementType) {
+    return tt::as_shared<Type>(make_shared<VectorType>(elementType, 0));
+}
+
+type_ptr_t Type::Tensor(const type_ptr_t &elementType, const std::vector<size_t> &shape) {
+    return tt::as_shared<Type>(make_shared<TensorType>(elementType, shape));
+}
+
 
 std::shared_ptr<FunctionType> Type::Func() {
     static std::shared_ptr<FunctionType> type = nullptr;
@@ -290,6 +290,13 @@ type_ptr_t Type::Ref() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
         type = make_shared<Type>(TypeCode::Ref);
+    }
+    return type;
+}
+std::shared_ptr<SpecialType> Type::Void() {
+    static std::shared_ptr<SpecialType> type = nullptr;
+    if (type == nullptr) {
+        type = std::make_shared<SpecialType>(TypeCode::Void);
     }
     return type;
 }

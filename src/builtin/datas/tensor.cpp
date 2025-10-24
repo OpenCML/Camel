@@ -18,8 +18,11 @@
  */
 
 #include "tensor.h"
-#include "core/data/entity.h"
+#include "builtin/types/tensor.h"
+#include "list.h"
 #include "utils/log.h"
+#include "vector.h"
+#include "core/data/primary.h"
 
 #include <algorithm>
 #include <cmath>
@@ -33,17 +36,91 @@
 using namespace std;
 
 TensorData::TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-    : StructData(std::make_shared<TensorType>(elementType, shape)) {}
+    : OtherData(std::static_pointer_cast<Type>(std::make_shared<TensorType>(shape))), shape_(shape) {
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+    data_.resize(total_size);
+    data_.setZero();
+}
+
+TensorData::~TensorData() = default;
 
 data_ptr_t TensorData::at(const std::vector<size_t> &index) const {
-    // TODO
-    throw runtime_error("Not implemented");
+    if (index.size() != shape_.size()) {
+        throw std::runtime_error("Index dimension mismatch");
+    }
+    
+    size_t linear_index = 0;
+    size_t multiplier = 1;
+    
+    for (size_t i = index.size(); i > 0; --i) {
+        size_t dim_index = i - 1;
+        if (index[dim_index] >= shape_[dim_index]) {
+            throw std::runtime_error("Index out of bounds");
+        }
+        linear_index += index[dim_index] * multiplier;
+        multiplier *= shape_[dim_index];
+    }
+    
+    return std::make_shared<DoubleData>(data_(linear_index));
 }
 
+std::vector<size_t> TensorData::shape() const { return shape_; }
+
+size_t TensorData::size() const { return data_.size(); }
 std::vector<std::string> TensorData::refs() const {
-    // TODO
-    throw runtime_error("Not implemented");
+    std::vector<std::string> result;
+    for (const auto &ref : refs_) {
+        if (ref) {
+            result.push_back(ref->toString());
+        }
+    }
+    return result;
 }
+
+data_ptr_t TensorData::clone(bool deep) const {
+    auto result = make_shared<TensorData>(type_, shape_);
+    result->data_ = data_;
+
+    if (deep) {
+        result->refs_.clear();
+        for (const auto &ref : refs_) {
+            if (ref) {
+                result->refs_.push_back(ref->clone(true));
+            } else {
+                result->refs_.push_back(nullptr);
+            }
+        }
+    } else {
+        result->refs_ = refs_;
+    }
+
+    return result;
+}
+
+const std::string TensorData::toString() const {
+    std::stringstream ss;
+    ss << "Tensor(shape=" << shape_to_string(shape_) << ", data=[";
+
+    size_t display_count = std::min(size_t(10), static_cast<size_t>(data_.size()));
+    for (size_t i = 0; i < display_count; ++i) {
+        ss << data_(i);
+        if (i < static_cast<size_t>(data_.size()) - 1) {
+            ss << ", ";
+        }
+    }
+
+    if (data_.size() > 10) {
+        ss << ", ...";
+    }
+    ss << "])";
+
+    return ss.str();
+}
+
+void TensorData::print(std::ostream &os) const { os << toString(); }
 
 void TensorData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
@@ -54,7 +131,6 @@ void TensorData::resolve(const data_vec_t &dataList) {
         throw runtime_error("Cannot resolve tensor references: empty data list provided");
     }
 
-    // 检查引用数量是否与张量数据大小匹配，转换类型以避免警告
     if (refs_.size() != static_cast<size_t>(data_.size())) {
         throw runtime_error(
             "Reference count mismatch: expected " + std::to_string(data_.size()) +
@@ -68,9 +144,7 @@ void TensorData::resolve(const data_vec_t &dataList) {
         for (const auto &data : dataList) {
             if (!data)
                 continue;
-
-            auto entity = data->entity();
-            if (entity && entity->toString() == refData->toString()) {
+            if (refData && refData->toString() == data->toString()) {
                 try {
                     auto doubleData = dynamic_pointer_cast<DoubleData>(data);
                     if (doubleData) {
@@ -171,7 +245,6 @@ void TensorData::resolve(const data_vec_t &dataList) {
 
     refs_.clear();
 
-    // 检查NaN和无穷大值，使用Eigen::Index类型
     for (Eigen::Index i = 0; i < data_.size(); ++i) {
         if (std::isnan(data_(i)) || std::isinf(data_(i))) {
             throw runtime_error(
@@ -180,10 +253,7 @@ void TensorData::resolve(const data_vec_t &dataList) {
         }
     }
 }
-bool TensorData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for VectorData
-    return true;
-}
+bool TensorData::equals(const data_ptr_t &other) const { return true; }
 
 data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
     if (target == type_ || (type_ && type_->equals(target))) {
@@ -213,10 +283,9 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
                     return reshape(tensor_type->shape());
                 } catch (...) {
                     auto result = make_shared<TensorData>(target, tensor_type->shape());
-                    // Copy as much data as possible using Eigen's segment operation
-                    // 使用static_cast进行类型转换以避免警告
-                    Eigen::Index min_size = std::min(static_cast<Eigen::Index>(data_.size()), 
-                                                    static_cast<Eigen::Index>(result->data_.size()));
+                    Eigen::Index min_size = std::min(
+                        static_cast<Eigen::Index>(data_.size()),
+                        static_cast<Eigen::Index>(result->data_.size()));
                     if (min_size > 0) {
                         result->data_.head(min_size) = data_.head(min_size);
                     }
@@ -234,10 +303,9 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
     case TypeCode::Vector: {
         auto vector_type = dynamic_pointer_cast<VectorType>(target);
         if (vector_type) {
-            // Convert to VectorData using Eigen data
             vector<data_ptr_t> elements;
-            elements.reserve(static_cast<size_t>(data_.size())); // 类型转换避免警告
-            for (Eigen::Index i = 0; i < data_.size(); ++i) { // 使用Eigen::Index类型
+            elements.reserve(static_cast<size_t>(data_.size()));
+            for (Eigen::Index i = 0; i < data_.size(); ++i) {
                 elements.push_back(make_shared<DoubleData>(data_(i)));
             }
             auto result = make_shared<VectorData>(vector_type, std::move(elements));
@@ -248,8 +316,8 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
 
     case TypeCode::List: {
         vector<data_ptr_t> elements;
-        elements.reserve(static_cast<size_t>(data_.size())); // 类型转换避免警告
-        for (Eigen::Index i = 0; i < data_.size(); ++i) { // 使用Eigen::Index类型
+        elements.reserve(static_cast<size_t>(data_.size()));
+        for (Eigen::Index i = 0; i < data_.size(); ++i) {
             elements.push_back(make_shared<DoubleData>(data_(i)));
         }
         auto result = make_shared<ListData>(std::move(elements));
@@ -260,8 +328,8 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
         auto array_type = dynamic_pointer_cast<ArrayType>(target);
         if (array_type) {
             vector<data_ptr_t> elements;
-            elements.reserve(static_cast<size_t>(data_.size())); // 类型转换避免警告
-            for (Eigen::Index i = 0; i < data_.size(); ++i) { // 使用Eigen::Index类型
+            elements.reserve(static_cast<size_t>(data_.size()));
+            for (Eigen::Index i = 0; i < data_.size(); ++i) {
                 elements.push_back(make_shared<DoubleData>(data_(i)));
             }
             auto result = make_shared<ArrayData>(array_type, std::move(elements));
@@ -291,14 +359,12 @@ data_ptr_t TensorData::reshape(const std::vector<size_t> &shape) const {
         new_size *= dim;
     }
 
-    // 使用static_cast进行类型转换以避免警告
     if (static_cast<Eigen::Index>(new_size) != data_.size()) {
         throw invalid_argument("Cannot reshape tensor: total size must remain constant");
     }
 
-    // For Eigen VectorXd, reshaping is simpler - just copy the data
     auto result = make_shared<TensorData>(nullptr, shape);
-    result->data_ = data_; // Copy the data (same content, different shape)
+    result->data_ = data_;
     return result;
 }
 
@@ -313,9 +379,7 @@ data_ptr_t TensorData::expand_dims(size_t axis) const {
 
     auto result = make_shared<TensorData>(nullptr, new_shape);
 
-    // For Eigen VectorXd, expanding dimensions just copies the data
-    // The shape change is handled by the TensorData constructor
-    result->data_ = data_; // Copy the data
+    result->data_ = data_;
 
     return result;
 }
@@ -359,7 +423,6 @@ data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
     vector<size_t> new_shape = shape();
 
     if (axis == 0) {
-        // Assuming 2D tensor with shape [rows, cols]
         if (shape().size() != 2 || other_tensor->shape().size() != 2) {
             throw invalid_argument("Concatenation currently only supports 2D tensors");
         }
@@ -377,13 +440,11 @@ data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
         size_t rows1 = shape()[0];
         size_t cols = shape()[1];
         size_t rows2 = other_tensor->shape()[0];
-        
-        // 使用Eigen的Map来处理2D数据布局
+
         Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols, rows1 + rows2);
         Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols, rows1);
         Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols, rows2);
-        
-        // 使用Eigen的block操作复制数据
+
         result_map.block(0, 0, cols, rows1) = this_map;
         result_map.block(0, rows1, cols, rows2) = other_map;
 
@@ -407,13 +468,11 @@ data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
         size_t rows = shape()[0];
         size_t cols1 = shape()[1];
         size_t cols2 = other_tensor->shape()[1];
-        
-        // 使用Eigen的Map来处理2D数据布局
+
         Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols1 + cols2, rows);
         Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols1, rows);
         Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols2, rows);
-        
-        // 使用Eigen的block操作复制数据
+
         result_map.block(0, 0, cols1, rows) = this_map;
         result_map.block(cols1, 0, cols2, rows) = other_map;
 
@@ -440,39 +499,35 @@ data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
     }
 
     if (axis == 0) {
-        // Stack along rows (axis 0)
         vector<size_t> new_shape = {2 * shape()[0], shape()[1]};
         auto result = make_shared<TensorData>(nullptr, new_shape);
         result->data_.resize(new_shape[0] * new_shape[1]);
 
-        // 使用Eigen的Map和block操作替代手动循环
         size_t rows1 = shape()[0];
         size_t cols = shape()[1];
         size_t rows2 = other_tensor->shape()[0];
-        
+
         Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols, rows1 + rows2);
         Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols, rows1);
         Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols, rows2);
-        
+
         result_map.block(0, 0, cols, rows1) = this_map;
         result_map.block(0, rows1, cols, rows2) = other_map;
 
         return result;
     } else if (axis == 1) {
-        // Stack along columns (axis 1)
         vector<size_t> new_shape = {shape()[0], 2 * shape()[1]};
         auto result = make_shared<TensorData>(nullptr, new_shape);
         result->data_.resize(new_shape[0] * new_shape[1]);
 
-        // 使用Eigen的Map和block操作替代手动循环
         size_t rows = shape()[0];
         size_t cols1 = shape()[1];
         size_t cols2 = other_tensor->shape()[1];
-        
+
         Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols1 + cols2, rows);
         Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols1, rows);
         Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols2, rows);
-        
+
         result_map.block(0, 0, cols1, rows) = this_map;
         result_map.block(cols1, 0, cols2, rows) = other_map;
 
@@ -484,15 +539,12 @@ data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
         auto result = make_shared<TensorData>(nullptr, new_shape);
         result->data_.resize(shape()[0] * shape()[1] * 2);
 
-        // 使用Eigen的segment操作替代手动循环
         size_t rows = shape()[0];
         size_t cols = shape()[1];
         size_t total_elements = rows * cols;
-        
-        // Copy data from first tensor
+
         result->data_.head(total_elements) = data_;
-        
-        // Copy data from second tensor
+
         result->data_.segment(total_elements, total_elements) = other_tensor->data_;
 
         return result;
@@ -504,11 +556,9 @@ data_ptr_t TensorData::argmin() const {
         throw invalid_argument("Cannot find argmin of empty tensor");
     }
 
-    // 使用Eigen的minCoeff方法找到最小值及其索引
     Eigen::Index min_index;
     data_.minCoeff(&min_index);
 
-    // Convert linear index to 2D coordinates (assuming 2D tensor)
     size_t cols = shape().size() > 1 ? shape()[1] : data_.size();
     size_t min_row = min_index / cols;
     size_t min_col = min_index % cols;
@@ -524,11 +574,9 @@ data_ptr_t TensorData::argmax() const {
         throw invalid_argument("Cannot find argmax of empty tensor");
     }
 
-    // 使用Eigen的maxCoeff方法找到最大值及其索引
     Eigen::Index max_index;
     data_.maxCoeff(&max_index);
 
-    // Convert linear index to 2D coordinates (assuming 2D tensor)
     size_t cols = shape().size() > 1 ? shape()[1] : data_.size();
     size_t max_row = max_index / cols;
     size_t max_col = max_index % cols;
@@ -544,7 +592,6 @@ data_ptr_t TensorData::var() const {
         throw invalid_argument("Cannot calculate variance of empty tensor");
     }
 
-    // 使用Eigen的方法计算方差
     double mean_val = data_.mean();
     double variance = (data_.array() - mean_val).square().mean();
 
@@ -557,7 +604,6 @@ data_ptr_t TensorData::std() const {
         throw invalid_argument("Cannot calculate standard deviation of empty tensor");
     }
 
-    // 使用Eigen的方法计算标准差
     double mean_val = data_.mean();
     double variance = (data_.array() - mean_val).square().mean();
     double std_dev = std::sqrt(variance);
@@ -568,56 +614,48 @@ data_ptr_t TensorData::std() const {
 
 data_ptr_t TensorData::sinh() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和sinh函数进行向量化操作
     result->data_ = data_.array().sinh();
     return result;
 }
 
 data_ptr_t TensorData::cosh() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和cosh函数进行向量化操作
     result->data_ = data_.array().cosh();
     return result;
 }
 
 data_ptr_t TensorData::tanh() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和tanh函数进行向量化操作
     result->data_ = data_.array().tanh();
     return result;
 }
 
 data_ptr_t TensorData::pow(double exponent) const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和pow函数进行向量化操作
     result->data_ = data_.array().pow(exponent);
     return result;
 }
 
 data_ptr_t TensorData::cube() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和cube函数进行向量化操作
     result->data_ = data_.array().cube();
     return result;
 }
 
 data_ptr_t TensorData::ceil() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和ceil函数进行向量化操作
     result->data_ = data_.array().ceil();
     return result;
 }
 
 data_ptr_t TensorData::floor() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和floor函数进行向量化操作
     result->data_ = data_.array().floor();
     return result;
 }
 
 data_ptr_t TensorData::round() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的array()方法和round函数进行向量化操作
     result->data_ = data_.array().round();
     return result;
 }
@@ -640,7 +678,6 @@ data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) con
     size_t cols = shape_vec[1];
 
     if (axis == 0) {
-        // Take rows
         auto result = make_shared<TensorData>(nullptr, vector<size_t>{indices.size(), cols});
         result->data_.resize(indices.size() * cols);
 
@@ -649,7 +686,6 @@ data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) con
                 throw out_of_range("Index out of bounds");
             }
 
-            // 使用Eigen的segment操作复制整行
             size_t src_start = indices[i] * cols;
             size_t dest_start = i * cols;
             result->data_.segment(dest_start, cols) = data_.segment(src_start, cols);
@@ -657,7 +693,6 @@ data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) con
 
         return result;
     } else {
-        // Take columns
         auto result = make_shared<TensorData>(nullptr, vector<size_t>{rows, indices.size()});
         result->data_.resize(rows * indices.size());
 
@@ -666,7 +701,6 @@ data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) con
                 throw out_of_range("Index out of bounds");
             }
 
-            // 逐元素复制列
             for (size_t j = 0; j < rows; ++j) {
                 size_t src_index = j * cols + indices[i];
                 size_t dest_index = j * indices.size() + i;
@@ -680,7 +714,6 @@ data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) con
 
 data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t &values) const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    // 使用Eigen的赋值操作复制原始数据
     result->data_ = data_;
 
     auto values_tensor = dynamic_pointer_cast<TensorData>(values);
@@ -688,7 +721,6 @@ data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t 
         throw invalid_argument("Values must be a TensorData");
     }
 
-    // 转换类型以避免警告
     if (indices.size() != static_cast<size_t>(values_tensor->data_.size())) {
         throw invalid_argument("Number of indices must match number of values");
     }
@@ -698,15 +730,11 @@ data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t 
         throw invalid_argument("Put operation currently only supports 2D tensors");
     }
 
-    // 使用Eigen::Index类型
     for (Eigen::Index i = 0; i < static_cast<Eigen::Index>(indices.size()); ++i) {
-        // 转换类型以避免警告
         if (indices[i] >= static_cast<size_t>(data_.size())) {
             throw out_of_range("Index out of bounds");
         }
 
-        // Put the value (assuming values_tensor is a 1D tensor)
-        // 转换类型以避免警告
         if (i < values_tensor->data_.size()) {
             result->data_(indices[i]) = values_tensor->data_(i);
         }
@@ -748,11 +776,93 @@ data_ptr_t TensorData::slice(const std::vector<std::pair<size_t, size_t>> &slice
     auto result = make_shared<TensorData>(nullptr, vector<size_t>{rows, cols});
     result->data_.resize(rows * cols);
 
-    // 使用Eigen的Map和block操作替代手动循环
     Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), total_cols, total_rows);
     Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
-    
+
     dest_map = src_map.block(start_col, start_row, cols, rows);
+
+    return result;
+}
+
+data_ptr_t TensorData::add(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw std::invalid_argument("Can only add with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw std::invalid_argument("Tensor dimensions must match for addition");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_ + other_tensor->data_;
+
+    return result;
+}
+
+data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw std::invalid_argument("Can only subtract with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw std::invalid_argument("Tensor dimensions must match for subtraction");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_ - other_tensor->data_;
+
+    return result;
+}
+
+
+data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
+    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+        if (data_.size() != tensor->data_.size()) {
+            throw std::invalid_argument("Tensor dimensions must match for element-wise multiplication");
+        }
+        
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * tensor->data_.array();
+        return result;
+    }
+    
+    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * static_cast<double>(intData->data());
+        return result;
+    }
+    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * static_cast<double>(longData->data());
+        return result;
+    }
+    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * static_cast<double>(floatData->data());
+        return result;
+    }
+    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * doubleData->data();
+        return result;
+    }
+    
+    throw runtime_error("Tensor multiplication expects either Tensor or scalar operand");
+}
+data_ptr_t TensorData::divide(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw std::invalid_argument("Can only divide with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw std::invalid_argument("Tensor dimensions must match for element-wise division");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array() / other_tensor->data_.array();
 
     return result;
 }
@@ -768,7 +878,6 @@ data_ptr_t TensorData::equal(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的数组比较操作替代手动循环
     result->data_ = (data_.array() == other_tensor->data_.array()).cast<double>();
     return result;
 }
@@ -784,7 +893,6 @@ data_ptr_t TensorData::not_equal(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的数组比较操作替代手动循环
     result->data_ = (data_.array() != other_tensor->data_.array()).cast<double>();
     return result;
 }
@@ -800,7 +908,6 @@ data_ptr_t TensorData::greater(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的数组比较操作替代手动循环
     result->data_ = (data_.array() > other_tensor->data_.array()).cast<double>();
     return result;
 }
@@ -816,7 +923,6 @@ data_ptr_t TensorData::less(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的数组比较操作替代手动循环
     result->data_ = (data_.array() < other_tensor->data_.array()).cast<double>();
     return result;
 }
@@ -832,7 +938,6 @@ data_ptr_t TensorData::greater_equal(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的数组比较操作替代手动循环
     result->data_ = (data_.array() >= other_tensor->data_.array()).cast<double>();
     return result;
 }
@@ -848,7 +953,6 @@ data_ptr_t TensorData::less_equal(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的数组比较操作替代手动循环
     result->data_ = (data_.array() <= other_tensor->data_.array()).cast<double>();
     return result;
 }
@@ -864,7 +968,6 @@ data_ptr_t TensorData::logical_and(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的逻辑与操作替代手动循环
     result->data_ = (data_.array() != 0.0 && other_tensor->data_.array() != 0.0).cast<double>();
     return result;
 }
@@ -880,14 +983,12 @@ data_ptr_t TensorData::logical_or(const data_ptr_t &other) const {
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的逻辑或操作替代手动循环
     result->data_ = (data_.array() != 0.0 || other_tensor->data_.array() != 0.0).cast<double>();
     return result;
 }
 
 data_ptr_t TensorData::logical_not() const {
     auto result = make_shared<TensorData>(nullptr, shape());
-    // 使用Eigen的逻辑非操作替代手动循环
     result->data_ = (data_.array() == 0.0).cast<double>();
     return result;
 }
@@ -907,7 +1008,6 @@ data_ptr_t TensorData::where(const data_ptr_t &condition, const data_ptr_t &othe
 
     auto result = make_shared<TensorData>(nullptr, shape());
 
-    // 使用Eigen的select操作替代手动循环
     result->data_ = (condition_tensor->data_.array() != 0.0)
                         .select(data_.array(), other_tensor->data_.array())
                         .matrix();
@@ -931,12 +1031,10 @@ data_ptr_t TensorData::flip(size_t axis) const {
     auto result = make_shared<TensorData>(nullptr, shape());
 
     if (axis == 0) {
-        // Flip rows using Eigen's reverse operation
         Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
         Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
         dest_map = src_map.colwise().reverse();
     } else {
-        // Flip columns using Eigen's reverse operation
         Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
         Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
         dest_map = src_map.rowwise().reverse();
@@ -973,22 +1071,20 @@ data_ptr_t TensorData::repeat(size_t repeats, size_t axis) const {
         auto result = make_shared<TensorData>(nullptr, new_shape);
         result->data_.resize(new_shape[0] * new_shape[1]);
 
-        // 使用Eigen的replicate操作替代手动循环
         Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
         Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, new_shape[0]);
         dest_map = src_map.replicate(1, repeats);
-        
+
         return result;
     } else {
         new_shape[1] *= repeats;
         auto result = make_shared<TensorData>(nullptr, new_shape);
         result->data_.resize(new_shape[0] * new_shape[1]);
 
-        // 使用Eigen的replicate操作替代手动循环
         Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
         Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], rows);
         dest_map = src_map.replicate(repeats, 1);
-        
+
         return result;
     }
 }
@@ -1018,7 +1114,6 @@ data_ptr_t TensorData::tile(const std::vector<size_t> &reps) const {
     auto result = make_shared<TensorData>(nullptr, new_shape);
     result->data_.resize(new_shape[0] * new_shape[1]);
 
-    // 使用Eigen的replicate操作替代手动循环
     Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
     Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], new_shape[0]);
     dest_map = src_map.replicate(col_reps, row_reps);
@@ -1044,11 +1139,9 @@ data_ptr_t TensorData::pad(size_t pad_width, double constant_value) const {
     auto result = make_shared<TensorData>(nullptr, new_shape);
     result->data_.resize(new_shape[0] * new_shape[1]);
 
-    // 使用Eigen的操作替代手动循环
     Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], new_shape[0]);
     dest_map.setConstant(constant_value);
-    
-    // 复制原始数据到中心
+
     Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
     dest_map.block(pad_width, pad_width, cols, rows) = src_map;
 
@@ -1070,13 +1163,11 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
     size_t cols = shape_vec[1];
 
     if (rows == 1 || cols == 1) {
-        // Create diagonal matrix from vector
         size_t size = std::max(rows, cols);
         auto result = make_shared<TensorData>(nullptr, vector<size_t>{size, size});
         result->data_.resize(size * size);
         result->data_.setZero();
 
-        // 使用Eigen的asDiagonal方法替代手动循环
         if (rows == 1) {
             // Row vector
             Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), size, size);
@@ -1089,12 +1180,10 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
 
         return result;
     } else {
-        // Extract diagonal from matrix
         size_t diag_size = std::min(rows, cols);
         auto result = make_shared<TensorData>(nullptr, vector<size_t>{diag_size, 1});
         result->data_.resize(diag_size);
 
-        // 使用Eigen的diagonal方法替代手动循环
         Eigen::Map<const Eigen::MatrixXd> src_map(v_tensor->data_.data(), cols, rows);
         result->data_ = src_map.diagonal().transpose();
 
@@ -1102,7 +1191,6 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
     }
 }
 
-// Helper function to calculate linear index from multi-dimensional indices
 size_t
 TensorData::calculate_linear_index(const vector<size_t> &indices, const vector<size_t> &shape) {
     if (indices.size() != shape.size()) {
@@ -1123,7 +1211,6 @@ TensorData::calculate_linear_index(const vector<size_t> &indices, const vector<s
     return index;
 }
 
-// Helper function to check if two shapes are broadcastable
 bool TensorData::is_broadcastable(const vector<size_t> &shape1, const vector<size_t> &shape2) {
     size_t dim1 = shape1.size();
     size_t dim2 = shape2.size();
@@ -1141,7 +1228,6 @@ bool TensorData::is_broadcastable(const vector<size_t> &shape1, const vector<siz
     return true;
 }
 
-// Helper function to calculate broadcast shape
 vector<size_t>
 TensorData::broadcast_shape(const vector<size_t> &shape1, const vector<size_t> &shape2) {
     size_t dim1 = shape1.size();
@@ -1167,7 +1253,6 @@ TensorData::broadcast_shape(const vector<size_t> &shape1, const vector<size_t> &
     return result_shape;
 }
 
-// Helper function to calculate tensor contraction (full implementation)
 void TensorData::calculate_tensor_contraction_full(
     const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
     size_t contraction_dims, vector<size_t> &index1, vector<size_t> &index2,
@@ -1175,25 +1260,20 @@ void TensorData::calculate_tensor_contraction_full(
     size_t dim1 = tensor1.shape_.size();
 
     if (current_dim == contraction_dims) {
-        // Calculate the contraction sum
         double sum = 0.0;
         vector<size_t> contraction_index(contraction_dims, 0);
 
-        // Recursively calculate the sum over contraction dimensions
         calculate_contraction_sum(tensor1, tensor2, contraction_index, index1, index2, 0, sum);
 
-        // Set the result value
         size_t linear_index = calculate_linear_index(index_result, result.shape_);
         result.data_(linear_index) = sum;
         return;
     }
 
-    // Recursively iterate over result dimensions
     size_t result_dim_size = result.shape_[current_dim];
     for (size_t i = 0; i < result_dim_size; ++i) {
         index_result[current_dim] = i;
 
-        // Update indices for tensor1 and tensor2
         if (current_dim < dim1 - contraction_dims) {
             index1[current_dim] = i;
         }
@@ -1214,12 +1294,10 @@ void TensorData::calculate_tensor_contraction_full(
     }
 }
 
-// Helper function to calculate contraction sum
 void TensorData::calculate_contraction_sum(
     const TensorData &tensor1, const TensorData &tensor2, vector<size_t> &contraction_index,
     vector<size_t> &index1, vector<size_t> &index2, size_t current_contraction_dim, double &sum) {
     if (current_contraction_dim == contraction_index.size()) {
-        // Calculate the product for this combination
         size_t linear_index1 = calculate_linear_index(index1, tensor1.shape_);
         size_t linear_index2 = calculate_linear_index(index2, tensor2.shape_);
         sum += tensor1.data_(linear_index1) * tensor2.data_(linear_index2);
@@ -1231,7 +1309,6 @@ void TensorData::calculate_contraction_sum(
     for (size_t i = 0; i < contraction_size; ++i) {
         contraction_index[current_contraction_dim] = i;
 
-        // Update indices for the contraction dimensions
         index1[tensor1.shape_.size() - contraction_index.size() + current_contraction_dim] = i;
         index2[current_contraction_dim] = i;
 
@@ -1246,7 +1323,6 @@ void TensorData::calculate_contraction_sum(
     }
 }
 
-// Helper function to calculate broadcast multiplication
 void TensorData::calculate_broadcast_multiplication(
     const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
     vector<size_t> &index1, vector<size_t> &index2, vector<size_t> &index_result,
@@ -1254,7 +1330,6 @@ void TensorData::calculate_broadcast_multiplication(
     size_t dim_result = result.shape_.size();
 
     if (current_dim == dim_result) {
-        // Calculate the actual indices for tensor1 and tensor2
         vector<size_t> actual_index1(tensor1.shape_.size(), 0);
         vector<size_t> actual_index2(tensor2.shape_.size(), 0);
 
@@ -1276,7 +1351,6 @@ void TensorData::calculate_broadcast_multiplication(
             }
         }
 
-        // Calculate the product
         size_t linear_index1 = calculate_linear_index(actual_index1, tensor1.shape_);
         size_t linear_index2 = calculate_linear_index(actual_index2, tensor2.shape_);
         size_t linear_index_result = calculate_linear_index(index_result, result.shape_);
@@ -1286,7 +1360,6 @@ void TensorData::calculate_broadcast_multiplication(
         return;
     }
 
-    // Recursively iterate over result dimensions
     size_t result_dim_size = result.shape_[current_dim];
     for (size_t i = 0; i < result_dim_size; ++i) {
         index_result[current_dim] = i;
@@ -1301,7 +1374,6 @@ void TensorData::calculate_broadcast_multiplication(
     }
 }
 
-// Helper function to convert shape to string for error messages
 std::string TensorData::shape_to_string(const vector<size_t> &shape) {
     if (shape.empty()) {
         return "[]";
@@ -1315,5 +1387,203 @@ std::string TensorData::shape_to_string(const vector<size_t> &shape) {
         }
     }
     result += "]";
+    return result;
+}
+
+data_ptr_t TensorData::eye(size_t n) {
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{n, n});
+    result->data_.resize(n * n);
+    result->data_.setZero();
+
+    // 设置对角线元素为1
+    for (size_t i = 0; i < n; ++i) {
+        result->data_(i * n + i) = 1.0;
+    }
+
+    return result;
+}
+
+data_ptr_t TensorData::zeros(const std::vector<size_t> &shape) {
+    // 计算总元素数量
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape);
+    result->data_.resize(total_size);
+    result->data_.setZero();
+
+    return result;
+}
+
+data_ptr_t TensorData::ones(const std::vector<size_t> &shape) {
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape);
+    result->data_.resize(total_size);
+    result->data_.setConstant(1.0);
+
+    return result;
+}
+
+data_ptr_t TensorData::linspace(double start, double stop, size_t num) {
+    if (num == 0) {
+        return make_shared<TensorData>(nullptr, std::vector<size_t>{0});
+    }
+
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{num});
+    result->data_.resize(num);
+
+    if (num == 1) {
+        result->data_(0) = start;
+    } else {
+        double step = (stop - start) / (num - 1);
+        for (size_t i = 0; i < num; ++i) {
+            result->data_(i) = start + i * step;
+        }
+    }
+
+    return result;
+}
+
+data_ptr_t TensorData::arange(double start, double stop, double step) {
+    if (step == 0) {
+        throw std::invalid_argument("Step must be non-zero");
+    }
+
+    size_t num;
+    if ((step > 0 && start >= stop) || (step < 0 && start <= stop)) {
+        num = 0;
+    } else {
+        num = static_cast<size_t>(std::ceil(std::abs((stop - start) / step)));
+    }
+
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{num});
+    result->data_.resize(num);
+
+    for (size_t i = 0; i < num; ++i) {
+        result->data_(i) = start + i * step;
+    }
+
+    return result;
+}
+data_ptr_t TensorData::transpose() const {
+    if (shape_.size() != 2) {
+        throw std::invalid_argument("Transpose currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_[0];
+    size_t cols = shape_[1];
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{cols, rows});
+    result->data_.resize(rows * cols);
+
+    // 使用Eigen进行矩阵转置
+    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), rows, cols);
+    dest_map = src_map.transpose();
+
+    return result;
+}
+
+data_ptr_t TensorData::flatten() const {
+    size_t total_size = 1;
+    for (size_t dim : shape_) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{total_size});
+    result->data_ = data_;
+
+    return result;
+}
+
+data_ptr_t TensorData::sum() const {
+    auto result = make_shared<DoubleData>(data_.sum());
+    return result;
+}
+
+data_ptr_t TensorData::mean() const {
+    if (data_.size() == 0) {
+        throw std::runtime_error("Cannot calculate mean of empty tensor");
+    }
+    auto result = make_shared<DoubleData>(data_.mean());
+    return result;
+}
+
+data_ptr_t TensorData::min() const {
+    if (data_.size() == 0) {
+        throw std::runtime_error("Cannot find minimum of empty tensor");
+    }
+    auto result = make_shared<DoubleData>(data_.minCoeff());
+    return result;
+}
+
+data_ptr_t TensorData::max() const {
+    if (data_.size() == 0) {
+        throw std::runtime_error("Cannot find maximum of empty tensor");
+    }
+    auto result = make_shared<DoubleData>(data_.maxCoeff());
+    return result;
+}
+
+// 添加缺失的范数计算方法实现
+data_ptr_t TensorData::norm_l1() const {
+    auto result = make_shared<DoubleData>(data_.array().abs().sum());
+    return result;
+}
+
+data_ptr_t TensorData::norm_l2() const {
+    auto result = make_shared<DoubleData>(std::sqrt(data_.array().square().sum()));
+    return result;
+}
+
+data_ptr_t TensorData::norm_squared_l2() const {
+    auto result = make_shared<DoubleData>(data_.array().square().sum());
+    return result;
+}
+
+data_ptr_t TensorData::sin() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().sin();
+    return result;
+}
+
+data_ptr_t TensorData::cos() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().cos();
+    return result;
+}
+
+data_ptr_t TensorData::exp() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().exp();
+    return result;
+}
+
+data_ptr_t TensorData::log() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().log();
+    return result;
+}
+
+data_ptr_t TensorData::sqrt() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().sqrt();
+    return result;
+}
+
+data_ptr_t TensorData::abs() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().abs();
+    return result;
+}
+
+data_ptr_t TensorData::square() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().square();
     return result;
 }

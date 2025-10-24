@@ -20,164 +20,435 @@
 #include "tensor.h"
 #include "builtin/executors/builtin.h"
 #include "core/context/context.h"
+#include "core/type/resolver.h"
+
+using namespace std;
+
+static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "ones",
+            {
+                {
+                    ":tensor/ones",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::List(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+                {
+                    ":tensor/ones",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Array(Type::Int32()), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+
+        OperatorGroup::create(
+            "zeros",
+            {
+                {
+                    ":tensor/zeros",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::List(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+                {
+                    ":tensor/zeros",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Array(Type::Int32()), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "eye",
+            {
+                {
+                    ":tensor/eye",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}},
+                        Type::Tensor(Type::Double(), {0, 0})),
+                },
+            }),
+        OperatorGroup::create(
+            "diag",
+            {
+                {
+                    ":tensor/diag",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "linspace",
+            {
+                {
+                    ":tensor/linspace",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "arange",
+            {
+                {
+                    ":tensor/arange",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+
+        OperatorGroup::create(
+            "add",
+            {
+                {
+                    ":tensor/add",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: tensor, b: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "subtract",
+            {
+                {
+                    ":tensor/subtract",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: tensor, b: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+
+        OperatorGroup::create(
+            "multiply",
+            {
+                {
+                    ":tensor/multiply",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: tensor, b: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "divide",
+            {
+                {
+                    ":tensor/divide",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: tensor, b: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+
+        OperatorGroup::create(
+            "__mul__",
+            {
+                {
+                    ":tensor/multiply",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(self: tensor, other: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TypeCode::Tensor) {
+                                return norm[1];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "reshape",
+            {
+                {
+                    ":tensor/reshape",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}, {Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "transpose",
+            {
+                {
+                    ":tensor/transpose",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0, 0})),
+                },
+            }),
+       OperatorGroup::create(
+            "flatten",
+            {
+                {
+                    ":tensor/flatten",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(a: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+
+        OperatorGroup::create(
+            "concat",
+            {
+                {
+                    ":tensor/concat",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}, {Type::Any(), false}, {Type::Int(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "stack",
+            {
+                {
+                    ":tensor/stack",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}, {Type::Int(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+
+        OperatorGroup::create(
+            "sum",
+            {
+                {
+                    ":tensor/sum",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(a: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "mean",
+            {
+                {
+                    ":tensor/mean",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(a: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor) {
+                                return Type::Tensor(Type::Double(), {0});
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "min",
+            {
+                {
+                    ":tensor/min",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "max",
+            {
+                {
+                    ":tensor/max",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+
+        OperatorGroup::create(
+            "norm_l1",
+            {
+                {
+                    ":tensor/norm_l1",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "norm_l2",
+            {
+                {
+                    ":tensor/norm_l2",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+
+        OperatorGroup::create(
+            "sin",
+            {
+                {
+                    ":tensor/sin",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "cos",
+            {
+                {
+                    ":tensor/cos",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "exp",
+            {
+                {
+                    ":tensor/exp",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Any(), false}},
+                        Type::Tensor(Type::Double(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "__idx__",
+            {
+                {
+                    ":tensor/idx",
+                    DynamicFuncTypeResolver::create(
+                        std::make_pair(
+                            std::make_pair(-1, std::vector<bool>{}),
+                            std::make_pair(2, std::vector<bool>{false, false})),
+                        "(t: tensor, i: int32) => double",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->equals(Type::Int32())) {
+                                return Type::Double();
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+
+        OperatorGroup::create(
+            "__idx__",
+            {
+                {
+                    ":tensor/idx2d",
+                    DynamicFuncTypeResolver::create(
+                        std::make_pair(
+                            std::make_pair(-1, std::vector<bool>{}),
+                            std::make_pair(3, std::vector<bool>{false, false, false})),
+                        "(t: tensor, i: int32, j: int32) => double",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Tensor &&
+                                norm[1]->equals(Type::Int32()) && norm[2]->equals(Type::Int32())) {
+                                return Type::Double();
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+
+    };
+
+    return groups;
+}
 
 TensorBuiltinModule::TensorBuiltinModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
-    exportBuiltinOperator(
-        "eye",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/eye");
-    exportBuiltinOperator(
-        "zeros",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/zeros");
-    exportBuiltinOperator(
-        "ones",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/ones");
-    exportBuiltinOperator(
-        "diag",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/diag");
-    exportBuiltinOperator(
-        "linspace",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/linspace");
-    exportBuiltinOperator(
-        "arange",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/arange");
-
-    exportBuiltinOperator(
-        "add",
-        param_init_list_t{},
-        {{Type::Any(), false}, {Type::Any(), false}},
-        Type::Any(),
-        ":tensor/add");
-    exportBuiltinOperator(
-        "subtract",
-        param_init_list_t{},
-        {{Type::Any(), false}, {Type::Any(), false}},
-        Type::Any(),
-        ":tensor/subtract");
-    exportBuiltinOperator(
-        "multiply",
-        param_init_list_t{},
-        {{Type::Any(), false}, {Type::Any(), false}},
-        Type::Any(),
-        ":tensor/multiply");
-    exportBuiltinOperator(
-        "divide",
-        param_init_list_t{},
-        {{Type::Any(), false}, {Type::Any(), false}},
-        Type::Any(),
-        ":tensor/divide");
-
-    exportBuiltinOperator(
-        "reshape",
-        param_init_list_t{},
-        {{Type::Any(), false}, {Type::Any(), false}},
-        Type::Any(),
-        ":tensor/reshape");
-    exportBuiltinOperator(
-        "transpose",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/transpose");
-    exportBuiltinOperator(
-        "flatten",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/flatten");
-
-    exportBuiltinOperator(
-        "concat",
-        param_init_list_t{},
-        {{Type::Any(), false}, {Type::Any(), false}, {Type::Int(), false}},
-        Type::Any(),
-        ":tensor/concat");
-    exportBuiltinOperator(
-        "stack",
-        param_init_list_t{},
-        {{Type::Any(), false}, {Type::Int(), false}},
-        Type::Any(),
-        ":tensor/stack");
-
-    exportBuiltinOperator(
-        "sum",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/sum");
-    exportBuiltinOperator(
-        "mean",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/mean");
-    exportBuiltinOperator(
-        "min",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/min");
-    exportBuiltinOperator(
-        "max",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/max");
-
-    exportBuiltinOperator(
-        "norm_l1",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/norm_l1");
-    exportBuiltinOperator(
-        "norm_l2",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/norm_l2");
-
-    exportBuiltinOperator(
-        "sin",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/sin");
-    exportBuiltinOperator(
-        "cos",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/cos");
-    exportBuiltinOperator(
-        "exp",
-        param_init_list_t{},
-        {{Type::Any(), false}},
-        Type::Any(),
-        ":tensor/exp");
+    for (const auto &group : getOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    exportType("tensor", Type::Tensor(Type::Double(), {0}));
 }
 
 bool TensorBuiltinModule::load() {
     if (loaded_) {
         return true;
     }
+    exportType("tensor", Type::Tensor(Type::Double(), {0}));
     context_->registerExecutorFactory("tensor", [&]() {
         return BasicBuiltinExecutor::create(context_);
     });
