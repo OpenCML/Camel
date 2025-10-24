@@ -19,6 +19,8 @@
 
 #include "pass.h"
 
+#include "builtin/passes/rewrite/inline/inline.h"
+#include "builtin/passes/rewrite/macro/macro.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
 #include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
@@ -36,22 +38,17 @@ graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
 std::unordered_map<
     std::string, std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>>
     passRegistry = {
+        // Rewrite Passes
         {
-            "std::dot",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+            "std::inline",
+            [](const context_ptr_t &ctx) { return std::make_unique<InlineRewritePass>(ctx); },
         },
         {
-            "std::graphviz",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+            "std::macro",
+            [](const context_ptr_t &ctx) { return std::make_unique<MacroRewritePass>(ctx); },
         },
-        {
-            "std::bytecode",
-            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
-        },
-        {
-            "std::tns",
-            [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
-        },
+
+        // Schedule Passes
         {
             "std::linear",
             [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
@@ -79,6 +76,24 @@ std::unordered_map<
         {
             "std::null",
             [](const context_ptr_t &ctx) { return std::make_unique<NullGraphIRPass>(ctx); },
+        },
+
+        // Translate Passes
+        {
+            "std::dot",
+            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+        },
+        {
+            "std::graphviz",
+            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+        },
+        {
+            "std::bytecode",
+            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
+        },
+        {
+            "std::tns",
+            [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
         },
 };
 

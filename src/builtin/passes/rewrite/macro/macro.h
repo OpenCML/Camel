@@ -12,17 +12,19 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 21, 2025
+ * Created: Oct. 25, 2025
  * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "bytecode.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
+#include "../rewrite.h"
 
-#include <memory>
+class MacroRewritePass : public GraphRewritePass {
+  public:
+    MacroRewritePass(const context_ptr_t &ctx) : GraphRewritePass(ctx) {};
+    virtual ~MacroRewritePass() = default;
 
-std::shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, GraphIR::Graph *graph);
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+};
