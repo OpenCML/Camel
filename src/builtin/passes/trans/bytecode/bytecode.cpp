@@ -41,11 +41,31 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         os << g->mangledName() << ":\n";
         for (size_t i = 0; i < bytecodes->size();) {
             const auto &bc = (*bytecodes)[i];
+            std::string operandStr;
+            if (bc.hasOperands()) {
+                size_t withCnt = bc.fastop[0];
+                size_t normCnt = bc.fastop[1];
+                operandStr = "<";
+                for (size_t j = 0; j < withCnt; j++) {
+                    operandStr += std::to_string(bc.operands()[j]);
+                    if (j + 1 < withCnt)
+                        operandStr += ", ";
+                }
+                operandStr += "> (";
+                for (size_t j = 0; j < normCnt; j++) {
+                    operandStr += std::to_string(bc.operands()[withCnt + j]);
+                    if (j + 1 < normCnt)
+                        operandStr += ", ";
+                }
+                operandStr += ")";
+            } else {
+                operandStr = "<> ()";
+            }
             os << std::format(
                 "  [{}] {} | {} | {}\n",
                 formatIndex(i),
                 bc.toString(),
-                bc.hasOperands() ? bc.operands()->toString() : "<> ()",
+                operandStr,
                 bc.opcode == OpCode::OPER
                     ? context_->execMgr().getNameOfAnOperator(bc.extra()->func)
                     : bc.extra()->toString(bc.opcode));

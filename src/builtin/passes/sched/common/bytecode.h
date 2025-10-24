@@ -27,19 +27,26 @@
 #include "compile/gir.h"
 
 enum class OpCode : uint8_t {
-    NOOP, // no operation
-    CAST,
-    COPY, // 使用 fastop[0] 作为待拷贝索引
-    FILL,
-    ACCS, // fastop[0] 作为目标索引，fastop[1] 作为访问的下标
-    BRCH,
-    JUMP, // 使用 fastop[0] 作为跳转目标地址
-    JOIN,
-    CALL,
-    FUNC,
-    OPER,
-    SCHD, // 使用 fastop[0] 作为调度策略 ID
+    // 定长参数指令
+    NOOP = 0b00000000, // no operation
+    CAST = 0b00000001,
+    COPY = 0b00000010, // 使用 fastop[0] 作为待拷贝索引
+    ACCS = 0b00000011, // fastop[0] 作为目标索引，fastop[1] 作为访问的下标
+    JUMP = 0b00000100, // 使用 fastop[0] 作为跳转目标地址
+
+    // 变长参数指令
+    BRCH = 0b10000000,
+    JOIN = 0b10000001,
+    FILL = 0b10000010,
+    CALL = 0b10000011,
+    FUNC = 0b10000100,
+    OPER = 0b10000101,
+    SCHD = 0b10000110, // 使用 fastop[0] 作为调度策略 ID
 };
+
+inline bool isOpCodeWithFixedOperands(OpCode opcode) {
+    return (static_cast<uint8_t>(opcode) & 0b10000000) == 0;
+}
 
 // 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
 using index_t = int16_t;
@@ -89,7 +96,6 @@ inline std::string formatIndex(index_t value) {
 std::string to_string(const OpCode &op);
 
 struct BytecodeHeader;
-struct BytecodeOperands;
 union BytecodeExtra;
 
 // Bytecode layout (Total size = opsize * 8 bytes)
@@ -107,8 +113,6 @@ union BytecodeExtra;
 // +-----------------------------+
 // | BytecodeOperands (optional) |
 // |-----------------------------|
-// | withCnt    : 1 byte         |
-// | normCnt    : 1 byte         |
 // | operands[] : 2 bytes each   |
 // | total bytes padded to 8B    |
 // +-----------------------------+
@@ -129,29 +133,32 @@ struct BytecodeHeader {           // 8 bytes
 
     std::string toString() const;
 
-    bool hasOperands() const { return !(fastop[0] != 0 || fastop[1] != 0); }
+    bool hasOperands() const { return !isOpCodeWithFixedOperands(opcode); }
 
-    inline BytecodeOperands *operands() { return reinterpret_cast<BytecodeOperands *>(this + 1); }
+    size_t withCnt() const {
+        ASSERT(hasOperands(), "No operands available.");
+        return static_cast<size_t>(fastop[0]);
+    }
+    size_t normCnt() const {
+        ASSERT(hasOperands(), "No operands available.");
+        return static_cast<size_t>(fastop[1]);
+    }
 
-    inline const BytecodeOperands *operands() const {
-        // Header 占 1 个 8 字节单位
-        return reinterpret_cast<const BytecodeOperands *>(this + 1);
+    inline index_t *operands() {
+        ASSERT(hasOperands(), "No operands available.");
+        return reinterpret_cast<index_t *>(this + 1);
+    }
+
+    inline const index_t *operands() const {
+        ASSERT(hasOperands(), "No operands available.");
+        return reinterpret_cast<const index_t *>(this + 1);
     }
 
     inline BytecodeExtra *extra() { return reinterpret_cast<BytecodeExtra *>(this + opsize - 1); }
 
     inline const BytecodeExtra *extra() const {
-        // Extra 位于 Bytecode 的最后一个 8 字节单位
         return reinterpret_cast<const BytecodeExtra *>(this + opsize - 1);
     }
-};
-
-struct BytecodeOperands { // 2 bytes at least
-    uint8_t withCnt = 0;  // 1 byte
-    uint8_t normCnt = 0;  // 1 byte
-    index_t operands[];   // variable length
-
-    std::string toString() const;
 };
 
 union BytecodeExtra {      // 8 bytes
@@ -167,7 +174,6 @@ using Bytecode = BytecodeHeader;
 static_assert(sizeof(Bytecode) == 8, "Bytecode must be exactly 8 bytes");
 static_assert(sizeof(BytecodeHeader) == 8, "BytecodeHeader must be exactly 8 bytes");
 static_assert(sizeof(BytecodeExtra) == 8, "BytecodeExtra must be exactly 8 bytes");
-static_assert(sizeof(BytecodeOperands) == 2, "BytecodeOperands must be exactly 2 bytes");
 
 using bytecode_vec_t = std::vector<Bytecode>;
 
