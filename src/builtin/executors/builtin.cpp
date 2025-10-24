@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
+#include "compile/gir.h"
 #include "utils/log.h"
 
 #include "../operators/io.h"
@@ -275,8 +276,7 @@ executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
     return std::make_shared<BasicBuiltinExecutor>(ctx);
 }
 
-OperatorReturnCode
-BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
+void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
@@ -284,5 +284,18 @@ BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
             RuntimeExceptionCode::InvalidURI,
             std::format("Invalid URI: {}", uri));
     }
-    return it->second(self, frame, *context_);
+    std::vector<GraphIR::data_idx_t> inputIndices;
+    for (const auto &in : self->withInputs()) {
+        inputIndices.push_back(in->index());
+    }
+    for (const auto &in : self->normInputs()) {
+        inputIndices.push_back(in->index());
+    }
+    return it->second(
+        self->index(),
+        inputIndices.data(),
+        self->withInputs().size(),
+        self->normInputs().size(),
+        frame,
+        *context_);
 };

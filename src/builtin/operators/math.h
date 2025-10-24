@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,11 +22,27 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-OperatorReturnCode __abs__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __exp__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __round__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __ceil__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __floor__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __bin__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __oct__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __hex__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+void __abs__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __exp__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __round__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __ceil__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __floor__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __bin__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __oct__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __hex__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);

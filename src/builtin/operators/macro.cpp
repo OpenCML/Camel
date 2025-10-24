@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,22 +26,8 @@
 
 using namespace GraphIR;
 
-OperatorReturnCode __cmp__(node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-
-    const data_ptr_t &lhs = frame.get(ins[0]);
-    const data_ptr_t &rhs = frame.get(ins[1]);
-
-    const type_ptr_t &lhsType = lhs->type();
-    const type_ptr_t &rhsType = rhs->type();
-
-    func_ptr_t lhsFunc = lhs->as<FunctionData>(Type::Func());
-    func_type_ptr_t lhsFuncType = lhsFunc->funcType();
-    // Graph &lhsGraph = lhs->as<FunctionData>(Type::Func())->graph();
-
-    func_ptr_t rhsFunc = rhs->as<FunctionData>(Type::Func());
-    func_type_ptr_t rhsFuncType = rhsFunc->funcType();
-    // Graph &rhsGraph = rhs->as<FunctionData>(Type::Func())->graph();
-
-    return OperatorReturnCode::OK;
+void __cmp__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    return;
 }

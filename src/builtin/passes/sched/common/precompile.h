@@ -13,9 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 23, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
+
+#pragma once
 
 #include "bytecode.h"
 #include "compile/gir.h"

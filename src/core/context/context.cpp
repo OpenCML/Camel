@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -245,6 +245,6 @@ void Context::registerExecutorFactory(std::string name, executor_factory_t fact)
     exeMgr_->registerExecutorFactory(name, fact);
 }
 
-OperatorReturnCode Context::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
+void Context::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
     return exeMgr_->eval(uri, self, frame);
 }

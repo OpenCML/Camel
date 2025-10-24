@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 1, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,20 +35,19 @@
 
 #include <iostream>
 #include <string>
-OperatorReturnCode __profiler_begin__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "profiler.begin requires exactly one argument");
-
-    const data_ptr_t &arg = frame.get(ins[0]);
+void __profiler_begin__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
     if (arg == nullptr) {
-        return OperatorReturnCode::Error;
+        return;
     }
 
     ASSERT(arg->type()->code() == TypeCode::String, "profiler.begin requires a string argument");
 
     auto stringData = std::dynamic_pointer_cast<StringData>(arg);
     if (stringData == nullptr) {
-        return OperatorReturnCode::Error;
+        return;
     }
 
 #ifndef NDEBUG
@@ -61,18 +60,17 @@ OperatorReturnCode __profiler_begin__(GraphIR::node_ptr_t &self, Frame &frame, C
     std::cout << "[PROFILER] Begin: " << name << std::endl;
 #endif
 
-    return OperatorReturnCode::OK;
+    return;
 }
-OperatorReturnCode __profiler_end__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "profiler.end requires exactly one argument");
-
-    const data_ptr_t &arg = frame.get(ins[0]);
+void __profiler_end__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
     ASSERT(arg->type()->code() == TypeCode::String, "profiler.end requires a string argument");
 
     auto stringData = std::dynamic_pointer_cast<StringData>(arg);
     if (stringData == nullptr) {
-        return OperatorReturnCode::Error;
+        return;
     }
 
 #ifndef NDEBUG
@@ -83,19 +81,18 @@ OperatorReturnCode __profiler_end__(GraphIR::node_ptr_t &self, Frame &frame, Con
     std::cout << "[PROFILER] End: " << name << std::endl;
 #endif
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __profiler_instant__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "profiler.instant requires exactly one argument");
-
-    const data_ptr_t &arg = frame.get(ins[0]);
+void __profiler_instant__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
     ASSERT(arg->type()->code() == TypeCode::String, "profiler.instant requires a string argument");
 
     auto stringData = std::dynamic_pointer_cast<StringData>(arg);
     if (stringData == nullptr) {
-        return OperatorReturnCode::Error;
+        return;
     }
 
 #ifndef NDEBUG
@@ -106,14 +103,13 @@ OperatorReturnCode __profiler_instant__(GraphIR::node_ptr_t &self, Frame &frame,
     std::cout << "[PROFILER] Instant: " << name << std::endl;
 #endif
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "profiler.enable requires exactly one argument");
-
-    const data_ptr_t &arg = frame.get(ins[0]);
+void __profiler_enable__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
     ASSERT(arg->type()->code() == TypeCode::Bool, "profiler.enable requires a boolean argument");
 
     auto boolData = std::dynamic_pointer_cast<PrimaryData<bool>>(arg);
@@ -137,5 +133,5 @@ OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, 
     }
 #endif
 
-    return OperatorReturnCode::OK;
+    return;
 }

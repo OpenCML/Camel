@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,43 +37,41 @@ std::string format_vector(const std::string &fmtStr, const std::vector<std::stri
     return fmt::vformat(fmtStr, store);
 }
 
-OperatorReturnCode __format__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &with = self->withInputs();
-    const auto &norm = self->normInputs();
-
-    const data_ptr_t &fmtStrData = frame.get(norm[0]);
+void __format__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &fmtStrData = frame.get(args[wCnt]);
 
     std::string fmtStr = fmtStrData->as<StringData>(Type::String())->data();
-    std::vector<std::string> args;
+    std::vector<std::string> argStrs;
 
-    for (size_t i = 0; i < with.size(); ++i) {
-        const data_ptr_t &arg = frame.get(with[i]);
+    for (arr_size_t i = 0; i < wCnt; ++i) {
+        const data_ptr_t &arg = frame.get(args[i]);
         std::ostringstream oss;
         arg->print(oss);
-        args.push_back(oss.str());
+        argStrs.push_back(oss.str());
     }
 
     try {
-        frame.set(self, std::make_shared<StringData>(format_vector(fmtStr, args)));
+        frame.set(self, std::make_shared<StringData>(format_vector(fmtStr, argStrs)));
     } catch (const fmt::format_error &e) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<format>", e.what());
         frame.set(self, Data::null());
     }
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __join__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &with = self->withInputs();
-    const auto &norm = self->normInputs();
-
-    const data_ptr_t &sepData = frame.get(with[0]);
+void __join__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &sepData = frame.get(args[0]);
 
     std::string separator = sepData->as<StringData>(Type::String())->data();
 
     std::ostringstream joined;
 
-    const data_ptr_t &arr = frame.get(norm.front());
+    const data_ptr_t &arr = frame.get(args[1]);
     auto vecData = arr->as<ArrayData>(Type::Array(Type::String()));
     for (auto &arg : vecData->raw()) {
         if (joined.tellp() > 0)
@@ -82,5 +80,5 @@ OperatorReturnCode __join__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
 
     frame.set(self, std::make_shared<StringData>(joined.str()));
-    return OperatorReturnCode::OK;
+    return;
 }

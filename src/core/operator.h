@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 22, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,15 +37,10 @@ using node_ptr_t = std::shared_ptr<Node>;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 
-enum class OperatorReturnCode {
-    OK = 0,
-    Error = 1,
-    NotImplemented = 2,
-    InvalidArgument = 3,
-    RuntimeError = 4,
-};
+using data_idx_t = int16_t;
+using arr_size_t = uint16_t;
 
-using operator_t = OperatorReturnCode (*)(GraphIR::node_ptr_t &, Frame &, Context &);
+using operator_t = void (*)(data_idx_t, data_idx_t *, arr_size_t, arr_size_t, Frame &, Context &);
 
 using oper_idx_ptr_t = std::shared_ptr<OperatorIndex>;
 using oper_idx_vec_t = std::vector<oper_idx_ptr_t>;

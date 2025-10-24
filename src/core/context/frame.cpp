@@ -47,50 +47,36 @@ Frame::Frame(Graph *graph) : graph_(graph), dataArr_(graph->runtimeDataSize(), n
     EXEC_WHEN_DEBUG(l.in("Frame").debug("Created Frame for Graph: {}", graph->name()));
 }
 
-data_ptr_t Frame::get(const node_ptr_t &node) {
+data_ptr_t Frame::get(const data_idx_t &index) {
     data_ptr_t res;
-    if (node->type() == NodeType::DATA) {
-        res = graph_->getStaticData(node->index());
+    ASSERT(index != 0, "Data index is invalid.");
+    if (index < 0) {
+        res = graph_->getStaticData(index);
     } else {
-        size_t idx = static_cast<size_t>(node->index());
+        size_t idx = static_cast<size_t>(index);
         ASSERT(idx < dataArr_.size(), "Data index out of range.");
         res = dataArr_[idx];
     }
     ASSERT(
         res != nullptr,
-        std::format(
-            "Accessing uninitialized data of node: {}::{}",
-            graph_->name(),
-            node->toString()));
-    EXEC_WHEN_DEBUG(l.in("Frame").debug(
-        "Getting data for node {}::{} from frame {}: {}",
-        node->graph().name(),
-        node->toString(),
-        graph_->name(),
-        res->toString()));
+        std::format("Accessing uninitialized data of node: {}::{}", graph_->name(), index));
+    EXEC_WHEN_DEBUG(
+        l.in("Frame")
+            .debug("Getting data for node {}::{}: {}", graph_->name(), index, res->toString()));
     return res;
 }
 
-void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
+void Frame::set(const data_idx_t &index, const data_ptr_t &data) {
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
-        "Setting data for node {}::{} in frame {}: {}",
-        node->graph().name(),
-        node->toString(),
+        "Setting data for node {}::{}: {}",
         graph_->name(),
+        index,
         data ? data->toString() : "null"));
-    if (node->type() == NodeType::DATA) {
-        return graph_->setStaticData(node->index(), data);
+    if (index < 0) {
+        return graph_->setStaticData(index, data);
     } else {
-        size_t idx = static_cast<size_t>(node->index());
+        size_t idx = static_cast<size_t>(index);
         ASSERT(idx < dataArr_.size(), "Data index out of range.");
-        // ASSERT(
-        //     dataArr_[idx] == nullptr,
-        //     std::format(
-        //         "Overwriting initialized data of node: {}::{} in frame {}: {}",
-        //         graph_.name(),
-        //         node->toString(),
-        //         graph_.name(),
-        //         dataArr_[idx]->toString()));
         dataArr_[idx] = data;
         return;
     }
@@ -99,7 +85,7 @@ void Frame::set(const node_ptr_t &node, const data_ptr_t &data) {
 std::string Frame::toString() const {
     std::ostringstream oss;
 
-    auto printDataArr = [&](const std::vector<data_ptr_t> &arr) {
+    auto printDataArr = [&](const data_vec_t &arr) {
         oss << "[";
         for (size_t i = 0; i < arr.size(); ++i) {
             if (i > 0) {
@@ -115,11 +101,11 @@ std::string Frame::toString() const {
         return oss.str();
     };
 
-    oss << std::format("Frame({})): (static)[", graph_->name());
+    oss << "Frame(" << graph_->name() << "): (static)[";
 
     printDataArr(graph_->staticDataArr());
 
-    oss << std::format("] (runtime)[");
+    oss << "] (runtime)[";
 
     printDataArr(dataArr_);
 

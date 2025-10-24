@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,12 +99,12 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             brchTargetMap.erase(node.get());
         }
 
-        vector<index_t> withOps, normOps;
+        vector<data_idx_t> withOps, normOps;
         for (const auto &in : node->withInputs()) {
-            withOps.push_back(as_index(in->index()));
+            withOps.push_back(in->index());
         }
         for (const auto &in : node->normInputs()) {
-            normOps.push_back(as_index(in->index()));
+            normOps.push_back(in->index());
         }
 
         // 根据节点类型设置操作码和额外信息
@@ -117,12 +117,12 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             appendBytecode(
                 *bytecodes,
                 OpCode::COPY,
-                as_index(node->index()),
-                {as_index(node->withInputs().front()->index())});
+                node->index(),
+                {node->withInputs().front()->index()});
             break;
 
         case NodeType::FILL:
-            appendBytecode(*bytecodes, OpCode::FILL, as_index(node->index()), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::FILL, node->index(), {}, withOps, normOps);
             break;
 
         case NodeType::ACCS: {
@@ -131,16 +131,16 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             appendBytecode(
                 *bytecodes,
                 OpCode::ACCS,
-                as_index(node->index()),
+                node->index(),
                 {
-                    as_index(node->normInputs().front()->index()),
+                    node->normInputs().front()->index(),
                     as_index(accNode->index<size_t>()),
                 });
             break;
         }
 
         case NodeType::BRCH: {
-            appendBytecode(*bytecodes, OpCode::BRCH, as_index(node->index()), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::BRCH, node->index(), {}, withOps, normOps);
 
             // 为这个 BRCH 节点的每个控制输出添加一个占位跳转指令
             for (const auto &ctrlOut : node->ctrlOutputs()) {
@@ -166,13 +166,13 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
                 joinTargetMap.erase(node.get());
             }
 
-            appendBytecode(*bytecodes, OpCode::JOIN, as_index(node->index()), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::JOIN, node->index(), {}, withOps, normOps);
 
             break;
         }
 
         case NodeType::CALL:
-            appendBytecode(*bytecodes, OpCode::CALL, as_index(node->index()), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::CALL, node->index(), {}, withOps, normOps);
             break;
 
         case NodeType::BIND:
@@ -184,7 +184,7 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             appendBytecode(
                 *bytecodes,
                 OpCode::FUNC,
-                as_index(node->index()),
+                node->index(),
                 {},
                 withOps,
                 normOps,
@@ -208,7 +208,7 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             appendBytecode(
                 *bytecodes,
                 OpCode::OPER,
-                as_index(node->index()),
+                node->index(),
                 {},
                 withOps,
                 normOps,
@@ -219,8 +219,22 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             break;
         }
 
-        default:
+        case NodeType::DATA:
+            [[fallthrough]];
+        case NodeType::PORT:
+            [[fallthrough]];
+        case NodeType::EXIT:
+            [[fallthrough]];
+        case NodeType::DREF:
+            // 这些节点类型不生成字节码
             continue;
+
+        default:
+            ASSERT(
+                false,
+                std::format(
+                    "Unsupported node type encountered in bytecode generation: {}",
+                    to_string(node->type())));
         }
 
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP

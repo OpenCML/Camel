@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 1, 2025
- * Updated: Oct. 03, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,15 @@
 #include "core/context/frame.h"
 #include "core/operator.h"
 
-OperatorReturnCode __profiler_begin__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __profiler_end__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __profiler_instant__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __profiler_enable__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+void __profiler_begin__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __profiler_end__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __profiler_instant__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
+void __profiler_enable__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx);
