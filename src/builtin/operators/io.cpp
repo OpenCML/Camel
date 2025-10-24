@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,52 +27,45 @@
 
 namespace GIR = GraphIR;
 
-OperatorReturnCode __print__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    for (size_t i = 0; i < ins.size(); i++) {
+void __print__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    for (arr_size_t i = 0; i < nCnt; i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        const data_ptr_t &data = frame.get(ins[i]->index());
+        const data_ptr_t &data = frame.get(args[i]);
         data->print(std::cout);
     }
-    frame.set(self->index(), Data::null());
-    return OperatorReturnCode::OK;
+    frame.set(self, Data::null());
+    return;
 }
 
-OperatorReturnCode __println__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    for (size_t i = 0; i < ins.size(); i++) {
+void __println__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    for (arr_size_t i = 0; i < nCnt; i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        const data_ptr_t &data = frame.get(ins[i]->index());
+        const data_ptr_t &data = frame.get(args[i]);
         data->print(std::cout);
     }
     std::cout << std::endl;
-    frame.set(self->index(), Data::null());
-    return OperatorReturnCode::OK;
+    frame.set(self, Data::null());
+    return;
 }
 
-OperatorReturnCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+void __input__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
     std::stringstream oss;
 
-    const auto &with = self->withInputs();
-    const auto &norm = self->normInputs();
-
-    for (size_t i = 0; i < with.size(); i++) {
+    for (arr_size_t i = 0; i < wCnt + nCnt; i++) {
         if (i > 0) {
             oss << " ";
         }
-        const data_ptr_t &data = frame.get(with[i]->index());
-        data->print(oss);
-    }
-
-    for (size_t i = 0; i < norm.size(); i++) {
-        if (i > 0 || !with.empty()) {
-            oss << " ";
-        }
-        const data_ptr_t &data = frame.get(norm[i]->index());
+        const data_ptr_t &data = frame.get(args[i]);
         data->print(oss);
     }
 
@@ -81,6 +74,6 @@ OperatorReturnCode __input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
     std::string input;
     std::getline(std::cin, input);
 
-    frame.set(self->index(), std::make_shared<StringData>(input));
-    return OperatorReturnCode::OK;
+    frame.set(self, std::make_shared<StringData>(input));
+    return;
 }

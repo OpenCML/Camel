@@ -73,7 +73,8 @@ using node_vec_t = std::vector<node_ptr_t>;
 using node_set_t = std::unordered_set<node_ptr_t>;
 
 // 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
-using data_idx_t = int64_t;
+using data_idx_t = int16_t;
+using arr_size_t = int16_t;
 
 struct WeakPtrHash {
     template <typename T> std::size_t operator()(const std::weak_ptr<T> &wp) const {
@@ -156,14 +157,14 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
     data_idx_t addStaticData(const data_ptr_t &data) {
         staticDataArr_.push_back(data);
-        if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<int64_t>::max())) {
-            throw std::overflow_error("staticDataArr_ exceeds int64_t max value");
+        if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+            throw std::overflow_error("staticDataArr_ exceeds arr_size_t max value");
         }
         return -static_cast<data_idx_t>(staticDataArr_.size() - 1);
     }
     data_idx_t addRuntimeData() {
-        if (runtimeDataSize_ > static_cast<size_t>(std::numeric_limits<int64_t>::max())) {
-            throw std::overflow_error("runtimeDataSize_ exceeds int64_t max value");
+        if (runtimeDataSize_ > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+            throw std::overflow_error("runtimeDataSize_ exceeds arr_size_t max value");
         }
         return static_cast<data_idx_t>(runtimeDataSize_++);
     }

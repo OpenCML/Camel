@@ -22,41 +22,33 @@
 #include "core/context/context.h"
 #include "core/context/frame.h"
 
-OperatorReturnCode __len_str__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-
-    const data_ptr_t &arg = frame.get(ins[0]->index());
+void __len_str__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
 
     int32_t len = static_cast<int32_t>(tt::as_shared<StringData>(arg)->data().size());
 
-    frame.set(self->index(), std::make_shared<Int32Data>(len));
-    return OperatorReturnCode::OK;
+    frame.set(self, std::make_shared<Int32Data>(len));
+    return;
 }
 
-OperatorReturnCode __len_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-
-    const data_ptr_t &arg = frame.get(ins[0]->index());
+void __len_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
 
     int32_t len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
 
-    frame.set(self->index(), std::make_shared<Int32Data>(len));
-    return OperatorReturnCode::OK;
+    frame.set(self, std::make_shared<Int32Data>(len));
+    return;
 }
 
-OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &normIns = self->normInputs();
-
-    if (normIns.size() != 2) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<zip> operator requires exactly two input sequences");
-        frame.set(self->index(), Data::null());
-        return OperatorReturnCode::OK;
-    }
-
-    const data_ptr_t &a = frame.get(normIns[0]->index());
-    const data_ptr_t &b = frame.get(normIns[1]->index());
+void __zip__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &a = frame.get(args[0]);
+    const data_ptr_t &b = frame.get(args[1]);
 
     auto getElements = [](const data_ptr_t &data) -> std::optional<data_vec_t> {
         switch (data->type()->code()) {
@@ -76,8 +68,8 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<zip> requires both inputs to be List/Array/Vector/Tuple");
-        frame.set(self->index(), Data::null());
-        return OperatorReturnCode::OK;
+        frame.set(self, Data::null());
+        return;
     }
 
     const data_vec_t &aElems = *aElemsOpt;
@@ -87,8 +79,8 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<zip> requires both sequences to have the same length");
-        frame.set(self->index(), Data::null());
-        return OperatorReturnCode::OK;
+        frame.set(self, Data::null());
+        return;
     }
 
     data_vec_t zipped;
@@ -99,30 +91,28 @@ OperatorReturnCode __zip__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx
         zipped.push_back(ArrayData::from(Type::Array(Type::Any()), std::move(pair)));
     }
 
-    frame.set(
-        self->index(),
-        ArrayData::from(Type::Array(Type::Array(Type::Any())), std::move(zipped)));
-    return OperatorReturnCode::OK;
+    frame.set(self, ArrayData::from(Type::Array(Type::Array(Type::Any())), std::move(zipped)));
+    return;
 }
 
-OperatorReturnCode __head_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &normIns = self->normInputs();
-
-    const data_ptr_t &collect = frame.get(normIns[0]->index());
+void __head_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &collect = frame.get(args[0]);
 
     auto extract_first = [&](const data_vec_t &arr) -> data_ptr_t {
         return arr.empty() ? Data::null() : arr[0];
     };
 
-    frame.set(self->index(), extract_first(tt::as_shared<ArrayData>(collect)->raw()));
+    frame.set(self, extract_first(tt::as_shared<ArrayData>(collect)->raw()));
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __tail_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &normIns = self->normInputs();
-
-    const data_ptr_t &collect = frame.get(normIns[0]->index());
+void __tail_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &collect = frame.get(args[0]);
 
     auto slice_tail = [](const data_vec_t &arr) -> data_vec_t {
         return arr.size() <= 1 ? data_vec_t{} : data_vec_t(arr.begin() + 1, arr.end());
@@ -131,20 +121,20 @@ OperatorReturnCode __tail_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context
     auto array = tt::as_shared<ArrayData>(collect)->raw();
     auto new_vec = slice_tail(array);
     auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
-    frame.set(self->index(), ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
+    frame.set(self, ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-
-    const data_ptr_t &startData = frame.get(ins[0]->index());
-    const data_ptr_t &stopData = frame.get(ins[1]->index());
+void __range__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &startData = frame.get(args[0]);
+    const data_ptr_t &stopData = frame.get(args[1]);
     data_ptr_t stepData = nullptr;
 
-    if (ins.size() == 3) {
-        stepData = frame.get(ins[2]->index());
+    if (nCnt == 3) {
+        stepData = frame.get(args[2]);
     }
 
     int32_t start = startData->as<Int32Data>(Type::Int32())->data();
@@ -153,8 +143,8 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
 
     if (step == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<range> step cannot be zero");
-        frame.set(self->index(), Data::null());
-        return OperatorReturnCode::OK;
+        frame.set(self, Data::null());
+        return;
     }
 
     data_vec_t values;
@@ -168,17 +158,16 @@ OperatorReturnCode __range__(GraphIR::node_ptr_t &self, Frame &frame, Context &c
     auto arrayType = Type::Array(Type::Int64());
     auto result = ArrayData::from(arrayType, std::move(values));
 
-    frame.set(self->index(), result);
-    return OperatorReturnCode::OK;
+    frame.set(self, result);
+    return;
 }
 
-OperatorReturnCode __slice_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withIns = self->withInputs();
-    const auto &normIns = self->normInputs();
-
-    const data_ptr_t &collect = frame.get(normIns[0]->index());
-    const data_ptr_t &startArg = frame.get(withIns[0]->index());
-    const data_ptr_t &endArg = frame.get(withIns[1]->index());
+void __slice_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &collect = frame.get(args[wCnt]);
+    const data_ptr_t &startArg = frame.get(args[0]);
+    const data_ptr_t &endArg = frame.get(args[1]);
 
     int32_t start = startArg->as<Int32Data>(Type::Int32())->data();
     int32_t end = endArg->as<Int32Data>(Type::Int32())->data();
@@ -198,68 +187,65 @@ OperatorReturnCode __slice_arr__(GraphIR::node_ptr_t &self, Frame &frame, Contex
     slice_range(static_cast<int32_t>(array.size()), start, end);
     data_vec_t sliced(array.begin() + start, array.begin() + end);
     frame.set(
-        self->index(),
+        self,
         ArrayData::from(
             Type::Array(tt::as_shared<ArrayType>(collect->type())->elementType()),
             std::move(sliced)));
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __concat_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &normIns = self->normInputs();
-
-    const data_ptr_t &left = frame.get(normIns[0]->index());
-    const data_ptr_t &right = frame.get(normIns[1]->index());
+void __concat_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &left = frame.get(args[0]);
+    const data_ptr_t &right = frame.get(args[1]);
 
     auto l = tt::as_shared<ArrayData>(left)->raw();
     auto r = tt::as_shared<ArrayData>(right)->raw();
     l.insert(l.end(), r.begin(), r.end());
     auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
-    frame.set(self->index(), ArrayData::from(Type::Array(elemType), std::move(l)));
+    frame.set(self, ArrayData::from(Type::Array(elemType), std::move(l)));
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __append_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withIns = self->withInputs();
-    const auto &normIns = self->normInputs();
-
-    const auto &collectNode = normIns[0];
-    const data_ptr_t &collection = frame.get(collectNode->index());
-    const data_ptr_t &element = frame.get(withIns[0]->index());
+void __append_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const auto &collectIdx = args[1];
+    const data_ptr_t &collection = frame.get(collectIdx);
+    const data_ptr_t &element = frame.get(args[0]);
 
     auto arr = tt::as_shared<ArrayData>(collection)->raw();
     arr.push_back(element);
     auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
-    frame.set(collectNode->index(), ArrayData::from(Type::Array(elemType), std::move(arr)));
+    frame.set(collectIdx, ArrayData::from(Type::Array(elemType), std::move(arr)));
 
-    frame.set(self->index(), collection);
-    return OperatorReturnCode::OK;
+    frame.set(self, collection);
+    return;
 }
 
-OperatorReturnCode __extend_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withIns = self->withInputs();
-    const auto &normIns = self->normInputs();
-
-    const auto &collectNode = normIns[0];
-    const data_ptr_t &collection = frame.get(collectNode->index());
-    const data_ptr_t &other = frame.get(withIns[0]->index());
+void __extend_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const auto &collectNode = args[1];
+    const data_ptr_t &collection = frame.get(collectNode);
+    const data_ptr_t &other = frame.get(args[0]);
 
     auto arr = tt::as_shared<ArrayData>(collection)->raw();
     auto ext = tt::as_shared<ArrayData>(other)->raw();
     arr.insert(arr.end(), ext.begin(), ext.end());
-    frame.set(collectNode->index(), collection);
+    frame.set(collectNode, collection);
 
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __contains_arr__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &withs = self->withInputs();
-    const auto &norms = self->normInputs();
-
-    const data_ptr_t &collection = frame.get(norms[0]->index());
-    const data_ptr_t &target = frame.get(withs[0]->index());
+void __contains_arr__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &collection = frame.get(args[0]);
+    const data_ptr_t &target = frame.get(args[1]);
 
     bool found = false;
 
@@ -270,6 +256,6 @@ OperatorReturnCode __contains_arr__(GraphIR::node_ptr_t &self, Frame &frame, Con
         }
     }
 
-    frame.set(self->index(), std::make_shared<BoolData>(found));
-    return OperatorReturnCode::OK;
+    frame.set(self, std::make_shared<BoolData>(found));
+    return;
 }

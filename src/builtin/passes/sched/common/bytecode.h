@@ -52,22 +52,13 @@ inline bool isOpCodeWithFixedOperands(OpCode opcode) {
 using index_t = int16_t;
 
 inline bool isSafeSizeTForIndexT(size_t value) {
-    return value <= static_cast<size_t>(std::numeric_limits<int16_t>::max());
-}
-
-inline bool isSafeInt64ForIndexT(int64_t value) {
-    return value >= static_cast<int64_t>(std::numeric_limits<index_t>::min()) &&
-           value <= static_cast<int64_t>(std::numeric_limits<index_t>::max());
+    return value <= static_cast<size_t>(std::numeric_limits<index_t>::max());
 }
 
 template <typename T> inline index_t as_index(T value) {
     if constexpr (std::is_same_v<T, size_t>) {
         ASSERT(
             isSafeSizeTForIndexT(value),
-            "Value exceeds int16_t range when converting to index_t.");
-    } else if constexpr (std::is_same_v<T, int64_t>) {
-        ASSERT(
-            isSafeInt64ForIndexT(value),
             "Value exceeds int16_t range when converting to index_t.");
     } else {
         static_assert(false, "Unsupported type for index_t conversion.");

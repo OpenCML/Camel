@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -161,23 +161,37 @@ void clearInputBuffer() {
 
 namespace GIR = GraphIR;
 
-OperatorReturnCode __sleep__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    const data_ptr_t &arg = frame.get(ins[0]->index());
+void __sleep__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
+
     auto pd = arg->as<Int32Data>(Type::Int32());
+
     if (pd->data() < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sleep> requires a non-negative integer");
-        frame.set(self->index(), Data::null());
-        return OperatorReturnCode::OK;
+        frame.set(self, Data::null());
+        return;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
-    frame.set(self->index(), Data::null());
-    return OperatorReturnCode::OK;
+
+    try {
+        std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
+    } catch (const std::exception &e) {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit(std::string("<sleep> encountered an error: ") + e.what());
+        frame.set(self, Data::null());
+        return;
+    }
+
+    frame.set(self, Data::null());
 }
 
-OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+void __whoami__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
     std::string username;
 
 #ifdef _WIN32
@@ -187,8 +201,8 @@ OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx)
         username = buffer;
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
-        frame.set(self->index(), Data::null());
-        return OperatorReturnCode::OK;
+        frame.set(self, Data::null());
+        return;
     }
 #else
     struct passwd *pw = getpwuid(getuid());
@@ -197,22 +211,25 @@ OperatorReturnCode __whoami__(GIR::node_ptr_t &self, Frame &frame, Context &ctx)
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 #endif
 
     data_ptr_t result = std::make_shared<StringData>(username);
-    frame.set(self->index(), result);
-    return OperatorReturnCode::OK;
+    frame.set(self, result);
+    return;
 }
 
-OperatorReturnCode __exit__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+void __exit__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
     throw CamelRuntimeException(RuntimeExceptionCode::ForceExit, "<exit> operator invoked");
 }
 
-OperatorReturnCode __set_terminal_raw_mode__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    const data_ptr_t &arg = frame.get(ins[0]->index());
+void __set_terminal_raw_mode__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
+    const data_ptr_t &arg = frame.get(args[0]);
 
     bool enable = arg->as<BoolData>(Type::Bool())->data();
     bool success = Terminal::setRawMode(enable);
@@ -223,42 +240,46 @@ OperatorReturnCode __set_terminal_raw_mode__(GIR::node_ptr_t &self, Frame &frame
             .commit("<set_terminal_raw_mode> failed to modify terminal mode");
     }
 
-    frame.set(self->index(), Data::null());
-    return OperatorReturnCode::OK;
+    frame.set(self, Data::null());
+    return;
 }
 
-OperatorReturnCode __has_input__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+void __has_input__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
     bool available = Terminal::hasInput();
 
-    frame.set(self->index(), std::make_shared<BoolData>(available));
-    return OperatorReturnCode::OK;
+    frame.set(self, std::make_shared<BoolData>(available));
+    return;
 }
 
-OperatorReturnCode __get_char__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+void __get_char__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
     std::string input = Terminal::readInput(1);
 
-    frame.set(self->index(), std::make_shared<StringData>(input));
-    return OperatorReturnCode::OK;
+    frame.set(self, std::make_shared<StringData>(input));
+    return;
 }
 
-OperatorReturnCode __get_chars__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-
+void __get_chars__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
     int maxChars = -1; // Default to read all available characters
-    if (ins.size() == 1) {
-        maxChars = frame.get(ins[0]->index())->as<Int32Data>(Type::Int32())->data();
-    }
+    maxChars = frame.get(args[0])->as<Int32Data>(Type::Int32())->data();
 
     std::string input = Terminal::readInput(maxChars);
 
-    frame.set(self->index(), std::make_shared<StringData>(input));
-    return OperatorReturnCode::OK;
+    frame.set(self, std::make_shared<StringData>(input));
+    return;
 }
 
-OperatorReturnCode __clear_input_buffer__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+void __clear_input_buffer__(
+    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
+    Context &ctx) {
 
     Terminal::clearInputBuffer();
 
-    frame.set(self->index(), Data::null());
-    return OperatorReturnCode::OK;
+    frame.set(self, Data::null());
+    return;
 }
