@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 23, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -271,7 +271,7 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             // For local variables, still need to create a new copy for each call
             // The mechanism of local shared variables is yet to be designed
             node_ptr_t copyNode = CopyNode::create(*currGraph_, data->type());
-            Node::link(LinkType::With, node, copyNode);
+            Node::link(LinkType::Norm, node, copyNode);
             node = copyNode;
         }
     } else {

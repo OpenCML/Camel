@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 23, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -214,7 +214,7 @@ data_ptr_t FallbackExecSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 break;
             }
             case NodeType::COPY: {
-                auto inputNode = n->withInputs().front();
+                auto inputNode = n->normInputs().front();
                 auto inputData = currFrame->get(inputNode);
                 if (inputData == nullptr) {
                     // If input data is not initialized, create a default integer value 0

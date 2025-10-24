@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 23, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,16 +60,16 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
         size_t totalNodeCount =
             graph->nodes().size() + graph->ports().size() + graph->closure().size();
         if (topoSortedNodes.size() != totalNodeCount) {
-            GraphIR::node_vec_t unreachableNodes;
+            node_vec_t unreachableNodes;
             for (const auto &node : graph->nodes()) {
                 if (node != exitNode &&
-                    std::find(topoSortedNodes.begin(), topoSortedNodes.end(), node) ==
+                    find(topoSortedNodes.begin(), topoSortedNodes.end(), node) ==
                         topoSortedNodes.end()) {
                     unreachableNodes.push_back(node);
                 }
             }
 
-            std::string unreachableInfo;
+            string unreachableInfo;
             for (const auto &node : unreachableNodes) {
                 if (!unreachableInfo.empty())
                     unreachableInfo += ", ";
@@ -84,41 +84,27 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
     }());
 
     auto bytecodes = make_shared<bytecode_vec_t>();
-    bytecodes->reserve(topoSortedNodes.size() * 1.2); // 预估容量
+    bytecodes->reserve(topoSortedNodes.size() * 2); // 预估容量
 
     // 用于回填跳转地址的映射表
-    std::unordered_map<GraphIR::Node *, size_t> brchTargetMap;
-    std::unordered_map<GraphIR::Node *, std::vector<size_t>> joinTargetMap;
+    unordered_map<Node *, size_t> brchTargetMap;
+    unordered_map<Node *, vector<size_t>> joinTargetMap;
 
     for (const auto &node : topoSortedNodes) {
-        ASSERT(node->index() < 256, "Node index exceeds bytecode limit.");
-        ASSERT(node->dataInDegree() <= 20, "Too many inputs for bytecode instruction.");
-
         // 回填之前记录的 JUMP 跳转地址
         if (brchTargetMap.find(node.get()) != brchTargetMap.end()) {
             size_t jumpIndex = brchTargetMap[node.get()];
-            (*bytecodes)[jumpIndex].extra.target = bytecodes->size();
+            auto &header = (*bytecodes)[jumpIndex];
+            header.fastop[0] = as_index(bytecodes->size());
             brchTargetMap.erase(node.get());
         }
 
-        // 创建并初始化字节码指令
-        Bytecode bytecode{
-            .opcode = OpCode::COPY, // 默认操作码，稍后根据节点类型修改
-            .self = static_cast<uint8_t>(node->index()),
-            .withCnt = static_cast<uint8_t>(node->withInputs().size()),
-            .normCnt = static_cast<uint8_t>(node->normInputs().size()),
-            .inputs = {},
-            .extra = {},
-        };
-
-        size_t inputIdx = 0;
+        vector<index_t> withOps, normOps;
         for (const auto &in : node->withInputs()) {
-            ASSERT(in->index() < 256, "Input node index out of range.");
-            bytecode.inputs[inputIdx++] = static_cast<uint8_t>(in->index());
+            withOps.push_back(as_index(in->index()));
         }
         for (const auto &in : node->normInputs()) {
-            ASSERT(in->index() < 256, "Input node index out of range.");
-            bytecode.inputs[inputIdx++] = static_cast<uint8_t>(in->index());
+            normOps.push_back(as_index(in->index()));
         }
 
         // 根据节点类型设置操作码和额外信息
@@ -128,62 +114,65 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             break;
 
         case NodeType::COPY:
-            bytecode.opcode = OpCode::COPY;
+            appendBytecode(
+                *bytecodes,
+                OpCode::COPY,
+                as_index(node->index()),
+                {as_index(node->withInputs().front()->index())});
             break;
 
         case NodeType::FILL:
-            bytecode.opcode = OpCode::FILL;
+            appendBytecode(*bytecodes, OpCode::FILL, as_index(node->index()), {}, withOps, normOps);
             break;
 
         case NodeType::ACCS: {
-            bytecode.opcode = OpCode::ACCS;
             auto accNode = tt::as_shared<AccsNode>(node);
-            if (accNode->isNum()) {
-                bytecode.extra.index = accNode->index<size_t>();
-            } else {
-                ASSERT(false, "ACCS node with non-numeric index not supported.");
-            }
+            ASSERT(accNode->isNum(), "Only numeric ACCS indices are supported in bytecode.");
+            appendBytecode(
+                *bytecodes,
+                OpCode::ACCS,
+                as_index(node->index()),
+                {
+                    as_index(node->normInputs().front()->index()),
+                    as_index(accNode->index<size_t>()),
+                });
             break;
         }
 
         case NodeType::BRCH: {
-            bytecode.opcode = OpCode::BRCH;
-
-            bytecodes->push_back(bytecode);
+            appendBytecode(*bytecodes, OpCode::BRCH, as_index(node->index()), {}, withOps, normOps);
 
             // 为这个 BRCH 节点的每个控制输出添加一个占位跳转指令
             for (const auto &ctrlOut : node->ctrlOutputs()) {
                 // 记录跳转目标在 bytecode 中的位置
                 brchTargetMap[ctrlOut.get()] = bytecodes->size();
-                bytecodes->push_back(Bytecode{
-                    // 占位跳转指令，目标地址稍后回填
-                    .opcode = OpCode::JUMP,
-                    .self = 255, // 占位，无实际节点对应
-                    .withCnt = 0,
-                    .normCnt = 0,
-                    .inputs = {},
-                    .extra = {},
-                });
+                // 占位跳转指令，目标地址稍后回填
+                appendBytecode(
+                    *bytecodes,
+                    OpCode::JUMP,
+                    0, // 占位，无实际节点对应
+                    {0});
             }
 
             continue;
         }
 
         case NodeType::JOIN: {
-            bytecode.opcode = OpCode::JOIN;
-
             if (joinTargetMap.find(node.get()) != joinTargetMap.end()) {
                 for (const auto &jumpPos : joinTargetMap[node.get()]) {
-                    (*bytecodes)[jumpPos].extra.target = bytecodes->size();
+                    auto &header = (*bytecodes)[jumpPos];
+                    header.fastop[0] = as_index(bytecodes->size());
                 }
                 joinTargetMap.erase(node.get());
             }
+
+            appendBytecode(*bytecodes, OpCode::JOIN, as_index(node->index()), {}, withOps, normOps);
 
             break;
         }
 
         case NodeType::CALL:
-            bytecode.opcode = OpCode::CALL;
+            appendBytecode(*bytecodes, OpCode::CALL, as_index(node->index()), {}, withOps, normOps);
             break;
 
         case NodeType::BIND:
@@ -191,14 +180,22 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             break;
 
         case NodeType::FUNC: {
-            bytecode.opcode = OpCode::FUNC;
             auto funcNode = tt::as_shared<FuncNode>(node);
-            bytecode.extra.graph = &(funcNode->func()->graph());
+            appendBytecode(
+                *bytecodes,
+                OpCode::FUNC,
+                as_index(node->index()),
+                {},
+                withOps,
+                normOps,
+                true,
+                {
+                    .graph = &(funcNode->func()->graph()),
+                });
             break;
         }
 
         case NodeType::OPER: {
-            bytecode.opcode = OpCode::OPER;
             auto opNode = tt::as_shared<OperNode>(node);
             const auto opFunc = ctx->execMgr().find(opNode->oper()->uri());
 
@@ -208,7 +205,17 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
                     .commit(opNode->oper()->uri());
             }
 
-            bytecode.extra.func = *opFunc;
+            appendBytecode(
+                *bytecodes,
+                OpCode::OPER,
+                as_index(node->index()),
+                {},
+                withOps,
+                normOps,
+                true,
+                {
+                    .func = *opFunc,
+                });
             break;
         }
 
@@ -216,22 +223,12 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             continue;
         }
 
-        bytecodes->push_back(bytecode);
-
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP
         if (node->withOutputs().size() == 1 &&
             node->withOutputs().front()->type() == NodeType::JOIN) {
             auto joinNode = node->withOutputs().front();
             joinTargetMap[joinNode.get()].push_back(bytecodes->size());
-            bytecodes->push_back(Bytecode{
-                // 占位跳转指令，目标地址稍后回填
-                .opcode = OpCode::JUMP,
-                .self = 255, // 占位，无实际节点对应
-                .withCnt = 0,
-                .normCnt = 0,
-                .inputs = {},
-                .extra = {},
-            });
+            appendBytecode(*bytecodes, OpCode::JUMP, 0, {0});
         }
     }
 

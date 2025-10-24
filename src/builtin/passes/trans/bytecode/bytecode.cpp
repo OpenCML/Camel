@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 23, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,15 +39,22 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     for (const auto &g : sortedGraphs) {
         auto bytecodes = precompile(context_, g.get());
         os << g->mangledName() << ":\n";
-        for (size_t i = 0; i < bytecodes->size(); ++i) {
+        for (size_t i = 0; i < bytecodes->size();) {
             const auto &bc = (*bytecodes)[i];
             os << std::format(
-                "  [{}] {} {}\n",
-                i,
+                "  [{}] {} | {} | {}\n",
+                formatIndex(i),
                 bc.toString(),
-                bc.opcode == OpCode::OPER ? context_->execMgr().getNameOfAnOperator(bc.extra.func)
-                                          : bc.extraStr());
+                bc.hasOperands() ? bc.operands()->toString() : "<> ()",
+                bc.opcode == OpCode::OPER
+                    ? context_->execMgr().getNameOfAnOperator(bc.extra()->func)
+                    : bc.extra()->toString(bc.opcode));
+            i += bc.opsize;
         }
+        os << std::format(
+            "  [used: {}, allocated: {}]\n",
+            bytecodes->size(),
+            bytecodes->capacity());
     }
 
     return graph;
