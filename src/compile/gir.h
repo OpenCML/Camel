@@ -252,14 +252,14 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_vec_t &nodes() { return nodes_; }
     node_vec_t ports() {
         node_vec_t ports;
-        ports.insert(ports.end(), withPorts_.begin(), withPorts_.end());
         ports.insert(ports.end(), normPorts_.begin(), normPorts_.end());
+        ports.insert(ports.end(), withPorts_.begin(), withPorts_.end());
         return ports;
     }
-    bool hasPorts() const { return !withPorts_.empty() || !normPorts_.empty(); }
+    bool hasPorts() const { return !normPorts_.empty() || !withPorts_.empty(); }
     bool hasClosure() const { return !closure_.empty(); }
-    const node_vec_t &withPorts() { return withPorts_; }
     const node_vec_t &normPorts() { return normPorts_; }
+    const node_vec_t &withPorts() { return withPorts_; }
     const node_vec_t &closure() { return closure_; }
 
     graph_ptr_t clone() const;
@@ -276,7 +276,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     data_vec_t staticDataArr_ = {nullptr}; // 静态数据段，索引0保留为空
     size_t runtimeDataSize_ = 1;           // 动态数据尺寸，从1开始，0保留为空
 
-    node_vec_t withPorts_, normPorts_, closure_;
+    node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     node_ptr_t exitNode_;
 
@@ -316,44 +316,37 @@ class Node : public std::enable_shared_from_this<Node> {
 
     node_vec_t dataInputs() const {
         node_vec_t inputs;
-        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
         inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
+        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
         return inputs;
     }
-    node_vec_t &withInputs() { return withInputs_; }
     node_vec_t &normInputs() { return normInputs_; }
+    node_vec_t &withInputs() { return withInputs_; }
     node_vec_t &ctrlInputs() { return ctrlInputs_; }
-    node_vec_t dataInputs() {
-        node_vec_t inputs;
-        inputs.reserve(withInputs_.size() + normInputs_.size());
-        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
-        inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
-        return inputs;
-    }
     node_vec_t inputs() {
         node_vec_t inputs;
-        inputs.reserve(withInputs_.size() + normInputs_.size() + ctrlInputs_.size());
-        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
+        inputs.reserve(normInputs_.size() + withInputs_.size() + ctrlInputs_.size());
         inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
+        inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
         inputs.insert(inputs.end(), ctrlInputs_.begin(), ctrlInputs_.end());
         return inputs;
     }
 
-    node_vec_t &withOutputs() { return withOutputs_; }
     node_vec_t &normOutputs() { return normOutputs_; }
+    node_vec_t &withOutputs() { return withOutputs_; }
     node_vec_t &ctrlOutputs() { return ctrlOutputs_; }
     node_vec_t dataOutputs() {
         node_vec_t outputs;
-        outputs.reserve(withOutputs_.size() + normOutputs_.size());
-        outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
+        outputs.reserve(normOutputs_.size() + withOutputs_.size());
         outputs.insert(outputs.end(), normOutputs_.begin(), normOutputs_.end());
+        outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
         return outputs;
     }
     node_vec_t outputs() {
         node_vec_t outputs;
-        outputs.reserve(withOutputs_.size() + normOutputs_.size() + ctrlOutputs_.size());
-        outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
+        outputs.reserve(normOutputs_.size() + withOutputs_.size() + ctrlOutputs_.size());
         outputs.insert(outputs.end(), normOutputs_.begin(), normOutputs_.end());
+        outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
         outputs.insert(outputs.end(), ctrlOutputs_.begin(), ctrlOutputs_.end());
         return outputs;
     }
@@ -361,12 +354,12 @@ class Node : public std::enable_shared_from_this<Node> {
     bool hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps = 99) const;
     bool hasLinkedTo(const node_ptr_t &node) const;
 
-    size_t inDegree() const { return withInputs_.size() + normInputs_.size() + ctrlInputs_.size(); }
+    size_t inDegree() const { return normInputs_.size() + withInputs_.size() + ctrlInputs_.size(); }
     size_t outDegree() const {
         return withOutputs_.size() + normOutputs_.size() + ctrlOutputs_.size();
     }
-    size_t dataInDegree() const { return withInputs_.size() + normInputs_.size(); }
-    size_t dataOutDegree() const { return withOutputs_.size() + normOutputs_.size(); }
+    size_t dataInDegree() const { return normInputs_.size() + withInputs_.size(); }
+    size_t dataOutDegree() const { return normOutputs_.size() + withOutputs_.size(); }
 
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
@@ -387,12 +380,12 @@ class Node : public std::enable_shared_from_this<Node> {
     type_ptr_t dataType_;
     data_idx_t dataIndex_;
 
-    node_vec_t withInputs_;
     node_vec_t normInputs_;
+    node_vec_t withInputs_;
     node_vec_t ctrlInputs_;
 
-    node_vec_t withOutputs_;
     node_vec_t normOutputs_;
+    node_vec_t withOutputs_;
     node_vec_t ctrlOutputs_;
 };
 

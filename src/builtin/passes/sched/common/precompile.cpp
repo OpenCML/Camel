@@ -84,13 +84,18 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
     }());
 
     auto bytecodes = make_shared<bytecode_vec_t>();
-    bytecodes->reserve(topoSortedNodes.size() * 2); // 预估容量
+    bytecodes->reserve(topoSortedNodes.size() * 3); // 预估容量
 
     // 用于回填跳转地址的映射表
     unordered_map<Node *, size_t> brchTargetMap;
-    unordered_map<Node *, vector<size_t>> joinTargetMap;
+    // JOIN*, FROM*
+    unordered_map<Node *, vector<pair<size_t, size_t>>> joinTargetMap;
 
-    for (const auto &node : topoSortedNodes) {
+    for (size_t i = 0; i < topoSortedNodes.size(); ++i) {
+        auto &node = topoSortedNodes[i];
+
+        size_t currIdx = bytecodes->size();
+
         // 回填之前记录的 JUMP 跳转地址
         if (brchTargetMap.find(node.get()) != brchTargetMap.end()) {
             size_t jumpIndex = brchTargetMap[node.get()];
@@ -99,12 +104,12 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             brchTargetMap.erase(node.get());
         }
 
-        vector<data_idx_t> withOps, normOps;
-        for (const auto &in : node->withInputs()) {
-            withOps.push_back(in->index());
-        }
+        vector<data_idx_t> normOps, withOps;
         for (const auto &in : node->normInputs()) {
             normOps.push_back(in->index());
+        }
+        for (const auto &in : node->withInputs()) {
+            withOps.push_back(in->index());
         }
 
         // 根据节点类型设置操作码和额外信息
@@ -118,11 +123,11 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
                 *bytecodes,
                 OpCode::COPY,
                 node->index(),
-                {node->withInputs().front()->index()});
+                {node->normInputs().front()->index()});
             break;
 
         case NodeType::FILL:
-            appendBytecode(*bytecodes, OpCode::FILL, node->index(), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::FILL, node->index(), {}, normOps, withOps);
             break;
 
         case NodeType::ACCS: {
@@ -140,11 +145,11 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
         }
 
         case NodeType::BRCH: {
-            appendBytecode(*bytecodes, OpCode::BRCH, node->index(), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::BRCH, node->index(), {}, normOps, withOps);
 
             // 为这个 BRCH 节点的每个控制输出添加一个占位跳转指令
             for (const auto &ctrlOut : node->ctrlOutputs()) {
-                // 记录跳转目标在 bytecode 中的位置
+                // 记录跳转目标
                 brchTargetMap[ctrlOut.get()] = bytecodes->size();
                 // 占位跳转指令，目标地址稍后回填
                 appendBytecode(
@@ -158,21 +163,27 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
         }
 
         case NodeType::JOIN: {
+            bool isTail = i == topoSortedNodes.size() - 1;
+
             if (joinTargetMap.find(node.get()) != joinTargetMap.end()) {
-                for (const auto &jumpPos : joinTargetMap[node.get()]) {
-                    auto &header = (*bytecodes)[jumpPos];
-                    header.fastop[0] = as_index(bytecodes->size());
+                for (const auto &[jumpIdx, fromIdx] : joinTargetMap[node.get()]) {
+                    auto &jump = (*bytecodes)[jumpIdx];
+                    auto &from = (*bytecodes)[fromIdx];
+                    jump.fastop[0] = as_index(bytecodes->size());
+                    if (isTail && from.opcode == OpCode::FUNC) {
+                        from.opcode = OpCode::TAIL;
+                    }
                 }
                 joinTargetMap.erase(node.get());
             }
 
-            appendBytecode(*bytecodes, OpCode::JOIN, node->index(), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::JOIN, node->index(), {}, normOps, withOps);
 
             break;
         }
 
         case NodeType::CALL:
-            appendBytecode(*bytecodes, OpCode::CALL, node->index(), {}, withOps, normOps);
+            appendBytecode(*bytecodes, OpCode::CALL, node->index(), {}, normOps, withOps);
             break;
 
         case NodeType::BIND:
@@ -183,11 +194,11 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
             auto funcNode = tt::as_shared<FuncNode>(node);
             appendBytecode(
                 *bytecodes,
-                OpCode::FUNC,
+                i == topoSortedNodes.size() - 1 ? OpCode::TAIL : OpCode::FUNC,
                 node->index(),
                 {},
-                withOps,
                 normOps,
+                withOps,
                 true,
                 {
                     .graph = &(funcNode->func()->graph()),
@@ -210,8 +221,8 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
                 OpCode::OPER,
                 node->index(),
                 {},
-                withOps,
                 normOps,
+                withOps,
                 true,
                 {
                     .func = *opFunc,
@@ -241,7 +252,10 @@ shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, Graph *graph) {
         if (node->withOutputs().size() == 1 &&
             node->withOutputs().front()->type() == NodeType::JOIN) {
             auto joinNode = node->withOutputs().front();
-            joinTargetMap[joinNode.get()].push_back(bytecodes->size());
+            joinTargetMap[joinNode.get()].push_back({
+                bytecodes->size(),
+                currIdx,
+            });
             appendBytecode(*bytecodes, OpCode::JUMP, 0, {0});
         }
     }

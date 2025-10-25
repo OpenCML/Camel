@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,9 +27,8 @@
 namespace GIR = GraphIR;
 
 void __abs__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
 
@@ -57,9 +56,8 @@ void __abs__(
 }
 
 void __exp__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &x = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &x = frame.get(nargs[0]);
 
     data_ptr_t result;
 
@@ -87,10 +85,9 @@ void __exp__(
 }
 
 void __round__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
-    const data_ptr_t &val = frame.get(args[0]);
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
 
@@ -112,9 +109,8 @@ void __round__(
 }
 
 void __ceil__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
 
@@ -136,9 +132,8 @@ void __ceil__(
 }
 
 void __floor__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
 
@@ -160,9 +155,8 @@ void __floor__(
 }
 
 void __bin__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     int64_t number = 0;
     if (val->type() == Type::Int32()) {
@@ -177,9 +171,8 @@ void __bin__(
 }
 
 void __oct__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
@@ -201,9 +194,8 @@ void __oct__(
 }
 
 void __hex__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()

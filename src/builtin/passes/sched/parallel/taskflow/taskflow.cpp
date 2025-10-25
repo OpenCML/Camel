@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -179,8 +179,8 @@ tf::Task TaskflowExecSchedPass::buildFillTask(
     FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
     return flowLike
         .emplace([&]() {
-            const auto &srcNode = n->withInputs().front();
-            const auto &dataInputs = n->normInputs();
+            const auto &srcNode = n->normInputs().front();
+            const auto &dataInputs = n->withInputs();
             data_ptr_t data = frame->get(srcNode->index())->clone();
             ASSERT(data != nullptr, "FILL data is null.");
             data_vec_t inputs;
@@ -254,7 +254,7 @@ tf::Task TaskflowExecSchedPass::buildCallTask(
             data_vec_t args;
             for (const auto &inNode : n->normInputs())
                 args.push_back(frame->get(inNode->index()));
-            const auto &ports = tgtGraph.ports();
+            const auto &ports = tgtGraph.normPorts();
             ASSERT(ports.size() == args.size(), "Argument count mismatch.");
 
             auto funcFrame = new Frame(&tgtGraph);

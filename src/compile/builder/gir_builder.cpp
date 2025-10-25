@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -288,9 +288,9 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         auto fillType = tt::as_shared<ComposedType>(dataType->clone());
         fillType->resolve(refTypes);
         node = FillNode::create(*currGraph_, fillType);
-        Node::link(LinkType::With, srcNode, node);
+        Node::link(LinkType::Norm, srcNode, node);
         for (const auto &refNode : refNodes) {
-            Node::link(LinkType::Norm, refNode, node);
+            Node::link(LinkType::With, refNode, node);
         }
     }
     LEAVE("DATA");
@@ -467,9 +467,9 @@ node_ptr_t Builder::createFuncDataNode(
     }
 
     auto fillNode = FillNode::create(*currGraph_, funcData->funcType());
-    Node::link(LinkType::With, dataNode, fillNode);
+    Node::link(LinkType::Norm, dataNode, fillNode);
     for (const auto &refNode : refNodes) {
-        Node::link(LinkType::Norm, refNode, fillNode);
+        Node::link(LinkType::With, refNode, fillNode);
     }
 
     if (callableAsResult) {

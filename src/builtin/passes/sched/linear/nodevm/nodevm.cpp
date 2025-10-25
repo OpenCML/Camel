@@ -50,6 +50,7 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
             },
             true // skip the start node itself
         );
+
         EXEC_WHEN_DEBUG([&]() {
             l.in("Topo").debug("Topologically sorted nodes for graph {}:", graph->name());
             for (const auto &n : sortedNodes) {
@@ -78,6 +79,7 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
                     nodeStrs);
             }
         }());
+
         const auto &sortedNodesPtr = std::make_shared<node_vec_t>(std::move(sortedNodes));
         graphTopoNodesCache_[graph] = sortedNodesPtr;
         return sortedNodesPtr;
@@ -186,33 +188,41 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     do {
         loop = false;
         auto &nodes = *nodesPtr;
+
         EXEC_WHEN_DEBUG([&]() {
             if (profiler::AdvancedTracer::getInstance().isTracing()) {
                 profiler::AdvancedTracer::getInstance().traceFunctionCall(
                     "topoExecution:" + graph->name());
             }
         }());
+
         for (size_t i = 0; i < nodes.size(); ++i) {
             auto &n = nodes[i];
+
             EXEC_WHEN_DEBUG([&]() {
                 if (profiler::AdvancedTracer::getInstance().isTracing()) {
                     std::string nodeName = "node:" + n->toString();
                     profiler::AdvancedTracer::getInstance().traceFunctionCall(nodeName);
                 }
             }());
+
             switch (n->type()) {
+
             case NodeType::DATA: {
                 ASSERT(currFrame->get(n->index()) != nullptr, "DATA data is null.");
                 break;
             }
+
             case NodeType::PORT: {
                 ASSERT(currFrame->get(n->index()) != nullptr, "PORT data is null.");
                 break;
             }
+
             case NodeType::CAST: {
                 ASSERT(false, "CAST node not implemented yet.");
                 break;
             }
+
             case NodeType::COPY: {
                 auto inputNode = n->normInputs().front();
                 auto inputData = currFrame->get(inputNode->index());
@@ -225,10 +235,11 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 currFrame->set(n->index(), inputData->clone());
                 break;
             }
+
             case NodeType::FILL: {
                 auto structNode = tt::as_shared<FillNode>(n);
-                const auto &srcNode = n->withInputs().front();
-                const auto &dataInputs = n->normInputs();
+                const auto &srcNode = n->normInputs().front();
+                const auto &dataInputs = n->withInputs();
                 data_ptr_t data = currFrame->get(srcNode->index())->clone();
                 ASSERT(data != nullptr, "FILL data is null.");
                 data_vec_t inputs;
@@ -240,6 +251,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 currFrame->set(n->index(), data);
                 break;
             }
+
             case NodeType::ACCS: {
                 data_ptr_t source = currFrame->get(n->dataInputs().front()->index());
                 auto accessNode = tt::as_shared<AccsNode>(n);
@@ -258,6 +270,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 }
                 break;
             }
+
             case NodeType::BRCH: {
                 ASSERT(
                     n->normInputs().size() == 1,
@@ -303,6 +316,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 i += ctrlOuts.size(); // skip all cases
                 break;
             }
+
             case NodeType::JOIN: {
                 auto execNode = brInfoStack_.top();
                 brInfoStack_.pop();
@@ -322,6 +336,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 }
                 break;
             }
+
             case NodeType::CALL: {
                 const auto &funcNode = n->withInputs().front();
                 const auto &funcData = currFrame->get(funcNode->index());
@@ -361,14 +376,17 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 currFrame->set(n->index(), res);
                 break;
             }
+
             case NodeType::BIND: {
                 ASSERT(false, "BIND node not implemented yet.");
                 break;
             }
+
             case NodeType::FUNC: {
                 evalFuncNode(n, i == nodes.size() - 1);
                 break;
             }
+
             case NodeType::OPER: {
                 auto opNode = tt::as_shared<OperNode>(n);
                 const auto &uri = opNode->oper()->uri();
@@ -381,15 +399,18 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 context_->eval(uri, n, *currFrame);
                 break;
             }
+
             case NodeType::EXIT: {
                 ASSERT(false, "EXIT node should not appear in the execution sequence.");
                 break;
             }
+
             case NodeType::DREF: {
                 ASSERT(false, "DREF node should not appear in the execution sequence.");
                 break;
             }
             }
+
             EXEC_WHEN_DEBUG([&]() {
                 if (profiler::AdvancedTracer::getInstance().isTracing()) {
                     std::string nodeName = "node:" + n->toString();
@@ -397,12 +418,14 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 }
             }());
         }
+
         EXEC_WHEN_DEBUG([&]() {
             if (profiler::AdvancedTracer::getInstance().isTracing()) {
                 profiler::AdvancedTracer::getInstance().traceFunctionReturn(
                     "topoExecution:" + graph->name());
             }
         }());
+
     } while (loop);
 
     currRecursionDepth_--;

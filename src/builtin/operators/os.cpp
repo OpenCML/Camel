@@ -162,9 +162,8 @@ void clearInputBuffer() {
 namespace GIR = GraphIR;
 
 void __sleep__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
 
     auto pd = arg->as<Int32Data>(Type::Int32());
 
@@ -190,8 +189,7 @@ void __sleep__(
 }
 
 void __whoami__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     std::string username;
 
 #ifdef _WIN32
@@ -221,15 +219,13 @@ void __whoami__(
 }
 
 void __exit__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     throw CamelRuntimeException(RuntimeExceptionCode::ForceExit, "<exit> operator invoked");
 }
 
 void __set_terminal_raw_mode__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
 
     bool enable = arg->as<BoolData>(Type::Bool())->data();
     bool success = Terminal::setRawMode(enable);
@@ -245,8 +241,7 @@ void __set_terminal_raw_mode__(
 }
 
 void __has_input__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     bool available = Terminal::hasInput();
 
     frame.set(self, std::make_shared<BoolData>(available));
@@ -254,8 +249,7 @@ void __has_input__(
 }
 
 void __get_char__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     std::string input = Terminal::readInput(1);
 
     frame.set(self, std::make_shared<StringData>(input));
@@ -263,10 +257,9 @@ void __get_char__(
 }
 
 void __get_chars__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     int maxChars = -1; // Default to read all available characters
-    maxChars = frame.get(args[0])->as<Int32Data>(Type::Int32())->data();
+    maxChars = frame.get(nargs[0])->as<Int32Data>(Type::Int32())->data();
 
     std::string input = Terminal::readInput(maxChars);
 
@@ -275,8 +268,7 @@ void __get_chars__(
 }
 
 void __clear_input_buffer__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     Terminal::clearInputBuffer();
 

@@ -41,8 +41,12 @@ std::string to_string(const OpCode &op) {
         return "CALL";
     case OpCode::FUNC:
         return "FUNC";
+    case OpCode::TAIL:
+        return "TAIL";
     case OpCode::OPER:
         return "OPER";
+    case OpCode::SCHD:
+        return "SCHD";
     default:
         ASSERT(false, "Unknown OpCode encountered.");
         return "UNKNOWN";
@@ -76,15 +80,15 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
     }
 }
 
-void appendBytecode(
+Bytecode *appendBytecode(
     bytecode_vec_t &vec, OpCode opcode, data_idx_t result, const std::vector<data_idx_t> &fastops,
-    const std::vector<data_idx_t> &withOperands, const std::vector<data_idx_t> &normOperands,
+    const std::vector<data_idx_t> &normOperands, const std::vector<data_idx_t> &withOperands,
     bool hasExtra, const BytecodeExtra &extra) {
 
     data_idx_t normCnt = as_index(normOperands.size());
     data_idx_t withCnt = as_index(withOperands.size());
 
-    size_t operandCount = withCnt + normCnt;
+    size_t operandCount = normCnt + withCnt;
 
     size_t operandUnits = 0;
     if (fastops.empty()) {
@@ -112,15 +116,15 @@ void appendBytecode(
             header->fastop[1] = fastops[1];
         }
     } else {
-        header->fastop[0] = withCnt;
-        header->fastop[1] = normCnt;
+        header->fastop[0] = normCnt;
+        header->fastop[1] = withCnt;
         uint8_t *raw = reinterpret_cast<uint8_t *>(&vec[offset + 1]);
         data_idx_t *ops = reinterpret_cast<data_idx_t *>(raw);
 
-        for (data_idx_t idx : withOperands) {
+        for (data_idx_t idx : normOperands) {
             *ops++ = idx;
         }
-        for (data_idx_t idx : normOperands) {
+        for (data_idx_t idx : withOperands) {
             *ops++ = idx;
         }
     }
@@ -130,4 +134,6 @@ void appendBytecode(
         BytecodeExtra *ex = reinterpret_cast<BytecodeExtra *>(&vec[offset + totalUnits - 1]);
         std::memcpy(ex, &extra, sizeof(BytecodeExtra));
     }
+
+    return header;
 }

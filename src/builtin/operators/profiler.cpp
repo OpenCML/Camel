@@ -36,9 +36,8 @@
 #include <iostream>
 #include <string>
 void __profiler_begin__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
     if (arg == nullptr) {
         return;
     }
@@ -63,9 +62,8 @@ void __profiler_begin__(
     return;
 }
 void __profiler_end__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
     ASSERT(arg->type()->code() == TypeCode::String, "profiler.end requires a string argument");
 
     auto stringData = std::dynamic_pointer_cast<StringData>(arg);
@@ -85,9 +83,8 @@ void __profiler_end__(
 }
 
 void __profiler_instant__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
     ASSERT(arg->type()->code() == TypeCode::String, "profiler.instant requires a string argument");
 
     auto stringData = std::dynamic_pointer_cast<StringData>(arg);
@@ -107,9 +104,8 @@ void __profiler_instant__(
 }
 
 void __profiler_enable__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
     ASSERT(arg->type()->code() == TypeCode::Bool, "profiler.enable requires a boolean argument");
 
     auto boolData = std::dynamic_pointer_cast<PrimaryData<bool>>(arg);
