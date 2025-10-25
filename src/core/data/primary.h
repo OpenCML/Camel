@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@
 
 template <typename T> class PrimaryData : public Data {
   private:
-    T data_;
+    mutable T data_;
 
     template <typename Dest, typename Src>
     std::shared_ptr<PrimaryData<Dest>> convertAndMakeShared(const Src &data) {
@@ -55,7 +55,7 @@ template <typename T> class PrimaryData : public Data {
         }
     }
 
-    const T &data() const { return data_; }
+    T &data() const { return data_; }
 
     virtual bool equals(const data_ptr_t &other) const override {
         if (auto o = std::dynamic_pointer_cast<PrimaryData<T>>(other)) {

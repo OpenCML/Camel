@@ -254,7 +254,7 @@ tf::Task TaskflowExecSchedPass::buildCallTask(
             data_vec_t args;
             for (const auto &inNode : n->normInputs())
                 args.push_back(frame->get(inNode->index()));
-            const auto &ports = tgtGraph.ports();
+            const auto &ports = tgtGraph.normPorts();
             ASSERT(ports.size() == args.size(), "Argument count mismatch.");
 
             auto funcFrame = new Frame(&tgtGraph);

@@ -31,51 +31,196 @@ void __builtin__assn__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &rhs = frame.get(nargs[1]);
     frame.set(self, rhs);
+    ctx.rtmDiags()
+        ->of(RuntimeDiag::RuntimeError)
+        .commit("assignment operator not fully implemented");
 }
 
-void __builtin__assn_add__(
+void __builtin__assn_add_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    int32_t res = lhs->data() + rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
 }
 
-void __builtin__assn_sub__(
+void __builtin__assn_add_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    int64_t res = lhs->data() + rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
 }
 
-void __builtin__assn_mul__(
+void __builtin__assn_add_f__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    const auto &lhs = tt::as_shared<FloatData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<FloatData>(frame.get(nargs[1]));
+    float res = lhs->data() + rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
 }
 
-void __builtin__assn_div__(
+void __builtin__assn_add_d__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    const auto &lhs = tt::as_shared<DoubleData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<DoubleData>(frame.get(nargs[1]));
+    double res = lhs->data() + rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_sub_i__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    int32_t res = lhs->data() - rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_sub_l__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    int64_t res = lhs->data() - rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_sub_f__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<FloatData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<FloatData>(frame.get(nargs[1]));
+    float res = lhs->data() - rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_sub_d__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<DoubleData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<DoubleData>(frame.get(nargs[1]));
+    double res = lhs->data() - rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_mul_i__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    int32_t res = lhs->data() * rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_mul_l__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    int64_t res = lhs->data() * rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_mul_f__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<FloatData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<FloatData>(frame.get(nargs[1]));
+    float res = lhs->data() * rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_mul_d__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<DoubleData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<DoubleData>(frame.get(nargs[1]));
+    double res = lhs->data() * rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_div_i__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    if (rhs->data() == 0)
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
+    int32_t res = lhs->data() / rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_div_l__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    if (rhs->data() == 0)
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
+    int64_t res = lhs->data() / rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_div_f__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<FloatData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<FloatData>(frame.get(nargs[1]));
+    if (rhs->data() == 0.0f)
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
+    float res = lhs->data() / rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
+}
+
+void __builtin__assn_div_d__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &lhs = tt::as_shared<DoubleData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<DoubleData>(frame.get(nargs[1]));
+    if (rhs->data() == 0.0)
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
+    double res = lhs->data() / rhs->data();
+    lhs->data() = res;
+    frame.set(self, lhs);
 }
 
 void __builtin__assn_mod__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    ctx.rtmDiags()
+        ->of(RuntimeDiag::RuntimeError)
+        .commit("assignment operator not fully implemented");
 }
 
 void __builtin__assn_pow__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    ctx.rtmDiags()
+        ->of(RuntimeDiag::RuntimeError)
+        .commit("assignment operator not fully implemented");
 }
 
 void __builtin__assn_and__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    ctx.rtmDiags()
+        ->of(RuntimeDiag::RuntimeError)
+        .commit("assignment operator not fully implemented");
 }
 
 void __builtin__assn_or__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    ctx.rtmDiags()
+        ->of(RuntimeDiag::RuntimeError)
+        .commit("assignment operator not fully implemented");
 }
 
 void __builtin__assn_mat__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ASSERT(false, "Not implemented");
+    ctx.rtmDiags()
+        ->of(RuntimeDiag::RuntimeError)
+        .commit("assignment operator not fully implemented");
 }
 
 void __builtin__or__(

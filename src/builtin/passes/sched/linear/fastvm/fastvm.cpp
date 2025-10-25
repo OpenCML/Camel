@@ -61,7 +61,10 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             isTailCall ? "yes" : "no"));
         frame_rptr_t nextFrame = nullptr;
 
-        auto portNodes = targetGraph.ports();
+        node_vec_t portNodes;
+        for (const auto &p : targetGraph.ports()) {
+            portNodes.push_back(p);
+        }
         ASSERT(
             args.size() == portNodes.size(),
             std::format(
