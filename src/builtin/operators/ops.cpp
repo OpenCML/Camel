@@ -28,71 +28,60 @@
 namespace GIR = GraphIR;
 
 void __builtin__assn__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &rhs = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &rhs = frame.get(nargs[1]);
     frame.set(self, rhs);
 }
 
 void __builtin__assn_add__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_sub__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_mul__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_div__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_mod__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_pow__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_and__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_or__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__assn_mat__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "Not implemented");
 }
 
 void __builtin__or__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = left->as<BoolData>(Type::Bool());
     if (l->data()) {
@@ -104,10 +93,9 @@ void __builtin__or__(
 }
 
 void __builtin__and__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = left->as<BoolData>(Type::Bool());
     if (!l->data()) {
@@ -119,50 +107,45 @@ void __builtin__and__(
 }
 
 void __builtin__eq__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     bool res = left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
 }
 
 void __builtin__neq__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     bool res = !left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
 }
 
 void __builtin__strict_eq__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     bool res = left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
 }
 
 void __builtin__strict_neq__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     bool res = !left->equals(right);
     frame.set(self, std::make_shared<BoolData>(res));
 }
 
 void __builtin__lt__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
@@ -171,10 +154,9 @@ void __builtin__lt__(
 }
 
 void __builtin__le__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
@@ -183,10 +165,9 @@ void __builtin__le__(
 }
 
 void __builtin__gt__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
@@ -195,10 +176,9 @@ void __builtin__gt__(
 }
 
 void __builtin__ge__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = left->as<DoubleData>(Type::Double());
     auto r = right->as<DoubleData>(Type::Double());
@@ -207,10 +187,9 @@ void __builtin__ge__(
 }
 
 void __builtin__add_ii__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
     result = std::make_shared<Int32Data>(
@@ -220,10 +199,9 @@ void __builtin__add_ii__(
 }
 
 void __builtin__add_ll__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
     result = std::make_shared<Int64Data>(
@@ -233,10 +211,9 @@ void __builtin__add_ll__(
 }
 
 void __builtin__add_ff__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
     result = std::make_shared<FloatData>(
@@ -246,10 +223,9 @@ void __builtin__add_ff__(
 }
 
 void __builtin__add_dd__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
     result = std::make_shared<DoubleData>(
@@ -260,10 +236,9 @@ void __builtin__add_dd__(
 }
 
 void __builtin__add_ss__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
     result = std::make_shared<DoubleData>(
@@ -274,10 +249,9 @@ void __builtin__add_ss__(
 }
 
 void __builtin__sub_ii__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     int32_t lval = left->as<Int32Data>(Type::Int32())->data();
     int32_t rval = right->as<Int32Data>(Type::Int32())->data();
@@ -287,10 +261,9 @@ void __builtin__sub_ii__(
 }
 
 void __builtin__sub_ll__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     int64_t lval = left->as<Int64Data>(Type::Int64())->data();
     int64_t rval = right->as<Int64Data>(Type::Int64())->data();
@@ -300,10 +273,9 @@ void __builtin__sub_ll__(
 }
 
 void __builtin__sub_ff__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     float lval = left->as<FloatData>(Type::Float())->data();
     float rval = right->as<FloatData>(Type::Float())->data();
@@ -313,10 +285,9 @@ void __builtin__sub_ff__(
 }
 
 void __builtin__sub_dd__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     double lval = left->as<DoubleData>(Type::Double())->data();
     double rval = right->as<DoubleData>(Type::Double())->data();
@@ -326,10 +297,9 @@ void __builtin__sub_dd__(
 }
 
 void __builtin__mul__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
     if (left->type() == Type::Int32()) {
@@ -360,10 +330,9 @@ void __builtin__mul__(
 }
 
 void __builtin__div__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     // 除以 0 检查
     if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
@@ -404,10 +373,9 @@ void __builtin__div__(
 }
 
 void __builtin__mod__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
         (right->type() == Type::Int64() && right->as<Int64Data>(Type::Int64())->data() == 0)) {
@@ -437,16 +405,14 @@ void __builtin__mod__(
 }
 
 void __builtin__mat__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     ASSERT(false, "mat operator not implemented");
 }
 
 void __builtin__pow__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &base = frame.get(args[0]);
-    const data_ptr_t &exponent = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &base = frame.get(nargs[0]);
+    const data_ptr_t &exponent = frame.get(nargs[1]);
 
     data_ptr_t result;
     if (base->type() == Type::Int32()) {
@@ -477,10 +443,9 @@ void __builtin__pow__(
 }
 
 void __builtin__idx__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &container = frame.get(args[0]);
-    const data_ptr_t &index = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &container = frame.get(nargs[0]);
+    const data_ptr_t &index = frame.get(nargs[1]);
 
     // 数值索引：适用于 Array
     if (index->type() == Type::Int32()) {
@@ -509,18 +474,16 @@ void __builtin__idx__(
 }
 
 void __builtin__not__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     bool result = !val->as<BoolData>(Type::Bool())->data();
     frame.set(self, std::make_shared<BoolData>(result));
 }
 
 void __builtin__neg__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
     if (val->type() == Type::Int32()) {
@@ -543,9 +506,8 @@ void __builtin__neg__(
 }
 
 void __builtin__inv__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &val = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
     if (val->type() == Type::Int32()) {

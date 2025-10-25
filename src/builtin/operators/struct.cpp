@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,9 +23,8 @@
 #include "core/context/frame.h"
 
 void __len_str__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
 
     int32_t len = static_cast<int32_t>(tt::as_shared<StringData>(arg)->data().size());
 
@@ -34,9 +33,8 @@ void __len_str__(
 }
 
 void __len_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &arg = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &arg = frame.get(nargs[0]);
 
     int32_t len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
 
@@ -45,10 +43,9 @@ void __len_arr__(
 }
 
 void __zip__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &a = frame.get(args[0]);
-    const data_ptr_t &b = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &a = frame.get(nargs[0]);
+    const data_ptr_t &b = frame.get(nargs[1]);
 
     auto getElements = [](const data_ptr_t &data) -> std::optional<data_vec_t> {
         switch (data->type()->code()) {
@@ -96,9 +93,8 @@ void __zip__(
 }
 
 void __head_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &collect = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &collect = frame.get(nargs[0]);
 
     auto extract_first = [&](const data_vec_t &arr) -> data_ptr_t {
         return arr.empty() ? Data::null() : arr[0];
@@ -110,9 +106,8 @@ void __head_arr__(
 }
 
 void __tail_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &collect = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &collect = frame.get(nargs[0]);
 
     auto slice_tail = [](const data_vec_t &arr) -> data_vec_t {
         return arr.size() <= 1 ? data_vec_t{} : data_vec_t(arr.begin() + 1, arr.end());
@@ -127,14 +122,13 @@ void __tail_arr__(
 }
 
 void __range__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &startData = frame.get(args[0]);
-    const data_ptr_t &stopData = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &startData = frame.get(nargs[0]);
+    const data_ptr_t &stopData = frame.get(nargs[1]);
     data_ptr_t stepData = nullptr;
 
-    if (nCnt == 3) {
-        stepData = frame.get(args[2]);
+    if (nargs.size == 3) {
+        stepData = frame.get(nargs[2]);
     }
 
     int32_t start = startData->as<Int32Data>(Type::Int32())->data();
@@ -163,11 +157,10 @@ void __range__(
 }
 
 void __slice_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &collect = frame.get(args[wCnt]);
-    const data_ptr_t &startArg = frame.get(args[0]);
-    const data_ptr_t &endArg = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &collect = frame.get(nargs[0]);
+    const data_ptr_t &startArg = frame.get(wargs[0]);
+    const data_ptr_t &endArg = frame.get(wargs[1]);
 
     int32_t start = startArg->as<Int32Data>(Type::Int32())->data();
     int32_t end = endArg->as<Int32Data>(Type::Int32())->data();
@@ -196,10 +189,9 @@ void __slice_arr__(
 }
 
 void __concat_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &left = frame.get(args[0]);
-    const data_ptr_t &right = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = tt::as_shared<ArrayData>(left)->raw();
     auto r = tt::as_shared<ArrayData>(right)->raw();
@@ -211,11 +203,10 @@ void __concat_arr__(
 }
 
 void __append_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const auto &collectIdx = args[1];
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &collectIdx = nargs[0];
     const data_ptr_t &collection = frame.get(collectIdx);
-    const data_ptr_t &element = frame.get(args[0]);
+    const data_ptr_t &element = frame.get(wargs[0]);
 
     auto arr = tt::as_shared<ArrayData>(collection)->raw();
     arr.push_back(element);
@@ -227,11 +218,10 @@ void __append_arr__(
 }
 
 void __extend_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const auto &collectNode = args[1];
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const auto &collectNode = nargs[0];
     const data_ptr_t &collection = frame.get(collectNode);
-    const data_ptr_t &other = frame.get(args[0]);
+    const data_ptr_t &other = frame.get(wargs[0]);
 
     auto arr = tt::as_shared<ArrayData>(collection)->raw();
     auto ext = tt::as_shared<ArrayData>(other)->raw();
@@ -242,10 +232,9 @@ void __extend_arr__(
 }
 
 void __contains_arr__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &collection = frame.get(args[0]);
-    const data_ptr_t &target = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &collection = frame.get(nargs[0]);
+    const data_ptr_t &target = frame.get(wargs[0]);
 
     bool found = false;
 

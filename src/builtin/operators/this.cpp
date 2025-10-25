@@ -25,8 +25,7 @@
 #include <iostream>
 
 void __zen__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     std::string zen =
 #include "ZEN"
         ;

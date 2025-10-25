@@ -12,15 +12,28 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 22, 2025
+ * Created: Oct. 25, 2025
  * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/operator.h"
-#include "core/type/type.h"
+#include "assert.h"
 
-void __zen__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+#include <cstdint>
+
+template <typename T> struct RawArray {
+    T *data;
+    size_t size;
+
+    T &operator[](size_t idx) {
+        ASSERT(idx < size, std::format("Array index out of range: {}, size: {}", idx, size));
+        return data[idx];
+    }
+
+    const T &operator[](size_t idx) const {
+        ASSERT(idx < size, std::format("Array index out of range: {}, size: {}", idx, size));
+        return data[idx];
+    }
+};

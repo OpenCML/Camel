@@ -28,13 +28,12 @@
 namespace GIR = GraphIR;
 
 void __print__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    for (arr_size_t i = 0; i < nCnt; i++) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    for (size_t i = 0; i < nargs.size; i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        const data_ptr_t &data = frame.get(args[i]);
+        const data_ptr_t &data = frame.get(nargs[i]);
         data->print(std::cout);
     }
     frame.set(self, Data::null());
@@ -42,13 +41,12 @@ void __print__(
 }
 
 void __println__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    for (arr_size_t i = 0; i < nCnt; i++) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    for (size_t i = 0; i < nargs.size; i++) {
         if (i > 0) {
             std::cout << " ";
         }
-        const data_ptr_t &data = frame.get(args[i]);
+        const data_ptr_t &data = frame.get(nargs[i]);
         data->print(std::cout);
     }
     std::cout << std::endl;
@@ -57,15 +55,14 @@ void __println__(
 }
 
 void __input__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     std::stringstream oss;
 
-    for (arr_size_t i = 0; i < wCnt + nCnt; i++) {
+    for (size_t i = 0; i < nargs.size; i++) {
         if (i > 0) {
             oss << " ";
         }
-        const data_ptr_t &data = frame.get(args[i]);
+        const data_ptr_t &data = frame.get(nargs[i]);
         data->print(oss);
     }
 

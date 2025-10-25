@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,13 +86,13 @@ Graph::create(const func_type_ptr_t &funcType, const graph_ptr_t &graph, const s
     if (graph) {
         graph->addSubGraph(newGraph);
     }
-    for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
-        node_ptr_t portNode = PortNode::create(*newGraph, type, name, isVar);
-        newGraph->addPort(portNode, true);
-    }
     for (const auto &[name, type, isVar] : funcType->normArgsInfo()) {
         node_ptr_t portNode = PortNode::create(*newGraph, type, name, isVar);
         newGraph->addPort(portNode, false);
+    }
+    for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
+        node_ptr_t portNode = PortNode::create(*newGraph, type, name, isVar);
+        newGraph->addPort(portNode, true);
     }
     return newGraph;
 }

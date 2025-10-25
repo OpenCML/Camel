@@ -118,7 +118,7 @@ int applyPasses(
     }
 
     if (entry != Graph::null()) {
-        auto fallback = std::make_unique<NodeVMSchedPass>(ctx);
+        auto fallback = std::make_unique<FastVMSchedPass>(ctx);
         fallback->apply(entry, os);
     }
 

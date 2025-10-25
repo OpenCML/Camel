@@ -285,17 +285,22 @@ void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Fram
             std::format("Invalid URI: {}", uri));
     }
     std::vector<GraphIR::data_idx_t> inputIndices;
-    for (const auto &in : self->withInputs()) {
+    for (const auto &in : self->normInputs()) {
         inputIndices.push_back(in->index());
     }
-    for (const auto &in : self->normInputs()) {
+    for (const auto &in : self->withInputs()) {
         inputIndices.push_back(in->index());
     }
     return it->second(
         self->index(),
-        inputIndices.data(),
-        self->withInputs().size(),
-        self->normInputs().size(),
+        data_arr_t{
+            inputIndices.data(),
+            self->normInputs().size(),
+        },
+        data_arr_t{
+            inputIndices.data() + self->normInputs().size(),
+            self->withInputs().size(),
+        },
         frame,
         *context_);
 };

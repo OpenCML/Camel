@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,15 +60,17 @@ data_ptr_t Frame::get(const data_idx_t &index) {
     ASSERT(
         res != nullptr,
         std::format("Accessing uninitialized data of node: {}::{}", graph_->name(), index));
-    EXEC_WHEN_DEBUG(
-        l.in("Frame")
-            .debug("Getting data for node {}::{}: {}", graph_->name(), index, res->toString()));
+    EXEC_WHEN_DEBUG(l.in("Frame").debug(
+        "Getting data of graph {} with index {}: {}",
+        graph_->name(),
+        index,
+        res->toString()));
     return res;
 }
 
 void Frame::set(const data_idx_t &index, const data_ptr_t &data) {
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
-        "Setting data for node {}::{}: {}",
+        "Setting data of graph {} with index {}: {}",
         graph_->name(),
         index,
         data ? data->toString() : "null"));

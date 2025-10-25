@@ -53,30 +53,22 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     Frame targetFrame(graph);
     frame_rptr_t currFrame = &frame, tailFrame = nullptr;
 
-    auto evalFuncNode = [&](const node_ptr_t &n, bool isTailCall) {
-        auto func = tt::as_shared<FuncNode>(n)->func();
-        auto &targetGraph = func->graph();
+    auto evalFuncNode =
+        [&](GraphIR::Graph &targetGraph, const data_vec_t &args, bool isTailCall) -> data_ptr_t {
         EXEC_WHEN_DEBUG(l.in("Eval").debug(
             "Calling function: {} (tail-call: {})",
-            func->name().empty() ? targetGraph.name() : func->name(),
+            targetGraph.name(),
             isTailCall ? "yes" : "no"));
         frame_rptr_t nextFrame = nullptr;
 
-        data_vec_t args;
-        const auto &inNodes = n->dataInputs();
-        args.reserve(inNodes.size());
-        for (const auto &inNode : inNodes) {
-            args.push_back(currFrame->get(inNode->index()));
-        }
-
         auto portNodes = targetGraph.ports();
         ASSERT(
-            inNodes.size() == portNodes.size(),
+            args.size() == portNodes.size(),
             std::format(
                 "Function {} expects {} arguments, but got {}.",
-                func->name().empty() ? targetGraph.name() : func->name(),
+                targetGraph.name(),
                 portNodes.size(),
-                inNodes.size()));
+                args.size()));
 
         if (isTailCall) {
             // Tail-call optimization
@@ -115,6 +107,8 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             for (size_t i = 0; i < portNodes.size(); ++i) {
                 nextFrame->set(portNodes[i]->index(), args[i]);
             }
+
+            return nullptr; // indicate tail-call
         } else {
             Frame tmpFrame(&targetGraph);
             nextFrame = &tmpFrame;
@@ -124,8 +118,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             // evaluate the target graph
-            data_ptr_t res = evalGraph(&targetGraph, *nextFrame);
-            currFrame->set(n->index(), res);
+            return evalGraph(&targetGraph, *nextFrame);
         }
     };
 
@@ -134,9 +127,9 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     do {
         loop = false;
         const Bytecode *code = bytecodes->data();
-        arr_size_t codeSize = static_cast<arr_size_t>(bytecodes->size());
+        size_t codeSize = bytecodes->size();
 
-        arr_size_t i = 0;
+        size_t i = 0;
         while (i < codeSize) {
             const Bytecode &bc = code[i];
             switch (bc.opcode) {
@@ -153,12 +146,17 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
 
             case OpCode::COPY: {
                 auto srcData = currFrame->get(bc.fastop[0]);
-                currFrame->set(bc.result, srcData);
+                currFrame->set(bc.result, srcData->clone());
                 break;
             }
 
             case OpCode::ACCS: {
-                ASSERT(false, "ACCS opcode not implemented in FastVM.");
+                auto srcData = currFrame->get(bc.fastop[0]);
+                auto tuple = tt::as_shared<TupleData>(srcData);
+                ASSERT(
+                    static_cast<size_t>(bc.fastop[1]) < tuple->size(),
+                    "Tuple access index out of range in FastVM.");
+                currFrame->set(bc.result, tuple->get(static_cast<size_t>(bc.fastop[1])));
                 break;
             }
 
@@ -168,31 +166,183 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             case OpCode::BRCH: {
-                ASSERT(false, "BRCH opcode not implemented in FastVM.");
-                break;
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                auto condData = currFrame->get(nargs[0]);
+
+                size_t jumpIdx = 0;
+
+                if (bc.withCnt() == 0) {
+                    bool cond = tt::as_shared<BoolData>(condData)->data();
+                    if (cond) {
+                        jumpIdx = 0; // jump to true branch
+                    } else {
+                        jumpIdx = 1; // jump to false branch
+                    }
+                } else {
+                    size_t j = 0;
+                    for (; j < bc.withCnt(); ++j) {
+                        auto caseData = currFrame->get(wargs[j]);
+                        EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                            "Matching case: {} with condition: {}",
+                            caseData->toString(),
+                            condData->toString()));
+                        if (condData->equals(caseData)) {
+                            jumpIdx = j; // jump to matched case
+                            break;
+                        }
+                    }
+                    if (j == bc.withCnt()) {
+                        // fallthrough to else case if no match
+                        jumpIdx = bc.withCnt();
+                    }
+                }
+
+                currFrame->set(
+                    bc.result,
+                    std::make_shared<Int32Data>(static_cast<int32_t>(jumpIdx)));
+                i += bc.opsize + jumpIdx;
+
+                continue; // skip i increment
             }
 
             case OpCode::JOIN: {
-                ASSERT(false, "JOIN opcode not implemented in FastVM.");
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                const auto &input = currFrame->get(nargs[0]);
+                int32_t choosenIdx = tt::as_shared<Int32Data>(input)->data();
+                ASSERT(
+                    choosenIdx >= 0 && static_cast<size_t>(choosenIdx) < bc.withCnt(),
+                    "JOIN opcode choosen index out of range in FastVM.");
+                auto resultData = currFrame->get(wargs[static_cast<size_t>(choosenIdx)]);
+                currFrame->set(bc.result, resultData);
                 break;
             }
 
             case OpCode::FILL: {
-                ASSERT(false, "FILL opcode not implemented in FastVM.");
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                auto target = currFrame->get(nargs[0])->clone();
+                ASSERT(target != nullptr, "FILL target data is null.");
+                data_vec_t inputs;
+                inputs.reserve(bc.withCnt());
+                for (size_t j = 0; j < bc.withCnt(); ++j) {
+                    inputs.push_back(currFrame->get(wargs[j]));
+                }
+                target->resolve(inputs);
+                currFrame->set(bc.result, target);
                 break;
             }
 
             case OpCode::CALL: {
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                auto funcData = currFrame->get(wargs[0]);
+                auto function = tt::as_shared<FunctionData>(funcData);
+                auto &targetGraph = function->graph();
+                Frame funcFrame(&targetGraph);
+
+                const auto &normPorts = targetGraph.normPorts();
+                ASSERT(
+                    bc.normCnt() == normPorts.size(),
+                    "CALL opcode norm argument count mismatch in FastVM.");
+                for (size_t j = 0; j < bc.normCnt(); ++j) {
+                    funcFrame.set(normPorts[j]->index(), currFrame->get(nargs[j]));
+                }
+
+                const auto &withPorts = targetGraph.withPorts();
+                ASSERT(
+                    withPorts.size() == bc.withCnt() - 1,
+                    "CALL opcode with argument count mismatch in FastVM.");
+                for (size_t j = 1; j < bc.withCnt(); ++j) {
+                    funcFrame.set(withPorts[j - 1]->index(), currFrame->get(wargs[j]));
+                }
+
+                const auto &closurePorts = targetGraph.closure();
+                const auto &closureData = function->closure();
+                ASSERT(
+                    closurePorts.size() == closureData.size(),
+                    "Function closure size mismatch in FastVM.");
+                for (size_t j = 0; j < closurePorts.size(); ++j) {
+                    funcFrame.set(closurePorts[j]->index(), closureData[j]);
+                }
+
+                const auto &result = evalGraph(&targetGraph, funcFrame);
+                currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::FUNC: {
-                ASSERT(false, "FUNC opcode not implemented in FastVM.");
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+
+                GraphIR::Graph *funcGraph = bc.extra()->graph;
+                const auto &normPorts = funcGraph->normPorts();
+                const auto &withPorts = funcGraph->withPorts();
+
+                data_vec_t args;
+                args.reserve(normPorts.size() + withPorts.size());
+
+                ASSERT(
+                    bc.normCnt() == normPorts.size(),
+                    "FUNC opcode norm argument count mismatch in FastVM.");
+                for (size_t j = 0; j < bc.normCnt(); ++j) {
+                    args.push_back(currFrame->get(nargs[j]));
+                }
+
+                ASSERT(
+                    withPorts.size() == bc.withCnt(),
+                    "FUNC opcode with argument count mismatch in FastVM.");
+                for (size_t j = 0; j < bc.withCnt(); ++j) {
+                    args.push_back(currFrame->get(wargs[j]));
+                }
+
+                auto res = evalFuncNode(*funcGraph, args, false);
+                currFrame->set(bc.result, res);
+
                 break;
             }
 
+            case OpCode::TAIL: {
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+
+                GraphIR::Graph *funcGraph = bc.extra()->graph;
+                const auto &normPorts = funcGraph->normPorts();
+                const auto &withPorts = funcGraph->withPorts();
+
+                data_vec_t args;
+                args.reserve(normPorts.size() + withPorts.size());
+
+                ASSERT(
+                    bc.normCnt() == normPorts.size(),
+                    "FUNC opcode norm argument count mismatch in FastVM.");
+                for (size_t j = 0; j < bc.normCnt(); ++j) {
+                    args.push_back(currFrame->get(nargs[j]));
+                }
+
+                ASSERT(
+                    withPorts.size() == bc.withCnt(),
+                    "FUNC opcode with argument count mismatch in FastVM.");
+                for (size_t j = 0; j < bc.withCnt(); ++j) {
+                    args.push_back(currFrame->get(wargs[j]));
+                }
+
+                evalFuncNode(*funcGraph, args, true);
+
+                // 跳过后续字节码，进行下一轮循环
+                i = codeSize;
+                continue;
+            }
+
             case OpCode::OPER: {
-                ASSERT(false, "OPER opcode not implemented in FastVM.");
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                auto func = bc.extra()->func;
+                EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                    "Executing operator {}.",
+                    context_->execMgr().getNameOfAnOperator(bc.extra()->func)));
+                func(bc.result, nargs, wargs, *currFrame, *context_);
                 break;
             }
 

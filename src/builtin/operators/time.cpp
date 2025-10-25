@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 24, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,8 +34,7 @@ namespace GIR = GraphIR;
 #endif
 
 void __now__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     auto now = std::chrono::system_clock::now();
     auto epoch = now.time_since_epoch();
     double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count() / 1000.0;
@@ -48,10 +47,9 @@ void __now__(
 }
 
 void __strftime__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &time_val = frame.get(args[0]);
-    const data_ptr_t &fmt_val = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &time_val = frame.get(nargs[0]);
+    const data_ptr_t &fmt_val = frame.get(nargs[1]);
 
     double timestamp = time_val->as<DoubleData>(Type::Double())->data();
 
@@ -98,10 +96,9 @@ void __strftime__(
 }
 
 void __strptime__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &str_val = frame.get(args[0]);
-    const data_ptr_t &fmt_val = frame.get(args[1]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &str_val = frame.get(nargs[0]);
+    const data_ptr_t &fmt_val = frame.get(nargs[1]);
 
     auto time_str = str_val->as<StringData>(Type::String())->data();
     auto fmt_str = fmt_val->as<StringData>(Type::String())->data();

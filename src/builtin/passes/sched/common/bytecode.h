@@ -25,6 +25,7 @@
 #include <limits>
 
 #include "compile/gir.h"
+#include "utils/rawarr.h"
 
 enum class OpCode : uint8_t {
     // 定长参数指令
@@ -40,8 +41,9 @@ enum class OpCode : uint8_t {
     FILL = 0b10000010,
     CALL = 0b10000011,
     FUNC = 0b10000100,
-    OPER = 0b10000101,
-    SCHD = 0b10000110, // 使用 fastop[0] 作为调度策略 ID
+    TAIL = 0b10000101, // 标记尾调用
+    OPER = 0b10000110,
+    SCHD = 0b10000111, // 使用 fastop[0] 作为调度策略 ID
 };
 
 inline bool isOpCodeWithFixedOperands(OpCode opcode) {
@@ -51,6 +53,8 @@ inline bool isOpCodeWithFixedOperands(OpCode opcode) {
 // 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
 using data_idx_t = int16_t;
 using arr_size_t = uint16_t;
+
+using data_arr_t = RawArray<const data_idx_t>;
 
 inline bool isSafeSizeTForIndexT(size_t value) {
     return value <= static_cast<size_t>(std::numeric_limits<data_idx_t>::max());
@@ -127,13 +131,22 @@ struct BytecodeHeader {            // 8 bytes
 
     bool hasOperands() const { return !isOpCodeWithFixedOperands(opcode); }
 
-    size_t withCnt() const {
+    size_t normCnt() const {
         ASSERT(hasOperands(), "No operands available.");
         return static_cast<size_t>(fastop[0]);
     }
-    size_t normCnt() const {
+    size_t withCnt() const {
         ASSERT(hasOperands(), "No operands available.");
         return static_cast<size_t>(fastop[1]);
+    }
+
+    const data_arr_t nargs() const {
+        ASSERT(hasOperands(), "No operands available.");
+        return data_arr_t{reinterpret_cast<const data_idx_t *>(this + 1), normCnt()};
+    }
+    const data_arr_t wargs() const {
+        ASSERT(hasOperands(), "No operands available.");
+        return data_arr_t{reinterpret_cast<const data_idx_t *>(this + 1) + normCnt(), withCnt()};
     }
 
     inline data_idx_t *operands() {
@@ -171,8 +184,8 @@ using bytecode_vec_t = std::vector<Bytecode>;
 
 inline size_t roundUp8(size_t n) { return (n + 7) & ~static_cast<size_t>(7); }
 
-void appendBytecode(
+Bytecode *appendBytecode(
     bytecode_vec_t &vec, OpCode opcode, data_idx_t result,
-    const std::vector<data_idx_t> &fastops = {}, const std::vector<data_idx_t> &withOperands = {},
-    const std::vector<data_idx_t> &normOperands = {}, bool hasExtra = false,
+    const std::vector<data_idx_t> &fastops = {}, const std::vector<data_idx_t> &normOperands = {},
+    const std::vector<data_idx_t> &withOperands = {}, bool hasExtra = false,
     const BytecodeExtra &extra = {});

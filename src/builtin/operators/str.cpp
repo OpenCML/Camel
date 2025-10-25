@@ -38,15 +38,14 @@ std::string format_vector(const std::string &fmtStr, const std::vector<std::stri
 }
 
 void __format__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &fmtStrData = frame.get(args[wCnt]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &fmtStrData = frame.get(nargs[0]);
 
     std::string fmtStr = fmtStrData->as<StringData>(Type::String())->data();
     std::vector<std::string> argStrs;
 
-    for (arr_size_t i = 0; i < wCnt; ++i) {
-        const data_ptr_t &arg = frame.get(args[i]);
+    for (size_t i = 0; i < wargs.size; ++i) {
+        const data_ptr_t &arg = frame.get(wargs[i]);
         std::ostringstream oss;
         arg->print(oss);
         argStrs.push_back(oss.str());
@@ -63,15 +62,14 @@ void __format__(
 }
 
 void __join__(
-    data_idx_t self, data_idx_t *args, arr_size_t wCnt, arr_size_t nCnt, Frame &frame,
-    Context &ctx) {
-    const data_ptr_t &sepData = frame.get(args[0]);
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &sepData = frame.get(wargs[0]);
 
     std::string separator = sepData->as<StringData>(Type::String())->data();
 
     std::ostringstream joined;
 
-    const data_ptr_t &arr = frame.get(args[1]);
+    const data_ptr_t &arr = frame.get(nargs[0]);
     auto vecData = arr->as<ArrayData>(Type::Array(Type::String()));
     for (auto &arg : vecData->raw()) {
         if (joined.tellp() > 0)
