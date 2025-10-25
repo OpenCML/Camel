@@ -94,11 +94,15 @@ Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ENTER("Module");
+    // Ensure the AST node is of the expected type
     ASSERT(ast->type() == AST::LoadType::Module, "Expected ModuleLoad type");
+
+    // Extract different parts of the module node
     auto importNodes = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
 
+    // Process import declarations
     for (const auto &import : *importNodes) {
         visitImport(import);
     }
@@ -107,12 +111,14 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     vector<node_ptr_t> stmts;
 
     root_ = createNodeAs<ExecLoad>();
+
     for (auto &stmt : *stmtNodes) {
         try {
             node_ptr_t node = visitStmt(stmt);
             if (node->type() == GCT::LoadType::DECL) {
                 decls.push_back(node);
             } else if (node->type() == GCT::LoadType::FUNC) {
+                // Handle function declarations
                 const auto &funcLoad = node->loadAs<FuncLoad>();
                 node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->name(), true);
                 node_ptr_t typeNode = node->atAs<TypeLoad>(0);
@@ -126,15 +132,20 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             continue;
         }
     }
+
+    // Add collected declarations to the root node
     if (!decls.empty()) {
         for (const auto &decl : decls) {
             *root_ << decl;
         }
     }
+
+    // Add collected statements to the root node
     for (const auto &stmt : stmts) {
         *root_ << stmt;
     }
 
+    // Process the optional export declaration if it exists
     if (!exportOptNode->empty()) {
         node_ptr_t exportNode = visitExport(exportOptNode->front());
         *root_ << exportNode;
@@ -149,23 +160,31 @@ ImportDecl(string path, Ref[] refs, Ref as) ;
 */
 void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     ENTER("ImportDecl");
+    // Ensure the AST node is of the expected type
     ASSERT(ast->type() == AST::LoadType::Import, "Expected ImportLoad type");
+
+    // Extract the import load details
     const auto &load = ast->loadAs<AST::ImportLoad>();
     const auto &path = load->getPath();
     const auto &refs = load->getRefs();
-    // const auto &as = load->getAs();
+
+    // Attempt to import the module
     const module_ptr_t &mod = context_->importModule(path, module_->name());
     if (!mod) {
         diags_->of(SemanticDiag::ModuleNotFound).at(load->tokenRange()).commit(path);
         throw BuildAbortException();
     }
+
+    // Import all references if none are specified
     if (refs.empty()) {
         module_->importAllRefsFromMod(mod);
     } else {
+        // Import specific references
         for (const Reference &ref : refs) {
             module_->markImportedRefFromMod(ref, mod);
         }
     }
+
     LEAVE("ImportDecl");
     return nullptr;
 }
@@ -175,10 +194,16 @@ ExportDecl(Ref[] refs) ;
 */
 node_ptr_t Builder::visitExport(const AST::node_ptr_t &ast) {
     ENTER("ExportDecl");
+    // Ensure the AST node is of the expected type
     ASSERT(ast->type() == AST::LoadType::Export, "Expected ExportLoad type");
+
+    // Extract the export load details
     const auto &load = ast->loadAs<AST::ExportLoad>();
     const auto &refs = load->getRefs();
+
+    // Create an export node with the extracted references
     node_ptr_t res = createNodeAs<ExptLoad>(refs);
+
     LEAVE("ExportDecl");
     return res;
 }
