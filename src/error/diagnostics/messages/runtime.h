@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@ enum class RuntimeDiag : uint32_t {
     KeyNotFound = 0x000003,
     MaxRecursionDepthExceeded = 0x000004,
     MissingMainFunction = 0x000005,
+    UnrecognizedOperatorURI = 0x000006,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

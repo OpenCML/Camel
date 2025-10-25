@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Sep. 21, 2025
+ * Updated: Oct. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,7 +44,9 @@ class Executor : public std::enable_shared_from_this<Executor> {
         : context_(ctx), opsMap_(ops) {};
     virtual ~Executor() = default;
 
-    virtual OperatorReturnCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) = 0;
+    virtual void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) = 0;
+    std::optional<operator_t> find(const std::string &uri);
+    std::string getNameOfAnOperator(const operator_t &op);
 };
 
 using executor_ptr_t = std::shared_ptr<Executor>;
@@ -54,14 +56,16 @@ class ExecutorManager {
   private:
     context_ptr_t context_;
     std::unordered_map<std::string, executor_factory_t> executorFactories;
-    std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
+    mutable std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
 
   public:
     ExecutorManager(context_ptr_t ctx) : context_(ctx) {};
     ~ExecutorManager() = default;
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 
-    OperatorReturnCode eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
+    void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) const;
+    std::optional<operator_t> find(const std::string &uri) const;
+    std::string getNameOfAnOperator(const operator_t &op) const;
 };
 
 using exec_mgr_uptr_t = std::unique_ptr<ExecutorManager>;

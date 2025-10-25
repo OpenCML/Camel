@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
+#include "compile/gir.h"
 #include "utils/log.h"
 
 #include "../operators/io.h"
@@ -45,30 +46,30 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn_b", __builtin__assn__},
         {"op/assn", __builtin__assn__},
 
-        {"op/assn_add_i", __builtin__assn_add__},
-        {"op/assn_add_l", __builtin__assn_add__},
-        {"op/assn_add_f", __builtin__assn_add__},
-        {"op/assn_add_d", __builtin__assn_add__},
-        {"op/assn_add_s", __builtin__assn_add__},
-        {"op/assn_add", __builtin__assn_add__},
+        {"op/assn_add_i", __builtin__assn_add_i__},
+        {"op/assn_add_l", __builtin__assn_add_l__},
+        {"op/assn_add_f", __builtin__assn_add_f__},
+        {"op/assn_add_d", __builtin__assn_add_d__},
+        {"op/assn_add_s", __not_implemented__},
+        {"op/assn_add", __not_implemented__},
 
-        {"op/assn_sub_i", __builtin__assn_sub__},
-        {"op/assn_sub_l", __builtin__assn_sub__},
-        {"op/assn_sub_f", __builtin__assn_sub__},
-        {"op/assn_sub_d", __builtin__assn_sub__},
-        {"op/assn_sub", __builtin__assn_sub__},
+        {"op/assn_sub_i", __builtin__assn_sub_i__},
+        {"op/assn_sub_l", __builtin__assn_sub_l__},
+        {"op/assn_sub_f", __builtin__assn_sub_f__},
+        {"op/assn_sub_d", __builtin__assn_sub_d__},
+        {"op/assn_sub", __not_implemented__},
 
-        {"op/assn_mul_i", __builtin__assn_mul__},
-        {"op/assn_mul_l", __builtin__assn_mul__},
-        {"op/assn_mul_f", __builtin__assn_mul__},
-        {"op/assn_mul_d", __builtin__assn_mul__},
-        {"op/assn_mul", __builtin__assn_mul__},
+        {"op/assn_mul_i", __builtin__assn_mul_i__},
+        {"op/assn_mul_l", __builtin__assn_mul_l__},
+        {"op/assn_mul_f", __builtin__assn_mul_f__},
+        {"op/assn_mul_d", __builtin__assn_mul_d__},
+        {"op/assn_mul", __not_implemented__},
 
-        {"op/assn_div_i", __builtin__assn_div__},
-        {"op/assn_div_l", __builtin__assn_div__},
-        {"op/assn_div_f", __builtin__assn_div__},
-        {"op/assn_div_d", __builtin__assn_div__},
-        {"op/assn_div", __builtin__assn_div__},
+        {"op/assn_div_i", __builtin__assn_div_i__},
+        {"op/assn_div_l", __builtin__assn_div_l__},
+        {"op/assn_div_f", __builtin__assn_div_f__},
+        {"op/assn_div_d", __builtin__assn_div_d__},
+        {"op/assn_div", __not_implemented__},
 
         {"op/assn_mod_i", __builtin__assn_mod__},
         {"op/assn_mod_l", __builtin__assn_mod__},
@@ -275,8 +276,7 @@ executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
     return std::make_shared<BasicBuiltinExecutor>(ctx);
 }
 
-OperatorReturnCode
-BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
+void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
@@ -284,5 +284,23 @@ BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
             RuntimeExceptionCode::InvalidURI,
             std::format("Invalid URI: {}", uri));
     }
-    return it->second(self, frame, *context_);
+    std::vector<GraphIR::data_idx_t> inputIndices;
+    for (const auto &in : self->normInputs()) {
+        inputIndices.push_back(in->index());
+    }
+    for (const auto &in : self->withInputs()) {
+        inputIndices.push_back(in->index());
+    }
+    return it->second(
+        self->index(),
+        data_arr_t{
+            inputIndices.data(),
+            self->normInputs().size(),
+        },
+        data_arr_t{
+            inputIndices.data() + self->normInputs().size(),
+            self->withInputs().size(),
+        },
+        frame,
+        *context_);
 };

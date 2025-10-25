@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,8 @@ namespace GIR = GraphIR;
 #include <windows.h>
 #endif
 
-OperatorReturnCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
+void __now__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     auto now = std::chrono::system_clock::now();
     auto epoch = now.time_since_epoch();
     double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count() / 1000.0;
@@ -42,14 +43,13 @@ OperatorReturnCode __now__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     seconds += 8 * 3600;
 
     frame.set(self, std::make_shared<DoubleData>(seconds));
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &norm = self->normInputs();
-
-    const data_ptr_t &time_val = frame.get(norm[0]);
-    const data_ptr_t &fmt_val = frame.get(norm[1]);
+void __strftime__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &time_val = frame.get(nargs[0]);
+    const data_ptr_t &fmt_val = frame.get(nargs[1]);
 
     double timestamp = time_val->as<DoubleData>(Type::Double())->data();
 
@@ -67,7 +67,7 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> failed to convert time using localtime_s");
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 #else
     // POSIX: localtime_r
@@ -76,7 +76,7 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> failed to convert time using localtime_r");
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 #endif
 
@@ -88,18 +88,17 @@ OperatorReturnCode __strftime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> formatting failed (buffer too small or invalid format)");
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     frame.set(self, std::make_shared<StringData>(std::string(buffer)));
-    return OperatorReturnCode::OK;
+    return;
 }
 
-OperatorReturnCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &norm = self->normInputs();
-
-    const data_ptr_t &str_val = frame.get(norm[0]);
-    const data_ptr_t &fmt_val = frame.get(norm[1]);
+void __strptime__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &str_val = frame.get(nargs[0]);
+    const data_ptr_t &fmt_val = frame.get(nargs[1]);
 
     auto time_str = str_val->as<StringData>(Type::String())->data();
     auto fmt_str = fmt_val->as<StringData>(Type::String())->data();
@@ -110,19 +109,19 @@ OperatorReturnCode __strptime__(GIR::node_ptr_t &self, Frame &frame, Context &ct
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strptime> failed to parse time string with format: " + fmt_str);
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     std::time_t time_epoch = std::mktime(&tm);
     if (time_epoch == -1) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strptime> mktime conversion failed");
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     // Add UTC+8 offset
     double seconds = static_cast<double>(time_epoch) + 8 * 3600;
 
     frame.set(self, std::make_shared<DoubleData>(seconds));
-    return OperatorReturnCode::OK;
+    return;
 }

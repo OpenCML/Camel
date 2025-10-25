@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 27, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,11 +22,19 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-OperatorReturnCode __exit__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __sleep__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __whoami__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __set_terminal_raw_mode__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __has_input__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __get_char__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __get_chars__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
-OperatorReturnCode __clear_input_buffer__(GraphIR::node_ptr_t &self, Frame &frame, Context &ctx);
+void __exit__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+void __sleep__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+void __whoami__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+void __set_terminal_raw_mode__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+void __has_input__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+void __get_char__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+void __get_chars__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+void __clear_input_buffer__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);

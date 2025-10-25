@@ -68,6 +68,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     -Wno-unused-parameter
     -Wno-language-extension-token # for antlr4-runtime
     -Wno-dollar-in-identifier-extension # for antlr4-runtime
+    -Wno-c99-extensions
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
 )

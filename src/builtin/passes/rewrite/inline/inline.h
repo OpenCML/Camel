@@ -12,15 +12,19 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 22, 2025
+ * Created: Oct. 25, 2025
  * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/operator.h"
-#include "core/type/type.h"
+#include "../rewrite.h"
 
-void __zen__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+class InlineRewritePass : public GraphRewritePass {
+  public:
+    InlineRewritePass(const context_ptr_t &ctx) : GraphRewritePass(ctx) {};
+    virtual ~InlineRewritePass() = default;
+
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+};

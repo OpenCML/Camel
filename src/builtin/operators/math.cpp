@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 29, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,20 +26,12 @@
 
 namespace GIR = GraphIR;
 
-OperatorReturnCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "abs operator requires exactly one argument");
-
-    const data_ptr_t &val = frame.get(ins[0]);
-    if (!val->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<abs> operator requires a primary type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+void __abs__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
+
     if (val->type() == Type::Int32()) {
         auto v = val->as<Int32Data>(Type::Int32());
         result = std::make_shared<Int32Data>(std::abs(v->data()));
@@ -57,26 +49,15 @@ OperatorReturnCode __abs__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<abs> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     frame.set(self, result);
-    return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "<exp> operator requires exactly one argument");
-
-    const data_ptr_t &x = frame.get(ins[0]);
-
-    if (!x->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<exp> operator requires a primary type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+void __exp__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &x = frame.get(nargs[0]);
 
     data_ptr_t result;
 
@@ -97,27 +78,19 @@ OperatorReturnCode __exp__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<exp> operator not supported for type " + x->type()->toString());
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     frame.set(self, result);
-    return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "round operator requires exactly one argument");
+void __round__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
-    const data_ptr_t &val = frame.get(ins[0]);
-    if (!val->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<round> operator requires a primary type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
+
     if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
         result = std::make_shared<FloatData>(std::round(v->data()));
@@ -129,27 +102,18 @@ OperatorReturnCode __round__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
             ->of(RuntimeDiag::RuntimeError)
             .commit("<round> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     frame.set(self, result);
-    return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "ceil operator requires exactly one argument");
-
-    const data_ptr_t &val = frame.get(ins[0]);
-    if (!val->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<ceil> operator requires a primary type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+void __ceil__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
+
     if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
         result = std::make_shared<FloatData>(std::ceil(v->data()));
@@ -161,27 +125,18 @@ OperatorReturnCode __ceil__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
             ->of(RuntimeDiag::RuntimeError)
             .commit("<ceil> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     frame.set(self, result);
-    return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "floor operator requires exactly one argument");
-
-    const data_ptr_t &val = frame.get(ins[0]);
-    if (!val->type()->primary()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<floor> operator requires a primary type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+void __floor__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
+
     if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
         result = std::make_shared<FloatData>(std::floor(v->data()));
@@ -193,25 +148,15 @@ OperatorReturnCode __floor__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) 
             ->of(RuntimeDiag::RuntimeError)
             .commit("<floor> not supported for type " + val->type()->toString());
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     frame.set(self, result);
-    return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "bin operator requires exactly one argument");
-
-    const data_ptr_t &val = frame.get(ins[0]);
-    if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<bin> operator requires integer type");
-        frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
-    }
+void __bin__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
     int64_t number = 0;
     if (val->type() == Type::Int32()) {
@@ -223,20 +168,18 @@ OperatorReturnCode __bin__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     std::string result = "0b" + std::bitset<64>(number).to_string();
     result.erase(2, result.find('1') - 2); // remove leading zeros
     frame.set(self, std::make_shared<StringData>(result));
-    return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "oct operator requires exactly one argument");
+void __oct__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
-    const data_ptr_t &val = frame.get(ins[0]);
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<oct> operator requires integer type");
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     std::ostringstream oss;
@@ -248,20 +191,18 @@ OperatorReturnCode __oct__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
 
     frame.set(self, std::make_shared<StringData>(oss.str()));
-    return OperatorReturnCode::OK;
 }
 
-OperatorReturnCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
-    const auto &ins = self->normInputs();
-    ASSERT(ins.size() == 1, "hex operator requires exactly one argument");
+void __hex__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    const data_ptr_t &val = frame.get(nargs[0]);
 
-    const data_ptr_t &val = frame.get(ins[0]);
     if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<hex> operator requires integer type");
         frame.set(self, Data::null());
-        return OperatorReturnCode::OK;
+        return;
     }
 
     std::ostringstream oss;
@@ -273,5 +214,4 @@ OperatorReturnCode __hex__(GIR::node_ptr_t &self, Frame &frame, Context &ctx) {
     }
 
     frame.set(self, std::make_shared<StringData>(oss.str()));
-    return OperatorReturnCode::OK;
 }

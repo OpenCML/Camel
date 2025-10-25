@@ -13,14 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 09, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "pass.h"
 
-#include "builtin/passes/sched/linear/fallback/fallback.h"
+#include "builtin/passes/rewrite/inline/inline.h"
+#include "builtin/passes/rewrite/macro/macro.h"
+#include "builtin/passes/sched/linear/fastvm/fastvm.h"
+#include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
+#include "builtin/passes/trans/bytecode/bytecode.h"
 #include "builtin/passes/trans/dot/graphviz.h"
 #include "builtin/passes/trans/tns/topo_node_seq.h"
 
@@ -34,21 +38,28 @@ graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
 std::unordered_map<
     std::string, std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>>
     passRegistry = {
+        // Rewrite Passes
         {
-            "std::dot",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+            "std::inline",
+            [](const context_ptr_t &ctx) { return std::make_unique<InlineRewritePass>(ctx); },
         },
         {
-            "std::graphviz",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+            "std::macro",
+            [](const context_ptr_t &ctx) { return std::make_unique<MacroRewritePass>(ctx); },
         },
-        {
-            "std::tns",
-            [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
-        },
+
+        // Schedule Passes
         {
             "std::linear",
-            [](const context_ptr_t &ctx) { return std::make_unique<FallbackExecSchedPass>(ctx); },
+            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
+        },
+        {
+            "std::fastvm",
+            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
+        },
+        {
+            "std::nodevm",
+            [](const context_ptr_t &ctx) { return std::make_unique<NodeVMSchedPass>(ctx); },
         },
         {
             "std::parallel",
@@ -60,11 +71,29 @@ std::unordered_map<
         },
         {
             "std::default",
-            [](const context_ptr_t &ctx) { return std::make_unique<FallbackExecSchedPass>(ctx); },
+            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
         },
         {
             "std::null",
             [](const context_ptr_t &ctx) { return std::make_unique<NullGraphIRPass>(ctx); },
+        },
+
+        // Translate Passes
+        {
+            "std::dot",
+            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+        },
+        {
+            "std::graphviz",
+            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+        },
+        {
+            "std::bytecode",
+            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
+        },
+        {
+            "std::tns",
+            [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
         },
 };
 
@@ -89,7 +118,7 @@ int applyPasses(
     }
 
     if (entry != Graph::null()) {
-        auto fallback = std::make_unique<FallbackExecSchedPass>(ctx);
+        auto fallback = std::make_unique<FastVMSchedPass>(ctx);
         fallback->apply(entry, os);
     }
 

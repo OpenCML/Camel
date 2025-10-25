@@ -12,15 +12,14 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 22, 2025
+ * Created: Oct. 25, 2025
  * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "macro.h"
 
-#include "core/operator.h"
-#include "core/type/type.h"
+using namespace std;
+using namespace GraphIR;
 
-void __zen__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) { return graph; }

@@ -12,15 +12,17 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 22, 2025
+ * Created: Oct. 21, 2025
  * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/operator.h"
-#include "core/type/type.h"
+#include "bytecode.h"
+#include "compile/gir.h"
+#include "core/context/context.h"
 
-void __zen__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+#include <memory>
+
+std::shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, GraphIR::Graph *graph);

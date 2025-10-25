@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -271,7 +271,7 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             // For local variables, still need to create a new copy for each call
             // The mechanism of local shared variables is yet to be designed
             node_ptr_t copyNode = CopyNode::create(*currGraph_, data->type());
-            Node::link(LinkType::With, node, copyNode);
+            Node::link(LinkType::Norm, node, copyNode);
             node = copyNode;
         }
     } else {
@@ -288,9 +288,9 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         auto fillType = tt::as_shared<ComposedType>(dataType->clone());
         fillType->resolve(refTypes);
         node = FillNode::create(*currGraph_, fillType);
-        Node::link(LinkType::With, srcNode, node);
+        Node::link(LinkType::Norm, srcNode, node);
         for (const auto &refNode : refNodes) {
-            Node::link(LinkType::Norm, refNode, node);
+            Node::link(LinkType::With, refNode, node);
         }
     }
     LEAVE("DATA");
@@ -467,9 +467,9 @@ node_ptr_t Builder::createFuncDataNode(
     }
 
     auto fillNode = FillNode::create(*currGraph_, funcData->funcType());
-    Node::link(LinkType::With, dataNode, fillNode);
+    Node::link(LinkType::Norm, dataNode, fillNode);
     for (const auto &refNode : refNodes) {
-        Node::link(LinkType::Norm, refNode, fillNode);
+        Node::link(LinkType::With, refNode, fillNode);
     }
 
     if (callableAsResult) {
@@ -779,7 +779,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
     type_ptr_t joinType = nullptr;
 
-    Node::link(LinkType::With, condNode, brchNode);
+    Node::link(LinkType::Norm, condNode, brchNode);
 
     for (size_t i = 1; i < gct->size(); i++) {
         const auto &caseNode = gct->atAs<GCT::CaseLoad>(i);
@@ -803,7 +803,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
                 res.type() == typeid(node_ptr_t),
                 "Unexpected result type from visiting the case node.");
             node_ptr_t valueNode = any_cast<node_ptr_t>(res);
-            Node::link(LinkType::Norm, valueNode, brchNode);
+            Node::link(LinkType::With, valueNode, brchNode);
             caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
             break;
         }
@@ -860,6 +860,8 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         Node::link(LinkType::Ctrl, brchNode, funcNode);
         Node::link(LinkType::With, funcNode, joinNode);
     }
+
+    Node::link(LinkType::Norm, brchNode, joinNode);
 
     if (synced_) {
         if (lastSyncedNode_ && linkCheek(lastSyncedNode_, brchNode)) {
