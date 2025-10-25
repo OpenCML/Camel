@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
+#include "builtin/types/tensor.h"
 #include "core/context/context.h"
 
 #include "utils/assert.h"
@@ -854,6 +855,34 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return norm[0];
                         }),
                 },
+                {
+                    ":tensor/multiply",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(self: Tensor, other: Tensor) => Tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[0];
+                            }
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[1];
+                            }
+                            return nullopt;
+                        }),
+                },
             }),
         OperatorGroup::create(
             "__div__",
@@ -1531,6 +1560,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
+        OperatorGroup::create(
+            "Tensor",
+            {
+                {
+                    ":type/tensor",
+                    StaticFuncTypeResolver::create({}, {}, TensorType::create(Type::Double(), {0})),
+                },
+            }),
     };
     return groups;
 }
@@ -1539,6 +1576,7 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &group : getGlobalOperatorGroups()) {
         exportEntity(group->name(), group);
     }
+    exportType("Tensor", TensorType::create(Type::Double(), {0}));
 }
 
 bool GlobalsBuiltinModule::load() {
