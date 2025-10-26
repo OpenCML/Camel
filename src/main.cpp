@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -216,17 +216,22 @@ int main(int argc, char *argv[]) {
                     }
                 }());
 
-                std::vector<std::string> passes(
-                    Run::targetFiles.begin() + 1,
-                    Run::targetFiles.end());
-                int retCode = applyPasses(passes, ctx, os);
-
-                if (retCode != 0) {
-                    const auto &diags = ctx->rtmDiags();
-                    if (diags->hasErrors()) {
-                        diags->dump(os, useJsonFormat);
+                try {
+                    std::vector<std::string> passes(
+                        Run::targetFiles.begin() + 1,
+                        Run::targetFiles.end());
+                    int retCode = applyPasses(passes, ctx, os);
+                    if (retCode != 0) {
+                        const auto &diags = ctx->rtmDiags();
+                        if (diags->hasErrors()) {
+                            diags->dump(os, useJsonFormat);
+                        }
+                        return retCode;
                     }
-                    return retCode;
+                } catch (DiagnosticsLimitExceededBaseException &e) {
+                    const auto &diags = ctx->rtmDiags();
+                    diags->dump(os, useJsonFormat);
+                    return selectedCommand == Command::Check ? 0 : 1;
                 }
 
                 EXEC_WHEN_DEBUG([] {

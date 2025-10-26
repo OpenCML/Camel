@@ -87,7 +87,12 @@ class OtherType : public Type {
     }
     virtual bool operator!=(const Type &other) const override { return !(*this == other); }
 
-    virtual bool assignable(const type_ptr_t &type) const = 0;
+    virtual bool assignable(const type_ptr_t &type) const {
+        if (!type->other()) {
+            return false;
+        }
+        return code_ == type->code();
+    }
 
     virtual type_ptr_t clone() const override = 0;
 

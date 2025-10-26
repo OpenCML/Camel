@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,4 +25,10 @@
 
 #include <memory>
 
-std::shared_ptr<bytecode_vec_t> precompile(const context_ptr_t &ctx, GraphIR::Graph *graph);
+struct OptimizationStrategy {
+    bool enableTailCallDetection = true;
+    bool enableInlineOperators = false;
+};
+
+std::shared_ptr<bytecode_vec_t>
+precompile(const context_ptr_t &ctx, GraphIR::Graph *graph, const OptimizationStrategy &opt = {});
