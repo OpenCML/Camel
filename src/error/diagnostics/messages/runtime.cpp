@@ -86,6 +86,15 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "bytecode.",
             },
         },
+        {
+            RuntimeDiag::GraphInliningFailed,
+            {
+                "GraphInliningFailed",
+                "Failed to inline graph of node '{0}' to graph '{1}'.",
+                "Refer to the documentation for possible causes and try adjusting the graph "
+                "translator or optimization settings.",
+            },
+        },
 
     };
 

@@ -84,6 +84,7 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
 
     try {
         visit(gct);
+
         auto optMainGraph = currGraph_->getSubGraphsByName("main");
         if (optMainGraph.has_value()) {
             auto mainGraphSet = optMainGraph.value();
@@ -93,6 +94,8 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
             auto funcNode = createFuncDataNode(mainGraph, false, false);
             currGraph_->setOutput(funcNode);
         }
+
+        rootGraph_->rearrange();
     } catch (Diagnostic &d) {
         diags_->add(std::move(d));
         rootGraph_ = nullptr;
@@ -121,6 +124,7 @@ graph_ptr_t Builder::enterScope(const func_type_ptr_t &funcType, const std::stri
 void Builder::leaveScope() {
     nodeScope_ = nodeScope_->leave();
     graphScope_ = graphScope_->leave();
+    currGraph_->rearrange();
     currGraph_ = currGraph_->outer();
 }
 

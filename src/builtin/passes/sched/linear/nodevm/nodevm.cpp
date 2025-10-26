@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,10 @@ using namespace std;
 using namespace GraphIR;
 
 std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
+    ASSERT(
+        !graph->dirty(),
+        std::format("Graph {} is dirty, please rearrange before precompiling.", graph->name()));
+
     if (graphTopoNodesCache_.find(graph) == graphTopoNodesCache_.end()) {
         node_ptr_t exitNode = graph->exitNode();
         auto sortedNodes = findReachable(
@@ -207,16 +211,6 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }());
 
             switch (n->type()) {
-
-            case NodeType::DATA: {
-                ASSERT(currFrame->get(n->index()) != nullptr, "DATA data is null.");
-                break;
-            }
-
-            case NodeType::PORT: {
-                ASSERT(currFrame->get(n->index()) != nullptr, "PORT data is null.");
-                break;
-            }
 
             case NodeType::CAST: {
                 ASSERT(false, "CAST node not implemented yet.");
@@ -400,13 +394,21 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 break;
             }
 
-            case NodeType::EXIT: {
-                ASSERT(false, "EXIT node should not appear in the execution sequence.");
+            // 无需处理
+            case NodeType::DATA:
+                [[fallthrough]];
+            case NodeType::PORT:
+                [[fallthrough]];
+            // 下面两个是无数据节点，无需处理，直接跳过
+            case NodeType::SYNC:
+                [[fallthrough]];
+            case NodeType::NREF:
                 break;
-            }
 
-            case NodeType::DREF: {
-                ASSERT(false, "DREF node should not appear in the execution sequence.");
+            default: {
+                ASSERT(
+                    false,
+                    std::format("Node {} should not appear in execution sequence.", n->toString()));
                 break;
             }
             }

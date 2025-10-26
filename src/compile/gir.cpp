@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,6 +55,10 @@ std::string to_string(NodeType type) {
         return "EXIT";
     case NodeType::DREF:
         return "DREF";
+    case NodeType::SYNC:
+        return "SYNC";
+    case NodeType::NREF:
+        return "NREF";
     }
     ASSERT(false, "Unknown NodeType");
     return "Unknown";
@@ -99,7 +103,15 @@ Graph::create(const func_type_ptr_t &funcType, const graph_ptr_t &graph, const s
 
 func_type_ptr_t Graph::funcType() const { return funcType_; }
 
-void Graph::addNode(const node_ptr_t &node) { nodes_.push_back(node); }
+void Graph::addNode(const node_ptr_t &node) {
+    nodes_.push_back(node);
+    dirty_ = true;
+}
+
+void Graph::delNode(const node_ptr_t &node) {
+    nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
+    dirty_ = true;
+}
 
 void Graph::addPort(const node_ptr_t &node, bool isWith) {
     if (isWith) {
@@ -113,6 +125,7 @@ void Graph::addPort(const node_ptr_t &node, bool isWith) {
             "Norm port node already exists in the graph.");
         normPorts_.push_back(node);
     }
+    dirty_ = true;
 }
 
 void Graph::addClosure(const node_ptr_t &node) {
@@ -122,12 +135,14 @@ void Graph::addClosure(const node_ptr_t &node) {
     const auto &portNode = tt::as_shared<PortNode>(node);
     closure_.push_back(node);
     funcType_->addClosureRef(portNode->name());
+    dirty_ = true;
 }
 
 void Graph::parametrizeClosure() {
     withPorts_.insert(withPorts_.begin(), closure_.begin(), closure_.end());
     closure_.clear();
     parameterized_ = true;
+    rearrange();
 }
 
 void Graph::setOutput(const node_ptr_t &node) {
@@ -196,21 +211,12 @@ graph_ptr_t Graph::clone() const {
     // 重新建立节点之间的连接
     for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
         for (const auto &withInput : oldNodePtr->withInputs()) {
-            ASSERT(
-                nodeMap.find(withInput.get()) != nodeMap.end(),
-                "Capture nodes should be handled separately.");
             Node::link(LinkType::With, nodeMap[withInput.get()], newNodePtr);
         }
         for (const auto &normInput : oldNodePtr->normInputs()) {
-            ASSERT(
-                nodeMap.find(normInput.get()) != nodeMap.end(),
-                "Capture nodes should be handled separately.");
             Node::link(LinkType::Norm, nodeMap[normInput.get()], newNodePtr);
         }
         for (const auto &ctrlInput : oldNodePtr->ctrlInputs()) {
-            ASSERT(
-                nodeMap.find(ctrlInput.get()) != nodeMap.end(),
-                "Capture nodes should be handled separately.");
             Node::link(LinkType::Ctrl, nodeMap[ctrlInput.get()], newNodePtr);
         }
     }
@@ -224,6 +230,171 @@ graph_ptr_t Graph::clone() const {
     newGraph->exitNode_ = newExitNode;
 
     return newGraph;
+}
+
+node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
+    if (node->graph() != *this) {
+        EXEC_WHEN_DEBUG(l.in("GIR").debug(
+            "Cannot inline node {} from different graph {} into graph {}.",
+            node->toString(),
+            node->graph().name(),
+            name_));
+        return nullptr;
+    }
+
+    if (node->type() != NodeType::FUNC) {
+        EXEC_WHEN_DEBUG(l.in("GIR").debug(
+            "Cannot inline non-FUNC node {} in graph {}.",
+            node->toString(),
+            name_));
+        return nullptr;
+    }
+
+    EXEC_WHEN_DEBUG(l.in("GIR").debug("Inlining node {} in graph {}.", node->toString(), name_));
+
+    const auto &funcNode = tt::as_shared<FuncNode>(node);
+    auto &targetGraph = funcNode->func()->graph();
+
+    // sync node
+    node_ptr_t syncNode = SyncNode::create(*this);
+
+    std::unordered_map<Node *, node_ptr_t> nodeMap;
+
+    // 处理PORT节点
+    // 如果开启了forceSync
+    // 则不允许内部节点直接连接到外部节点
+    // 而需要新建一个NREF节点作为中转
+    // 保证所有的内部节点都在sync节点后执行
+    const auto &normPorts = targetGraph.normPorts();
+    const auto &normInputs = node->normInputs();
+    ASSERT(
+        normPorts.size() == normInputs.size(),
+        "Number of norm ports and norm inputs do not match for inlining.");
+    for (size_t i = 0; i < normPorts.size(); ++i) {
+        if (forceSync) {
+            node_ptr_t nrefNode = NRefNode::create(*this);
+            Node::link(LinkType::Ctrl, syncNode, nrefNode);
+            Node::link(LinkType::Norm, normInputs[i], nrefNode);
+            nodeMap[normPorts[i].get()] = nrefNode;
+        } else {
+            nodeMap[normPorts[i].get()] = normInputs[i];
+        }
+    }
+
+    const auto &withPorts = targetGraph.withPorts();
+    const auto &withInputs = node->withInputs();
+    ASSERT(
+        withPorts.size() == withInputs.size(),
+        "Number of with ports and with inputs do not match for inlining.");
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        if (forceSync) {
+            node_ptr_t nrefNode = NRefNode::create(*this);
+            Node::link(LinkType::Ctrl, syncNode, nrefNode);
+            Node::link(LinkType::Norm, withInputs[i], nrefNode);
+            nodeMap[withPorts[i].get()] = nrefNode;
+        } else {
+            nodeMap[withPorts[i].get()] = withInputs[i];
+        }
+    }
+
+    ASSERT(targetGraph.closure().empty(), "Cannot inline a graph with closure.");
+
+    for (const auto &n : targetGraph.nodes()) {
+        const auto &clonedNode = n->clone(*this);
+        nodeMap[n.get()] = clonedNode;
+    }
+
+    for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
+        if (forceSync && oldNodePtr->inDegree() == 0) {
+            // 保证原图中所有的0入度节点都在sync节点后执行
+            // 即保证sync节点为整个子图的初始节点
+            if (oldNodePtr->type() == NodeType::PORT) {
+                continue; // PORT节点已经处理过了
+            }
+            Node::link(LinkType::Ctrl, syncNode, newNodePtr);
+        }
+
+        for (const auto &withInput : oldNodePtr->withInputs()) {
+            ASSERT(
+                nodeMap.find(withInput.get()) != nodeMap.end(),
+                "Input node not found in node map during inlining.");
+            const auto &t = nodeMap[withInput.get()];
+            Node::link(LinkType::With, t, newNodePtr);
+        }
+        for (const auto &normInput : oldNodePtr->normInputs()) {
+            ASSERT(
+                nodeMap.find(normInput.get()) != nodeMap.end(),
+                "Input node not found in node map during inlining.");
+            const auto &t = nodeMap[normInput.get()];
+            Node::link(LinkType::Norm, t, newNodePtr);
+        }
+        for (const auto &ctrlInput : oldNodePtr->ctrlInputs()) {
+            ASSERT(
+                nodeMap.find(ctrlInput.get()) != nodeMap.end(),
+                "Input node not found in node map during inlining.");
+            const auto &t = nodeMap[ctrlInput.get()];
+            Node::link(LinkType::Ctrl, t, newNodePtr);
+        }
+    }
+
+    // Re-link outputs
+    const auto &targetOutput = targetGraph.exitNode()->normInputs().front();
+    ASSERT(nodeMap.find(targetOutput.get()) != nodeMap.end(), "Target output node not found.");
+    const auto &inlinedOutput = nodeMap[targetOutput.get()];
+
+    for (const auto &out : node->normOutputs()) {
+        Node::link(LinkType::Norm, inlinedOutput, out);
+    }
+    for (const auto &out : node->withOutputs()) {
+        Node::link(LinkType::With, inlinedOutput, out);
+    }
+    for (const auto &out : node->ctrlOutputs()) {
+        Node::link(LinkType::Ctrl, inlinedOutput, out);
+    }
+
+    return syncNode;
+}
+
+void Graph::rearrange() {
+    if (!dirty_) {
+        l.in("GIR").debug("Graph {} is not dirty, no need to rearrange.", name_);
+        return;
+    }
+
+    l.in("GIR").debug("Rearranging graph {}.", name_);
+
+    data_idx_t idx = 1;                   // 0 reserved for null
+    data_vec_t newStaticDataArr{nullptr}; // index 0 reserved for null
+
+    for (auto &node : normPorts_) {
+        node->setIndex(idx++);
+    }
+    for (auto &node : withPorts_) {
+        node->setIndex(idx++);
+    }
+    for (auto &node : closure_) {
+        node->setIndex(idx++);
+    }
+    for (auto &node : nodes_) {
+        NodeType type = node->type();
+        ASSERT(type != NodeType::DREF, "DREF nodes should not exist in finalized graph.");
+        if (type == NodeType::DATA) {
+            const auto &dataNode = tt::as_shared<DataNode>(node);
+            newStaticDataArr.push_back(dataNode->data());
+            dataNode->setIndex(-(newStaticDataArr.size() - 1));
+        } else {
+            if (type == NodeType::SYNC || type == NodeType::NREF) {
+                // 无数据节点直接跳过
+                continue;
+            }
+            node->setIndex(idx++);
+        }
+    }
+
+    runtimeDataSize_ = idx;
+    staticDataArr_ = std::move(newStaticDataArr);
+
+    dirty_ = false;
 }
 
 /*
@@ -382,12 +553,6 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
     }
 }
 
-/**
- * 解除两个节点之间的连接
- * 由于link保证了不会有多条边，因此unlink只需要解除一条边
- * 默认不允许跨图解除连接
- * 如果需要强制解除跨图连接，须设置force=true
- */
 bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
     ASSERT(from && to, "Cannot unlink null nodes.");
     ASSERT(from != to, "Cannot unlink a node from itself.");
@@ -479,10 +644,6 @@ bool Node::replace(const node_ptr_t &oldNode, const node_ptr_t &newNode) {
     return oldNode->detach();
 }
 
-/**
- * 默认不允许解除被其他图捕获的暴露节点的连接
- * 如果需要强制解除被暴露的节点，须设置force=true
- */
 bool Node::detach() {
     node_ptr_t self = shared_from_this();
 

@@ -24,7 +24,7 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": true,
+            "externalConsole": true
         },
         {
             "name": "RUN (debug)",
@@ -33,7 +33,21 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
-            "args": ["-v", "--log-level debug", "--profile", "${file}"],
+            "args": ["-v", "--log-level debug", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": true,
+                "trace": true
+            }
+        },
+        {
+            "name": "RUN (inlined/debug)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::fastvm"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,
@@ -159,6 +173,20 @@
             }
         },
         {
+            "name": "Inspect GIR (inlined)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::graphviz"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
             "name": "Inspect TNS",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
@@ -166,6 +194,34 @@
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
             "args": ["inspect", "-v", "--log-level debug", "--tns", "${file}"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
+            "name": "Inspect Bytecode",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["${file}", "std::bytecode"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": true
+            }
+        },
+        {
+            "name": "Inspect Bytecode (inlined)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "args": ["${file}", "std::inline", "std::bytecode"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": false,
