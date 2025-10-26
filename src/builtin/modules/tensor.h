@@ -13,22 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "bytecode.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
+#include "core/module/builtin.h"
 
-#include <memory>
+class TensorBuiltinModule : public BuiltinModule {
+  public:
+    TensorBuiltinModule(context_ptr_t ctx);
+    virtual ~TensorBuiltinModule() = default;
 
-struct OptimizationStrategy {
-    bool enableTailCallDetection = true;
-    bool enableInlineOperators = false;
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx) {
+        return std::make_shared<TensorBuiltinModule>(ctx);
+    }
 };
-
-std::shared_ptr<bytecode_vec_t>
-precompile(const context_ptr_t &ctx, GraphIR::Graph *graph, const OptimizationStrategy &opt = {});

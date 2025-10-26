@@ -13,12 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "base.h"
 
+#include "composed/array.h"
+#include "composed/struct.h"
+#include "composed/tuple.h"
+#include "other/other.h"
 #include "primary.h"
 #include "special/func.h"
 #include "utils/type.h"
@@ -141,6 +145,11 @@ bool Type::assignable(const type_ptr_t &type) const {
         return this->equals(type);
     }
 
+    if (other()) {
+        const auto &otherType = static_cast<const OtherType &>(*this);
+        return otherType.assignable(type);
+    }
+
     return code_ == type->code_;
 }
 
@@ -232,11 +241,11 @@ std::shared_ptr<ArrayType> Type::Array(const type_ptr_t &elementType) {
     static std::shared_ptr<ArrayType> voidArrayType = nullptr;
     if (!elementType) {
         if (voidArrayType == nullptr) {
-            voidArrayType = make_shared<ArrayType>(Type::Void());
+            voidArrayType = std::make_shared<ArrayType>(Type::Void());
         }
         return voidArrayType;
     }
-    return make_shared<ArrayType>(elementType);
+    return std::make_shared<ArrayType>(elementType);
 }
 
 std::shared_ptr<TupleType> Type::Tuple(const type_vec_t &types) {
@@ -249,14 +258,6 @@ std::shared_ptr<SpecialType> Type::Any() {
     static std::shared_ptr<SpecialType> type = nullptr;
     if (type == nullptr) {
         type = make_shared<SpecialType>(TypeCode::Any);
-    }
-    return type;
-}
-
-std::shared_ptr<SpecialType> Type::Void() {
-    static std::shared_ptr<SpecialType> type = nullptr;
-    if (type == nullptr) {
-        type = make_shared<SpecialType>(TypeCode::Void);
     }
     return type;
 }
@@ -274,6 +275,14 @@ type_ptr_t Type::Ref() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
         type = make_shared<Type>(TypeCode::Ref);
+    }
+    return type;
+}
+
+std::shared_ptr<SpecialType> Type::Void() {
+    static std::shared_ptr<SpecialType> type = nullptr;
+    if (type == nullptr) {
+        type = std::make_shared<SpecialType>(TypeCode::Void);
     }
     return type;
 }

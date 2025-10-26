@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,12 +31,12 @@ std::optional<func_type_ptr_t> StaticFuncTypeResolver::resolve(
         return std::nullopt; // reject
     }
     for (size_t i = 0; i < withTypes.size(); i++) {
-        if (!withTypes[i].first->assignable(with[i])) {
+        if (!with[i]->assignable(withTypes[i].first)) {
             return std::nullopt; // reject
         }
     }
     for (size_t i = 0; i < normTypes.size(); i++) {
-        if (!normTypes[i].first->assignable(norm[i])) {
+        if (!norm[i]->assignable(normTypes[i].first)) {
             return std::nullopt; // reject
         }
     }

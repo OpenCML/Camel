@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -73,8 +73,8 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportType(const Reference &ref, const type_ptr_t &type);
     bool exportEntity(const Reference &ref, const entity &ent);
 
-    type_ptr_t getImportedType(const Reference &ref) const;
-    entity getImportedEntity(const Reference &ref) const;
+    std::optional<type_ptr_t> getImportedType(const Reference &ref) const;
+    std::optional<entity> getImportedEntity(const Reference &ref) const;
 
     std::optional<type_ptr_t> getExportedType(const Reference &ref) const;
     std::optional<entity> getExportedEntity(const Reference &ref) const;

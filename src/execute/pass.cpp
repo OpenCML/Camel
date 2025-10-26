@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -118,8 +118,15 @@ int applyPasses(
     }
 
     if (entry != Graph::null()) {
-        auto fallback = std::make_unique<FastVMSchedPass>(ctx);
-        fallback->apply(entry, os);
+        if (passes.empty()) {
+            // 如果用户没有指定任何遍，则默认使用 FastVMSchedPass 进行调度
+            auto fallback = std::make_unique<FastVMSchedPass>(ctx);
+            fallback->apply(entry, os);
+        } else {
+            // 如果用户指定了遍，则会将没有处理完的图直接丢弃
+            auto fallback = std::make_unique<NullGraphIRPass>(ctx);
+            fallback->apply(entry, os);
+        }
     }
 
     return 0;

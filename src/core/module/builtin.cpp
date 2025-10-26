@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
+#include "core/data/composed/func.h"
+#include "core/operator.h"
 
 #include "builtin/modules/fs.h"
 #include "builtin/modules/globals.h"
@@ -30,6 +32,7 @@
 #include "builtin/modules/random.h"
 #include "builtin/modules/re.h"
 #include "builtin/modules/sys.h"
+#include "builtin/modules/tensor.h"
 #include "builtin/modules/this.h"
 #include "builtin/modules/time.h"
 
@@ -47,6 +50,8 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
         {"this", [](context_ptr_t ctx) { return ThisBuiltinModule::create(ctx); }},
         {"para", [](context_ptr_t ctx) { return ParaBuiltinModule::create(ctx); }},
+        {"tensor", [](context_ptr_t ctx) { return TensorBuiltinModule::create(ctx); }},
+
 #ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},
 #endif

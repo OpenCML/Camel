@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -793,7 +793,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     LEAVE("ReservedExpr");
     return res;
 }
-
 /*
 IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 */
@@ -1366,13 +1365,22 @@ type_ptr_t Builder::visitRefType(const AST::node_ptr_t &ast) {
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
     const Reference &ref = typeLoad->ref();
     const auto &type = typeScope_->get(ref);
-    if (!type.has_value()) {
+
+    if (type) {
+        LEAVE("RefType");
+        return type.value();
+    }
+
+    const auto &importedType = module_->getImportedType(ref);
+
+    if (!importedType.has_value()) {
         diags_->of(SemanticDiag::UnresolvedTypeReference)
             .at(ast->load()->tokenRange())
             .commit(ref.toString());
         throw BuildAbortException();
     }
+
     LEAVE("RefType");
-    return type.value();
+    return importedType.value();
 }
 } // namespace GraphConstructTree

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,38 +59,30 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
     return exportedEntityNS_->insert(ref, ent);
 }
 
-type_ptr_t Module::getImportedType(const Reference &ref) const {
-    ASSERT(
-        importedRefModMap_.find(ref) != importedRefModMap_.end(),
-        "Imported type not found: " + ref.toString() + " in module " + name_);
+std::optional<type_ptr_t> Module::getImportedType(const Reference &ref) const {
+    if (importedRefModMap_.find(ref) == importedRefModMap_.end()) {
+        return std::nullopt;
+    }
+
     auto &mod = importedRefModMap_.at(ref);
     if (!mod->loaded()) { // 懒加载
         mod->load();
     }
-    auto optType = mod->getExportedType(ref);
-    if (!optType.has_value()) {
-        throw CamelBaseException(
-            "Import Error: cannot import type '" + ref.toString() + "' from module '" +
-            mod->name() + "'");
-    }
-    return optType.value();
+
+    return mod->getExportedType(ref);
 };
 
-entity Module::getImportedEntity(const Reference &ref) const {
-    ASSERT(
-        importedRefModMap_.find(ref) != importedRefModMap_.end(),
-        "Imported entity not found: " + ref.toString() + " in module " + name_);
+std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
+    if (importedRefModMap_.find(ref) == importedRefModMap_.end()) {
+        return std::nullopt;
+    }
+
     auto &mod = importedRefModMap_.at(ref);
     if (!mod->loaded()) { // 懒加载
         mod->load();
     }
-    auto optEntity = mod->getExportedEntity(ref);
-    if (!optEntity.has_value()) {
-        throw CamelBaseException(
-            "Import Error: cannot import entity '" + ref.toString() + "' from module '" +
-            mod->name() + "'");
-    }
-    return optEntity.value();
+
+    return mod->getExportedEntity(ref);
 };
 
 std::optional<type_ptr_t> Module::getExportedType(const Reference &ref) const {

@@ -13,46 +13,1551 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tensor.h"
-#include "utils/scope.h"
+#include "builtin/types/tensor.h"
+#include "core/data/primary.h"
+#include "list.h"
+#include "utils/log.h"
+#include "vector.h"
+
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <memory>
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
 
 using namespace std;
 
 TensorData::TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-    : OtherData(std::make_shared<TensorType>(elementType, shape)) {}
+    : OtherData(std::static_pointer_cast<Type>(std::make_shared<TensorType>(shape))),
+      shape_(shape) {
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+    data_.resize(total_size);
+    data_.setZero();
+}
+
+TensorData::~TensorData() = default;
 
 data_ptr_t TensorData::at(const std::vector<size_t> &index) const {
-    // TODO
-    throw runtime_error("Not implemented");
+    if (index.size() != shape_.size()) {
+        throw std::runtime_error("Index dimension mismatch");
+    }
+
+    size_t linear_index = 0;
+    size_t multiplier = 1;
+
+    for (size_t i = index.size(); i > 0; --i) {
+        size_t dim_index = i - 1;
+        if (index[dim_index] >= shape_[dim_index]) {
+            throw std::runtime_error("Index out of bounds");
+        }
+        linear_index += index[dim_index] * multiplier;
+        multiplier *= shape_[dim_index];
+    }
+
+    return std::make_shared<DoubleData>(data_(linear_index));
 }
 
+std::vector<size_t> TensorData::shape() const { return shape_; }
+
+size_t TensorData::size() const { return data_.size(); }
 std::vector<std::string> TensorData::refs() const {
-    // TODO
-    throw runtime_error("Not implemented");
+    std::vector<std::string> result;
+    for (const auto &ref : refs_) {
+        if (ref) {
+            result.push_back(ref->toString());
+        }
+    }
+    return result;
 }
+
+data_ptr_t TensorData::clone(bool deep) const {
+    auto result = make_shared<TensorData>(type_, shape_);
+    result->data_ = data_;
+
+    if (deep) {
+        result->refs_.clear();
+        for (const auto &ref : refs_) {
+            if (ref) {
+                result->refs_.push_back(ref->clone(true));
+            } else {
+                result->refs_.push_back(nullptr);
+            }
+        }
+    } else {
+        result->refs_ = refs_;
+    }
+
+    return result;
+}
+
+const std::string TensorData::toString() const {
+    std::stringstream ss;
+    ss << "Tensor(shape=" << shape_to_string(shape_) << ", data=[";
+
+    size_t display_count = std::min(size_t(10), static_cast<size_t>(data_.size()));
+    for (size_t i = 0; i < display_count; ++i) {
+        ss << data_(i);
+        if (i < static_cast<size_t>(data_.size()) - 1) {
+            ss << ", ";
+        }
+    }
+
+    if (data_.size() > 10) {
+        ss << ", ...";
+    }
+    ss << "])";
+
+    return ss.str();
+}
+
+void TensorData::print(std::ostream &os) const { os << toString(); }
 
 void TensorData::resolve(const data_vec_t &dataList) {
-    // TODO
-    throw runtime_error("Not implemented");
+    if (refs_.empty()) {
+        return;
+    }
+
+    if (dataList.empty()) {
+        throw runtime_error("Cannot resolve tensor references: empty data list provided");
+    }
+
+    if (refs_.size() != static_cast<size_t>(data_.size())) {
+        throw runtime_error(
+            "Reference count mismatch: expected " + std::to_string(data_.size()) +
+            " references, got " + std::to_string(refs_.size()));
+    }
+
+    for (size_t i = 0; i < refs_.size(); ++i) {
+        const auto &refData = refs_[i];
+
+        bool found = false;
+        for (const auto &data : dataList) {
+            if (!data)
+                continue;
+            if (refData && refData->toString() == data->toString()) {
+                try {
+                    auto doubleData = dynamic_pointer_cast<DoubleData>(data);
+                    if (doubleData) {
+                        data_(i) = doubleData->data();
+                        found = true;
+                        break;
+                    }
+
+                    auto int32Data = dynamic_pointer_cast<Int32Data>(data);
+                    if (int32Data) {
+                        data_(i) = static_cast<double>(int32Data->data());
+                        found = true;
+                        break;
+                    }
+
+                    auto int64Data = dynamic_pointer_cast<Int64Data>(data);
+                    if (int64Data) {
+                        data_(i) = static_cast<double>(int64Data->data());
+                        found = true;
+                        break;
+                    }
+
+                    auto floatData = dynamic_pointer_cast<FloatData>(data);
+                    if (floatData) {
+                        data_(i) = static_cast<double>(floatData->data());
+                        found = true;
+                        break;
+                    }
+
+                    auto boolData = dynamic_pointer_cast<BoolData>(data);
+                    if (boolData) {
+                        data_(i) = boolData->data() ? 1.0 : 0.0;
+                        found = true;
+                        break;
+                    }
+
+                    auto charData = dynamic_pointer_cast<CharData>(data);
+                    if (charData) {
+                        data_(i) = static_cast<double>(charData->data());
+                        found = true;
+                        break;
+                    }
+
+                    auto stringData = dynamic_pointer_cast<StringData>(data);
+                    if (stringData) {
+                        try {
+                            data_(i) = std::stod(stringData->data());
+                            found = true;
+                            break;
+                        } catch (const std::exception &) {
+                            continue;
+                        }
+                    }
+
+                    auto tensorData = dynamic_pointer_cast<TensorData>(data);
+                    if (tensorData && tensorData->size() == 1) {
+                        data_(i) = tensorData->data_(0);
+                        found = true;
+                        break;
+                    }
+
+                    auto vectorData = dynamic_pointer_cast<VectorData>(data);
+                    if (vectorData && vectorData->size() == 1) {
+                        auto element = vectorData->get(0);
+                        auto elementDouble = dynamic_pointer_cast<DoubleData>(element);
+                        if (elementDouble) {
+                            data_(i) = elementDouble->data();
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    auto listData = dynamic_pointer_cast<ListData>(data);
+                    if (listData && listData->size() == 1) {
+                        auto element = listData->get(0);
+                        auto elementDouble = dynamic_pointer_cast<DoubleData>(element);
+                        if (elementDouble) {
+                            data_(i) = elementDouble->data();
+                            found = true;
+                            break;
+                        }
+                    }
+
+                } catch (const exception &e) {
+                    std::cerr << "Warning: Error resolving reference " << i << ": " << e.what()
+                              << std::endl;
+                    continue;
+                }
+            }
+        }
+
+        if (!found) {
+            throw runtime_error(
+                "Cannot resolve reference: " + refData->toString() + " at position " +
+                std::to_string(i));
+        }
+    }
+
+    refs_.clear();
+
+    for (Eigen::Index i = 0; i < data_.size(); ++i) {
+        if (std::isnan(data_(i)) || std::isinf(data_(i))) {
+            throw runtime_error(
+                "Invalid data value at position " + std::to_string(i) +
+                " after reference resolution");
+        }
+    }
+}
+bool TensorData::equals(const data_ptr_t &other) const { return true; }
+
+data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
+    if (target == type_ || (type_ && type_->equals(target))) {
+        return shared_from_this();
+    }
+
+    if (inplace && target->code() == TensorType::typeCode()) {
+        type_ = target;
+        return shared_from_this();
+    }
+
+    switch (target->code()) {
+    case TypeCode::Array: {
+        auto array_type = dynamic_pointer_cast<ArrayType>(target);
+        if (array_type) {
+            vector<data_ptr_t> elements;
+            elements.reserve(static_cast<size_t>(data_.size()));
+            for (Eigen::Index i = 0; i < data_.size(); ++i) {
+                elements.push_back(make_shared<DoubleData>(data_(i)));
+            }
+            auto result = make_shared<ArrayData>(array_type, std::move(elements));
+            return result;
+        }
+        break;
+    }
+
+    case TypeCode::Double: {
+        if (data_.size() == 1) {
+            auto result = make_shared<DoubleData>(data_(0));
+            return result;
+        }
+        break;
+    }
+
+    default:
+        if (target->code() == TensorType::typeCode()) {
+            auto tensor_type = dynamic_pointer_cast<TensorType>(target);
+            if (tensor_type) {
+                if (type_ && !type_->equals(tensor_type->elementType())) {
+                    auto result = make_shared<TensorData>(target, tensor_type->shape());
+
+                    // Eigen VectorXd already contains double values
+                    result->data_ = data_;
+
+                    return result;
+                }
+
+                if (tensor_type->shape() != shape()) {
+                    try {
+                        return reshape(tensor_type->shape());
+                    } catch (...) {
+                        auto result = make_shared<TensorData>(target, tensor_type->shape());
+                        Eigen::Index min_size = std::min(
+                            static_cast<Eigen::Index>(data_.size()),
+                            static_cast<Eigen::Index>(result->data_.size()));
+                        if (min_size > 0) {
+                            result->data_.head(min_size) = data_.head(min_size);
+                        }
+                        return result;
+                    }
+                }
+
+                auto result = make_shared<TensorData>(target, shape());
+                result->data_ = data_;
+                return result;
+            }
+        }
+    }
+
+    throw DataConvError("Cannot convert TensorData to " + target->toString());
 }
 
-bool TensorData::equals(const data_ptr_t &other) const {
-    // TODO: implement equals for ArrayData
+data_ptr_t TensorData::reshape(const std::vector<size_t> &shape) const {
+    size_t new_size = 1;
+    for (size_t dim : shape) {
+        new_size *= dim;
+    }
+
+    if (static_cast<Eigen::Index>(new_size) != data_.size()) {
+        throw invalid_argument("Cannot reshape tensor: total size must remain constant");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape);
+    result->data_ = data_;
+    return result;
+}
+
+data_ptr_t TensorData::expand_dims(size_t axis) const {
+    vector<size_t> new_shape = shape();
+
+    if (axis <= new_shape.size()) {
+        new_shape.insert(new_shape.begin() + axis, 1);
+    } else {
+        throw invalid_argument("Axis out of bounds");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, new_shape);
+
+    result->data_ = data_;
+
+    return result;
+}
+
+data_ptr_t TensorData::squeeze() const {
+    vector<size_t> old_shape = shape();
+    vector<size_t> new_shape;
+
+    for (size_t dim : old_shape) {
+        if (dim != 1) {
+            new_shape.push_back(dim);
+        }
+    }
+
+    if (new_shape.size() == old_shape.size()) {
+        return clone(true);
+    }
+
+    if (new_shape.empty()) {
+        new_shape.push_back(1);
+        new_shape.push_back(1);
+    } else if (new_shape.size() == 1) {
+        new_shape.push_back(1);
+    }
+
+    auto result = make_shared<TensorData>(nullptr, new_shape);
+    result->data_ = data_;
+    return result;
+}
+
+data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only concatenate with another TensorData");
+    }
+
+    if (axis > 1) {
+        throw invalid_argument("Axis out of bounds for 2D tensor");
+    }
+
+    vector<size_t> new_shape = shape();
+
+    if (axis == 0) {
+        if (shape().size() != 2 || other_tensor->shape().size() != 2) {
+            throw invalid_argument("Concatenation currently only supports 2D tensors");
+        }
+
+        if (shape()[1] != other_tensor->shape()[1]) {
+            throw invalid_argument(
+                "Tensors must have the same number of columns for axis=0 concatenation");
+        }
+
+        new_shape[0] = shape()[0] + other_tensor->shape()[0];
+        auto result = make_shared<TensorData>(nullptr, new_shape);
+        result->data_.resize(new_shape[0] * new_shape[1]);
+
+        // Copy data from first tensor using Eigen's block operations
+        size_t rows1 = shape()[0];
+        size_t cols = shape()[1];
+        size_t rows2 = other_tensor->shape()[0];
+
+        Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols, rows1 + rows2);
+        Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols, rows1);
+        Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols, rows2);
+
+        result_map.block(0, 0, cols, rows1) = this_map;
+        result_map.block(0, rows1, cols, rows2) = other_map;
+
+        return result;
+    } else {
+        // axis == 1
+        if (shape().size() != 2 || other_tensor->shape().size() != 2) {
+            throw invalid_argument("Concatenation currently only supports 2D tensors");
+        }
+
+        if (shape()[0] != other_tensor->shape()[0]) {
+            throw invalid_argument(
+                "Tensors must have the same number of rows for axis=1 concatenation");
+        }
+
+        new_shape[1] = shape()[1] + other_tensor->shape()[1];
+        auto result = make_shared<TensorData>(nullptr, new_shape);
+        result->data_.resize(new_shape[0] * new_shape[1]);
+
+        // Copy data from first tensor and second tensor using Eigen operations
+        size_t rows = shape()[0];
+        size_t cols1 = shape()[1];
+        size_t cols2 = other_tensor->shape()[1];
+
+        Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols1 + cols2, rows);
+        Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols1, rows);
+        Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols2, rows);
+
+        result_map.block(0, 0, cols1, rows) = this_map;
+        result_map.block(cols1, 0, cols2, rows) = other_map;
+
+        return result;
+    }
+}
+
+data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only stack with another TensorData");
+    }
+
+    if (axis > 2) {
+        throw invalid_argument("Axis out of bounds for 2D tensor stacking");
+    }
+
+    if (shape() != other_tensor->shape()) {
+        throw invalid_argument("Tensors must have the same shape for stacking");
+    }
+
+    if (shape().size() != 2) {
+        throw invalid_argument("Stacking currently only supports 2D tensors");
+    }
+
+    if (axis == 0) {
+        vector<size_t> new_shape = {2 * shape()[0], shape()[1]};
+        auto result = make_shared<TensorData>(nullptr, new_shape);
+        result->data_.resize(new_shape[0] * new_shape[1]);
+
+        size_t rows1 = shape()[0];
+        size_t cols = shape()[1];
+        size_t rows2 = other_tensor->shape()[0];
+
+        Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols, rows1 + rows2);
+        Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols, rows1);
+        Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols, rows2);
+
+        result_map.block(0, 0, cols, rows1) = this_map;
+        result_map.block(0, rows1, cols, rows2) = other_map;
+
+        return result;
+    } else if (axis == 1) {
+        vector<size_t> new_shape = {shape()[0], 2 * shape()[1]};
+        auto result = make_shared<TensorData>(nullptr, new_shape);
+        result->data_.resize(new_shape[0] * new_shape[1]);
+
+        size_t rows = shape()[0];
+        size_t cols1 = shape()[1];
+        size_t cols2 = other_tensor->shape()[1];
+
+        Eigen::Map<Eigen::MatrixXd> result_map(result->data_.data(), cols1 + cols2, rows);
+        Eigen::Map<const Eigen::MatrixXd> this_map(data_.data(), cols1, rows);
+        Eigen::Map<const Eigen::MatrixXd> other_map(other_tensor->data_.data(), cols2, rows);
+
+        result_map.block(0, 0, cols1, rows) = this_map;
+        result_map.block(cols1, 0, cols2, rows) = other_map;
+
+        return result;
+    } else {
+        // axis == 2 (stack along depth)
+        // For 2D tensors, this creates a 3D tensor
+        vector<size_t> new_shape = {shape()[0], shape()[1], 2};
+        auto result = make_shared<TensorData>(nullptr, new_shape);
+        result->data_.resize(shape()[0] * shape()[1] * 2);
+
+        size_t rows = shape()[0];
+        size_t cols = shape()[1];
+        size_t total_elements = rows * cols;
+
+        result->data_.head(total_elements) = data_;
+
+        result->data_.segment(total_elements, total_elements) = other_tensor->data_;
+
+        return result;
+    }
+}
+
+data_ptr_t TensorData::argmin() const {
+    if (data_.size() == 0) {
+        throw invalid_argument("Cannot find argmin of empty tensor");
+    }
+
+    Eigen::Index min_index;
+    data_.minCoeff(&min_index);
+
+    size_t cols = shape().size() > 1 ? shape()[1] : data_.size();
+    size_t min_row = min_index / cols;
+    size_t min_col = min_index % cols;
+
+    auto result = make_shared<TensorData>(nullptr, vector<size_t>{1, 2});
+    result->data_(0) = static_cast<double>(min_row);
+    result->data_(1) = static_cast<double>(min_col);
+    return result;
+}
+
+data_ptr_t TensorData::argmax() const {
+    if (data_.size() == 0) {
+        throw invalid_argument("Cannot find argmax of empty tensor");
+    }
+
+    Eigen::Index max_index;
+    data_.maxCoeff(&max_index);
+
+    size_t cols = shape().size() > 1 ? shape()[1] : data_.size();
+    size_t max_row = max_index / cols;
+    size_t max_col = max_index % cols;
+
+    auto result = make_shared<TensorData>(nullptr, vector<size_t>{1, 2});
+    result->data_(0) = static_cast<double>(max_row);
+    result->data_(1) = static_cast<double>(max_col);
+    return result;
+}
+
+data_ptr_t TensorData::var() const {
+    if (data_.size() == 0) {
+        throw invalid_argument("Cannot calculate variance of empty tensor");
+    }
+
+    double mean_val = data_.mean();
+    double variance = (data_.array() - mean_val).square().mean();
+
+    auto result = make_shared<DoubleData>(variance);
+    return result;
+}
+
+data_ptr_t TensorData::std() const {
+    if (data_.size() == 0) {
+        throw invalid_argument("Cannot calculate standard deviation of empty tensor");
+    }
+
+    double mean_val = data_.mean();
+    double variance = (data_.array() - mean_val).square().mean();
+    double std_dev = std::sqrt(variance);
+
+    auto result = make_shared<DoubleData>(std_dev);
+    return result;
+}
+
+data_ptr_t TensorData::sinh() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().sinh();
+    return result;
+}
+
+data_ptr_t TensorData::cosh() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().cosh();
+    return result;
+}
+
+data_ptr_t TensorData::tanh() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().tanh();
+    return result;
+}
+
+data_ptr_t TensorData::pow(double exponent) const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().pow(exponent);
+    return result;
+}
+
+data_ptr_t TensorData::cube() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().cube();
+    return result;
+}
+
+data_ptr_t TensorData::ceil() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().ceil();
+    return result;
+}
+
+data_ptr_t TensorData::floor() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().floor();
+    return result;
+}
+
+data_ptr_t TensorData::round() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().round();
+    return result;
+}
+
+data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) const {
+    if (axis > 1) {
+        throw invalid_argument("Axis out of bounds for 2D tensor");
+    }
+
+    if (indices.empty()) {
+        throw invalid_argument("Indices cannot be empty");
+    }
+
+    const auto &shape_vec = shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("Take operation currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_vec[0];
+    size_t cols = shape_vec[1];
+
+    if (axis == 0) {
+        auto result = make_shared<TensorData>(nullptr, vector<size_t>{indices.size(), cols});
+        result->data_.resize(indices.size() * cols);
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            if (indices[i] >= rows) {
+                throw out_of_range("Index out of bounds");
+            }
+
+            size_t src_start = indices[i] * cols;
+            size_t dest_start = i * cols;
+            result->data_.segment(dest_start, cols) = data_.segment(src_start, cols);
+        }
+
+        return result;
+    } else {
+        auto result = make_shared<TensorData>(nullptr, vector<size_t>{rows, indices.size()});
+        result->data_.resize(rows * indices.size());
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            if (indices[i] >= cols) {
+                throw out_of_range("Index out of bounds");
+            }
+
+            for (size_t j = 0; j < rows; ++j) {
+                size_t src_index = j * cols + indices[i];
+                size_t dest_index = j * indices.size() + i;
+                result->data_(dest_index) = data_(src_index);
+            }
+        }
+
+        return result;
+    }
+}
+
+data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t &values) const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_;
+
+    auto values_tensor = dynamic_pointer_cast<TensorData>(values);
+    if (!values_tensor) {
+        throw invalid_argument("Values must be a TensorData");
+    }
+
+    if (indices.size() != static_cast<size_t>(values_tensor->data_.size())) {
+        throw invalid_argument("Number of indices must match number of values");
+    }
+
+    const auto &shape_vec = shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("Put operation currently only supports 2D tensors");
+    }
+
+    for (Eigen::Index i = 0; i < static_cast<Eigen::Index>(indices.size()); ++i) {
+        if (indices[i] >= static_cast<size_t>(data_.size())) {
+            throw out_of_range("Index out of bounds");
+        }
+
+        if (i < values_tensor->data_.size()) {
+            result->data_(indices[i]) = values_tensor->data_(i);
+        }
+    }
+
+    return result;
+}
+
+data_ptr_t TensorData::slice(const std::vector<std::pair<size_t, size_t>> &slices) const {
+    if (slices.size() != 2) {
+        throw invalid_argument("Slice must specify ranges for both dimensions");
+    }
+
+    const auto &shape_vec = shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("Slice operation currently only supports 2D tensors");
+    }
+
+    size_t total_rows = shape_vec[0];
+    size_t total_cols = shape_vec[1];
+
+    size_t start_row = slices[0].first;
+    size_t end_row = slices[0].second;
+    size_t start_col = slices[1].first;
+    size_t end_col = slices[1].second;
+
+    if (start_row >= total_rows || end_row > total_rows || start_col >= total_cols ||
+        end_col > total_cols) {
+        throw out_of_range("Slice indices out of bounds");
+    }
+
+    if (start_row >= end_row || start_col >= end_col) {
+        throw invalid_argument("Invalid slice range");
+    }
+
+    size_t rows = end_row - start_row;
+    size_t cols = end_col - start_col;
+
+    auto result = make_shared<TensorData>(nullptr, vector<size_t>{rows, cols});
+    result->data_.resize(rows * cols);
+
+    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), total_cols, total_rows);
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
+
+    dest_map = src_map.block(start_col, start_row, cols, rows);
+
+    return result;
+}
+
+data_ptr_t TensorData::add(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw std::invalid_argument("Can only add with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw std::invalid_argument("Tensor dimensions must match for addition");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_ + other_tensor->data_;
+
+    return result;
+}
+
+data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw std::invalid_argument("Can only subtract with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw std::invalid_argument("Tensor dimensions must match for subtraction");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_ - other_tensor->data_;
+
+    return result;
+}
+
+data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
+    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+        if (data_.size() != tensor->data_.size()) {
+            throw std::invalid_argument(
+                "Tensor dimensions must match for element-wise multiplication");
+        }
+
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * tensor->data_.array();
+        return result;
+    }
+
+    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * static_cast<double>(intData->data());
+        return result;
+    }
+    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * static_cast<double>(longData->data());
+        return result;
+    }
+    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * static_cast<double>(floatData->data());
+        return result;
+    }
+    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() * doubleData->data();
+        return result;
+    }
+
+    throw runtime_error("Tensor multiplication expects either Tensor or scalar operand");
+}
+data_ptr_t TensorData::divide(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw std::invalid_argument("Can only divide with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw std::invalid_argument("Tensor dimensions must match for element-wise division");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array() / other_tensor->data_.array();
+
+    return result;
+}
+
+data_ptr_t TensorData::equal(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only compare with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for comparison");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() == other_tensor->data_.array()).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::not_equal(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only compare with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for comparison");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() != other_tensor->data_.array()).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::greater(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only compare with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for comparison");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() > other_tensor->data_.array()).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::less(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only compare with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for comparison");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() < other_tensor->data_.array()).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::greater_equal(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only compare with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for comparison");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() >= other_tensor->data_.array()).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::less_equal(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only compare with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for comparison");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() <= other_tensor->data_.array()).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::logical_and(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only perform logical operation with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for logical operation");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() != 0.0 && other_tensor->data_.array() != 0.0).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::logical_or(const data_ptr_t &other) const {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only perform logical operation with another TensorData");
+    }
+
+    if (data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("Tensor dimensions must match for logical operation");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() != 0.0 || other_tensor->data_.array() != 0.0).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::logical_not() const {
+    auto result = make_shared<TensorData>(nullptr, shape());
+    result->data_ = (data_.array() == 0.0).cast<double>();
+    return result;
+}
+
+data_ptr_t TensorData::where(const data_ptr_t &condition, const data_ptr_t &other) const {
+    auto condition_tensor = dynamic_pointer_cast<TensorData>(condition);
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+
+    if (!condition_tensor || !other_tensor) {
+        throw invalid_argument("Condition and other must be TensorData");
+    }
+
+    if (data_.size() != condition_tensor->data_.size() ||
+        data_.size() != other_tensor->data_.size()) {
+        throw invalid_argument("All tensors must have the same dimensions");
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+
+    result->data_ = (condition_tensor->data_.array() != 0.0)
+                        .select(data_.array(), other_tensor->data_.array())
+                        .matrix();
+
+    return result;
+}
+
+data_ptr_t TensorData::flip(size_t axis) const {
+    if (axis > 1) {
+        throw invalid_argument("Axis out of bounds for 2D tensor");
+    }
+
+    const auto &shape_vec = shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("Flip operation currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_vec[0];
+    size_t cols = shape_vec[1];
+
+    auto result = make_shared<TensorData>(nullptr, shape());
+
+    if (axis == 0) {
+        Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
+        dest_map = src_map.colwise().reverse();
+    } else {
+        Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
+        dest_map = src_map.rowwise().reverse();
+    }
+
+    return result;
+}
+
+data_ptr_t TensorData::flipud() const { return flip(0); }
+
+data_ptr_t TensorData::fliplr() const { return flip(1); }
+
+data_ptr_t TensorData::repeat(size_t repeats, size_t axis) const {
+    if (repeats == 0) {
+        throw invalid_argument("Repeats must be positive");
+    }
+
+    if (axis > 1) {
+        throw invalid_argument("Axis out of bounds for 2D tensor");
+    }
+
+    const auto &shape_vec = shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("Repeat operation currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_vec[0];
+    size_t cols = shape_vec[1];
+
+    vector<size_t> new_shape = shape();
+
+    if (axis == 0) {
+        new_shape[0] *= repeats;
+        auto result = make_shared<TensorData>(nullptr, new_shape);
+        result->data_.resize(new_shape[0] * new_shape[1]);
+
+        Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, new_shape[0]);
+        dest_map = src_map.replicate(1, repeats);
+
+        return result;
+    } else {
+        new_shape[1] *= repeats;
+        auto result = make_shared<TensorData>(nullptr, new_shape);
+        result->data_.resize(new_shape[0] * new_shape[1]);
+
+        Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], rows);
+        dest_map = src_map.replicate(repeats, 1);
+
+        return result;
+    }
+}
+
+data_ptr_t TensorData::tile(const std::vector<size_t> &reps) const {
+    if (reps.size() != 2) {
+        throw invalid_argument("Reps must specify repetition counts for both dimensions");
+    }
+
+    size_t row_reps = reps[0];
+    size_t col_reps = reps[1];
+
+    if (row_reps == 0 || col_reps == 0) {
+        throw invalid_argument("Repetition counts must be positive");
+    }
+
+    const auto &shape_vec = shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("Tile operation currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_vec[0];
+    size_t cols = shape_vec[1];
+
+    vector<size_t> new_shape = {rows * row_reps, cols * col_reps};
+
+    auto result = make_shared<TensorData>(nullptr, new_shape);
+    result->data_.resize(new_shape[0] * new_shape[1]);
+
+    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], new_shape[0]);
+    dest_map = src_map.replicate(col_reps, row_reps);
+
+    return result;
+}
+
+data_ptr_t TensorData::pad(size_t pad_width, double constant_value) const {
+    if (pad_width == 0) {
+        return clone(true);
+    }
+
+    const auto &shape_vec = shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("Pad operation currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_vec[0];
+    size_t cols = shape_vec[1];
+
+    vector<size_t> new_shape = {rows + 2 * pad_width, cols + 2 * pad_width};
+
+    auto result = make_shared<TensorData>(nullptr, new_shape);
+    result->data_.resize(new_shape[0] * new_shape[1]);
+
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], new_shape[0]);
+    dest_map.setConstant(constant_value);
+
+    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+    dest_map.block(pad_width, pad_width, cols, rows) = src_map;
+
+    return result;
+}
+
+data_ptr_t TensorData::diag(const data_ptr_t &v) {
+    auto v_tensor = dynamic_pointer_cast<TensorData>(v);
+    if (!v_tensor) {
+        throw invalid_argument("Input must be a TensorData");
+    }
+
+    const auto &shape_vec = v_tensor->shape();
+    if (shape_vec.size() != 2) {
+        throw invalid_argument("diag operation currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_vec[0];
+    size_t cols = shape_vec[1];
+
+    if (rows == 1 || cols == 1) {
+        size_t size = std::max(rows, cols);
+        auto result = make_shared<TensorData>(nullptr, vector<size_t>{size, size});
+        result->data_.resize(size * size);
+        result->data_.setZero();
+
+        if (rows == 1) {
+            // Row vector
+            Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), size, size);
+            dest_map = v_tensor->data_.transpose().asDiagonal();
+        } else {
+            // Column vector
+            Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), size, size);
+            dest_map = v_tensor->data_.asDiagonal();
+        }
+
+        return result;
+    } else {
+        size_t diag_size = std::min(rows, cols);
+        auto result = make_shared<TensorData>(nullptr, vector<size_t>{diag_size, 1});
+        result->data_.resize(diag_size);
+
+        Eigen::Map<const Eigen::MatrixXd> src_map(v_tensor->data_.data(), cols, rows);
+        result->data_ = src_map.diagonal().transpose();
+
+        return result;
+    }
+}
+
+size_t
+TensorData::calculate_linear_index(const vector<size_t> &indices, const vector<size_t> &shape) {
+    if (indices.size() != shape.size()) {
+        throw invalid_argument("Indices size must match shape size");
+    }
+
+    size_t index = 0;
+    size_t stride = 1;
+
+    for (size_t i = indices.size(); i > 0; --i) {
+        if (indices[i - 1] >= shape[i - 1]) {
+            throw invalid_argument("Index out of bounds");
+        }
+        index += indices[i - 1] * stride;
+        stride *= shape[i - 1];
+    }
+
+    return index;
+}
+
+bool TensorData::is_broadcastable(const vector<size_t> &shape1, const vector<size_t> &shape2) {
+    size_t dim1 = shape1.size();
+    size_t dim2 = shape2.size();
+    size_t max_dim = std::max(dim1, dim2);
+
+    for (size_t i = 0; i < max_dim; ++i) {
+        size_t size1 = (i < dim1) ? shape1[dim1 - 1 - i] : 1;
+        size_t size2 = (i < dim2) ? shape2[dim2 - 1 - i] : 1;
+
+        if (size1 != size2 && size1 != 1 && size2 != 1) {
+            return false;
+        }
+    }
+
     return true;
 }
 
-data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
-    // TODO
-    throw DataConvError(
-        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+vector<size_t>
+TensorData::broadcast_shape(const vector<size_t> &shape1, const vector<size_t> &shape2) {
+    size_t dim1 = shape1.size();
+    size_t dim2 = shape2.size();
+    size_t max_dim = std::max(dim1, dim2);
+    vector<size_t> result_shape(max_dim);
+
+    for (size_t i = 0; i < max_dim; ++i) {
+        size_t size1 = (i < dim1) ? shape1[dim1 - 1 - i] : 1;
+        size_t size2 = (i < dim2) ? shape2[dim2 - 1 - i] : 1;
+
+        if (size1 == size2) {
+            result_shape[max_dim - 1 - i] = size1;
+        } else if (size1 == 1) {
+            result_shape[max_dim - 1 - i] = size2;
+        } else if (size2 == 1) {
+            result_shape[max_dim - 1 - i] = size1;
+        } else {
+            throw invalid_argument("Shapes are not broadcastable");
+        }
+    }
+
+    return result_shape;
 }
 
-data_ptr_t TensorData::clone(bool deep) const { throw runtime_error("Not implemented"); }
+void TensorData::calculate_tensor_contraction_full(
+    const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+    size_t contraction_dims, vector<size_t> &index1, vector<size_t> &index2,
+    vector<size_t> &index_result, size_t current_dim) {
+    size_t dim1 = tensor1.shape_.size();
 
-const string TensorData::toString() const { return string("TensorData"); }
+    if (current_dim == contraction_dims) {
+        double sum = 0.0;
+        vector<size_t> contraction_index(contraction_dims, 0);
 
-void TensorData::print(std::ostream &os) const { os << toString(); }
+        calculate_contraction_sum(tensor1, tensor2, contraction_index, index1, index2, 0, sum);
+
+        size_t linear_index = calculate_linear_index(index_result, result.shape_);
+        result.data_(linear_index) = sum;
+        return;
+    }
+
+    size_t result_dim_size = result.shape_[current_dim];
+    for (size_t i = 0; i < result_dim_size; ++i) {
+        index_result[current_dim] = i;
+
+        if (current_dim < dim1 - contraction_dims) {
+            index1[current_dim] = i;
+        }
+        if (current_dim >= dim1 - contraction_dims) {
+            size_t tensor2_dim = current_dim - (dim1 - contraction_dims);
+            index2[contraction_dims + tensor2_dim] = i;
+        }
+
+        calculate_tensor_contraction_full(
+            tensor1,
+            tensor2,
+            result,
+            contraction_dims,
+            index1,
+            index2,
+            index_result,
+            current_dim + 1);
+    }
+}
+
+void TensorData::calculate_contraction_sum(
+    const TensorData &tensor1, const TensorData &tensor2, vector<size_t> &contraction_index,
+    vector<size_t> &index1, vector<size_t> &index2, size_t current_contraction_dim, double &sum) {
+    if (current_contraction_dim == contraction_index.size()) {
+        size_t linear_index1 = calculate_linear_index(index1, tensor1.shape_);
+        size_t linear_index2 = calculate_linear_index(index2, tensor2.shape_);
+        sum += tensor1.data_(linear_index1) * tensor2.data_(linear_index2);
+        return;
+    }
+
+    size_t contraction_size =
+        tensor1.shape_[tensor1.shape_.size() - contraction_index.size() + current_contraction_dim];
+    for (size_t i = 0; i < contraction_size; ++i) {
+        contraction_index[current_contraction_dim] = i;
+
+        index1[tensor1.shape_.size() - contraction_index.size() + current_contraction_dim] = i;
+        index2[current_contraction_dim] = i;
+
+        calculate_contraction_sum(
+            tensor1,
+            tensor2,
+            contraction_index,
+            index1,
+            index2,
+            current_contraction_dim + 1,
+            sum);
+    }
+}
+
+void TensorData::calculate_broadcast_multiplication(
+    const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+    vector<size_t> &index1, vector<size_t> &index2, vector<size_t> &index_result,
+    size_t current_dim) {
+    size_t dim_result = result.shape_.size();
+
+    if (current_dim == dim_result) {
+        vector<size_t> actual_index1(tensor1.shape_.size(), 0);
+        vector<size_t> actual_index2(tensor2.shape_.size(), 0);
+
+        for (size_t i = 0; i < tensor1.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor1.shape_.size() + i;
+            if (tensor1.shape_[i] == 1) {
+                actual_index1[i] = 0;
+            } else {
+                actual_index1[i] = index_result[result_dim];
+            }
+        }
+
+        for (size_t i = 0; i < tensor2.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor2.shape_.size() + i;
+            if (tensor2.shape_[i] == 1) {
+                actual_index2[i] = 0;
+            } else {
+                actual_index2[i] = index_result[result_dim];
+            }
+        }
+
+        size_t linear_index1 = calculate_linear_index(actual_index1, tensor1.shape_);
+        size_t linear_index2 = calculate_linear_index(actual_index2, tensor2.shape_);
+        size_t linear_index_result = calculate_linear_index(index_result, result.shape_);
+
+        result.data_(linear_index_result) =
+            tensor1.data_(linear_index1) * tensor2.data_(linear_index2);
+        return;
+    }
+
+    size_t result_dim_size = result.shape_[current_dim];
+    for (size_t i = 0; i < result_dim_size; ++i) {
+        index_result[current_dim] = i;
+        calculate_broadcast_multiplication(
+            tensor1,
+            tensor2,
+            result,
+            index1,
+            index2,
+            index_result,
+            current_dim + 1);
+    }
+}
+
+std::string TensorData::shape_to_string(const vector<size_t> &shape) {
+    if (shape.empty()) {
+        return "[]";
+    }
+
+    string result = "[";
+    for (size_t i = 0; i < shape.size(); ++i) {
+        result += to_string(shape[i]);
+        if (i < shape.size() - 1) {
+            result += ", ";
+        }
+    }
+    result += "]";
+    return result;
+}
+
+data_ptr_t TensorData::eye(size_t n) {
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{n, n});
+    result->data_.resize(n * n);
+    result->data_.setZero();
+
+    // 设置对角线元素为1
+    for (size_t i = 0; i < n; ++i) {
+        result->data_(i * n + i) = 1.0;
+    }
+
+    return result;
+}
+
+data_ptr_t TensorData::zeros(const std::vector<size_t> &shape) {
+    // 计算总元素数量
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape);
+    result->data_.resize(total_size);
+    result->data_.setZero();
+
+    return result;
+}
+
+data_ptr_t TensorData::ones(const std::vector<size_t> &shape) {
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape);
+    result->data_.resize(total_size);
+    result->data_.setConstant(1.0);
+
+    return result;
+}
+
+data_ptr_t TensorData::linspace(double start, double stop, size_t num) {
+    if (num == 0) {
+        return make_shared<TensorData>(nullptr, std::vector<size_t>{0});
+    }
+
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{num});
+    result->data_.resize(num);
+
+    if (num == 1) {
+        result->data_(0) = start;
+    } else {
+        double step = (stop - start) / (num - 1);
+        for (size_t i = 0; i < num; ++i) {
+            result->data_(i) = start + i * step;
+        }
+    }
+
+    return result;
+}
+
+data_ptr_t TensorData::arange(double start, double stop, double step) {
+    if (step == 0) {
+        throw std::invalid_argument("Step must be non-zero");
+    }
+
+    size_t num;
+    if ((step > 0 && start >= stop) || (step < 0 && start <= stop)) {
+        num = 0;
+    } else {
+        num = static_cast<size_t>(std::ceil(std::abs((stop - start) / step)));
+    }
+
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{num});
+    result->data_.resize(num);
+
+    for (size_t i = 0; i < num; ++i) {
+        result->data_(i) = start + i * step;
+    }
+
+    return result;
+}
+data_ptr_t TensorData::transpose() const {
+    if (shape_.size() != 2) {
+        throw std::invalid_argument("Transpose currently only supports 2D tensors");
+    }
+
+    size_t rows = shape_[0];
+    size_t cols = shape_[1];
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{cols, rows});
+    result->data_.resize(rows * cols);
+
+    // 使用Eigen进行矩阵转置
+    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), rows, cols);
+    dest_map = src_map.transpose();
+
+    return result;
+}
+
+data_ptr_t TensorData::flatten() const {
+    size_t total_size = 1;
+    for (size_t dim : shape_) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{total_size});
+    result->data_ = data_;
+
+    return result;
+}
+
+data_ptr_t TensorData::sum() const {
+    auto result = make_shared<DoubleData>(data_.sum());
+    return result;
+}
+
+data_ptr_t TensorData::mean() const {
+    if (data_.size() == 0) {
+        throw std::runtime_error("Cannot calculate mean of empty tensor");
+    }
+    auto result = make_shared<DoubleData>(data_.mean());
+    return result;
+}
+
+data_ptr_t TensorData::min() const {
+    if (data_.size() == 0) {
+        throw std::runtime_error("Cannot find minimum of empty tensor");
+    }
+    auto result = make_shared<DoubleData>(data_.minCoeff());
+    return result;
+}
+
+data_ptr_t TensorData::max() const {
+    if (data_.size() == 0) {
+        throw std::runtime_error("Cannot find maximum of empty tensor");
+    }
+    auto result = make_shared<DoubleData>(data_.maxCoeff());
+    return result;
+}
+
+// 添加缺失的范数计算方法实现
+data_ptr_t TensorData::norm_l1() const {
+    auto result = make_shared<DoubleData>(data_.array().abs().sum());
+    return result;
+}
+
+data_ptr_t TensorData::norm_l2() const {
+    auto result = make_shared<DoubleData>(std::sqrt(data_.array().square().sum()));
+    return result;
+}
+
+data_ptr_t TensorData::norm_squared_l2() const {
+    auto result = make_shared<DoubleData>(data_.array().square().sum());
+    return result;
+}
+
+data_ptr_t TensorData::sin() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().sin();
+    return result;
+}
+
+data_ptr_t TensorData::cos() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().cos();
+    return result;
+}
+
+data_ptr_t TensorData::exp() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().exp();
+    return result;
+}
+
+data_ptr_t TensorData::log() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().log();
+    return result;
+}
+
+data_ptr_t TensorData::sqrt() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().sqrt();
+    return result;
+}
+
+data_ptr_t TensorData::abs() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().abs();
+    return result;
+}
+
+data_ptr_t TensorData::square() const {
+    auto result = make_shared<TensorData>(nullptr, shape_);
+    result->data_ = data_.array().square();
+    return result;
+}

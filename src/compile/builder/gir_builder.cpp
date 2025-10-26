@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,6 +84,7 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
 
     try {
         visit(gct);
+
         auto optMainGraph = currGraph_->getSubGraphsByName("main");
         if (optMainGraph.has_value()) {
             auto mainGraphSet = optMainGraph.value();
@@ -93,6 +94,8 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
             auto funcNode = createFuncDataNode(mainGraph, false, false);
             currGraph_->setOutput(funcNode);
         }
+
+        rootGraph_->rearrange();
     } catch (Diagnostic &d) {
         diags_->add(std::move(d));
         rootGraph_ = nullptr;
@@ -121,6 +124,7 @@ graph_ptr_t Builder::enterScope(const func_type_ptr_t &funcType, const std::stri
 void Builder::leaveScope() {
     nodeScope_ = nodeScope_->leave();
     graphScope_ = graphScope_->leave();
+    currGraph_->rearrange();
     currGraph_ = currGraph_->outer();
 }
 
@@ -358,7 +362,11 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (module_->hasImportedRef(name)) {
-        const auto &e = module_->getImportedEntity(name);
+        const auto &opt = module_->getImportedEntity(name);
+        ASSERT(
+            opt.has_value(),
+            "Imported entity not found: " + name + " in module " + module_->name());
+        const auto &e = opt.value();
         if (std::holds_alternative<node_ptr_t>(e)) {
             ASSERT(false, "Cannot import a data node directly.");
             const auto &node = std::get<node_ptr_t>(e);

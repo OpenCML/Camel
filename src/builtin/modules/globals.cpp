@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
+#include "builtin/types/tensor.h"
 #include "core/context/context.h"
 
 #include "utils/assert.h"
@@ -453,49 +454,49 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__neq__",
             {
                 {
-                    ":op/neq_i",
+                    ":op/ne_i",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), false}, {Type::Int32(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_l",
+                    ":op/ne_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), false}, {Type::Int64(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_f",
+                    ":op/ne_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float(), false}, {Type::Float(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_d",
+                    ":op/ne_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Double(), false}, {Type::Double(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_b",
+                    ":op/ne_b",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), false}, {Type::Bool(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_s",
+                    ":op/ne_s",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq",
+                    ":op/ne",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => bool",
@@ -523,7 +524,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__strict_neq__",
             {
                 {
-                    ":op/strict_neq",
+                    ":op/strict_ne",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}, {Type::Any(), false}},
@@ -852,6 +853,34 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
+                        }),
+                },
+                {
+                    ":tensor/multiply",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(self: Tensor, other: Tensor) => Tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[0];
+                            }
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[1];
+                            }
+                            return nullopt;
                         }),
                 },
             }),
@@ -1529,6 +1558,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             return rhsFuncType->exitType();
                         }),
+                },
+            }),
+        OperatorGroup::create(
+            "Tensor",
+            {
+                {
+                    ":type/tensor",
+                    StaticFuncTypeResolver::create({}, {}, TensorType::create(Type::Double(), {0})),
                 },
             }),
     };

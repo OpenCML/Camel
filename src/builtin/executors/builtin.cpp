@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,7 @@
 #include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
+#include "../operators/tensor.h"
 #include "../operators/this.h"
 #include "../operators/time.h"
 
@@ -92,16 +93,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/eq_s", __builtin__eq__},
         {"op/eq", __builtin__eq__},
 
-        {"op/neq_i", __builtin__neq__},
-        {"op/neq_l", __builtin__neq__},
-        {"op/neq_f", __builtin__neq__},
-        {"op/neq_d", __builtin__neq__},
-        {"op/neq_b", __builtin__neq__},
-        {"op/neq_s", __builtin__neq__},
-        {"op/neq", __builtin__neq__},
+        {"op/ne_i", __builtin__ne__},
+        {"op/ne_l", __builtin__ne__},
+        {"op/ne_f", __builtin__ne__},
+        {"op/ne_d", __builtin__ne__},
+        {"op/ne_b", __builtin__ne__},
+        {"op/ne_s", __builtin__ne__},
+        {"op/ne", __builtin__ne__},
 
         {"op/strict_eq", __builtin__strict_eq__},
-        {"op/strict_neq", __builtin__strict_neq__},
+        {"op/strict_ne", __builtin__strict_ne__},
 
         {"op/lt_i", __builtin__lt__},
         {"op/lt_l", __builtin__lt__},
@@ -184,6 +185,49 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"io/input", __input__},
         {"io/print", __print__},
         {"io/println", __println__},
+
+        // tensor
+        {"tensor/eye", __eye__},
+        {"tensor/zeros", __zeros__},
+        {"tensor/ones", __ones__},
+        {"tensor/diag", __diag__},
+        {"tensor/linspace", __linspace__},
+        {"tensor/arange", __arange__},
+        {"tensor/shape", __shape__},
+
+        {"tensor/add", __tensor_add__},
+        {"tensor/subtract", __tensor_subtract__},
+        {"tensor/multiply", __tensor_multiply__},
+        {"tensor/divide", __tensor_divide__},
+
+        {"tensor/reshape", __tensor_reshape__},
+        {"tensor/transpose", __tensor_transpose__},
+        {"tensor/flatten", __tensor_flatten__},
+
+        {"tensor/concat", __tensor_concat__},
+        {"tensor/stack", __tensor_stack__},
+
+        {"tensor/sum", __tensor_sum__},
+        {"tensor/mean", __tensor_mean__},
+        {"tensor/min", __tensor_min__},
+        {"tensor/max", __tensor_max__},
+        {"tensor/argmin", __tensor_argmin__},
+        {"tensor/argmax", __tensor_argmax__},
+        {"tensor/std", __tensor_std__},
+
+        {"tensor/norm_l1", __tensor_norm_l1__},
+        {"tensor/norm_l2", __tensor_norm_l2__},
+        {"tensor/norm_squared_l2", __tensor_norm_squared_l2__},
+
+        {"tensor/sin", __tensor_sin__},
+        {"tensor/cos", __tensor_cos__},
+        {"tensor/exp", __tensor_exp__},
+        {"tensor/log", __tensor_log__},
+        {"tensor/sqrt", __tensor_sqrt__},
+
+        {"tensor/sinh", __tensor_sinh__},
+        {"tensor/cosh", __tensor_cosh__},
+        {"tensor/tanh", __tensor_tanh__},
 
         // os
         {"os/exit", __exit__},

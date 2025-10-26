@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,6 +86,13 @@ class OtherType : public Type {
         return code_ == other.code();
     }
     virtual bool operator!=(const Type &other) const override { return !(*this == other); }
+
+    virtual bool assignable(const type_ptr_t &type) const {
+        if (!type->other()) {
+            return false;
+        }
+        return code_ == type->code();
+    }
 
     virtual type_ptr_t clone() const override = 0;
 
