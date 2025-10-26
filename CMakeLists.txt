@@ -29,21 +29,17 @@ endif()
 
 file(GLOB_RECURSE SRC_FILES
 	"${PROJECT_SOURCE_DIR}/src/*.cpp"
-	"${PROJECT_SOURCE_DIR}/third_party/antlr4-runtime/*.cpp"
+	"${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
-
 
 find_package(fmt REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
-find_package(Eigen3 REQUIRED)
 
 add_definitions(-DNOMINMAX)
-
-add_compile_options(-Wno-nan-infinity-disabled)
-
 add_executable(${PROJECT_NAME} ${SRC_FILES})
+
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD 23
@@ -55,29 +51,32 @@ if (NOT ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))
     message(FATAL_ERROR "This project requires Clang as the C++ compiler. Current compiler is ${CMAKE_CXX_COMPILER_ID}.")
 endif()
 
-# 开启全局 LTO 支持
+# 开启 LTO 支持
 include(CheckIPOSupported)
 check_ipo_supported(RESULT result OUTPUT output)
+
 if(result)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO FALSE)
 endif()
 
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>:-O3>
     $<$<CONFIG:RelWithDebInfo>:-O2>
     $<$<CONFIG:RelWithDebInfo>:-g3>
+    $<$<CONFIG:RelWithDebInfo>:-fno-PIE>
     $<$<CONFIG:Debug>:-O0>
     $<$<CONFIG:Debug>:-g3>
     -Wall -Wextra -Wpedantic
     -Wno-unused-parameter
     -Wno-language-extension-token # for antlr4-runtime
     -Wno-dollar-in-identifier-extension # for antlr4-runtime
-    -Wno-c99-extensions
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
-    -march=native  
-    -mfma          
-    -ffast-math
+)
+
+target_link_options(${PROJECT_NAME} PRIVATE
+    $<$<CONFIG:RelWithDebInfo>:-no-pie>
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ANTLR4CPP_STATIC)
@@ -97,5 +96,4 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     gtest::gtest
     nlohmann_json::nlohmann_json
     Taskflow::Taskflow
-    Eigen3::Eigen
 )

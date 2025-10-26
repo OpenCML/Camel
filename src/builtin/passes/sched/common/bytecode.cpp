@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -132,7 +132,7 @@ Bytecode *appendBytecode(
     // Step 3: 写入 Extra（如果有）
     if (hasExtra) {
         BytecodeExtra *ex = reinterpret_cast<BytecodeExtra *>(&vec[offset + totalUnits - 1]);
-        std::memcpy(ex, &extra, sizeof(BytecodeExtra));
+        *ex = extra;
     }
 
     return header;
