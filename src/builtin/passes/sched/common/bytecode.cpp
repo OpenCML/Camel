@@ -47,6 +47,97 @@ std::string to_string(const OpCode &op) {
         return "OPER";
     case OpCode::SCHD:
         return "SCHD";
+
+    case OpCode::IADD:
+        return "IADD";
+    case OpCode::LADD:
+        return "LADD";
+    case OpCode::FADD:
+        return "FADD";
+    case OpCode::DADD:
+        return "DADD";
+
+    case OpCode::ISUB:
+        return "ISUB";
+    case OpCode::LSUB:
+        return "LSUB";
+    case OpCode::FSUB:
+        return "FSUB";
+    case OpCode::DSUB:
+        return "DSUB";
+
+    case OpCode::IMUL:
+        return "IMUL";
+    case OpCode::LMUL:
+        return "LMUL";
+    case OpCode::FMUL:
+        return "FMUL";
+    case OpCode::DMUL:
+        return "DMUL";
+
+    case OpCode::IDIV:
+        return "IDIV";
+    case OpCode::LDIV:
+        return "LDIV";
+    case OpCode::FDIV:
+        return "FDIV";
+    case OpCode::DDIV:
+        return "DDIV";
+
+    case OpCode::ILT:
+        return "ILT";
+    case OpCode::LLT:
+        return "LLT";
+    case OpCode::FLT:
+        return "FLT";
+    case OpCode::DLT:
+        return "DLT";
+
+    case OpCode::IGT:
+        return "IGT";
+    case OpCode::LGT:
+        return "LGT";
+    case OpCode::FGT:
+        return "FGT";
+    case OpCode::DGT:
+        return "DGT";
+
+    case OpCode::IEQ:
+        return "IEQ";
+    case OpCode::LEQ:
+        return "LEQ";
+    case OpCode::FEQ:
+        return "FEQ";
+    case OpCode::DEQ:
+        return "DEQ";
+
+    case OpCode::INE:
+        return "INE";
+    case OpCode::LNE:
+        return "LNE";
+    case OpCode::FNE:
+        return "FNE";
+    case OpCode::DNE:
+        return "DNE";
+
+    case OpCode::ILE:
+        return "ILE";
+    case OpCode::LLE:
+        return "LLE";
+    case OpCode::FLE:
+        return "FLE";
+    case OpCode::DLE:
+        return "DLE";
+
+    case OpCode::IGE:
+        return "IGE";
+    case OpCode::LGE:
+        return "LGE";
+    case OpCode::FGE:
+        return "FGE";
+    case OpCode::DGE:
+        return "DGE";
+
     default:
         ASSERT(false, "Unknown OpCode encountered.");
         return "UNKNOWN";

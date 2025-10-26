@@ -454,49 +454,49 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__neq__",
             {
                 {
-                    ":op/neq_i",
+                    ":op/ne_i",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), false}, {Type::Int32(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_l",
+                    ":op/ne_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), false}, {Type::Int64(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_f",
+                    ":op/ne_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float(), false}, {Type::Float(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_d",
+                    ":op/ne_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Double(), false}, {Type::Double(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_b",
+                    ":op/ne_b",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), false}, {Type::Bool(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq_s",
+                    ":op/ne_s",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
                 {
-                    ":op/neq",
+                    ":op/ne",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => bool",
@@ -524,7 +524,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "__strict_neq__",
             {
                 {
-                    ":op/strict_neq",
+                    ":op/strict_ne",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}, {Type::Any(), false}},

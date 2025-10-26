@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 22, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,6 +77,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "Ensure the operator URI is correctly specified and supported by the runtime.",
             },
         },
+        {
+            RuntimeDiag::UnsupportedBytecode,
+            {
+                "UnsupportedBytecode",
+                "Encountered unsupported bytecode: '{0}'.",
+                "Refer to the documentation and try using a graph scheduler that supports this "
+                "bytecode.",
+            },
+        },
+
     };
 
     return infoMap;

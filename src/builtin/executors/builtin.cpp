@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,16 +93,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/eq_s", __builtin__eq__},
         {"op/eq", __builtin__eq__},
 
-        {"op/neq_i", __builtin__neq__},
-        {"op/neq_l", __builtin__neq__},
-        {"op/neq_f", __builtin__neq__},
-        {"op/neq_d", __builtin__neq__},
-        {"op/neq_b", __builtin__neq__},
-        {"op/neq_s", __builtin__neq__},
-        {"op/neq", __builtin__neq__},
+        {"op/ne_i", __builtin__ne__},
+        {"op/ne_l", __builtin__ne__},
+        {"op/ne_f", __builtin__ne__},
+        {"op/ne_d", __builtin__ne__},
+        {"op/ne_b", __builtin__ne__},
+        {"op/ne_s", __builtin__ne__},
+        {"op/ne", __builtin__ne__},
 
         {"op/strict_eq", __builtin__strict_eq__},
-        {"op/strict_neq", __builtin__strict_neq__},
+        {"op/strict_ne", __builtin__strict_ne__},
 
         {"op/lt_i", __builtin__lt__},
         {"op/lt_l", __builtin__lt__},

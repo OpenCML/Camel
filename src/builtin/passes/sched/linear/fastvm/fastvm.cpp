@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,12 @@ using namespace GraphIR;
 
 std::shared_ptr<bytecode_vec_t> FastVMSchedPass::getCodeOfGraph(Graph *graph) {
     if (codes_.find(graph) == codes_.end()) {
-        auto code = precompile(context_, graph);
+        auto code = precompile(
+            context_,
+            graph,
+            {
+                .enableInlineOperators = true,
+            });
         codes_[graph] = code;
         return code;
     } else {
@@ -41,7 +46,7 @@ std::shared_ptr<bytecode_vec_t> FastVMSchedPass::getCodeOfGraph(Graph *graph) {
 }
 
 data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
-    EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
@@ -55,7 +60,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
 
     auto evalFuncNode =
         [&](GraphIR::Graph &targetGraph, const data_vec_t &args, bool isTailCall) -> data_ptr_t {
-        EXEC_WHEN_DEBUG(l.in("Eval").debug(
+        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
             "Calling function: {} (tail-call: {})",
             targetGraph.name(),
             isTailCall ? "yes" : "no"));
@@ -81,7 +86,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             if (&targetGraph == currFrame->graph()) {
                 // Self-recursion optimization
                 currFrame = lastFrame;
-                EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                     "Optimizing self-recursion for graph: {}",
                     currFrame->graph()->name()));
             } else {
@@ -89,7 +94,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
 
                 if (tailFrame && tailFrame->graph() == &targetGraph) {
                     // Mutual-tail-recursion optimization
-                    EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                         "Optimizing mutual-tail-recursion for graph: {}",
                         currFrame->graph()->name()));
                     currFrame = tailFrame;
@@ -135,8 +140,9 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
         size_t i = 0;
         while (i < codeSize) {
             const Bytecode &bc = code[i];
-            switch (bc.opcode) {
+            EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode[{}]: {}", i, bc.toString()));
 
+            switch (bc.opcode) {
             case OpCode::NOOP: {
                 // do nothing
                 break;
@@ -186,7 +192,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     size_t j = 0;
                     for (; j < bc.withCnt(); ++j) {
                         auto caseData = currFrame->get(wargs[j]);
-                        EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                             "Matching case: {} with condition: {}",
                             caseData->toString(),
                             condData->toString()));
@@ -342,7 +348,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 auto func = bc.extra()->func;
-                EXEC_WHEN_DEBUG(l.in("Eval").debug(
+                EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                     "Executing operator {}.",
                     context_->execMgr().getNameOfAnOperator(bc.extra()->func)));
                 func(bc.result, nargs, wargs, *currFrame, *context_);
@@ -354,8 +360,285 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 break;
             }
 
-            default:
-                ASSERT(false, "Unsupported opcode in FastVM.");
+            default: {
+                if (isOpCodeOfInlinedOperator(bc.opcode)) {
+                    const data_ptr_t &lhs = currFrame->get(bc.fastop[0]);
+                    const data_ptr_t &rhs = currFrame->get(bc.fastop[1]);
+
+                    switch (bc.opcode) {
+                    case OpCode::IADD: {
+                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() +
+                                      tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        break;
+                    }
+                    case OpCode::LADD: {
+                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() +
+                                      tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        break;
+                    }
+                    case OpCode::FADD: {
+                        float res = tt::as_shared<FloatData>(lhs)->data() +
+                                    tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        break;
+                    }
+                    case OpCode::DADD: {
+                        double res = tt::as_shared<DoubleData>(lhs)->data() +
+                                     tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        break;
+                    }
+
+                    case OpCode::ISUB: {
+                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() -
+                                      tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        break;
+                    }
+                    case OpCode::LSUB: {
+                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() -
+                                      tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        break;
+                    }
+                    case OpCode::FSUB: {
+                        float res = tt::as_shared<FloatData>(lhs)->data() -
+                                    tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        break;
+                    }
+                    case OpCode::DSUB: {
+                        double res = tt::as_shared<DoubleData>(lhs)->data() -
+                                     tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        break;
+                    }
+
+                    case OpCode::IMUL: {
+                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() *
+                                      tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        break;
+                    }
+                    case OpCode::LMUL: {
+                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() *
+                                      tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        break;
+                    }
+                    case OpCode::FMUL: {
+                        float res = tt::as_shared<FloatData>(lhs)->data() *
+                                    tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        break;
+                    }
+                    case OpCode::DMUL: {
+                        double res = tt::as_shared<DoubleData>(lhs)->data() *
+                                     tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        break;
+                    }
+
+                    case OpCode::IDIV: {
+                        int32_t divisor = tt::as_shared<Int32Data>(rhs)->data();
+                        if (divisor == 0) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() / divisor;
+                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        break;
+                    }
+                    case OpCode::LDIV: {
+                        int64_t divisor = tt::as_shared<Int64Data>(rhs)->data();
+                        if (divisor == 0) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() / divisor;
+                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        break;
+                    }
+                    case OpCode::FDIV: {
+                        float divisor = tt::as_shared<FloatData>(rhs)->data();
+                        if (divisor == 0.0f) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        float res = tt::as_shared<FloatData>(lhs)->data() / divisor;
+                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        break;
+                    }
+                    case OpCode::DDIV: {
+                        double divisor = tt::as_shared<DoubleData>(rhs)->data();
+                        if (divisor == 0.0) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        double res = tt::as_shared<DoubleData>(lhs)->data() / divisor;
+                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        break;
+                    }
+
+                    case OpCode::ILT: {
+                        bool res = tt::as_shared<Int32Data>(lhs)->data() <
+                                   tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::LLT: {
+                        bool res = tt::as_shared<Int64Data>(lhs)->data() <
+                                   tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::FLT: {
+                        bool res = tt::as_shared<FloatData>(lhs)->data() <
+                                   tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::DLT: {
+                        bool res = tt::as_shared<DoubleData>(lhs)->data() <
+                                   tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+
+                    case OpCode::IGT: {
+                        bool res = tt::as_shared<Int32Data>(lhs)->data() >
+                                   tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::LGT: {
+                        bool res = tt::as_shared<Int64Data>(lhs)->data() >
+                                   tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::FGT: {
+                        bool res = tt::as_shared<FloatData>(lhs)->data() >
+                                   tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::DGT: {
+                        bool res = tt::as_shared<DoubleData>(lhs)->data() >
+                                   tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+
+                    case OpCode::IEQ: {
+                        bool res = tt::as_shared<Int32Data>(lhs)->data() ==
+                                   tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::LEQ: {
+                        bool res = tt::as_shared<Int64Data>(lhs)->data() ==
+                                   tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::FEQ: {
+                        bool res = tt::as_shared<FloatData>(lhs)->data() ==
+                                   tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::DEQ: {
+                        bool res = tt::as_shared<DoubleData>(lhs)->data() ==
+                                   tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+
+                    case OpCode::INE: {
+                        bool res = tt::as_shared<Int32Data>(lhs)->data() !=
+                                   tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::LNE: {
+                        bool res = tt::as_shared<Int64Data>(lhs)->data() !=
+                                   tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::FNE: {
+                        bool res = tt::as_shared<FloatData>(lhs)->data() !=
+                                   tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::DNE: {
+                        bool res = tt::as_shared<DoubleData>(lhs)->data() !=
+                                   tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+
+                    case OpCode::ILE: {
+                        bool res = tt::as_shared<Int32Data>(lhs)->data() <=
+                                   tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::LLE: {
+                        bool res = tt::as_shared<Int64Data>(lhs)->data() <=
+                                   tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::FLE: {
+                        bool res = tt::as_shared<FloatData>(lhs)->data() <=
+                                   tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::DLE: {
+                        bool res = tt::as_shared<DoubleData>(lhs)->data() <=
+                                   tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+
+                    case OpCode::IGE: {
+                        bool res = tt::as_shared<Int32Data>(lhs)->data() >=
+                                   tt::as_shared<Int32Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::LGE: {
+                        bool res = tt::as_shared<Int64Data>(lhs)->data() >=
+                                   tt::as_shared<Int64Data>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::FGE: {
+                        bool res = tt::as_shared<FloatData>(lhs)->data() >=
+                                   tt::as_shared<FloatData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+                    case OpCode::DGE: {
+                        bool res = tt::as_shared<DoubleData>(lhs)->data() >=
+                                   tt::as_shared<DoubleData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        break;
+                    }
+
+                    default:
+                        ASSERT(false, "Unsupported inlined operator.");
+                    }
+
+                    break;
+                }
+
+                context_->rtmDiags()
+                    ->of(RuntimeDiag::UnsupportedBytecode)
+                    .commit(to_string(bc.opcode));
+            }
             }
 
             // move to the next bytecode
