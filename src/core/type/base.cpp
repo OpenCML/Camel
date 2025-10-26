@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "composed/array.h"
 #include "composed/struct.h"
 #include "composed/tuple.h"
+#include "other/other.h"
 #include "primary.h"
 #include "special/func.h"
 #include "utils/type.h"
@@ -142,6 +143,11 @@ bool Type::assignable(const type_ptr_t &type) const {
     }
     if (composed() && type->composed()) {
         return this->equals(type);
+    }
+
+    if (other()) {
+        const auto &otherType = static_cast<const OtherType &>(*this);
+        return otherType.assignable(type);
     }
 
     return code_ == type->code_;
