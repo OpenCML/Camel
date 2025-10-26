@@ -36,6 +36,7 @@ find_package(fmt REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 add_definitions(-DNOMINMAX)
 add_executable(${PROJECT_NAME} ${SRC_FILES})
@@ -71,8 +72,12 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     -Wno-unused-parameter
     -Wno-language-extension-token # for antlr4-runtime
     -Wno-dollar-in-identifier-extension # for antlr4-runtime
+    -Wno-nan-infinity-disabled
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
+    -march=native  
+    -mfma          
+    -ffast-math
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE
@@ -96,4 +101,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     gtest::gtest
     nlohmann_json::nlohmann_json
     Taskflow::Taskflow
+    Eigen3::Eigen
 )

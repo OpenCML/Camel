@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -428,14 +428,13 @@ TensorBuiltinModule::TensorBuiltinModule(context_ptr_t ctx) : BuiltinModule("ten
     for (const auto &group : getOperatorGroups()) {
         exportEntity(group->name(), group);
     }
-    exportType("tensor", TensorType::create(Type::Double(), {0}));
+    exportType("Tensor", TensorType::create(Type::Double(), {0}));
 }
 
 bool TensorBuiltinModule::load() {
     if (loaded_) {
         return true;
     }
-    exportType("tensor", TensorType::create(Type::Double(), {0}));
     context_->registerExecutorFactory("tensor", [&]() {
         return BasicBuiltinExecutor::create(context_);
     });

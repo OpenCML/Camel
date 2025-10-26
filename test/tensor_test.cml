@@ -1,36 +1,40 @@
-import {add, subtract, multiply, divide, ones, zeros, sum, mean, eye, diag, flatten, transpose} from tensor;
+import {
+    Tensor,
+    add, subtract, multiply, divide, ones, zeros, 
+    sum, mean, eye, diag, flatten, transpose
+} from tensor
+
+// func test(t : Tensor): Tensor sync {
+
+// }
 
 func test_tensor_operations(): int sync {
     // 创建不同形状的tensor
-    let a = ones([3, 3]);
-    let b = zeros([3, 3]);
-    let c = eye(3);
+    let a = ones([3, 3])
+    let b = zeros([3, 3])
+    let c = eye(3)
     
     // 基本运算测试
-    let add_result = add(a, c);
-    let sub_result = subtract(a, c);
-    let mul_result = multiply(a, c);
-    let div_result = divide(a, c);
+    let add_result = add(a, c)
+    let sub_result = subtract(a, c)
+    let mul_result = multiply(a, c)
+    let div_result = divide(a, c)
     
     // 形状变换测试
-    let flat = flatten(a);
-    let trans = transpose(a);
+    let flat = flatten(a)
+    let trans = transpose(a)
     
     // 其他操作测试
-    let d = diag(a);
-    let s = sum(a);
-    let m = mean(a);
+    let d = diag(a)
+    let s = sum(a)
+    let m = mean(a)
     
-    return 0;
-}
-
-func test(t : Tensor): Tensor sync {
-
+    return 0
 }
 
 func main(): int sync {
-    test_tensor_operations();
-    test_tensor_with_scalars();
+    test_tensor_operations()
+    // test_tensor_with_scalars()
     
-    return 0;
+    return 0
 }

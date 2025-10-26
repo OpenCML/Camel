@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1576,7 +1576,6 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &group : getGlobalOperatorGroups()) {
         exportEntity(group->name(), group);
     }
-    exportType("Tensor", TensorType::create(Type::Double(), {0}));
 }
 
 bool GlobalsBuiltinModule::load() {

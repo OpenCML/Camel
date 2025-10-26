@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -358,7 +358,11 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (module_->hasImportedRef(name)) {
-        const auto &e = module_->getImportedEntity(name);
+        const auto &opt = module_->getImportedEntity(name);
+        ASSERT(
+            opt.has_value(),
+            "Imported entity not found: " + name + " in module " + module_->name());
+        const auto &e = opt.value();
         if (std::holds_alternative<node_ptr_t>(e)) {
             ASSERT(false, "Cannot import a data node directly.");
             const auto &node = std::get<node_ptr_t>(e);
