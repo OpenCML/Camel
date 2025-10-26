@@ -60,6 +60,11 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
 
 shared_ptr<bytecode_vec_t>
 precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &opt) {
+    ASSERT(graph != nullptr, "Graph is null.");
+    ASSERT(
+        !graph->dirty(),
+        std::format("Graph {} is dirty, please rearrange before precompiling.", graph->name()));
+
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
     node_ptr_t exitNode = graph->exitNode();
 
@@ -284,11 +289,21 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
             break;
         }
 
+        case NodeType::NREF: {
+            // 一般无操作
+            // 但在内联函数中，有时候会产生NREF直连JOIN的情况
+            // 这时候需要插入一个JUMP节点而不能直接跳过
+            // 否则会导致该条路径为空，进而导致跳转错误
+            break; // break 而不能是 continue
+        }
+
         case NodeType::DATA:
             [[fallthrough]];
         case NodeType::PORT:
             [[fallthrough]];
         case NodeType::EXIT:
+            [[fallthrough]];
+        case NodeType::SYNC:
             [[fallthrough]];
         case NodeType::DREF:
             // 这些节点类型不生成字节码

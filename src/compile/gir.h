@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,12 @@ enum class NodeType {
     FUNC, // (Sub)-Graph, function
     OPER, // Atomic operation
     EXIT, // Final output node
+
+    // 无私有数据节点
+    SYNC, // Synchronization point
+    NREF, // reference of node
+
+    // 图构造过程中的临时节点
     DREF, // Dereference
 };
 
@@ -214,8 +220,25 @@ class Graph : public std::enable_shared_from_this<Graph> {
                 existing.find(graph) == existing.end(),
                 std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
             existing.insert(graph);
+            l.in("GIR").debug("Added subgraph '{}' to graph '{}'.", graph->mangledName(), name_);
         }
         graph->outer_ = shared_from_this();
+    }
+    void delSubGraph(const graph_ptr_t &graph) {
+        ASSERT(graph.get() != this, "Cannot remove itself as a subgraph.");
+        ASSERT(!graph->name().empty(), "Cannot remove an anonymous graph as a subgraph.");
+        if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
+            auto &existing = subGraphs_[graph->name()];
+            existing.erase(graph);
+            l.in("GIR").debug(
+                "Removed subgraph '{}' from graph '{}'.",
+                graph->mangledName(),
+                name_);
+            if (existing.empty()) {
+                subGraphs_.erase(graph->name());
+            }
+            graph->outer_.reset();
+        }
     }
     std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> &subGraphs() {
         return subGraphs_;
@@ -234,9 +257,22 @@ class Graph : public std::enable_shared_from_this<Graph> {
         }
         dependencies_.insert(graph);
         graph->dependents_.insert(shared_from_this());
+        l.in("GIR").debug(
+            "Added dependency: Graph '{}' depends on graph '{}'.",
+            name_,
+            graph->name());
+    }
+    void delDependency(const graph_ptr_t &graph) {
+        dependencies_.erase(graph);
+        graph->dependents_.erase(shared_from_this());
+        l.in("GIR").debug(
+            "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
+            name_,
+            graph->name());
     }
 
-    void addNode(const node_ptr_t &node);                      // 由Node::create调用
+    void addNode(const node_ptr_t &node); // 由Node::create调用
+    void delNode(const node_ptr_t &node);
     void addPort(const node_ptr_t &node, bool isWith = false); // 由PortNode::create调用
     void addClosure(const node_ptr_t &node);
     bool parameterized() const { return parameterized_; }
@@ -264,6 +300,11 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     graph_ptr_t clone() const;
 
+    node_ptr_t inlineNode(const node_ptr_t &node, bool forceSync = false);
+
+    bool dirty() const { return dirty_; }
+    void rearrange();
+
   private:
     std::string name_;
     graph_wptr_t outer_;
@@ -279,6 +320,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     node_ptr_t exitNode_;
+
+    // 增删节点时标记为脏
+    // 需要通过 rearrange 来解决
+    bool dirty_ = false;
 
     bool looped_ = false;
     bool parameterized_ = false;
@@ -308,7 +353,17 @@ class Node : public std::enable_shared_from_this<Node> {
     bool operator!=(const Node &other) const { return !(this == &other); }
 
     Graph &graph() const { return graph_; }
-    data_idx_t index() const { return dataIndex_; }
+    data_idx_t index() const {
+        // SYNC、DREF和NREF节点都是无数据节点
+        // 其中，NREF的数据索引是其输入节点索引
+        ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
+        ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
+        if (nodeType_ == NodeType::NREF) {
+            return normInputs_.front()->index();
+        }
+        return dataIndex_;
+    }
+    void setIndex(data_idx_t index) { dataIndex_ = index; }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
     void setMacro(bool m) { macro_ = m; }
@@ -498,7 +553,6 @@ class CopyNode : public Node {
 };
 
 class FillNode : public Node {
-
   public:
     FillNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
         : Node(graph, NodeType::FILL, type, index) {}
@@ -763,6 +817,42 @@ class DrefNode : public Node {
 
   private:
     dref_target_t target_;
+};
+
+class SyncNode : public Node {
+  public:
+    SyncNode(Graph &graph) : Node(graph, NodeType::SYNC, Type::Void(), 0) {}
+    ~SyncNode() = default;
+
+    static node_ptr_t create(Graph &graph) {
+        auto node = std::make_shared<SyncNode>(graph);
+        graph.addNode(node);
+        return node;
+    }
+
+    virtual std::string toString() const override {
+        return std::format("SYNC({}): {}", dataIndex_, dataType()->toString());
+    }
+
+    virtual node_ptr_t clone(Graph &graph) const override { return SyncNode::create(graph); }
+};
+
+class NRefNode : public Node {
+  public:
+    NRefNode(Graph &graph) : Node(graph, NodeType::NREF, Type::Void(), 0) {}
+    ~NRefNode() = default;
+
+    static node_ptr_t create(Graph &graph) {
+        auto node = std::make_shared<NRefNode>(graph);
+        graph.addNode(node);
+        return node;
+    }
+
+    virtual std::string toString() const override {
+        return std::format("NREF({}): {}", dataIndex_, dataType()->toString());
+    }
+
+    virtual node_ptr_t clone(Graph &graph) const override { return NRefNode::create(graph); }
 };
 
 } // namespace GraphIR

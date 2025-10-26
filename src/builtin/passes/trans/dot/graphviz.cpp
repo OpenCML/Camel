@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 26, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -322,7 +322,20 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
             size = "width=0.9, height=0.9";
             break;
         }
+        case NodeType::SYNC: {
+            label = "SYNC";
+            shape = "diamond";
+            style = "dashed";
+            break;
+        }
+        case NodeType::NREF: {
+            label = "NREF";
+            shape = "diamond";
+            style = "dashed";
+            break;
+        }
         default:
+            ASSERT(false, "Unknown node type encountered during GraphViz generation.");
             throw runtime_error("Unknown node type encountered during GraphViz generation.");
         }
 

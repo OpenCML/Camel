@@ -33,6 +33,7 @@ enum class RuntimeDiag : uint32_t {
     MissingMainFunction = 0x000005,
     UnrecognizedOperatorURI = 0x000006,
     UnsupportedBytecode = 0x000007,
+    GraphInliningFailed = 0x000008,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }
