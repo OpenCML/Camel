@@ -289,16 +289,16 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
             break;
         }
 
+        case NodeType::DATA:
+            [[fallthrough]];
         case NodeType::NREF: {
             // 一般无操作
-            // 但在内联函数中，有时候会产生NREF直连JOIN的情况
+            // 但在内联函数中，有时候会直连JOIN
             // 这时候需要插入一个JUMP节点而不能直接跳过
             // 否则会导致该条路径为空，进而导致跳转错误
             break; // break 而不能是 continue
         }
 
-        case NodeType::DATA:
-            [[fallthrough]];
         case NodeType::PORT:
             [[fallthrough]];
         case NodeType::EXIT:
