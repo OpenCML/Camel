@@ -94,6 +94,24 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         TensorType::create(Type::Double(), {0})),
                 },
             }),
+        OperatorGroup::create(
+            "shape",
+            {
+                {
+                    ":tensor/shape",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(a: Tensor) => int32[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TensorType::typeCode()) {
+                                auto int32Type = std::make_shared<PrimaryType>(TypeCode::Int32);
+                                return std::make_shared<ArrayType>(int32Type);
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
 
         OperatorGroup::create(
             "add",
@@ -108,6 +126,20 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
+                            }
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[1];
                             }
                             return nullopt;
                         }),
@@ -126,6 +158,20 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
+                            }
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[1];
                             }
                             return nullopt;
                         }),
@@ -146,10 +192,25 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
                             }
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[1];
+                            }
                             return nullopt;
                         }),
                 },
             }),
+
         OperatorGroup::create(
             "divide",
             {
@@ -164,16 +225,47 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
                             }
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[1];
+                            }
                             return nullopt;
                         }),
                 },
             }),
-
+        OperatorGroup::create(
+            "matmul",
+            {
+                {
+                    ":tensor/matmul",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: Tensor, b: Tensor) => Tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
         OperatorGroup::create(
             "__mul__",
             {
                 {
-                    ":tensor/multiply",
+                    ":tensor/matmul",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(self: Tensor, other: Tensor) => Tensor",
@@ -202,6 +294,62 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
+            "pow",
+            {
+                {
+                    ":tensor/pow",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: Tensor, b: Tensor | number) => Tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            // Tensor to Tensor power
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[0];
+                            }
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int32 ||
+                                 norm[1]->code() == TypeCode::Int64 ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double)) {
+                                return norm[0];
+                            }
+                            if ((norm[0]->code() == TypeCode::Int32 ||
+                                 norm[0]->code() == TypeCode::Int64 ||
+                                 norm[0]->code() == TypeCode::Float ||
+                                 norm[0]->code() == TypeCode::Double) &&
+                                norm[1]->code() == TensorType::typeCode()) {
+                                return norm[1];
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+
+        OperatorGroup::create(
+            "matpow",
+            {
+                {
+                    ":tensor/matpow",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: Tensor, n: int32) => Tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                norm[1]->equals(Type::Int32())) {
+                                auto tensor_type = std::dynamic_pointer_cast<TensorType>(norm[0]);
+                                if (tensor_type && tensor_type->shape().size() == 2 &&
+                                    tensor_type->shape()[0] == tensor_type->shape()[1]) {
+                                    return norm[0];
+                                }
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
             "reshape",
             {
                 {
@@ -217,10 +365,22 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":tensor/transpose",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0, 0})),
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(a: tensor) => tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TensorType::typeCode()) {
+                                auto tensor_type = std::dynamic_pointer_cast<TensorType>(norm[0]);
+                                if (tensor_type && tensor_type->shape().size() == 2) {
+                                    auto shape = tensor_type->shape();
+                                    std::swap(shape[0], shape[1]);
+                                    return TensorType::create(tensor_type->elementType(), shape);
+                                }
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
                 },
             }),
         OperatorGroup::create(
@@ -271,11 +431,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":tensor/sum",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "(a: Tensor) => Tensor",
+                        "(a: Tensor) => double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() == TensorType::typeCode()) {
-                                return norm[0];
+                                return Type::Double();
                             }
                             return nullopt;
                         }),
@@ -416,6 +576,14 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             }
                             return nullopt;
                         }),
+                },
+            }),
+        OperatorGroup::create(
+            "show",
+            {
+                {
+                    ":tensor/show",
+                    StaticFuncTypeResolver::create({}, {{Type::Any(), false}}, Type::Void()),
                 },
             }),
 

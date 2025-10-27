@@ -1,0 +1,96 @@
+// linear_regression.cml - Linear Regression with Gradient Descent
+
+module linear_regression
+
+import {
+    add, subtract, multiply, matmul, ones, zeros,
+    sum, eye, transpose, show, pow, Tensor, shape
+} from tensor
+
+// Mean Squared Error function
+func mse_loss(predictions: Tensor, targets: Tensor): double sync {
+    let errors = subtract(predictions, targets)
+    let squared_errors = pow(errors, 2.0)
+    let mse_tensor = sum(squared_errors)
+    return mse_tensor
+}
+
+// Linear regression using gradient descent
+func train(X: Tensor, y: Tensor, learning_rate: double, num_iterations: int): Tensor sync {
+    let m = shape(X)[0]  // number of samples
+    let n = shape(X)[1]  // number of features
+    
+    let ones_col = ones([m, 1])
+    let X_with_bias = concat(X, ones_col, 1)  // axis=1
+    
+    let weights_with_bias = zeros([n + 1, 1])
+    
+    println("Starting gradient descent...")
+
+    var i = 0
+    //while (i < num_iterations) {
+    //    // Forward pass
+    //    let predictions = matmul(X_with_bias, weights_with_bias)
+    //    
+    //    // Calculate loss
+    //    let loss = mse_loss(predictions, y)
+    //    
+    //    // Calculate gradients
+    //    let errors = subtract(predictions, y)
+    //    let dw = matmul(transpose(X_with_bias), errors)
+    //    dw = multiply(dw, 2.0 / m)
+    //    
+    //    // Update weights
+    //    weights_with_bias = subtract(weights_with_bias, multiply(dw, learning_rate))
+    //    
+    //    // Print progress every 100 iterations
+    //    if (i % 100 == 0) then {
+    //        println("Iteration " + i + ", Loss: " + loss)
+    //    }
+    //    
+    //    i = i + 1
+    //}
+    //
+    //println("Training completed.")
+    return weights_with_bias
+}
+
+// Predict function
+// func predict(X: Tensor, weights_with_bias: Tensor): Tensor sync {
+//     let m = shape(X)[0]
+//     let ones_col = ones([m, 1])
+//     let X_with_bias = concat(X, ones_col, 1)
+//     return matmul(X_with_bias, weights_with_bias)
+// }
+
+func main(): int sync {
+    println("=== Linear Regression with Gradient Descent ===")
+    
+//    // Create training data (4 samples, 2 features)
+    let X = ones([4, 2])
+    let y = ones([4, 1])
+//    
+    println("Feature matrix X (4x2):")
+    show(X)
+    println("Target vector y (4x1):")
+    show(y)
+    
+//    // Train the model
+    let learning_rate = 0.01
+    let num_iterations = 1000
+//    let trained_weights = train(X, y, learning_rate, num_iterations)
+//    
+//    println("Trained weights (including bias):")
+//    show(trained_weights)
+//    
+//    // Make predictions
+//    let predictions = predict(X, trained_weights)
+//    println("Predictions:")
+//    show(predictions)
+//    
+//    // Calculate final loss
+//    let final_loss = mse_loss(predictions, y)
+//    println("Final MSE Loss: " + final_loss)
+    
+    return 0
+}

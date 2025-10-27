@@ -4,31 +4,44 @@ import {
     sum, mean, eye, diag, flatten, transpose
 } from tensor
 
-// func test(t : Tensor): Tensor sync {
-
-// }
-
 func test_tensor_operations(): int sync {
     // 创建不同形状的tensor
-    let a = ones([3, 3])
-    let b = zeros([3, 3])
-    let c = eye(3)
-    
+    let a = ones([4, 2])
+    let c = ones([2, 4])
+    println("a")
+    print(a)
+    println("c")
+    print(c)    
     // 基本运算测试
     let add_result = add(a, c)
+    println("add_result")
+    print(add_result)
     let sub_result = subtract(a, c)
+    println("sub_result")
+
+    print(sub_result)
     let mul_result = multiply(a, c)
+    println("mul_result")
+
+    print(mul_result)
     let div_result = divide(a, c)
-    
+    println("div_result")
+
+    print(div_result)
+
     // 形状变换测试
     let flat = flatten(a)
+    print(flat)
     let trans = transpose(a)
-    
+    print(trans)
+
     // 其他操作测试
     let d = diag(a)
+    print(d)
     let s = sum(a)
+    println(s)
     let m = mean(a)
-    
+    println(m)    
     return 0
 }
 

@@ -167,70 +167,28 @@ void __arange__(
     return;
 }
 
+
 // Tensor arithmetic operations
 void __tensor_add__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Calling tensor.add"));
 
-    EXEC_WHEN_DEBUG(auto l = Logger();
-                    l.in("TensorOps").debug("tensor.add called with {} arguments", nargs.size));
-
-    if (nargs.size != 2) {
-        EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Argument count check failed"));
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidNormParameter,
-            std::format("tensor.add expects 2 arguments, got {}", nargs.size));
-    }
-
-    EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Getting first argument"));
     auto tensor1 = frame.get(nargs[0]);
-    EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Getting second argument"));
     auto tensor2 = frame.get(nargs[1]);
 
-    EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps")
-                                           .debug(
-                                               "tensor1 type: {}, tensor2 type: {}",
-                                               tensor1->type()->toString(),
-                                               tensor2->type()->toString()));
-
-    if (tensor1->type()->code() != TensorType::typeCode()) {
-        EXEC_WHEN_DEBUG(
-            auto l = Logger();
-            l.in("TensorOps")
-                .error("First argument is not a tensor, type: {}", tensor1->type()->toString()));
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::UnknownError,
-            std::format(
-                "tensor.add expects first argument to be Tensor, got {}",
-                tensor1->type()->toString()));
-    }
-
-    if (tensor2->type()->code() != TensorType::typeCode()) {
-        EXEC_WHEN_DEBUG(
-            auto l = Logger();
-            l.in("TensorOps")
-                .error("Second argument is not a tensor, type: {}", tensor2->type()->toString()));
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::UnknownError,
-            std::format(
-                "tensor.add expects second argument to be Tensor, got {}",
-                tensor2->type()->toString()));
-    }
-
-    EXEC_WHEN_DEBUG(
-        auto l = Logger();
-        l.in("TensorOps").debug("Both arguments are Tensor types, performing addition"));
+    EXEC_WHEN_DEBUG(auto l = Logger(); l.in("TensorOps").debug("Performing addition"));
 
     try {
-        EXEC_WHEN_DEBUG(auto l = Logger();
-                        l.in("TensorOps").debug("Calling TensorData::add method"));
+        EXEC_WHEN_DEBUG(
+            auto l = Logger(); l.in("TensorOps").debug("Calling TensorData::add method"));
         auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->add(tensor2);
-        EXEC_WHEN_DEBUG(auto l = Logger();
-                        l.in("TensorOps").debug("Addition completed successfully"));
+        EXEC_WHEN_DEBUG(
+            auto l = Logger(); l.in("TensorOps").debug("Addition completed successfully"));
         frame.set(self, result);
     } catch (const std::exception &e) {
-        EXEC_WHEN_DEBUG(auto l = Logger();
-                        l.in("TensorOps").error("Exception during tensor addition: {}", e.what()));
+        EXEC_WHEN_DEBUG(
+            auto l = Logger();
+            l.in("TensorOps").error("Exception during tensor addition: {}", e.what()));
         throw;
     }
 
@@ -244,18 +202,10 @@ void __tensor_subtract__(
     auto tensor1 = frame.get(nargs[0]);
     auto tensor2 = frame.get(nargs[1]);
 
-    if (tensor1->type()->code() != TensorType::typeCode() ||
-        tensor2->type()->code() != TensorType::typeCode()) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::UnknownError,
-            std::format("tensor.subtract expects Tensor arguments"));
-    }
-
     auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->subtract(tensor2);
     frame.set(self, result);
     return;
 }
-
 void __tensor_multiply__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.multiply"));
@@ -264,13 +214,6 @@ void __tensor_multiply__(
     auto tensor2 = frame.get(nargs[1]);
 
     bool first_is_tensor = (tensor1->type()->code() == TensorType::typeCode());
-    bool second_is_tensor = (tensor2->type()->code() == TensorType::typeCode());
-
-    if (!first_is_tensor && !second_is_tensor) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::UnknownError,
-            std::format("tensor.multiply expects at least one Tensor argument"));
-    }
 
     if (first_is_tensor) {
         auto tensor_data = std::dynamic_pointer_cast<TensorData>(tensor1);
@@ -279,21 +222,15 @@ void __tensor_multiply__(
         return;
     }
 
-    if (second_is_tensor) {
-        auto tensor_data = std::dynamic_pointer_cast<TensorData>(tensor2);
-        auto result = tensor_data->multiply(tensor1);
-        frame.set(self, result);
-        return;
-    }
-
-    throw CamelRuntimeException(
-        RuntimeExceptionCode::UnknownError,
-        std::format("tensor.multiply expects Tensor arguments"));
+    auto tensor_data = std::dynamic_pointer_cast<TensorData>(tensor2);
+    auto result = tensor_data->multiply(tensor1); // Multiply is commutative for scalar-tensor
+    frame.set(self, result);
+    return;
 }
 
-void __tensor_divide__(
+void __tensor_matmul__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.divide"));
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.matmul"));
 
     auto tensor1 = frame.get(nargs[0]);
     auto tensor2 = frame.get(nargs[1]);
@@ -302,8 +239,20 @@ void __tensor_divide__(
         tensor2->type()->code() != TensorType::typeCode()) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
-            std::format("tensor.divide expects Tensor arguments"));
+            std::format("tensor.matmul expects Tensor arguments"));
     }
+
+    auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->matmul(tensor2);
+    frame.set(self, result);
+    return;
+}
+
+void __tensor_divide__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.divide"));
+
+    auto tensor1 = frame.get(nargs[0]);
+    auto tensor2 = frame.get(nargs[1]);
 
     auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->divide(tensor2);
     frame.set(self, result);
@@ -669,6 +618,49 @@ void __tensor_sqrt__(
     return;
 }
 
+void __tensor_pow__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.pow"));
+
+    auto self_data = frame.get(nargs[0]);
+    auto tensor = std::dynamic_pointer_cast<TensorData>(self_data);
+    if (!tensor) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.pow expects TensorData as first argument"));
+    }
+
+    auto exponent = frame.get(nargs[1]);
+    auto result = tensor->pow(exponent);
+    frame.set(self, result);
+    return;
+}
+
+void __tensor_matpow__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.matpow"));
+
+    auto self_data = frame.get(nargs[0]);
+    auto tensor = std::dynamic_pointer_cast<TensorData>(self_data);
+    if (!tensor) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.matpow expects TensorData as first argument"));
+    }
+
+    auto exponent_data = frame.get(nargs[1]);
+    if (!exponent_data->type()->equals(Type::Int32())) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.matpow expects Int32 as second argument"));
+    }
+
+    auto intData = std::dynamic_pointer_cast<Int32Data>(exponent_data);
+    auto result = tensor->matpow(intData->data());
+    frame.set(self, result);
+    return;
+}
+
 // Tensor hyperbolic functions
 void __tensor_sinh__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
@@ -737,13 +729,12 @@ void __shape__(
     auto tensor_data = std::dynamic_pointer_cast<TensorData>(tensor);
     auto shape = tensor_data->shape();
 
-    // Convert shape to a list of integers
-    data_vec_t shape_list;
+    data_vec_t shape_array;
     for (auto dim : shape) {
-        shape_list.push_back(std::make_shared<Int32Data>(dim));
+        shape_array.push_back(std::make_shared<Int32Data>(dim));
     }
 
-    auto result = std::make_shared<ListData>(std::move(shape_list));
+    auto result = ArrayData::from(Type::Array(Type::Int32()), std::move(shape_array));
     frame.set(self, result);
     return;
 }
@@ -811,5 +802,23 @@ void __tensor_idx2d__(
     auto result = tensorData->at(
         {static_cast<size_t>(rowIndexData->data()), static_cast<size_t>(colIndexData->data())});
     frame.set(self, result);
+    return;
+}
+
+void __tensor_show__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.show"));
+
+    auto tensor = frame.get(nargs[0]);
+
+    if (tensor->type()->code() != TensorType::typeCode()) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.show expects Tensor argument"));
+    }
+
+    auto tensor_data = std::dynamic_pointer_cast<TensorData>(tensor);
+    std::cout << tensor_data->toFormattedString() << std::endl;
+
     return;
 }
