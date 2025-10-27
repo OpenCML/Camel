@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 27, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -42,6 +42,7 @@
 #include "service/profiler/core/trace.h"
 #include "utils/env.h"
 #include "utils/log.h"
+#include "utils/memperf.h"
 
 #include <chrono>
 #include <filesystem>
@@ -216,6 +217,8 @@ int main(int argc, char *argv[]) {
                     }
                 }());
 
+                memperf::start();
+
                 try {
                     std::vector<std::string> passes(
                         Run::targetFiles.begin() + 1,
@@ -233,6 +236,10 @@ int main(int argc, char *argv[]) {
                     diags->dump(os, useJsonFormat);
                     return selectedCommand == Command::Check ? 0 : 1;
                 }
+
+                memperf::stop();
+
+                memperf::report(os);
 
                 EXEC_WHEN_DEBUG([] {
                     if (Run::profile) {
