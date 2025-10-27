@@ -151,7 +151,7 @@ void PerfMonitor::report(std::ostream &os) {
     for (size_t i = 0; i < BUCKET_COUNT; ++i) {
         std::string label;
         if (i == BUCKET_COUNT - 1)
-            label = "< MAX bytes:";
+            label = "< MAX  bytes:";
         else {
             std::ostringstream lbl;
             lbl << "<" << bucket_limits[i] << " bytes:";

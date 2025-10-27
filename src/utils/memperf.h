@@ -19,7 +19,7 @@
 
 #pragma once
 
-#define MEMPERF_ENABLED
+// #define MEMPERF_ENABLED
 
 #include <array>
 #include <atomic>

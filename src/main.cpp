@@ -217,6 +217,8 @@ int main(int argc, char *argv[]) {
                     }
                 }());
 
+                // memperf::enable_logging(true);
+
                 memperf::start();
 
                 try {
