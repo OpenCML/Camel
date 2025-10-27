@@ -48,10 +48,22 @@ class TensorData : public OtherData {
         const TensorData &tensor1, const TensorData &tensor2,
         std::vector<size_t> &contraction_index, std::vector<size_t> &index1,
         std::vector<size_t> &index2, size_t current_contraction_dim, double &sum);
+    static void calculate_broadcast_addition(
+        const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+        std::vector<size_t> &index_result, size_t current_dim);
+    static void calculate_broadcast_subtraction(
+        const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+        std::vector<size_t> &index_result, size_t current_dim);
     static void calculate_broadcast_multiplication(
         const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
         std::vector<size_t> &index1, std::vector<size_t> &index2, std::vector<size_t> &index_result,
         size_t current_dim);
+    static void calculate_broadcast_division(
+        const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+        std::vector<size_t> &index_result, size_t current_dim);
+    static void calculate_broadcast_power(
+        const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+        std::vector<size_t> &index_result, size_t current_dim);
     static std::string shape_to_string(const std::vector<size_t> &shape);
 
   public:
@@ -84,12 +96,14 @@ class TensorData : public OtherData {
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
+    const std::string toFormattedString() const;
     virtual void print(std::ostream &os) const override;
 
     // Basic Arithmetic Operations
     data_ptr_t add(const data_ptr_t &other) const;
     data_ptr_t subtract(const data_ptr_t &other) const;
     data_ptr_t multiply(const data_ptr_t &other) const;
+    data_ptr_t matmul(const data_ptr_t &other) const;
     data_ptr_t divide(const data_ptr_t &other) const;
 
     // Shape Transformation Operations
@@ -132,6 +146,9 @@ class TensorData : public OtherData {
 
     // Power Functions
     data_ptr_t pow(double exponent) const;
+    data_ptr_t pow(const data_ptr_t &exponent) const; // Element-wise power with tensor exponent
+    data_ptr_t matpow(size_t exponent) const;         // Matrix power
+
     data_ptr_t square() const;
     data_ptr_t cube() const;
 
