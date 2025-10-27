@@ -208,7 +208,7 @@ graph_ptr_t Graph::clone() const {
         nodeMap[newNode.get()] = newNode;
     }
 
-    // 重新建立节点之间的连接
+    // Re-establish connections between nodes
     for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
         for (const auto &withInput : oldNodePtr->withInputs()) {
             Node::link(LinkType::With, nodeMap[withInput.get()], newNodePtr);
@@ -260,11 +260,11 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
 
     std::unordered_map<Node *, node_ptr_t> nodeMap;
 
-    // 处理PORT节点
-    // 如果开启了forceSync
-    // 则不允许内部节点直接连接到外部节点
-    // 而需要新建一个NREF节点作为中转
-    // 保证所有的内部节点都在sync节点后执行
+    // Process PORT nodes
+    // If forceSync is enabled,
+    // internal nodes are not allowed to directly connect to external nodes.
+    // Instead, a new NREF node is created as an intermediary,
+    // ensuring that all internal nodes execute after the sync node.
     const auto &normPorts = targetGraph.normPorts();
     const auto &normInputs = node->normInputs();
     ASSERT(
@@ -306,10 +306,10 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
 
     for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
         if (forceSync && oldNodePtr->inDegree() == 0) {
-            // 保证原图中所有的0入度节点都在sync节点后执行
-            // 即保证sync节点为整个子图的初始节点
+            // Ensure all zero-input nodes in the original graph execute after the sync node.
+            // This guarantees the sync node is the initial node of the entire subgraph.
             if (oldNodePtr->type() == NodeType::PORT) {
-                continue; // PORT节点已经处理过了
+                continue; // PORT nodes have already been processed
             }
             Node::link(LinkType::Ctrl, syncNode, newNodePtr);
         }
@@ -363,8 +363,10 @@ void Graph::rearrange() {
 
     l.in("GIR").debug("Rearranging graph {}.", name_);
 
-    data_idx_t idx = 1;                   // 0 reserved for null
-    data_vec_t newStaticDataArr{nullptr}; // index 0 reserved for null
+    // 0 reserved for null
+    data_idx_t idx = 1;
+    // index 0 reserved for null
+    data_vec_t newStaticDataArr{nullptr};
 
     for (auto &node : normPorts_) {
         node->setIndex(idx++);
@@ -384,7 +386,7 @@ void Graph::rearrange() {
             dataNode->setIndex(-(newStaticDataArr.size() - 1));
         } else {
             if (type == NodeType::SYNC || type == NodeType::NREF) {
-                // 无数据节点直接跳过
+                // Skip nodes without data
                 continue;
             }
             node->setIndex(idx++);
@@ -406,8 +408,9 @@ bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
         return false;
     }
 
-    // 使用 DFS 进行递归检查
-    std::unordered_set<const void *> visited; // 用于避免重复访问
+    // Use DFS to perform recursive checks
+    // Used to avoid revisiting nodes
+    std::unordered_set<const void *> visited;
     std::function<bool(const node_ptr_t &, size_t)> dfs;
 
     dfs = [&](const node_ptr_t &current, size_t jumpsLeft) -> bool {
@@ -419,10 +422,10 @@ bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
             return false;
         }
 
-        // 标记当前节点为已访问
+        // Mark the current node as visited
         visited.insert(current.get());
 
-        // 检查当前节点的所有输出
+        // Check all outputs of the current node
         for (const auto &out : current->withOutputs_) {
             if (out == node) {
                 return true;
@@ -459,7 +462,7 @@ bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
         return false;
     };
 
-    // 从当前节点出发进行递归搜索
+    // Perform recursive search starting from the current node.
     for (const auto &out : withOutputs_) {
         if (dfs(out, maxJumps - 1)) {
             return true;
@@ -519,7 +522,7 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         to->toString()));
 
     switch (type) {
-        // With link 和 Norm link 允许多重边存在
+        // With link and Norm link allow multiple edges to exist.
     case LinkType::With:
         from->withOutputs_.push_back(to);
         to->withInputs_.push_back(from);
@@ -675,6 +678,142 @@ bool Node::detach() {
     }
 
     return true;
+}
+
+std::string Graph::location() const {
+    if (outer_.expired()) {
+        return name_.empty() ? "<anonymous>" : name_;
+    }
+    return outer_.lock()->location() + "::" + (name_.empty() ? "<anonymous>" : name_);
+}
+
+graph_ptr_t Graph::outer() const {
+    if (outer_.expired()) {
+        return nullptr;
+    }
+    return outer_.lock();
+}
+
+std::string Graph::toString() const {
+    return std::format(
+        "Graph({}, nodes: {}, subgraphs: {}, deps: {}, outs: {})",
+        name_.empty() ? "<anonymous>" : name_,
+        nodes_.size(),
+        subGraphs_.size(),
+        dependencies_.size(),
+        dependents_.size());
+}
+
+data_idx_t Graph::addStaticData(const data_ptr_t &data) {
+    staticDataArr_.push_back(data);
+    if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+        throw std::overflow_error("staticDataArr_ exceeds arr_size_t max value");
+    }
+    return -static_cast<data_idx_t>(staticDataArr_.size() - 1);
+}
+
+data_idx_t Graph::addRuntimeData() {
+    if (runtimeDataSize_ > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+        throw std::overflow_error("runtimeDataSize_ exceeds arr_size_t max value");
+    }
+    return static_cast<data_idx_t>(runtimeDataSize_++);
+}
+
+void Graph::setStaticData(data_idx_t index, const data_ptr_t &data) {
+    ASSERT(index < 0, "Static data index must be negative.");
+    size_t idx = static_cast<size_t>(-index);
+    ASSERT(
+        idx < staticDataArr_.size(),
+        std::format(
+            "Static data index out of range when setting data of graph ({}) at index {}. "
+            "(total size: {})",
+            name_,
+            index,
+            staticDataArr_.size()));
+    staticDataArr_[idx] = data;
+}
+
+data_ptr_t Graph::getStaticData(data_idx_t index) const {
+    ASSERT(index < 0, "Static data index must be negative.");
+    size_t idx = static_cast<size_t>(-index);
+    ASSERT(
+        idx < staticDataArr_.size(),
+        std::format(
+            "Static data index out of range when getting data of graph ({}) at index {}. "
+            "(total size: {})",
+            name_,
+            index,
+            staticDataArr_.size()));
+    return staticDataArr_[idx];
+}
+
+std::optional<std::unordered_set<graph_ptr_t>> Graph::getSubGraphsByName(const std::string &name) {
+    if (subGraphs_.find(name) != subGraphs_.end()) {
+        return subGraphs_[name];
+    }
+    return std::nullopt;
+}
+
+void Graph::addSubGraph(const graph_ptr_t &graph) {
+    ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
+    ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
+    if (subGraphs_.find(graph->name()) == subGraphs_.end()) {
+        subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>({graph});
+    } else {
+        auto &existing = subGraphs_[graph->name()];
+        ASSERT(
+            existing.find(graph) == existing.end(),
+            std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
+        existing.insert(graph);
+        l.in("GIR").debug("Added subgraph '{}' to graph '{}'.", graph->mangledName(), name_);
+    }
+    graph->outer_ = shared_from_this();
+}
+
+void Graph::delSubGraph(const graph_ptr_t &graph) {
+    ASSERT(graph.get() != this, "Cannot remove itself as a subgraph.");
+    ASSERT(!graph->name().empty(), "Cannot remove an anonymous graph as a subgraph.");
+    if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
+        auto &existing = subGraphs_[graph->name()];
+        existing.erase(graph);
+        l.in("GIR").debug("Removed subgraph '{}' from graph '{}'.", graph->mangledName(), name_);
+        if (existing.empty()) {
+            subGraphs_.erase(graph->name());
+        }
+        graph->outer_.reset();
+    }
+}
+
+void Graph::addDependency(const graph_ptr_t &graph) {
+    if (graph.get() == this) {
+        this->looped_ = true;
+        // Here we do not add itself to dependencies_ to avoid self-references
+        // but only mark it as a looped graph
+        return;
+    }
+    dependencies_.insert(graph);
+    graph->dependents_.insert(shared_from_this());
+    l.in("GIR").debug("Added dependency: Graph '{}' depends on graph '{}'.", name_, graph->name());
+}
+
+void Graph::delDependency(const graph_ptr_t &graph) {
+    dependencies_.erase(graph);
+    graph->dependents_.erase(shared_from_this());
+    l.in("GIR").debug(
+        "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
+        name_,
+        graph->name());
+}
+
+data_idx_t Node::index() const {
+    // SYNC, DREF, and NREF nodes do not have data indices.
+    // For NREF nodes, the data index is derived from their input node's index.
+    ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
+    ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
+    if (nodeType_ == NodeType::NREF) {
+        return normInputs_.front()->index();
+    }
+    return dataIndex_;
 }
 
 } // namespace GraphIR
