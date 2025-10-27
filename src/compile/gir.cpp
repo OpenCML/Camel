@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -498,17 +498,20 @@ bool Node::hasLinkedTo(const node_ptr_t &node) const {
     return false;
 }
 
-/**
- * 保证两个节点之间不会有多条边
- * 但不保证不会成环，需要在调用时做成环检测
- * 涉及到外部节点时，自动设置捕获
- */
 void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
     ASSERT(
         from->nodeType_ != NodeType::DREF,
         "DREF nodes cannot be linked as input to other nodes.");
     ASSERT(from && to, "Cannot link null nodes.");
     ASSERT(from != to, "Cannot link a node to itself.");
+    ASSERT(
+        &from->graph() == &to->graph(),
+        std::format(
+            "Cannot link nodes from different graphs: {} -{}-> {}. ",
+            from->toString(),
+            (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
+            to->toString()));
+
     EXEC_WHEN_DEBUG(l.in("GIR").debug(
         "Linking nodes: {} -{}-> {}",
         from->toString(),
@@ -516,19 +519,12 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         to->toString()));
 
     switch (type) {
+        // With link 和 Norm link 允许多重边存在
     case LinkType::With:
-        ASSERT(
-            std::find(from->withOutputs_.begin(), from->withOutputs_.end(), to) ==
-                from->withOutputs_.end(),
-            "Nodes are already linked (with).");
         from->withOutputs_.push_back(to);
         to->withInputs_.push_back(from);
         break;
     case LinkType::Norm:
-        ASSERT(
-            std::find(from->normOutputs_.begin(), from->normOutputs_.end(), to) ==
-                from->normOutputs_.end(),
-            "Nodes are already linked (norm).");
         from->normOutputs_.push_back(to);
         to->normInputs_.push_back(from);
         break;
@@ -541,16 +537,6 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
         to->ctrlInputs_.push_back(from);
         break;
     }
-
-    // setting capture
-    if (&from->graph() != &to->graph()) {
-        Graph *curr = &to->graph();
-        while (curr != nullptr && &from->graph() != curr) {
-            // the referenced node is from an outer scope, need to mark it as captured
-            curr->addClosure(from);
-            curr = curr->outer().get();
-        }
-    }
 }
 
 bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
@@ -562,6 +548,7 @@ bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
             "Cannot unlink nodes from different graphs: {} -X- {}. ",
             from->toString(),
             to->toString()));
+
     EXEC_WHEN_DEBUG(
         l.in("GIR").debug("Unlinking nodes: {} -X- {}", from->toString(), to->toString()));
 
