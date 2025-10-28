@@ -35,7 +35,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Array(Type::Int32()), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
 
@@ -47,7 +47,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Array(Type::Int32()), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -58,7 +58,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), false}},
-                        TensorType::create(Type::Double(), {0, 0})),
+                        TensorType::create(Type::Float(), {0, 0})),
                 },
             }),
         OperatorGroup::create(
@@ -69,7 +69,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -80,7 +80,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -91,7 +91,47 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "random",
+            {
+                {
+                    ":tensor/random",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Array(Type::Int32()), false}},
+                        TensorType::create(Type::Float(), {0})),
+                },
+                {
+                    ":tensor/random",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Array(Type::Int32()), false},
+                         {Type::Float(), false},
+                         {Type::Float(), false}},
+                        TensorType::create(Type::Float(), {0})),
+                },
+            }),
+        OperatorGroup::create(
+            "randn",
+            {
+                {
+                    ":tensor/randn",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Array(Type::Int32()), false}},
+                        TensorType::create(Type::Float(), {0})),
+                },
+                {
+                    ":tensor/randn_params",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Array(Type::Int32()), false},
+                         {Type::Float(), false},
+                         {Type::Float(), false}},
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -357,7 +397,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}, {Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -409,7 +449,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}, {Type::Any(), false}, {Type::Int(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -420,7 +460,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}, {Type::Int(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
 
@@ -431,11 +471,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":tensor/sum",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "(a: Tensor) => double",
+                        "(a: Tensor) => float",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() == TensorType::typeCode()) {
-                                return Type::Double();
+                                return Type::Float();
                             }
                             return nullopt;
                         }),
@@ -452,7 +492,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() == TensorType::typeCode()) {
-                                return TensorType::create(Type::Double(), {0});
+                                return TensorType::create(Type::Float(), {0});
                             }
                             return nullopt;
                         }),
@@ -466,7 +506,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -477,7 +517,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
 
@@ -489,7 +529,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -500,7 +540,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
 
@@ -523,7 +563,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -534,7 +574,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Any(), false}},
-                        TensorType::create(Type::Double(), {0})),
+                        TensorType::create(Type::Float(), {0})),
                 },
             }),
         OperatorGroup::create(
@@ -586,7 +626,26 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create({}, {{Type::Any(), false}}, Type::Void()),
                 },
             }),
-
+        OperatorGroup::create(
+            "to_float",
+            {
+                {
+                    ":tensor/to_float",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(value: typeas T) => float",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Int32 ||
+                                norm[0]->code() == TypeCode::Int64 ||
+                                norm[0]->code() == TypeCode::Float ||
+                                norm[0]->code() == TypeCode::Double) {
+                                return Type::Float();
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
     };
 
     return groups;
@@ -596,7 +655,7 @@ TensorBuiltinModule::TensorBuiltinModule(context_ptr_t ctx) : BuiltinModule("ten
     for (const auto &group : getOperatorGroups()) {
         exportEntity(group->name(), group);
     }
-    exportType("Tensor", TensorType::create(Type::Double(), {0}));
+    exportType("Tensor", TensorType::create(Type::Float(), {0}));
 }
 
 bool TensorBuiltinModule::load() {

@@ -1560,14 +1560,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "Tensor",
-            {
-                {
-                    ":type/tensor",
-                    StaticFuncTypeResolver::create({}, {}, TensorType::create(Type::Double(), {0})),
-                },
-            }),
     };
     return groups;
 }

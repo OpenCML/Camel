@@ -161,7 +161,7 @@ class TensorData : public OtherData {
     // Indexing and Slicing Operations
     data_ptr_t take(const std::vector<size_t> &indices, size_t axis) const;
     data_ptr_t put(const std::vector<size_t> &indices, const data_ptr_t &values) const;
-    data_ptr_t slice(const std::vector<std::pair<size_t, size_t>> &slices) const;
+    data_ptr_t TensorData::slice(size_t start, size_t end, size_t row) const;
 
     // Comparison Operations
     data_ptr_t equal(const data_ptr_t &other) const;
@@ -189,6 +189,8 @@ class TensorData : public OtherData {
     data_ptr_t tile(const std::vector<size_t> &reps) const;
     data_ptr_t pad(size_t pad_width, double constant_value = 0.0) const;
 
+    void assign(const data_ptr_t &other);
+
     // Static Factory Methods
     static data_ptr_t eye(size_t n);
     static data_ptr_t diag(const data_ptr_t &v);
@@ -196,4 +198,6 @@ class TensorData : public OtherData {
     static data_ptr_t arange(double start, double stop, double step = 1.0);
     static data_ptr_t zeros(const std::vector<size_t> &shape);
     static data_ptr_t ones(const std::vector<size_t> &shape);
+    static data_ptr_t random(const std::vector<size_t> &shape, double lower = 0.0, double upper = 1.0);
+    static data_ptr_t randn(const std::vector<size_t> &shape, double mean = 0.0, double stddev = 1.0);
 };

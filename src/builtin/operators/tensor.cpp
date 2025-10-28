@@ -167,6 +167,109 @@ void __arange__(
     return;
 }
 
+void __random__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.random"));
+
+    auto shapeArg = frame.get(nargs[0]);
+    std::vector<size_t> shape;
+
+    if (shapeArg->type()->code() == TypeCode::Array) {
+        auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
+        for (const auto &element : arrayData->raw()) {
+            if (!element->type()->equals(Type::Int32())) {
+                throw CamelRuntimeException(
+                    RuntimeExceptionCode::UnknownError,
+                    std::format("tensor.random expects Array of Int32 arguments"));
+            }
+            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            shape.push_back(static_cast<size_t>(intData->data()));
+        }
+    } else {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.random expects List or Array argument"));
+    }
+
+    double lower = 0.0;
+    double upper = 1.0;
+    
+    if (nargs.size > 1) {
+        auto lowerArg = frame.get(nargs[1]);
+        if (!lowerArg->type()->equals(Type::Float())) {
+            throw CamelRuntimeException(
+                RuntimeExceptionCode::UnknownError,
+                std::format("tensor.random expects Float lower bound"));
+        }
+        lower = std::dynamic_pointer_cast<FloatData>(lowerArg)->data();
+    }
+    
+    if (nargs.size > 2) {
+        auto upperArg = frame.get(nargs[2]);
+        if (!upperArg->type()->equals(Type::Float())) {
+            throw CamelRuntimeException(
+                RuntimeExceptionCode::UnknownError,
+                std::format("tensor.random expects Float upper bound"));
+        }
+        upper = std::dynamic_pointer_cast<FloatData>(upperArg)->data();
+    }
+
+    auto tensor = TensorData::random(shape, lower, upper);
+    frame.set(self, tensor);
+    return;
+}
+
+void __randn__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.randn"));
+
+    auto shapeArg = frame.get(nargs[0]);
+    std::vector<size_t> shape;
+
+    if (shapeArg->type()->code() == TypeCode::Array) {
+        auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
+        for (const auto &element : arrayData->raw()) {
+            if (!element->type()->equals(Type::Int32())) {
+                throw CamelRuntimeException(
+                    RuntimeExceptionCode::UnknownError,
+                    std::format("tensor.randn expects Array of Int32 arguments"));
+            }
+            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            shape.push_back(static_cast<size_t>(intData->data()));
+        }
+    } else {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.randn expects List or Array argument"));
+    }
+
+    double mean = 0.0;
+    double stddev = 1.0;
+    
+    if (nargs.size > 1) {
+        auto meanArg = frame.get(nargs[1]);
+        if (!meanArg->type()->equals(Type::Float())) {
+            throw CamelRuntimeException(
+                RuntimeExceptionCode::UnknownError,
+                std::format("tensor.randn expects Float mean"));
+        }
+        mean = std::dynamic_pointer_cast<FloatData>(meanArg)->data();
+    }
+    
+    if (nargs.size > 2) {
+        auto stddevArg = frame.get(nargs[2]);
+        if (!stddevArg->type()->equals(Type::Float())) {
+            throw CamelRuntimeException(
+                RuntimeExceptionCode::UnknownError,
+                std::format("tensor.randn expects Float standard deviation"));
+        }
+        stddev = std::dynamic_pointer_cast<FloatData>(stddevArg)->data();
+    }
+
+    auto tensor = TensorData::randn(shape, mean, stddev);
+    frame.set(self, tensor);
+    return;
+}
 
 // Tensor arithmetic operations
 void __tensor_add__(
@@ -328,6 +431,7 @@ void __tensor_concat__(
 
     auto tensor1 = frame.get(nargs[0]);
     auto tensor2 = frame.get(nargs[1]);
+    auto axis_data = frame.get(nargs[2]);
 
     if (tensor1->type()->code() != TensorType::typeCode() ||
         tensor2->type()->code() != TensorType::typeCode()) {
@@ -336,7 +440,14 @@ void __tensor_concat__(
             std::format("tensor.concat expects Tensor arguments"));
     }
 
-    auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->concat(tensor2);
+    if (axis_data->type()->code() != TypeCode::Int32) {
+        throw CamelRuntimeException(
+            RuntimeExceptionCode::UnknownError,
+            std::format("tensor.concat expects integer axis argument"));
+    }
+
+    auto axis = std::dynamic_pointer_cast<Int32Data>(axis_data)->data();
+    auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->concat(tensor2, axis);
     frame.set(self, result);
     return;
 }
@@ -775,9 +886,7 @@ void __tensor_idx2d__(
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor 2d index"));
 
     auto tensor = frame.get(nargs[0]);
-    auto rowIndex = frame.get(nargs[1]);
-    auto colIndex = frame.get(nargs[2]);
-
+    
     if (tensor->type()->code() != TensorType::typeCode()) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
@@ -786,25 +895,52 @@ void __tensor_idx2d__(
                 tensor->type()->toString()));
     }
 
-    if (!rowIndex->type()->equals(Type::Int32()) || !colIndex->type()->equals(Type::Int32())) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::UnknownError,
-            std::format(
-                "tensor 2d index expects second and third arguments to be Int32, got {} and {}",
-                rowIndex->type()->toString(),
-                colIndex->type()->toString()));
-    }
-
     auto tensorData = std::dynamic_pointer_cast<TensorData>(tensor);
-    auto rowIndexData = std::dynamic_pointer_cast<Int32Data>(rowIndex);
-    auto colIndexData = std::dynamic_pointer_cast<Int32Data>(colIndex);
+    
+    if (nargs.size == 3) {
+        auto rowIndex = frame.get(nargs[1]);
+        auto colIndex = frame.get(nargs[2]);
 
-    auto result = tensorData->at(
-        {static_cast<size_t>(rowIndexData->data()), static_cast<size_t>(colIndexData->data())});
-    frame.set(self, result);
+        if (!rowIndex->type()->equals(Type::Int32()) || !colIndex->type()->equals(Type::Int32())) {
+            throw CamelRuntimeException(
+                RuntimeExceptionCode::UnknownError,
+                std::format(
+                    "tensor 2d index expects second and third arguments to be Int32, got {} and {}",
+                    rowIndex->type()->toString(),
+                    colIndex->type()->toString()));
+        }
+
+        auto rowIndexData = std::dynamic_pointer_cast<Int32Data>(rowIndex);
+        auto colIndexData = std::dynamic_pointer_cast<Int32Data>(colIndex);
+
+        auto result = tensorData->at(
+            {static_cast<size_t>(rowIndexData->data()), static_cast<size_t>(colIndexData->data())});
+        frame.set(self, result);
+    } else if (nargs.size == 5) {
+        auto arg1 = frame.get(nargs[1]);
+        auto arg2 = frame.get(nargs[2]);
+        auto arg3 = frame.get(nargs[3]);
+        auto arg4 = frame.get(nargs[4]);
+        
+        if (arg1->type()->equals(Type::Int32()) &&  // start
+            arg2->type()->equals(Type::Int32()) &&  // end
+            arg3->type()->equals(Type::Int32()) &&  // row
+            arg4->type()->equals(Type::Int32())) {  // unused/step (for future use)
+            
+            auto startData = std::dynamic_pointer_cast<Int32Data>(arg1);
+            auto endData = std::dynamic_pointer_cast<Int32Data>(arg2);
+            auto rowData = std::dynamic_pointer_cast<Int32Data>(arg3);
+            
+            auto result = tensorData->slice(
+                static_cast<size_t>(startData->data()),
+                static_cast<size_t>(endData->data()),
+                static_cast<size_t>(rowData->data()));
+            frame.set(self, result);
+        }
+    }
+    
     return;
 }
-
 void __tensor_show__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.show"));
@@ -821,4 +957,31 @@ void __tensor_show__(
     std::cout << tensor_data->toFormattedString() << std::endl;
 
     return;
+}
+void __to_float__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    auto data = frame.get(nargs[0]);
+    switch (data->type()->code()) {
+    case TypeCode::Int32: {
+        auto intData = std::dynamic_pointer_cast<Int32Data>(data);
+        frame.set(self, std::make_shared<FloatData>(static_cast<float>(intData->data())));
+        return;
+    }
+    case TypeCode::Int64: {
+        auto intData = std::dynamic_pointer_cast<Int64Data>(data);
+        frame.set(self, std::make_shared<FloatData>(static_cast<float>(intData->data())));
+        return;
+    }
+    case TypeCode::Double: {
+        auto doubleData = std::dynamic_pointer_cast<DoubleData>(data);
+        frame.set(self, std::make_shared<FloatData>(static_cast<float>(doubleData->data())));
+        return;
+    }
+    case TypeCode::Float: {
+        frame.set(self, data);
+        return;
+    }
+    default:
+        throw std::runtime_error("Cannot convert type to float: " + data->type()->toString());
+    }
 }

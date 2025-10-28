@@ -193,6 +193,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"tensor/diag", __diag__},
         {"tensor/linspace", __linspace__},
         {"tensor/arange", __arange__},
+        {"tensor/random", __random__},
+        {"tensor/randn", __randn__},
+
         {"tensor/shape", __shape__},
 
         {"tensor/add", __tensor_add__},
@@ -233,6 +236,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"tensor/tanh", __tensor_tanh__},
 
         {"tensor/show", __tensor_show__},
+        {"tensor/to_float", __to_float__},
 
         // os
         {"os/exit", __exit__},
