@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 27, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -165,6 +165,131 @@ void Graph::setOutput(const node_ptr_t &node) {
 
     exitNode_ = ExitNode::create(*this, node->dataType(), node->index());
     Node::link(LinkType::Norm, node, exitNode_);
+}
+
+std::string Graph::location() const {
+    if (outer_.expired()) {
+        return name_.empty() ? "<anonymous>" : name_;
+    }
+    return outer_.lock()->location() + "::" + (name_.empty() ? "<anonymous>" : name_);
+}
+
+graph_ptr_t Graph::outer() const {
+    if (outer_.expired()) {
+        return nullptr;
+    }
+    return outer_.lock();
+}
+
+std::string Graph::toString() const {
+    return std::format(
+        "Graph({}, nodes: {}, subgraphs: {}, deps: {}, outs: {})",
+        name_.empty() ? "<anonymous>" : name_,
+        nodes_.size(),
+        subGraphs_.size(),
+        dependencies_.size(),
+        dependents_.size());
+}
+
+data_idx_t Graph::addStaticData(const data_ptr_t &data) {
+    staticDataArr_.push_back(data);
+    if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+        throw std::overflow_error("staticDataArr_ exceeds arr_size_t max value");
+    }
+    return -static_cast<data_idx_t>(staticDataArr_.size() - 1);
+}
+
+data_idx_t Graph::addRuntimeData() {
+    if (runtimeDataSize_ > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+        throw std::overflow_error("runtimeDataSize_ exceeds arr_size_t max value");
+    }
+    return static_cast<data_idx_t>(runtimeDataSize_++);
+}
+
+void Graph::setStaticData(data_idx_t index, const data_ptr_t &data) {
+    ASSERT(index < 0, "Static data index must be negative.");
+    size_t idx = static_cast<size_t>(-index);
+    ASSERT(
+        idx < staticDataArr_.size(),
+        std::format(
+            "Static data index out of range when setting data of graph ({}) at index {}. "
+            "(total size: {})",
+            name_,
+            index,
+            staticDataArr_.size()));
+    staticDataArr_[idx] = data;
+}
+
+data_ptr_t Graph::getStaticData(data_idx_t index) const {
+    ASSERT(index < 0, "Static data index must be negative.");
+    size_t idx = static_cast<size_t>(-index);
+    ASSERT(
+        idx < staticDataArr_.size(),
+        std::format(
+            "Static data index out of range when getting data of graph ({}) at index {}. "
+            "(total size: {})",
+            name_,
+            index,
+            staticDataArr_.size()));
+    return staticDataArr_[idx];
+}
+
+std::optional<std::unordered_set<graph_ptr_t>> Graph::getSubGraphsByName(const std::string &name) {
+    if (subGraphs_.find(name) != subGraphs_.end()) {
+        return subGraphs_[name];
+    }
+    return std::nullopt;
+}
+
+void Graph::addSubGraph(const graph_ptr_t &graph) {
+    ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
+    ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
+    if (subGraphs_.find(graph->name()) == subGraphs_.end()) {
+        subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>({graph});
+    } else {
+        auto &existing = subGraphs_[graph->name()];
+        ASSERT(
+            existing.find(graph) == existing.end(),
+            std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
+        existing.insert(graph);
+        l.in("GIR").debug("Added subgraph '{}' to graph '{}'.", graph->mangledName(), name_);
+    }
+    graph->outer_ = shared_from_this();
+}
+
+void Graph::delSubGraph(const graph_ptr_t &graph) {
+    ASSERT(graph.get() != this, "Cannot remove itself as a subgraph.");
+    ASSERT(!graph->name().empty(), "Cannot remove an anonymous graph as a subgraph.");
+    if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
+        auto &existing = subGraphs_[graph->name()];
+        existing.erase(graph);
+        l.in("GIR").debug("Removed subgraph '{}' from graph '{}'.", graph->mangledName(), name_);
+        if (existing.empty()) {
+            subGraphs_.erase(graph->name());
+        }
+        graph->outer_.reset();
+    }
+}
+
+void Graph::addDependency(const graph_ptr_t &graph) {
+    if (graph.get() == this) {
+        this->looped_ = true;
+        // Here we do not add itself to dependencies_ to avoid self-references
+        // but only mark it as a looped graph
+        return;
+    }
+    dependencies_.insert(graph);
+    graph->dependents_.insert(shared_from_this());
+    l.in("GIR").debug("Added dependency: Graph '{}' depends on graph '{}'.", name_, graph->name());
+}
+
+void Graph::delDependency(const graph_ptr_t &graph) {
+    dependencies_.erase(graph);
+    graph->dependents_.erase(shared_from_this());
+    l.in("GIR").debug(
+        "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
+        name_,
+        graph->name());
 }
 
 graph_ptr_t Graph::clone() const {
@@ -402,6 +527,17 @@ void Graph::rearrange() {
 /*
 Node
 */
+
+data_idx_t Node::index() const {
+    // SYNC, DREF, and NREF nodes do not have data indices.
+    // For NREF nodes, the data index is derived from their input node's index.
+    ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
+    ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
+    if (nodeType_ == NodeType::NREF) {
+        return normInputs_.front()->index();
+    }
+    return dataIndex_;
+}
 
 bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
     if (maxJumps == 0) {
@@ -678,142 +814,6 @@ bool Node::detach() {
     }
 
     return true;
-}
-
-std::string Graph::location() const {
-    if (outer_.expired()) {
-        return name_.empty() ? "<anonymous>" : name_;
-    }
-    return outer_.lock()->location() + "::" + (name_.empty() ? "<anonymous>" : name_);
-}
-
-graph_ptr_t Graph::outer() const {
-    if (outer_.expired()) {
-        return nullptr;
-    }
-    return outer_.lock();
-}
-
-std::string Graph::toString() const {
-    return std::format(
-        "Graph({}, nodes: {}, subgraphs: {}, deps: {}, outs: {})",
-        name_.empty() ? "<anonymous>" : name_,
-        nodes_.size(),
-        subGraphs_.size(),
-        dependencies_.size(),
-        dependents_.size());
-}
-
-data_idx_t Graph::addStaticData(const data_ptr_t &data) {
-    staticDataArr_.push_back(data);
-    if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
-        throw std::overflow_error("staticDataArr_ exceeds arr_size_t max value");
-    }
-    return -static_cast<data_idx_t>(staticDataArr_.size() - 1);
-}
-
-data_idx_t Graph::addRuntimeData() {
-    if (runtimeDataSize_ > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
-        throw std::overflow_error("runtimeDataSize_ exceeds arr_size_t max value");
-    }
-    return static_cast<data_idx_t>(runtimeDataSize_++);
-}
-
-void Graph::setStaticData(data_idx_t index, const data_ptr_t &data) {
-    ASSERT(index < 0, "Static data index must be negative.");
-    size_t idx = static_cast<size_t>(-index);
-    ASSERT(
-        idx < staticDataArr_.size(),
-        std::format(
-            "Static data index out of range when setting data of graph ({}) at index {}. "
-            "(total size: {})",
-            name_,
-            index,
-            staticDataArr_.size()));
-    staticDataArr_[idx] = data;
-}
-
-data_ptr_t Graph::getStaticData(data_idx_t index) const {
-    ASSERT(index < 0, "Static data index must be negative.");
-    size_t idx = static_cast<size_t>(-index);
-    ASSERT(
-        idx < staticDataArr_.size(),
-        std::format(
-            "Static data index out of range when getting data of graph ({}) at index {}. "
-            "(total size: {})",
-            name_,
-            index,
-            staticDataArr_.size()));
-    return staticDataArr_[idx];
-}
-
-std::optional<std::unordered_set<graph_ptr_t>> Graph::getSubGraphsByName(const std::string &name) {
-    if (subGraphs_.find(name) != subGraphs_.end()) {
-        return subGraphs_[name];
-    }
-    return std::nullopt;
-}
-
-void Graph::addSubGraph(const graph_ptr_t &graph) {
-    ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
-    ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
-    if (subGraphs_.find(graph->name()) == subGraphs_.end()) {
-        subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>({graph});
-    } else {
-        auto &existing = subGraphs_[graph->name()];
-        ASSERT(
-            existing.find(graph) == existing.end(),
-            std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
-        existing.insert(graph);
-        l.in("GIR").debug("Added subgraph '{}' to graph '{}'.", graph->mangledName(), name_);
-    }
-    graph->outer_ = shared_from_this();
-}
-
-void Graph::delSubGraph(const graph_ptr_t &graph) {
-    ASSERT(graph.get() != this, "Cannot remove itself as a subgraph.");
-    ASSERT(!graph->name().empty(), "Cannot remove an anonymous graph as a subgraph.");
-    if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
-        auto &existing = subGraphs_[graph->name()];
-        existing.erase(graph);
-        l.in("GIR").debug("Removed subgraph '{}' from graph '{}'.", graph->mangledName(), name_);
-        if (existing.empty()) {
-            subGraphs_.erase(graph->name());
-        }
-        graph->outer_.reset();
-    }
-}
-
-void Graph::addDependency(const graph_ptr_t &graph) {
-    if (graph.get() == this) {
-        this->looped_ = true;
-        // Here we do not add itself to dependencies_ to avoid self-references
-        // but only mark it as a looped graph
-        return;
-    }
-    dependencies_.insert(graph);
-    graph->dependents_.insert(shared_from_this());
-    l.in("GIR").debug("Added dependency: Graph '{}' depends on graph '{}'.", name_, graph->name());
-}
-
-void Graph::delDependency(const graph_ptr_t &graph) {
-    dependencies_.erase(graph);
-    graph->dependents_.erase(shared_from_this());
-    l.in("GIR").debug(
-        "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
-        name_,
-        graph->name());
-}
-
-data_idx_t Node::index() const {
-    // SYNC, DREF, and NREF nodes do not have data indices.
-    // For NREF nodes, the data index is derived from their input node's index.
-    ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
-    ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
-    if (nodeType_ == NodeType::NREF) {
-        return normInputs_.front()->index();
-    }
-    return dataIndex_;
 }
 
 } // namespace GraphIR
