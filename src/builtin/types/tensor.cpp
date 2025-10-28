@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@ using namespace std;
 unordered_map<string, string> TensorType::staticMethods_;
 
 TensorType::TensorType(const vector<size_t> &shape)
-    : OtherType(typeCode()), shape_(shape), element_type_(Type::Double()) {
+    : OtherType(typeCode()), shape_(shape), element_type_(Type::Float()) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
     }
