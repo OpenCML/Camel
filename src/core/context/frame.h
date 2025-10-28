@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,8 @@ using arr_size_t = uint16_t;
 using node_ptr_t = std::shared_ptr<Node>;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
+
+class FrameTemplate {};
 
 class Frame {
   public:
@@ -58,4 +60,7 @@ class Frame {
   private:
     GraphIR::Graph *graph_;
     data_vec_t dataArr_;
+
+    void *meta_;
+    void *data_;
 };

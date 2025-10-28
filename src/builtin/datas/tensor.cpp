@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -65,9 +66,8 @@ data_ptr_t TensorData::at(const std::vector<size_t> &index) const {
         multiplier *= shape_[dim_index];
     }
 
-    return std::make_shared<DoubleData>(data_(linear_index));
+    return std::make_shared<FloatData>(static_cast<float>(data_(linear_index)));
 }
-
 std::vector<size_t> TensorData::shape() const { return shape_; }
 
 size_t TensorData::size() const { return data_.size(); }
@@ -121,7 +121,59 @@ const std::string TensorData::toString() const {
     return ss.str();
 }
 
-void TensorData::print(std::ostream &os) const { os << toString(); }
+const std::string TensorData::toFormattedString() const {
+    std::stringstream ss;
+
+    if (shape_.empty()) {
+        ss << "Tensor([])";
+        return ss.str();
+    }
+
+    // For 0-D tensor
+    if (shape_.size() == 1 && shape_[0] == 1) {
+        ss << "Tensor(" << data_(0) << ")";
+        return ss.str();
+    }
+
+    // For 1-D tensor
+    if (shape_.size() == 1) {
+        ss << "Tensor([";
+        for (size_t i = 0; i < shape_[0]; ++i) {
+            ss << data_(i);
+            if (i < shape_[0] - 1) {
+                ss << ", ";
+            }
+        }
+        ss << "])";
+        return ss.str();
+    }
+
+    // For 2-D tensor (matrix)
+    if (shape_.size() == 2) {
+        ss << "Tensor(\n";
+        for (size_t i = 0; i < shape_[0]; ++i) {
+            ss << "  [";
+            for (size_t j = 0; j < shape_[1]; ++j) {
+                size_t index = i * shape_[1] + j;
+                ss << data_(index);
+                if (j < shape_[1] - 1) {
+                    ss << ", ";
+                }
+            }
+            ss << "]";
+            if (i < shape_[0] - 1) {
+                ss << ",";
+            }
+            ss << "\n";
+        }
+        ss << ")";
+        return ss.str();
+    }
+
+    return toString();
+}
+
+void TensorData::print(std::ostream &os) const { os << toFormattedString(); }
 
 void TensorData::resolve(const data_vec_t &dataList) {
     if (refs_.empty()) {
@@ -402,7 +454,7 @@ data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
         }
 
         if (shape()[1] != other_tensor->shape()[1]) {
-            throw invalid_argument(
+            throw runtime_error(
                 "Tensors must have the same number of columns for axis=0 concatenation");
         }
 
@@ -569,7 +621,7 @@ data_ptr_t TensorData::var() const {
     double mean_val = data_.mean();
     double variance = (data_.array() - mean_val).square().mean();
 
-    auto result = make_shared<DoubleData>(variance);
+    auto result = make_shared<FloatData>(static_cast<float>(variance));
     return result;
 }
 
@@ -582,7 +634,7 @@ data_ptr_t TensorData::std() const {
     double variance = (data_.array() - mean_val).square().mean();
     double std_dev = std::sqrt(variance);
 
-    auto result = make_shared<DoubleData>(std_dev);
+    auto result = make_shared<FloatData>(static_cast<float>(std_dev));
     return result;
 }
 
@@ -607,6 +659,128 @@ data_ptr_t TensorData::tanh() const {
 data_ptr_t TensorData::pow(double exponent) const {
     auto result = make_shared<TensorData>(nullptr, shape_);
     result->data_ = data_.array().pow(exponent);
+    return result;
+}
+
+data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
+    if (auto tensor = dynamic_pointer_cast<TensorData>(exponent)) {
+        if (!is_broadcastable(shape_, tensor->shape_)) {
+            throw std::invalid_argument(
+                "Tensor shapes are not broadcastable for power operation: " +
+                shape_to_string(shape_) + " and " + shape_to_string(tensor->shape_));
+        }
+
+        std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
+
+        auto result = make_shared<TensorData>(nullptr, result_shape);
+        result->data_.resize(result->data_.size());
+
+        std::vector<size_t> index_result(result_shape.size(), 0);
+        calculate_broadcast_power(*this, *tensor, *result, index_result, 0);
+
+        return result;
+    }
+
+    if (auto intData = dynamic_pointer_cast<Int32Data>(exponent)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array().pow(static_cast<double>(intData->data()));
+        return result;
+    }
+    if (auto longData = dynamic_pointer_cast<Int64Data>(exponent)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array().pow(static_cast<double>(longData->data()));
+        return result;
+    }
+    if (auto floatData = dynamic_pointer_cast<FloatData>(exponent)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array().pow(static_cast<double>(floatData->data()));
+        return result;
+    }
+    if (auto doubleData = dynamic_pointer_cast<DoubleData>(exponent)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array().pow(doubleData->data());
+        return result;
+    }
+
+    throw runtime_error("Tensor power operation expects either Tensor or scalar operand");
+}
+
+void TensorData::calculate_broadcast_power(
+    const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+    std::vector<size_t> &index_result, size_t current_dim) {
+    size_t dim_result = result.shape_.size();
+
+    if (current_dim == dim_result) {
+        std::vector<size_t> actual_index1(tensor1.shape_.size(), 0);
+        std::vector<size_t> actual_index2(tensor2.shape_.size(), 0);
+
+        size_t offset1 = dim_result - tensor1.shape_.size();
+        for (size_t i = 0; i < tensor1.shape_.size(); ++i) {
+            size_t result_dim = offset1 + i;
+            if (tensor1.shape_[i] == 1) {
+                actual_index1[i] = 0; // Broadcast dimension
+            } else {
+                actual_index1[i] = index_result[result_dim];
+            }
+        }
+
+        size_t offset2 = dim_result - tensor2.shape_.size();
+        for (size_t i = 0; i < tensor2.shape_.size(); ++i) {
+            size_t result_dim = offset2 + i;
+            if (tensor2.shape_[i] == 1) {
+                actual_index2[i] = 0; // Broadcast dimension
+            } else {
+                actual_index2[i] = index_result[result_dim];
+            }
+        }
+
+        size_t linear_index1 = calculate_linear_index(actual_index1, tensor1.shape_);
+        size_t linear_index2 = calculate_linear_index(actual_index2, tensor2.shape_);
+        size_t linear_index_result = calculate_linear_index(index_result, result.shape_);
+
+        result.data_(linear_index_result) =
+            std::pow(tensor1.data_(linear_index1), tensor2.data_(linear_index2));
+        return;
+    }
+
+    size_t result_dim_size = result.shape_[current_dim];
+    for (size_t i = 0; i < result_dim_size; ++i) {
+        index_result[current_dim] = i;
+        calculate_broadcast_power(tensor1, tensor2, result, index_result, current_dim + 1);
+    }
+}
+
+data_ptr_t TensorData::matpow(size_t exponent) const {
+    if (shape_.size() != 2) {
+        throw std::invalid_argument("Matrix power only supports 2D tensors");
+    }
+
+    if (shape_[0] != shape_[1]) {
+        throw std::invalid_argument("Matrix power only supports square matrices");
+    }
+
+    if (exponent == 0) {
+        return eye(shape_[0]);
+    }
+
+    if (exponent == 1) {
+        return clone(true);
+    }
+
+    auto result = std::dynamic_pointer_cast<TensorData>(clone(true));
+
+    auto base = std::dynamic_pointer_cast<TensorData>(clone(true));
+
+    while (exponent > 1) {
+        if (exponent % 2 == 1) {
+            result = std::dynamic_pointer_cast<TensorData>(result->matmul(base));
+        }
+        if (exponent > 1) {
+            base = std::dynamic_pointer_cast<TensorData>(base->matmul(base));
+        }
+        exponent /= 2;
+    }
+
     return result;
 }
 
@@ -717,88 +891,238 @@ data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t 
     return result;
 }
 
-data_ptr_t TensorData::slice(const std::vector<std::pair<size_t, size_t>> &slices) const {
-    if (slices.size() != 2) {
-        throw invalid_argument("Slice must specify ranges for both dimensions");
+data_ptr_t TensorData::slice(size_t start, size_t end, size_t row) const {
+    // For 2D tensor, extract a slice from a specific row
+    if (shape_.size() != 2) {
+        throw std::runtime_error("Slice operation only supported for 2D tensors");
     }
 
-    const auto &shape_vec = shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("Slice operation currently only supports 2D tensors");
+    if (row >= shape_[0]) {
+        throw std::runtime_error("Row index out of bounds");
     }
 
-    size_t total_rows = shape_vec[0];
-    size_t total_cols = shape_vec[1];
-
-    size_t start_row = slices[0].first;
-    size_t end_row = slices[0].second;
-    size_t start_col = slices[1].first;
-    size_t end_col = slices[1].second;
-
-    if (start_row >= total_rows || end_row > total_rows || start_col >= total_cols ||
-        end_col > total_cols) {
-        throw out_of_range("Slice indices out of bounds");
+    if (start >= shape_[1] || end > shape_[1] || start >= end) {
+        throw std::runtime_error("Invalid slice range");
     }
 
-    if (start_row >= end_row || start_col >= end_col) {
-        throw invalid_argument("Invalid slice range");
+    // Create a new tensor for the slice
+    std::vector<size_t> new_shape = {1, end - start};
+    auto result_tensor = std::make_shared<TensorData>(type_, new_shape);
+
+    // Copy the data
+    for (size_t col = start; col < end; ++col) {
+        size_t src_index = row * shape_[1] + col;
+        size_t dst_index = col - start;
+        result_tensor->data_(dst_index) = data_(src_index);
     }
 
-    size_t rows = end_row - start_row;
-    size_t cols = end_col - start_col;
-
-    auto result = make_shared<TensorData>(nullptr, vector<size_t>{rows, cols});
-    result->data_.resize(rows * cols);
-
-    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), total_cols, total_rows);
-    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
-
-    dest_map = src_map.block(start_col, start_row, cols, rows);
-
-    return result;
+    return result_tensor;
 }
 
 data_ptr_t TensorData::add(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
-    if (!other_tensor) {
-        throw std::invalid_argument("Can only add with another TensorData");
+    // Element-wise addition with broadcasting
+    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+        if (!is_broadcastable(shape_, tensor->shape_)) {
+            throw std::invalid_argument(
+                "Tensor shapes are not broadcastable for addition: " + shape_to_string(shape_) +
+                " and " + shape_to_string(tensor->shape_));
+        }
+
+        std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
+
+        auto result = make_shared<TensorData>(nullptr, result_shape);
+        result->data_.resize(result->data_.size());
+
+        std::vector<size_t> index_result(result_shape.size(), 0);
+        calculate_broadcast_addition(*this, *tensor, *result, index_result, 0);
+
+        return result;
     }
 
-    if (data_.size() != other_tensor->data_.size()) {
-        throw std::invalid_argument("Tensor dimensions must match for addition");
+    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() + static_cast<double>(intData->data());
+        return result;
+    }
+    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() + static_cast<double>(longData->data());
+        return result;
+    }
+    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() + static_cast<double>(floatData->data());
+        return result;
+    }
+    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() + doubleData->data();
+        return result;
     }
 
-    auto result = make_shared<TensorData>(nullptr, shape_);
-    result->data_ = data_ + other_tensor->data_;
+    throw runtime_error("Tensor addition expects either Tensor or scalar operand");
+}
 
-    return result;
+void TensorData::calculate_broadcast_addition(
+    const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+    std::vector<size_t> &index_result, size_t current_dim) {
+    size_t dim_result = result.shape_.size();
+
+    if (current_dim == dim_result) {
+        std::vector<size_t> actual_index1(tensor1.shape_.size(), 0);
+        std::vector<size_t> actual_index2(tensor2.shape_.size(), 0);
+
+        for (size_t i = 0; i < tensor1.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor1.shape_.size() + i;
+            if (tensor1.shape_[i] == 1) {
+                actual_index1[i] = 0; // Broadcast dimension
+            } else {
+                actual_index1[i] = index_result[result_dim];
+            }
+        }
+
+        for (size_t i = 0; i < tensor2.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor2.shape_.size() + i;
+            if (tensor2.shape_[i] == 1) {
+                actual_index2[i] = 0; // Broadcast dimension
+            } else {
+                actual_index2[i] = index_result[result_dim];
+            }
+        }
+
+        size_t linear_index1 = calculate_linear_index(actual_index1, tensor1.shape_);
+        size_t linear_index2 = calculate_linear_index(actual_index2, tensor2.shape_);
+        size_t linear_index_result = calculate_linear_index(index_result, result.shape_);
+
+        result.data_(linear_index_result) =
+            tensor1.data_(linear_index1) + tensor2.data_(linear_index2);
+        return;
+    }
+
+    size_t result_dim_size = result.shape_[current_dim];
+    for (size_t i = 0; i < result_dim_size; ++i) {
+        index_result[current_dim] = i;
+        calculate_broadcast_addition(tensor1, tensor2, result, index_result, current_dim + 1);
+    }
 }
 
 data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
-    if (!other_tensor) {
-        throw std::invalid_argument("Can only subtract with another TensorData");
+    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+        if (!is_broadcastable(shape_, tensor->shape_)) {
+            throw std::invalid_argument(
+                "Tensor shapes are not broadcastable for subtraction: " + shape_to_string(shape_) +
+                " and " + shape_to_string(tensor->shape_));
+        }
+
+        std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
+
+        auto result = make_shared<TensorData>(nullptr, result_shape);
+        result->data_.resize(result->data_.size());
+
+        std::vector<size_t> index_result(result_shape.size(), 0);
+        calculate_broadcast_subtraction(*this, *tensor, *result, index_result, 0);
+
+        return result;
     }
 
-    if (data_.size() != other_tensor->data_.size()) {
-        throw std::invalid_argument("Tensor dimensions must match for subtraction");
+    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() - static_cast<double>(intData->data());
+        return result;
+    }
+    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() - static_cast<double>(longData->data());
+        return result;
+    }
+    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() - static_cast<double>(floatData->data());
+        return result;
+    }
+    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() - doubleData->data();
+        return result;
     }
 
-    auto result = make_shared<TensorData>(nullptr, shape_);
-    result->data_ = data_ - other_tensor->data_;
+    throw runtime_error("Tensor subtraction expects either Tensor or scalar operand");
+}
 
-    return result;
+void TensorData::calculate_broadcast_subtraction(
+    const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+    std::vector<size_t> &index_result, size_t current_dim) {
+    size_t dim_result = result.shape_.size();
+
+    if (current_dim == dim_result) {
+        std::vector<size_t> actual_index1(tensor1.shape_.size(), 0);
+        std::vector<size_t> actual_index2(tensor2.shape_.size(), 0);
+
+        for (size_t i = 0; i < tensor1.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor1.shape_.size() + i;
+            if (tensor1.shape_[i] == 1) {
+                actual_index1[i] = 0; // Broadcast dimension
+            } else {
+                actual_index1[i] = index_result[result_dim];
+            }
+        }
+
+        for (size_t i = 0; i < tensor2.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor2.shape_.size() + i;
+            if (tensor2.shape_[i] == 1) {
+                actual_index2[i] = 0; // Broadcast dimension
+            } else {
+                actual_index2[i] = index_result[result_dim];
+            }
+        }
+
+        size_t linear_index1 = calculate_linear_index(actual_index1, tensor1.shape_);
+        size_t linear_index2 = calculate_linear_index(actual_index2, tensor2.shape_);
+        size_t linear_index_result = calculate_linear_index(index_result, result.shape_);
+
+        result.data_(linear_index_result) =
+            tensor1.data_(linear_index1) - tensor2.data_(linear_index2);
+        return;
+    }
+
+    size_t result_dim_size = result.shape_[current_dim];
+    for (size_t i = 0; i < result_dim_size; ++i) {
+        index_result[current_dim] = i;
+        calculate_broadcast_subtraction(tensor1, tensor2, result, index_result, current_dim + 1);
+    }
 }
 
 data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
+    // Element-wise multiplication with broadcasting
+    if (this == other.get()) {
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array().square();
+        return result;
+    }
     if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
-        if (data_.size() != tensor->data_.size()) {
+        if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
-                "Tensor dimensions must match for element-wise multiplication");
+                "Tensor shapes are not broadcastable for multiplication: " +
+                shape_to_string(shape_) + " and " + shape_to_string(tensor->shape_));
         }
 
-        auto result = make_shared<TensorData>(nullptr, shape_);
-        result->data_ = data_.array() * tensor->data_.array();
+        std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
+
+        auto result = make_shared<TensorData>(nullptr, result_shape);
+        result->data_.resize(result->data_.size());
+
+        std::vector<size_t> index_result(result_shape.size(), 0);
+        std::vector<size_t> index1(shape_.size(), 0);
+        std::vector<size_t> index2(tensor->shape_.size(), 0);
+        calculate_broadcast_multiplication(
+            *this,
+            *tensor,
+            *result,
+            index1,
+            index2,
+            index_result,
+            0);
+
         return result;
     }
 
@@ -825,22 +1149,207 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
 
     throw runtime_error("Tensor multiplication expects either Tensor or scalar operand");
 }
-data_ptr_t TensorData::divide(const data_ptr_t &other) const {
+
+data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
     auto other_tensor = dynamic_pointer_cast<TensorData>(other);
     if (!other_tensor) {
-        throw std::invalid_argument("Can only divide with another TensorData");
+        throw std::invalid_argument(
+            "Can only perform matrix multiplication with another TensorData");
     }
 
-    if (data_.size() != other_tensor->data_.size()) {
-        throw std::invalid_argument("Tensor dimensions must match for element-wise division");
+    size_t dim_this = shape_.size();
+    size_t dim_other = other_tensor->shape_.size();
+
+    if ((dim_this != 1 && dim_this != 2) || (dim_other != 1 && dim_other != 2)) {
+        throw std::invalid_argument("Matrix multiplication supports 1D and 2D tensors only");
     }
 
-    auto result = make_shared<TensorData>(nullptr, shape_);
-    result->data_ = data_.array() / other_tensor->data_.array();
+    std::vector<size_t> shape1 = shape_;
+    std::vector<size_t> shape2 = other_tensor->shape_;
+
+    if (dim_this == 1) {
+        shape1.insert(shape1.begin(), 1);
+    }
+    if (dim_other == 1) {
+        shape2.push_back(1);
+    }
+
+    if (shape1[shape1.size() - 1] != shape2[shape2.size() - 2]) {
+        throw std::invalid_argument(
+            "Matrix dimensions incompatible for multiplication: " + shape_to_string(shape1) +
+            " * " + shape_to_string(shape2));
+    }
+
+    std::vector<size_t> result_shape;
+    if (dim_this == 1 && dim_other == 1) {
+        auto result = std::make_shared<DoubleData>(0.0);
+
+        double dot_product = 0.0;
+        for (Eigen::Index i = 0; i < data_.size(); ++i) {
+            dot_product += data_(i) * other_tensor->data_(i);
+        }
+        result->data() = dot_product;
+        return result;
+    } else if (dim_this == 1) {
+        // 1D * 2D -> 1D
+        result_shape = {shape2[1]};
+    } else if (dim_other == 1) {
+        // 2D * 1D -> 1D
+        result_shape = {shape1[0]};
+    } else {
+        // 2D * 2D -> 2D
+        result_shape = {shape1[0], shape2[1]};
+    }
+
+    auto result = std::make_shared<TensorData>(nullptr, result_shape);
+    result->data_.resize(result_shape[0] * result_shape[1]);
+
+    if (dim_this == 1 && dim_other == 1) {
+        Eigen::Map<const Eigen::VectorXd> this_vector(data_.data(), shape1[0]);
+        Eigen::Map<const Eigen::VectorXd> other_vector(other_tensor->data_.data(), shape2[0]);
+
+        double dot_product = this_vector.dot(other_vector);
+        auto result_scalar = std::make_shared<DoubleData>(dot_product);
+        return result_scalar;
+    } else if (dim_this == 1) {
+        // 1D * 2D
+        Eigen::Map<const Eigen::Matrix<double, 1, Eigen::Dynamic, Eigen::RowMajor>> this_matrix(
+            data_.data(),
+            1,
+            shape1[0]);
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+            other_matrix(other_tensor->data_.data(), shape2[0], shape2[1]);
+        Eigen::Map<Eigen::Matrix<double, 1, Eigen::Dynamic, Eigen::RowMajor>> result_matrix(
+            result->data_.data(),
+            1,
+            result_shape[0]);
+
+        result_matrix = this_matrix * other_matrix;
+    } else if (dim_other == 1) {
+        // 2D * 1D
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+            this_matrix(data_.data(), shape1[0], shape1[1]);
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1, Eigen::ColMajor>> other_matrix(
+            other_tensor->data_.data(),
+            shape2[0],
+            1);
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1, Eigen::ColMajor>> result_matrix(
+            result->data_.data(),
+            result_shape[0],
+            1);
+
+        result_matrix = this_matrix * other_matrix;
+    } else {
+        // 2D * 2D
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+            this_matrix(data_.data(), shape1[0], shape1[1]);
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+            other_matrix(other_tensor->data_.data(), shape2[0], shape2[1]);
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+            result_matrix(result->data_.data(), result_shape[0], result_shape[1]);
+
+        result_matrix = this_matrix * other_matrix;
+    }
 
     return result;
 }
+data_ptr_t TensorData::divide(const data_ptr_t &other) const {
+    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+        if (!is_broadcastable(shape_, tensor->shape_)) {
+            throw std::invalid_argument(
+                "Tensor shapes are not broadcastable for division: " + shape_to_string(shape_) +
+                " and " + shape_to_string(tensor->shape_));
+        }
 
+        std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
+
+        auto result = make_shared<TensorData>(nullptr, result_shape);
+        result->data_.resize(result->data_.size());
+
+        std::vector<size_t> index_result(result_shape.size(), 0);
+        calculate_broadcast_division(*this, *tensor, *result, index_result, 0);
+
+        return result;
+    }
+
+    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+        if (intData->data() == 0) {
+            throw std::invalid_argument("Division by zero");
+        }
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() / static_cast<double>(intData->data());
+        return result;
+    }
+    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+        if (longData->data() == 0) {
+            throw std::invalid_argument("Division by zero");
+        }
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() / static_cast<double>(longData->data());
+        return result;
+    }
+    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+        if (floatData->data() == 0.0f) {
+            throw std::invalid_argument("Division by zero");
+        }
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() / static_cast<double>(floatData->data());
+        return result;
+    }
+    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+        if (doubleData->data() == 0.0) {
+            throw std::invalid_argument("Division by zero");
+        }
+        auto result = make_shared<TensorData>(nullptr, shape_);
+        result->data_ = data_.array() / doubleData->data();
+        return result;
+    }
+
+    throw runtime_error("Tensor division expects either Tensor or scalar operand");
+}
+
+void TensorData::calculate_broadcast_division(
+    const TensorData &tensor1, const TensorData &tensor2, TensorData &result,
+    std::vector<size_t> &index_result, size_t current_dim) {
+    size_t dim_result = result.shape_.size();
+
+    if (current_dim == dim_result) {
+        std::vector<size_t> actual_index1(tensor1.shape_.size(), 0);
+        std::vector<size_t> actual_index2(tensor2.shape_.size(), 0);
+
+        for (size_t i = 0; i < tensor1.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor1.shape_.size() + i;
+            if (tensor1.shape_[i] == 1) {
+                actual_index1[i] = 0; // Broadcast dimension
+            } else {
+                actual_index1[i] = index_result[result_dim];
+            }
+        }
+
+        for (size_t i = 0; i < tensor2.shape_.size(); ++i) {
+            size_t result_dim = dim_result - tensor2.shape_.size() + i;
+            if (tensor2.shape_[i] == 1) {
+                actual_index2[i] = 0; // Broadcast dimension
+            } else {
+                actual_index2[i] = index_result[result_dim];
+            }
+        }
+
+        size_t linear_index1 = calculate_linear_index(actual_index1, tensor1.shape_);
+        size_t linear_index2 = calculate_linear_index(actual_index2, tensor2.shape_);
+        size_t linear_index_result = calculate_linear_index(index_result, result.shape_);
+
+        result.data_(linear_index_result) =
+            tensor1.data_(linear_index1) / tensor2.data_(linear_index2);
+        return;
+    }
+
+    size_t result_dim_size = result.shape_[current_dim];
+    for (size_t i = 0; i < result_dim_size; ++i) {
+        index_result[current_dim] = i;
+        calculate_broadcast_division(tensor1, tensor2, result, index_result, current_dim + 1);
+    }
+}
 data_ptr_t TensorData::equal(const data_ptr_t &other) const {
     auto other_tensor = dynamic_pointer_cast<TensorData>(other);
     if (!other_tensor) {
@@ -1165,6 +1674,19 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
     }
 }
 
+void TensorData::assign(const data_ptr_t &other) {
+    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    if (!other_tensor) {
+        throw invalid_argument("Can only assign from another TensorData");
+    }
+
+    if (shape_ != other_tensor->shape_) {
+        throw invalid_argument("Tensor shapes must match for assignment");
+    }
+
+    data_ = other_tensor->data_;
+}
+
 size_t
 TensorData::calculate_linear_index(const vector<size_t> &indices, const vector<size_t> &shape) {
     if (indices.size() != shape.size()) {
@@ -1369,7 +1891,6 @@ data_ptr_t TensorData::eye(size_t n) {
     result->data_.resize(n * n);
     result->data_.setZero();
 
-    // 设置对角线元素为1
     for (size_t i = 0; i < n; ++i) {
         result->data_(i * n + i) = 1.0;
     }
@@ -1378,7 +1899,6 @@ data_ptr_t TensorData::eye(size_t n) {
 }
 
 data_ptr_t TensorData::zeros(const std::vector<size_t> &shape) {
-    // 计算总元素数量
     size_t total_size = 1;
     for (size_t dim : shape) {
         total_size *= dim;
@@ -1445,6 +1965,46 @@ data_ptr_t TensorData::arange(double start, double stop, double step) {
 
     return result;
 }
+
+data_ptr_t TensorData::random(const std::vector<size_t> &shape, double lower, double upper) {
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape);
+    result->data_.resize(total_size);
+
+    if (lower == 0.0 && upper == 1.0) {
+        result->data_.setRandom();
+        result->data_ = (result->data_.array() + 1.0) / 2.0;
+    } else {
+        result->data_.setRandom();
+        result->data_ = (result->data_.array() + 1.0) / 2.0;
+        result->data_ = result->data_.array() * (upper - lower) + lower;
+    }
+
+    return result;
+}
+
+data_ptr_t TensorData::randn(const std::vector<size_t> &shape, double mean, double stddev) {
+    size_t total_size = 1;
+    for (size_t dim : shape) {
+        total_size *= dim;
+    }
+
+    auto result = make_shared<TensorData>(nullptr, shape);
+    result->data_.resize(total_size);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<double> dis(mean, stddev);
+
+    result->data_ = Eigen::VectorXd::NullaryExpr(total_size, [&]() { return dis(gen); });
+
+    return result;
+}
+
 data_ptr_t TensorData::transpose() const {
     if (shape_.size() != 2) {
         throw std::invalid_argument("Transpose currently only supports 2D tensors");
@@ -1455,14 +2015,12 @@ data_ptr_t TensorData::transpose() const {
     auto result = make_shared<TensorData>(nullptr, std::vector<size_t>{cols, rows});
     result->data_.resize(rows * cols);
 
-    // 使用Eigen进行矩阵转置
-    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
-    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), rows, cols);
+    Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), rows, cols);
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, rows);
     dest_map = src_map.transpose();
 
     return result;
 }
-
 data_ptr_t TensorData::flatten() const {
     size_t total_size = 1;
     for (size_t dim : shape_) {
@@ -1476,7 +2034,7 @@ data_ptr_t TensorData::flatten() const {
 }
 
 data_ptr_t TensorData::sum() const {
-    auto result = make_shared<DoubleData>(data_.sum());
+    auto result = make_shared<FloatData>(static_cast<float>(data_.sum()));
     return result;
 }
 
@@ -1484,7 +2042,7 @@ data_ptr_t TensorData::mean() const {
     if (data_.size() == 0) {
         throw std::runtime_error("Cannot calculate mean of empty tensor");
     }
-    auto result = make_shared<DoubleData>(data_.mean());
+    auto result = make_shared<FloatData>(static_cast<float>(data_.mean()));
     return result;
 }
 
@@ -1492,7 +2050,7 @@ data_ptr_t TensorData::min() const {
     if (data_.size() == 0) {
         throw std::runtime_error("Cannot find minimum of empty tensor");
     }
-    auto result = make_shared<DoubleData>(data_.minCoeff());
+    auto result = make_shared<FloatData>(static_cast<float>(data_.minCoeff()));
     return result;
 }
 
@@ -1500,26 +2058,25 @@ data_ptr_t TensorData::max() const {
     if (data_.size() == 0) {
         throw std::runtime_error("Cannot find maximum of empty tensor");
     }
-    auto result = make_shared<DoubleData>(data_.maxCoeff());
+    auto result = make_shared<FloatData>(static_cast<float>(data_.maxCoeff()));
     return result;
 }
 
-// 添加缺失的范数计算方法实现
 data_ptr_t TensorData::norm_l1() const {
-    auto result = make_shared<DoubleData>(data_.array().abs().sum());
+    auto result = make_shared<FloatData>(static_cast<float>(data_.array().abs().sum()));
     return result;
 }
 
 data_ptr_t TensorData::norm_l2() const {
-    auto result = make_shared<DoubleData>(std::sqrt(data_.array().square().sum()));
+    auto result =
+        make_shared<FloatData>(static_cast<float>(std::sqrt(data_.array().square().sum())));
     return result;
 }
 
 data_ptr_t TensorData::norm_squared_l2() const {
-    auto result = make_shared<DoubleData>(data_.array().square().sum());
+    auto result = make_shared<FloatData>(static_cast<float>(data_.array().square().sum()));
     return result;
 }
-
 data_ptr_t TensorData::sin() const {
     auto result = make_shared<TensorData>(nullptr, shape_);
     result->data_ = data_.array().sin();

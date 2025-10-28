@@ -1,0 +1,125 @@
+// svm.cml - Support Vector Machine Implementation
+
+module svm
+
+import {
+    add, subtract, multiply, matmul, ones, zeros,
+    sum, eye, transpose, show, pow, Tensor, shape, concat, range, to_float
+} from tensor
+
+// SVM with linear kernel
+func svm_train(X: Tensor, y: Tensor, learning_rate: float, epochs: int, lambda: float): Tensor sync {
+    let m = shape(X)[0]  // number of samples
+    let n = shape(X)[1]  // number of features
+    
+    // Initialize weights and bias
+    let w = zeros([n, 1])
+    let b = 0.0
+    
+    // Convert y to -1, 1 if needed (assuming input is 0, 1)
+    let y_adjusted = multiply(subtract(multiply(y, 2.0), 1.0), 1.0)
+    
+    func svm_epoch(epoch: int, weights: Tensor, bias: float): tuple<Tensor, float> sync {
+        if (epoch >= epochs) then {
+            return (weights, bias)
+        } else sync {
+            let predictions = add(matmul(X, weights), bias)
+            
+            // Hinge loss calculation
+            let margins = multiply(multiply(y_adjusted, predictions), 1.0)
+            let hinge_loss = subtract(1.0, margins)
+            let hinge_loss_positive = multiply(hinge_loss, (hinge_loss > 0))
+            
+            // Gradients
+            let dw = add(
+                multiply(weights, lambda), 
+                multiply(
+                    multiply(
+                        multiply(y_adjusted, -1.0), 
+                        (hinge_loss > 0)
+                    ), 
+                    1.0/m
+                )
+            )
+            
+            let db = sum(multiply(multiply(y_adjusted, -1.0), (hinge_loss > 0))) * (1.0/m)
+            
+            // Update weights and bias
+            let new_weights = subtract(weights, multiply(dw, learning_rate))
+            let new_bias = bias - (db * learning_rate)
+            
+            if (epoch % 100 == 0) then {
+                let loss = sum(hinge_loss_positive) + (0.5 * lambda * sum(pow(weights, 2.0)))
+                let msg = "SVM Epoch {}, Loss: {}"->format<epoch, loss>
+                msg->println
+            }
+            
+            return svm_epoch(epoch + 1, new_weights, new_bias)
+        }
+    }
+    
+    let (final_weights, final_bias) = svm_epoch(0, w, b)
+    // Combine weights and bias into one tensor for return
+    let bias_tensor = ones([1, 1]) * final_bias
+    return concat(final_weights, bias_tensor, 0)
+}
+
+// SVM prediction function
+func svm_predict(X: Tensor, model: Tensor): Tensor sync {
+    let n = shape(model)[0]
+    let weights = zeros([n-1, 1])
+    
+    func copy_weights(i: int): void sync {
+        if (i >= n-1) then {
+            return
+        } else sync {
+            let val = model[i, 0]  // 获取第i行的权重值
+            weights[i, 0] = val
+            copy_weights(i + 1)
+        }
+    }
+    copy_weights(0)
+    
+    let bias = model[n-1, 0]
+    
+    let predictions = add(matmul(X, weights), bias)
+    // Return class labels (-1 or 1)
+    return subtract(multiply((predictions > 0), 2.0), 1.0)
+}
+func main(): int sync {
+    println("=== Support Vector Machine ===")
+    
+    // Create sample data (2 features, 6 samples)
+    // Class 0
+    let X1 = [[1.0, 2.0], [2.0, 3.0], [3.0, 1.0]]
+    let y1 = [0.0, 0.0, 0.0]
+    
+    // Class 1
+    let X2 = [[6.0, 5.0], [7.0, 8.0], [8.0, 6.0]]
+    let y2 = [1.0, 1.0, 1.0]
+    
+    // Combine data
+    let X = concat(X1, X2, 0)
+    let y = concat(y1, y2, 0)
+    
+    println("Training data:")
+    show(X)
+    println("Labels:")
+    show(y)
+    
+    // Train SVM
+    let learning_rate = 0.01
+    let epochs = 1000
+    let lambda = 0.01
+    
+    let model = svm_train(X, y, learning_rate, epochs, lambda)
+    println("Trained SVM model:")
+    show(model)
+    
+    // Make predictions
+    let predictions = svm_predict(X, model)
+    println("Predictions:")
+    show(predictions)
+    
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,18 +48,18 @@ enum class NodeType {
     OPER, // Atomic operation
     EXIT, // Final output node
 
-    // 无私有数据节点
+    // Nodes without private data
     SYNC, // Synchronization point
-    NREF, // reference of node
+    NREF, // Reference of node
 
-    // 图构造过程中的临时节点
+    // Temporary nodes during graph construction
     DREF, // Dereference
 };
 
 enum class LinkType {
-    Norm, // node edge
-    With, // with edge
-    Ctrl, // control edge
+    Norm, // Node edge
+    With, // With edge
+    Ctrl, // Control edge
 };
 
 std::string to_string(NodeType type);
@@ -78,7 +78,8 @@ using node_lst_t = std::list<node_ptr_t>;
 using node_vec_t = std::vector<node_ptr_t>;
 using node_set_t = std::unordered_set<node_ptr_t>;
 
-// 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
+// 0 represents empty, positive numbers indicate runtime data segment indices,
+// and negative numbers indicate the opposite of static data segment indices.
 using data_idx_t = int16_t;
 using arr_size_t = uint16_t;
 
@@ -100,10 +101,10 @@ struct WeakPtrEqual {
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
-    Graph(const Graph &other) = delete;            // 删除拷贝构造函数
-    Graph &operator=(const Graph &other) = delete; // 删除赋值运算
-    Graph(Graph &&other) = delete;                 // 删除移动构造函数
-    Graph &operator=(Graph &&other) = delete;      // 删除移动赋值运算
+    Graph(const Graph &other) = delete;            // Delete copy constructor
+    Graph &operator=(const Graph &other) = delete; // Delete copy assignment
+    Graph(Graph &&other) = delete;                 // Delete move constructor
+    Graph &operator=(Graph &&other) = delete;      // Delete move assignment
 
     explicit Graph(
         const func_type_ptr_t &funcType, const graph_ptr_t &graph = nullptr,
@@ -123,123 +124,35 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     static graph_ptr_t null() { return nullptr; }
 
-    bool operator==(const Graph &other) const {
-        return this == &other; // 比较指针地址
-    }
+    // Compare pointer addresses
+    bool operator==(const Graph &other) const { return this == &other; }
     bool operator!=(const Graph &other) const { return !(this == &other); }
 
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
-    std::string location() const {
-        if (outer_.expired()) {
-            return name_.empty() ? "<anonymous>" : name_;
-        }
-        return outer_.lock()->location() + "::" + (name_.empty() ? "<anonymous>" : name_);
-    }
+    std::string location() const;
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
-    graph_ptr_t outer() const {
-        if (outer_.expired()) {
-            return nullptr;
-        }
-        return outer_.lock();
-    }
+    graph_ptr_t outer() const;
     size_t inDegree() const { return dependencies_.size(); }
     size_t outDegree() const { return dependents_.size(); }
 
-    std::string toString() const {
-        return std::format(
-            "Graph({}, nodes: {}, subgraphs: {}, deps: {}, outs: {})",
-            name_.empty() ? "<anonymous>" : name_,
-            nodes_.size(),
-            subGraphs_.size(),
-            dependencies_.size(),
-            dependents_.size());
-    }
+    std::string toString() const;
 
     func_type_ptr_t funcType() const;
 
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
-    data_idx_t addStaticData(const data_ptr_t &data) {
-        staticDataArr_.push_back(data);
-        if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
-            throw std::overflow_error("staticDataArr_ exceeds arr_size_t max value");
-        }
-        return -static_cast<data_idx_t>(staticDataArr_.size() - 1);
-    }
-    data_idx_t addRuntimeData() {
-        if (runtimeDataSize_ > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
-            throw std::overflow_error("runtimeDataSize_ exceeds arr_size_t max value");
-        }
-        return static_cast<data_idx_t>(runtimeDataSize_++);
-    }
-    void setStaticData(data_idx_t index, const data_ptr_t &data) {
-        ASSERT(index < 0, "Static data index must be negative.");
-        size_t idx = static_cast<size_t>(-index);
-        ASSERT(
-            idx < staticDataArr_.size(),
-            std::format(
-                "Static data index out of range when setting data of graph ({}) at index {}. "
-                "(total size: {})",
-                name_,
-                index,
-                staticDataArr_.size()));
-        staticDataArr_[idx] = data;
-    }
-    data_ptr_t getStaticData(data_idx_t index) const {
-        ASSERT(index < 0, "Static data index must be negative.");
-        size_t idx = static_cast<size_t>(-index);
-        ASSERT(
-            idx < staticDataArr_.size(),
-            std::format(
-                "Static data index out of range when getting data of graph ({}) at index {}. "
-                "(total size: {})",
-                name_,
-                index,
-                staticDataArr_.size()));
-        return staticDataArr_[idx];
-    }
+    data_idx_t addStaticData(const data_ptr_t &data);
+    data_idx_t addRuntimeData();
+    void setStaticData(data_idx_t index, const data_ptr_t &data);
+    data_ptr_t getStaticData(data_idx_t index) const;
     size_t staticDataSize() const { return staticDataArr_.size(); }
     size_t runtimeDataSize() const { return runtimeDataSize_; }
 
-    std::optional<std::unordered_set<graph_ptr_t>> getSubGraphsByName(const std::string &name) {
-        if (subGraphs_.find(name) != subGraphs_.end()) {
-            return subGraphs_[name];
-        }
-        return std::nullopt;
-    }
-    void addSubGraph(const graph_ptr_t &graph) {
-        ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
-        ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
-        if (subGraphs_.find(graph->name()) == subGraphs_.end()) {
-            subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>({graph});
-        } else {
-            auto &existing = subGraphs_[graph->name()];
-            ASSERT(
-                existing.find(graph) == existing.end(),
-                std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
-            existing.insert(graph);
-            l.in("GIR").debug("Added subgraph '{}' to graph '{}'.", graph->mangledName(), name_);
-        }
-        graph->outer_ = shared_from_this();
-    }
-    void delSubGraph(const graph_ptr_t &graph) {
-        ASSERT(graph.get() != this, "Cannot remove itself as a subgraph.");
-        ASSERT(!graph->name().empty(), "Cannot remove an anonymous graph as a subgraph.");
-        if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
-            auto &existing = subGraphs_[graph->name()];
-            existing.erase(graph);
-            l.in("GIR").debug(
-                "Removed subgraph '{}' from graph '{}'.",
-                graph->mangledName(),
-                name_);
-            if (existing.empty()) {
-                subGraphs_.erase(graph->name());
-            }
-            graph->outer_.reset();
-        }
-    }
+    std::optional<std::unordered_set<graph_ptr_t>> getSubGraphsByName(const std::string &name);
+    void addSubGraph(const graph_ptr_t &graph);
+    void delSubGraph(const graph_ptr_t &graph);
     std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> &subGraphs() {
         return subGraphs_;
     }
@@ -248,35 +161,20 @@ class Graph : public std::enable_shared_from_this<Graph> {
         return dependents_;
     }
     std::unordered_set<graph_ptr_t> &dependencies() { return dependencies_; }
-    void addDependency(const graph_ptr_t &graph) {
-        if (graph.get() == this) {
-            this->looped_ = true;
-            // Here we do not add itself to dependencies_ to avoid self-references
-            // but only mark it as a looped graph
-            return;
-        }
-        dependencies_.insert(graph);
-        graph->dependents_.insert(shared_from_this());
-        l.in("GIR").debug(
-            "Added dependency: Graph '{}' depends on graph '{}'.",
-            name_,
-            graph->name());
-    }
-    void delDependency(const graph_ptr_t &graph) {
-        dependencies_.erase(graph);
-        graph->dependents_.erase(shared_from_this());
-        l.in("GIR").debug(
-            "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
-            name_,
-            graph->name());
-    }
+    void addDependency(const graph_ptr_t &graph);
+    void delDependency(const graph_ptr_t &graph);
 
-    void addNode(const node_ptr_t &node); // 由Node::create调用
+    // Called by Node::create
+    void addNode(const node_ptr_t &node);
     void delNode(const node_ptr_t &node);
-    void addPort(const node_ptr_t &node, bool isWith = false); // 由PortNode::create调用
+
+    // Called by PortNode::create
+    void addPort(const node_ptr_t &node, bool isWith = false);
     void addClosure(const node_ptr_t &node);
     bool parameterized() const { return parameterized_; }
-    void parametrizeClosure(); // 将所有的闭包捕获节点转为参数节点
+
+    // Convert all closure capture nodes to parameter nodes
+    void parametrizeClosure();
 
     const node_ptr_t &exitNode() const {
         ASSERT(exitNode_ != nullptr, std::format("Graph {} has no exit node.", name_));
@@ -314,15 +212,18 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> dependents_;
 
     func_type_ptr_t funcType_;
-    data_vec_t staticDataArr_ = {nullptr}; // 静态数据段，索引0保留为空
-    size_t runtimeDataSize_ = 1;           // 动态数据尺寸，从1开始，0保留为空
+    // Static data segment, index 0 is reserved as empty
+    data_vec_t staticDataArr_ = {nullptr};
+
+    // Dynamic data size, starting from 1, 0 is reserved as empty
+    size_t runtimeDataSize_ = 1;
 
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     node_ptr_t exitNode_;
 
-    // 增删节点时标记为脏
-    // 需要通过 rearrange 来解决
+    // Marked as dirty when nodes are added or removed
+    // Needs to be resolved via rearrange
     bool dirty_ = false;
 
     bool looped_ = false;
@@ -348,21 +249,13 @@ class Node : public std::enable_shared_from_this<Node> {
     virtual node_ptr_t clone(Graph &graph) const = 0;
 
     bool operator==(const Node &other) const {
-        return this == &other; // 比较指针地址
+        // Compare pointer addresses
+        return this == &other;
     }
     bool operator!=(const Node &other) const { return !(this == &other); }
 
     Graph &graph() const { return graph_; }
-    data_idx_t index() const {
-        // SYNC、DREF和NREF节点都是无数据节点
-        // 其中，NREF的数据索引是其输入节点索引
-        ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
-        ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
-        if (nodeType_ == NodeType::NREF) {
-            return normInputs_.front()->index();
-        }
-        return dataIndex_;
-    }
+    data_idx_t index() const;
     void setIndex(data_idx_t index) { dataIndex_ = index; }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
@@ -486,8 +379,8 @@ class PortNode : public Node {
     create(Graph &graph, const type_ptr_t &type, const std::string &name, bool isVar) {
         data_idx_t index = graph.addRuntimeData();
         auto node = std::make_shared<PortNode>(graph, type, index, name, isVar);
-        // 这里不会自动调用，需要手动添加，因为ports的顺序非常重要
-        // graph.addPort(node);
+        // This is not automatically called and needs to be added manually because the order of
+        // ports is very important. graph.addPort(node);
         return node;
     }
 
@@ -799,7 +692,7 @@ class DrefNode : public Node {
 
     static node_ptr_t create(Graph &graph, const dref_target_t &target) {
         auto node = std::make_shared<DrefNode>(graph, target);
-        // 虚拟节点，不加入graph，只在构造过程中临时使用
+        // Virtual node, not added to the graph, only used temporarily during construction
         // graph.addNode(node);
         return node;
     }

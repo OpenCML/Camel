@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 1, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,20 +37,8 @@
 #include <string>
 void __profiler_begin__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arg = frame.get(nargs[0]);
-    if (arg == nullptr) {
-        return;
-    }
-
-    ASSERT(arg->type()->code() == TypeCode::String, "profiler.begin requires a string argument");
-
-    auto stringData = std::dynamic_pointer_cast<StringData>(arg);
-    if (stringData == nullptr) {
-        return;
-    }
-
 #ifndef NDEBUG
-    const std::string &name = stringData->data();
+    const std::string name = "profiler_scope";
     bool is_tracing = profiler::AdvancedTracer::getInstance().isTracing();
     if (is_tracing) {
         profiler::AdvancedTracer::getInstance().traceFunctionCall(name);
@@ -63,16 +51,8 @@ void __profiler_begin__(
 }
 void __profiler_end__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arg = frame.get(nargs[0]);
-    ASSERT(arg->type()->code() == TypeCode::String, "profiler.end requires a string argument");
-
-    auto stringData = std::dynamic_pointer_cast<StringData>(arg);
-    if (stringData == nullptr) {
-        return;
-    }
-
 #ifndef NDEBUG
-    const std::string &name = stringData->data();
+    const std::string name = "profiler_scope";
     if (profiler::AdvancedTracer::getInstance().isTracing()) {
         profiler::AdvancedTracer::getInstance().traceFunctionReturn(name);
     }
@@ -84,16 +64,8 @@ void __profiler_end__(
 
 void __profiler_instant__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arg = frame.get(nargs[0]);
-    ASSERT(arg->type()->code() == TypeCode::String, "profiler.instant requires a string argument");
-
-    auto stringData = std::dynamic_pointer_cast<StringData>(arg);
-    if (stringData == nullptr) {
-        return;
-    }
-
 #ifndef NDEBUG
-    const std::string &name = stringData->data();
+    const std::string name = "instant_event";
     if (profiler::AdvancedTracer::getInstance().isTracing()) {
         profiler::TRACE_EVENT_INSTANT(name.c_str());
     }
@@ -105,28 +77,14 @@ void __profiler_instant__(
 
 void __profiler_enable__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arg = frame.get(nargs[0]);
-    ASSERT(arg->type()->code() == TypeCode::Bool, "profiler.enable requires a boolean argument");
-
-    auto boolData = std::dynamic_pointer_cast<PrimaryData<bool>>(arg);
-
 #ifndef NDEBUG
-    const bool &enabled = boolData->data();
-    if (enabled) {
-        profiler::AdvancedTracer::Config config;
-        config.enablePerfettoIntegration = true;
-        config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
-        config.outputFile = "profile_reports/camel_trace.json";
-        profiler::AdvancedTracer::getInstance().initialize(config);
-        profiler::AdvancedTracer::getInstance().startTracing();
-        std::cout << "[PROFILER] Profiling enabled" << std::endl;
-    } else {
-        profiler::AdvancedTracer::getInstance().stopTracing();
-        profiler::trace_event_flush();
-        std::cout << "[PROFILER] Profiling disabled. Trace data saved to "
-                     "profile_reports/trace_output.json"
-                  << std::endl;
-    }
+    profiler::AdvancedTracer::Config config;
+    config.enablePerfettoIntegration = true;
+    config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
+    config.outputFile = "profile_reports/camel_trace.json";
+    profiler::AdvancedTracer::getInstance().initialize(config);
+    profiler::AdvancedTracer::getInstance().startTracing();
+    std::cout << "[PROFILER] Profiling enabled" << std::endl;
 #endif
 
     return;

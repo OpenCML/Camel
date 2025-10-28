@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1558,14 +1558,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             return rhsFuncType->exitType();
                         }),
-                },
-            }),
-        OperatorGroup::create(
-            "Tensor",
-            {
-                {
-                    ":type/tensor",
-                    StaticFuncTypeResolver::create({}, {}, TensorType::create(Type::Double(), {0})),
                 },
             }),
     };

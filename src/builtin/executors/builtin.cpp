@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -193,11 +193,15 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"tensor/diag", __diag__},
         {"tensor/linspace", __linspace__},
         {"tensor/arange", __arange__},
+        {"tensor/random", __random__},
+        {"tensor/randn", __randn__},
+
         {"tensor/shape", __shape__},
 
         {"tensor/add", __tensor_add__},
         {"tensor/subtract", __tensor_subtract__},
         {"tensor/multiply", __tensor_multiply__},
+        {"tensor/matmul", __tensor_matmul__},
         {"tensor/divide", __tensor_divide__},
 
         {"tensor/reshape", __tensor_reshape__},
@@ -224,10 +228,15 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"tensor/exp", __tensor_exp__},
         {"tensor/log", __tensor_log__},
         {"tensor/sqrt", __tensor_sqrt__},
+        {"tensor/matpow", __tensor_matpow__},
+        {"tensor/pow", __tensor_pow__},
 
         {"tensor/sinh", __tensor_sinh__},
         {"tensor/cosh", __tensor_cosh__},
         {"tensor/tanh", __tensor_tanh__},
+
+        {"tensor/show", __tensor_show__},
+        {"tensor/to_float", __to_float__},
 
         // os
         {"os/exit", __exit__},

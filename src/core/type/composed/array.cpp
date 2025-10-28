@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 27, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,7 +44,6 @@ bool ArrayType::resolved() const { return elementType_->code() != TypeCode::Void
 
 void ArrayType::resolve(const type_vec_t &typeList) {
     ASSERT(typeList.size() > 0, "Type list is empty");
-    ASSERT(!resolved(), "ArrayType is already resolved");
     for (const auto &type : typeList) {
         if (elementType_->code() == TypeCode::Void) {
             elementType_ = type;

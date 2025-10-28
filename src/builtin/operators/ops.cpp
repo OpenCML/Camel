@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 28, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "ops.h"
+#include "builtin/datas/tensor.h"
+#include "builtin/types/tensor.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
 #include "core/context/frame.h"
@@ -30,10 +32,28 @@ namespace GIR = GraphIR;
 void __builtin__assn__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &rhs = frame.get(nargs[1]);
+
+    if (rhs->type()->code() == TensorType::typeCode()) {
+        auto rhs_tensor = std::dynamic_pointer_cast<TensorData>(rhs);
+        if (rhs_tensor) {
+            const data_ptr_t &lhs = frame.get(nargs[0]);
+            auto lhs_tensor = std::dynamic_pointer_cast<TensorData>(lhs);
+
+            if (lhs_tensor) {
+                lhs_tensor->assign(rhs_tensor);
+                frame.set(self, lhs_tensor);
+                return;
+            } else {
+                auto new_tensor = std::dynamic_pointer_cast<TensorData>(rhs_tensor->clone(true));
+                frame.set(nargs[0], new_tensor);
+                frame.set(self, new_tensor);
+                return;
+            }
+        }
+    }
+
+    frame.set(nargs[0], rhs);
     frame.set(self, rhs);
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::RuntimeError)
-        .commit("assignment operator not fully implemented");
 }
 
 void __builtin__assn_add_i__(
@@ -218,9 +238,7 @@ void __builtin__assn_or__(
 
 void __builtin__assn_mat__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::RuntimeError)
-        .commit("assignment operator not fully implemented");
+    ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Invalid tensor assignment operation");
 }
 
 void __builtin__or__(
