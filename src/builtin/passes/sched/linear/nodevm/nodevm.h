@@ -25,7 +25,7 @@
 #include <stack>
 
 class NodeVMSchedPass : public LinearSchedPass {
-    static const size_t maxRecursionDepth_ = 64; // default max recursion depth
+    static const size_t maxRecursionDepth_ = 3000; // default max recursion depth
     size_t currRecursionDepth_ = 0;
     std::stack<GraphIR::node_ptr_t> brInfoStack_;
     std::unordered_map<GraphIR::Graph *, std::shared_ptr<GraphIR::node_vec_t>> graphTopoNodesCache_;
