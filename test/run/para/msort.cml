@@ -1,8 +1,8 @@
-module msort
+module merge_sort
 
 import { now } from time
 import { seed, rand, shuffle } from random
-import { sorted, sort, merge_sorted_arrays } from algo
+import { sort, sorted, merge_sorted_arrays } from algo
 
 func merge(lhs: int[], rhs: int[]): int[] sync {
     return merge_sorted_arrays(lhs, rhs)

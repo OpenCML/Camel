@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1202,8 +1202,7 @@ any Formatter::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
 
 /*
 primaryType
-    : INNER_ATOM_TYPE
-    | structType
+    : structType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -1214,28 +1213,25 @@ primaryType
 */
 any Formatter::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     switch (context->getAltNumber()) {
-    case 1: // INNER_ATOM_TYPE
-        return context->INNER_ATOM_TYPE()->getText();
-        break;
-    case 2: // structExprType
+    case 1: // structExprType
         return any_cast<string>(visitStructType(context->structType()));
         break;
-    case 3: // identRef
+    case 2: // identRef
         return any_cast<string>(visitIdentRef(context->identRef()));
         break;
-    case 4: // '(' typeExpr ')'
+    case 3: // '(' typeExpr ')'
         return "(" + any_cast<string>(visitTypeExpr(context->typeExpr())) + ")";
         break;
-    case 5: // tupleType
+    case 4: // tupleType
         return any_cast<string>(visitTupleType(context->tupleType()));
         break;
-    case 6: // lambdaType
+    case 5: // lambdaType
         return any_cast<string>(visitFuncType(context->funcType()));
         break;
-    case 7: // TYPEOF waitExpr
+    case 6: // TYPEOF waitExpr
         return "typeof " + any_cast<string>(visitDataExpr(context->dataExpr()));
         break;
-    case 8: // TYPEAS identDef
+    case 7: // TYPEAS identDef
         return "typeas " + any_cast<string>(visitIdentDef(context->identDef()));
         break;
 
