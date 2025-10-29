@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@ void __len_str__(
 
     int32_t len = static_cast<int32_t>(tt::as_shared<StringData>(arg)->data().size());
 
-    frame.set(self, std::make_shared<Int32Data>(len));
+    frame.set(self, std::make_shared<IntData>(len));
     return;
 }
 
@@ -38,7 +38,7 @@ void __len_arr__(
 
     int32_t len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
 
-    frame.set(self, std::make_shared<Int32Data>(len));
+    frame.set(self, std::make_shared<IntData>(len));
     return;
 }
 
@@ -131,9 +131,9 @@ void __range__(
         stepData = frame.get(nargs[2]);
     }
 
-    int32_t start = startData->as<Int32Data>(Type::Int32())->data();
-    int32_t stop = stopData->as<Int32Data>(Type::Int32())->data();
-    int32_t step = stepData ? stepData->as<Int32Data>(Type::Int32())->data() : 1;
+    int32_t start = startData->as<IntData>(Type::Int())->data();
+    int32_t stop = stopData->as<IntData>(Type::Int())->data();
+    int32_t step = stepData ? stepData->as<IntData>(Type::Int())->data() : 1;
 
     if (step == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<range> step cannot be zero");
@@ -145,11 +145,11 @@ void __range__(
 
     if ((step > 0 && start < stop) || (step < 0 && start > stop)) {
         for (int32_t i = start; (step > 0 ? i < stop : i > stop); i += step) {
-            values.push_back(std::make_shared<Int32Data>(i));
+            values.push_back(std::make_shared<IntData>(i));
         }
     }
 
-    auto arrayType = Type::Array(Type::Int64());
+    auto arrayType = Type::Array(Type::Long());
     auto result = ArrayData::from(arrayType, std::move(values));
 
     frame.set(self, result);
@@ -162,8 +162,8 @@ void __slice_arr__(
     const data_ptr_t &startArg = frame.get(wargs[0]);
     const data_ptr_t &endArg = frame.get(wargs[1]);
 
-    int32_t start = startArg->as<Int32Data>(Type::Int32())->data();
-    int32_t end = endArg->as<Int32Data>(Type::Int32())->data();
+    int32_t start = startArg->as<IntData>(Type::Int())->data();
+    int32_t end = endArg->as<IntData>(Type::Int())->data();
 
     auto slice_range = [](int32_t size, int32_t &start, int32_t &end) {
         if (start < 0)

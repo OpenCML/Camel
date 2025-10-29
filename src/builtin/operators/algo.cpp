@@ -121,8 +121,8 @@ void __insert_sort__(
     const auto &rawCopy = arr->raw();
     auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
-    if (elemType == Type::Int32()) {
-        doSort<int32_t, Int32Data>(
+    if (elemType == Type::Int()) {
+        doSort<int32_t, IntData>(
             false,
             rawCopy,
             raw,
@@ -131,8 +131,8 @@ void __insert_sort__(
             nargs[0],
             frame,
             SortAlgo::Insertion);
-    } else if (elemType == Type::Int64()) {
-        doSort<int64_t, Int64Data>(
+    } else if (elemType == Type::Long()) {
+        doSort<int64_t, LongData>(
             false,
             rawCopy,
             raw,
@@ -177,8 +177,8 @@ void __insert_sort_inplace__(
     const auto &rawCopy = arr->raw();
     auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
-    if (elemType == Type::Int32()) {
-        doSort<int32_t, Int32Data>(
+    if (elemType == Type::Int()) {
+        doSort<int32_t, IntData>(
             true,
             rawCopy,
             raw,
@@ -187,8 +187,8 @@ void __insert_sort_inplace__(
             nargs[0],
             frame,
             SortAlgo::Insertion);
-    } else if (elemType == Type::Int64()) {
-        doSort<int64_t, Int64Data>(
+    } else if (elemType == Type::Long()) {
+        doSort<int64_t, LongData>(
             true,
             rawCopy,
             raw,
@@ -234,8 +234,8 @@ void __quick_sort__(
     const auto &rawCopy = arr->raw();
     auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
-    if (elemType == Type::Int32()) {
-        doSort<int32_t, Int32Data>(
+    if (elemType == Type::Int()) {
+        doSort<int32_t, IntData>(
             false,
             rawCopy,
             raw,
@@ -244,8 +244,8 @@ void __quick_sort__(
             nargs[0],
             frame,
             SortAlgo::Quick);
-    } else if (elemType == Type::Int64()) {
-        doSort<int64_t, Int64Data>(
+    } else if (elemType == Type::Long()) {
+        doSort<int64_t, LongData>(
             false,
             rawCopy,
             raw,
@@ -291,8 +291,8 @@ void __quick_sort_inplace__(
     const auto &rawCopy = arr->raw();
     auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
-    if (elemType == Type::Int32()) {
-        doSort<int32_t, Int32Data>(
+    if (elemType == Type::Int()) {
+        doSort<int32_t, IntData>(
             true,
             rawCopy,
             raw,
@@ -301,8 +301,8 @@ void __quick_sort_inplace__(
             nargs[0],
             frame,
             SortAlgo::Quick);
-    } else if (elemType == Type::Int64()) {
-        doSort<int64_t, Int64Data>(
+    } else if (elemType == Type::Long()) {
+        doSort<int64_t, LongData>(
             true,
             rawCopy,
             raw,
@@ -348,8 +348,8 @@ void __merge_sort__(
     const auto &rawCopy = arr->raw();
     auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
-    if (elemType == Type::Int32()) {
-        doSort<int32_t, Int32Data>(
+    if (elemType == Type::Int()) {
+        doSort<int32_t, IntData>(
             false,
             rawCopy,
             raw,
@@ -358,8 +358,8 @@ void __merge_sort__(
             nargs[0],
             frame,
             SortAlgo::Merge);
-    } else if (elemType == Type::Int64()) {
-        doSort<int64_t, Int64Data>(
+    } else if (elemType == Type::Long()) {
+        doSort<int64_t, LongData>(
             false,
             rawCopy,
             raw,
@@ -405,8 +405,8 @@ void __merge_sort_inplace__(
     const auto &rawCopy = arr->raw();
     auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
-    if (elemType == Type::Int32()) {
-        doSort<int32_t, Int32Data>(
+    if (elemType == Type::Int()) {
+        doSort<int32_t, IntData>(
             true,
             rawCopy,
             raw,
@@ -415,8 +415,8 @@ void __merge_sort_inplace__(
             nargs[0],
             frame,
             SortAlgo::Merge);
-    } else if (elemType == Type::Int64()) {
-        doSort<int64_t, Int64Data>(
+    } else if (elemType == Type::Long()) {
+        doSort<int64_t, LongData>(
             true,
             rawCopy,
             raw,
@@ -493,10 +493,10 @@ void __merge_sorted__(
 
     std::vector<data_ptr_t> merged;
 
-    if (elemType == Type::Int32()) {
-        merged = merge_sorted_arrays<int32_t, Int32Data>(L, R);
-    } else if (elemType == Type::Int64()) {
-        merged = merge_sorted_arrays<int64_t, Int64Data>(L, R);
+    if (elemType == Type::Int()) {
+        merged = merge_sorted_arrays<int32_t, IntData>(L, R);
+    } else if (elemType == Type::Long()) {
+        merged = merge_sorted_arrays<int64_t, LongData>(L, R);
     } else if (elemType == Type::Float()) {
         merged = merge_sorted_arrays<float, FloatData>(L, R);
     } else if (elemType == Type::Double()) {

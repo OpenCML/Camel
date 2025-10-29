@@ -28,7 +28,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":rand/seed",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Void()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::Void()),
                 },
             }),
         OperatorGroup::create(
@@ -54,8 +54,8 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":rand/randint",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Int32(), false}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        {{Type::Int(), false}, {Type::Int(), false}},
+                        Type::Int()),
                 },
             }),
         OperatorGroup::create(

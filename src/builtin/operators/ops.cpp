@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,8 +58,8 @@ void __builtin__assn__(
 
 void __builtin__assn_add_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<IntData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<IntData>(frame.get(nargs[1]));
     int32_t res = lhs->data() + rhs->data();
     lhs->data() = res;
     frame.set(self, lhs);
@@ -67,8 +67,8 @@ void __builtin__assn_add_i__(
 
 void __builtin__assn_add_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<LongData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<LongData>(frame.get(nargs[1]));
     int64_t res = lhs->data() + rhs->data();
     lhs->data() = res;
     frame.set(self, lhs);
@@ -94,8 +94,8 @@ void __builtin__assn_add_d__(
 
 void __builtin__assn_sub_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<IntData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<IntData>(frame.get(nargs[1]));
     int32_t res = lhs->data() - rhs->data();
     lhs->data() = res;
     frame.set(self, lhs);
@@ -103,8 +103,8 @@ void __builtin__assn_sub_i__(
 
 void __builtin__assn_sub_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<LongData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<LongData>(frame.get(nargs[1]));
     int64_t res = lhs->data() - rhs->data();
     lhs->data() = res;
     frame.set(self, lhs);
@@ -130,8 +130,8 @@ void __builtin__assn_sub_d__(
 
 void __builtin__assn_mul_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<IntData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<IntData>(frame.get(nargs[1]));
     int32_t res = lhs->data() * rhs->data();
     lhs->data() = res;
     frame.set(self, lhs);
@@ -139,8 +139,8 @@ void __builtin__assn_mul_i__(
 
 void __builtin__assn_mul_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<LongData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<LongData>(frame.get(nargs[1]));
     int64_t res = lhs->data() * rhs->data();
     lhs->data() = res;
     frame.set(self, lhs);
@@ -166,8 +166,8 @@ void __builtin__assn_mul_d__(
 
 void __builtin__assn_div_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int32Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int32Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<IntData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<IntData>(frame.get(nargs[1]));
     if (rhs->data() == 0)
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
     int32_t res = lhs->data() / rhs->data();
@@ -177,8 +177,8 @@ void __builtin__assn_div_i__(
 
 void __builtin__assn_div_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &lhs = tt::as_shared<Int64Data>(frame.get(nargs[0]));
-    const auto &rhs = tt::as_shared<Int64Data>(frame.get(nargs[1]));
+    const auto &lhs = tt::as_shared<LongData>(frame.get(nargs[0]));
+    const auto &rhs = tt::as_shared<LongData>(frame.get(nargs[1]));
     if (rhs->data() == 0)
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
     int64_t res = lhs->data() / rhs->data();
@@ -355,8 +355,8 @@ void __builtin__add_ii__(
     const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
-    result = std::make_shared<Int32Data>(
-        left->as<Int32Data>(Type::Int32())->data() + right->as<Int32Data>(Type::Int32())->data());
+    result = std::make_shared<IntData>(
+        left->as<IntData>(Type::Int())->data() + right->as<IntData>(Type::Int())->data());
 
     frame.set(self, result);
 }
@@ -367,8 +367,8 @@ void __builtin__add_ll__(
     const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
-    result = std::make_shared<Int64Data>(
-        left->as<Int64Data>(Type::Int64())->data() + right->as<Int64Data>(Type::Int64())->data());
+    result = std::make_shared<LongData>(
+        left->as<LongData>(Type::Long())->data() + right->as<LongData>(Type::Long())->data());
 
     frame.set(self, result);
 }
@@ -416,10 +416,10 @@ void __builtin__sub_ii__(
     const data_ptr_t &left = frame.get(nargs[0]);
     const data_ptr_t &right = frame.get(nargs[1]);
 
-    int32_t lval = left->as<Int32Data>(Type::Int32())->data();
-    int32_t rval = right->as<Int32Data>(Type::Int32())->data();
+    int32_t lval = left->as<IntData>(Type::Int())->data();
+    int32_t rval = right->as<IntData>(Type::Int())->data();
 
-    data_ptr_t result = std::make_shared<Int32Data>(lval - rval);
+    data_ptr_t result = std::make_shared<IntData>(lval - rval);
     frame.set(self, result);
 }
 
@@ -428,10 +428,10 @@ void __builtin__sub_ll__(
     const data_ptr_t &left = frame.get(nargs[0]);
     const data_ptr_t &right = frame.get(nargs[1]);
 
-    int64_t lval = left->as<Int64Data>(Type::Int64())->data();
-    int64_t rval = right->as<Int64Data>(Type::Int64())->data();
+    int64_t lval = left->as<LongData>(Type::Long())->data();
+    int64_t rval = right->as<LongData>(Type::Long())->data();
 
-    data_ptr_t result = std::make_shared<Int64Data>(lval - rval);
+    data_ptr_t result = std::make_shared<LongData>(lval - rval);
     frame.set(self, result);
 }
 
@@ -465,14 +465,12 @@ void __builtin__mul__(
     const data_ptr_t &right = frame.get(nargs[1]);
 
     data_ptr_t result;
-    if (left->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(
-            left->as<Int32Data>(Type::Int32())->data() *
-            right->as<Int32Data>(Type::Int32())->data());
-    } else if (left->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(
-            left->as<Int64Data>(Type::Int64())->data() *
-            right->as<Int64Data>(Type::Int64())->data());
+    if (left->type() == Type::Int()) {
+        result = std::make_shared<IntData>(
+            left->as<IntData>(Type::Int())->data() * right->as<IntData>(Type::Int())->data());
+    } else if (left->type() == Type::Long()) {
+        result = std::make_shared<LongData>(
+            left->as<LongData>(Type::Long())->data() * right->as<LongData>(Type::Long())->data());
     } else if (left->type() == Type::Float()) {
         result = std::make_shared<FloatData>(
             left->as<FloatData>(Type::Float())->data() *
@@ -498,8 +496,8 @@ void __builtin__div__(
     const data_ptr_t &right = frame.get(nargs[1]);
 
     // 除以 0 检查
-    if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
-        (right->type() == Type::Int64() && right->as<Int64Data>(Type::Int64())->data() == 0) ||
+    if ((right->type() == Type::Int() && right->as<IntData>(Type::Int())->data() == 0) ||
+        (right->type() == Type::Long() && right->as<LongData>(Type::Long())->data() == 0) ||
         (right->type() == Type::Float() && right->as<FloatData>(Type::Float())->data() == 0.0f) ||
         (right->type() == Type::Double() && right->as<DoubleData>(Type::Double())->data() == 0.0)) {
         ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
@@ -508,14 +506,12 @@ void __builtin__div__(
     }
 
     data_ptr_t result;
-    if (left->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(
-            left->as<Int32Data>(Type::Int32())->data() /
-            right->as<Int32Data>(Type::Int32())->data());
-    } else if (left->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(
-            left->as<Int64Data>(Type::Int64())->data() /
-            right->as<Int64Data>(Type::Int64())->data());
+    if (left->type() == Type::Int()) {
+        result = std::make_shared<IntData>(
+            left->as<IntData>(Type::Int())->data() / right->as<IntData>(Type::Int())->data());
+    } else if (left->type() == Type::Long()) {
+        result = std::make_shared<LongData>(
+            left->as<LongData>(Type::Long())->data() / right->as<LongData>(Type::Long())->data());
     } else if (left->type() == Type::Float()) {
         result = std::make_shared<FloatData>(
             left->as<FloatData>(Type::Float())->data() /
@@ -540,22 +536,20 @@ void __builtin__mod__(
     const data_ptr_t &left = frame.get(nargs[0]);
     const data_ptr_t &right = frame.get(nargs[1]);
 
-    if ((right->type() == Type::Int32() && right->as<Int32Data>(Type::Int32())->data() == 0) ||
-        (right->type() == Type::Int64() && right->as<Int64Data>(Type::Int64())->data() == 0)) {
+    if ((right->type() == Type::Int() && right->as<IntData>(Type::Int())->data() == 0) ||
+        (right->type() == Type::Long() && right->as<LongData>(Type::Long())->data() == 0)) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
         frame.set(self, Data::null());
         return;
     }
 
     data_ptr_t result;
-    if (left->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(
-            left->as<Int32Data>(Type::Int32())->data() %
-            right->as<Int32Data>(Type::Int32())->data());
-    } else if (left->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(
-            left->as<Int64Data>(Type::Int64())->data() %
-            right->as<Int64Data>(Type::Int64())->data());
+    if (left->type() == Type::Int()) {
+        result = std::make_shared<IntData>(
+            left->as<IntData>(Type::Int())->data() % right->as<IntData>(Type::Int())->data());
+    } else if (left->type() == Type::Long()) {
+        result = std::make_shared<LongData>(
+            left->as<LongData>(Type::Long())->data() % right->as<LongData>(Type::Long())->data());
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
@@ -578,14 +572,14 @@ void __builtin__pow__(
     const data_ptr_t &exponent = frame.get(nargs[1]);
 
     data_ptr_t result;
-    if (base->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(static_cast<int32_t>(std::pow(
-            base->as<Int32Data>(Type::Int32())->data(),
-            exponent->as<Int32Data>(Type::Int32())->data())));
-    } else if (base->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(static_cast<int64_t>(std::pow(
-            base->as<Int64Data>(Type::Int64())->data(),
-            exponent->as<Int64Data>(Type::Int64())->data())));
+    if (base->type() == Type::Int()) {
+        result = std::make_shared<IntData>(static_cast<int32_t>(std::pow(
+            base->as<IntData>(Type::Int())->data(),
+            exponent->as<IntData>(Type::Int())->data())));
+    } else if (base->type() == Type::Long()) {
+        result = std::make_shared<LongData>(static_cast<int64_t>(std::pow(
+            base->as<LongData>(Type::Long())->data(),
+            exponent->as<LongData>(Type::Long())->data())));
     } else if (base->type() == Type::Float()) {
         result = std::make_shared<FloatData>(std::pow(
             base->as<FloatData>(Type::Float())->data(),
@@ -611,8 +605,8 @@ void __builtin__idx__(
     const data_ptr_t &index = frame.get(nargs[1]);
 
     // 数值索引：适用于 Array
-    if (index->type() == Type::Int32()) {
-        size_t idx = static_cast<size_t>(index->as<Int32Data>(Type::Int32())->data());
+    if (index->type() == Type::Int()) {
+        size_t idx = static_cast<size_t>(index->as<IntData>(Type::Int())->data());
         auto arr = std::dynamic_pointer_cast<ArrayData>(container);
         ASSERT(idx < arr->raw().size(), "Array index out of bounds.");
         frame.set(self, arr->raw()[idx]);
@@ -649,10 +643,10 @@ void __builtin__neg__(
     const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
-    if (val->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(-val->as<Int32Data>(Type::Int32())->data());
-    } else if (val->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(-val->as<Int64Data>(Type::Int64())->data());
+    if (val->type() == Type::Int()) {
+        result = std::make_shared<IntData>(-val->as<IntData>(Type::Int())->data());
+    } else if (val->type() == Type::Long()) {
+        result = std::make_shared<LongData>(-val->as<LongData>(Type::Long())->data());
     } else if (val->type() == Type::Float()) {
         result = std::make_shared<FloatData>(-val->as<FloatData>(Type::Float())->data());
     } else if (val->type() == Type::Double()) {
@@ -673,15 +667,15 @@ void __builtin__inv__(
     const data_ptr_t &val = frame.get(nargs[0]);
 
     data_ptr_t result;
-    if (val->type() == Type::Int32()) {
-        result = std::make_shared<Int32Data>(~val->as<Int32Data>(Type::Int32())->data());
-    } else if (val->type() == Type::Int64()) {
-        result = std::make_shared<Int64Data>(~val->as<Int64Data>(Type::Int64())->data());
+    if (val->type() == Type::Int()) {
+        result = std::make_shared<IntData>(~val->as<IntData>(Type::Int())->data());
+    } else if (val->type() == Type::Long()) {
+        result = std::make_shared<LongData>(~val->as<LongData>(Type::Long())->data());
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(
-                "<inv> operator only supported for integer types (Int32 / Int64), got " +
+                "<inv> operator only supported for integer types (Int / Long), got " +
                 val->type()->toString());
         frame.set(self, Data::null());
         return;

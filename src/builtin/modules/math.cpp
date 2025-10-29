@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,11 +28,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/abs_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int32()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::Int()),
                 },
                 {
                     ":math/abs_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
+                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::Long()),
                 },
                 {
                     ":math/abs_f",
@@ -96,11 +96,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/bin_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::String()),
                 },
                 {
                     ":math/bin_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::String()),
                 },
             }),
         OperatorGroup::create(
@@ -108,11 +108,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/oct_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::String()),
                 },
                 {
                     ":math/oct_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::String()),
                 },
             }),
         OperatorGroup::create(
@@ -120,11 +120,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/hex_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::String()),
                 },
                 {
                     ":math/hex_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::String()),
                 },
             })};
 

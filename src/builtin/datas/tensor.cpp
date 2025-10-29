@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -206,14 +206,14 @@ void TensorData::resolve(const data_vec_t &dataList) {
                         break;
                     }
 
-                    auto int32Data = dynamic_pointer_cast<Int32Data>(data);
+                    auto int32Data = dynamic_pointer_cast<IntData>(data);
                     if (int32Data) {
                         data_(i) = static_cast<double>(int32Data->data());
                         found = true;
                         break;
                     }
 
-                    auto int64Data = dynamic_pointer_cast<Int64Data>(data);
+                    auto int64Data = dynamic_pointer_cast<LongData>(data);
                     if (int64Data) {
                         data_(i) = static_cast<double>(int64Data->data());
                         found = true;
@@ -681,12 +681,12 @@ data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<Int32Data>(exponent)) {
+    if (auto intData = dynamic_pointer_cast<IntData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(intData->data()));
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<Int64Data>(exponent)) {
+    if (auto longData = dynamic_pointer_cast<LongData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(longData->data()));
         return result;
@@ -939,12 +939,12 @@ data_ptr_t TensorData::add(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() + static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() + static_cast<double>(longData->data());
         return result;
@@ -1025,12 +1025,12 @@ data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() - static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() - static_cast<double>(longData->data());
         return result;
@@ -1126,12 +1126,12 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(longData->data());
         return result;
@@ -1272,7 +1272,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<Int32Data>(other)) {
+    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
         if (intData->data() == 0) {
             throw std::invalid_argument("Division by zero");
         }
@@ -1280,7 +1280,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
         result->data_ = data_.array() / static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<Int64Data>(other)) {
+    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
         if (longData->data() == 0) {
             throw std::invalid_argument("Division by zero");
         }
