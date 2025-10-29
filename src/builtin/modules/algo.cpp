@@ -164,7 +164,30 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             return vecType;
                         }),
                 },
-            })};
+            }),
+
+        OperatorGroup::create(
+            "merge_and_sort",
+            {
+                {
+                    ":algo/merge_and_sort",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "<> (lft: T[], rgt: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            if (norm[1]->code() != TypeCode::Array)
+                                return nullopt;
+                            if (norm[0] != norm[1])
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            return vecType;
+                        }),
+                },
+            }),
+    };
 
     return groups;
 }

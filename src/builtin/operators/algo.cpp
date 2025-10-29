@@ -452,3 +452,69 @@ void __merge_sort_i__(
         frame.set(self, Data::null());
     }
 }
+
+void __merge_and_sort__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+
+    // 获取两个输入数组
+    const data_ptr_t &left_arr_val = frame.get(nargs[0]);
+    const data_ptr_t &right_arr_val = frame.get(nargs[1]);
+
+    auto left = left_arr_val->as<ArrayData>(left_arr_val->type());
+    auto right = right_arr_val->as<ArrayData>(right_arr_val->type());
+    auto elemType = tt::as_shared<ArrayType>(left_arr_val->type())->elementType();
+
+    // 合并两个数组
+    std::vector<data_ptr_t> merged;
+    merged.reserve(left->raw().size() + right->raw().size());
+    merged.insert(merged.end(), left->raw().begin(), left->raw().end());
+    merged.insert(merged.end(), right->raw().begin(), right->raw().end());
+
+    // 根据类型选择模板参数并调用 doSort
+    if (elemType == Type::Int32()) {
+        doSort<int32_t, Int32Data>(
+            false,  // 不在原地排序，返回新的数组
+            merged, // rawCopy
+            merged, // raw (这里一样，因为我们直接排序合并后的数组)
+            elemType,
+            self,
+            nargs[0], // arr索引随便给一个原数组的就可以（doSort里只是为了取frame.get）
+            frame,
+            SortAlgo::Merge);
+    } else if (elemType == Type::Int64()) {
+        doSort<int64_t, Int64Data>(
+            false,
+            merged,
+            merged,
+            elemType,
+            self,
+            nargs[0],
+            frame,
+            SortAlgo::Merge);
+    } else if (elemType == Type::Float()) {
+        doSort<float, FloatData>(
+            false,
+            merged,
+            merged,
+            elemType,
+            self,
+            nargs[0],
+            frame,
+            SortAlgo::Merge);
+    } else if (elemType == Type::Double()) {
+        doSort<double, DoubleData>(
+            false,
+            merged,
+            merged,
+            elemType,
+            self,
+            nargs[0],
+            frame,
+            SortAlgo::Merge);
+    } else {
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<merge_and_sort> not supported for element type " + elemType->toString());
+        frame.set(self, Data::null());
+    }
+}

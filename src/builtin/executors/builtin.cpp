@@ -329,6 +329,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"algo/quick_sort_i", __quick_sort_i__},
         {"algo/merge_sort", __merge_sort__},
         {"algo/merge_sort_i", __merge_sort_i__},
+        {"algo/merge_and_sort", __merge_and_sort__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},
