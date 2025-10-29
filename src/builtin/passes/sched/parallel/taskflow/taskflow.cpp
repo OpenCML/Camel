@@ -129,7 +129,7 @@ tf::Task TaskflowExecSchedPass::buildExitTask(
                          auto in = n->normInputs().front();
                          auto v = frame->get(in->index());
                          if (v == nullptr) {
-                             v = std::make_shared<Int32Data>(0);
+                             v = std::make_shared<IntData>(0);
                              frame->set(in->index(), v);
                          }
                      }
@@ -168,7 +168,7 @@ tf::Task TaskflowExecSchedPass::buildCopyTask(
             auto src = n->normInputs().front();
             auto v = frame->get(src->index());
             if (v == nullptr) {
-                v = std::make_shared<Int32Data>(0);
+                v = std::make_shared<IntData>(0);
                 frame->set(src->index(), v);
             }
             frame->set(n->index(), v->clone());
@@ -382,7 +382,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
                                     tar = (int)withIns.size(); // default
                             }
                             ASSERT(tar >= 0, "Invalid branch target.");
-                            frame->set(brch->index(), std::make_shared<Int32Data>(tar));
+                            frame->set(brch->index(), std::make_shared<IntData>(tar));
                             return tar;
                         })
                         .name("BRCH_SEL:" + brch->toString());
@@ -420,7 +420,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
             flowLike
                 .emplace([i, candidate, brch, frame, this](tf::Subflow &csf) {
                     auto tar = frame->get(brch->index());
-                    int tar_idx = tar->as<Int32Data>(Type::Int32())->data();
+                    int tar_idx = tar->as<IntData>(Type::Int())->data();
                     if ((int)i != tar_idx) {
                         return;
                     }
@@ -723,15 +723,14 @@ void TaskflowExecSchedPass::mark_apply_arr(
           }).name("APPLY_ELEM");
     };
 
-    auto par_apply =
-        [&sf, &frame, node, spawn_unary](const data_vec_t &elements, auto createOut) {
-            data_vec_t results(elements.size());
-            for (size_t i = 0; i < elements.size(); ++i) {
-                spawn_unary(elements[i], results[i]);
-            }
-            sf.join();
-            frame->set(node->index(), createOut(std::move(results)));
-        };
+    auto par_apply = [&sf, &frame, node, spawn_unary](const data_vec_t &elements, auto createOut) {
+        data_vec_t results(elements.size());
+        for (size_t i = 0; i < elements.size(); ++i) {
+            spawn_unary(elements[i], results[i]);
+        }
+        sf.join();
+        frame->set(node->index(), createOut(std::move(results)));
+    };
 
     auto arr = tt::as_shared<ArrayData>(targetData);
     par_apply(arr->raw(), [&](data_vec_t v) { return ArrayData::from(arr->type(), std::move(v)); });

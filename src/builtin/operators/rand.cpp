@@ -30,7 +30,7 @@ void __seed__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &seed_val = frame.get(nargs[0]);
 
-    auto v = seed_val->as<Int32Data>(Type::Int32());
+    auto v = seed_val->as<IntData>(Type::Int());
     g_rng.seed(static_cast<uint64_t>(v->data()));
 
     frame.set(self, Data::null());
@@ -55,14 +55,14 @@ void __randint__(
     const data_ptr_t &low_val = frame.get(nargs[0]);
     const data_ptr_t &high_val = frame.get(nargs[1]);
 
-    int32_t low = low_val->as<Int32Data>(Type::Int32())->data();
-    int32_t high = high_val->as<Int32Data>(Type::Int32())->data();
+    int32_t low = low_val->as<IntData>(Type::Int())->data();
+    int32_t high = high_val->as<IntData>(Type::Int())->data();
 
     if (low > high)
         std::swap(low, high);
 
     std::uniform_int_distribution<int32_t> dist(low, high);
-    frame.set(self, std::make_shared<Int32Data>(dist(g_rng)));
+    frame.set(self, std::make_shared<IntData>(dist(g_rng)));
 }
 
 void __choice__(
@@ -87,7 +87,7 @@ void __sample__(
 
     auto arr = arr_val->as<ArrayData>(arr_val->type());
     auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    int32_t n = n_val->as<Int32Data>(Type::Int32())->data();
+    int32_t n = n_val->as<IntData>(Type::Int())->data();
 
     if (n < 0 || static_cast<size_t>(n) > arr->raw().size()) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<sample> size out of range");

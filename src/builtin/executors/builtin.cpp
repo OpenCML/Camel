@@ -22,6 +22,7 @@
 #include "utils/log.h"
 
 #include "../operators/algo.h"
+#include "../operators/cast.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
 #include "../operators/math.h"
@@ -39,6 +40,38 @@
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
         {"not-impl", __not_implemented__},
+
+        // 类型转换
+        {"op/itoi", __itoi__},
+        {"op/ltoi", __ltoi__},
+        {"op/ftoi", __ftoi__},
+        {"op/dtoi", __dtoi__},
+        {"op/stoi", __stoi__},
+
+        {"op/itol", __itol__},
+        {"op/ltol", __ltol__},
+        {"op/ftol", __ftol__},
+        {"op/dtol", __dtol__},
+        {"op/stol", __stol__},
+
+        {"op/itof", __itof__},
+        {"op/ltof", __ltof__},
+        {"op/ftof", __ftof__},
+        {"op/dtof", __dtof__},
+        {"op/stof", __stof__},
+
+        {"op/itod", __itod__},
+        {"op/ltod", __ltod__},
+        {"op/ftod", __ftod__},
+        {"op/dtod", __dtod__},
+        {"op/stod", __stod__},
+
+        {"op/itos", __itos__},
+        {"op/ltos", __ltos__},
+        {"op/ftos", __ftos__},
+        {"op/dtos", __dtos__},
+        {"op/stos", __stos__},
+        {"op/atos", __atos__},
 
         // ops
         {"op/assn_i", __builtin__assn__},

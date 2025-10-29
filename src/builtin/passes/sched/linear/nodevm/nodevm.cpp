@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -223,7 +223,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 if (inputData == nullptr) {
                     // If input data is not initialized, create a default integer value 0
                     // For counters in recursive functions, this is typically an integer type
-                    inputData = std::make_shared<Int32Data>(0);
+                    inputData = std::make_shared<IntData>(0);
                     currFrame->set(inputNode->index(), inputData);
                 }
                 currFrame->set(n->index(), inputData->clone());
@@ -446,7 +446,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
         if (inputData == nullptr) {
             // If input data is not initialized, create a default integer value 0
             // For recursive function counters, this is typically an integer type
-            inputData = std::make_shared<Int32Data>(0);
+            inputData = std::make_shared<IntData>(0);
             currFrame->set(input.front()->index(), inputData);
         }
         result = inputData;

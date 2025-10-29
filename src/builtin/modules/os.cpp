@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,7 +58,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":os/get_chars",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::String()),
                 },
             }),
         OperatorGroup::create(

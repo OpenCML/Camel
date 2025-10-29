@@ -785,7 +785,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of BRCH node.");
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
-    node_ptr_t brchNode = BrchNode::create(*currGraph_, Type::Int32());
+    node_ptr_t brchNode = BrchNode::create(*currGraph_, Type::Int());
     node_ptr_t joinNode = JoinNode::create(*currGraph_, nullptr);
 
     type_ptr_t joinType = nullptr;

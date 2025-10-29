@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,9 +37,9 @@ type_ptr_t PrimaryType::clone() const { return std::make_shared<PrimaryType>(cod
 
 std::string PrimaryType::mangle() const {
     switch (code_) {
-    case TypeCode::Int32:
+    case TypeCode::Int:
         return "i";
-    case TypeCode::Int64:
+    case TypeCode::Long:
         return "l";
     case TypeCode::Float:
         return "f";

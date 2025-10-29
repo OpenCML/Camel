@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,12 +32,12 @@ void __abs__(
 
     data_ptr_t result;
 
-    if (val->type() == Type::Int32()) {
-        auto v = val->as<Int32Data>(Type::Int32());
-        result = std::make_shared<Int32Data>(std::abs(v->data()));
-    } else if (val->type() == Type::Int64()) {
-        auto v = val->as<Int64Data>(Type::Int64());
-        result = std::make_shared<Int64Data>(std::abs(v->data()));
+    if (val->type() == Type::Int()) {
+        auto v = val->as<IntData>(Type::Int());
+        result = std::make_shared<IntData>(std::abs(v->data()));
+    } else if (val->type() == Type::Long()) {
+        auto v = val->as<LongData>(Type::Long());
+        result = std::make_shared<LongData>(std::abs(v->data()));
     } else if (val->type() == Type::Float()) {
         auto v = val->as<FloatData>(Type::Float());
         result = std::make_shared<FloatData>(std::fabs(v->data()));
@@ -67,11 +67,11 @@ void __exp__(
     } else if (x->type() == Type::Double()) {
         auto val = x->as<DoubleData>(Type::Double());
         result = std::make_shared<DoubleData>(std::exp(val->data()));
-    } else if (x->type() == Type::Int32()) {
-        auto val = x->as<Int32Data>(Type::Int32());
+    } else if (x->type() == Type::Int()) {
+        auto val = x->as<IntData>(Type::Int());
         result = std::make_shared<DoubleData>(std::exp(static_cast<double>(val->data())));
-    } else if (x->type() == Type::Int64()) {
-        auto val = x->as<Int64Data>(Type::Int64());
+    } else if (x->type() == Type::Long()) {
+        auto val = x->as<LongData>(Type::Long());
         result = std::make_shared<DoubleData>(std::exp(static_cast<double>(val->data())));
     } else {
         ctx.rtmDiags()
@@ -159,10 +159,10 @@ void __bin__(
     const data_ptr_t &val = frame.get(nargs[0]);
 
     int64_t number = 0;
-    if (val->type() == Type::Int32()) {
-        number = val->as<Int32Data>(Type::Int32())->data();
+    if (val->type() == Type::Int()) {
+        number = val->as<IntData>(Type::Int())->data();
     } else {
-        number = val->as<Int64Data>(Type::Int64())->data();
+        number = val->as<LongData>(Type::Long())->data();
     }
 
     std::string result = "0b" + std::bitset<64>(number).to_string();
@@ -174,7 +174,7 @@ void __oct__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &val = frame.get(nargs[0]);
 
-    if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
+    if (val->type() != Type::Int() && val->type() != Type::Long()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<oct> operator requires integer type");
@@ -184,10 +184,10 @@ void __oct__(
 
     std::ostringstream oss;
     oss << "0o" << std::oct;
-    if (val->type() == Type::Int32()) {
-        oss << val->as<Int32Data>(Type::Int32())->data();
+    if (val->type() == Type::Int()) {
+        oss << val->as<IntData>(Type::Int())->data();
     } else {
-        oss << val->as<Int64Data>(Type::Int64())->data();
+        oss << val->as<LongData>(Type::Long())->data();
     }
 
     frame.set(self, std::make_shared<StringData>(oss.str()));
@@ -197,7 +197,7 @@ void __hex__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &val = frame.get(nargs[0]);
 
-    if (val->type() != Type::Int32() && val->type() != Type::Int64()) {
+    if (val->type() != Type::Int() && val->type() != Type::Long()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<hex> operator requires integer type");
@@ -207,10 +207,10 @@ void __hex__(
 
     std::ostringstream oss;
     oss << "0x" << std::hex << std::uppercase;
-    if (val->type() == Type::Int32()) {
-        oss << val->as<Int32Data>(Type::Int32())->data();
+    if (val->type() == Type::Int()) {
+        oss << val->as<IntData>(Type::Int())->data();
     } else {
-        oss << val->as<Int64Data>(Type::Int64())->data();
+        oss << val->as<LongData>(Type::Long())->data();
     }
 
     frame.set(self, std::make_shared<StringData>(oss.str()));

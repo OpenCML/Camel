@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1757,8 +1757,7 @@ any Builder::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
 
 /*
 primaryType
-    : INNER_ATOM_TYPE
-    | structType
+    : structType
     | identRef
     | '(' typeExpr ')'
     | tupleType
@@ -1770,11 +1769,7 @@ primaryType
 any Builder::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
     ENTER("PrimaryType");
     node_ptr_t res = nullptr;
-    if (context->INNER_ATOM_TYPE()) {
-        Reference ref(context->INNER_ATOM_TYPE()->getText());
-        res = createNodeAs<RefTypeLoad>(ref);
-        setNodeTokenRangeByContext(res, context);
-    } else if (context->structType()) {
+    if (context->structType()) {
         res = any2node(visitStructType(context->structType()));
     } else if (context->identRef()) {
         res = createNodeAs<RefTypeLoad>(any_cast<Reference>(visitIdentRef(context->identRef())));
