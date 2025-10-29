@@ -84,7 +84,7 @@ void doSort(
     SortAlgo algo) {
 
     auto comparator = [&](const data_ptr_t &a, const data_ptr_t &b) {
-        return a->as<DataType>(elemType)->data() < b->as<DataType>(elemType)->data();
+        return static_cast<DataType &>(*a).data() < static_cast<DataType &>(*b).data();
     };
 
     auto runSort = [&](std::vector<data_ptr_t> &vec) {
@@ -169,7 +169,7 @@ void __insert_sort__(
     }
 }
 
-void __insert_sort_i__(
+void __insert_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &arr_val = frame.get(nargs[0]);
     auto arr = arr_val->as<ArrayData>(arr_val->type());
@@ -282,7 +282,7 @@ void __quick_sort__(
     }
 }
 
-void __quick_sort_i__(
+void __quick_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     const data_ptr_t &arr_val = frame.get(nargs[0]);
@@ -396,7 +396,7 @@ void __merge_sort__(
     }
 }
 
-void __merge_sort_i__(
+void __merge_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     const data_ptr_t &arr_val = frame.get(nargs[0]);
@@ -453,10 +453,34 @@ void __merge_sort_i__(
     }
 }
 
-void __merge_and_sort__(
+template <typename T, typename DataT>
+static std::vector<data_ptr_t>
+merge_sorted_arrays(const std::vector<data_ptr_t> &L, const std::vector<data_ptr_t> &R) {
+
+    std::vector<data_ptr_t> merged;
+    merged.reserve(L.size() + R.size());
+
+    size_t i = 0, j = 0;
+    while (i < L.size() && j < R.size()) {
+        auto li = static_cast<DataT &>(*L[i]).data();
+        auto rj = static_cast<DataT &>(*R[j]).data();
+        if (li < rj) {
+            merged.push_back(L[i++]);
+        } else {
+            merged.push_back(R[j++]);
+        }
+    }
+    while (i < L.size())
+        merged.push_back(L[i++]);
+    while (j < R.size())
+        merged.push_back(R[j++]);
+
+    return merged;
+}
+
+void __merge_sorted__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
-    // 获取两个输入数组
     const data_ptr_t &left_arr_val = frame.get(nargs[0]);
     const data_ptr_t &right_arr_val = frame.get(nargs[1]);
 
@@ -464,57 +488,26 @@ void __merge_and_sort__(
     auto right = right_arr_val->as<ArrayData>(right_arr_val->type());
     auto elemType = tt::as_shared<ArrayType>(left_arr_val->type())->elementType();
 
-    // 合并两个数组
-    std::vector<data_ptr_t> merged;
-    merged.reserve(left->raw().size() + right->raw().size());
-    merged.insert(merged.end(), left->raw().begin(), left->raw().end());
-    merged.insert(merged.end(), right->raw().begin(), right->raw().end());
+    const auto &L = left->raw();
+    const auto &R = right->raw();
 
-    // 根据类型选择模板参数并调用 doSort
+    std::vector<data_ptr_t> merged;
+
     if (elemType == Type::Int32()) {
-        doSort<int32_t, Int32Data>(
-            false,  // 不在原地排序，返回新的数组
-            merged, // rawCopy
-            merged, // raw (这里一样，因为我们直接排序合并后的数组)
-            elemType,
-            self,
-            nargs[0], // arr索引随便给一个原数组的就可以（doSort里只是为了取frame.get）
-            frame,
-            SortAlgo::Merge);
+        merged = merge_sorted_arrays<int32_t, Int32Data>(L, R);
     } else if (elemType == Type::Int64()) {
-        doSort<int64_t, Int64Data>(
-            false,
-            merged,
-            merged,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
+        merged = merge_sorted_arrays<int64_t, Int64Data>(L, R);
     } else if (elemType == Type::Float()) {
-        doSort<float, FloatData>(
-            false,
-            merged,
-            merged,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
+        merged = merge_sorted_arrays<float, FloatData>(L, R);
     } else if (elemType == Type::Double()) {
-        doSort<double, DoubleData>(
-            false,
-            merged,
-            merged,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
+        merged = merge_sorted_arrays<double, DoubleData>(L, R);
     } else {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<merge_and_sort> not supported for element type " + elemType->toString());
+            .commit("<merge_sorted> not supported for element type " + elemType->toString());
         frame.set(self, Data::null());
+        return;
     }
+
+    frame.set(self, std::make_shared<ArrayData>(Type::Array(elemType), std::move(merged)));
 }

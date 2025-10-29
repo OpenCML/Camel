@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,7 @@
 
 class TaskflowExecSchedPass : public ParallelSchedPass {
   public:
-    TaskflowExecSchedPass(const context_ptr_t &ctx, size_t max_concurrent_tasks = 25)
+    TaskflowExecSchedPass(const context_ptr_t &ctx, size_t max_concurrent_tasks = 32)
         : ParallelSchedPass(ctx), executor_(max_concurrent_tasks) {}
     virtual ~TaskflowExecSchedPass() = default;
 

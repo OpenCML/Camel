@@ -27,7 +27,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             "sort",
             {
                 {
-                    ":algo/sort",
+                    ":algo/sorted",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
@@ -42,13 +42,31 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             }),
 
         OperatorGroup::create(
-            "sort_i",
+            "sort",
             {
                 {
-                    ":algo/sort_i",
+                    ":algo/sort",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {true}}},
                         "<> (var array: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            return vecType;
+                        }),
+                },
+            }),
+
+        OperatorGroup::create(
+            "insert_sorted",
+            {
+                {
+                    ":algo/insert_sorted",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -65,24 +83,6 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     ":algo/insert_sort",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
-                            return vecType;
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
-            "insert_sort_i",
-            {
-                {
-                    ":algo/insert_sort_i",
-                    DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {true}}},
                         "<> (var array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
@@ -95,14 +95,31 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
 
+        OperatorGroup::create(
+            "quick_sorted",
+            {
+                {
+                    ":algo/quick_sorted",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            return vecType;
+                        }),
+                },
+            }),
         OperatorGroup::create(
             "quick_sort",
             {
                 {
                     ":algo/quick_sort",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
+                        {{0, {}}, {1, {true}}},
+                        "<> (var array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -112,14 +129,15 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         }),
                 },
             }),
+
         OperatorGroup::create(
-            "quick_sort_i",
+            "merge_sorted",
             {
                 {
-                    ":algo/quick_sort_i",
+                    ":algo/merge_sorted",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {true}}},
-                        "<> (var array: T[]) => T[]",
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -136,24 +154,6 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     ":algo/merge_sort",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
-                            return vecType;
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
-            "merge_sort_i",
-            {
-                {
-                    ":algo/merge_sort_i",
-                    DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {true}}},
                         "<> (var array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
@@ -167,10 +167,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             }),
 
         OperatorGroup::create(
-            "merge_and_sort",
+            "merge_sorted_arrays",
             {
                 {
-                    ":algo/merge_and_sort",
+                    ":algo/merge_sorted_arrays",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "<> (lft: T[], rgt: T[]) => T[]",

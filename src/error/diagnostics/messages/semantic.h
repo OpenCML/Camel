@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,7 @@ enum class SemanticDiag : uint32_t {
     ElementTypeMismatch = 0x000012,
     CallingIncompleteFunction = 0x000013,
     ClosureCaptureAfterSelfCall = 0x000014,
+    ImportNameNotExported = 0x000015,
 
     // Warnings
     FeatureNotSupported = 0x100000,

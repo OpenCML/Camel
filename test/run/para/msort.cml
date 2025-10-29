@@ -2,24 +2,28 @@ module msort
 
 import { now } from time
 import { seed, rand, shuffle } from random
-import { sort, merge_and_sort } from algo
+import { sorted, sort, merge_sorted_arrays } from algo
 
-func merge(a: int[], b: int[]): int[] {
-    // println('Merging {} and {} elements...'->format<len(a), len(b)>)
-    return merge_and_sort(a, b)
+func merge(lhs: int[], rhs: int[]): int[] sync {
+    return merge_sorted_arrays(lhs, rhs)
+    // return concat(lhs, rhs)->sorted
 }
 
-func mergesort(a: int[]): int[] {
-    if len(a) <= 100 then sort(a) else {
-        let mid = len(a) / 2
-        let l = mergesort(a->slice<0, mid>)
-        let r = mergesort(a->slice<mid, len(a)>)
-        return merge(l, r)
+func mergesort(arr: int[]): int[] sync {
+    let start = now()
+    let res = if len(arr) <= 10000 then sort(arr) else {
+        let mid = len(arr) / 2
+        let lhs = arr->slice<0, mid>->mergesort
+        let rhs = arr->slice<mid, len(arr)>->mergesort
+        return merge(lhs, rhs)
     }
+    let duration = now() - start
+    println('MergeSorted {} elements in {} seconds.'->format<len(arr), duration>)
+    return res
 }
 
 func main(): int sync {
-    let n = 100000
+    let n = 10000000
     let m = 100
     let s = 1
 

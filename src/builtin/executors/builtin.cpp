@@ -321,15 +321,15 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // algo
         // {"algo/argsort", __argsort__},
-        {"algo/sort", __insert_sort__},
-        {"algo/sort_i", __insert_sort_i__},
-        {"algo/insert_sort", __insert_sort__},
-        {"algo/insert_sort_i", __insert_sort_i__},
-        {"algo/quick_sort", __quick_sort__},
-        {"algo/quick_sort_i", __quick_sort_i__},
-        {"algo/merge_sort", __merge_sort__},
-        {"algo/merge_sort_i", __merge_sort_i__},
-        {"algo/merge_and_sort", __merge_and_sort__},
+        {"algo/sort", __quick_sort_inplace__}, // 默认是快速排序
+        {"algo/sorted", __quick_sort__},
+        {"algo/insert_sort", __insert_sort_inplace__},
+        {"algo/insert_sorted", __insert_sort__},
+        {"algo/quick_sort", __quick_sort_inplace__},
+        {"algo/quick_sorted", __quick_sort__},
+        {"algo/merge_sort", __merge_sort_inplace__},
+        {"algo/merge_sorted", __merge_sort__},
+        {"algo/merge_sorted_arrays", __merge_sorted__}, // 双指针合并法
 
         // profiler
         {"profiler/begin", __profiler_begin__},
