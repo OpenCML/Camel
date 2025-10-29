@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -892,14 +892,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), false}, {Type::Int32(), false}},
-                        Type::Float()),
+                        Type::Int32()),
                 },
                 {
                     ":op/div_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), false}, {Type::Int64(), false}},
-                        Type::Float()),
+                        Type::Int64()),
                 },
                 {
                     ":op/div_f",

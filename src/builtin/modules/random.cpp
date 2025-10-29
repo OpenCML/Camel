@@ -13,31 +13,100 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "random.h"
 
+using namespace std;
+
 static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
-            "random",
+            "seed",
             {
                 {
-                    ":not-impl",
-                    StaticFuncTypeResolver::create({}, {}, Type::Float()),
+                    ":rand/seed",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Void()),
+                },
+            }),
+        OperatorGroup::create(
+            "rand",
+            {
+                {
+                    ":rand/rand",
+                    StaticFuncTypeResolver::create({}, {}, Type::Double()),
+                },
+            }),
+        OperatorGroup::create(
+            "randn",
+            {
+                {
+                    ":rand/randn",
+                    StaticFuncTypeResolver::create({}, {}, Type::Double()),
                 },
             }),
         OperatorGroup::create(
             "randint",
             {
                 {
-                    ":not-impl",
+                    ":rand/randint",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), false}, {Type::Int32(), false}},
                         Type::Int32()),
+                },
+            }),
+        OperatorGroup::create(
+            "choice",
+            {
+                {
+                    ":rand/choice",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            return vecType->elementType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "sample",
+            {
+                {
+                    ":rand/sample",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            return vecType;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "shuffle",
+            {
+                {
+                    ":rand/shuffle",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            return vecType;
+                        }),
                 },
             }),
     };

@@ -1,0 +1,43 @@
+module msort
+
+import { now } from time
+import { seed, rand, shuffle } from random
+import { sort, merge_and_sort } from algo
+
+func merge(a: int[], b: int[]): int[] {
+    // println('Merging {} and {} elements...'->format<len(a), len(b)>)
+    return merge_and_sort(a, b)
+}
+
+func mergesort(a: int[]): int[] {
+    if len(a) <= 100 then sort(a) else {
+        let mid = len(a) / 2
+        let l = mergesort(a->slice<0, mid>)
+        let r = mergesort(a->slice<mid, len(a)>)
+        return merge(l, r)
+    }
+}
+
+func main(): int sync {
+    let n = 100000
+    let m = 100
+    let s = 1
+
+    seed(s)
+
+    'Generating {} values (seed={})...'->format<n, s>->println
+    let arr = range(0, n)->shuffle
+    'First {} values (unsorted):'->format<m>->println
+    arr->slice<0, m>->println
+
+    'Start sorting {} numbers...'->format<n>->println
+    let start = now()
+    let sorted = mergesort(arr)
+    let duration = now() - start
+
+    'Sorted (first {} shown):'->format<m>->println
+    sorted->slice<0, m>->println
+
+    'Mergesort completed in {} seconds'->format<duration>->println
+    return 0
+}
