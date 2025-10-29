@@ -4,12 +4,12 @@ import { now } from time
 import { seed, rand, shuffle } from random
 import { sort, merge_and_sort } from algo
 
-func merge(a: int[], b: int[]): int[] sync {
+func merge(a: int[], b: int[]): int[] {
     // println('Merging {} and {} elements...'->format<len(a), len(b)>)
     return merge_and_sort(a, b)
 }
 
-func mergesort(a: int[]): int[] sync {
+func mergesort(a: int[]): int[] {
     if len(a) <= 100 then sort(a) else {
         let mid = len(a) / 2
         let l = mergesort(a->slice<0, mid>)
