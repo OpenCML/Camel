@@ -180,7 +180,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            if (norm[0] != norm[1])
+                            const auto &lftElemType =
+                                tt::as_shared<ArrayType>(norm[0])->elementType();
+                            const auto &rgtElemType =
+                                tt::as_shared<ArrayType>(norm[1])->elementType();
+                            if (!lftElemType->equals(rgtElemType))
                                 return nullopt;
                             const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
                             return vecType;
