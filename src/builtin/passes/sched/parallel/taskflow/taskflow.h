@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 21, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,7 @@
 
 class TaskflowExecSchedPass : public ParallelSchedPass {
   public:
-    TaskflowExecSchedPass(const context_ptr_t &ctx, size_t max_concurrent_tasks = 12)
+    TaskflowExecSchedPass(const context_ptr_t &ctx, size_t max_concurrent_tasks = 32)
         : ParallelSchedPass(ctx), executor_(max_concurrent_tasks) {}
     virtual ~TaskflowExecSchedPass() = default;
 
@@ -119,9 +119,9 @@ class TaskflowExecSchedPass : public ParallelSchedPass {
 
     // BRCH-JOIN 区域处理（创建 selector/candidate/join 任务）
     template <typename FlowT>
-    void buildBranchJoinRegions(
+    void buildBranchJoinRegion(
         FlowT &flowLike, GraphIR::Graph *graph, const frame_rptr_t &frame,
-        std::unordered_map<GraphIR::Node *, tf::Task> &taskMap);
+        std::unordered_map<GraphIR::Node *, tf::Task> &taskMap, const GraphIR::node_ptr_t &brch);
 
     // 构建非 BRCH-JOIN 的普通节点任务（含 ports）
     template <typename FlowT>

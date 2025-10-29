@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 27, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -75,12 +75,15 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
 
 void Builder::initInnerTypes() {
     typeScope_->clear();
-    typeScope_->insert(Reference("int"), Type::Int32());
-    typeScope_->insert(Reference("int32"), Type::Int32());
-    typeScope_->insert(Reference("int64"), Type::Int64());
+    typeScope_->insert(Reference("int"), Type::Int());
+    typeScope_->insert(Reference("i32"), Type::Int());
+    typeScope_->insert(Reference("long"), Type::Long());
+    typeScope_->insert(Reference("i64"), Type::Long());
     typeScope_->insert(Reference("float"), Type::Float());
+    typeScope_->insert(Reference("f32"), Type::Float());
     typeScope_->insert(Reference("double"), Type::Double());
-    typeScope_->insert(Reference("number"), Type::Double());
+    typeScope_->insert(Reference("f64"), Type::Double());
+    typeScope_->insert(Reference("real"), Type::Double());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("char"), Type::Char());
     typeScope_->insert(Reference("string"), Type::String());

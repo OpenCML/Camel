@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -165,7 +165,7 @@ void __sleep__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &arg = frame.get(nargs[0]);
 
-    auto pd = arg->as<Int32Data>(Type::Int32());
+    auto pd = arg->as<IntData>(Type::Int());
 
     if (pd->data() < 0) {
         ctx.rtmDiags()
@@ -259,7 +259,7 @@ void __get_char__(
 void __get_chars__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     int maxChars = -1; // Default to read all available characters
-    maxChars = frame.get(nargs[0])->as<Int32Data>(Type::Int32())->data();
+    maxChars = frame.get(nargs[0])->as<IntData>(Type::Int())->data();
 
     std::string input = Terminal::readInput(maxChars);
 

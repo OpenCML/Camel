@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,24 +24,24 @@
 #include "builtin/datas/tensor.h"
 #include "builtin/types/tensor.h"
 
-void __eye__(
+void __tensor_eye__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.eye"));
 
     auto n = frame.get(nargs[0]);
-    if (!n->type()->equals(Type::Int32())) {
+    if (!n->type()->equals(Type::Int())) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
-            std::format("tensor.eye expects Int32 argument"));
+            std::format("tensor.eye expects Int argument"));
     }
 
-    auto intData = std::dynamic_pointer_cast<Int32Data>(n);
+    auto intData = std::dynamic_pointer_cast<IntData>(n);
     auto tensor = TensorData::eye(intData->data());
     frame.set(self, tensor);
     return;
 }
 
-void __diag__(
+void __tensor_diag__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.diag"));
 
@@ -51,7 +51,7 @@ void __diag__(
     return;
 }
 
-void __zeros__(
+void __tensor_zeros__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.zeros"));
 
@@ -61,12 +61,12 @@ void __zeros__(
     if (shapeArg->type()->code() == TypeCode::Array) {
         auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
         for (const auto &element : arrayData->raw()) {
-            if (!element->type()->equals(Type::Int32())) {
+            if (!element->type()->equals(Type::Int())) {
                 throw CamelRuntimeException(
                     RuntimeExceptionCode::UnknownError,
-                    std::format("tensor.zeros expects Array of Int32 arguments"));
+                    std::format("tensor.zeros expects Array of Int arguments"));
             }
-            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            auto intData = std::dynamic_pointer_cast<IntData>(element);
             shape.push_back(static_cast<size_t>(intData->data()));
         }
     } else {
@@ -80,7 +80,7 @@ void __zeros__(
     return;
 }
 
-void __ones__(
+void __tensor_ones__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.ones"));
 
@@ -90,12 +90,12 @@ void __ones__(
     if (shapeArg->type()->code() == TypeCode::Array) {
         auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
         for (const auto &element : arrayData->raw()) {
-            if (!element->type()->equals(Type::Int32())) {
+            if (!element->type()->equals(Type::Int())) {
                 throw CamelRuntimeException(
                     RuntimeExceptionCode::UnknownError,
-                    std::format("tensor.ones expects Array of Int32 arguments"));
+                    std::format("tensor.ones expects Array of Int arguments"));
             }
-            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            auto intData = std::dynamic_pointer_cast<IntData>(element);
             shape.push_back(static_cast<size_t>(intData->data()));
         }
     } else {
@@ -109,7 +109,7 @@ void __ones__(
     return;
 }
 
-void __linspace__(
+void __tensor_linspace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.linspace"));
 
@@ -118,21 +118,21 @@ void __linspace__(
     auto num = frame.get(nargs[2]);
 
     if (!start->type()->equals(Type::Float()) || !stop->type()->equals(Type::Float()) ||
-        !num->type()->equals(Type::Int32())) {
+        !num->type()->equals(Type::Int())) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
-            std::format("tensor.linspace expects (Float, Float, Int32) arguments"));
+            std::format("tensor.linspace expects (Float, Float, Int) arguments"));
     }
 
     auto startData = std::dynamic_pointer_cast<FloatData>(start);
     auto stopData = std::dynamic_pointer_cast<FloatData>(stop);
-    auto numData = std::dynamic_pointer_cast<Int32Data>(num);
+    auto numData = std::dynamic_pointer_cast<IntData>(num);
     auto tensor = TensorData::linspace(startData->data(), stopData->data(), numData->data());
     frame.set(self, tensor);
     return;
 }
 
-void __arange__(
+void __tensor_arange__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.arange"));
 
@@ -167,7 +167,7 @@ void __arange__(
     return;
 }
 
-void __random__(
+void __tensor_random__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.random"));
 
@@ -177,12 +177,12 @@ void __random__(
     if (shapeArg->type()->code() == TypeCode::Array) {
         auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
         for (const auto &element : arrayData->raw()) {
-            if (!element->type()->equals(Type::Int32())) {
+            if (!element->type()->equals(Type::Int())) {
                 throw CamelRuntimeException(
                     RuntimeExceptionCode::UnknownError,
-                    std::format("tensor.random expects Array of Int32 arguments"));
+                    std::format("tensor.random expects Array of Int arguments"));
             }
-            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            auto intData = std::dynamic_pointer_cast<IntData>(element);
             shape.push_back(static_cast<size_t>(intData->data()));
         }
     } else {
@@ -219,7 +219,7 @@ void __random__(
     return;
 }
 
-void __randn__(
+void __tensor_randn__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.randn"));
 
@@ -229,12 +229,12 @@ void __randn__(
     if (shapeArg->type()->code() == TypeCode::Array) {
         auto arrayData = std::dynamic_pointer_cast<ArrayData>(shapeArg);
         for (const auto &element : arrayData->raw()) {
-            if (!element->type()->equals(Type::Int32())) {
+            if (!element->type()->equals(Type::Int())) {
                 throw CamelRuntimeException(
                     RuntimeExceptionCode::UnknownError,
-                    std::format("tensor.randn expects Array of Int32 arguments"));
+                    std::format("tensor.randn expects Array of Int arguments"));
             }
-            auto intData = std::dynamic_pointer_cast<Int32Data>(element);
+            auto intData = std::dynamic_pointer_cast<IntData>(element);
             shape.push_back(static_cast<size_t>(intData->data()));
         }
     } else {
@@ -439,13 +439,13 @@ void __tensor_concat__(
             std::format("tensor.concat expects Tensor arguments"));
     }
 
-    if (axis_data->type()->code() != TypeCode::Int32) {
+    if (axis_data->type()->code() != TypeCode::Int) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
             std::format("tensor.concat expects integer axis argument"));
     }
 
-    auto axis = std::dynamic_pointer_cast<Int32Data>(axis_data)->data();
+    auto axis = std::dynamic_pointer_cast<IntData>(axis_data)->data();
     auto result = std::dynamic_pointer_cast<TensorData>(tensor1)->concat(tensor2, axis);
     frame.set(self, result);
     return;
@@ -759,13 +759,13 @@ void __tensor_matpow__(
     }
 
     auto exponent_data = frame.get(nargs[1]);
-    if (!exponent_data->type()->equals(Type::Int32())) {
+    if (!exponent_data->type()->equals(Type::Int())) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
-            std::format("tensor.matpow expects Int32 as second argument"));
+            std::format("tensor.matpow expects Int as second argument"));
     }
 
-    auto intData = std::dynamic_pointer_cast<Int32Data>(exponent_data);
+    auto intData = std::dynamic_pointer_cast<IntData>(exponent_data);
     auto result = tensor->matpow(intData->data());
     frame.set(self, result);
     return;
@@ -824,7 +824,7 @@ void __tensor_tanh__(
 }
 
 // Tensor shape operation
-void __shape__(
+void __tensor_shape__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.shape"));
 
@@ -841,10 +841,10 @@ void __shape__(
 
     data_vec_t shape_array;
     for (auto dim : shape) {
-        shape_array.push_back(std::make_shared<Int32Data>(dim));
+        shape_array.push_back(std::make_shared<IntData>(dim));
     }
 
-    auto result = ArrayData::from(Type::Array(Type::Int32()), std::move(shape_array));
+    auto result = ArrayData::from(Type::Array(Type::Int()), std::move(shape_array));
     frame.set(self, result);
     return;
 }
@@ -864,16 +864,16 @@ void __tensor_idx__(
                 tensor->type()->toString()));
     }
 
-    if (!index->type()->equals(Type::Int32())) {
+    if (!index->type()->equals(Type::Int())) {
         throw CamelRuntimeException(
             RuntimeExceptionCode::UnknownError,
             std::format(
-                "tensor index expects second argument to be Int32, got {}",
+                "tensor index expects second argument to be Int, got {}",
                 index->type()->toString()));
     }
 
     auto tensorData = std::dynamic_pointer_cast<TensorData>(tensor);
-    auto indexData = std::dynamic_pointer_cast<Int32Data>(index);
+    auto indexData = std::dynamic_pointer_cast<IntData>(index);
 
     auto result = tensorData->at({static_cast<size_t>(indexData->data())});
     frame.set(self, result);
@@ -900,17 +900,17 @@ void __tensor_idx2d__(
         auto rowIndex = frame.get(nargs[1]);
         auto colIndex = frame.get(nargs[2]);
 
-        if (!rowIndex->type()->equals(Type::Int32()) || !colIndex->type()->equals(Type::Int32())) {
+        if (!rowIndex->type()->equals(Type::Int()) || !colIndex->type()->equals(Type::Int())) {
             throw CamelRuntimeException(
                 RuntimeExceptionCode::UnknownError,
                 std::format(
-                    "tensor 2d index expects second and third arguments to be Int32, got {} and {}",
+                    "tensor 2d index expects second and third arguments to be Int, got {} and {}",
                     rowIndex->type()->toString(),
                     colIndex->type()->toString()));
         }
 
-        auto rowIndexData = std::dynamic_pointer_cast<Int32Data>(rowIndex);
-        auto colIndexData = std::dynamic_pointer_cast<Int32Data>(colIndex);
+        auto rowIndexData = std::dynamic_pointer_cast<IntData>(rowIndex);
+        auto colIndexData = std::dynamic_pointer_cast<IntData>(colIndex);
 
         auto result = tensorData->at(
             {static_cast<size_t>(rowIndexData->data()), static_cast<size_t>(colIndexData->data())});
@@ -921,14 +921,14 @@ void __tensor_idx2d__(
         auto arg3 = frame.get(nargs[3]);
         auto arg4 = frame.get(nargs[4]);
 
-        if (arg1->type()->equals(Type::Int32()) && // start
-            arg2->type()->equals(Type::Int32()) && // end
-            arg3->type()->equals(Type::Int32()) && // row
-            arg4->type()->equals(Type::Int32())) { // unused/step (for future use)
+        if (arg1->type()->equals(Type::Int()) && // start
+            arg2->type()->equals(Type::Int()) && // end
+            arg3->type()->equals(Type::Int()) && // row
+            arg4->type()->equals(Type::Int())) { // unused/step (for future use)
 
-            auto startData = std::dynamic_pointer_cast<Int32Data>(arg1);
-            auto endData = std::dynamic_pointer_cast<Int32Data>(arg2);
-            auto rowData = std::dynamic_pointer_cast<Int32Data>(arg3);
+            auto startData = std::dynamic_pointer_cast<IntData>(arg1);
+            auto endData = std::dynamic_pointer_cast<IntData>(arg2);
+            auto rowData = std::dynamic_pointer_cast<IntData>(arg3);
 
             auto result = tensorData->slice(
                 static_cast<size_t>(startData->data()),
@@ -961,13 +961,13 @@ void __to_float__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     auto data = frame.get(nargs[0]);
     switch (data->type()->code()) {
-    case TypeCode::Int32: {
-        auto intData = std::dynamic_pointer_cast<Int32Data>(data);
+    case TypeCode::Int: {
+        auto intData = std::dynamic_pointer_cast<IntData>(data);
         frame.set(self, std::make_shared<FloatData>(static_cast<float>(intData->data())));
         return;
     }
-    case TypeCode::Int64: {
-        auto intData = std::dynamic_pointer_cast<Int64Data>(data);
+    case TypeCode::Long: {
+        auto intData = std::dynamic_pointer_cast<LongData>(data);
         frame.set(self, std::make_shared<FloatData>(static_cast<float>(intData->data())));
         return;
     }

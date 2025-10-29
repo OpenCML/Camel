@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,9 +30,9 @@
 using namespace std;
 
 const signed char primeTypeConvMatrix[7][7] = {
-    // Int32, Int64, Float, Double, String, Bool, Char
-    {01, 01, 01, 01, 00, 01, -1}, // Int32
-    {-1, 01, -1, 01, 00, 01, -1}, // Int64
+    // Int, Long, Float, Double, String, Bool, Char
+    {01, 01, 01, 01, 00, 01, -1}, // Int
+    {-1, 01, -1, 01, 00, 01, -1}, // Long
     {-1, -1, 01, 01, 00, 01, -1}, // Float
     {-1, -1, -1, 01, 00, 01, -1}, // Double
     {00, 00, 00, 00, 01, 01, 00}, // String
@@ -46,10 +46,10 @@ string typeCodeToString(TypeCode code) {
     case TypeCode::Ref:
         return "ref";
         // primitive types
-    case TypeCode::Int32:
-        return "int32";
-    case TypeCode::Int64:
-        return "int64";
+    case TypeCode::Int:
+        return "int";
+    case TypeCode::Long:
+        return "long";
     case TypeCode::Float:
         return "float";
     case TypeCode::Double:
@@ -175,18 +175,18 @@ bool Type::castSafetyCheck(const type_ptr_t &from, const type_ptr_t &to, CastSaf
     return castSafetyCheck(*from, *to, required);
 }
 
-std::shared_ptr<PrimaryType> Type::Int32() {
+std::shared_ptr<PrimaryType> Type::Int() {
     static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = make_shared<PrimaryType>(TypeCode::Int32);
+        type = make_shared<PrimaryType>(TypeCode::Int);
     }
     return type;
 }
 
-std::shared_ptr<PrimaryType> Type::Int64() {
+std::shared_ptr<PrimaryType> Type::Long() {
     static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = make_shared<PrimaryType>(TypeCode::Int64);
+        type = make_shared<PrimaryType>(TypeCode::Long);
     }
     return type;
 }
@@ -230,12 +230,6 @@ std::shared_ptr<PrimaryType> Type::Char() {
     }
     return type;
 }
-
-std::shared_ptr<PrimaryType> Type::Int() { return Int32(); }
-
-std::shared_ptr<PrimaryType> Type::Real() { return Float(); }
-
-std::shared_ptr<PrimaryType> Type::Number() { return Double(); }
 
 std::shared_ptr<ArrayType> Type::Array(const type_ptr_t &elementType) {
     static std::shared_ptr<ArrayType> voidArrayType = nullptr;

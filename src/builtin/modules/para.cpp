@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":mark/unordered_reduce_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {2, {false, false}}},
-                        "<collect: T[]> (func: (acc: U, item: T) => U, initial: U) => U",
+                        "<func: (acc: U, item: T) => U, initial: U> (collect: T[]) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)
@@ -57,7 +57,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":mark/unordered_foreach_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
-                        "<collect: T[]> (func: (item: T) => void) => void",
+                        "<func: (item: T) => void> (collect: T[]) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (with[0]->code() != TypeCode::Array)

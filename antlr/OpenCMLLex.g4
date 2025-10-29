@@ -52,18 +52,6 @@ ELLIPSIS : '...';
 DOTDOT   : '..';
 DOT      : '.';
 
-INNER_ATOM_TYPE
-    : 'int'
-    | 'float'
-    | 'bool'
-    | 'char'
-    | 'string'
-    | 'any'
-    | 'void'
-    | 'unit'
-    | 'functor'
-    ;
-
 BLANK
     : [ \r\n\t\u000C]+ -> skip
     ;

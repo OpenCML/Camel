@@ -12,21 +12,21 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 01, 2025
+ * Created: Jul. 29, 2025
  * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
-#include "core/operator.h"
+#include "core/module/builtin.h"
 
-void __profiler_begin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __profiler_end__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __profiler_instant__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __profiler_enable__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+class AlgoBuiltinModule : public BuiltinModule {
+  public:
+    AlgoBuiltinModule(context_ptr_t ctx);
+    virtual ~AlgoBuiltinModule() = default;
+
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx);
+};

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -362,10 +362,13 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (module_->hasImportedRef(name)) {
+        // hasImportedRef 为 true 只说明用户声明了导入这个名字
+        // 但并不意味着被导入的模块中导出了这个名字
+        // 所以这里仍然要做一次检测
         const auto &opt = module_->getImportedEntity(name);
-        ASSERT(
-            opt.has_value(),
-            "Imported entity not found: " + name + " in module " + module_->name());
+        if (!opt.has_value()) {
+            diags_->of(SemanticDiag::ImportNameNotExported).commit(name);
+        }
         const auto &e = opt.value();
         if (std::holds_alternative<node_ptr_t>(e)) {
             ASSERT(false, "Cannot import a data node directly.");
@@ -782,7 +785,7 @@ node_ptr_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_ptr_t),
         "Unexpected result type from Enter the child of BRCH node.");
     node_ptr_t condNode = any_cast<node_ptr_t>(res);
-    node_ptr_t brchNode = BrchNode::create(*currGraph_, Type::Int32());
+    node_ptr_t brchNode = BrchNode::create(*currGraph_, Type::Int());
     node_ptr_t joinNode = JoinNode::create(*currGraph_, nullptr);
 
     type_ptr_t joinType = nullptr;

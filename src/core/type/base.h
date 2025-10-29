@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,8 +37,8 @@ enum class TypeCode : uint32_t {
     Ref = 0x0'0000000,
 
     // primitive types (P = 0x1)
-    Int32 = 0x1'0000000,
-    Int64 = 0x1'0000001,
+    Int = 0x1'0000000,
+    Long = 0x1'0000001,
     Float = 0x1'0000002,
     Double = 0x1'0000003,
     String = 0x1'0000004,
@@ -126,17 +126,13 @@ class Type {
     static bool castSafetyCheck(
         const type_ptr_t &from, const type_ptr_t &to, CastSafety required = CastSafety::Safe);
 
-    static std::shared_ptr<PrimaryType> Int32();
-    static std::shared_ptr<PrimaryType> Int64();
+    static std::shared_ptr<PrimaryType> Int();
+    static std::shared_ptr<PrimaryType> Long();
     static std::shared_ptr<PrimaryType> Float();
     static std::shared_ptr<PrimaryType> Double();
     static std::shared_ptr<PrimaryType> String();
     static std::shared_ptr<PrimaryType> Bool();
     static std::shared_ptr<PrimaryType> Char();
-
-    static std::shared_ptr<PrimaryType> Int();
-    static std::shared_ptr<PrimaryType> Real();
-    static std::shared_ptr<PrimaryType> Number();
 
     static std::shared_ptr<ArrayType> Array(const type_ptr_t &elementType = nullptr);
     static std::shared_ptr<TupleType> Tuple(const type_vec_t &types = {});

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -202,6 +202,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "All closure captures must be declared before the first call to the function. "
                 "If the function is recursive, ensure closure captures are declared before any "
                 "self-call to avoid changes in its calling convention.",
+            },
+        },
+        {
+            SemanticDiag::ImportNameNotExported,
+            {
+                "ImportNameNotExported",
+                "Reference '{0}' is declared as imported but is not exported by its module.",
+                "Check that the module exports the name '{0}' or remove the import declaration.",
             },
         },
 

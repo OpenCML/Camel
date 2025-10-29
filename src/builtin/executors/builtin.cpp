@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,8 @@
 #include "compile/gir.h"
 #include "utils/log.h"
 
+#include "../operators/algo.h"
+#include "../operators/cast.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
 #include "../operators/math.h"
@@ -28,6 +30,7 @@
 #include "../operators/os.h"
 #include "../operators/other.h"
 #include "../operators/profiler.h"
+#include "../operators/rand.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
 #include "../operators/tensor.h"
@@ -37,6 +40,38 @@
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
         {"not-impl", __not_implemented__},
+
+        // 类型转换
+        {"op/itoi", __itoi__},
+        {"op/ltoi", __ltoi__},
+        {"op/ftoi", __ftoi__},
+        {"op/dtoi", __dtoi__},
+        {"op/stoi", __stoi__},
+
+        {"op/itol", __itol__},
+        {"op/ltol", __ltol__},
+        {"op/ftol", __ftol__},
+        {"op/dtol", __dtol__},
+        {"op/stol", __stol__},
+
+        {"op/itof", __itof__},
+        {"op/ltof", __ltof__},
+        {"op/ftof", __ftof__},
+        {"op/dtof", __dtof__},
+        {"op/stof", __stof__},
+
+        {"op/itod", __itod__},
+        {"op/ltod", __ltod__},
+        {"op/ftod", __ftod__},
+        {"op/dtod", __dtod__},
+        {"op/stod", __stod__},
+
+        {"op/itos", __itos__},
+        {"op/ltos", __ltos__},
+        {"op/ftos", __ftos__},
+        {"op/dtos", __dtos__},
+        {"op/stos", __stos__},
+        {"op/atos", __atos__},
 
         // ops
         {"op/assn_i", __builtin__assn__},
@@ -187,16 +222,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"io/println", __println__},
 
         // tensor
-        {"tensor/eye", __eye__},
-        {"tensor/zeros", __zeros__},
-        {"tensor/ones", __ones__},
-        {"tensor/diag", __diag__},
-        {"tensor/linspace", __linspace__},
-        {"tensor/arange", __arange__},
-        {"tensor/random", __random__},
-        {"tensor/randn", __randn__},
+        {"tensor/eye", __tensor_eye__},
+        {"tensor/zeros", __tensor_zeros__},
+        {"tensor/ones", __tensor_ones__},
+        {"tensor/diag", __tensor_diag__},
+        {"tensor/linspace", __tensor_linspace__},
+        {"tensor/arange", __tensor_arange__},
+        {"tensor/random", __tensor_random__},
+        {"tensor/randn", __tensor_randn__},
 
-        {"tensor/shape", __shape__},
+        {"tensor/shape", __tensor_shape__},
 
         {"tensor/add", __tensor_add__},
         {"tensor/subtract", __tensor_subtract__},
@@ -307,6 +342,27 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"time/now", __now__},
         {"time/strftime", __strftime__},
         {"time/strptime", __strptime__},
+
+        // rand
+        {"rand/seed", __seed__},
+        {"rand/rand", __rand__},
+        {"rand/randn", __randn__},
+        {"rand/randint", __randint__},
+        {"rand/choice", __choice__},
+        {"rand/sample", __sample__},
+        {"rand/shuffle", __shuffle__},
+
+        // algo
+        // {"algo/argsort", __argsort__},
+        {"algo/sort", __quick_sort_inplace__}, // 默认是快速排序
+        {"algo/sorted", __quick_sort__},
+        {"algo/insert_sort", __insert_sort_inplace__},
+        {"algo/insert_sorted", __insert_sort__},
+        {"algo/quick_sort", __quick_sort_inplace__},
+        {"algo/quick_sorted", __quick_sort__},
+        {"algo/merge_sort", __merge_sort_inplace__},
+        {"algo/merge_sorted", __merge_sort__},
+        {"algo/merge_sorted_arrays", __merge_sorted__}, // 双指针合并法
 
         // profiler
         {"profiler/begin", __profiler_begin__},

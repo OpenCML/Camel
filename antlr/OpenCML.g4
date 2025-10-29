@@ -260,8 +260,7 @@ specType
     ;
 
 primaryType
-    : INNER_ATOM_TYPE
-    | structType
+    : structType
     | identRef
     | '(' typeExpr ')'
     | tupleType

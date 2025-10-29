@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -207,9 +207,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
                 }
 
-                currFrame->set(
-                    bc.result,
-                    std::make_shared<Int32Data>(static_cast<int32_t>(jumpIdx)));
+                currFrame->set(bc.result, std::make_shared<IntData>(static_cast<int32_t>(jumpIdx)));
                 i += bc.opsize + jumpIdx;
 
                 continue; // skip i increment
@@ -219,7 +217,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 const auto &input = currFrame->get(nargs[0]);
-                int32_t choosenIdx = tt::as_shared<Int32Data>(input)->data();
+                int32_t choosenIdx = tt::as_shared<IntData>(input)->data();
                 ASSERT(
                     choosenIdx >= 0 && static_cast<size_t>(choosenIdx) < bc.withCnt(),
                     "JOIN opcode choosen index out of range in FastVM.");
@@ -367,15 +365,15 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
 
                     switch (bc.opcode) {
                     case OpCode::IADD: {
-                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() +
-                                      tt::as_shared<Int32Data>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        int32_t res = tt::as_shared<IntData>(lhs)->data() +
+                                      tt::as_shared<IntData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<IntData>(res));
                         break;
                     }
                     case OpCode::LADD: {
-                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() +
-                                      tt::as_shared<Int64Data>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        int64_t res = tt::as_shared<LongData>(lhs)->data() +
+                                      tt::as_shared<LongData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<LongData>(res));
                         break;
                     }
                     case OpCode::FADD: {
@@ -392,15 +390,15 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::ISUB: {
-                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() -
-                                      tt::as_shared<Int32Data>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        int32_t res = tt::as_shared<IntData>(lhs)->data() -
+                                      tt::as_shared<IntData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<IntData>(res));
                         break;
                     }
                     case OpCode::LSUB: {
-                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() -
-                                      tt::as_shared<Int64Data>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        int64_t res = tt::as_shared<LongData>(lhs)->data() -
+                                      tt::as_shared<LongData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<LongData>(res));
                         break;
                     }
                     case OpCode::FSUB: {
@@ -417,15 +415,15 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::IMUL: {
-                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() *
-                                      tt::as_shared<Int32Data>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        int32_t res = tt::as_shared<IntData>(lhs)->data() *
+                                      tt::as_shared<IntData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<IntData>(res));
                         break;
                     }
                     case OpCode::LMUL: {
-                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() *
-                                      tt::as_shared<Int64Data>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        int64_t res = tt::as_shared<LongData>(lhs)->data() *
+                                      tt::as_shared<LongData>(rhs)->data();
+                        currFrame->set(bc.result, std::make_shared<LongData>(res));
                         break;
                     }
                     case OpCode::FMUL: {
@@ -442,21 +440,21 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::IDIV: {
-                        int32_t divisor = tt::as_shared<Int32Data>(rhs)->data();
+                        int32_t divisor = tt::as_shared<IntData>(rhs)->data();
                         if (divisor == 0) {
                             context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
                         }
-                        int32_t res = tt::as_shared<Int32Data>(lhs)->data() / divisor;
-                        currFrame->set(bc.result, std::make_shared<Int32Data>(res));
+                        int32_t res = tt::as_shared<IntData>(lhs)->data() / divisor;
+                        currFrame->set(bc.result, std::make_shared<IntData>(res));
                         break;
                     }
                     case OpCode::LDIV: {
-                        int64_t divisor = tt::as_shared<Int64Data>(rhs)->data();
+                        int64_t divisor = tt::as_shared<LongData>(rhs)->data();
                         if (divisor == 0) {
                             context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
                         }
-                        int64_t res = tt::as_shared<Int64Data>(lhs)->data() / divisor;
-                        currFrame->set(bc.result, std::make_shared<Int64Data>(res));
+                        int64_t res = tt::as_shared<LongData>(lhs)->data() / divisor;
+                        currFrame->set(bc.result, std::make_shared<LongData>(res));
                         break;
                     }
                     case OpCode::FDIV: {
@@ -479,14 +477,14 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::ILT: {
-                        bool res = tt::as_shared<Int32Data>(lhs)->data() <
-                                   tt::as_shared<Int32Data>(rhs)->data();
+                        bool res = tt::as_shared<IntData>(lhs)->data() <
+                                   tt::as_shared<IntData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
                     case OpCode::LLT: {
-                        bool res = tt::as_shared<Int64Data>(lhs)->data() <
-                                   tt::as_shared<Int64Data>(rhs)->data();
+                        bool res = tt::as_shared<LongData>(lhs)->data() <
+                                   tt::as_shared<LongData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
@@ -504,14 +502,14 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::IGT: {
-                        bool res = tt::as_shared<Int32Data>(lhs)->data() >
-                                   tt::as_shared<Int32Data>(rhs)->data();
+                        bool res = tt::as_shared<IntData>(lhs)->data() >
+                                   tt::as_shared<IntData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
                     case OpCode::LGT: {
-                        bool res = tt::as_shared<Int64Data>(lhs)->data() >
-                                   tt::as_shared<Int64Data>(rhs)->data();
+                        bool res = tt::as_shared<LongData>(lhs)->data() >
+                                   tt::as_shared<LongData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
@@ -529,14 +527,14 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::IEQ: {
-                        bool res = tt::as_shared<Int32Data>(lhs)->data() ==
-                                   tt::as_shared<Int32Data>(rhs)->data();
+                        bool res = tt::as_shared<IntData>(lhs)->data() ==
+                                   tt::as_shared<IntData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
                     case OpCode::LEQ: {
-                        bool res = tt::as_shared<Int64Data>(lhs)->data() ==
-                                   tt::as_shared<Int64Data>(rhs)->data();
+                        bool res = tt::as_shared<LongData>(lhs)->data() ==
+                                   tt::as_shared<LongData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
@@ -554,14 +552,14 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::INE: {
-                        bool res = tt::as_shared<Int32Data>(lhs)->data() !=
-                                   tt::as_shared<Int32Data>(rhs)->data();
+                        bool res = tt::as_shared<IntData>(lhs)->data() !=
+                                   tt::as_shared<IntData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
                     case OpCode::LNE: {
-                        bool res = tt::as_shared<Int64Data>(lhs)->data() !=
-                                   tt::as_shared<Int64Data>(rhs)->data();
+                        bool res = tt::as_shared<LongData>(lhs)->data() !=
+                                   tt::as_shared<LongData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
@@ -579,14 +577,14 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::ILE: {
-                        bool res = tt::as_shared<Int32Data>(lhs)->data() <=
-                                   tt::as_shared<Int32Data>(rhs)->data();
+                        bool res = tt::as_shared<IntData>(lhs)->data() <=
+                                   tt::as_shared<IntData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
                     case OpCode::LLE: {
-                        bool res = tt::as_shared<Int64Data>(lhs)->data() <=
-                                   tt::as_shared<Int64Data>(rhs)->data();
+                        bool res = tt::as_shared<LongData>(lhs)->data() <=
+                                   tt::as_shared<LongData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
@@ -604,14 +602,14 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     }
 
                     case OpCode::IGE: {
-                        bool res = tt::as_shared<Int32Data>(lhs)->data() >=
-                                   tt::as_shared<Int32Data>(rhs)->data();
+                        bool res = tt::as_shared<IntData>(lhs)->data() >=
+                                   tt::as_shared<IntData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
                     case OpCode::LGE: {
-                        bool res = tt::as_shared<Int64Data>(lhs)->data() >=
-                                   tt::as_shared<Int64Data>(rhs)->data();
+                        bool res = tt::as_shared<LongData>(lhs)->data() >=
+                                   tt::as_shared<LongData>(rhs)->data();
                         currFrame->set(bc.result, std::make_shared<BoolData>(res));
                         break;
                     }
@@ -663,7 +661,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
         if (inputData == nullptr) {
             // If input data is not initialized, create a default integer value 0
             // For recursive function counters, this is typically an integer type
-            inputData = std::make_shared<Int32Data>(0);
+            inputData = std::make_shared<IntData>(0);
             currFrame->set(input.front()->index(), inputData);
         }
         result = inputData;

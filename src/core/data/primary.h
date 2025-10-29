@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,9 +39,9 @@ template <typename T> class PrimaryData : public Data {
     PrimaryData() = delete;
     PrimaryData(const T &data) : Data(), data_(data) {
         if constexpr (std::is_same_v<T, int32_t>) {
-            type_ = Type::Int32();
+            type_ = Type::Int();
         } else if constexpr (std::is_same_v<T, int64_t>) {
-            type_ = Type::Int64();
+            type_ = Type::Long();
         } else if constexpr (std::is_same_v<T, float>) {
             type_ = Type::Float();
         } else if constexpr (std::is_same_v<T, double>) {
@@ -90,9 +90,9 @@ template <typename T> class PrimaryData : public Data {
                     std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
                     std::is_same_v<T, float> || std::is_same_v<T, double>) {
                     switch (target->code()) {
-                    case TypeCode::Int32:
+                    case TypeCode::Int:
                         return convertAndMakeShared<int32_t>(data_);
-                    case TypeCode::Int64:
+                    case TypeCode::Long:
                         return convertAndMakeShared<int64_t>(data_);
                     case TypeCode::Float:
                         return convertAndMakeShared<float>(data_);
@@ -109,9 +109,9 @@ template <typename T> class PrimaryData : public Data {
                 } else if constexpr (std::is_same_v<T, bool>) {
                     const bool &b = data_;
                     switch (target->code()) {
-                    case TypeCode::Int32:
+                    case TypeCode::Int:
                         return std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(b));
-                    case TypeCode::Int64:
+                    case TypeCode::Long:
                         return std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(b));
                     case TypeCode::Float:
                         return std::make_shared<PrimaryData<float>>(static_cast<float>(b));
@@ -129,10 +129,10 @@ template <typename T> class PrimaryData : public Data {
                 } else if constexpr (std::is_same_v<T, char>) {
                     const char &c = data_;
                     switch (target->code()) {
-                    case TypeCode::Int32:
+                    case TypeCode::Int:
                         return std::static_pointer_cast<Data>(
                             std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(c)));
-                    case TypeCode::Int64:
+                    case TypeCode::Long:
                         return std::static_pointer_cast<Data>(
                             std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(c)));
                     case TypeCode::Float:
@@ -192,8 +192,8 @@ template <typename T> class PrimaryData : public Data {
     virtual void print(std::ostream &os) const override { os << std::to_string(data_); }
 };
 
-using Int32Data = PrimaryData<int32_t>;
-using Int64Data = PrimaryData<int64_t>;
+using IntData = PrimaryData<int32_t>;
+using LongData = PrimaryData<int64_t>;
 using FloatData = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
 using BoolData = PrimaryData<bool>;
