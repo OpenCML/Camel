@@ -2,6 +2,7 @@ module msort
 
 import { now } from time
 import { seed, rand, shuffle } from random
+import { sort_i } from algo
 
 // func next_val(x: float): float {
 //     let y = x + 73.7
@@ -41,12 +42,14 @@ import { seed, rand, shuffle } from random
 // }
 
 func main(): int sync {
-    let n = 3000
+    let n = 30
     let s = 7
     seed(s)
     'Generating {} values (seed={})...'->format<n, s>->println
     let arr = range(0, n)->shuffle
     'Generated {}.'->format<arr>->println
+    let res = arr->sort_i
+    'Sorted {}.'->format<res>->println
 
     // 'Start sorting {} numbers...'->format<n>->println
     // let start = now()

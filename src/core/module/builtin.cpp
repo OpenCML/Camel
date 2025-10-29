@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "core/data/composed/func.h"
 #include "core/operator.h"
 
+#include "builtin/modules/algo.h"
 #include "builtin/modules/fs.h"
 #include "builtin/modules/globals.h"
 #include "builtin/modules/io.h"
@@ -46,6 +47,7 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"sys", [](context_ptr_t ctx) { return SysBuiltinModule::create(ctx); }},
         {"math", [](context_ptr_t ctx) { return MathBuiltinModule::create(ctx); }},
         {"time", [](context_ptr_t ctx) { return TimeBuiltinModule::create(ctx); }},
+        {"algo", [](context_ptr_t ctx) { return AlgoBuiltinModule::create(ctx); }},
         {"json", [](context_ptr_t ctx) { return JsonBuiltinModule::create(ctx); }},
         {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
         {"this", [](context_ptr_t ctx) { return ThisBuiltinModule::create(ctx); }},
