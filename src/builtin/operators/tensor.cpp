@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 #include "builtin/datas/tensor.h"
 #include "builtin/types/tensor.h"
 
-void __eye__(
+void __tensor_eye__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.eye"));
 
@@ -41,7 +41,7 @@ void __eye__(
     return;
 }
 
-void __diag__(
+void __tensor_diag__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.diag"));
 
@@ -51,7 +51,7 @@ void __diag__(
     return;
 }
 
-void __zeros__(
+void __tensor_zeros__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.zeros"));
 
@@ -80,7 +80,7 @@ void __zeros__(
     return;
 }
 
-void __ones__(
+void __tensor_ones__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.ones"));
 
@@ -109,7 +109,7 @@ void __ones__(
     return;
 }
 
-void __linspace__(
+void __tensor_linspace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.linspace"));
 
@@ -132,7 +132,7 @@ void __linspace__(
     return;
 }
 
-void __arange__(
+void __tensor_arange__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.arange"));
 
@@ -167,7 +167,7 @@ void __arange__(
     return;
 }
 
-void __random__(
+void __tensor_random__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.random"));
 
@@ -219,7 +219,7 @@ void __random__(
     return;
 }
 
-void __randn__(
+void __tensor_randn__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.randn"));
 
@@ -824,7 +824,7 @@ void __tensor_tanh__(
 }
 
 // Tensor shape operation
-void __shape__(
+void __tensor_shape__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.shape"));
 

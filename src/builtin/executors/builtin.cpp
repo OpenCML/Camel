@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,7 @@
 #include "../operators/os.h"
 #include "../operators/other.h"
 #include "../operators/profiler.h"
+#include "../operators/rand.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
 #include "../operators/tensor.h"
@@ -187,16 +188,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"io/println", __println__},
 
         // tensor
-        {"tensor/eye", __eye__},
-        {"tensor/zeros", __zeros__},
-        {"tensor/ones", __ones__},
-        {"tensor/diag", __diag__},
-        {"tensor/linspace", __linspace__},
-        {"tensor/arange", __arange__},
-        {"tensor/random", __random__},
-        {"tensor/randn", __randn__},
+        {"tensor/eye", __tensor_eye__},
+        {"tensor/zeros", __tensor_zeros__},
+        {"tensor/ones", __tensor_ones__},
+        {"tensor/diag", __tensor_diag__},
+        {"tensor/linspace", __tensor_linspace__},
+        {"tensor/arange", __tensor_arange__},
+        {"tensor/random", __tensor_random__},
+        {"tensor/randn", __tensor_randn__},
 
-        {"tensor/shape", __shape__},
+        {"tensor/shape", __tensor_shape__},
 
         {"tensor/add", __tensor_add__},
         {"tensor/subtract", __tensor_subtract__},
@@ -307,6 +308,15 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"time/now", __now__},
         {"time/strftime", __strftime__},
         {"time/strptime", __strptime__},
+
+        // rand
+        {"rand/seed", __seed__},
+        {"rand/rand", __rand__},
+        {"rand/randn", __randn__},
+        {"rand/randint", __randint__},
+        {"rand/choice", __choice__},
+        {"rand/sample", __sample__},
+        {"rand/shuffle", __shuffle__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},
