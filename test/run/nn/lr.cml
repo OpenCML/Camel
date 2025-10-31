@@ -28,8 +28,7 @@ sync func update(var w: Tensor): Tensor {
     let dw = transpose(X) @ errors
     let m = shape(X)[0]
     wait dw = 2.0 / float(m) * dw
-    wait w = w - lr * dw
-    return w
+    return w = w - lr * dw
 }
 
 with <X: Tensor, y: Tensor, lr: float, its: int>
@@ -45,7 +44,7 @@ sync func train(var weights: Tensor): void {
         if i % 100 == 0 then {
             let pred = X_bias @ nw
             let loss = mean_squared_error(pred, y)
-            "Iteration {}: MSE Loss = {}"->format<i, loss>->println
+            'Iteration {}: MSE Loss = {}'->format<i, loss>->println
         }
     }>
 }
@@ -60,21 +59,21 @@ func main(): int sync {
     let y = ones([num_samples, 1])
     let w = zeros([num_features + 1, 1]) // +1 for bias term
 
-    println("Feature matrix X:", X)
-    println("Target vector y:", y)
-    println("Initial weights:", w)
+    println('Feature matrix X:', X)
+    println('Target vector y:', y)
+    println('Initial weights:', w)
 
-    println("Starting training...")
+    println('Starting training...')
     train<X, y, lr, its>(w)
     'Training completed with weights: \n{}'->format<w>->println
     
     // Make predictions
     let predictions = predict<w>(X)
-    println("Predictions:", predictions)
+    println('Predictions:', predictions)
     
     // Calculate final loss
     let final_loss = mean_squared_error(predictions, y)
-    "Final MSE Loss: {}"->format<final_loss>->println
+    'Final MSE Loss: {}'->format<final_loss>->println
 
     return 0
 }
