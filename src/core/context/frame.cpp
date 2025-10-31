@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,17 @@ inline std::string formatAddress(void *ptr) {
 
 Frame::Frame(Graph *graph) : graph_(graph), dataArr_(graph->runtimeDataSize(), nullptr) {
     EXEC_WHEN_DEBUG(l.in("Frame").debug("Created Frame for Graph: {}", graph->name()));
+}
+
+bool Frame::has(const data_idx_t &index) {
+    ASSERT(index != 0, "Data index is invalid.");
+    if (index < 0) {
+        return graph_->getStaticData(index) != nullptr;
+    } else {
+        size_t idx = static_cast<size_t>(index);
+        ASSERT(idx < dataArr_.size(), "Data index out of range.");
+        return dataArr_[idx] != nullptr;
+    }
 }
 
 data_ptr_t Frame::get(const data_idx_t &index) {

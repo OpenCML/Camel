@@ -472,10 +472,8 @@ void __tensor_idx2d__(
 
 void __tensor_show__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    EXEC_WHEN_DEBUG(l.in("TensorOps").debug("Calling tensor.show"));
-
     auto tensor = frame.get(nargs[0]);
-
     auto tensor_data = tt::as_shared<TensorData>(tensor);
     std::cout << tensor_data->toFormattedString() << std::endl;
+    frame.set(self, Data::null());
 }

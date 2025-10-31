@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,6 +93,15 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "Failed to inline graph of node '{0}' to graph '{1}'.",
                 "Refer to the documentation for possible causes and try adjusting the graph "
                 "translator or optimization settings.",
+            },
+        },
+        {
+            RuntimeDiag::TensorDimensionMismatch,
+            {
+                "TensorDimensionMismatch",
+                "Tensor dimension mismatched: expected shape '{0}', got '{1}'.",
+                "Check the shapes of all operands involved in the operation and ensure they are "
+                "compatible for broadcasting or direct computation.",
             },
         },
 

@@ -20,6 +20,7 @@
 #include "tensor.h"
 #include "builtin/types/tensor.h"
 #include "core/data/primary.h"
+#include "error/diagnostics/diagnostics.h"
 #include "list.h"
 #include "utils/log.h"
 #include "vector.h"
@@ -673,7 +674,7 @@ data_ptr_t TensorData::pow(double exponent) const {
 }
 
 data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
-    if (auto tensor = tt::as_shared<TensorData>(exponent)) {
+    if (auto tensor = tt::to_shared<TensorData>(exponent)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
                 "Tensor shapes are not broadcastable for power operation: " +
@@ -691,22 +692,22 @@ data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
         return result;
     }
 
-    if (auto intData = tt::as_shared<IntData>(exponent)) {
+    if (auto intData = tt::to_shared<IntData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(intData->data()));
         return result;
     }
-    if (auto longData = tt::as_shared<LongData>(exponent)) {
+    if (auto longData = tt::to_shared<LongData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(longData->data()));
         return result;
     }
-    if (auto floatData = tt::as_shared<FloatData>(exponent)) {
+    if (auto floatData = tt::to_shared<FloatData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(floatData->data()));
         return result;
     }
-    if (auto doubleData = tt::as_shared<DoubleData>(exponent)) {
+    if (auto doubleData = tt::to_shared<DoubleData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(doubleData->data());
         return result;
@@ -1109,7 +1110,7 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
         result->data_ = data_.array().square();
         return result;
     }
-    if (auto tensor = tt::as_shared<TensorData>(other)) {
+    if (auto tensor = tt::to_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
                 "Tensor shapes are not broadcastable for multiplication: " +
@@ -1136,22 +1137,22 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = tt::as_shared<IntData>(other)) {
+    if (auto intData = tt::to_shared<IntData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = tt::as_shared<LongData>(other)) {
+    if (auto longData = tt::to_shared<LongData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(longData->data());
         return result;
     }
-    if (auto floatData = tt::as_shared<FloatData>(other)) {
+    if (auto floatData = tt::to_shared<FloatData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(floatData->data());
         return result;
     }
-    if (auto doubleData = tt::as_shared<DoubleData>(other)) {
+    if (auto doubleData = tt::to_shared<DoubleData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * doubleData->data();
         return result;
@@ -1162,10 +1163,6 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
 
 data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
-    if (!other_tensor) {
-        throw std::invalid_argument(
-            "Can only perform matrix multiplication with another TensorData");
-    }
 
     size_t dim_this = shape_.size();
     size_t dim_other = other_tensor->shape_.size();
@@ -1185,9 +1182,8 @@ data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
     }
 
     if (shape1[shape1.size() - 1] != shape2[shape2.size() - 2]) {
-        throw std::invalid_argument(
-            "Matrix dimensions incompatible for multiplication: " + shape_to_string(shape1) +
-            " * " + shape_to_string(shape2));
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit(shape_to_string(shape1), shape_to_string(shape2));
     }
 
     std::vector<size_t> result_shape;

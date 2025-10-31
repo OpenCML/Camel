@@ -12,7 +12,7 @@ import {
 // Mean Squared Error function
 func mse_loss(predictions: Tensor, targets: Tensor): float sync {
     let errors = predictions - targets
-    let squared_errors = pow(errors,2.0)
+    let squared_errors = pow(errors, 2.0)
     let mse_tensor = sum(squared_errors)
     let sample_count = float(shape(predictions)[0])
     let mse = mse_tensor / sample_count
@@ -55,15 +55,16 @@ func train(X: Tensor, y: Tensor, learning_rate: float, num_iterations: int): Ten
                 msg->println
             }
 
-            // return train_loop(i + 1, new_weights, targets, sample_count, lr)
-            return predictions
+            return train_loop(i + 1, new_weights, targets, sample_count, lr)
         }
     }
 
     let final_weights = train_loop(0, weights_with_bias, y, m, learning_rate)
     println("Training completed.")
+    println("Final weights (including bias):", final_weights)
     return final_weights
 }
+
 // Predict function
 func predict(X: Tensor, weights_with_bias: Tensor): Tensor sync {
     let m = shape(X)[0]
@@ -91,7 +92,7 @@ func main(): int sync {
     let trained_weights = train(X, y, learning_rate, num_iterations)
     instant()
     println("Trained weights (including bias):")
-    show(trained_weights)
+    println(trained_weights)
     
     // Make predictions
     let predictions = predict(X, trained_weights)

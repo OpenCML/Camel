@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,6 +52,7 @@ class Frame {
         return *this;
     }
 
+    bool has(const GraphIR::data_idx_t &index);
     data_ptr_t get(const GraphIR::data_idx_t &index);
     void set(const GraphIR::data_idx_t &index, const data_ptr_t &data);
 

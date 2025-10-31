@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,7 @@
 
 #include <iostream>
 #include <string>
+
 void __profiler_begin__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 #ifndef NDEBUG
@@ -46,9 +47,9 @@ void __profiler_begin__(
     }
     std::cout << "[PROFILER] Begin: " << name << std::endl;
 #endif
-
-    return;
+    frame.set(self, Data::null());
 }
+
 void __profiler_end__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 #ifndef NDEBUG
@@ -58,8 +59,7 @@ void __profiler_end__(
     }
     std::cout << "[PROFILER] End: " << name << std::endl;
 #endif
-
-    return;
+    frame.set(self, Data::null());
 }
 
 void __profiler_instant__(
@@ -71,8 +71,7 @@ void __profiler_instant__(
     }
     std::cout << "[PROFILER] Instant: " << name << std::endl;
 #endif
-
-    return;
+    frame.set(self, Data::null());
 }
 
 void __profiler_enable__(
@@ -86,6 +85,5 @@ void __profiler_enable__(
     profiler::AdvancedTracer::getInstance().startTracing();
     std::cout << "[PROFILER] Profiling enabled" << std::endl;
 #endif
-
-    return;
+    frame.set(self, Data::null());
 }

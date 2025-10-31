@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -320,7 +320,11 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 // function call can be optimized as a tail-call. If the branch function
                 // call is executed earlier, it is difficult to determine whether it is a
                 // tail-call.
-                if (i == nodes.size() - 1) {
+                // 注意，这里除了要求 JOIN 节点是执行序列的最后一个节点之外
+                // 还必须保证 JOIN 节点的返回值就是 Graph 的返回值
+                // 如果 Graph 选择返回的值不是 JOIN 节点的产生值，不能做尾调用优化
+                // 因为尾调用优化之后，原 Frame 就会被释放，这样 Graph 无法返回正确的值
+                if (i == nodes.size() - 1 && graph->exitNode()->normInputs().front() == n) {
                     evalFuncNode(execNode, true);
                     // no need to set currFrame->set(n, ...)
                     // as the tail-call function will reset the frame
@@ -391,6 +395,21 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 }
 
                 context_->eval(uri, n, *currFrame);
+
+                EXEC_WHEN_DEBUG([&]() {
+                    const auto &result = currFrame->get(n->index());
+                    const auto &expectedType = n->dataType();
+                    ASSERT(result != nullptr, "Return data is null.");
+                    ASSERT(
+                        result->type()->assignable(expectedType),
+                        std::format(
+                            "Operator '<{}>' expected to return data of type '{}', "
+                            "but got type '<{}>'.",
+                            uri,
+                            expectedType->toString(),
+                            result->type()->toString()));
+                }());
+
                 break;
             }
 
@@ -432,7 +451,12 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
 
     currRecursionDepth_--;
 
-    const auto &retNode = currFrame->graph()->exitNode();
+    // 前面可能触发了尾调用优化
+    // 此时的 Frame 的 Graph 不一定是参数传入的 Graph
+    // 拿数据也要从最终的 Frame 中拿
+    const auto &finalGraph = currFrame->graph();
+
+    const auto &retNode = finalGraph->exitNode();
     ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
@@ -451,6 +475,15 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
         }
         result = inputData;
     }
+
+    ASSERT(result != nullptr, "Return data is null.");
+    ASSERT(
+        result->type()->assignable(input.front()->dataType()),
+        std::format(
+            "Function '{}' expected to return data of type '{}', but got type '{}'.",
+            graph->name(),
+            graph->funcType()->exitType()->toString(),
+            result->type()->toString()));
 
     EXEC_WHEN_DEBUG([&]() {
         if (profiler::AdvancedTracer::getInstance().isTracing()) {
