@@ -29,17 +29,16 @@ func train(X: Tensor, y: Tensor, learning_rate: float, num_iterations: int): Ten
     show(X)
     println("Bias column (4x1):")
     show(ones_col)
-    let X_with_bias = concat(X, ones_col, 1)  // axis=1
+    let X_bias = concat(X, ones_col, 1)  // axis=1
     
     let weights_with_bias = zeros([n + 1, 1])
     
     println("Starting gradient descent...")
 
-    func train_loop(i: int, weights: Tensor, X_bias: Tensor, targets: Tensor, sample_count: int, lr: float): Tensor sync {
-        println(X)
+    func train_loop(i: int, weights: Tensor, targets: Tensor, sample_count: int, lr: float): Tensor sync {
         if (i >= num_iterations) then {
             return weights
-        } 
+        }
         else sync {
             let predictions = X_bias @ weights
             
@@ -55,12 +54,13 @@ func train(X: Tensor, y: Tensor, learning_rate: float, num_iterations: int): Ten
                 let msg = "Iteration {}, Loss: {}"->format<i, loss>
                 msg->println
             }
-            
-            return train_loop(i + 1, new_weights, X_bias, targets, sample_count, lr)
+
+            // return train_loop(i + 1, new_weights, targets, sample_count, lr)
+            return predictions
         }
     }
-    
-    let final_weights = train_loop(0, weights_with_bias, X_with_bias, y, m, learning_rate)
+
+    let final_weights = train_loop(0, weights_with_bias, y, m, learning_rate)
     println("Training completed.")
     return final_weights
 }

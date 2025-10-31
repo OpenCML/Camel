@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -341,7 +341,6 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
                 diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall)
                     .commit(name, currGraph_->name());
                 throw BuildAbortException();
-                throw BuildAbortException();
             }
             const auto &port = PortNode::create(*currGraph_, node->dataType(), name, false);
             currGraph_->addClosure(port);
@@ -433,7 +432,10 @@ node_ptr_t Builder::createFuncDataNode(
         "Cannot enable both callableAsResult and allowParameterization options.");
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
-    usedGraphs_.insert(graph.get());
+    if (!graphUsedBefore) {
+        usedGraphs_.insert(graph.get());
+    }
+
     auto funcData = FunctionData::create(*graph);
 
     if (allowParameterization && !callableAsResult && !graphUsedBefore) {

@@ -134,13 +134,13 @@ const std::string TensorData::toFormattedString(size_t /*maxItemsPerDim*/) const
         std::ostringstream oss;
         double absVal = std::fabs(val);
         if (absVal == 0.0) {
-            oss << "0";
+            oss << "0.0";
         } else if (absVal >= 1e5 || absVal < 1e-4) {
             oss << std::scientific << std::setprecision(4) << val;
         } else if (std::floor(val) == val) {
-            oss << std::fixed << std::setprecision(0) << val;
+            oss << std::fixed << std::setprecision(1) << val;
         } else {
-            oss << std::fixed << std::setprecision(4) << val;
+            oss << std::fixed << std::setprecision(6) << val;
         }
         return oss.str();
     };
@@ -209,49 +209,49 @@ void TensorData::resolve(const data_vec_t &dataList) {
                 continue;
             if (refData && refData->toString() == data->toString()) {
                 try {
-                    auto doubleData = dynamic_pointer_cast<DoubleData>(data);
+                    auto doubleData = tt::as_shared<DoubleData>(data);
                     if (doubleData) {
                         data_(i) = doubleData->data();
                         found = true;
                         break;
                     }
 
-                    auto int32Data = dynamic_pointer_cast<IntData>(data);
+                    auto int32Data = tt::as_shared<IntData>(data);
                     if (int32Data) {
                         data_(i) = static_cast<double>(int32Data->data());
                         found = true;
                         break;
                     }
 
-                    auto int64Data = dynamic_pointer_cast<LongData>(data);
+                    auto int64Data = tt::as_shared<LongData>(data);
                     if (int64Data) {
                         data_(i) = static_cast<double>(int64Data->data());
                         found = true;
                         break;
                     }
 
-                    auto floatData = dynamic_pointer_cast<FloatData>(data);
+                    auto floatData = tt::as_shared<FloatData>(data);
                     if (floatData) {
                         data_(i) = static_cast<double>(floatData->data());
                         found = true;
                         break;
                     }
 
-                    auto boolData = dynamic_pointer_cast<BoolData>(data);
+                    auto boolData = tt::as_shared<BoolData>(data);
                     if (boolData) {
                         data_(i) = boolData->data() ? 1.0 : 0.0;
                         found = true;
                         break;
                     }
 
-                    auto charData = dynamic_pointer_cast<CharData>(data);
+                    auto charData = tt::as_shared<CharData>(data);
                     if (charData) {
                         data_(i) = static_cast<double>(charData->data());
                         found = true;
                         break;
                     }
 
-                    auto stringData = dynamic_pointer_cast<StringData>(data);
+                    auto stringData = tt::as_shared<StringData>(data);
                     if (stringData) {
                         try {
                             data_(i) = std::stod(stringData->data());
@@ -262,17 +262,17 @@ void TensorData::resolve(const data_vec_t &dataList) {
                         }
                     }
 
-                    auto tensorData = dynamic_pointer_cast<TensorData>(data);
+                    auto tensorData = tt::as_shared<TensorData>(data);
                     if (tensorData && tensorData->size() == 1) {
                         data_(i) = tensorData->data_(0);
                         found = true;
                         break;
                     }
 
-                    auto vectorData = dynamic_pointer_cast<VectorData>(data);
+                    auto vectorData = tt::as_shared<VectorData>(data);
                     if (vectorData && vectorData->size() == 1) {
                         auto element = vectorData->get(0);
-                        auto elementDouble = dynamic_pointer_cast<DoubleData>(element);
+                        auto elementDouble = tt::as_shared<DoubleData>(element);
                         if (elementDouble) {
                             data_(i) = elementDouble->data();
                             found = true;
@@ -280,10 +280,10 @@ void TensorData::resolve(const data_vec_t &dataList) {
                         }
                     }
 
-                    auto listData = dynamic_pointer_cast<ListData>(data);
+                    auto listData = tt::as_shared<ListData>(data);
                     if (listData && listData->size() == 1) {
                         auto element = listData->get(0);
-                        auto elementDouble = dynamic_pointer_cast<DoubleData>(element);
+                        auto elementDouble = tt::as_shared<DoubleData>(element);
                         if (elementDouble) {
                             data_(i) = elementDouble->data();
                             found = true;
@@ -330,7 +330,7 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
 
     switch (target->code()) {
     case TypeCode::Array: {
-        auto array_type = dynamic_pointer_cast<ArrayType>(target);
+        auto array_type = tt::as_shared<ArrayType>(target);
         if (array_type) {
             vector<data_ptr_t> elements;
             elements.reserve(static_cast<size_t>(data_.size()));
@@ -353,7 +353,7 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
 
     default:
         if (target->code() == TensorType::typeCode()) {
-            auto tensor_type = dynamic_pointer_cast<TensorType>(target);
+            auto tensor_type = tt::as_shared<TensorType>(target);
             if (tensor_type) {
                 if (type_ && !type_->equals(tensor_type->dType())) {
                     auto result = make_shared<TensorData>(target, tensor_type->shape());
@@ -447,7 +447,7 @@ data_ptr_t TensorData::squeeze() const {
 }
 
 data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only concatenate with another TensorData");
     }
@@ -517,7 +517,7 @@ data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
 }
 
 data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only stack with another TensorData");
     }
@@ -673,7 +673,7 @@ data_ptr_t TensorData::pow(double exponent) const {
 }
 
 data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
-    if (auto tensor = dynamic_pointer_cast<TensorData>(exponent)) {
+    if (auto tensor = tt::as_shared<TensorData>(exponent)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
                 "Tensor shapes are not broadcastable for power operation: " +
@@ -691,22 +691,22 @@ data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<IntData>(exponent)) {
+    if (auto intData = tt::as_shared<IntData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(intData->data()));
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<LongData>(exponent)) {
+    if (auto longData = tt::as_shared<LongData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(longData->data()));
         return result;
     }
-    if (auto floatData = dynamic_pointer_cast<FloatData>(exponent)) {
+    if (auto floatData = tt::as_shared<FloatData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(static_cast<double>(floatData->data()));
         return result;
     }
-    if (auto doubleData = dynamic_pointer_cast<DoubleData>(exponent)) {
+    if (auto doubleData = tt::as_shared<DoubleData>(exponent)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array().pow(doubleData->data());
         return result;
@@ -777,16 +777,16 @@ data_ptr_t TensorData::matpow(size_t exponent) const {
         return clone(true);
     }
 
-    auto result = std::dynamic_pointer_cast<TensorData>(clone(true));
+    auto result = tt::as_shared<TensorData>(clone(true));
 
-    auto base = std::dynamic_pointer_cast<TensorData>(clone(true));
+    auto base = tt::as_shared<TensorData>(clone(true));
 
     while (exponent > 1) {
         if (exponent % 2 == 1) {
-            result = std::dynamic_pointer_cast<TensorData>(result->matmul(base));
+            result = tt::as_shared<TensorData>(result->matmul(base));
         }
         if (exponent > 1) {
-            base = std::dynamic_pointer_cast<TensorData>(base->matmul(base));
+            base = tt::as_shared<TensorData>(base->matmul(base));
         }
         exponent /= 2;
     }
@@ -874,7 +874,7 @@ data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t 
     auto result = make_shared<TensorData>(nullptr, shape_);
     result->data_ = data_;
 
-    auto values_tensor = dynamic_pointer_cast<TensorData>(values);
+    auto values_tensor = tt::as_shared<TensorData>(values);
     if (!values_tensor) {
         throw invalid_argument("Values must be a TensorData");
     }
@@ -931,7 +931,7 @@ data_ptr_t TensorData::slice(size_t start, size_t end, size_t row) const {
 
 data_ptr_t TensorData::add(const data_ptr_t &other) const {
     // Element-wise addition with broadcasting
-    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+    if (auto tensor = tt::as_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
                 "Tensor shapes are not broadcastable for addition: " + shape_to_string(shape_) +
@@ -949,22 +949,22 @@ data_ptr_t TensorData::add(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
+    if (auto intData = tt::as_shared<IntData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() + static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
+    if (auto longData = tt::as_shared<LongData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() + static_cast<double>(longData->data());
         return result;
     }
-    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+    if (auto floatData = tt::as_shared<FloatData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() + static_cast<double>(floatData->data());
         return result;
     }
-    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+    if (auto doubleData = tt::as_shared<DoubleData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() + doubleData->data();
         return result;
@@ -1017,7 +1017,7 @@ void TensorData::calculate_broadcast_addition(
 }
 
 data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
-    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+    if (auto tensor = tt::as_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
                 "Tensor shapes are not broadcastable for subtraction: " + shape_to_string(shape_) +
@@ -1035,22 +1035,22 @@ data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
+    if (auto intData = tt::as_shared<IntData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() - static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
+    if (auto longData = tt::as_shared<LongData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() - static_cast<double>(longData->data());
         return result;
     }
-    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+    if (auto floatData = tt::as_shared<FloatData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() - static_cast<double>(floatData->data());
         return result;
     }
-    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+    if (auto doubleData = tt::as_shared<DoubleData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() - doubleData->data();
         return result;
@@ -1109,7 +1109,7 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
         result->data_ = data_.array().square();
         return result;
     }
-    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+    if (auto tensor = tt::as_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
                 "Tensor shapes are not broadcastable for multiplication: " +
@@ -1136,22 +1136,22 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
+    if (auto intData = tt::as_shared<IntData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
+    if (auto longData = tt::as_shared<LongData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(longData->data());
         return result;
     }
-    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+    if (auto floatData = tt::as_shared<FloatData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * static_cast<double>(floatData->data());
         return result;
     }
-    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+    if (auto doubleData = tt::as_shared<DoubleData>(other)) {
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() * doubleData->data();
         return result;
@@ -1161,7 +1161,7 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw std::invalid_argument(
             "Can only perform matrix multiplication with another TensorData");
@@ -1264,7 +1264,7 @@ data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
     return result;
 }
 data_ptr_t TensorData::divide(const data_ptr_t &other) const {
-    if (auto tensor = dynamic_pointer_cast<TensorData>(other)) {
+    if (auto tensor = tt::as_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
             throw std::invalid_argument(
                 "Tensor shapes are not broadcastable for division: " + shape_to_string(shape_) +
@@ -1282,7 +1282,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
         return result;
     }
 
-    if (auto intData = dynamic_pointer_cast<IntData>(other)) {
+    if (auto intData = tt::as_shared<IntData>(other)) {
         if (intData->data() == 0) {
             throw std::invalid_argument("Division by zero");
         }
@@ -1290,7 +1290,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
         result->data_ = data_.array() / static_cast<double>(intData->data());
         return result;
     }
-    if (auto longData = dynamic_pointer_cast<LongData>(other)) {
+    if (auto longData = tt::as_shared<LongData>(other)) {
         if (longData->data() == 0) {
             throw std::invalid_argument("Division by zero");
         }
@@ -1298,7 +1298,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
         result->data_ = data_.array() / static_cast<double>(longData->data());
         return result;
     }
-    if (auto floatData = dynamic_pointer_cast<FloatData>(other)) {
+    if (auto floatData = tt::as_shared<FloatData>(other)) {
         if (floatData->data() == 0.0f) {
             throw std::invalid_argument("Division by zero");
         }
@@ -1306,7 +1306,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
         result->data_ = data_.array() / static_cast<double>(floatData->data());
         return result;
     }
-    if (auto doubleData = dynamic_pointer_cast<DoubleData>(other)) {
+    if (auto doubleData = tt::as_shared<DoubleData>(other)) {
         if (doubleData->data() == 0.0) {
             throw std::invalid_argument("Division by zero");
         }
@@ -1361,7 +1361,7 @@ void TensorData::calculate_broadcast_division(
     }
 }
 data_ptr_t TensorData::equal(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only compare with another TensorData");
     }
@@ -1376,7 +1376,7 @@ data_ptr_t TensorData::equal(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::not_equal(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only compare with another TensorData");
     }
@@ -1391,7 +1391,7 @@ data_ptr_t TensorData::not_equal(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::greater(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only compare with another TensorData");
     }
@@ -1406,7 +1406,7 @@ data_ptr_t TensorData::greater(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::less(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only compare with another TensorData");
     }
@@ -1421,7 +1421,7 @@ data_ptr_t TensorData::less(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::greater_equal(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only compare with another TensorData");
     }
@@ -1436,7 +1436,7 @@ data_ptr_t TensorData::greater_equal(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::less_equal(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only compare with another TensorData");
     }
@@ -1451,7 +1451,7 @@ data_ptr_t TensorData::less_equal(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::logical_and(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only perform logical operation with another TensorData");
     }
@@ -1466,7 +1466,7 @@ data_ptr_t TensorData::logical_and(const data_ptr_t &other) const {
 }
 
 data_ptr_t TensorData::logical_or(const data_ptr_t &other) const {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only perform logical operation with another TensorData");
     }
@@ -1487,8 +1487,8 @@ data_ptr_t TensorData::logical_not() const {
 }
 
 data_ptr_t TensorData::where(const data_ptr_t &condition, const data_ptr_t &other) const {
-    auto condition_tensor = dynamic_pointer_cast<TensorData>(condition);
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto condition_tensor = tt::as_shared<TensorData>(condition);
+    auto other_tensor = tt::as_shared<TensorData>(other);
 
     if (!condition_tensor || !other_tensor) {
         throw invalid_argument("Condition and other must be TensorData");
@@ -1642,7 +1642,7 @@ data_ptr_t TensorData::pad(size_t pad_width, double constant_value) const {
 }
 
 data_ptr_t TensorData::diag(const data_ptr_t &v) {
-    auto v_tensor = dynamic_pointer_cast<TensorData>(v);
+    auto v_tensor = tt::as_shared<TensorData>(v);
     if (!v_tensor) {
         throw invalid_argument("Input must be a TensorData");
     }
@@ -1685,7 +1685,7 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
 }
 
 void TensorData::assign(const data_ptr_t &other) {
-    auto other_tensor = dynamic_pointer_cast<TensorData>(other);
+    auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
         throw invalid_argument("Can only assign from another TensorData");
     }

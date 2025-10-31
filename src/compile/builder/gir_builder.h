@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,8 @@ class Builder {
     bool synced_;
     bool varied_;
 
+    // 记录该 Graph 是否被已经被调用过（通过 createFuncDataNode 被使用）
+    // 已经被调用过的 Graph 不能再追加闭包捕获
     std::unordered_set<Graph *> usedGraphs_;
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastSyncedNode_;

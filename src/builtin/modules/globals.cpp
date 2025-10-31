@@ -1083,7 +1083,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":tensor/multiply",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
-                        "(a: Tensor, b: Tensor) => Tensor",
+                        "(a: Tensor | number, b: Tensor | number) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             TypeCode lhs = norm[0]->code();
