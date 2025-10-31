@@ -35,6 +35,7 @@ enum class RuntimeDiag : uint32_t {
     UnsupportedBytecode = 0x000007,
     GraphInliningFailed = 0x000008,
     TensorDimensionMismatch = 0x000009,
+    UnrecognizedGraphPass = 0x00000A,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

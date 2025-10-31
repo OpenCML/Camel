@@ -104,6 +104,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "compatible for broadcasting or direct computation.",
             },
         },
+        {
+            RuntimeDiag::UnrecognizedGraphPass,
+            {
+                "UnrecognizedGraphPass",
+                "Unrecognized graph rewriting/scheduling/translation pass '{0}'.",
+                "Check the pass name for possible typos, "
+                "or refer to the documentation to see the passes "
+                "supported in the current version.",
+            },
+        },
 
     };
 

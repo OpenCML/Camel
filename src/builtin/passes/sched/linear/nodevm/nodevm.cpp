@@ -324,7 +324,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 // 还必须保证 JOIN 节点的返回值就是 Graph 的返回值
                 // 如果 Graph 选择返回的值不是 JOIN 节点的产生值，不能做尾调用优化
                 // 因为尾调用优化之后，原 Frame 就会被释放，这样 Graph 无法返回正确的值
-                if (i == nodes.size() - 1 && graph->exitNode()->normInputs().front() == n) {
+                if (i == nodes.size() - 1 && graph->outputNode() == n) {
                     evalFuncNode(execNode, true);
                     // no need to set currFrame->set(n, ...)
                     // as the tail-call function will reset the frame
@@ -381,7 +381,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             case NodeType::FUNC: {
-                evalFuncNode(n, i == nodes.size() - 1);
+                evalFuncNode(n, i == nodes.size() - 1 && graph->outputNode() == n);
                 break;
             }
 
