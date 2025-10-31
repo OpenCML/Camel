@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 #include "utils/token.h"
 #include "utils/type.h"
 
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL -1
 
 using namespace std;
 

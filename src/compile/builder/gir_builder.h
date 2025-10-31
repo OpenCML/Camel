@@ -80,6 +80,7 @@ class Builder {
 
     node_ptr_t
     createFuncDataNode(const graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
+    node_ptr_t resolveCrossGraphRef(const node_ptr_t &node, const std::string &name);
     node_ptr_t resolveNodeByRef(const std::string &name);
 
     std::any visit(const GCT::node_ptr_t &gct);
