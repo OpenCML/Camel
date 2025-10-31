@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,7 @@ class TensorType : public OtherType {
 
     std::vector<size_t> shape() const;
 
-    type_ptr_t elementType() const;
+    type_ptr_t dType() const;
 
     std::string toString() const override;
 
@@ -53,6 +53,15 @@ class TensorType : public OtherType {
 
     bool operator==(const Type &other) const override;
     bool operator!=(const Type &other) const override;
+
+    virtual bool assignable(const type_ptr_t &type) const override {
+        // 目标必须是 Tensor 类型
+        if (type->code() != typeCode()) {
+            return false;
+        }
+        // 暂时先不考虑元素类型和形状的兼容性问题
+        return true;
+    }
 
     type_ptr_t clone() const override {
         ASSERT(false, "clone() not implemented");
@@ -66,4 +75,5 @@ class TensorType : public OtherType {
     static bool hasStaticMethod(const std::string &methodName);
 
     static type_ptr_t Tensor(const std::vector<size_t> &shape);
+    static type_ptr_t Default();
 };

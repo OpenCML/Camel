@@ -39,5 +39,5 @@ void __merge_sort__(
 void __merge_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
 
-void __merge_sorted__(
+void __merge_sorted_arrays__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);

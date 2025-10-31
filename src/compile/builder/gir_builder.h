@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,8 @@ class Builder {
     bool synced_;
     bool varied_;
 
+    // 记录该 Graph 是否被已经被调用过（通过 createFuncDataNode 被使用）
+    // 已经被调用过的 Graph 不能再追加闭包捕获
     std::unordered_set<Graph *> usedGraphs_;
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastSyncedNode_;
@@ -78,6 +80,7 @@ class Builder {
 
     node_ptr_t
     createFuncDataNode(const graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
+    node_ptr_t resolveCrossGraphRef(const node_ptr_t &node, const std::string &name);
     node_ptr_t resolveNodeByRef(const std::string &name);
 
     std::any visit(const GCT::node_ptr_t &gct);

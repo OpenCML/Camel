@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -149,7 +149,7 @@ void __range__(
         }
     }
 
-    auto arrayType = Type::Array(Type::Long());
+    auto arrayType = Type::Array(Type::Int());
     auto result = ArrayData::from(arrayType, std::move(values));
 
     frame.set(self, result);

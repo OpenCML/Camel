@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,8 +26,7 @@ std::optional<func_type_ptr_t> StaticFuncTypeResolver::resolve(
     ASSERT(funcType_, "FunctionType is null");
     const auto &withTypes = funcType_->withTypes();
     const auto &normTypes = funcType_->normTypes();
-    if (withTypes.size() != with.size() || normTypes.size() != norm.size() ||
-        funcType_->modifiers() != modifiers) {
+    if (withTypes.size() != with.size() || normTypes.size() != norm.size()) {
         return std::nullopt; // reject
     }
     for (size_t i = 0; i < withTypes.size(); i++) {

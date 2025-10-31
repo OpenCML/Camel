@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -143,6 +143,15 @@ void Graph::parametrizeClosure() {
     closure_.clear();
     parameterized_ = true;
     rearrange();
+}
+
+const node_ptr_t &Graph::exitNode() const {
+    ASSERT(exitNode_ != nullptr, std::format("Graph {} has no exit node.", name_));
+    return exitNode_;
+}
+const node_ptr_t &Graph::outputNode() const {
+    ASSERT(exitNode_ != nullptr, std::format("Graph {} has no exit node.", name_));
+    return exitNode_->normInputs().front();
 }
 
 void Graph::setOutput(const node_ptr_t &node) {

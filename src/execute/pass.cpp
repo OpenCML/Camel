@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "pass.h"
+#include "error/diagnostics/diagnostics.h"
 
 #include "builtin/passes/rewrite/inline/inline.h"
 #include "builtin/passes/rewrite/macro/macro.h"
@@ -99,33 +100,43 @@ std::unordered_map<
 
 int applyPasses(
     const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os) {
-    GraphIR::graph_ptr_t entry = ctx->rootGraph();
+    GraphIR::graph_ptr_t graph = ctx->rootGraph();
 
     for (const auto &p : passes) {
-        if (entry == Graph::null()) {
+        ASSERT(graph != nullptr, "Graph is null.");
+        ASSERT(
+            !graph->dirty(),
+            std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
+
+        if (graph == Graph::null()) {
             return 0;
         }
+
         auto it = passRegistry.find(p);
         if (it != passRegistry.end()) {
             auto pass = it->second(ctx);
-            entry = pass->apply(entry, os);
+            graph = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
                 return 1;
             }
         } else {
-            throw CamelBaseException("Unknown pass: " + p);
+            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
         }
     }
 
-    if (entry != Graph::null()) {
+    if (graph != Graph::null()) {
+        ASSERT(
+            !graph->dirty(),
+            std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
+
         if (passes.empty()) {
             // 如果用户没有指定任何遍，则默认使用 NodeVMSchedPass 进行调度
             auto fallback = std::make_unique<NodeVMSchedPass>(ctx);
-            fallback->apply(entry, os);
+            fallback->apply(graph, os);
         } else {
             // 如果用户指定了遍，则会将没有处理完的图直接丢弃
             auto fallback = std::make_unique<NullGraphIRPass>(ctx);
-            fallback->apply(entry, os);
+            fallback->apply(graph, os);
         }
     }
 

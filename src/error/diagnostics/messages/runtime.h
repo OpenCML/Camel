@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,8 @@ enum class RuntimeDiag : uint32_t {
     UnrecognizedOperatorURI = 0x000006,
     UnsupportedBytecode = 0x000007,
     GraphInliningFailed = 0x000008,
+    TensorDimensionMismatch = 0x000009,
+    UnrecognizedGraphPass = 0x00000A,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

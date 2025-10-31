@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -198,8 +198,13 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     d.type = type_;
     d.specific = specific_;
     d.name = name_;
-    d.message = fmt::format(fmt::runtime(rawMessage_), std::forward<Args>(args)...);
-    d.suggestion = fmt::format(fmt::runtime(rawSuggestion_), std::forward<Args>(args)...);
+    try {
+        d.message = fmt::format(fmt::runtime(rawMessage_), std::forward<Args>(args)...);
+        d.suggestion = fmt::format(fmt::runtime(rawSuggestion_), std::forward<Args>(args)...);
+    } catch (const fmt::format_error &e) {
+        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+            .commit("Error formatting diagnostic message: " + std::string(e.what()));
+    }
     d.moduleName = moduleName_;
     d.modulePath = modulePath_;
 

@@ -4,7 +4,7 @@ module svm
 
 import {
     add, subtract, multiply, matmul, ones, zeros,
-    sum, eye, transpose, show, pow, Tensor, shape, concat, range, to_float
+    sum, eye, transpose, show, pow, Tensor, shape, concat, range
 } from tensor
 
 // SVM with linear kernel

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,7 +42,7 @@ TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shap
 
 vector<size_t> TensorType::shape() const { return shape_; }
 
-type_ptr_t TensorType::elementType() const { return element_type_; }
+type_ptr_t TensorType::dType() const { return element_type_; }
 
 string TensorType::toString() const {
     string result = "Tensor<[";
@@ -148,4 +148,8 @@ bool TensorType::hasStaticMethod(const std::string &methodName) {
 
 type_ptr_t TensorType::Tensor(const std::vector<size_t> &shape) {
     return std::make_shared<TensorType>(shape);
+}
+
+type_ptr_t TensorType::Default() {
+    return std::make_shared<TensorType>(Type::Float(), std::vector<size_t>{0});
 }
