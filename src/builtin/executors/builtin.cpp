@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -271,7 +271,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"tensor/tanh", __tensor_tanh__},
 
         {"tensor/show", __tensor_show__},
-        {"tensor/to_float", __to_float__},
 
         // os
         {"os/exit", __exit__},

@@ -6,7 +6,7 @@ import {begin, enable, end, instant} from profiler
 
 import {
     ones, zeros,
-    sum, eye, transpose, show, pow, Tensor, shape, concat, range, to_float, random
+    sum, eye, transpose, show, pow, Tensor, shape, concat, range, random
 } from tensor
 
 // Mean Squared Error function
@@ -14,7 +14,7 @@ func mse_loss(predictions: Tensor, targets: Tensor): float sync {
     let errors = predictions - targets
     let squared_errors = pow(errors,2.0)
     let mse_tensor = sum(squared_errors)
-    let sample_count = to_float(shape(predictions)[0])
+    let sample_count = float(shape(predictions)[0])
     let mse = mse_tensor / sample_count
     return mse
 }
@@ -47,7 +47,7 @@ func train(X: Tensor, y: Tensor, learning_rate: float, num_iterations: int): Ten
             
             let errors = predictions - targets
             let dw = transpose(X_bias) @ errors
-            dw = 2.0 / to_float(sample_count) * dw
+            dw = 2.0 / float(sample_count) * dw
             
             let new_weights = weights - lr * dw
             

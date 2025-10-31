@@ -550,26 +550,6 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     StaticFuncTypeResolver::create({}, {{Type::Any(), false}}, Type::Void()),
                 },
             }),
-        OperatorGroup::create(
-            "to_float",
-            {
-                {
-                    ":tensor/to_float",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(value: typeas T) => float",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            if (norm[0]->code() == TypeCode::Int ||
-                                norm[0]->code() == TypeCode::Long ||
-                                norm[0]->code() == TypeCode::Float ||
-                                norm[0]->code() == TypeCode::Double) {
-                                return Type::Float();
-                            }
-                            return nullopt;
-                        }),
-                },
-            }),
     };
 
     return groups;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -956,31 +956,4 @@ void __tensor_show__(
     std::cout << tensor_data->toFormattedString() << std::endl;
 
     return;
-}
-void __to_float__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    auto data = frame.get(nargs[0]);
-    switch (data->type()->code()) {
-    case TypeCode::Int: {
-        auto intData = std::dynamic_pointer_cast<IntData>(data);
-        frame.set(self, std::make_shared<FloatData>(static_cast<float>(intData->data())));
-        return;
-    }
-    case TypeCode::Long: {
-        auto intData = std::dynamic_pointer_cast<LongData>(data);
-        frame.set(self, std::make_shared<FloatData>(static_cast<float>(intData->data())));
-        return;
-    }
-    case TypeCode::Double: {
-        auto doubleData = std::dynamic_pointer_cast<DoubleData>(data);
-        frame.set(self, std::make_shared<FloatData>(static_cast<float>(doubleData->data())));
-        return;
-    }
-    case TypeCode::Float: {
-        frame.set(self, data);
-        return;
-    }
-    default:
-        throw std::runtime_error("Cannot convert type to float: " + data->type()->toString());
-    }
 }
