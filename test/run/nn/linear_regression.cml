@@ -5,13 +5,13 @@ module linear_regression
 import {begin, enable, end, instant} from profiler
 
 import {
-    add, subtract, multiply, matmul, ones, zeros,
+    ones, zeros,
     sum, eye, transpose, show, pow, Tensor, shape, concat, range, to_float, random
 } from tensor
 
 // Mean Squared Error function
 func mse_loss(predictions: Tensor, targets: Tensor): float sync {
-    let errors = subtract(predictions, targets)
+    let errors = predictions - targets
     let squared_errors = pow(errors,2.0)
     let mse_tensor = sum(squared_errors)
     let sample_count = to_float(shape(predictions)[0])
@@ -36,19 +36,20 @@ func train(X: Tensor, y: Tensor, learning_rate: float, num_iterations: int): Ten
     println("Starting gradient descent...")
 
     func train_loop(i: int, weights: Tensor, X_bias: Tensor, targets: Tensor, sample_count: int, lr: float): Tensor sync {
+        println(X)
         if (i >= num_iterations) then {
             return weights
         } 
         else sync {
-            let predictions = matmul(X_bias, weights)
+            let predictions = X_bias @ weights
             
             let loss = mse_loss(predictions, targets)
             
-            let errors = subtract(predictions, targets)
-            let dw = matmul(transpose(X_bias), errors)
-            dw = multiply(dw, 2.0 / to_float(sample_count))
+            let errors = predictions - targets
+            let dw = transpose(X_bias) @ errors
+            dw = 2.0 / to_float(sample_count) * dw
             
-            let new_weights = subtract(weights, multiply(dw, lr))
+            let new_weights = weights - lr * dw
             
             if (i % 100 == 0) then {
                 let msg = "Iteration {}, Loss: {}"->format<i, loss>
@@ -68,7 +69,7 @@ func predict(X: Tensor, weights_with_bias: Tensor): Tensor sync {
     let m = shape(X)[0]
     let ones_col = ones([m, 1])
     let X_with_bias = concat(X, ones_col, 1)  // axis=1
-    return matmul(X_with_bias, weights_with_bias)
+    return X_with_bias @ weights_with_bias
 }
 
 func main(): int sync {
