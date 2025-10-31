@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1228,6 +1228,24 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Double(), false}, {Type::Double(), false}},
                         Type::Double()),
+                },
+                {
+                    ":tensor/pow",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(base: Tensor, exponent: Tensor | number) => Tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TensorType::typeCode() &&
+                                (norm[1]->code() == TypeCode::Int ||
+                                 norm[1]->code() == TypeCode::Long ||
+                                 norm[1]->code() == TypeCode::Float ||
+                                 norm[1]->code() == TypeCode::Double ||
+                                 norm[1]->code() == TensorType::typeCode())) {
+                                return norm[0];
+                            }
+                            return nullopt;
+                        }),
                 },
                 {
                     ":op/pow",
