@@ -42,7 +42,7 @@ TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shap
 
 vector<size_t> TensorType::shape() const { return shape_; }
 
-type_ptr_t TensorType::elementType() const { return element_type_; }
+type_ptr_t TensorType::dType() const { return element_type_; }
 
 string TensorType::toString() const {
     string result = "Tensor<[";

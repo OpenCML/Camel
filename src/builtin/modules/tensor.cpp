@@ -380,7 +380,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 if (tensor_type && tensor_type->shape().size() == 2) {
                                     auto shape = tensor_type->shape();
                                     std::swap(shape[0], shape[1]);
-                                    return TensorType::create(tensor_type->elementType(), shape);
+                                    return TensorType::create(tensor_type->dType(), shape);
                                 }
                                 return norm[0];
                             }

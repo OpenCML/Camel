@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -121,7 +121,7 @@ const std::string TensorData::toString() const {
     return ss.str();
 }
 
-const std::string TensorData::toFormattedString() const {
+const std::string TensorData::toFormattedString(size_t /*maxItemsPerDim*/) const {
     std::stringstream ss;
 
     if (shape_.empty()) {
@@ -129,48 +129,58 @@ const std::string TensorData::toFormattedString() const {
         return ss.str();
     }
 
-    // For 0-D tensor
-    if (shape_.size() == 1 && shape_[0] == 1) {
-        ss << "Tensor(" << data_(0) << ")";
-        return ss.str();
-    }
-
-    // For 1-D tensor
-    if (shape_.size() == 1) {
-        ss << "Tensor([";
-        for (size_t i = 0; i < shape_[0]; ++i) {
-            ss << data_(i);
-            if (i < shape_[0] - 1) {
-                ss << ", ";
-            }
+    // 数值格式化
+    auto formatValue = [](double val) -> std::string {
+        std::ostringstream oss;
+        double absVal = std::fabs(val);
+        if (absVal == 0.0) {
+            oss << "0";
+        } else if (absVal >= 1e5 || absVal < 1e-4) {
+            oss << std::scientific << std::setprecision(4) << val;
+        } else if (std::floor(val) == val) {
+            oss << std::fixed << std::setprecision(0) << val;
+        } else {
+            oss << std::fixed << std::setprecision(4) << val;
         }
-        ss << "])";
-        return ss.str();
-    }
+        return oss.str();
+    };
 
-    // For 2-D tensor (matrix)
-    if (shape_.size() == 2) {
-        ss << "Tensor(\n";
-        for (size_t i = 0; i < shape_[0]; ++i) {
-            ss << "  [";
-            for (size_t j = 0; j < shape_[1]; ++j) {
-                size_t index = i * shape_[1] + j;
-                ss << data_(index);
-                if (j < shape_[1] - 1) {
-                    ss << ", ";
+    // 递归打印 + 缩进
+    std::function<void(std::stringstream &, size_t, size_t, size_t)> printDim;
+    printDim = [&](std::stringstream &out, size_t dim, size_t offset, size_t indent) {
+        size_t len = shape_[dim];
+        bool isLastDim = (dim == shape_.size() - 1);
+
+        if (isLastDim) {
+            out << "[";
+            for (size_t i = 0; i < len; ++i) {
+                out << formatValue(data_(offset + i));
+                if (i != len - 1)
+                    out << ", ";
+            }
+            out << "]";
+        } else {
+            out << "[";
+            size_t stride = 1;
+            for (size_t k = dim + 1; k < shape_.size(); ++k)
+                stride *= shape_[k];
+
+            for (size_t i = 0; i < len; ++i) {
+                if (i > 0) {
+                    out << ",\n" << std::string(indent + 1, ' ');
                 }
+                printDim(out, dim + 1, offset + i * stride, indent + 1);
             }
-            ss << "]";
-            if (i < shape_[0] - 1) {
-                ss << ",";
-            }
-            ss << "\n";
+            out << "]";
         }
-        ss << ")";
-        return ss.str();
-    }
+    };
 
-    return toString();
+    // 顶层调用，初始缩进量 = "Tensor(" 的长度
+    ss << "Tensor(";
+    printDim(ss, 0, 0, std::string("Tensor(").size());
+    const auto &dtype = tt::as_shared<TensorType>(type_)->dType();
+    ss << ", dtype=" << dtype->toString() << ")";
+    return ss.str();
 }
 
 void TensorData::print(std::ostream &os) const { os << toFormattedString(); }
@@ -345,7 +355,7 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
         if (target->code() == TensorType::typeCode()) {
             auto tensor_type = dynamic_pointer_cast<TensorType>(target);
             if (tensor_type) {
-                if (type_ && !type_->equals(tensor_type->elementType())) {
+                if (type_ && !type_->equals(tensor_type->dType())) {
                     auto result = make_shared<TensorData>(target, tensor_type->shape());
 
                     // Eigen VectorXd already contains double values

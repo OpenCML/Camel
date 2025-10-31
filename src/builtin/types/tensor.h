@@ -45,7 +45,7 @@ class TensorType : public OtherType {
 
     std::vector<size_t> shape() const;
 
-    type_ptr_t elementType() const;
+    type_ptr_t dType() const;
 
     std::string toString() const override;
 
