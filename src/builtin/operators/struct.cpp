@@ -29,7 +29,6 @@ void __len_str__(
     int32_t len = static_cast<int32_t>(tt::as_shared<StringData>(arg)->data().size());
 
     frame.set(self, std::make_shared<IntData>(len));
-    return;
 }
 
 void __len_arr__(
@@ -39,7 +38,6 @@ void __len_arr__(
     int32_t len = static_cast<int32_t>(tt::as_shared<ArrayData>(arg)->raw().size());
 
     frame.set(self, std::make_shared<IntData>(len));
-    return;
 }
 
 void __zip__(
@@ -47,32 +45,15 @@ void __zip__(
     const data_ptr_t &a = frame.get(nargs[0]);
     const data_ptr_t &b = frame.get(nargs[1]);
 
-    auto getElements = [](const data_ptr_t &data) -> std::optional<data_vec_t> {
-        switch (data->type()->code()) {
-        case TypeCode::Array:
-            return tt::as_shared<ArrayData>(data)->raw();
-        case TypeCode::Tuple:
-            return tt::as_shared<TupleData>(data)->raw();
-        default:
-            return std::nullopt;
-        }
-    };
+    const auto &lhsArr = tt::as_shared<ArrayData>(a);
+    const auto &rhsArr = tt::as_shared<ArrayData>(b);
+    const auto &lhsElems = lhsArr->raw();
+    const auto &rhsElems = rhsArr->raw();
+    const auto &lhsElemType = tt::as_shared<ArrayType>(a->type())->elementType();
+    const auto &rhsElemType = tt::as_shared<ArrayType>(b->type())->elementType();
+    const auto &resElemType = Type::Tuple({lhsElemType, rhsElemType});
 
-    auto aElemsOpt = getElements(a);
-    auto bElemsOpt = getElements(b);
-
-    if (!aElemsOpt || !bElemsOpt) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<zip> requires both inputs to be List/Array/Vector/Tuple");
-        frame.set(self, Data::null());
-        return;
-    }
-
-    const data_vec_t &aElems = *aElemsOpt;
-    const data_vec_t &bElems = *bElemsOpt;
-
-    if (aElems.size() != bElems.size()) {
+    if (lhsElems.size() != rhsElems.size()) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<zip> requires both sequences to have the same length");
@@ -81,15 +62,14 @@ void __zip__(
     }
 
     data_vec_t zipped;
-    zipped.reserve(aElems.size());
+    zipped.reserve(lhsElems.size());
 
-    for (size_t i = 0; i < aElems.size(); ++i) {
-        data_vec_t pair{aElems[i], bElems[i]};
-        zipped.push_back(ArrayData::from(Type::Array(Type::Any()), std::move(pair)));
+    for (size_t i = 0; i < lhsElems.size(); ++i) {
+        data_vec_t pair{lhsElems[i], rhsElems[i]};
+        zipped.push_back(TupleData::create(resElemType, std::move(pair)));
     }
 
-    frame.set(self, ArrayData::from(Type::Array(Type::Array(Type::Any())), std::move(zipped)));
-    return;
+    frame.set(self, ArrayData::from(Type::Array(resElemType), std::move(zipped)));
 }
 
 void __head_arr__(
@@ -101,8 +81,6 @@ void __head_arr__(
     };
 
     frame.set(self, extract_first(tt::as_shared<ArrayData>(collect)->raw()));
-
-    return;
 }
 
 void __tail_arr__(
@@ -117,8 +95,6 @@ void __tail_arr__(
     auto new_vec = slice_tail(array);
     auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
     frame.set(self, ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
-
-    return;
 }
 
 void __range__(
@@ -153,7 +129,6 @@ void __range__(
     auto result = ArrayData::from(arrayType, std::move(values));
 
     frame.set(self, result);
-    return;
 }
 
 void __slice_arr__(
@@ -184,8 +159,6 @@ void __slice_arr__(
         ArrayData::from(
             Type::Array(tt::as_shared<ArrayType>(collect->type())->elementType()),
             std::move(sliced)));
-
-    return;
 }
 
 void __concat_arr__(
@@ -198,8 +171,6 @@ void __concat_arr__(
     l.insert(l.end(), r.begin(), r.end());
     auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
     frame.set(self, ArrayData::from(Type::Array(elemType), std::move(l)));
-
-    return;
 }
 
 void __append_arr__(
@@ -214,7 +185,6 @@ void __append_arr__(
     frame.set(collectIdx, ArrayData::from(Type::Array(elemType), std::move(arr)));
 
     frame.set(self, collection);
-    return;
 }
 
 void __extend_arr__(
@@ -227,8 +197,6 @@ void __extend_arr__(
     auto ext = tt::as_shared<ArrayData>(other)->raw();
     arr.insert(arr.end(), ext.begin(), ext.end());
     frame.set(collectNode, collection);
-
-    return;
 }
 
 void __contains_arr__(
@@ -246,5 +214,4 @@ void __contains_arr__(
     }
 
     frame.set(self, std::make_shared<BoolData>(found));
-    return;
 }

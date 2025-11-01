@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -266,6 +266,37 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
                         });
                     break;
                 }
+            }
+
+            if (uri.starts_with(":mark/")) {
+                MarkOpCode markOp;
+                if (uri == ":mark/map_arr") {
+                    markOp = MarkOpCode::MapArr;
+                } else if (uri == ":mark/apply_arr") {
+                    markOp = MarkOpCode::ApplyArr;
+                } else if (uri == ":mark/reduce_arr") {
+                    markOp = MarkOpCode::ReduceArr;
+                } else if (uri == ":mark/filter_arr") {
+                    markOp = MarkOpCode::FilterArr;
+                } else if (uri == ":mark/foreach_arr") {
+                    markOp = MarkOpCode::ForeachArr;
+                } else {
+                    ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
+                    break;
+                }
+
+                appendBytecode(
+                    *bytecodes,
+                    OpCode::SCHD,
+                    node->index(),
+                    {},
+                    normOps,
+                    withOps,
+                    true,
+                    {
+                        .mark = markOp,
+                    });
+                break;
             }
 
             const auto opFunc = ctx->execMgr().find(uri);

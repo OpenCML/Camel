@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,7 @@ std::shared_ptr<bytecode_vec_t> FastVMSchedPass::getCodeOfGraph(Graph *graph) {
     }
 }
 
-data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
+data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
@@ -58,7 +58,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     Frame targetFrame(graph);
     frame_rptr_t currFrame = &frame, tailFrame = nullptr;
 
-    auto evalFuncNode =
+    auto _call =
         [&](GraphIR::Graph &targetGraph, const data_vec_t &args, bool isTailCall) -> data_ptr_t {
         EXEC_WHEN_DEBUG(l.in("FastVM").debug(
             "Calling function: {} (tail-call: {})",
@@ -126,7 +126,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             // evaluate the target graph
-            return evalGraph(&targetGraph, *nextFrame);
+            return call(&targetGraph, *nextFrame);
         }
     };
 
@@ -274,7 +274,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     funcFrame.set(closurePorts[j]->index(), closureData[j]);
                 }
 
-                const auto &result = evalGraph(&targetGraph, funcFrame);
+                const auto &result = call(&targetGraph, funcFrame);
                 currFrame->set(bc.result, result);
                 break;
             }
@@ -304,7 +304,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     args.push_back(currFrame->get(wargs[j]));
                 }
 
-                auto res = evalFuncNode(*funcGraph, args, false);
+                auto res = _call(*funcGraph, args, false);
                 currFrame->set(bc.result, res);
 
                 break;
@@ -335,7 +335,7 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     args.push_back(currFrame->get(wargs[j]));
                 }
 
-                evalFuncNode(*funcGraph, args, true);
+                _call(*funcGraph, args, true);
 
                 // 跳过后续字节码，进行下一轮循环
                 i = codeSize;
@@ -354,7 +354,10 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             case OpCode::SCHD: {
-                ASSERT(false, "SCHD opcode not implemented in FastVM.");
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                auto mark = bc.extra()->mark;
+                evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
                 break;
             }
 
@@ -677,32 +680,39 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .commit(context_->mainModule()->name());
     }
     Frame rootFrame(graph.get());
-    evalGraph(graph.get(), rootFrame);
+    call(graph.get(), rootFrame);
     return Graph::null();
 }
 
 void FastVMSchedPass::evalMarkedOperator(
-    const std::string uri, const GraphIR::node_ptr_t &node, Frame &currFrame) {
-    if (uri == "map_arr") {
-        evalMarkedOperator_map_arr(node, currFrame);
-    } else if (uri == "apply_arr") {
-        evalMarkedOperator_apply_arr(node, currFrame);
-    } else if (uri == "filter_arr") {
-        evalMarkedOperator_filter_arr(node, currFrame);
-    } else if (uri == "reduce_arr" || uri == "unordered_reduce_arr") {
-        evalMarkedOperator_reduce_arr(node, currFrame);
-    } else if (uri == "foreach_arr" || uri == "unordered_foreach_arr") {
-        evalMarkedOperator_foreach_arr(node, currFrame);
-    } else {
-        ASSERT(false, std::format("Mark Operator {} not implemented.", uri));
+    const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    switch (op) {
+    case MarkOpCode::MapArr:
+        evalMarkedOperator_map_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::ApplyArr:
+        evalMarkedOperator_apply_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::FilterArr:
+        evalMarkedOperator_filter_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::ReduceArr:
+        evalMarkedOperator_reduce_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::ForeachArr:
+        evalMarkedOperator_foreach_arr(self, nargs, wargs, currFrame);
+        break;
+    default:
+        ASSERT(false, "Unsupported marked operator in FastVM.");
     }
 }
 
-void FastVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
+void FastVMSchedPass::evalMarkedOperator_map_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
 
-    auto func = funcData->as<FunctionData>(Type::Func());
+    auto func = tt::as_shared<FunctionData>(funcData);
     type_ptr_t funcRetType = func->funcType()->exitType();
 
     auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
@@ -724,21 +734,20 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &
                 }
             }
             frame.set(targetGraph.ports().front()->index(), item);
-            res.push_back(evalGraph(&targetGraph, frame));
+            res.push_back(call(&targetGraph, frame));
         }
         return res;
     };
 
     auto arrayData = tt::as_shared<ArrayData>(targetData);
-    currFrame.set(
-        node->index(),
-        ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
+    currFrame.set(self, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
 }
 
-void FastVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
-    auto func = funcData->as<FunctionData>(Type::Func());
+void FastVMSchedPass::evalMarkedOperator_apply_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
         auto &targetGraph = func->graph();
@@ -756,20 +765,21 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame
             }
         }
         frame.set(targetGraph.ports().front()->index(), item);
-        return evalGraph(&targetGraph, frame);
+        return call(&targetGraph, frame);
     };
 
     for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
         item = applyFunc(item);
     }
 
-    currFrame.set(node->index(), targetData);
+    currFrame.set(self, targetData);
 }
 
-void FastVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
-    auto func = funcData->as<FunctionData>(Type::Func());
+void FastVMSchedPass::evalMarkedOperator_filter_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     auto shouldKeep = [&](const data_ptr_t &item) -> bool {
         auto &targetGraph = func->graph();
@@ -787,7 +797,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
             }
         }
         frame.set(targetGraph.ports().front()->index(), item);
-        auto result = evalGraph(&targetGraph, frame);
+        auto result = call(&targetGraph, frame);
         return result->as<BoolData>(Type::Bool())->data();
     };
 
@@ -798,7 +808,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
             if (shouldKeep(item))
                 res.push_back(item);
         }
-        currFrame.set(node->index(), createFunc(containerData->type(), std::move(res)));
+        currFrame.set(self, createFunc(containerData->type(), std::move(res)));
     };
 
     filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
@@ -806,17 +816,18 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
     });
 }
 
-void FastVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs()[0]->index());
-    auto initData = currFrame.get(node->withInputs()[1]->index());
+void FastVMSchedPass::evalMarkedOperator_reduce_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto initData = currFrame.get(wargs[1]);
 
-    auto func = funcData->as<FunctionData>(Type::Func());
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
 
     if (elements.empty()) {
-        currFrame.set(node->index(), initData);
+        currFrame.set(self, initData);
         return;
     }
 
@@ -842,16 +853,17 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Fram
         frame.set(ports[0]->index(), result); // acc
         frame.set(ports[1]->index(), item);   // cur
 
-        result = evalGraph(&targetGraph, frame); // 更新 result
+        result = call(&targetGraph, frame); // 更新 result
     }
 
-    currFrame.set(node->index(), result);
+    currFrame.set(self, result);
 }
 
-void FastVMSchedPass::evalMarkedOperator_foreach_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
-    auto func = funcData->as<FunctionData>(Type::Func());
+void FastVMSchedPass::evalMarkedOperator_foreach_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     auto applyFunc = [&](const data_ptr_t &item) {
         auto &targetGraph = func->graph();
@@ -869,10 +881,12 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(const node_ptr_t &node, Fra
             }
         }
         frame.set(targetGraph.ports().front()->index(), item);
-        evalGraph(&targetGraph, frame); // 忽略返回值
+        call(&targetGraph, frame); // 忽略返回值
     };
 
     for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
         applyFunc(item);
     }
+
+    currFrame.set(self, Data::null());
 }
