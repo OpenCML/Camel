@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -146,6 +146,32 @@ bool Builder::insertGraph(const std::string &name, const graph_ptr_t &graph) {
     return true;
 }
 
+node_ptr_t Builder::resolveCrossGraphRef(const node_ptr_t &node, const std::string &name) {
+    Graph *curr = currGraph_.get();
+    node_scope_ptr_t scope = nodeScope_;
+
+    while (curr != &node->graph()) {
+        // 在沿途经过的所有中间图添加 Port 节点
+        if (usedGraphs_.find(curr) != usedGraphs_.end()) {
+            // 不能对已经使用过的图添加闭包捕获
+            diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, curr->name());
+            throw BuildAbortException();
+        }
+
+        // 插入一个 Port 节点
+        const auto &port = PortNode::create(*curr, node->dataType(), name, false);
+        curr->addClosure(port);
+        scope->insert(name, port);
+
+        // 向外层图和作用域继续遍历
+        curr = curr->outer().get();
+        scope = scope->outer();
+    }
+
+    // 再次获取新的节点引用
+    return *nodeScope_->get(name);
+}
+
 node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
     auto optSrcNode = nodeAt(name);
     if (!optSrcNode.has_value()) {
@@ -153,21 +179,13 @@ node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
         throw BuildAbortException();
     }
     node_ptr_t node = optSrcNode.value();
-    // 对于跨图节点引用，需要在每个中间图中创建对应的Port节点
-    // 这里并没有做循环处理，是因为每个图只处理自己的外部节点
-    // 对于多层嵌套的图结构，在处理闭包的时候会再次解引用，从而递归地处理
-    // 换言之，这里要被处理为闭包捕获
-    // 闭包节点默认是不可变的
+
+    // 如果是跨图节点引用，处理闭包捕获
     if (node->graph() != *currGraph_) {
-        if (usedGraphs_.find(currGraph_.get()) != usedGraphs_.end()) {
-            diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, currGraph_->name());
-            throw BuildAbortException();
-        }
-        const auto &port = PortNode::create(*currGraph_, node->dataType(), name, false);
-        currGraph_->addClosure(port);
-        insertNode(name, port);
-        node = port;
+        node = resolveCrossGraphRef(node, name);
+        ASSERT(node->graph() == *currGraph_, "Failed to resolve cross-graph reference.");
     }
+
     return node;
 }
 
@@ -331,22 +349,9 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     auto optNode = nodeAt(name);
     if (optNode.has_value()) {
         node_ptr_t node = optNode.value();
-        // 对于跨图节点引用，需要在每个中间图中创建对应的Port节点
-        // 这里并没有做循环处理，是因为每个图只处理自己的外部节点
-        // 对于多层嵌套的图结构，在处理闭包的时候会再次解引用，从而递归地处理
-        // 换言之，这里要被处理为闭包捕获
-        // 闭包节点默认是不可变的
         if (node->graph() != *currGraph_) {
-            if (usedGraphs_.find(currGraph_.get()) != usedGraphs_.end()) {
-                diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall)
-                    .commit(name, currGraph_->name());
-                throw BuildAbortException();
-                throw BuildAbortException();
-            }
-            const auto &port = PortNode::create(*currGraph_, node->dataType(), name, false);
-            currGraph_->addClosure(port);
-            insertNode(name, port);
-            node = port;
+            node = resolveCrossGraphRef(node, name);
+            ASSERT(node->graph() == *currGraph_, "Failed to resolve cross-graph reference.");
         }
         LEAVE("DREF");
         return node;
@@ -433,30 +438,32 @@ node_ptr_t Builder::createFuncDataNode(
         "Cannot enable both callableAsResult and allowParameterization options.");
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
-    usedGraphs_.insert(graph.get());
+
     auto funcData = FunctionData::create(*graph);
+    node_ptr_t resultNode = nullptr;
 
     if (allowParameterization && !callableAsResult && !graphUsedBefore) {
         if (funcData->resolved()) {
-            return FuncNode::create(*currGraph_, funcData);
+            resultNode = FuncNode::create(*currGraph_, funcData);
+        } else {
+            auto funcNode = FuncNode::create(*currGraph_, funcData);
+            for (const auto &ref : funcData->refs()) {
+                const auto &refNode = resolveNodeByRef(ref);
+                Node::link(LinkType::With, refNode, funcNode);
+            }
+            funcData->graph().parametrizeClosure();
+            resultNode = funcNode;
         }
-        auto funcNode = FuncNode::create(*currGraph_, funcData);
-        for (const auto &ref : funcData->refs()) {
-            const auto &refNode = resolveNodeByRef(ref);
-            Node::link(LinkType::With, refNode, funcNode);
-        }
-        funcData->graph().parametrizeClosure();
-        return funcNode;
+
+        usedGraphs_.insert(graph.get());
+        return resultNode;
     }
 
     // allowParameterization = false
-
     if (funcData->resolved()) {
         if (callableAsResult) {
-            // DataNode 节点对应的数据类型是可调用的函数
-            return DataNode::create(*currGraph_, funcData);
+            resultNode = DataNode::create(*currGraph_, funcData);
         } else {
-            // FuncNode 节点对应的数据类型是函数调用后的结果
             auto funcNode = FuncNode::create(*currGraph_, funcData);
             if (graph->parameterized()) {
                 for (const auto &ref : graph->funcType()->closureRefs()) {
@@ -464,12 +471,14 @@ node_ptr_t Builder::createFuncDataNode(
                     Node::link(LinkType::With, refNode, funcNode);
                 }
             }
-            return funcNode;
+            resultNode = funcNode;
         }
+
+        usedGraphs_.insert(graph.get());
+        return resultNode;
     }
 
     // funcData not resolved, while parameterization not allowed
-
     auto dataNode = DataNode::create(*currGraph_, funcData);
     node_vec_t refNodes;
     for (const auto &ref : funcData->refs()) {
@@ -484,12 +493,19 @@ node_ptr_t Builder::createFuncDataNode(
     }
 
     if (callableAsResult) {
-        return fillNode;
+        resultNode = fillNode;
     } else {
         auto callNode = CallNode::create(*currGraph_, graph->funcType()->exitType());
         Node::link(LinkType::With, fillNode, callNode);
-        return callNode;
+        resultNode = callNode;
     }
+
+    // 保证在最后再更新 usedGraphs_
+    // 因为在构造过程中可能会更新图的闭包捕获
+    // 而在更新闭包捕获前会检查被更新的图是否已经被使用过
+    // 所以要等所有的更新完成再将此图设置为被使用过
+    usedGraphs_.insert(graph.get());
+    return resultNode;
 }
 
 node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {

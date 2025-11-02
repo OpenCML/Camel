@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,7 +69,7 @@ class TensorData : public OtherData {
   public:
     TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape);
     ~TensorData();
-    TensorData(TensorData &&otheor) noexcept;
+    TensorData(TensorData &&other) noexcept;
     TensorData &operator=(TensorData &&other) noexcept;
 
     TensorData(const TensorData &) = delete;
@@ -96,7 +96,7 @@ class TensorData : public OtherData {
     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    const std::string toFormattedString() const;
+    const std::string toFormattedString(size_t maxItemsPerDim = 6) const;
     virtual void print(std::ostream &os) const override;
 
     // Basic Arithmetic Operations

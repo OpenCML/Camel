@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -129,11 +129,16 @@ bool Type::assignable(const type_ptr_t &type) const {
     if (this == type.get())
         return true;
 
+    // 内置类型，含有 Ref 类型的复合类型必须 resolve 后才能赋值给其他类型
     ASSERT(code_ != TypeCode::Ref && type->code_ != TypeCode::Ref, "Ref type cannot be assigned");
+
+    // any 类型可以接受任何类型的赋值，但不可以赋值给其他类型
     if (type->code_ == TypeCode::Any)
         return true;
     if (code_ == TypeCode::Any)
         return false;
+
+    // void 类型不能赋值给任何类型，任何类型也不能赋值给 void 类型
     if (code_ == TypeCode::Void || type->code_ == TypeCode::Void)
         return false;
 
@@ -141,15 +146,19 @@ bool Type::assignable(const type_ptr_t &type) const {
         // TODO: 这里需要进一步设计
         return true;
     }
+
+    // 复合类型目前需要完全相等才能赋值
     if (composed() && type->composed()) {
         return this->equals(type);
     }
 
+    // 第三方类型交由第三方自己重载的 assignable 方法处理
     if (other()) {
-        const auto &otherType = static_cast<const OtherType &>(*this);
-        return otherType.assignable(type);
+        const auto &self = static_cast<const OtherType &>(*this);
+        return self.assignable(type);
     }
 
+    // 剩余情况只能是基础类型之间的赋值，必须相同
     return code_ == type->code_;
 }
 

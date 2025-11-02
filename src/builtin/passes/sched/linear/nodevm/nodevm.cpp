@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Nov. 02, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -92,17 +92,19 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
     }
 }
 
-data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
+data_ptr_t NodeVMSchedPass::call(Graph *graph, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("Eval").debug("Evaluating graph: {}", graph->name()));
 
     EXEC_WHEN_DEBUG([&]() {
         if (profiler::AdvancedTracer::getInstance().isTracing()) {
-            profiler::AdvancedTracer::getInstance().traceFunctionCall("evalGraph:" + graph->name());
+            profiler::AdvancedTracer::getInstance().traceFunctionCall("call:" + graph->name());
         }
     }());
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
-        context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
+        context_->rtmDiags()
+            ->of(RuntimeDiag::MaxRecursionDepthExceeded)
+            .commit(graph->name(), maxRecursionDepth_);
     }
 
     bool loop = false;
@@ -111,7 +113,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
     Frame targetFrame(graph);
     frame_rptr_t currFrame = &frame, tailFrame = nullptr;
 
-    auto evalFuncNode = [&](const node_ptr_t &n, bool isTailCall) {
+    auto _call = [&](const node_ptr_t &n, bool isTailCall) {
         auto func = tt::as_shared<FuncNode>(n)->func();
         auto &targetGraph = func->graph();
         EXEC_WHEN_DEBUG(l.in("Eval").debug(
@@ -165,11 +167,6 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             tailFrame = lastFrame;
             nextFrame = currFrame;
 
-            // clear the frame for re-use
-            // note: here the nextFrame may be the currFrame
-            // so we need to reset it after retrieving the args
-            EXEC_WHEN_DEBUG(nextFrame->reset());
-
             for (size_t i = 0; i < portNodes.size(); ++i) {
                 nextFrame->set(portNodes[i]->index(), args[i]);
             }
@@ -182,21 +179,27 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             // evaluate the target graph
-            data_ptr_t res = evalGraph(&targetGraph, *nextFrame);
+            data_ptr_t res = call(&targetGraph, *nextFrame);
             currFrame->set(n->index(), res);
         }
     };
+
+    // 前面可能触发了尾调用优化
+    // 此时的 Frame 的 Graph 不一定是参数传入的 Graph
+    // 拿数据也要从当前的 Frame 中拿
+    const Graph *currGraph = nullptr;
 
     // for tail-call optimization
     // reuse the current frame for tail-recursive calls
     do {
         loop = false;
         auto &nodes = *nodesPtr;
+        currGraph = currFrame->graph();
 
         EXEC_WHEN_DEBUG([&]() {
             if (profiler::AdvancedTracer::getInstance().isTracing()) {
                 profiler::AdvancedTracer::getInstance().traceFunctionCall(
-                    "topoExecution:" + graph->name());
+                    "topoExecution:" + currGraph->name());
             }
         }());
 
@@ -320,12 +323,16 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 // function call can be optimized as a tail-call. If the branch function
                 // call is executed earlier, it is difficult to determine whether it is a
                 // tail-call.
-                if (i == nodes.size() - 1) {
-                    evalFuncNode(execNode, true);
+                // 注意，这里除了要求 JOIN 节点是执行序列的最后一个节点之外
+                // 还必须保证 JOIN 节点的返回值就是 Graph 的返回值
+                // 如果 Graph 选择返回的值不是 JOIN 节点的产生值，不能做尾调用优化
+                // 因为尾调用优化之后，原 Frame 就会被释放，这样 Graph 无法返回正确的值
+                if (i == nodes.size() - 1 && currGraph->outputNode() == n) {
+                    _call(execNode, true);
                     // no need to set currFrame->set(n, ...)
                     // as the tail-call function will reset the frame
                 } else {
-                    evalFuncNode(execNode, false);
+                    _call(execNode, false);
                     currFrame->set(n->index(), currFrame->get(execNode->index()));
                 }
                 break;
@@ -366,7 +373,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                     funcFrame.set(portNodes[i]->index(), args[i]);
                 }
 
-                const auto &res = evalGraph(&targetGraph, funcFrame);
+                const auto &res = call(&targetGraph, funcFrame);
                 currFrame->set(n->index(), res);
                 break;
             }
@@ -377,7 +384,8 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             case NodeType::FUNC: {
-                evalFuncNode(n, i == nodes.size() - 1);
+                bool isTailCall = i == nodes.size() - 1 && currGraph->outputNode() == n;
+                _call(n, isTailCall);
                 break;
             }
 
@@ -391,6 +399,21 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 }
 
                 context_->eval(uri, n, *currFrame);
+
+                EXEC_WHEN_DEBUG([&]() {
+                    const auto &result = currFrame->get(n->index());
+                    const auto &expectedType = n->dataType();
+                    ASSERT(result != nullptr, "Return data is null.");
+                    ASSERT(
+                        result->type()->assignable(expectedType),
+                        std::format(
+                            "Operator '<{}>' expected to return data of type '{}', "
+                            "but got type '<{}>'.",
+                            uri,
+                            expectedType->toString(),
+                            result->type()->toString()));
+                }());
+
                 break;
             }
 
@@ -424,7 +447,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
         EXEC_WHEN_DEBUG([&]() {
             if (profiler::AdvancedTracer::getInstance().isTracing()) {
                 profiler::AdvancedTracer::getInstance().traceFunctionReturn(
-                    "topoExecution:" + graph->name());
+                    "topoExecution:" + currGraph->name());
             }
         }());
 
@@ -432,7 +455,7 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
 
     currRecursionDepth_--;
 
-    const auto &retNode = currFrame->graph()->exitNode();
+    const auto &retNode = currGraph->exitNode();
     ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
@@ -452,10 +475,18 @@ data_ptr_t NodeVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
         result = inputData;
     }
 
+    ASSERT(result != nullptr, "Return data is null.");
+    // ASSERT(
+    //     result->type()->assignable(input.front()->dataType()),
+    //     std::format(
+    //         "Function '{}' expected to return data of type '{}', but got type '{}'.",
+    //         graph->name(),
+    //         graph->funcType()->exitType()->toString(),
+    //         result->type()->toString()));
+
     EXEC_WHEN_DEBUG([&]() {
         if (profiler::AdvancedTracer::getInstance().isTracing()) {
-            profiler::AdvancedTracer::getInstance().traceFunctionReturn(
-                "evalGraph:" + graph->name());
+            profiler::AdvancedTracer::getInstance().traceFunctionReturn("call:" + graph->name());
         }
     }());
 
@@ -469,7 +500,7 @@ graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .commit(context_->mainModule()->name());
     }
     Frame rootFrame(graph.get());
-    evalGraph(graph.get(), rootFrame);
+    call(graph.get(), rootFrame);
     return Graph::null();
 }
 
@@ -516,7 +547,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &
                 }
             }
             frame.set(targetGraph.ports().front()->index(), item);
-            res.push_back(evalGraph(&targetGraph, frame));
+            res.push_back(call(&targetGraph, frame));
         }
         return res;
     };
@@ -548,7 +579,7 @@ void NodeVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame
             }
         }
         frame.set(targetGraph.ports().front()->index(), item);
-        return evalGraph(&targetGraph, frame);
+        return call(&targetGraph, frame);
     };
 
     for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
@@ -579,7 +610,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
             }
         }
         frame.set(targetGraph.ports().front()->index(), item);
-        auto result = evalGraph(&targetGraph, frame);
+        auto result = call(&targetGraph, frame);
         return result->as<BoolData>(Type::Bool())->data();
     };
 
@@ -634,7 +665,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Fram
         frame.set(ports[0]->index(), result); // acc
         frame.set(ports[1]->index(), item);   // cur
 
-        result = evalGraph(&targetGraph, frame); // 更新 result
+        result = call(&targetGraph, frame); // 更新 result
     }
 
     currFrame.set(node->index(), result);
@@ -661,10 +692,12 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(const node_ptr_t &node, Fra
             }
         }
         frame.set(targetGraph.ports().front()->index(), item);
-        evalGraph(&targetGraph, frame); // 忽略返回值
+        call(&targetGraph, frame); // 忽略返回值
     };
 
     for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
         applyFunc(item);
     }
+
+    currFrame.set(node->index(), Data::null());
 }

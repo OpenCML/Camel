@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 27, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -176,10 +176,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     // Convert all closure capture nodes to parameter nodes
     void parametrizeClosure();
 
-    const node_ptr_t &exitNode() const {
-        ASSERT(exitNode_ != nullptr, std::format("Graph {} has no exit node.", name_));
-        return exitNode_;
-    }
+    const node_ptr_t &exitNode() const;
+    const node_ptr_t &outputNode() const;
     bool hasOutput() const { return exitNode_ != nullptr; }
     void setOutput(const node_ptr_t &node);
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,11 +60,6 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
 
 shared_ptr<bytecode_vec_t>
 precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &opt) {
-    ASSERT(graph != nullptr, "Graph is null.");
-    ASSERT(
-        !graph->dirty(),
-        std::format("Graph {} is dirty, please rearrange before precompiling.", graph->name()));
-
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
     node_ptr_t exitNode = graph->exitNode();
 
@@ -204,7 +199,11 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
         }
 
         case NodeType::JOIN: {
-            bool isTail = i == topoSortedNodes.size() - 1;
+            // 注意，这里除了要求 JOIN 节点是执行序列的最后一个节点之外
+            // 还必须保证 JOIN 节点的返回值就是 Graph 的返回值
+            // 如果 Graph 选择返回的值不是 JOIN 节点的产生值，不能做尾调用优化
+            // 因为尾调用优化之后，原 Frame 就会被释放，这样 Graph 无法返回正确的值
+            bool isTail = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
 
             if (joinTargetMap.find(node.get()) != joinTargetMap.end()) {
                 for (const auto &[jumpIdx, fromIdx] : joinTargetMap[node.get()]) {
@@ -232,11 +231,11 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
             break;
 
         case NodeType::FUNC: {
+            bool isTail = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
             auto funcNode = tt::as_shared<FuncNode>(node);
             appendBytecode(
                 *bytecodes,
-                (opt.enableTailCallDetection && i == topoSortedNodes.size() - 1) ? OpCode::TAIL
-                                                                                 : OpCode::FUNC,
+                (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
                 node->index(),
                 {},
                 normOps,
@@ -267,6 +266,37 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
                         });
                     break;
                 }
+            }
+
+            if (uri.starts_with(":mark/")) {
+                MarkOpCode markOp;
+                if (uri == ":mark/map_arr") {
+                    markOp = MarkOpCode::MapArr;
+                } else if (uri == ":mark/apply_arr") {
+                    markOp = MarkOpCode::ApplyArr;
+                } else if (uri == ":mark/reduce_arr") {
+                    markOp = MarkOpCode::ReduceArr;
+                } else if (uri == ":mark/filter_arr") {
+                    markOp = MarkOpCode::FilterArr;
+                } else if (uri == ":mark/foreach_arr") {
+                    markOp = MarkOpCode::ForeachArr;
+                } else {
+                    ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
+                    break;
+                }
+
+                appendBytecode(
+                    *bytecodes,
+                    OpCode::SCHD,
+                    node->index(),
+                    {},
+                    normOps,
+                    withOps,
+                    true,
+                    {
+                        .mark = markOp,
+                    });
+                break;
             }
 
             const auto opFunc = ctx->execMgr().find(uri);

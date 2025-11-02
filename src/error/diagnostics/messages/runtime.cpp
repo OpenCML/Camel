@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,7 +57,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             RuntimeDiag::MaxRecursionDepthExceeded,
             {
                 "MaxRecursionDepthExceeded",
-                "Maximum recursion depth exceeded when evaluating graph '{0}'.",
+                "Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.",
                 "Check for infinite recursion or excessively deep recursive calls.",
             },
         },
@@ -93,6 +93,25 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "Failed to inline graph of node '{0}' to graph '{1}'.",
                 "Refer to the documentation for possible causes and try adjusting the graph "
                 "translator or optimization settings.",
+            },
+        },
+        {
+            RuntimeDiag::TensorDimensionMismatch,
+            {
+                "TensorDimensionMismatch",
+                "Tensor dimension mismatched: expected shape '{0}', got '{1}'.",
+                "Check the shapes of all operands involved in the operation and ensure they are "
+                "compatible for broadcasting or direct computation.",
+            },
+        },
+        {
+            RuntimeDiag::UnrecognizedGraphPass,
+            {
+                "UnrecognizedGraphPass",
+                "Unrecognized graph rewriting/scheduling/translation pass '{0}'.",
+                "Check the pass name for possible typos, "
+                "or refer to the documentation to see the passes "
+                "supported in the current version.",
             },
         },
 

@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "executor.h"
+#include "compile/gir.h"
+#include "core/context/frame.h"
 #include "utils/log.h"
 
 std::optional<operator_t> Executor::find(const std::string &uri) {
@@ -54,7 +56,15 @@ void ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
     const std::string protocol = uri.substr(0, pos);
     auto itExec = loadedExecutors.find(protocol);
     if (itExec != loadedExecutors.end()) {
-        return itExec->second->eval(uri.substr(pos + 1), self, frame);
+        itExec->second->eval(uri.substr(pos + 1), self, frame);
+        ASSERT(
+            frame.has(self->index()),
+            std::format(
+                "Operator <{}> did not set result for node {}. "
+                "Make sure to return Data::null() if the return type is void.",
+                uri,
+                self->toString()));
+        return;
     }
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
@@ -65,7 +75,14 @@ void ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
     EXEC_WHEN_DEBUG(l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol));
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, executor);
-    return executor->eval(uri.substr(pos + 1), self, frame);
+    executor->eval(uri.substr(pos + 1), self, frame);
+    ASSERT(
+        frame.has(self->index()),
+        std::format(
+            "Operator <{}> did not set result for node {}. "
+            "Make sure to return Data::null() if the return type is void.",
+            uri,
+            self->toString()));
 }
 
 std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {

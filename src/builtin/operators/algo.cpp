@@ -478,7 +478,7 @@ merge_sorted_arrays(const std::vector<data_ptr_t> &L, const std::vector<data_ptr
     return merged;
 }
 
-void __merge_sorted__(
+void __merge_sorted_arrays__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     const data_ptr_t &left_arr_val = frame.get(nargs[0]);

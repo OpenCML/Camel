@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 01, 2024
- * Updated: Oct. 22, 2024
+ * Updated: Oct. 31, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,7 +52,7 @@ inline std::string rainbowPattern(int depth) {
 
 #define ENTER(target)                                                                              \
     do {                                                                                           \
-        if (DEBUG_LEVEL > 0) {                                                                     \
+        if (DEBUG_LEVEL >= 0) {                                                                    \
             std::cout << rainbowPattern(__depth__) << _blue("[enter] ") << target << std::endl;    \
         }                                                                                          \
         __depth__++;                                                                               \
@@ -61,7 +61,7 @@ inline std::string rainbowPattern(int depth) {
 #define LEAVE(target)                                                                              \
     do {                                                                                           \
         __depth__--;                                                                               \
-        if (DEBUG_LEVEL > 0) {                                                                     \
+        if (DEBUG_LEVEL >= 0) {                                                                    \
             std::cout << rainbowPattern(__depth__) << _green("[leave] ") << target << std::endl;   \
         }                                                                                          \
     } while (false)

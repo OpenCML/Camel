@@ -1,0 +1,79 @@
+module linear_regression
+
+import {
+    Tensor,
+    ones, zeros, sum, transpose, shape, concat, random
+} from tensor
+
+func mean_squared_error(y_pred: Tensor, y_true: Tensor): float {
+    let residuals = y_pred - y_true
+    let squared_residuals = residuals ^ 2.0
+    let total_squared_error = sum(squared_residuals)
+    let num_of_samples = shape(y_pred)[0]
+    return total_squared_error / float(num_of_samples)
+}
+
+with <weights: Tensor>
+func predict(X: Tensor): Tensor {
+    let num_of_samples = shape(X)[0]
+    let ones_col = ones([num_of_samples, 1])
+    let X_with_bias = concat(X, ones_col, 1)  // axis=1
+    return X_with_bias @ weights
+}
+
+with <X: Tensor, y: Tensor, lr: float>
+sync func update(var w: Tensor): Tensor {
+    let pred = X @ w
+    let errors = pred - y
+    let dw = transpose(X) @ errors
+    let m = shape(X)[0]
+    wait dw = 2.0 / float(m) * dw
+    return w = w - lr * dw
+}
+
+with <X: Tensor, y: Tensor, lr: float, its: int>
+sync func train(var weights: Tensor): void {
+    let m = shape(X)[0]  // number of samples
+    let n = shape(X)[1]  // number of features
+    
+    let ones_col = ones([m, 1])
+    let X_bias = concat(X, ones_col, 1)  // axis=1
+
+    return range(0, its)->foreach<sync (i: int) => sync {
+        let nw = update<X_bias, y, lr>(weights)
+        if i % 100 == 0 then {
+            let pred = X_bias @ nw
+            let loss = mean_squared_error(pred, y)
+            'Iteration {}: MSE Loss = {}'->format<i, loss>->println
+        }
+    }>
+}
+
+func main(): int sync {
+    let lr = 0.001 // learning rate
+    let its = 1000 // number of iterations
+    let num_samples = 4
+    let num_features = 2
+
+    let X = random([num_samples, num_features], 0.0, 10.0)
+    let y = ones([num_samples, 1])
+    let w = zeros([num_features + 1, 1]) // +1 for bias term
+
+    println('Feature matrix X:', X)
+    println('Target vector y:', y)
+    println('Initial weights:', w)
+
+    println('Starting training...')
+    train<X, y, lr, its>(w)
+    'Training completed with weights: \n{}'->format<w>->println
+    
+    // Make predictions
+    let predictions = predict<w>(X)
+    println('Predictions:', predictions)
+    
+    // Calculate final loss
+    let final_loss = mean_squared_error(predictions, y)
+    'Final MSE Loss: {}'->format<final_loss>->println
+
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Nov. 02, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,103 +31,130 @@ using namespace std;
 using namespace GraphIR;
 
 std::shared_ptr<bytecode_vec_t> FastVMSchedPass::getCodeOfGraph(Graph *graph) {
-    if (codes_.find(graph) == codes_.end()) {
+    if (compiledCodesMap_.find(graph) == compiledCodesMap_.end()) {
         auto code = precompile(
             context_,
             graph,
             {
                 .enableInlineOperators = true,
             });
-        codes_[graph] = code;
+        compiledCodesMap_[graph] = code;
         return code;
     } else {
-        return codes_[graph];
+        return compiledCodesMap_[graph];
     }
 }
 
-data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
+data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
-        context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
+        context_->rtmDiags()
+            ->of(RuntimeDiag::MaxRecursionDepthExceeded)
+            .commit(graph->name(), maxRecursionDepth_);
     }
 
     bool loop = false;
     auto bytecodes = getCodeOfGraph(graph);
 
-    Frame targetFrame(graph);
-    frame_rptr_t currFrame = &frame, tailFrame = nullptr;
+    Frame nextFrame; // for mutual-tail-recursion optimization
+    frame_rptr_t currFrame = &frame, twinFrame = nullptr;
 
-    auto evalFuncNode =
-        [&](GraphIR::Graph &targetGraph, const data_vec_t &args, bool isTailCall) -> data_ptr_t {
+    auto __call =
+        [&](GraphIR::Graph &targetGraph, const Bytecode &bc, bool isTailCall) -> data_ptr_t {
         EXEC_WHEN_DEBUG(l.in("FastVM").debug(
             "Calling function: {} (tail-call: {})",
             targetGraph.name(),
             isTailCall ? "yes" : "no"));
-        frame_rptr_t nextFrame = nullptr;
 
-        node_vec_t portNodes;
-        for (const auto &p : targetGraph.ports()) {
-            portNodes.push_back(p);
-        }
         ASSERT(
-            args.size() == portNodes.size(),
+            bc.argsCnt() == targetGraph.normPorts().size() + targetGraph.withPorts().size(),
             std::format(
                 "Function {} expects {} arguments, but got {}.",
                 targetGraph.name(),
-                portNodes.size(),
-                args.size()));
+                targetGraph.normPorts().size() + targetGraph.withPorts().size(),
+                bc.argsCnt()));
 
+        // 如果是尾调用，则尝试复用当前 C++ 栈帧
         if (isTailCall) {
-            // Tail-call optimization
+            // enable tail-call optimization
+            // 设置 loop flag 为 true
+            // 当前字节码执行子循环结束后不会退出大循环
+            // 而会根据新指定的 currFrame 和 bytecodes 执行新图
+            // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
             loop = true;
-            frame_rptr_t lastFrame = currFrame;
+            // 设置 lastFrame 为当前帧 currFrame 备用
+            const frame_rptr_t lastFrame = currFrame;
 
+            // 下面准备将 currFrame 重新指向新栈帧
             if (&targetGraph == currFrame->graph()) {
-                // Self-recursion optimization
-                currFrame = lastFrame;
+                // 如果目标图就是当前帧的图，说明在进行自递归尾调用
+                // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
                 EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                     "Optimizing self-recursion for graph: {}",
                     currFrame->graph()->name()));
             } else {
+                // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
                 bytecodes = getCodeOfGraph(&targetGraph);
 
-                if (tailFrame && tailFrame->graph() == &targetGraph) {
-                    // Mutual-tail-recursion optimization
+                // 即便目标图不是当前图，仍可能存在互调用尾递归现象
+                // 即 A 尾调用 B，B 又尾调用 A
+                // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
+                // 思路是在互调用时维护一个孪生栈帧 twinFrame
+                // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
+                // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
+
+                if (twinFrame && twinFrame->graph() == &targetGraph) {
+                    // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
                     EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                         "Optimizing mutual-tail-recursion for graph: {}",
                         currFrame->graph()->name()));
-                    currFrame = tailFrame;
+                    currFrame = twinFrame;
+                    twinFrame = lastFrame;
                 } else {
-                    targetFrame = Frame(&targetGraph);
-                    currFrame = &targetFrame;
+                    // 将当前栈帧设置为孪生帧
+                    twinFrame = currFrame;
+
+                    // 创建新的栈帧并设置参数
+                    Frame targetFrame(&targetGraph);
+                    size_t argsCnt = bc.argsCnt();
+                    const data_idx_t *args = bc.operands();
+                    for (size_t i = 0; i < argsCnt; ++i) {
+                        targetFrame.set(i + 1, currFrame->get(args[i]));
+                    }
+
+                    // 将栈帧对象保存到 nextFrame 中，以免离开作用域后销毁
+                    // 这里不能直接覆写 currFrame 所指向的栈帧
+                    // 因为该栈帧要保留以备互调用使用
+                    nextFrame = std::move(targetFrame);
+
+                    // 切换到新栈帧
+                    currFrame = &nextFrame;
+                    return nullptr; // indicate tail-call
                 }
             }
 
-            tailFrame = lastFrame;
-            nextFrame = currFrame;
-
-            // clear the frame for re-use
-            // note: here the nextFrame may be the currFrame
-            // so we need to reset it after retrieving the args
-            EXEC_WHEN_DEBUG(nextFrame->reset());
-
-            for (size_t i = 0; i < portNodes.size(); ++i) {
-                nextFrame->set(portNodes[i]->index(), args[i]);
+            // 自递归和互递归的情况在这里集中设置参数
+            size_t argsCnt = bc.argsCnt();
+            const data_idx_t *args = bc.operands();
+            for (size_t i = 0; i < argsCnt; ++i) {
+                currFrame->set(i + 1, lastFrame->get(args[i]));
             }
 
             return nullptr; // indicate tail-call
-        } else {
-            Frame tmpFrame(&targetGraph);
-            nextFrame = &tmpFrame;
-
-            for (size_t i = 0; i < portNodes.size(); ++i) {
-                nextFrame->set(portNodes[i]->index(), args[i]);
-            }
-
-            // evaluate the target graph
-            return evalGraph(&targetGraph, *nextFrame);
         }
+
+        // 如果不是尾调用，则新建栈帧并递归调用 call 函数
+
+        Frame targetFrame(&targetGraph);
+
+        size_t argsCnt = bc.argsCnt();
+        const data_idx_t *args = bc.operands();
+        for (size_t i = 0; i < argsCnt; ++i) {
+            targetFrame.set(i + 1, currFrame->get(args[i]));
+        }
+
+        return call(&targetGraph, targetFrame);
     };
 
     // for tail-call optimization
@@ -249,93 +276,31 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
                 auto &targetGraph = function->graph();
                 Frame funcFrame(&targetGraph);
 
-                const auto &normPorts = targetGraph.normPorts();
-                ASSERT(
-                    bc.normCnt() == normPorts.size(),
-                    "CALL opcode norm argument count mismatch in FastVM.");
-                for (size_t j = 0; j < bc.normCnt(); ++j) {
-                    funcFrame.set(normPorts[j]->index(), currFrame->get(nargs[j]));
+                size_t i = 0;
+                for (; i < nargs.size; ++i) {
+                    funcFrame.set(i + 1, currFrame->get(nargs[i]));
                 }
 
-                const auto &withPorts = targetGraph.withPorts();
-                ASSERT(
-                    withPorts.size() == bc.withCnt() - 1,
-                    "CALL opcode with argument count mismatch in FastVM.");
-                for (size_t j = 1; j < bc.withCnt(); ++j) {
-                    funcFrame.set(withPorts[j - 1]->index(), currFrame->get(wargs[j]));
-                }
-
-                const auto &closurePorts = targetGraph.closure();
                 const auto &closureData = function->closure();
                 ASSERT(
-                    closurePorts.size() == closureData.size(),
+                    targetGraph.closure().size() == closureData.size(),
                     "Function closure size mismatch in FastVM.");
-                for (size_t j = 0; j < closurePorts.size(); ++j) {
-                    funcFrame.set(closurePorts[j]->index(), closureData[j]);
+                for (size_t j = 0; j < closureData.size(); ++j) {
+                    funcFrame.set(i + j + 1, closureData[j]);
                 }
 
-                const auto &result = evalGraph(&targetGraph, funcFrame);
+                const auto &result = call(&targetGraph, funcFrame);
                 currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::FUNC: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-
-                GraphIR::Graph *funcGraph = bc.extra()->graph;
-                const auto &normPorts = funcGraph->normPorts();
-                const auto &withPorts = funcGraph->withPorts();
-
-                data_vec_t args;
-                args.reserve(normPorts.size() + withPorts.size());
-
-                ASSERT(
-                    bc.normCnt() == normPorts.size(),
-                    "FUNC opcode norm argument count mismatch in FastVM.");
-                for (size_t j = 0; j < bc.normCnt(); ++j) {
-                    args.push_back(currFrame->get(nargs[j]));
-                }
-
-                ASSERT(
-                    withPorts.size() == bc.withCnt(),
-                    "FUNC opcode with argument count mismatch in FastVM.");
-                for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    args.push_back(currFrame->get(wargs[j]));
-                }
-
-                auto res = evalFuncNode(*funcGraph, args, false);
-                currFrame->set(bc.result, res);
-
+                currFrame->set(bc.result, __call(*bc.extra()->graph, bc, false));
                 break;
             }
 
             case OpCode::TAIL: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-
-                GraphIR::Graph *funcGraph = bc.extra()->graph;
-                const auto &normPorts = funcGraph->normPorts();
-                const auto &withPorts = funcGraph->withPorts();
-
-                data_vec_t args;
-                args.reserve(normPorts.size() + withPorts.size());
-
-                ASSERT(
-                    bc.normCnt() == normPorts.size(),
-                    "FUNC opcode norm argument count mismatch in FastVM.");
-                for (size_t j = 0; j < bc.normCnt(); ++j) {
-                    args.push_back(currFrame->get(nargs[j]));
-                }
-
-                ASSERT(
-                    withPorts.size() == bc.withCnt(),
-                    "FUNC opcode with argument count mismatch in FastVM.");
-                for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    args.push_back(currFrame->get(wargs[j]));
-                }
-
-                evalFuncNode(*funcGraph, args, true);
+                __call(*bc.extra()->graph, bc, true);
 
                 // 跳过后续字节码，进行下一轮循环
                 i = codeSize;
@@ -354,7 +319,10 @@ data_ptr_t FastVMSchedPass::evalGraph(Graph *graph, Frame &frame) {
             }
 
             case OpCode::SCHD: {
-                ASSERT(false, "SCHD opcode not implemented in FastVM.");
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                auto mark = bc.extra()->mark;
+                evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
                 break;
             }
 
@@ -677,32 +645,39 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .commit(context_->mainModule()->name());
     }
     Frame rootFrame(graph.get());
-    evalGraph(graph.get(), rootFrame);
+    call(graph.get(), rootFrame);
     return Graph::null();
 }
 
 void FastVMSchedPass::evalMarkedOperator(
-    const std::string uri, const GraphIR::node_ptr_t &node, Frame &currFrame) {
-    if (uri == "map_arr") {
-        evalMarkedOperator_map_arr(node, currFrame);
-    } else if (uri == "apply_arr") {
-        evalMarkedOperator_apply_arr(node, currFrame);
-    } else if (uri == "filter_arr") {
-        evalMarkedOperator_filter_arr(node, currFrame);
-    } else if (uri == "reduce_arr" || uri == "unordered_reduce_arr") {
-        evalMarkedOperator_reduce_arr(node, currFrame);
-    } else if (uri == "foreach_arr" || uri == "unordered_foreach_arr") {
-        evalMarkedOperator_foreach_arr(node, currFrame);
-    } else {
-        ASSERT(false, std::format("Mark Operator {} not implemented.", uri));
+    const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    switch (op) {
+    case MarkOpCode::MapArr:
+        evalMarkedOperator_map_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::ApplyArr:
+        evalMarkedOperator_apply_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::FilterArr:
+        evalMarkedOperator_filter_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::ReduceArr:
+        evalMarkedOperator_reduce_arr(self, nargs, wargs, currFrame);
+        break;
+    case MarkOpCode::ForeachArr:
+        evalMarkedOperator_foreach_arr(self, nargs, wargs, currFrame);
+        break;
+    default:
+        ASSERT(false, "Unsupported marked operator in FastVM.");
     }
 }
 
-void FastVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
+void FastVMSchedPass::evalMarkedOperator_map_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
 
-    auto func = funcData->as<FunctionData>(Type::Func());
+    auto func = tt::as_shared<FunctionData>(funcData);
     type_ptr_t funcRetType = func->funcType()->exitType();
 
     auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
@@ -713,81 +688,75 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &
             Frame frame(&targetGraph);
             if (targetGraph.hasClosure()) {
                 const auto &functionData = tt::as_shared<FunctionData>(funcData);
-                const auto &closureNodes = targetGraph.closure();
                 const auto &closureData = functionData->closure();
                 ASSERT(
-                    functionData->closure().size() == closureNodes.size(),
+                    closureData.size() == targetGraph.closure().size(),
                     "Function closure size mismatch.");
-                for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
-                    auto closureNode = closureNodes[ci];
-                    frame.set(closureNode->index(), closureData[ci]);
+                for (size_t ci = 0; ci < closureData.size(); ++ci) {
+                    frame.set(ci + 2, closureData[ci]);
                 }
             }
-            frame.set(targetGraph.ports().front()->index(), item);
-            res.push_back(evalGraph(&targetGraph, frame));
+            frame.set(1, item);
+            res.push_back(call(&targetGraph, frame));
         }
         return res;
     };
 
     auto arrayData = tt::as_shared<ArrayData>(targetData);
-    currFrame.set(
-        node->index(),
-        ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
+    currFrame.set(self, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
 }
 
-void FastVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
-    auto func = funcData->as<FunctionData>(Type::Func());
+void FastVMSchedPass::evalMarkedOperator_apply_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
         auto &targetGraph = func->graph();
         Frame frame(&targetGraph);
         if (targetGraph.hasClosure()) {
             const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureNodes = targetGraph.closure();
             const auto &closureData = functionData->closure();
             ASSERT(
-                functionData->closure().size() == closureNodes.size(),
+                closureData.size() == targetGraph.closure().size(),
                 "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
-                auto closureNode = closureNodes[ci];
-                frame.set(closureNode->index(), closureData[ci]);
+            for (size_t ci = 0; ci < closureData.size(); ++ci) {
+                frame.set(ci + 2, closureData[ci]);
             }
         }
-        frame.set(targetGraph.ports().front()->index(), item);
-        return evalGraph(&targetGraph, frame);
+        frame.set(1, item);
+        return call(&targetGraph, frame);
     };
 
     for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
         item = applyFunc(item);
     }
 
-    currFrame.set(node->index(), targetData);
+    currFrame.set(self, targetData);
 }
 
-void FastVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
-    auto func = funcData->as<FunctionData>(Type::Func());
+void FastVMSchedPass::evalMarkedOperator_filter_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     auto shouldKeep = [&](const data_ptr_t &item) -> bool {
         auto &targetGraph = func->graph();
         Frame frame(&targetGraph);
         if (targetGraph.hasClosure()) {
             const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureNodes = targetGraph.closure();
             const auto &closureData = functionData->closure();
             ASSERT(
-                functionData->closure().size() == closureNodes.size(),
+                closureData.size() == targetGraph.closure().size(),
                 "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
-                auto closureNode = closureNodes[ci];
-                frame.set(closureNode->index(), closureData[ci]);
+            for (size_t ci = 0; ci < closureData.size(); ++ci) {
+                frame.set(ci + 2, closureData[ci]);
             }
         }
-        frame.set(targetGraph.ports().front()->index(), item);
-        auto result = evalGraph(&targetGraph, frame);
+        frame.set(1, item);
+        auto result = call(&targetGraph, frame);
         return result->as<BoolData>(Type::Bool())->data();
     };
 
@@ -798,7 +767,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
             if (shouldKeep(item))
                 res.push_back(item);
         }
-        currFrame.set(node->index(), createFunc(containerData->type(), std::move(res)));
+        currFrame.set(self, createFunc(containerData->type(), std::move(res)));
     };
 
     filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
@@ -806,17 +775,18 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
     });
 }
 
-void FastVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs()[0]->index());
-    auto initData = currFrame.get(node->withInputs()[1]->index());
+void FastVMSchedPass::evalMarkedOperator_reduce_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto initData = currFrame.get(wargs[1]);
 
-    auto func = funcData->as<FunctionData>(Type::Func());
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
 
     if (elements.empty()) {
-        currFrame.set(node->index(), initData);
+        currFrame.set(self, initData);
         return;
     }
 
@@ -827,14 +797,12 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Fram
 
         if (targetGraph.hasClosure()) {
             const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureNodes = targetGraph.closure();
             const auto &closureData = functionData->closure();
             ASSERT(
-                functionData->closure().size() == closureNodes.size(),
+                closureData.size() == targetGraph.closure().size(),
                 "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
-                auto closureNode = closureNodes[ci];
-                frame.set(closureNode->index(), closureData[ci]);
+            for (size_t ci = 0; ci < closureData.size(); ++ci) {
+                frame.set(ci + 3, closureData[ci]);
             }
         }
 
@@ -842,37 +810,38 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Fram
         frame.set(ports[0]->index(), result); // acc
         frame.set(ports[1]->index(), item);   // cur
 
-        result = evalGraph(&targetGraph, frame); // 更新 result
+        result = call(&targetGraph, frame); // 更新 result
     }
 
-    currFrame.set(node->index(), result);
+    currFrame.set(self, result);
 }
 
-void FastVMSchedPass::evalMarkedOperator_foreach_arr(const node_ptr_t &node, Frame &currFrame) {
-    auto targetData = currFrame.get(node->normInputs().front()->index());
-    auto funcData = currFrame.get(node->withInputs().front()->index());
-    auto func = funcData->as<FunctionData>(Type::Func());
+void FastVMSchedPass::evalMarkedOperator_foreach_arr(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    auto targetData = currFrame.get(nargs[0]);
+    auto funcData = currFrame.get(wargs[0]);
+    auto func = tt::as_shared<FunctionData>(funcData);
 
     auto applyFunc = [&](const data_ptr_t &item) {
         auto &targetGraph = func->graph();
         Frame frame(&targetGraph);
         if (targetGraph.hasClosure()) {
             const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureNodes = targetGraph.closure();
             const auto &closureData = functionData->closure();
             ASSERT(
-                functionData->closure().size() == closureNodes.size(),
+                closureData.size() == targetGraph.closure().size(),
                 "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureNodes.size(); ++ci) {
-                auto closureNode = closureNodes[ci];
-                frame.set(closureNode->index(), closureData[ci]);
+            for (size_t ci = 0; ci < closureData.size(); ++ci) {
+                frame.set(ci + 2, closureData[ci]);
             }
         }
-        frame.set(targetGraph.ports().front()->index(), item);
-        evalGraph(&targetGraph, frame); // 忽略返回值
+        frame.set(1, item);
+        call(&targetGraph, frame); // 忽略返回值
     };
 
     for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
         applyFunc(item);
     }
+
+    currFrame.set(self, Data::null());
 }
