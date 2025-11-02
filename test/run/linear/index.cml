@@ -15,7 +15,7 @@ func comp2(signal: Signal): Signal {
 }
 
 func analyzer(signals: Signal[]) {
-    'Analyzer1: {}'->format<signals>->println
+    'Analyzer: {}'->format<signals>->println
 }
 
 func main() {

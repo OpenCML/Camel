@@ -75,9 +75,9 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     -Wno-nan-infinity-disabled
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
-    -march=native  
-    -mfma          
-    -ffast-math
+    -march=native
+    -mfma
+    # -ffast-math # 不要开启这个，在build模式优化下会导致计算结果失真
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE

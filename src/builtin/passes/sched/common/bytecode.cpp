@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -144,6 +144,24 @@ std::string to_string(const OpCode &op) {
     }
 }
 
+std::string to_string(const MarkOpCode &op) {
+    switch (op) {
+    case MarkOpCode::MapArr:
+        return "MapArr";
+    case MarkOpCode::ApplyArr:
+        return "ApplyArr";
+    case MarkOpCode::ReduceArr:
+        return "ReduceArr";
+    case MarkOpCode::FilterArr:
+        return "FilterArr";
+    case MarkOpCode::ForeachArr:
+        return "ForeachArr";
+    default:
+        ASSERT(false, "Unknown MarkOpCode encountered.");
+        return "UNKNOWN";
+    }
+}
+
 std::string BytecodeHeader::toString() const {
     if (hasOperands()) {
         return std::format("{} ({}) [{}]", to_string(opcode), opsize, formatIndex(result));
@@ -161,11 +179,15 @@ std::string BytecodeHeader::toString() const {
 std::string BytecodeExtra::toString(OpCode opcode) const {
     switch (opcode) {
     case OpCode::CAST:
-        return std::format("Type: {}", pType ? pType->toString() : "null");
+        return std::format("{}", pType ? pType->toString() : "null");
     case OpCode::FUNC:
-        return std::format("Graph: {}", graph ? graph->mangledName() : "null");
+        [[fallthrough]];
+    case OpCode::TAIL:
+        return std::format("{}", graph ? graph->mangledName() : "null");
     case OpCode::OPER:
-        return std::format("Func: {}", reinterpret_cast<void *>(func));
+        return std::format("{}", reinterpret_cast<void *>(func));
+    case OpCode::SCHD:
+        return std::format("{}", to_string(mark));
     default:
         return "";
     }

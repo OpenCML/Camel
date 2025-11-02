@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 02, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,17 +38,15 @@ class FrameTemplate {};
 
 class Frame {
   public:
+    Frame() = default;
     Frame(GraphIR::Graph *graph);
     ~Frame() = default;
 
     const GraphIR::Graph *graph() const { return graph_; }
-    void reset() { std::fill(dataArr_.begin(), dataArr_.end(), nullptr); }
 
-    Frame &operator=(const Frame &other) {
-        if (this != &other) {
-            graph_ = other.graph_;
-            dataArr_ = other.dataArr_;
-        }
+    Frame &operator=(const Frame &&other) {
+        graph_ = other.graph_;
+        dataArr_ = std::move(other.dataArr_);
         return *this;
     }
 
@@ -61,7 +59,4 @@ class Frame {
   private:
     GraphIR::Graph *graph_;
     data_vec_t dataArr_;
-
-    void *meta_;
-    void *data_;
 };

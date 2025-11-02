@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -97,6 +97,14 @@ enum class OpCode : uint8_t {
     DGE = 0b01100111,
 };
 
+enum class MarkOpCode {
+    MapArr,
+    ApplyArr,
+    ReduceArr,
+    FilterArr,
+    ForeachArr,
+};
+
 inline bool isOpCodeWithFixedOperands(OpCode opcode) {
     return (static_cast<uint8_t>(opcode) & 0b10000000) == 0b00000000;
 }
@@ -145,6 +153,7 @@ inline std::string formatIndex(data_idx_t value) {
 }
 
 std::string to_string(const OpCode &op);
+std::string to_string(const MarkOpCode &op);
 
 struct BytecodeHeader;
 union BytecodeExtra;
@@ -194,6 +203,10 @@ struct BytecodeHeader {            // 8 bytes
         ASSERT(hasOperands(), "No operands available.");
         return static_cast<size_t>(fastop[1]);
     }
+    size_t argsCnt() const {
+        ASSERT(hasOperands(), "No operands available.");
+        return normCnt() + withCnt();
+    }
 
     const data_arr_t nargs() const {
         ASSERT(hasOperands(), "No operands available.");
@@ -225,6 +238,7 @@ union BytecodeExtra {      // 8 bytes
     Type *pType;           // for CAST
     GraphIR::Graph *graph; // for FUNC
     operator_t func;       // for OPER
+    MarkOpCode mark;       // for SCHD
 
     std::string toString(OpCode opcode) const;
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 02, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,6 +48,7 @@ Frame::Frame(Graph *graph) : graph_(graph), dataArr_(graph->runtimeDataSize(), n
 }
 
 bool Frame::has(const data_idx_t &index) {
+    ASSERT(graph_ != nullptr, "Frame graph is null.");
     ASSERT(index != 0, "Data index is invalid.");
     if (index < 0) {
         return graph_->getStaticData(index) != nullptr;
@@ -59,6 +60,7 @@ bool Frame::has(const data_idx_t &index) {
 }
 
 data_ptr_t Frame::get(const data_idx_t &index) {
+    ASSERT(graph_ != nullptr, "Frame graph is null.");
     data_ptr_t res;
     ASSERT(index != 0, "Data index is invalid.");
     if (index < 0) {
@@ -80,6 +82,7 @@ data_ptr_t Frame::get(const data_idx_t &index) {
 }
 
 void Frame::set(const data_idx_t &index, const data_ptr_t &data) {
+    ASSERT(graph_ != nullptr, "Frame graph is null.");
     EXEC_WHEN_DEBUG(l.in("Frame").debug(
         "Setting data of graph {} with index {}: {}",
         graph_->name(),
@@ -96,6 +99,7 @@ void Frame::set(const data_idx_t &index, const data_ptr_t &data) {
 }
 
 std::string Frame::toString() const {
+    ASSERT(graph_ != nullptr, "Frame graph is null.");
     std::ostringstream oss;
 
     auto printDataArr = [&](const data_vec_t &arr) {
