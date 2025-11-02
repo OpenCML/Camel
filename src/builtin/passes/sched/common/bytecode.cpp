@@ -181,6 +181,8 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
     case OpCode::CAST:
         return std::format("{}", pType ? pType->toString() : "null");
     case OpCode::FUNC:
+        [[fallthrough]];
+    case OpCode::TAIL:
         return std::format("{}", graph ? graph->mangledName() : "null");
     case OpCode::OPER:
         return std::format("{}", reinterpret_cast<void *>(func));

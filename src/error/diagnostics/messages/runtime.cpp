@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 01, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,7 +57,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             RuntimeDiag::MaxRecursionDepthExceeded,
             {
                 "MaxRecursionDepthExceeded",
-                "Maximum recursion depth exceeded when evaluating graph '{0}'.",
+                "Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.",
                 "Check for infinite recursion or excessively deep recursive calls.",
             },
         },

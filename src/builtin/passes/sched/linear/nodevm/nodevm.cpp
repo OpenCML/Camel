@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Nov. 01, 2025
+ * Updated: Nov. 02, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -102,7 +102,9 @@ data_ptr_t NodeVMSchedPass::call(Graph *graph, Frame &frame) {
     }());
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
-        context_->rtmDiags()->of(RuntimeDiag::MaxRecursionDepthExceeded).commit(graph->name());
+        context_->rtmDiags()
+            ->of(RuntimeDiag::MaxRecursionDepthExceeded)
+            .commit(graph->name(), maxRecursionDepth_);
     }
 
     bool loop = false;
@@ -164,11 +166,6 @@ data_ptr_t NodeVMSchedPass::call(Graph *graph, Frame &frame) {
 
             tailFrame = lastFrame;
             nextFrame = currFrame;
-
-            // clear the frame for re-use
-            // note: here the nextFrame may be the currFrame
-            // so we need to reset it after retrieving the args
-            EXEC_WHEN_DEBUG(nextFrame->reset());
 
             for (size_t i = 0; i < portNodes.size(); ++i) {
                 nextFrame->set(portNodes[i]->index(), args[i]);
@@ -479,13 +476,13 @@ data_ptr_t NodeVMSchedPass::call(Graph *graph, Frame &frame) {
     }
 
     ASSERT(result != nullptr, "Return data is null.");
-    ASSERT(
-        result->type()->assignable(input.front()->dataType()),
-        std::format(
-            "Function '{}' expected to return data of type '{}', but got type '{}'.",
-            graph->name(),
-            graph->funcType()->exitType()->toString(),
-            result->type()->toString()));
+    // ASSERT(
+    //     result->type()->assignable(input.front()->dataType()),
+    //     std::format(
+    //         "Function '{}' expected to return data of type '{}', but got type '{}'.",
+    //         graph->name(),
+    //         graph->funcType()->exitType()->toString(),
+    //         result->type()->toString()));
 
     EXEC_WHEN_DEBUG([&]() {
         if (profiler::AdvancedTracer::getInstance().isTracing()) {

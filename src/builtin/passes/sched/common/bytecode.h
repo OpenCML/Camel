@@ -203,6 +203,10 @@ struct BytecodeHeader {            // 8 bytes
         ASSERT(hasOperands(), "No operands available.");
         return static_cast<size_t>(fastop[1]);
     }
+    size_t argsCnt() const {
+        ASSERT(hasOperands(), "No operands available.");
+        return normCnt() + withCnt();
+    }
 
     const data_arr_t nargs() const {
         ASSERT(hasOperands(), "No operands available.");
