@@ -26,9 +26,9 @@
 #include <stack>
 
 class FastVMSchedPass : public LinearSchedPass {
-    static const size_t maxRecursionDepth_ = 128; // default max recursion depth
+    inline static const size_t maxRecursionDepth_ = 128; // default max recursion depth
     size_t currRecursionDepth_ = 0;
-    std::unordered_map<GraphIR::Graph *, std::shared_ptr<bytecode_vec_t>> codes_;
+    std::unordered_map<GraphIR::Graph *, std::shared_ptr<bytecode_vec_t>> compiledCodesMap_;
 
     data_ptr_t call(GraphIR::Graph *graph, Frame &frame);
     std::shared_ptr<bytecode_vec_t> getCodeOfGraph(GraphIR::Graph *graph);
