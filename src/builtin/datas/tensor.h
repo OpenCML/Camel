@@ -198,6 +198,8 @@ class TensorData : public OtherData {
     static data_ptr_t arange(double start, double stop, double step = 1.0);
     static data_ptr_t zeros(const std::vector<size_t> &shape);
     static data_ptr_t ones(const std::vector<size_t> &shape);
+    static data_ptr_t from_array(const data_ptr_t &array_data);
+
     static data_ptr_t
     random(const std::vector<size_t> &shape, double lower = 0.0, double upper = 1.0);
     static data_ptr_t

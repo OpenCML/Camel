@@ -158,6 +158,24 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
+            "from_array",
+            {
+                {
+                    ":tensor/from_array",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(data: any[][]) => Tensor",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            if (norm[0]->code() == TypeCode::Array) {
+                                return TensorType::Default();
+                            }
+                            return nullopt;
+                        }),
+                },
+            }),
+
+        OperatorGroup::create(
             "shape",
             {
                 {

@@ -73,7 +73,7 @@ func svm_predict(X: Tensor, model: Tensor): Tensor sync {
         if (i >= n-1) then {
             return
         } else sync {
-            let val = model[i, 0]  // 获取第i行的权重值
+            let val = model[i, 0]
             weights[i, 0] = val
             copy_weights(i + 1)
         }

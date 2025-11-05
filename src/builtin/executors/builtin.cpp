@@ -231,6 +231,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"tensor/random", __tensor_random__},
         {"tensor/randn", __tensor_randn__},
 
+        {"tensor/from_array", __tensor_from_array__},
+
         {"tensor/shape", __tensor_shape__},
 
         {"tensor/add", __tensor_add__},

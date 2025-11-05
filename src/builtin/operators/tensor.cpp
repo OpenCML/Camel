@@ -28,6 +28,11 @@ void __tensor_eye__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     auto n = frame.get(nargs[0]);
     auto intData = tt::as_shared<IntData>(n);
+    if (intData->data() < 0) {
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<eye> requires a non-negative integer");
+        frame.set(self, Data::null());
+        return;
+    }
     auto tensor = TensorData::eye(intData->data());
     frame.set(self, tensor);
 }
@@ -47,6 +52,11 @@ void __tensor_zeros__(
     auto arrayData = tt::as_shared<ArrayData>(shapeArg);
     for (const auto &element : arrayData->raw()) {
         auto intData = tt::as_shared<IntData>(element);
+        if (intData->data() < 0) {
+            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<zeros> requires non-negative integers for shape");
+            frame.set(self, Data::null());
+            return;
+        }
         shape.push_back(static_cast<size_t>(intData->data()));
     }
 
@@ -62,6 +72,11 @@ void __tensor_ones__(
     auto arrayData = tt::as_shared<ArrayData>(shapeArg);
     for (const auto &element : arrayData->raw()) {
         auto intData = tt::as_shared<IntData>(element);
+        if (intData->data() < 0) {
+            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<ones> requires non-negative integers for shape");
+            frame.set(self, Data::null());
+            return;
+        }
         shape.push_back(static_cast<size_t>(intData->data()));
     }
 
@@ -78,6 +93,12 @@ void __tensor_linspace__(
     auto startData = tt::as_shared<FloatData>(start);
     auto stopData = tt::as_shared<FloatData>(stop);
     auto numData = tt::as_shared<IntData>(num);
+    
+    if (numData->data() < 0) {
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<linspace> requires a non-negative integer for num");
+        frame.set(self, Data::null());
+        return;
+    }
 
     auto tensor = TensorData::linspace(startData->data(), stopData->data(), numData->data());
     frame.set(self, tensor);
@@ -92,12 +113,22 @@ void __tensor_arange__(
     if (nargs.size == 2) {
         auto startData = tt::as_shared<FloatData>(start);
         auto stopData = tt::as_shared<FloatData>(stop);
+        if (startData->data() >= stopData->data()) {
+            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<arange> requires start < stop");
+            frame.set(self, Data::null());
+            return;
+        }
         tensor = TensorData::arange(startData->data(), stopData->data());
     } else {
         auto step = frame.get(nargs[2]);
         auto startData = tt::as_shared<FloatData>(start);
         auto stopData = tt::as_shared<FloatData>(stop);
         auto stepData = tt::as_shared<FloatData>(step);
+        if (stepData->data() <= 0) {
+            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<arange> requires a positive step");
+            frame.set(self, Data::null());
+            return;
+        }
         tensor = TensorData::arange(startData->data(), stopData->data(), stepData->data());
     }
 
@@ -112,6 +143,11 @@ void __tensor_random__(
     auto arrayData = tt::as_shared<ArrayData>(shapeArg);
     for (const auto &element : arrayData->raw()) {
         auto intData = tt::as_shared<IntData>(element);
+        if (intData->data() < 0) {
+            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<random> requires non-negative integers for shape");
+            frame.set(self, Data::null());
+            return;
+        }
         shape.push_back(static_cast<size_t>(intData->data()));
     }
 
@@ -127,6 +163,12 @@ void __tensor_random__(
         auto upperArg = frame.get(nargs[2]);
         upper = tt::as_shared<FloatData>(upperArg)->data();
     }
+    
+    if (lower >= upper) {
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<random> requires lower < upper");
+        frame.set(self, Data::null());
+        return;
+    }
 
     auto tensor = TensorData::random(shape, lower, upper);
     frame.set(self, tensor);
@@ -140,6 +182,11 @@ void __tensor_randn__(
     auto arrayData = tt::as_shared<ArrayData>(shapeArg);
     for (const auto &element : arrayData->raw()) {
         auto intData = tt::as_shared<IntData>(element);
+        if (intData->data() < 0) {
+            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<randn> requires non-negative integers for shape");
+            frame.set(self, Data::null());
+            return;
+        }
         shape.push_back(static_cast<size_t>(intData->data()));
     }
 
@@ -154,12 +201,16 @@ void __tensor_randn__(
     if (nargs.size > 2) {
         auto stddevArg = frame.get(nargs[2]);
         stddev = tt::as_shared<FloatData>(stddevArg)->data();
+        if (stddev < 0) {
+            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<randn> requires non-negative stddev");
+            frame.set(self, Data::null());
+            return;
+        }
     }
 
     auto tensor = TensorData::randn(shape, mean, stddev);
     frame.set(self, tensor);
 }
-
 // Tensor arithmetic operations
 void __tensor_add__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
@@ -184,16 +235,16 @@ void __tensor_multiply__(
 
     // 如果第一个是 Tensor
     if (lhs->type()->code() == TensorType::typeCode()) {
-        auto tensor_data = tt::as_shared<TensorData>(lhs);
-        auto result = tensor_data->multiply(rhs);
+        auto tensorData = tt::as_shared<TensorData>(lhs);
+        auto result = tensorData->multiply(rhs);
         frame.set(self, result);
         return;
     }
 
     // 如果第一个不是 Tensor，那么第二个必须是 Tensor
     // 类型校验系统会保证这一点
-    auto tensor_data = tt::as_shared<TensorData>(rhs);
-    auto result = tensor_data->multiply(lhs); // Multiply is commutative for scalar-tensor
+    auto tensorData = tt::as_shared<TensorData>(rhs);
+    auto result = tensorData->multiply(lhs); // Multiply is commutative for scalar-tensor
     frame.set(self, result);
 }
 
@@ -236,9 +287,9 @@ void __tensor_transpose__(
 
 void __tensor_flatten__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    auto tensor_data = frame.get(nargs[0]);
-    auto result_tensor = tt::as_shared<TensorData>(tensor_data)->flatten();
-    frame.set(self, result_tensor);
+    auto tensorData = frame.get(nargs[0]);
+    auto resultTensor = tt::as_shared<TensorData>(tensorData)->flatten();
+    frame.set(self, resultTensor);
 }
 
 // Tensor combination operations
@@ -370,8 +421,8 @@ void __tensor_sqrt__(
 
 void __tensor_pow__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    auto self_data = frame.get(nargs[0]);
-    auto tensor = tt::as_shared<TensorData>(self_data);
+    auto selfData = frame.get(nargs[0]);
+    auto tensor = tt::as_shared<TensorData>(selfData);
     auto exponent = frame.get(nargs[1]);
     auto result = tensor->pow(exponent);
     frame.set(self, result);
@@ -379,10 +430,10 @@ void __tensor_pow__(
 
 void __tensor_matpow__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    auto self_data = frame.get(nargs[0]);
-    auto tensor = tt::as_shared<TensorData>(self_data);
-    auto exponent_data = frame.get(nargs[1]);
-    auto intData = tt::as_shared<IntData>(exponent_data);
+    auto selfData = frame.get(nargs[0]);
+    auto tensor = tt::as_shared<TensorData>(selfData);
+    auto exponentData = frame.get(nargs[1]);
+    auto intData = tt::as_shared<IntData>(exponentData);
     auto result = tensor->matpow(intData->data());
     frame.set(self, result);
 }
@@ -413,8 +464,8 @@ void __tensor_tanh__(
 void __tensor_shape__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     auto tensor = frame.get(nargs[0]);
-    auto tensor_data = tt::as_shared<TensorData>(tensor);
-    auto shape = tensor_data->shape();
+    auto tensorData = tt::as_shared<TensorData>(tensor);
+    auto shape = tensorData->shape();
 
     data_vec_t shape_array;
     for (auto dim : shape) {
@@ -423,6 +474,13 @@ void __tensor_shape__(
 
     auto result = ArrayData::from(Type::Array(Type::Int()), std::move(shape_array));
     frame.set(self, result);
+}
+
+void __tensor_from_array__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    auto arrayData = frame.get(nargs[0]);
+    auto tensor = TensorData::from_array(arrayData);
+    frame.set(self, tensor);
 }
 
 void __tensor_idx__(
@@ -473,7 +531,7 @@ void __tensor_idx2d__(
 void __tensor_show__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     auto tensor = frame.get(nargs[0]);
-    auto tensor_data = tt::as_shared<TensorData>(tensor);
-    std::cout << tensor_data->toFormattedString() << std::endl;
+    auto tensorData = tt::as_shared<TensorData>(tensor);
+    std::cout << tensorData->toFormattedString() << std::endl;
     frame.set(self, Data::null());
 }

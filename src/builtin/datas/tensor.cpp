@@ -44,15 +44,18 @@ TensorData::TensorData(const type_ptr_t &elementType, const std::vector<size_t> 
     for (size_t dim : shape) {
         total_size *= dim;
     }
-    data_.resize(total_size);
-    data_.setZero();
+    data_ = Eigen::VectorXd(total_size);
+    for (Eigen::Index i = 0; i < data_.size(); ++i) {
+        data_(i) = 0.0;
+    }
 }
 
 TensorData::~TensorData() = default;
 
 data_ptr_t TensorData::at(const std::vector<size_t> &index) const {
     if (index.size() != shape_.size()) {
-        throw std::runtime_error("Index dimension mismatch");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+            .commit("Index dimension mismatch in TensorData::at");
     }
 
     size_t linear_index = 0;
@@ -61,7 +64,8 @@ data_ptr_t TensorData::at(const std::vector<size_t> &index) const {
     for (size_t i = index.size(); i > 0; --i) {
         size_t dim_index = i - 1;
         if (index[dim_index] >= shape_[dim_index]) {
-            throw std::runtime_error("Index out of bounds");
+            throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+                .commit("Index out of bounds in TensorData::at");
         }
         linear_index += index[dim_index] * multiplier;
         multiplier *= shape_[dim_index];
@@ -84,6 +88,7 @@ std::vector<std::string> TensorData::refs() const {
 
 data_ptr_t TensorData::clone(bool deep) const {
     auto result = make_shared<TensorData>(type_, shape_);
+    result->data_.resize(data_.size());
     result->data_ = data_;
 
     if (deep) {
@@ -101,7 +106,6 @@ data_ptr_t TensorData::clone(bool deep) const {
 
     return result;
 }
-
 const std::string TensorData::toString() const {
     std::stringstream ss;
     ss << "Tensor(shape=" << shape_to_string(shape_) << ", data=[";
@@ -176,7 +180,6 @@ const std::string TensorData::toFormattedString(size_t /*maxItemsPerDim*/) const
         }
     };
 
-    // 顶层调用，初始缩进量 = "Tensor(" 的长度
     ss << "Tensor(";
     printDim(ss, 0, 0, std::string("Tensor(").size());
     const auto &dtype = tt::as_shared<TensorType>(type_)->dType();
@@ -192,13 +195,13 @@ void TensorData::resolve(const data_vec_t &dataList) {
     }
 
     if (dataList.empty()) {
-        throw runtime_error("Cannot resolve tensor references: empty data list provided");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("No data provided for resolving references in TensorData::resolve");
     }
 
     if (refs_.size() != static_cast<size_t>(data_.size())) {
-        throw runtime_error(
-            "Reference count mismatch: expected " + std::to_string(data_.size()) +
-            " references, got " + std::to_string(refs_.size()));
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Reference count mismatch in TensorData::resolve");
     }
 
     for (size_t i = 0; i < refs_.size(); ++i) {
@@ -301,9 +304,8 @@ void TensorData::resolve(const data_vec_t &dataList) {
         }
 
         if (!found) {
-            throw runtime_error(
-                "Cannot resolve reference: " + refData->toString() + " at position " +
-                std::to_string(i));
+            throw DiagnosticBuilder::of(RuntimeDiag::KeyNotFound)
+                .commit("Reference " + refData->toString() + " not found in TensorData::resolve");
         }
     }
 
@@ -311,9 +313,8 @@ void TensorData::resolve(const data_vec_t &dataList) {
 
     for (Eigen::Index i = 0; i < data_.size(); ++i) {
         if (std::isnan(data_(i)) || std::isinf(data_(i))) {
-            throw runtime_error(
-                "Invalid data value at position " + std::to_string(i) +
-                " after reference resolution");
+            throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+                .commit("NaN or INF found in TensorData::resolve");
         }
     }
 }
@@ -387,7 +388,8 @@ data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
         }
     }
 
-    throw DataConvError("Cannot convert TensorData to " + target->toString());
+    throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+        .commit("Unsupported conversion in TensorData::convert");
 }
 
 data_ptr_t TensorData::reshape(const std::vector<size_t> &shape) const {
@@ -397,7 +399,10 @@ data_ptr_t TensorData::reshape(const std::vector<size_t> &shape) const {
     }
 
     if (static_cast<Eigen::Index>(new_size) != data_.size()) {
-        throw invalid_argument("Cannot reshape tensor: total size must remain constant");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit(
+                "Cannot reshape tensor of size " + std::to_string(data_.size()) +
+                " to shape with size " + std::to_string(new_size));
     }
 
     auto result = make_shared<TensorData>(nullptr, shape);
@@ -406,15 +411,16 @@ data_ptr_t TensorData::reshape(const std::vector<size_t> &shape) const {
 }
 
 data_ptr_t TensorData::expand_dims(size_t axis) const {
-    vector<size_t> new_shape = shape();
+    vector<size_t> newShape = shape();
 
-    if (axis <= new_shape.size()) {
-        new_shape.insert(new_shape.begin() + axis, 1);
+    if (axis <= newShape.size()) {
+        newShape.insert(newShape.begin() + axis, 1);
     } else {
-        throw invalid_argument("Axis out of bounds");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+            .commit("Axis out of bounds in TensorData::expand_dims");
     }
 
-    auto result = make_shared<TensorData>(nullptr, new_shape);
+    auto result = make_shared<TensorData>(nullptr, newShape);
 
     result->data_ = data_;
 
@@ -423,26 +429,26 @@ data_ptr_t TensorData::expand_dims(size_t axis) const {
 
 data_ptr_t TensorData::squeeze() const {
     vector<size_t> old_shape = shape();
-    vector<size_t> new_shape;
+    vector<size_t> newShape;
 
     for (size_t dim : old_shape) {
         if (dim != 1) {
-            new_shape.push_back(dim);
+            newShape.push_back(dim);
         }
     }
 
-    if (new_shape.size() == old_shape.size()) {
+    if (newShape.size() == old_shape.size()) {
         return clone(true);
     }
 
-    if (new_shape.empty()) {
-        new_shape.push_back(1);
-        new_shape.push_back(1);
-    } else if (new_shape.size() == 1) {
-        new_shape.push_back(1);
+    if (newShape.empty()) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot squeeze tensor to empty shape");
+    } else if (newShape.size() == 1) {
+        newShape.push_back(1);
     }
 
-    auto result = make_shared<TensorData>(nullptr, new_shape);
+    auto result = make_shared<TensorData>(nullptr, newShape);
     result->data_ = data_;
     return result;
 }
@@ -450,28 +456,31 @@ data_ptr_t TensorData::squeeze() const {
 data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only concatenate with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only concatenate with another TensorData");
     }
 
     if (axis > 1) {
-        throw invalid_argument("Axis out of bounds for 2D tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+            .commit("Axis out of bounds for 2D tensor");
     }
 
-    vector<size_t> new_shape = shape();
+    vector<size_t> newShape = shape();
 
     if (axis == 0) {
         if (shape().size() != 2 || other_tensor->shape().size() != 2) {
-            throw invalid_argument("Concatenation currently only supports 2D tensors");
+            throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+                .commit("Concatenation currently only supports 2D tensors");
         }
 
         if (shape()[1] != other_tensor->shape()[1]) {
-            throw runtime_error(
-                "Tensors must have the same number of columns for axis=0 concatenation");
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit("Tensors must have the same number of columns for axis=0 concatenation");
         }
 
-        new_shape[0] = shape()[0] + other_tensor->shape()[0];
-        auto result = make_shared<TensorData>(nullptr, new_shape);
-        result->data_.resize(new_shape[0] * new_shape[1]);
+        newShape[0] = shape()[0] + other_tensor->shape()[0];
+        auto result = make_shared<TensorData>(nullptr, newShape);
+        result->data_.resize(newShape[0] * newShape[1]);
 
         // Copy data from first tensor using Eigen's block operations
         size_t rows1 = shape()[0];
@@ -489,17 +498,18 @@ data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
     } else {
         // axis == 1
         if (shape().size() != 2 || other_tensor->shape().size() != 2) {
-            throw invalid_argument("Concatenation currently only supports 2D tensors");
+            throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+                .commit("Concatenation currently only supports 2D tensors");
         }
 
         if (shape()[0] != other_tensor->shape()[0]) {
-            throw invalid_argument(
-                "Tensors must have the same number of rows for axis=1 concatenation");
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit("Tensors must have the same number of rows for axis=1 concatenation");
         }
 
-        new_shape[1] = shape()[1] + other_tensor->shape()[1];
-        auto result = make_shared<TensorData>(nullptr, new_shape);
-        result->data_.resize(new_shape[0] * new_shape[1]);
+        newShape[1] = shape()[1] + other_tensor->shape()[1];
+        auto result = make_shared<TensorData>(nullptr, newShape);
+        result->data_.resize(newShape[0] * newShape[1]);
 
         // Copy data from first tensor and second tensor using Eigen operations
         size_t rows = shape()[0];
@@ -520,25 +530,29 @@ data_ptr_t TensorData::concat(const data_ptr_t &other, size_t axis) const {
 data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only stack with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only stack with another TensorData");
     }
 
     if (axis > 2) {
-        throw invalid_argument("Axis out of bounds for 2D tensor stacking");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+            .commit("Axis out of bounds for 2D tensor stacking");
     }
 
     if (shape() != other_tensor->shape()) {
-        throw invalid_argument("Tensors must have the same shape for stacking");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensors must have the same shape for stacking");
     }
 
     if (shape().size() != 2) {
-        throw invalid_argument("Stacking currently only supports 2D tensors");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Stacking currently only supports 2D tensors");
     }
 
     if (axis == 0) {
-        vector<size_t> new_shape = {2 * shape()[0], shape()[1]};
-        auto result = make_shared<TensorData>(nullptr, new_shape);
-        result->data_.resize(new_shape[0] * new_shape[1]);
+        vector<size_t> newShape = {2 * shape()[0], shape()[1]};
+        auto result = make_shared<TensorData>(nullptr, newShape);
+        result->data_.resize(newShape[0] * newShape[1]);
 
         size_t rows1 = shape()[0];
         size_t cols = shape()[1];
@@ -553,9 +567,9 @@ data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
 
         return result;
     } else if (axis == 1) {
-        vector<size_t> new_shape = {shape()[0], 2 * shape()[1]};
-        auto result = make_shared<TensorData>(nullptr, new_shape);
-        result->data_.resize(new_shape[0] * new_shape[1]);
+        vector<size_t> newShape = {shape()[0], 2 * shape()[1]};
+        auto result = make_shared<TensorData>(nullptr, newShape);
+        result->data_.resize(newShape[0] * newShape[1]);
 
         size_t rows = shape()[0];
         size_t cols1 = shape()[1];
@@ -572,8 +586,8 @@ data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
     } else {
         // axis == 2 (stack along depth)
         // For 2D tensors, this creates a 3D tensor
-        vector<size_t> new_shape = {shape()[0], shape()[1], 2};
-        auto result = make_shared<TensorData>(nullptr, new_shape);
+        vector<size_t> newShape = {shape()[0], shape()[1], 2};
+        auto result = make_shared<TensorData>(nullptr, newShape);
         result->data_.resize(shape()[0] * shape()[1] * 2);
 
         size_t rows = shape()[0];
@@ -590,7 +604,8 @@ data_ptr_t TensorData::stack(const data_ptr_t &other, size_t axis) const {
 
 data_ptr_t TensorData::argmin() const {
     if (data_.size() == 0) {
-        throw invalid_argument("Cannot find argmin of empty tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot find argmin of empty tensor");
     }
 
     Eigen::Index min_index;
@@ -608,7 +623,8 @@ data_ptr_t TensorData::argmin() const {
 
 data_ptr_t TensorData::argmax() const {
     if (data_.size() == 0) {
-        throw invalid_argument("Cannot find argmax of empty tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot find argmax of empty tensor");
     }
 
     Eigen::Index max_index;
@@ -626,7 +642,8 @@ data_ptr_t TensorData::argmax() const {
 
 data_ptr_t TensorData::var() const {
     if (data_.size() == 0) {
-        throw invalid_argument("Cannot calculate variance of empty tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot calculate variance of empty tensor");
     }
 
     double mean_val = data_.mean();
@@ -638,7 +655,8 @@ data_ptr_t TensorData::var() const {
 
 data_ptr_t TensorData::std() const {
     if (data_.size() == 0) {
-        throw invalid_argument("Cannot calculate standard deviation of empty tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot calculate standard deviation of empty tensor");
     }
 
     double mean_val = data_.mean();
@@ -669,16 +687,36 @@ data_ptr_t TensorData::tanh() const {
 
 data_ptr_t TensorData::pow(double exponent) const {
     auto result = make_shared<TensorData>(nullptr, shape_);
-    result->data_ = data_.array().pow(exponent);
+    result->data_.resize(data_.size());
+    result->data_.setZero();
+
+    std::cout << "Input data: ";
+    for (Eigen::Index i = 0; i < data_.size(); ++i) {
+        std::cout << data_(i) << " ";
+    }
+    std::cout << std::endl;
+
+    for (Eigen::Index i = 0; i < data_.size(); ++i) {
+        result->data_(i) = std::pow(data_(i), exponent);
+        std::cout << "data_(" << i << ")=" << data_(i) << " -> " << result->data_(i) << std::endl;
+    }
+
+    std::cout << "Output data: ";
+    for (Eigen::Index i = 0; i < result->data_.size(); ++i) {
+        std::cout << result->data_(i) << " ";
+    }
+    std::cout << std::endl;
+
     return result;
 }
 
 data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
     if (auto tensor = tt::to_shared<TensorData>(exponent)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
-            throw std::invalid_argument(
-                "Tensor shapes are not broadcastable for power operation: " +
-                shape_to_string(shape_) + " and " + shape_to_string(tensor->shape_));
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit(
+                    "Tensor shapes are not broadcastable for power operation: " +
+                    shape_to_string(shape_) + " and " + shape_to_string(tensor->shape_));
         }
 
         std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
@@ -713,7 +751,8 @@ data_ptr_t TensorData::pow(const data_ptr_t &exponent) const {
         return result;
     }
 
-    throw runtime_error("Tensor power operation expects either Tensor or scalar operand");
+    throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+        .commit("Tensor power operation expects either Tensor or scalar operand");
 }
 
 void TensorData::calculate_broadcast_power(
@@ -763,11 +802,13 @@ void TensorData::calculate_broadcast_power(
 
 data_ptr_t TensorData::matpow(size_t exponent) const {
     if (shape_.size() != 2) {
-        throw std::invalid_argument("Matrix power only supports 2D tensors");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Matrix power only supports 2D tensors");
     }
 
     if (shape_[0] != shape_[1]) {
-        throw std::invalid_argument("Matrix power only supports square matrices");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Matrix power only supports square matrices");
     }
 
     if (exponent == 0) {
@@ -821,20 +862,22 @@ data_ptr_t TensorData::round() const {
 
 data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) const {
     if (axis > 1) {
-        throw invalid_argument("Axis out of bounds for 2D tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+            .commit("Axis out of bounds for 2D tensor");
     }
 
     if (indices.empty()) {
-        throw invalid_argument("Indices cannot be empty");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError).commit("Indices cannot be empty");
     }
 
-    const auto &shape_vec = shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("Take operation currently only supports 2D tensors");
+    const auto &shapeVec = shape();
+    if (shapeVec.size() != 2) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Take operation currently only supports 2D tensors");
     }
 
-    size_t rows = shape_vec[0];
-    size_t cols = shape_vec[1];
+    size_t rows = shapeVec[0];
+    size_t cols = shapeVec[1];
 
     if (axis == 0) {
         auto result = make_shared<TensorData>(nullptr, vector<size_t>{indices.size(), cols});
@@ -842,7 +885,8 @@ data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) con
 
         for (size_t i = 0; i < indices.size(); ++i) {
             if (indices[i] >= rows) {
-                throw out_of_range("Index out of bounds");
+                throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+                    .commit("Index out of bounds");
             }
 
             size_t src_start = indices[i] * cols;
@@ -857,7 +901,8 @@ data_ptr_t TensorData::take(const std::vector<size_t> &indices, size_t axis) con
 
         for (size_t i = 0; i < indices.size(); ++i) {
             if (indices[i] >= cols) {
-                throw out_of_range("Index out of bounds");
+                throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+                    .commit("Index out of bounds");
             }
 
             for (size_t j = 0; j < rows; ++j) {
@@ -875,27 +920,31 @@ data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t 
     auto result = make_shared<TensorData>(nullptr, shape_);
     result->data_ = data_;
 
-    auto values_tensor = tt::as_shared<TensorData>(values);
-    if (!values_tensor) {
-        throw invalid_argument("Values must be a TensorData");
+    auto valueTensor = tt::to_shared<TensorData>(values);
+    if (!valueTensor) {
+        throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+            .commit("Tensor", values->type()->toString(), "Tensor");
     }
 
-    if (indices.size() != static_cast<size_t>(values_tensor->data_.size())) {
-        throw invalid_argument("Number of indices must match number of values");
+    if (indices.size() != static_cast<size_t>(valueTensor->data_.size())) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Number of indices must match number of values");
     }
 
-    const auto &shape_vec = shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("Put operation currently only supports 2D tensors");
+    const auto &shapeVec = shape();
+    if (shapeVec.size() != 2) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Put operation currently only supports 2D tensors");
     }
 
     for (Eigen::Index i = 0; i < static_cast<Eigen::Index>(indices.size()); ++i) {
         if (indices[i] >= static_cast<size_t>(data_.size())) {
-            throw out_of_range("Index out of bounds");
+            throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+                .commit(std::to_string(indices[i]));
         }
 
-        if (i < values_tensor->data_.size()) {
-            result->data_(indices[i]) = values_tensor->data_(i);
+        if (i < valueTensor->data_.size()) {
+            result->data_(indices[i]) = valueTensor->data_(i);
         }
     }
 
@@ -905,38 +954,40 @@ data_ptr_t TensorData::put(const std::vector<size_t> &indices, const data_ptr_t 
 data_ptr_t TensorData::slice(size_t start, size_t end, size_t row) const {
     // For 2D tensor, extract a slice from a specific row
     if (shape_.size() != 2) {
-        throw std::runtime_error("Slice operation only supported for 2D tensors");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Slice operation only supported for 2D tensors");
     }
 
     if (row >= shape_[0]) {
-        throw std::runtime_error("Row index out of bounds");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange).commit("Row index out of bounds");
     }
 
     if (start >= shape_[1] || end > shape_[1] || start >= end) {
-        throw std::runtime_error("Invalid slice range");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange).commit("Invalid slice range");
     }
 
     // Create a new tensor for the slice
-    std::vector<size_t> new_shape = {1, end - start};
-    auto result_tensor = std::make_shared<TensorData>(type_, new_shape);
+    std::vector<size_t> newShape = {1, end - start};
+    auto resultTensor = std::make_shared<TensorData>(type_, newShape);
 
     // Copy the data
     for (size_t col = start; col < end; ++col) {
-        size_t src_index = row * shape_[1] + col;
-        size_t dst_index = col - start;
-        result_tensor->data_(dst_index) = data_(src_index);
+        size_t srcIndex = row * shape_[1] + col;
+        size_t dstIndex = col - start;
+        resultTensor->data_(dstIndex) = data_(srcIndex);
     }
 
-    return result_tensor;
+    return resultTensor;
 }
 
 data_ptr_t TensorData::add(const data_ptr_t &other) const {
     // Element-wise addition with broadcasting
     if (auto tensor = tt::as_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
-            throw std::invalid_argument(
-                "Tensor shapes are not broadcastable for addition: " + shape_to_string(shape_) +
-                " and " + shape_to_string(tensor->shape_));
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit(
+                    "Tensor shapes are not broadcastable for addition: " + shape_to_string(shape_) +
+                    " and " + shape_to_string(tensor->shape_));
         }
 
         std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
@@ -971,7 +1022,8 @@ data_ptr_t TensorData::add(const data_ptr_t &other) const {
         return result;
     }
 
-    throw runtime_error("Tensor addition expects either Tensor or scalar operand");
+    throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+        .commit("Tensor addition expects either Tensor or scalar operand");
 }
 
 void TensorData::calculate_broadcast_addition(
@@ -1020,9 +1072,10 @@ void TensorData::calculate_broadcast_addition(
 data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
     if (auto tensor = tt::as_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
-            throw std::invalid_argument(
-                "Tensor shapes are not broadcastable for subtraction: " + shape_to_string(shape_) +
-                " and " + shape_to_string(tensor->shape_));
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit(
+                    "Tensor shapes are not broadcastable for subtraction: " +
+                    shape_to_string(shape_) + " and " + shape_to_string(tensor->shape_));
         }
 
         std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
@@ -1057,7 +1110,8 @@ data_ptr_t TensorData::subtract(const data_ptr_t &other) const {
         return result;
     }
 
-    throw runtime_error("Tensor subtraction expects either Tensor or scalar operand");
+    throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+        .commit("Tensor subtraction expects either Tensor or scalar operand");
 }
 
 void TensorData::calculate_broadcast_subtraction(
@@ -1112,9 +1166,10 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
     }
     if (auto tensor = tt::to_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
-            throw std::invalid_argument(
-                "Tensor shapes are not broadcastable for multiplication: " +
-                shape_to_string(shape_) + " and " + shape_to_string(tensor->shape_));
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit(
+                    "Tensor shapes are not broadcastable for multiplication: " +
+                    shape_to_string(shape_) + " and " + shape_to_string(tensor->shape_));
         }
 
         std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
@@ -1158,7 +1213,8 @@ data_ptr_t TensorData::multiply(const data_ptr_t &other) const {
         return result;
     }
 
-    throw runtime_error("Tensor multiplication expects either Tensor or scalar operand");
+    throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+        .commit("Tensor multiplication expects either Tensor or scalar operand");
 }
 
 data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
@@ -1168,7 +1224,8 @@ data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
     size_t dim_other = other_tensor->shape_.size();
 
     if ((dim_this != 1 && dim_this != 2) || (dim_other != 1 && dim_other != 2)) {
-        throw std::invalid_argument("Matrix multiplication supports 1D and 2D tensors only");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Matrix multiplication supports 1D and 2D tensors only");
     }
 
     std::vector<size_t> shape1 = shape_;
@@ -1183,7 +1240,9 @@ data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
 
     if (shape1[shape1.size() - 1] != shape2[shape2.size() - 2]) {
         throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
-            .commit(shape_to_string(shape1), shape_to_string(shape2));
+            .commit(
+                "Matrix multiplication shapes do not match: " + shape_to_string(shape1) + " and " +
+                shape_to_string(shape2));
     }
 
     std::vector<size_t> result_shape;
@@ -1262,9 +1321,10 @@ data_ptr_t TensorData::matmul(const data_ptr_t &other) const {
 data_ptr_t TensorData::divide(const data_ptr_t &other) const {
     if (auto tensor = tt::as_shared<TensorData>(other)) {
         if (!is_broadcastable(shape_, tensor->shape_)) {
-            throw std::invalid_argument(
-                "Tensor shapes are not broadcastable for division: " + shape_to_string(shape_) +
-                " and " + shape_to_string(tensor->shape_));
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit(
+                    "Tensor shapes are not broadcastable for division: " + shape_to_string(shape_) +
+                    " and " + shape_to_string(tensor->shape_));
         }
 
         std::vector<size_t> result_shape = broadcast_shape(shape_, tensor->shape_);
@@ -1280,7 +1340,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
 
     if (auto intData = tt::as_shared<IntData>(other)) {
         if (intData->data() == 0) {
-            throw std::invalid_argument("Division by zero");
+            throw DiagnosticBuilder::of(RuntimeDiag::DivisionByZero).commit("Division by zero");
         }
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() / static_cast<double>(intData->data());
@@ -1288,7 +1348,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
     }
     if (auto longData = tt::as_shared<LongData>(other)) {
         if (longData->data() == 0) {
-            throw std::invalid_argument("Division by zero");
+            throw DiagnosticBuilder::of(RuntimeDiag::DivisionByZero).commit("Division by zero");
         }
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() / static_cast<double>(longData->data());
@@ -1296,7 +1356,7 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
     }
     if (auto floatData = tt::as_shared<FloatData>(other)) {
         if (floatData->data() == 0.0f) {
-            throw std::invalid_argument("Division by zero");
+            throw DiagnosticBuilder::of(RuntimeDiag::DivisionByZero).commit("Division by zero");
         }
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() / static_cast<double>(floatData->data());
@@ -1304,14 +1364,15 @@ data_ptr_t TensorData::divide(const data_ptr_t &other) const {
     }
     if (auto doubleData = tt::as_shared<DoubleData>(other)) {
         if (doubleData->data() == 0.0) {
-            throw std::invalid_argument("Division by zero");
+            throw DiagnosticBuilder::of(RuntimeDiag::DivisionByZero).commit("Division by zero");
         }
         auto result = make_shared<TensorData>(nullptr, shape_);
         result->data_ = data_.array() / doubleData->data();
         return result;
     }
 
-    throw runtime_error("Tensor division expects either Tensor or scalar operand");
+    throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+        .commit("Tensor division expects either Tensor or scalar operand");
 }
 
 void TensorData::calculate_broadcast_division(
@@ -1359,11 +1420,13 @@ void TensorData::calculate_broadcast_division(
 data_ptr_t TensorData::equal(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only compare with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only compare with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for comparison");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for comparison");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1374,11 +1437,13 @@ data_ptr_t TensorData::equal(const data_ptr_t &other) const {
 data_ptr_t TensorData::not_equal(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only compare with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only compare with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for comparison");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for comparison");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1389,11 +1454,13 @@ data_ptr_t TensorData::not_equal(const data_ptr_t &other) const {
 data_ptr_t TensorData::greater(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only compare with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only compare with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for comparison");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for comparison");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1404,11 +1471,13 @@ data_ptr_t TensorData::greater(const data_ptr_t &other) const {
 data_ptr_t TensorData::less(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only compare with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only compare with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for comparison");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for comparison");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1419,11 +1488,13 @@ data_ptr_t TensorData::less(const data_ptr_t &other) const {
 data_ptr_t TensorData::greater_equal(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only compare with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only compare with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for comparison");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for comparison");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1434,11 +1505,13 @@ data_ptr_t TensorData::greater_equal(const data_ptr_t &other) const {
 data_ptr_t TensorData::less_equal(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only compare with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only compare with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for comparison");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for comparison");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1449,11 +1522,13 @@ data_ptr_t TensorData::less_equal(const data_ptr_t &other) const {
 data_ptr_t TensorData::logical_and(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only perform logical operation with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only perform logical operation with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for logical operation");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for logical operation");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1464,11 +1539,13 @@ data_ptr_t TensorData::logical_and(const data_ptr_t &other) const {
 data_ptr_t TensorData::logical_or(const data_ptr_t &other) const {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only perform logical operation with another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only perform logical operation with another TensorData");
     }
 
     if (data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("Tensor dimensions must match for logical operation");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor dimensions must match for logical operation");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1487,12 +1564,14 @@ data_ptr_t TensorData::where(const data_ptr_t &condition, const data_ptr_t &othe
     auto other_tensor = tt::as_shared<TensorData>(other);
 
     if (!condition_tensor || !other_tensor) {
-        throw invalid_argument("Condition and other must be TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Condition and other must be TensorData");
     }
 
     if (data_.size() != condition_tensor->data_.size() ||
         data_.size() != other_tensor->data_.size()) {
-        throw invalid_argument("All tensors must have the same dimensions");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("All tensors must have the same dimensions");
     }
 
     auto result = make_shared<TensorData>(nullptr, shape());
@@ -1506,16 +1585,18 @@ data_ptr_t TensorData::where(const data_ptr_t &condition, const data_ptr_t &othe
 
 data_ptr_t TensorData::flip(size_t axis) const {
     if (axis > 1) {
-        throw invalid_argument("Axis out of bounds for 2D tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+            .commit("Axis out of bounds for 2D tensor");
     }
 
-    const auto &shape_vec = shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("Flip operation currently only supports 2D tensors");
+    const auto &shapeVec = shape();
+    if (shapeVec.size() != 2) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Flip operation currently only supports 2D tensors");
     }
 
-    size_t rows = shape_vec[0];
-    size_t cols = shape_vec[1];
+    size_t rows = shapeVec[0];
+    size_t cols = shapeVec[1];
 
     auto result = make_shared<TensorData>(nullptr, shape());
 
@@ -1538,40 +1619,42 @@ data_ptr_t TensorData::fliplr() const { return flip(1); }
 
 data_ptr_t TensorData::repeat(size_t repeats, size_t axis) const {
     if (repeats == 0) {
-        throw invalid_argument("Repeats must be positive");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError).commit("Repeats must be positive");
     }
 
     if (axis > 1) {
-        throw invalid_argument("Axis out of bounds for 2D tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange)
+            .commit("Axis out of bounds for 2D tensor");
     }
 
-    const auto &shape_vec = shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("Repeat operation currently only supports 2D tensors");
+    const auto &shapeVec = shape();
+    if (shapeVec.size() != 2) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Repeat operation currently only supports 2D tensors");
     }
 
-    size_t rows = shape_vec[0];
-    size_t cols = shape_vec[1];
+    size_t rows = shapeVec[0];
+    size_t cols = shapeVec[1];
 
-    vector<size_t> new_shape = shape();
+    vector<size_t> newShape = shapeVec;
 
     if (axis == 0) {
-        new_shape[0] *= repeats;
-        auto result = make_shared<TensorData>(nullptr, new_shape);
-        result->data_.resize(new_shape[0] * new_shape[1]);
+        newShape[0] *= repeats;
+        auto result = make_shared<TensorData>(nullptr, newShape);
+        result->data_.resize(newShape[0] * newShape[1]);
 
         Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
-        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, new_shape[0]);
+        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), cols, newShape[0]);
         dest_map = src_map.replicate(1, repeats);
 
         return result;
     } else {
-        new_shape[1] *= repeats;
-        auto result = make_shared<TensorData>(nullptr, new_shape);
-        result->data_.resize(new_shape[0] * new_shape[1]);
+        newShape[1] *= repeats;
+        auto result = make_shared<TensorData>(nullptr, newShape);
+        result->data_.resize(newShape[0] * newShape[1]);
 
         Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
-        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], rows);
+        Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), newShape[1], rows);
         dest_map = src_map.replicate(repeats, 1);
 
         return result;
@@ -1580,32 +1663,34 @@ data_ptr_t TensorData::repeat(size_t repeats, size_t axis) const {
 
 data_ptr_t TensorData::tile(const std::vector<size_t> &reps) const {
     if (reps.size() != 2) {
-        throw invalid_argument("Reps must specify repetition counts for both dimensions");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Reps must specify repetition counts for both dimensions");
     }
 
-    size_t row_reps = reps[0];
-    size_t col_reps = reps[1];
+    size_t rowReps = reps[0];
+    size_t colReps = reps[1];
 
-    if (row_reps == 0 || col_reps == 0) {
-        throw invalid_argument("Repetition counts must be positive");
+    if (rowReps == 0 || colReps == 0) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Repetition counts must be positive");
     }
 
-    const auto &shape_vec = shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("Tile operation currently only supports 2D tensors");
+    const auto &shapeVec = shape();
+    if (shapeVec.size() != 2) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Tile operation currently only supports 2D tensors");
     }
+    size_t rows = shapeVec[0];
+    size_t cols = shapeVec[1];
 
-    size_t rows = shape_vec[0];
-    size_t cols = shape_vec[1];
+    vector<size_t> newShape = {rows * rowReps, cols * colReps};
 
-    vector<size_t> new_shape = {rows * row_reps, cols * col_reps};
-
-    auto result = make_shared<TensorData>(nullptr, new_shape);
-    result->data_.resize(new_shape[0] * new_shape[1]);
+    auto result = make_shared<TensorData>(nullptr, newShape);
+    result->data_.resize(newShape[0] * newShape[1]);
 
     Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
-    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], new_shape[0]);
-    dest_map = src_map.replicate(col_reps, row_reps);
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), newShape[1], newShape[0]);
+    dest_map = src_map.replicate(colReps, rowReps);
 
     return result;
 }
@@ -1615,20 +1700,21 @@ data_ptr_t TensorData::pad(size_t pad_width, double constant_value) const {
         return clone(true);
     }
 
-    const auto &shape_vec = shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("Pad operation currently only supports 2D tensors");
+    const auto &shapeVec = shape();
+    if (shapeVec.size() != 2) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Pad operation currently only supports 2D tensors");
     }
 
-    size_t rows = shape_vec[0];
-    size_t cols = shape_vec[1];
+    size_t rows = shapeVec[0];
+    size_t cols = shapeVec[1];
 
-    vector<size_t> new_shape = {rows + 2 * pad_width, cols + 2 * pad_width};
+    vector<size_t> newShape = {rows + 2 * pad_width, cols + 2 * pad_width};
 
-    auto result = make_shared<TensorData>(nullptr, new_shape);
-    result->data_.resize(new_shape[0] * new_shape[1]);
+    auto result = make_shared<TensorData>(nullptr, newShape);
+    result->data_.resize(newShape[0] * newShape[1]);
 
-    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), new_shape[1], new_shape[0]);
+    Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), newShape[1], newShape[0]);
     dest_map.setConstant(constant_value);
 
     Eigen::Map<const Eigen::MatrixXd> src_map(data_.data(), cols, rows);
@@ -1638,18 +1724,20 @@ data_ptr_t TensorData::pad(size_t pad_width, double constant_value) const {
 }
 
 data_ptr_t TensorData::diag(const data_ptr_t &v) {
-    auto v_tensor = tt::as_shared<TensorData>(v);
-    if (!v_tensor) {
-        throw invalid_argument("Input must be a TensorData");
+    auto vTensor = tt::as_shared<TensorData>(v);
+    if (!vTensor) {
+        throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+            .commit("Tensor", v->type()->toString(), "Tensor");
     }
 
-    const auto &shape_vec = v_tensor->shape();
-    if (shape_vec.size() != 2) {
-        throw invalid_argument("diag operation currently only supports 2D tensors");
+    const auto &shapeVec = vTensor->shape();
+    if (shapeVec.size() != 2) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("diag operation currently only supports 2D tensors");
     }
 
-    size_t rows = shape_vec[0];
-    size_t cols = shape_vec[1];
+    size_t rows = shapeVec[0];
+    size_t cols = shapeVec[1];
 
     if (rows == 1 || cols == 1) {
         size_t size = std::max(rows, cols);
@@ -1660,11 +1748,11 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
         if (rows == 1) {
             // Row vector
             Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), size, size);
-            dest_map = v_tensor->data_.transpose().asDiagonal();
+            dest_map = vTensor->data_.transpose().asDiagonal();
         } else {
             // Column vector
             Eigen::Map<Eigen::MatrixXd> dest_map(result->data_.data(), size, size);
-            dest_map = v_tensor->data_.asDiagonal();
+            dest_map = vTensor->data_.asDiagonal();
         }
 
         return result;
@@ -1673,7 +1761,7 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
         auto result = make_shared<TensorData>(nullptr, vector<size_t>{diag_size, 1});
         result->data_.resize(diag_size);
 
-        Eigen::Map<const Eigen::MatrixXd> src_map(v_tensor->data_.data(), cols, rows);
+        Eigen::Map<const Eigen::MatrixXd> src_map(vTensor->data_.data(), cols, rows);
         result->data_ = src_map.diagonal().transpose();
 
         return result;
@@ -1683,11 +1771,15 @@ data_ptr_t TensorData::diag(const data_ptr_t &v) {
 void TensorData::assign(const data_ptr_t &other) {
     auto other_tensor = tt::as_shared<TensorData>(other);
     if (!other_tensor) {
-        throw invalid_argument("Can only assign from another TensorData");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Can only assign from another TensorData");
+        return;
     }
 
     if (shape_ != other_tensor->shape_) {
-        throw invalid_argument("Tensor shapes must match for assignment");
+        throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+            .commit("Tensor shapes must match for assignment");
+        return;
     }
 
     data_ = other_tensor->data_;
@@ -1696,7 +1788,8 @@ void TensorData::assign(const data_ptr_t &other) {
 size_t
 TensorData::calculate_linear_index(const vector<size_t> &indices, const vector<size_t> &shape) {
     if (indices.size() != shape.size()) {
-        throw invalid_argument("Indices size must match shape size");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Indices size must match shape size");
     }
 
     size_t index = 0;
@@ -1704,7 +1797,7 @@ TensorData::calculate_linear_index(const vector<size_t> &indices, const vector<s
 
     for (size_t i = indices.size(); i > 0; --i) {
         if (indices[i - 1] >= shape[i - 1]) {
-            throw invalid_argument("Index out of bounds");
+            throw DiagnosticBuilder::of(RuntimeDiag::IndexOutOfRange).commit("Index out of bounds");
         }
         index += indices[i - 1] * stride;
         stride *= shape[i - 1];
@@ -1748,7 +1841,8 @@ TensorData::broadcast_shape(const vector<size_t> &shape1, const vector<size_t> &
         } else if (size2 == 1) {
             result_shape[max_dim - 1 - i] = size1;
         } else {
-            throw invalid_argument("Shapes are not broadcastable");
+            throw DiagnosticBuilder::of(RuntimeDiag::TensorDimensionMismatch)
+                .commit("Shapes are not broadcastable");
         }
     }
 
@@ -1905,28 +1999,119 @@ data_ptr_t TensorData::eye(size_t n) {
 }
 
 data_ptr_t TensorData::zeros(const std::vector<size_t> &shape) {
-    size_t total_size = 1;
-    for (size_t dim : shape) {
-        total_size *= dim;
-    }
-
     auto result = make_shared<TensorData>(nullptr, shape);
-    result->data_.resize(total_size);
     result->data_.setZero();
+
+    std::ofstream debug_file("debug_tensor.txt", std::ios::app);
+    if (debug_file.is_open()) {
+        debug_file << "=== ZEROS DEBUG ===" << std::endl;
+        debug_file << "Shape: [";
+        for (size_t i = 0; i < shape.size(); ++i) {
+            debug_file << shape[i];
+            if (i < shape.size() - 1)
+                debug_file << ", ";
+        }
+        debug_file << "]" << std::endl;
+        debug_file << "Data size: " << result->data_.size() << std::endl;
+        debug_file << "Data values: ";
+        for (Eigen::Index i = 0; i < result->data_.size(); ++i) {
+            debug_file << result->data_(i) << " ";
+        }
+        debug_file << std::endl << "=== END ZEROS DEBUG ===" << std::endl << std::endl;
+        debug_file.close();
+    }
 
     return result;
 }
 
 data_ptr_t TensorData::ones(const std::vector<size_t> &shape) {
-    size_t total_size = 1;
-    for (size_t dim : shape) {
-        total_size *= dim;
-    }
-
     auto result = make_shared<TensorData>(nullptr, shape);
-    result->data_.resize(total_size);
     result->data_.setConstant(1.0);
 
+    std::ofstream debug_file("debug_tensor.txt", std::ios::app);
+    if (debug_file.is_open()) {
+        debug_file << "=== ONES DEBUG ===" << std::endl;
+        debug_file << "Shape: [";
+        for (size_t i = 0; i < shape.size(); ++i) {
+            debug_file << shape[i];
+            if (i < shape.size() - 1)
+                debug_file << ", ";
+        }
+        debug_file << "]" << std::endl;
+        debug_file << "Data size: " << result->data_.size() << std::endl;
+        debug_file << "Data values: ";
+        for (Eigen::Index i = 0; i < result->data_.size(); ++i) {
+            debug_file << result->data_(i) << " ";
+        }
+        debug_file << std::endl << "=== END ONES DEBUG ===" << std::endl << std::endl;
+        debug_file.close();
+    }
+
+    return result;
+}
+data_ptr_t TensorData::from_array(const data_ptr_t &array_data) {
+    auto array = tt::as_shared<ArrayData>(array_data);
+    if (!array) {
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError).commit("Input must be ArrayData");
+        return nullptr;
+    }
+
+    std::vector<size_t> shape;
+    std::vector<double> data;
+
+    std::function<void(const std::vector<data_ptr_t> &, size_t)> calculate_shape =
+        [&](const std::vector<data_ptr_t> &elements, size_t depth) {
+            if (elements.empty()) {
+                if (shape.size() <= depth) {
+                    shape.resize(depth + 1, 0);
+                }
+                return;
+            }
+
+            if (shape.size() <= depth) {
+                shape.push_back(elements.size());
+            } else if (shape[depth] != elements.size()) {
+                throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+                    .commit("Inconsistent array dimensions");
+                return;
+            }
+
+            auto first_element = elements[0];
+            if (auto sub_array = tt::as_shared<ArrayData>(first_element)) {
+                calculate_shape(sub_array->raw(), depth + 1);
+            }
+        };
+
+    std::function<void(const std::vector<data_ptr_t> &)> collect_data =
+        [&](const std::vector<data_ptr_t> &elements) {
+            for (const auto &element : elements) {
+                if (auto sub_array = tt::as_shared<ArrayData>(element)) {
+                    collect_data(sub_array->raw());
+                } else {
+                    double value = 0.0;
+                    if (auto int_data = tt::as_shared<IntData>(element)) {
+                        value = static_cast<double>(int_data->data());
+                    } else if (auto float_data = tt::as_shared<FloatData>(element)) {
+                        value = static_cast<double>(float_data->data());
+                    } else if (auto double_data = tt::as_shared<DoubleData>(element)) {
+                        value = double_data->data();
+                    } else if (auto long_data = tt::as_shared<LongData>(element)) {
+                        value = static_cast<double>(long_data->data());
+                    } else {
+                        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+                            .commit("Unsupported data type in array");
+                        return;
+                    }
+                    data.push_back(value);
+                }
+            }
+        };
+
+    calculate_shape(array->raw(), 0);
+    collect_data(array->raw());
+
+    auto result = std::make_shared<TensorData>(nullptr, shape);
+    result->data_ = Eigen::Map<Eigen::VectorXd>(data.data(), data.size());
     return result;
 }
 
@@ -1952,7 +2137,7 @@ data_ptr_t TensorData::linspace(double start, double stop, size_t num) {
 
 data_ptr_t TensorData::arange(double start, double stop, double step) {
     if (step == 0) {
-        throw std::invalid_argument("Step must be non-zero");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError).commit("Step must be non-zero");
     }
 
     size_t num;
@@ -2013,7 +2198,8 @@ data_ptr_t TensorData::randn(const std::vector<size_t> &shape, double mean, doub
 
 data_ptr_t TensorData::transpose() const {
     if (shape_.size() != 2) {
-        throw std::invalid_argument("Transpose currently only supports 2D tensors");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Transpose currently only supports 2D tensors");
     }
 
     size_t rows = shape_[0];
@@ -2046,7 +2232,8 @@ data_ptr_t TensorData::sum() const {
 
 data_ptr_t TensorData::mean() const {
     if (data_.size() == 0) {
-        throw std::runtime_error("Cannot calculate mean of empty tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot calculate mean of empty tensor");
     }
     auto result = make_shared<FloatData>(static_cast<float>(data_.mean()));
     return result;
@@ -2054,7 +2241,8 @@ data_ptr_t TensorData::mean() const {
 
 data_ptr_t TensorData::min() const {
     if (data_.size() == 0) {
-        throw std::runtime_error("Cannot find minimum of empty tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot find minimum of empty tensor");
     }
     auto result = make_shared<FloatData>(static_cast<float>(data_.minCoeff()));
     return result;
@@ -2062,7 +2250,8 @@ data_ptr_t TensorData::min() const {
 
 data_ptr_t TensorData::max() const {
     if (data_.size() == 0) {
-        throw std::runtime_error("Cannot find maximum of empty tensor");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Cannot find maximum of empty tensor");
     }
     auto result = make_shared<FloatData>(static_cast<float>(data_.maxCoeff()));
     return result;

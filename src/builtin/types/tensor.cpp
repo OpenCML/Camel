@@ -18,6 +18,7 @@
  */
 
 #include "tensor.h"
+#include "error/diagnostics/diagnostics.h"
 
 #include "set.h"
 #include "vector.h"
@@ -29,14 +30,14 @@ unordered_map<string, string> TensorType::staticMethods_;
 TensorType::TensorType(const vector<size_t> &shape)
     : OtherType(typeCode()), shape_(shape), element_type_(Type::Float()) {
     if (shape_.size() == 0) {
-        throw invalid_argument("Tensor shape must at least have 1 dim");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError).commit("Tensor shape must at least have 1 dim");
     }
 }
 
 TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shape)
     : OtherType(typeCode()), shape_(shape), element_type_(elementType) {
     if (shape_.size() == 0) {
-        throw invalid_argument("Tensor shape must at least have 1 dim");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError).commit("Tensor shape must at least have 1 dim");
     }
 }
 
