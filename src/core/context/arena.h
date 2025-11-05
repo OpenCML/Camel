@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 21, 2025
- * Updated: Oct. 28, 2025
+ * Updated: Nov. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,8 +66,9 @@ class LinearAllocator : public IAllocator {
 
     void free(void *ptr) override {
         size_t pos = static_cast<uint8_t *>(ptr) - static_cast<uint8_t *>(arena.base());
-        if (pos > offset)
-            throw std::runtime_error("Invalid free in LinearAllocator");
+        ASSERT(
+            pos < offset,
+            std::format("Invalid free in LinearAllocator: pos={}, offset={}", pos, offset));
         offset = pos;
     }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 04, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -193,6 +193,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_vec_t &normPorts() { return normPorts_; }
     const node_vec_t &withPorts() { return withPorts_; }
     const node_vec_t &closure() { return closure_; }
+    const size_t argsCount() const {
+        return normPorts_.size() + withPorts_.size() + closure_.size();
+    }
 
     graph_ptr_t clone() const;
 
