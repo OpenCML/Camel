@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 28, 2025
+ * Updated: Nov. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,38 +37,44 @@ class DataConvError : public std::exception {
     virtual const char *what() const noexcept override { return message_.c_str(); }
 };
 
-template <typename Derived, typename T> class RawDataBase {
+template <typename Derived, typename T> class RawData {
   protected:
-    TypeCode type_;
     mutable T data_;
 
   public:
-    RawDataBase(TypeCode type) : type_(type), data_() {}
+    RawData() : data_() {}
 
-    template <typename... Args>
-    RawDataBase(TypeCode type, Args &&...args) : type_(type), data_(std::forward<Args>(args)...) {}
+    template <typename... Args> RawData(Args &&...args) : data_(std::forward<Args>(args)...) {}
 
-    TypeCode type() const { return type_; }
-    T &data() const { return data_; }
+    RawData(const T &value) : data_(value) {}
+    RawData(T &&value) : data_(std::move(value)) {}
 
-    void process() { static_cast<Derived *>(this)->process_impl(); }
-};
+    // 拷贝构造
+    RawData(const RawData &other) : data_(other.data_) {}
 
-template <typename T> class RawData : public RawDataBase<RawData<T>, T> {
-  public:
-    using Base = RawDataBase<RawData<T>, T>;
-    using Base::Base; // 继承基类构造
+    // 移动构造
+    RawData(RawData &&other) noexcept : data_(std::move(other.data_)) {}
 
-    void process_impl() {
-        // 具体实现
+    Derived &operator=(const RawData &other) {
+        data_ = other.data_;
+        return static_cast<Derived &>(*this);
     }
+
+    Derived &operator=(RawData &&other) noexcept {
+        data_ = std::move(other.data_);
+        return static_cast<Derived &>(*this);
+    }
+
+    const T &data() const { return data_; }
+    T &data() { return data_; }
+
+    std::string toString() const { return static_cast<Derived *>(this)->toString(); }
 };
 
 template <typename T> using data_rptr_t = RawData<T> *;
 
 class Data : public std::enable_shared_from_this<Data> {
   protected:
-    bool mutable_ = false;
     type_ptr_t type_;
 
   public:
@@ -77,9 +83,6 @@ class Data : public std::enable_shared_from_this<Data> {
     virtual ~Data() = default;
 
     virtual type_ptr_t type() const;
-
-    bool variable() const;
-    void setVariable();
 
     static data_ptr_t null();
     virtual bool isNull() const; // check if this is a null data

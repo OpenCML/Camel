@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,10 +29,6 @@ Data::Data() {};
 Data::Data(type_ptr_t type) : type_(type) {}
 
 type_ptr_t Data::type() const { return type_; }
-
-bool Data::variable() const { return mutable_; }
-
-void Data::setVariable() { mutable_ = true; }
 
 data_ptr_t Data::null() {
     static data_ptr_t nullData = nullptr;

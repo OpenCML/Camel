@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Nov. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -215,4 +215,53 @@ class StringData : public Data {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
     virtual void print(std::ostream &os) const override;
+};
+
+class Int : public RawData<Int, int32_t> {
+  public:
+    using RawData<Int, int32_t>::RawData;
+
+    std::string toString() const { return std::to_string(this->data_); }
+};
+
+class Long : public RawData<Long, int64_t> {
+  public:
+    using RawData<Long, int64_t>::RawData;
+
+    std::string toString() const { return std::to_string(this->data_); }
+};
+
+class Float : public RawData<Float, float> {
+  public:
+    using RawData<Float, float>::RawData;
+
+    std::string toString() const { return std::to_string(this->data_); }
+};
+
+class Double : public RawData<Double, double> {
+  public:
+    using RawData<Double, double>::RawData;
+
+    std::string toString() const { return std::to_string(this->data_); }
+};
+
+class Bool : public RawData<Bool, bool> {
+  public:
+    using RawData<Bool, bool>::RawData;
+
+    std::string toString() const { return this->data_ ? "true" : "false"; }
+};
+
+class Char : public RawData<Char, char> {
+  public:
+    using RawData<Char, char>::RawData;
+
+    std::string toString() const { return std::string(1, this->data_); }
+};
+
+class String : public RawData<String, std::string> {
+  public:
+    using RawData<String, std::string>::RawData;
+
+    std::string toString() const { return this->data_; }
 };
