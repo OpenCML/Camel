@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Oct. 26, 2025
+ * Updated: Nov. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,9 +41,9 @@ class OtherTypeRegistry {
             throw std::runtime_error("Too many Other types registered!");
         }
 
-        registry[typeName] = id;
+        registry[typeName]  = id;
         reverseRegistry[id] = typeName;
-        return static_cast<TypeCode>(0xF0000000 | id);
+        return static_cast<TypeCode>(makeTypeCode(TypeFlag::OtherType, id));
     }
 
     static std::string getTypeName(TypeCode code) {
@@ -80,7 +80,7 @@ class OtherType : public Type {
     virtual std::string mangle() const override = 0;
 
     virtual bool operator==(const Type &other) const override {
-        if (!other.other()) {
+        if (!isOtherType(other.code())) {
             return false;
         }
         return code_ == other.code();
@@ -88,7 +88,7 @@ class OtherType : public Type {
     virtual bool operator!=(const Type &other) const override { return !(*this == other); }
 
     virtual bool assignable(const type_ptr_t &type) const {
-        if (!type->other()) {
+        if (!isOtherType(type->code())) {
             return false;
         }
         return code_ == type->code();

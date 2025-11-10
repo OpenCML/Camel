@@ -17,9 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "base.h"
-
-#include "special/null.h"
+#include "data.h"
 #include "utils/assert.h"
 
 using namespace std;

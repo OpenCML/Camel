@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,23 +29,19 @@
 
 using namespace std;
 
-const signed char primeTypeConvMatrix[7][7] = {
-    // Int, Long, Float, Double, String, Bool, Char
-    {01, 01, 01, 01, 00, 01, -1}, // Int
-    {-1, 01, -1, 01, 00, 01, -1}, // Long
-    {-1, -1, 01, 01, 00, 01, -1}, // Float
-    {-1, -1, -1, 01, 00, 01, -1}, // Double
-    {00, 00, 00, 00, 01, 01, 00}, // String
-    {01, 01, 01, 01, 01, 01, 01}, // Bool
-    {01, 01, 01, 01, 01, 01, 01}  // Char
+const signed char primitiveTypeConvMatrix[7][7] = {
+    // Int, Long, Float, Double, Bool, Byte, Void
+    {01, 01, 01, 01, 01, -1, -1}, // Int
+    {-1, 01, -1, 01, 01, -1, -1}, // Long
+    {-1, -1, 01, 01, 01, -1, -1}, // Float
+    {-1, -1, -1, 01, 01, -1, -1}, // Double
+    {01, 01, 01, 01, 01, 01, -1}, // Bool
+    {01, 01, 01, 01, 01, 01, -1}, // Byte
+    {00, 00, 00, 00, 00, 00, 01}  // Void
 };
 
 string typeCodeToString(TypeCode code) {
     switch (code) {
-        // internal use
-    case TypeCode::Ref:
-        return "ref";
-        // primitive types
     case TypeCode::Int:
         return "int";
     case TypeCode::Long:
@@ -54,51 +50,38 @@ string typeCodeToString(TypeCode code) {
         return "float";
     case TypeCode::Double:
         return "double";
-    case TypeCode::String:
-        return "string";
     case TypeCode::Bool:
         return "bool";
-    case TypeCode::Char:
-        return "char";
-        // composed types
+    case TypeCode::Byte:
+        return "byte";
+    case TypeCode::Void:
+        return "void";
+    case TypeCode::String:
+        return "string";
     case TypeCode::Array:
         return "array";
     case TypeCode::Tuple:
         return "tuple";
-    case TypeCode::Union:
-        return "union";
     case TypeCode::Struct:
         return "struct";
     case TypeCode::Function:
         return "function";
-        // special types
+    case TypeCode::Frame:
+        return "frame";
+    case TypeCode::Ref:
+        return "ref";
     case TypeCode::Any:
         return "any";
-    case TypeCode::Void:
-        return "void";
-        // other types
+    case TypeCode::Union:
+        return "union";
     default:
-        if ((static_cast<uint32_t>(code) & 0xF0000000) == 0xF0000000) {
-            return "other";
-        }
-        break;
+        return isOtherType(code) ? "other" : "unknown";
     }
-    return "Unknown";
 }
 
 Type::Type(TypeCode type) : code_(type) {}
 
 const TypeCode &Type::code() const { return code_; }
-
-bool Type::internal() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x00000000; }
-
-bool Type::primary() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x10000000; }
-
-bool Type::composed() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x20000000; }
-
-bool Type::special() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0x30000000; }
-
-bool Type::other() const { return (static_cast<uint32_t>(code_) & 0xF0000000) == 0xF0000000; }
 
 std::string Type::toString() const { return typeCodeToString(code_); }
 
@@ -148,12 +131,12 @@ bool Type::assignable(const type_ptr_t &type) const {
     }
 
     // 复合类型目前需要完全相等才能赋值
-    if (composed() && type->composed()) {
+    if (isComposite(code_) && isComposite(type->code_)) {
         return this->equals(type);
     }
 
     // 第三方类型交由第三方自己重载的 assignable 方法处理
-    if (other()) {
+    if (isOtherType(code_)) {
         const auto &self = static_cast<const OtherType &>(*this);
         return self.assignable(type);
     }
@@ -232,10 +215,10 @@ std::shared_ptr<PrimaryType> Type::Bool() {
     return type;
 }
 
-std::shared_ptr<PrimaryType> Type::Char() {
+std::shared_ptr<PrimaryType> Type::Byte() {
     static std::shared_ptr<PrimaryType> type = nullptr;
     if (type == nullptr) {
-        type = make_shared<PrimaryType>(TypeCode::Char);
+        type = make_shared<PrimaryType>(TypeCode::Byte);
     }
     return type;
 }

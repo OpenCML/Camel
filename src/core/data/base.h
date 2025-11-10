@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 08, 2025
+ * Updated: Nov. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,42 +36,6 @@ class DataConvError : public std::exception {
 
     virtual const char *what() const noexcept override { return message_.c_str(); }
 };
-
-template <typename Derived, typename T> class RawData {
-  protected:
-    mutable T data_;
-
-  public:
-    RawData() : data_() {}
-
-    template <typename... Args> RawData(Args &&...args) : data_(std::forward<Args>(args)...) {}
-
-    RawData(const T &value) : data_(value) {}
-    RawData(T &&value) : data_(std::move(value)) {}
-
-    // 拷贝构造
-    RawData(const RawData &other) : data_(other.data_) {}
-
-    // 移动构造
-    RawData(RawData &&other) noexcept : data_(std::move(other.data_)) {}
-
-    Derived &operator=(const RawData &other) {
-        data_ = other.data_;
-        return static_cast<Derived &>(*this);
-    }
-
-    Derived &operator=(RawData &&other) noexcept {
-        data_ = std::move(other.data_);
-        return static_cast<Derived &>(*this);
-    }
-
-    const T &data() const { return data_; }
-    T &data() { return data_; }
-
-    std::string toString() const { return static_cast<Derived *>(this)->toString(); }
-};
-
-template <typename T> using data_rptr_t = RawData<T> *;
 
 class Data : public std::enable_shared_from_this<Data> {
   protected:

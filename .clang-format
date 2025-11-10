@@ -7,3 +7,4 @@ BinPackArguments: false
 AlignAfterOpenBracket: AlwaysBreak
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
+AlignConsecutiveAssignments: true

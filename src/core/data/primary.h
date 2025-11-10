@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 05, 2025
+ * Updated: Nov. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,7 @@ template <typename T> class PrimaryData : public Data {
         } else if constexpr (std::is_same_v<T, bool>) {
             type_ = Type::Bool();
         } else if constexpr (std::is_same_v<T, char>) {
-            type_ = Type::Char();
+            type_ = Type::Byte();
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
@@ -100,7 +100,7 @@ template <typename T> class PrimaryData : public Data {
                         return convertAndMakeShared<double>(data_);
                     case TypeCode::Bool:
                         return convertAndMakeShared<bool>(data_);
-                    case TypeCode::Char:
+                    case TypeCode::Byte:
                         return convertAndMakeShared<char>(data_);
 
                     default:
@@ -120,7 +120,7 @@ template <typename T> class PrimaryData : public Data {
                     case TypeCode::String:
                         return std::static_pointer_cast<Data>(
                             std::make_shared<StringData>(b ? "true" : "false"));
-                    case TypeCode::Char:
+                    case TypeCode::Byte:
                         return std::make_shared<PrimaryData<char>>(static_cast<char>(b));
 
                     default:
@@ -192,12 +192,12 @@ template <typename T> class PrimaryData : public Data {
     virtual void print(std::ostream &os) const override { os << std::to_string(data_); }
 };
 
-using IntData = PrimaryData<int32_t>;
-using LongData = PrimaryData<int64_t>;
-using FloatData = PrimaryData<float>;
+using IntData    = PrimaryData<int32_t>;
+using LongData   = PrimaryData<int64_t>;
+using FloatData  = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
-using BoolData = PrimaryData<bool>;
-using CharData = PrimaryData<char>;
+using BoolData   = PrimaryData<bool>;
+using CharData   = PrimaryData<char>;
 
 class StringData : public Data {
   private:
@@ -215,53 +215,4 @@ class StringData : public Data {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
     virtual void print(std::ostream &os) const override;
-};
-
-class Int : public RawData<Int, int32_t> {
-  public:
-    using RawData<Int, int32_t>::RawData;
-
-    std::string toString() const { return std::to_string(this->data_); }
-};
-
-class Long : public RawData<Long, int64_t> {
-  public:
-    using RawData<Long, int64_t>::RawData;
-
-    std::string toString() const { return std::to_string(this->data_); }
-};
-
-class Float : public RawData<Float, float> {
-  public:
-    using RawData<Float, float>::RawData;
-
-    std::string toString() const { return std::to_string(this->data_); }
-};
-
-class Double : public RawData<Double, double> {
-  public:
-    using RawData<Double, double>::RawData;
-
-    std::string toString() const { return std::to_string(this->data_); }
-};
-
-class Bool : public RawData<Bool, bool> {
-  public:
-    using RawData<Bool, bool>::RawData;
-
-    std::string toString() const { return this->data_ ? "true" : "false"; }
-};
-
-class Char : public RawData<Char, char> {
-  public:
-    using RawData<Char, char>::RawData;
-
-    std::string toString() const { return std::string(1, this->data_); }
-};
-
-class String : public RawData<String, std::string> {
-  public:
-    using RawData<String, std::string>::RawData;
-
-    std::string toString() const { return this->data_; }
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Nov. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,7 @@ std::string PrimaryType::mangle() const {
         return "s";
     case TypeCode::Bool:
         return "b";
-    case TypeCode::Char:
+    case TypeCode::Byte:
         return "c";
     default:
         ASSERT(false, "Unknown PrimaryType");
@@ -64,12 +64,8 @@ CastSafety PrimaryType::castSafetyTo(const Type &other) const {
     if (otherCode == code_) {
         return CastSafety::Safe;
     }
-    if (other.primary()) {
-        const int thisIndex = static_cast<int>(code_) & 0b00'000111;
-        const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
-        return static_cast<CastSafety>(primeTypeConvMatrix[thisIndex][otherIndex]);
-    }
-    if (other.composed()) {
+
+    if (isComposite(other.code())) {
         switch (otherCode) {
         case TypeCode::Union:
             [[fallthrough]];
@@ -78,6 +74,12 @@ CastSafety PrimaryType::castSafetyTo(const Type &other) const {
         default:
             return CastSafety::Forbidden;
         }
+    }
+
+    if (other.primary()) {
+        const int thisIndex  = static_cast<int>(code_) & 0b00'000111;
+        const int otherIndex = static_cast<int>(otherCode) & 0b00'000111;
+        return static_cast<CastSafety>(primitiveTypeConvMatrix[thisIndex][otherIndex]);
     }
     if (other.special()) {
         switch (otherCode) {
