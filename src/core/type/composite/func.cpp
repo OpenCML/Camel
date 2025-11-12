@@ -24,120 +24,102 @@
 
 using namespace std;
 
-FunctionType::FunctionType() : SpecialType(TypeCode::Function), exitType_(nullptr) {
+FunctionType::FunctionType()
+    : CompositeType(TypeCode::Function), exitType_(nullptr), hasCompileInfo_(true) {
     // 默认空构造函数，需要通过addWithArg和addNormArg添加参数
     // 通过此方式构造的FunctionType，是有编译信息的
-    hasCompileInfo_ = true;
 }
 
 FunctionType::FunctionType(
     const param_init_list_t &withTypes, const param_init_list_t &normTypes,
     const type_ptr_t &returnType, const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(withTypes),
-      normTypes_(normTypes), exitType_(returnType) {
-    // 通过此方式构造的FunctionType，没有编译期信息
-    hasCompileInfo_ = false;
-}
+    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
+      withTypes_(withTypes), normTypes_(normTypes), exitType_(returnType), hasCompileInfo_(false) {}
 
 FunctionType::FunctionType(
     const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
     const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(withTypes),
-      normTypes_(normTypes), exitType_(returnType) {
-    // 通过此方式构造的FunctionType，没有编译期信息
-    hasCompileInfo_ = false;
-}
+    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
+      withTypes_(withTypes), normTypes_(normTypes), exitType_(returnType), hasCompileInfo_(false) {}
 
 FunctionType::FunctionType(
     const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
     const ModifierSet &modifiers)
-    : SpecialType(TypeCode::Function), modifiers_(modifiers), withTypes_(std::move(withTypes)),
-      normTypes_(std::move(normTypes)), exitType_(returnType) {
-    // 通过此方式构造的FunctionType，没有编译期信息
-    hasCompileInfo_ = false;
-}
+    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
+      withTypes_(std::move(withTypes)), normTypes_(std::move(normTypes)), exitType_(returnType),
+      hasCompileInfo_(false) {}
 
-const std::string &FunctionType::argNameAt(size_t idx) const {
+const string &FunctionType::argNameAt(size_t idx) const {
     ASSERT(!argNames_.empty(), "No argument names available");
     ASSERT(idx < argNames_.size(), "Index out of range");
     return argNames_[idx];
 }
 
 bool FunctionType::addWithArg(const string &ident, const type_ptr_t type, bool isVar) {
-    ASSERT(
-        hasCompileInfo_,
-        "Cannot add argument to FunctionType that is not constructed using default constructor");
-    withTypes_.push_back({type, isVar});
-    // 确保argsNames没有重复
-    if (std::find(argNames_.begin(), argNames_.end(), ident) == argNames_.end()) {
-        argNames_.push_back(ident);
-    } else {
+    ASSERT(hasCompileInfo_, "Cannot add argument to non-compile-info FunctionType");
+    if (find(argNames_.begin(), argNames_.end(), ident) != argNames_.end()) {
         return false;
     }
+    withTypes_.push_back({type, isVar});
+    argNames_.push_back(ident);
     return true;
 }
 
 bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool isVar) {
-    ASSERT(
-        hasCompileInfo_,
-        "Cannot add argument to FunctionType that is not constructed using default constructor");
-    normTypes_.push_back({type, isVar});
-    // 确保argsNames没有重复
-    if (std::find(argNames_.begin(), argNames_.end(), ident) == argNames_.end()) {
-        argNames_.push_back(ident);
-    } else {
+    ASSERT(hasCompileInfo_, "Cannot add argument to non-compile-info FunctionType");
+    if (find(argNames_.begin(), argNames_.end(), ident) != argNames_.end()) {
         return false;
     }
+    normTypes_.push_back({type, isVar});
+    argNames_.push_back(ident);
     return true;
 }
 
-bool FunctionType::addClosureRef(const std::string &ident) {
-    ASSERT(
-        hasCompileInfo_,
-        "Cannot add closure ref to FunctionType that is not constructed using default constructor");
+bool FunctionType::addClosureRef(const string &ident) {
+    ASSERT(hasCompileInfo_, "Cannot add closure ref to non-compile-info FunctionType");
     closureRefs_.push_back(ident);
     return true;
 }
 
 type_ptr_t FunctionType::exitType() const {
-    if (!exitType_) {
-        // 如果没有返回值类型，默认为void
-        // 但此时返回值仍然是未设置状态，以便编译器进行类型推导
-        return Type::Void();
-    }
-    return exitType_;
+    // 如果没有返回值类型，默认为void
+    // 但此时返回值仍然是未设置状态，以便编译器进行类型推导
+    return exitType_ ? exitType_ : Type::Void();
 }
 
 bool FunctionType::checkModifiers() const { return true; }
 
-std::vector<std::tuple<std::string, type_ptr_t, bool>> FunctionType::withArgsInfo() const {
+vector<tuple<string, type_ptr_t, bool>> FunctionType::withArgsInfo() const {
     ASSERT(hasCompileInfo_, "No compile info available");
     ASSERT(
         withTypes_.size() + normTypes_.size() == argNames_.size(),
         "Argument names size mismatch");
-    std::vector<std::tuple<std::string, type_ptr_t, bool>> result;
+    vector<tuple<string, type_ptr_t, bool>> result;
     for (size_t i = 0; i < withTypes_.size(); i++) {
-        const auto &type = withTypes_[i];
-        const auto &name = argNames_.at(i);
-        result.emplace_back(name, type.first, type.second);
+        result.emplace_back(argNames_[i], withTypes_[i].first, withTypes_[i].second);
     }
     return result;
 }
 
-std::vector<std::tuple<std::string, type_ptr_t, bool>> FunctionType::normArgsInfo() const {
+vector<tuple<string, type_ptr_t, bool>> FunctionType::normArgsInfo() const {
     ASSERT(hasCompileInfo_, "No compile info available");
     ASSERT(
         withTypes_.size() + normTypes_.size() == argNames_.size(),
         "Argument names size mismatch");
-    std::vector<std::tuple<std::string, type_ptr_t, bool>> result;
+    vector<tuple<string, type_ptr_t, bool>> result;
     for (size_t i = 0; i < normTypes_.size(); i++) {
-        size_t idx       = i + withTypes_.size();
-        const auto &type = normTypes_[i];
-        const auto &name = argNames_.at(idx);
-        result.emplace_back(name, type.first, type.second);
+        size_t idx = i + withTypes_.size();
+        result.emplace_back(argNames_[idx], normTypes_[i].first, normTypes_[i].second);
     }
     return result;
 }
+
+type_ptr_t FunctionType::resolve(const type_vec_t &typeList) const {
+    ASSERT(false, "Not implemented");
+    return nullptr;
+}
+
+bool FunctionType::resolved() const { return true; }
 
 string FunctionType::toString() const {
     string result;
@@ -147,113 +129,58 @@ string FunctionType::toString() const {
     if (!modifiers_.empty()) {
         result += string(modifiers_) + " ";
     }
-    if (withTypes_.size() > 0) {
+    if (!withTypes_.empty()) {
         result += "<";
         for (size_t i = 0; i < withTypes_.size(); i++) {
-            if (i > 0) {
+            if (i > 0)
                 result += ", ";
-            }
-            const auto &type = withTypes_[i];
-            if (type.second) {
+            if (withTypes_[i].second)
                 result += "var ";
-            }
-            if (hasCompileInfo_) {
-                const auto &name = argNames_.at(i);
-                result += name + ": ";
-            }
-            result += type.first->toString();
+            if (hasCompileInfo_)
+                result += argNames_[i] + ": ";
+            result += withTypes_[i].first->toString();
         }
         result += "> ";
     }
     result += "(";
     for (size_t i = 0; i < normTypes_.size(); i++) {
-        if (i > 0) {
+        if (i > 0)
             result += ", ";
-        }
-        const auto &type = normTypes_[i];
-        if (type.second) {
+        if (normTypes_[i].second)
             result += "var ";
-        }
         if (hasCompileInfo_) {
             size_t idx = i + withTypes_.size();
-            ASSERT(idx < argNames_.size(), "Argument name index out of range");
-            const auto &name = argNames_.at(idx);
-            result += name + ": ";
+            result += argNames_[idx] + ": ";
         }
-        result += type.first->toString();
+        result += normTypes_[i].first->toString();
     }
     result += ") => ";
-    if (exitType_) {
-        result += exitType_->toString();
-    } else {
-        result += "<null>";
-    }
+    result += exitType_ ? exitType_->toString() : "<null>";
     return result;
 }
 
-std::string FunctionType::mangle() const {
-    std::string result = "F";
-    // with types
+string FunctionType::mangle() const {
+    string result = "F";
     if (!withTypes_.empty()) {
-        result += "W" + std::to_string(withTypes_.size());
+        result += "W" + to_string(withTypes_.size());
         for (const auto &[type, isVar] : withTypes_) {
-            result += isVar ? "V" : "";
+            if (isVar)
+                result += "V";
             result += type->mangle();
         }
     }
-    // norm types
     if (!normTypes_.empty()) {
-        result += "N" + std::to_string(normTypes_.size());
+        result += "N" + to_string(normTypes_.size());
         for (const auto &[type, isVar] : normTypes_) {
-            result += isVar ? "V" : "";
+            if (isVar)
+                result += "V";
             result += type->mangle();
         }
     }
-    // return type
     result += "R";
-    if (exitType_) {
-        result += exitType_->mangle();
-    } else {
-        result += "v"; // void
-    }
+    result += exitType_ ? exitType_->mangle() : "v";
     return result;
 }
-
-bool FunctionType::operator==(const Type &other) const {
-    if (this == &other) {
-        return true;
-    }
-    if (other.code() != TypeCode::Function) {
-        return false;
-    }
-    const FunctionType &otherFunctor = dynamic_cast<const FunctionType &>(other);
-    for (size_t i = 0; i < withTypes_.size(); i++) {
-        if (i >= otherFunctor.withTypes_.size()) {
-            return false;
-        }
-        const auto &[type, isVar]           = withTypes_[i];
-        const auto &[otherType, otherIsVar] = otherFunctor.withTypes_[i];
-        if (isVar != otherIsVar || !type->equals(otherType)) {
-            return false;
-        }
-    }
-    for (size_t i = 0; i < normTypes_.size(); i++) {
-        if (i >= otherFunctor.normTypes_.size()) {
-            return false;
-        }
-        const auto &[type, isVar]           = normTypes_[i];
-        const auto &[otherType, otherIsVar] = otherFunctor.normTypes_[i];
-        if (isVar != otherIsVar || !type->equals(otherType)) {
-            return false;
-        }
-    }
-    if (exitType_ != nullptr && !exitType_->equals(otherFunctor.exitType_)) {
-        return false;
-    }
-    return true;
-}
-
-bool FunctionType::operator!=(const Type &other) const { return !(*this == other); }
 
 type_ptr_t FunctionType::clone() const {
     auto res             = std::make_shared<FunctionType>();
@@ -267,3 +194,44 @@ type_ptr_t FunctionType::clone() const {
     res->hasCompileInfo_ = hasCompileInfo_;
     return res;
 }
+
+bool FunctionType::equals(const type_ptr_t &other) const {
+    if (this == other.get())
+        return true;
+    if (other->code() != TypeCode::Function)
+        return false;
+
+    const auto &otherFunc = static_cast<const FunctionType &>(*other);
+
+    if (withTypes_.size() != otherFunc.withTypes_.size() ||
+        normTypes_.size() != otherFunc.normTypes_.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < withTypes_.size(); i++) {
+        const auto &[type, isVar]           = withTypes_[i];
+        const auto &[otherType, otherIsVar] = otherFunc.withTypes_[i];
+        if (isVar != otherIsVar || !type->equals(otherType))
+            return false;
+    }
+    for (size_t i = 0; i < normTypes_.size(); i++) {
+        const auto &[type, isVar]           = normTypes_[i];
+        const auto &[otherType, otherIsVar] = otherFunc.normTypes_[i];
+        if (isVar != otherIsVar || !type->equals(otherType))
+            return false;
+    }
+    if (exitType_ && otherFunc.exitType_) {
+        if (!exitType_->equals(otherFunc.exitType_))
+            return false;
+    } else if (exitType_ || otherFunc.exitType_) {
+        return false;
+    }
+    return true;
+}
+
+CastSafety FunctionType::castSafetyTo(const Type &other) const {
+    if (this == &other)
+        return CastSafety::Safe;
+    return CastSafety::Forbidden;
+}
+
+bool FunctionType::assignable(const type_ptr_t &type) const { return equals(type); }

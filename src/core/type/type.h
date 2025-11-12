@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Nov. 11, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,8 +21,7 @@
 
 #include "base.h"
 #include "composite/array.h"
+#include "composite/func.h"
 #include "composite/struct.h"
 #include "composite/tuple.h"
 #include "composite/union.h"
-#include "resolver.h"
-#include "special/func.h"

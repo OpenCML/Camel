@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 10, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -169,10 +169,10 @@ class GlobalGC {
   public:
     static GarbageCollector &instance() {
         static GarbageCollector gc(GCConfig{
-            .edenSize              = 16 * 1024 * 1024, // 16 MB
-            .survivorSize          = 2 * 1024 * 1024,  // 2 MB
-            .oldGenSize            = 64 * 1024 * 1024, // 64 MB
-            .permGenSize           = 16 * 1024 * 1024, // 16 MB
+            .edenSize              = 1024 * 1024 * 16, // 16 MB
+            .survivorSize          = 1024 * 1024 * 2,  // 2 MB
+            .oldGenSize            = 1024 * 1024 * 64, // 64 MB
+            .permGenSize           = 1024 * 1024 * 16, // 16 MB
             .promotionAgeThreshold = 2                 // 晋升阈值
         });
         return gc;

@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
-#include "special/func.h"
+#include "composite/func.h"
 
 #include <functional>
 #include <optional>
