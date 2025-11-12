@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -191,5 +191,21 @@ const std::string FuncDataLoad::geneCode() const {
 }
 
 const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
+
+const std::string AbstractSyntaxTree::DataLoad::toString() const {
+    std::string result = "DataLoad: " + to_string(dataType_) + this->status();
+    return result;
+}
+
+const std::string AbstractSyntaxTree::DataLoad::status() const {
+    std::string status;
+    if (waited_) {
+        status += " (waited)";
+    }
+    if (notNull_) {
+        status += " (non-null)";
+    }
+    return status;
+}
 
 } // namespace AbstractSyntaxTree

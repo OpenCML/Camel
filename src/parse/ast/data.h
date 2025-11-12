@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,23 +83,12 @@ class DataLoad : public Load {
   public:
     DataLoad(DataType type, bool notNull = false, bool waited = false)
         : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}
-    const std::string toString() const override {
-        std::string result = "DataLoad: " + to_string(dataType_) + this->status();
-        return result;
-    }
+
+    const std::string toString() const override;
 
     DataType dataType() const { return dataType_; }
 
-    const std::string status() const {
-        std::string status;
-        if (waited_) {
-            status += " (waited)";
-        }
-        if (notNull_) {
-            status += " (non-null)";
-        }
-        return status;
-    }
+    const std::string status() const;
 
     void wait() { waited_ = true; }
     bool waited() const { return waited_; }
@@ -230,7 +219,8 @@ class TupleDataLoad : public DataLoad {
 
 class FuncDataLoad : public DataLoad {
   public:
-    FuncDataLoad() : DataLoad(DataType::Func) {} // anonymous function
+    // anonymous function
+    FuncDataLoad() : DataLoad(DataType::Func) {}
     FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
     const std::string toString() const override {
         return "FuncData: " + ref_.toString() + this->status();

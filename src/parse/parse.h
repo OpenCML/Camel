@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,16 +44,7 @@ class ParserErrorListener : public antlr4::BaseErrorListener {
 
     virtual void syntaxError(
         antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
-        size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
-        hasErrors_ = true;
-        if (offendingSymbol) {
-            diagnostics_->of(SyntaxDiag::UnknownSyntaxError).at(offendingSymbol).commit(msg);
-        } else {
-            diagnostics_->of(SyntaxDiag::UnknownSyntaxError)
-                .at(CharRange{{line, charPositionInLine}, {line, charPositionInLine}})
-                .commit(msg);
-        }
-    }
+        size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override;
 };
 
 class CamelParser {
@@ -67,43 +58,9 @@ class CamelParser {
     antlr4::tree::ParseTree *cst_ = nullptr;
     AST::node_ptr_t ast_ = nullptr;
 
-    bool buildCST() {
-        auto interpreter = parser_->getInterpreter<antlr4::atn::ParserATNSimulator>();
-        parser_->removeErrorListeners();
+    bool buildCST();
 
-        try {
-            interpreter->setPredictionMode(antlr4::atn::PredictionMode::SLL);
-            parser_->setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
-            cst_ = parser_->program();
-        } catch (antlr4::ParseCancellationException &e) {
-            parser_->reset();
-            interpreter->setPredictionMode(antlr4::atn::PredictionMode::LL);
-            auto listener = std::make_unique<ParserErrorListener>(diagnostics_);
-            parser_->addErrorListener(listener.get());
-            parser_->setErrorHandler(std::make_shared<antlr4::DefaultErrorStrategy>());
-
-            cst_ = parser_->program();
-
-            if (listener->hasErrors()) {
-                cst_ = nullptr;
-                return false;
-            }
-        }
-
-        return cst_ != nullptr;
-    }
-
-    bool buildAST() {
-        auto constructor = AST::Builder();
-        ast_ = constructor.build(cst_, diagnostics_);
-
-        if (diagnostics_->hasErrors()) {
-            ast_ = nullptr;
-            return false;
-        }
-
-        return ast_ != nullptr;
-    }
+    bool buildAST();
 
   public:
     CamelParser(diagnostics_ptr_t diagnostics) : diagnostics_(diagnostics) {}
@@ -117,37 +74,11 @@ class CamelParser {
     AST::node_ptr_t ast() const { return ast_; }
     diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
-    bool parse(std::istream &is) {
-        input_.load(is);
+    bool parse(std::istream &is);
 
-        lexer_ = std::make_unique<OpenCMLLexer>(&input_);
-        tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
-        parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
+    void dumpTokens(std::ostream &os);
 
-        return buildCST() && buildAST();
-    }
-
-    void dumpTokens(std::ostream &os) {
-        tokens_->reset();
-        while (true) {
-            antlr4::Token *token = tokens_->LT(1);
-            if (token->getType() == antlr4::Token::EOF) {
-                break;
-            }
-            os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3)
-               << std::right << token->getLine() << ":" << std::setw(3) << std::left
-               << token->getCharPositionInLine() << "] (" << token->getChannel()
-               << ") : " << token->getText() << std::endl;
-            tokens_->consume();
-        }
-        tokens_->reset();
-    }
-
-    void dumpDiagnostics(std::ostream &os, bool json = false) {
-        const auto &tokenVec = tokens_->getTokens();
-        diagnostics_->fetchAll(tokenVec);
-        diagnostics_->dump(os, json);
-    }
+    void dumpDiagnostics(std::ostream &os, bool json = false);
 };
 
 using parser_ptr_t = std::shared_ptr<CamelParser>;

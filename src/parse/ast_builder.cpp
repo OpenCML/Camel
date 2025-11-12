@@ -13,13 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "antlr/OpenCMLLexer.h"
 
 #include "ast_builder.h"
+
+namespace AbstractSyntaxTree {
+
+node_ptr_t Builder::build(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diags) {
+    diags_ = diags;
+    root_ = nullptr;
+    visit(tree);
+    return root_;
+}
+
+} // namespace AbstractSyntaxTree
 
 #include "utils/scope.h"
 #include "utils/token.h"
@@ -1922,6 +1933,7 @@ identRef : (IDENTIFIER '::')* IDENTIFIER ;
 */
 any Builder::visitIdentRef(OpenCMLParser::IdentRefContext *context) {
     ENTER("IdentRef");
+
     Reference ref(context->getText());
     LEAVE("IdentRef");
     return ref;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,8 +33,10 @@ namespace CmdLineArgs {
 extern Command selectedCommand;
 
 namespace Global {
-extern bool verbose;         // Whether to enable verbose output
-extern std::string logLevel; // Log level: debug, info, warn, error, off
+// Whether to enable verbose output
+extern bool verbose;
+// Log level: debug, info, warn, error, off
+extern std::string logLevel;
 } // namespace Global
 
 namespace Run {

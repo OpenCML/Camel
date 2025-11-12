@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,10 +66,7 @@ class Load {
     Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
-    void setTokenRange(size_t start, size_t end) {
-        tokenRange_.start = start;
-        tokenRange_.end = end;
-    }
+    void setTokenRange(size_t start, size_t end);
     void setTokenRange(TokenRange range) { tokenRange_ = range; }
 
     LoadType type() const { return type_; }
@@ -128,12 +125,7 @@ class ModuleLoad : public Load {
     const std::string toString() const override { return "Module: " + ref_.toString(); }
 
     void setRef(const Reference &ref) { ref_ = ref; }
-    const Reference &getRef() const {
-        if (ref_.empty()) {
-            throw std::runtime_error("ModuleLoad: Reference is not set");
-        }
-        return ref_;
-    }
+    const Reference &getRef() const;
     const std::string geneCode() const override;
 
   private:
@@ -146,28 +138,13 @@ class ImportLoad : public Load {
     const std::string toString() const override;
 
     void setPath(const std::string &path) { path_ = path; }
-    const std::string &getPath() const {
-        if (path_.empty()) {
-            throw std::runtime_error("ImportLoad: Path is not set");
-        }
-        return path_;
-    }
+    const std::string &getPath() const;
 
     void setRefs(const std::vector<Reference> &refs) { refs_ = refs; }
-    std::vector<Reference> &getRefs() {
-        if (refs_.empty()) {
-            throw std::runtime_error("ImportLoad: References are not set");
-        }
-        return refs_;
-    }
+    std::vector<Reference> &getRefs();
 
     void setAs(const Reference &as) { as_ = as; }
-    const Reference &getAs() const {
-        if (as_.empty()) {
-            throw std::runtime_error("ImportLoad: 'as' Reference is not set");
-        }
-        return as_;
-    }
+    const Reference &getAs() const;
     const std::string geneCode() const override;
 
   private:
@@ -182,20 +159,11 @@ class ExportLoad : public Load {
     const std::string toString() const override;
 
     void setRefs(const std::vector<Reference> &refs) { refs_ = refs; }
-    std::vector<Reference> &getRefs() {
-        if (refs_.empty()) {
-            throw std::runtime_error("ExportLoad: References are not set");
-        }
-        return refs_;
-    }
+    std::vector<Reference> &getRefs();
+
     bool isEmpty() const { return refs_.empty(); }
 
-    void addRef(const Reference &ref) {
-        if (ref.empty()) {
-            throw std::runtime_error("ExportLoad: Cannot add null Reference");
-        }
-        refs_.push_back(ref);
-    }
+    void addRef(const Reference &ref);
     const std::string geneCode() const override;
 
   private:

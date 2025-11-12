@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,9 +77,10 @@ class Formatter : public OpenCMLVisitor {
     template <typename T>
     std::string formatBiOpsList(
         const std::vector<T *> &list,
-        std::vector<antlr4::tree::ParseTree *> &children, // children of the context
-        bool padding = true                               // padding spaces
-    ) {
+        // children of the context
+        std::vector<antlr4::tree::ParseTree *> &children,
+        // padding spaces
+        bool padding = true) {
         // expr (op expr)*
         std::string result = std::any_cast<std::string>(visit(list[0]));
         if (list.size() == 1) {
@@ -113,10 +114,15 @@ class Formatter : public OpenCMLVisitor {
     template <typename T>
     std::string formatList(
         const std::vector<T *> &list, const antlr4::ParserRuleContext *context,
-        const std::string iComma, // inline comma
-        const std::string nComma, // new line comma
-        int flags = 0,            // combined flags
-        int maxSkips = 2,         // maximum number of line skips
+        // inline comma
+        const std::string iComma,
+        // new line comma
+        const std::string nComma,
+        // combined flags
+        int flags = 0,
+        // maximum number of line skips
+        int maxSkips = 2,
+
         std::vector<std::pair<size_t, size_t>> tokenRanges = {}) {
         // Parse flags
         bool tComma = flags & TrailingC;

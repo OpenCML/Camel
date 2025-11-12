@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,12 +36,7 @@ class Builder : public OpenCMLVisitor {
     Builder() {};
     virtual ~Builder() = default;
 
-    node_ptr_t build(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diags) {
-        diags_ = diags;
-        root_ = nullptr;
-        visit(tree);
-        return root_;
-    }
+    node_ptr_t build(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diags);
 
   private:
     node_ptr_t root_;
