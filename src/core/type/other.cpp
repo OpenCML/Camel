@@ -12,26 +12,14 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Created: Oct. 11, 2024
+ * Updated: Oct. 29, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "other.h"
 
-#include "type.h"
-
-class PrimaryType : public Type {
-  public:
-    PrimaryType() = delete;
-    PrimaryType(TypeCode code) : Type(code) {}
-
-    virtual bool operator==(const Type &other) const override;
-    virtual bool operator!=(const Type &other) const override;
-
-    virtual type_ptr_t clone() const override;
-
-    virtual std::string mangle() const override;
-
-    CastSafety castSafetyTo(const Type &other) const override;
-};
+std::mutex OtherTypeRegistry::mtx;
+std::unordered_map<std::string, unsigned int> OtherTypeRegistry::registry;
+std::atomic<unsigned int> OtherTypeRegistry::counter{0};
+std::unordered_map<unsigned int, std::string> OtherTypeRegistry::reverseRegistry;

@@ -13,44 +13,43 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composed.h"
+#include "composite.h"
 
-class StructType : public ComposedType {
+#include <optional>
+
+class StructType : public CompositeType {
   private:
-    std::vector<std::string> refIndices_;
-    std::unordered_map<std::string, type_ptr_t> fields_;
+    std::vector<std::pair<std::string, type_ptr_t>> fields_;
 
   public:
     StructType();
+    ~StructType() noexcept override = default;
 
-    std::string toString() const override;
+    std::shared_ptr<StructType> create() const;
 
-    virtual std::string mangle() const override;
-
-    std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
-
-    virtual bool resolved() const override;
-    virtual void resolve(const type_vec_t &typeList) override;
-
-    bool operator==(const Type &other) const override;
-    bool operator!=(const Type &other) const override;
-
-    virtual type_ptr_t clone() const override;
-
+    std::optional<type_ptr_t> typeAt(size_t idx) const;
+    std::optional<type_ptr_t> typeOf(const std::string &idx) const;
+    size_t size() const;
     bool add(const std::string &name, const type_ptr_t &type);
     bool has(const std::string &name) const;
     type_ptr_t get(const std::string &name) const;
-
     void clear();
 
     type_ptr_t operator|(const StructType &other) const;
     type_ptr_t operator&(const StructType &other) const;
 
-    CastSafety castSafetyTo(const Type &other) const override;
+    virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
+    virtual bool resolved() const override;
+    virtual std::string toString() const override;
+    virtual std::string mangle() const override;
+    virtual type_ptr_t clone() const override;
+    virtual bool equals(const type_ptr_t &type) const override;
+    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual bool assignable(const type_ptr_t &type) const override;
 };

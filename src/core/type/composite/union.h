@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composed.h"
+#include "composite.h"
 
-class UnionType : public ComposedType {
+#include <unordered_set>
+
+class UnionType : public CompositeType {
   private:
     std::unordered_set<type_ptr_t> types_;
 
@@ -32,23 +34,17 @@ class UnionType : public ComposedType {
     UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs);
     UnionType(const std::initializer_list<type_ptr_t> &types);
     UnionType(const std::vector<type_ptr_t> &types);
-
-    std::string toString() const override;
-
-    virtual std::string mangle() const override;
-
-    std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
-
-    bool operator==(const Type &other) const override;
-    bool operator!=(const Type &other) const override;
-
-    virtual type_ptr_t clone() const override {
-        ASSERT(false, "clone() not implemented");
-        return nullptr;
-    }
+    ~UnionType() noexcept override = default;
 
     void add(const type_ptr_t &type);
     bool has(const type_ptr_t &type) const;
 
-    CastSafety castSafetyTo(const Type &other) const override;
+    virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
+    virtual bool resolved() const override;
+    virtual std::string toString() const override;
+    virtual std::string mangle() const override;
+    virtual type_ptr_t clone() const override;
+    virtual bool equals(const type_ptr_t &type) const override;
+    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual bool assignable(const type_ptr_t &type) const override;
 };

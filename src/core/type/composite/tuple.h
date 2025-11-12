@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composed.h"
+#include "composite.h"
 
-class TupleType : public ComposedType {
+#include <optional>
+
+class TupleType : public CompositeType {
   private:
     std::vector<type_ptr_t> types_;
 
@@ -29,28 +31,25 @@ class TupleType : public ComposedType {
     TupleType();
     TupleType(const std::initializer_list<type_ptr_t> &types);
     TupleType(const std::vector<type_ptr_t> &types);
+    TupleType(std::vector<type_ptr_t> &&types);
+    ~TupleType() noexcept override = default;
 
-    std::string toString() const override;
-
-    virtual std::string mangle() const override;
-
-    std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
-
-    virtual bool resolved() const override;
-    virtual void resolve(const type_vec_t &typeList) override;
-
-    bool operator==(const Type &other) const override;
-    bool operator!=(const Type &other) const override;
-
-    virtual type_ptr_t clone() const override;
+    std::shared_ptr<TupleType> create(const std::vector<type_ptr_t> &types) const;
+    std::shared_ptr<TupleType> create(std::vector<type_ptr_t> &&types) const;
 
     void add(const type_ptr_t &type);
     void set(size_t index, const type_ptr_t &type);
-    std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
-
     size_t size() const;
-
     const std::vector<type_ptr_t> &types() const;
+    std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
+    std::optional<type_ptr_t> typeAt(size_t idx) const;
 
-    CastSafety castSafetyTo(const Type &other) const override;
+    virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
+    virtual bool resolved() const override;
+    virtual std::string toString() const override;
+    virtual std::string mangle() const override;
+    virtual type_ptr_t clone() const override;
+    virtual bool equals(const type_ptr_t &type) const override;
+    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual bool assignable(const type_ptr_t &type) const override;
 };

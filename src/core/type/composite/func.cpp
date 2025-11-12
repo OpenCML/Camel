@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -131,7 +131,7 @@ std::vector<std::tuple<std::string, type_ptr_t, bool>> FunctionType::normArgsInf
         "Argument names size mismatch");
     std::vector<std::tuple<std::string, type_ptr_t, bool>> result;
     for (size_t i = 0; i < normTypes_.size(); i++) {
-        size_t idx = i + withTypes_.size();
+        size_t idx       = i + withTypes_.size();
         const auto &type = normTypes_[i];
         const auto &name = argNames_.at(idx);
         result.emplace_back(name, type.first, type.second);
@@ -231,7 +231,7 @@ bool FunctionType::operator==(const Type &other) const {
         if (i >= otherFunctor.withTypes_.size()) {
             return false;
         }
-        const auto &[type, isVar] = withTypes_[i];
+        const auto &[type, isVar]           = withTypes_[i];
         const auto &[otherType, otherIsVar] = otherFunctor.withTypes_[i];
         if (isVar != otherIsVar || !type->equals(otherType)) {
             return false;
@@ -241,7 +241,7 @@ bool FunctionType::operator==(const Type &other) const {
         if (i >= otherFunctor.normTypes_.size()) {
             return false;
         }
-        const auto &[type, isVar] = normTypes_[i];
+        const auto &[type, isVar]           = normTypes_[i];
         const auto &[otherType, otherIsVar] = otherFunctor.normTypes_[i];
         if (isVar != otherIsVar || !type->equals(otherType)) {
             return false;
@@ -256,14 +256,14 @@ bool FunctionType::operator==(const Type &other) const {
 bool FunctionType::operator!=(const Type &other) const { return !(*this == other); }
 
 type_ptr_t FunctionType::clone() const {
-    auto res = std::make_shared<FunctionType>();
-    res->implMark_ = implMark_;
-    res->modifiers_ = modifiers_;
-    res->withTypes_ = withTypes_;
-    res->normTypes_ = normTypes_;
-    res->exitType_ = exitType_;
-    res->argNames_ = argNames_;
-    res->closureRefs_ = closureRefs_;
+    auto res             = std::make_shared<FunctionType>();
+    res->implMark_       = implMark_;
+    res->modifiers_      = modifiers_;
+    res->withTypes_      = withTypes_;
+    res->normTypes_      = normTypes_;
+    res->exitType_       = exitType_;
+    res->argNames_       = argNames_;
+    res->closureRefs_    = closureRefs_;
     res->hasCompileInfo_ = hasCompileInfo_;
     return res;
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Nov. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 class VectorType : public OtherType {
   private:
     size_t size_;
-    type_ptr_t elementType_;
+    type_ptr_t elemType_;
 
   public:
     VectorType() = delete;

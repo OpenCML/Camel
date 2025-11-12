@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,19 +22,19 @@
 using namespace std;
 
 VectorType::VectorType(const type_ptr_t &elementType, size_t size)
-    : OtherType(typeCode()), size_(size), elementType_(elementType) {}
+    : OtherType(typeCode()), size_(size), elemType_(elementType) {}
 
 size_t VectorType::size() const { return size_; }
 
-type_ptr_t VectorType::elementType() const { return elementType_; }
+type_ptr_t VectorType::elementType() const { return elemType_; }
 
 string VectorType::toString() const {
-    return "Vector<" + elementType_->toString() + ", " + to_string(size_) + ">";
+    return "Vector<" + elemType_->toString() + ", " + to_string(size_) + ">";
 }
 
 std::string VectorType::mangle() const {
     std::string result = "A";
-    result += elementType_->mangle();
+    result += elemType_->mangle();
     result += std::to_string(size_);
     return result;
 }
@@ -47,7 +47,7 @@ bool VectorType::operator==(const Type &other) const {
         return false;
     }
     const VectorType &otherVec = dynamic_cast<const VectorType &>(other);
-    return size_ == otherVec.size_ && elementType_->equals(otherVec.elementType_);
+    return size_ == otherVec.size_ && elemType_->equals(otherVec.elemType_);
 }
 
 bool VectorType::operator!=(const Type &other) const {
@@ -55,7 +55,7 @@ bool VectorType::operator!=(const Type &other) const {
         return true;
     }
     const VectorType &otherVec = dynamic_cast<const VectorType &>(other);
-    return size_ != otherVec.size_ || !elementType_->equals(otherVec.elementType_);
+    return size_ != otherVec.size_ || !elemType_->equals(otherVec.elemType_);
 }
 
 CastSafety VectorType::castSafetyTo(const Type &other) const {

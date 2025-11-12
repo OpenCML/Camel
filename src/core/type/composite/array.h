@@ -13,36 +13,34 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 18, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composed.h"
+#include "composite.h"
 
-class ArrayType : public ComposedType {
+#include <optional>
+
+class ArrayType : public CompositeType {
   private:
-    type_ptr_t elementType_;
+    type_ptr_t elemType_;
 
   public:
-    ArrayType(const type_ptr_t &elementType);
+    ArrayType(const type_ptr_t &elemType);
+    ~ArrayType() noexcept override = default;
+
+    std::shared_ptr<ArrayType> create(const type_ptr_t &elemType = nullptr) const;
 
     type_ptr_t elementType() const;
 
-    std::string toString() const override;
-
-    virtual std::string mangle() const override;
-
-    std::optional<type_ptr_t> typeAt(struct_idx_t idx) const override;
-
+    virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
-    virtual void resolve(const type_vec_t &typeList) override;
-
-    bool operator==(const Type &other) const override;
-    bool operator!=(const Type &other) const override;
-
+    virtual std::string toString() const override;
+    virtual std::string mangle() const override;
     virtual type_ptr_t clone() const override;
-
-    CastSafety castSafetyTo(const Type &other) const override;
+    virtual bool equals(const type_ptr_t &type) const override;
+    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual bool assignable(const type_ptr_t &type) const override;
 };

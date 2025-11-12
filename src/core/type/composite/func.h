@@ -13,24 +13,38 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "composite.h"
+
 #include "core/func.h"
 #include "core/impl.h"
-#include "special.h"
 
-using param_t = std::pair<type_ptr_t, bool>; // bool表示是否为可变参数
+using param_t           = std::pair<type_ptr_t, bool>; // bool表示是否为可变参数
 using param_init_list_t = std::initializer_list<param_t>;
-using param_vec_t = std::vector<param_t>;
+using param_vec_t       = std::vector<param_t>;
 
 class FunctionType;
 using func_type_ptr_t = std::shared_ptr<FunctionType>;
 
-class FunctionType : public SpecialType {
+class FunctionType : public CompositeType {
+  private:
+    ImplMark implMark_     = ImplMark::Graph;
+    ModifierSet modifiers_ = Modifier::None;
+
+    param_vec_t withTypes_;
+    param_vec_t normTypes_;
+    type_ptr_t exitType_ = nullptr;
+
+    // 只在编译期记录并使用
+    bool hasCompileInfo_ = true;
+    std::vector<std::string> argNames_;
+    std::vector<std::string> closureRefs_;
+
   public:
     FunctionType();
     FunctionType(
@@ -45,6 +59,13 @@ class FunctionType : public SpecialType {
 
     virtual ~FunctionType() = default;
 
+    static func_type_ptr_t create() {
+        return std::make_shared<FunctionType>(
+            param_vec_t{},
+            param_vec_t{},
+            Type::Void(),
+            Modifier::None);
+    }
     static func_type_ptr_t create(
         const param_init_list_t &withTypes, const param_init_list_t &normTypes,
         const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None) {
@@ -64,8 +85,6 @@ class FunctionType : public SpecialType {
             returnType,
             modifiers);
     }
-
-    virtual type_ptr_t clone() const override;
 
     ImplMark implMark() const { return implMark_; }
     void setImplMark(ImplMark mark) { implMark_ = mark; }
@@ -95,28 +114,12 @@ class FunctionType : public SpecialType {
     std::vector<std::tuple<std::string, type_ptr_t, bool>> withArgsInfo() const;
     std::vector<std::tuple<std::string, type_ptr_t, bool>> normArgsInfo() const;
 
-    std::string toString() const override;
-
+    virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
+    virtual bool resolved() const override;
+    virtual std::string toString() const override;
     virtual std::string mangle() const override;
-
-    bool operator==(const Type &other) const override;
-    bool operator!=(const Type &other) const override;
-
-    CastSafety castSafetyTo(const Type &other) const override {
-        ASSERT(false, "FunctionType cannot be cast to other types");
-        return CastSafety::Forbidden;
-    };
-
-  private:
-    ImplMark implMark_ = ImplMark::Graph;
-    ModifierSet modifiers_ = Modifier::None;
-
-    param_vec_t withTypes_;
-    param_vec_t normTypes_;
-    type_ptr_t exitType_ = nullptr;
-
-    // 只在编译期记录并使用
-    bool hasCompileInfo_ = true;
-    std::vector<std::string> argNames_;
-    std::vector<std::string> closureRefs_;
+    virtual type_ptr_t clone() const override;
+    virtual bool equals(const type_ptr_t &type) const override;
+    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual bool assignable(const type_ptr_t &type) const override;
 };

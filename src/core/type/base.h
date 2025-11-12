@@ -13,24 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 10, 2025
+ * Updated: Nov. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <any>
-#include <list>
-#include <map>
 #include <memory>
-#include <stdexcept>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
-
-#include "../impl.h"
-#include "utils/assert.h"
 
 /*
  TypeCode (32 bits) 编码结构:
@@ -53,10 +44,10 @@
 
 enum class TypeFlag : uint32_t {
     Primitive = 0,        // 内置原始类型，既非组合类型，也非 GC 跟踪类型
-    OtherType = 1u << 31, // 第三方类型
-    Composite = 1u << 30, // 组合类型
-    GC_Traced = 1u << 29, // GC 跟踪类型
-    Auxiliary = 1u << 28  // 辅助类型，无实际数据存储
+    OtherType = 1u << 31, // 第三方类型，由第三方库在运行时注册实际id
+    Composite = 1u << 30, // 组合类型，由多个类型组合而成
+    GC_Traced = 1u << 29, // GC 跟踪类型，其数据对象会持有由 GC 管理的内存块引用
+    Auxiliary = 1u << 28  // 辅助类型，参与类型解算但无实际数据对象
 };
 
 constexpr TypeFlag operator|(TypeFlag a, TypeFlag b) {
@@ -68,45 +59,39 @@ constexpr uint32_t makeTypeCode(TypeFlag flags, uint32_t id) {
 }
 
 enum class TypeCode : uint32_t {
-    // Primitive data types
-    Int    = makeTypeCode(TypeFlag::Primitive, 0x000),
-    Long   = makeTypeCode(TypeFlag::Primitive, 0x001),
-    Float  = makeTypeCode(TypeFlag::Primitive, 0x002),
-    Double = makeTypeCode(TypeFlag::Primitive, 0x003),
-    Bool   = makeTypeCode(TypeFlag::Primitive, 0x004),
-    Byte   = makeTypeCode(TypeFlag::Primitive, 0x005),
-    Void   = makeTypeCode(TypeFlag::Primitive, 0x006),
-    // GC Traced data types
-    String   = makeTypeCode(TypeFlag::GC_Traced, 0x007),
-    Array    = makeTypeCode(TypeFlag::GC_Traced | TypeFlag::Composite, 0x008),
-    Tuple    = makeTypeCode(TypeFlag::GC_Traced | TypeFlag::Composite, 0x009),
-    Struct   = makeTypeCode(TypeFlag::GC_Traced | TypeFlag::Composite, 0x00A),
-    Function = makeTypeCode(TypeFlag::GC_Traced | TypeFlag::Composite, 0x00B),
-    Frame    = makeTypeCode(TypeFlag::GC_Traced | TypeFlag::Composite, 0x00C),
-    // Auxiliary types (no actual data storage)
-    Ref   = makeTypeCode(TypeFlag::Auxiliary, 0x00D),
-    Any   = makeTypeCode(TypeFlag::Auxiliary, 0x00E),
-    Union = makeTypeCode(TypeFlag::Auxiliary | TypeFlag::Composite, 0x00F),
-    // Third-party types
-    Other = makeTypeCode(TypeFlag::OtherType, 0x000),
+    Int      = makeTypeCode(TypeFlag::Primitive, 0x000),
+    Long     = makeTypeCode(TypeFlag::Primitive, 0x001),
+    Float    = makeTypeCode(TypeFlag::Primitive, 0x002),
+    Double   = makeTypeCode(TypeFlag::Primitive, 0x003),
+    Bool     = makeTypeCode(TypeFlag::Primitive, 0x004),
+    Byte     = makeTypeCode(TypeFlag::Primitive, 0x005),
+    Void     = makeTypeCode(TypeFlag::Primitive, 0x006),
+    String   = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x007),
+    Array    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x008),
+    Tuple    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x009),
+    Struct   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00A),
+    Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00B),
+    Frame    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00C),
+    Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00D),
+    Any      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00E),
+    Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00F),
+    Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 
-constexpr bool hasFlag(uint32_t code, TypeFlag flag) {
+inline constexpr bool hasFlag(uint32_t code, TypeFlag flag) {
     return (code & static_cast<uint32_t>(flag)) != 0;
 }
 
-inline constexpr bool isPrimitive(uint32_t code) {
+// !注意，isPrimitive 意味着
+// !isComposite && !isOtherType && !isAuxiliary
+template <typename T> inline constexpr bool isPrimitive(T code) {
     // Primitive 类型没有任何标志位，即前四位均为 0
-    return (code & 0xF0000000) == 0;
+    return (static_cast<uint32_t>(code) & 0xF0000000) == 0;
 }
 
-inline constexpr bool isOtherType(uint32_t code) { return hasFlag(code, TypeFlag::OtherType); }
-
-inline constexpr bool isComposite(uint32_t code) { return hasFlag(code, TypeFlag::Composite); }
-
-inline constexpr bool isGCTraced(uint32_t code) { return hasFlag(code, TypeFlag::GC_Traced); }
-
-inline constexpr bool isAuxiliary(uint32_t code) { return hasFlag(code, TypeFlag::Auxiliary); }
+template <typename T> inline constexpr bool isOtherType(T code) {
+    return hasFlag(static_cast<uint32_t>(code), TypeFlag::OtherType);
+}
 
 template <typename T> inline constexpr bool isComposite(T code) {
     return hasFlag(static_cast<uint32_t>(code), TypeFlag::Composite);
@@ -114,10 +99,6 @@ template <typename T> inline constexpr bool isComposite(T code) {
 
 template <typename T> inline constexpr bool isGCTraced(T code) {
     return hasFlag(static_cast<uint32_t>(code), TypeFlag::GC_Traced);
-}
-
-template <typename T> inline constexpr bool isOtherType(T code) {
-    return hasFlag(static_cast<uint32_t>(code), TypeFlag::OtherType);
 }
 
 template <typename T> inline constexpr bool isAuxiliary(T code) {
@@ -135,25 +116,9 @@ std::string typeCodeToString(TypeCode code);
 extern const signed char primitiveTypeConvMatrix[7][7];
 
 class Type;
-class PrimaryType;
-class ComposedType;
-class SpecialType;
-class FunctionType;
-
-class TupleType;
-class ArrayType;
-class StructType;
-
 using type_ptr_t  = std::shared_ptr<Type>;
 using type_vec_t  = std::vector<type_ptr_t>;
 using type_wptr_t = std::weak_ptr<Type>;
-
-class Data;
-using data_ptr_t  = std::shared_ptr<Data>;
-using data_wptr_t = std::weak_ptr<Data>;
-using data_lst_t  = std::list<data_ptr_t>;
-using data_vec_t  = std::vector<data_ptr_t>;
-using data_list_t = std::initializer_list<data_ptr_t>;
 
 class Type {
   protected:
@@ -162,42 +127,29 @@ class Type {
   public:
     Type() = delete;
     Type(TypeCode type);
-    virtual ~Type() = default;
+    virtual ~Type() noexcept = default;
 
     const TypeCode &code() const;
 
     virtual std::string toString() const;
     virtual std::string mangle() const;
-
-    virtual bool operator==(const Type &other) const;
-    virtual bool operator!=(const Type &other) const;
-
     virtual type_ptr_t clone() const;
 
-    bool equals(const type_ptr_t &type) const;
-    bool assignable(const type_ptr_t &type) const;
-
+    virtual bool equals(const type_ptr_t &type) const;
     virtual CastSafety castSafetyTo(const Type &other) const;
+    virtual bool assignable(const type_ptr_t &type) const;
 
-    static bool
-    castSafetyCheck(const Type &from, const Type &to, CastSafety required = CastSafety::Safe);
-    static bool castSafetyCheck(
-        const type_ptr_t &from, const type_ptr_t &to, CastSafety required = CastSafety::Safe);
+    bool operator==(const type_ptr_t &other) const = delete;
+    bool operator!=(const type_ptr_t &other) const = delete;
 
-    static std::shared_ptr<PrimaryType> Int();
-    static std::shared_ptr<PrimaryType> Long();
-    static std::shared_ptr<PrimaryType> Float();
-    static std::shared_ptr<PrimaryType> Double();
-    static std::shared_ptr<PrimaryType> String();
-    static std::shared_ptr<PrimaryType> Bool();
-    static std::shared_ptr<PrimaryType> Byte();
-    static std::shared_ptr<SpecialType> Void();
-
-    static std::shared_ptr<ArrayType> Array(const type_ptr_t &elementType = nullptr);
-    static std::shared_ptr<TupleType> Tuple(const type_vec_t &types = {});
-    static std::shared_ptr<StructType> Struct();
-    static std::shared_ptr<FunctionType> Func();
-
+    static type_ptr_t Int();
+    static type_ptr_t Long();
+    static type_ptr_t Float();
+    static type_ptr_t Double();
+    static type_ptr_t Bool();
+    static type_ptr_t Byte();
+    static type_ptr_t Void();
+    static type_ptr_t String();
     static type_ptr_t Ref();
-    static std::shared_ptr<SpecialType> Any();
+    static type_ptr_t Any();
 };

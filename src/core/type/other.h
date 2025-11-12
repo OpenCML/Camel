@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Nov. 10, 2025
+ * Updated: Nov. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../base.h"
+#include "base.h"
 
 #include <atomic>
 #include <mutex>

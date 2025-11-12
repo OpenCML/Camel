@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,9 +33,10 @@ void UnionType::insertUnion(const UnionType &other) {
     }
 }
 
-UnionType::UnionType() : ComposedType(TypeCode::Union) {}
+UnionType::UnionType() : CompositeType(TypeCode::Union) {}
 
-UnionType::UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs) : ComposedType(TypeCode::Union) {
+UnionType::UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs)
+    : CompositeType(TypeCode::Union) {
     if (lhs->code() == TypeCode::Union)
         insertUnion(dynamic_cast<const UnionType &>(*lhs));
     else
@@ -47,7 +48,7 @@ UnionType::UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs) : ComposedTyp
         types_.insert(rhs);
 }
 
-UnionType::UnionType(const initializer_list<type_ptr_t> &types) : ComposedType(TypeCode::Union) {
+UnionType::UnionType(const initializer_list<type_ptr_t> &types) : CompositeType(TypeCode::Union) {
     for (const auto &type : types) {
         if (type->code() == TypeCode::Union)
             insertUnion(dynamic_cast<const UnionType &>(*type));
@@ -56,7 +57,7 @@ UnionType::UnionType(const initializer_list<type_ptr_t> &types) : ComposedType(T
     }
 }
 
-UnionType::UnionType(const vector<type_ptr_t> &types) : ComposedType(TypeCode::Union) {
+UnionType::UnionType(const vector<type_ptr_t> &types) : CompositeType(TypeCode::Union) {
     for (const auto &type : types) {
         if (type->code() == TypeCode::Union)
             insertUnion(dynamic_cast<const UnionType &>(*type));
@@ -129,7 +130,7 @@ CastSafety UnionType::castSafetyTo(const Type &other) const {
         switch (other.code()) {
         case TypeCode::Union: {
             const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
-            CastSafety result = CastSafety::Safe;
+            CastSafety result           = CastSafety::Safe;
             for (const auto &type : types_) {
                 CastSafety typeConv = CastSafety::Forbidden;
                 for (const auto &otherType : otherUnion.types_) {
