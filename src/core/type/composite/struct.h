@@ -22,10 +22,12 @@
 #include "composite.h"
 
 #include <optional>
+#include <unordered_map>
 
 class StructType : public CompositeType {
   private:
-    std::vector<std::pair<std::string, type_ptr_t>> fields_;
+    std::vector<type_ptr_t> fields_;
+    std::unordered_map<std::string, size_t> fieldIndexMap_;
 
   public:
     StructType();
@@ -33,13 +35,12 @@ class StructType : public CompositeType {
 
     std::shared_ptr<StructType> create() const;
 
+    size_t size() const;
     std::optional<type_ptr_t> typeAt(size_t idx) const;
     std::optional<type_ptr_t> typeOf(const std::string &idx) const;
-    size_t size() const;
     bool add(const std::string &name, const type_ptr_t &type);
     bool has(const std::string &name) const;
     type_ptr_t get(const std::string &name) const;
-    void clear();
 
     type_ptr_t operator|(const StructType &other) const;
     type_ptr_t operator&(const StructType &other) const;

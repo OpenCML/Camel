@@ -18,18 +18,18 @@
  */
 
 #include "union.h"
-
-#include "array.h"
+#include "utils/assert.h"
 
 using namespace std;
 
 void UnionType::insertUnion(const UnionType &other) {
-    // flatten the union type
+    // Flatten nested UnionType
     for (const auto &type : other.types_) {
-        if (type->code() == TypeCode::Union)
-            insertUnion(dynamic_cast<const UnionType &>(*type));
-        else
+        if (type->code() == TypeCode::Union) {
+            insertUnion(static_cast<const UnionType &>(*type));
+        } else {
             types_.insert(type);
+        }
     }
 }
 
@@ -38,12 +38,12 @@ UnionType::UnionType() : CompositeType(TypeCode::Union) {}
 UnionType::UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs)
     : CompositeType(TypeCode::Union) {
     if (lhs->code() == TypeCode::Union)
-        insertUnion(dynamic_cast<const UnionType &>(*lhs));
+        insertUnion(static_cast<const UnionType &>(*lhs));
     else
         types_.insert(lhs);
 
     if (rhs->code() == TypeCode::Union)
-        insertUnion(dynamic_cast<const UnionType &>(*rhs));
+        insertUnion(static_cast<const UnionType &>(*rhs));
     else
         types_.insert(rhs);
 }
@@ -51,7 +51,7 @@ UnionType::UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs)
 UnionType::UnionType(const initializer_list<type_ptr_t> &types) : CompositeType(TypeCode::Union) {
     for (const auto &type : types) {
         if (type->code() == TypeCode::Union)
-            insertUnion(dynamic_cast<const UnionType &>(*type));
+            insertUnion(static_cast<const UnionType &>(*type));
         else
             types_.insert(type);
     }
@@ -60,11 +60,40 @@ UnionType::UnionType(const initializer_list<type_ptr_t> &types) : CompositeType(
 UnionType::UnionType(const vector<type_ptr_t> &types) : CompositeType(TypeCode::Union) {
     for (const auto &type : types) {
         if (type->code() == TypeCode::Union)
-            insertUnion(dynamic_cast<const UnionType &>(*type));
+            insertUnion(static_cast<const UnionType &>(*type));
         else
             types_.insert(type);
     }
 }
+
+std::shared_ptr<UnionType> UnionType::create(const type_ptr_t &lhs, const type_ptr_t &rhs) {
+    return std::make_shared<UnionType>(lhs, rhs);
+}
+
+std::shared_ptr<UnionType> UnionType::create(const std::initializer_list<type_ptr_t> &types) {
+    return std::make_shared<UnionType>(types);
+}
+
+std::shared_ptr<UnionType> UnionType::create(const std::vector<type_ptr_t> &types) {
+    return std::make_shared<UnionType>(types);
+}
+
+void UnionType::add(const type_ptr_t &type) {
+    if (type->code() == TypeCode::Union) {
+        insertUnion(static_cast<const UnionType &>(*type));
+    } else {
+        types_.insert(type);
+    }
+}
+
+bool UnionType::has(const type_ptr_t &type) const { return types_.find(type) != types_.end(); }
+
+type_ptr_t UnionType::resolve(const type_vec_t &typeList) const {
+    ASSERT(false, "UnionType cannot be resolved");
+    return nullptr;
+}
+
+bool UnionType::resolved() const { return true; }
 
 string UnionType::toString() const {
     string result = "Union<";
@@ -88,19 +117,18 @@ std::string UnionType::mangle() const {
     return result;
 }
 
-std::optional<type_ptr_t> UnionType::typeAt(struct_idx_t idx) const {
-    ASSERT(false, "UnionType does not support indexing");
-    return std::nullopt;
+type_ptr_t UnionType::clone() const {
+    return make_shared<UnionType>(vector<type_ptr_t>(types_.begin(), types_.end()));
 }
 
-bool UnionType::operator==(const Type &other) const {
-    if (this == &other) {
+bool UnionType::equals(const type_ptr_t &other) const {
+    if (this == other.get()) {
         return true;
     }
-    if (other.code() != TypeCode::Union) {
+    if (other->code() != TypeCode::Union) {
         return false;
     }
-    const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
+    const UnionType &otherUnion = static_cast<const UnionType &>(*other);
 
     if (types_.size() != otherUnion.types_.size()) {
         return false;
@@ -113,51 +141,11 @@ bool UnionType::operator==(const Type &other) const {
     return true;
 }
 
-bool UnionType::operator!=(const Type &other) const { return !(*this == other); }
-
-void UnionType::add(const type_ptr_t &type) { types_.insert(type); }
-
-bool UnionType::has(const type_ptr_t &type) const { return types_.find(type) != types_.end(); }
-
 CastSafety UnionType::castSafetyTo(const Type &other) const {
     if (this == &other) {
         return CastSafety::Safe;
     }
-    if (other.code() == code_) {
-        return CastSafety::Safe;
-    }
-    if (other.composed()) {
-        switch (other.code()) {
-        case TypeCode::Union: {
-            const UnionType &otherUnion = dynamic_cast<const UnionType &>(other);
-            CastSafety result           = CastSafety::Safe;
-            for (const auto &type : types_) {
-                CastSafety typeConv = CastSafety::Forbidden;
-                for (const auto &otherType : otherUnion.types_) {
-                    CastSafety tempConv = type->castSafetyTo(*otherType);
-                    if (tempConv == CastSafety::Safe) {
-                        typeConv = CastSafety::Safe;
-                        break;
-                    } else if (tempConv == CastSafety::Unsafe) {
-                        typeConv = CastSafety::Unsafe;
-                    }
-                }
-                if (typeConv == CastSafety::Forbidden) {
-                    return CastSafety::Forbidden;
-                } else if (typeConv == CastSafety::Unsafe) {
-                    result = CastSafety::Unsafe;
-                }
-            }
-            return result;
-        }
-
-        default:
-            return CastSafety::Forbidden;
-        }
-    }
-    if (other.code() == TypeCode::Any) {
-        return CastSafety::Safe;
-    }
-    // primary types and special types are forbidden
     return CastSafety::Forbidden;
 }
+
+bool UnionType::assignable(const type_ptr_t &type) const { return equals(type); }

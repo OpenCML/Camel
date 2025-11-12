@@ -36,6 +36,10 @@ class UnionType : public CompositeType {
     UnionType(const std::vector<type_ptr_t> &types);
     ~UnionType() noexcept override = default;
 
+    static std::shared_ptr<UnionType> create(const type_ptr_t &lhs, const type_ptr_t &rhs);
+    static std::shared_ptr<UnionType> create(const std::initializer_list<type_ptr_t> &types);
+    static std::shared_ptr<UnionType> create(const std::vector<type_ptr_t> &types);
+
     void add(const type_ptr_t &type);
     bool has(const type_ptr_t &type) const;
 

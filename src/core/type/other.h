@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Nov. 11, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,12 +28,12 @@
 
 class OtherTypeRegistry {
   public:
-    static TypeCode registerType(const std::string &typeName) {
+    static TypeCode registerType(const std::string &typeName, TypeFlag flags) {
         std::lock_guard<std::mutex> lock(mtx);
 
         auto it = registry.find(typeName);
         if (it != registry.end()) {
-            return static_cast<TypeCode>(0xF0000000 | it->second);
+            return it->second;
         }
 
         uint32_t id = counter.fetch_add(1);
@@ -41,16 +41,15 @@ class OtherTypeRegistry {
             throw std::runtime_error("Too many Other types registered!");
         }
 
-        registry[typeName]  = id;
-        reverseRegistry[id] = typeName;
-        return static_cast<TypeCode>(makeTypeCode(TypeFlag::OtherType, id));
+        TypeCode newCode   = static_cast<TypeCode>(makeTypeCode(TypeFlag::OtherType | flags, id));
+        registry[typeName] = newCode;
+        reverseRegistry[newCode] = typeName;
+        return newCode;
     }
 
     static std::string getTypeName(TypeCode code) {
-        uint32_t id = static_cast<uint32_t>(code) & static_cast<uint32_t>(0x0FFFFFFF);
-
         std::lock_guard<std::mutex> lock(mtx);
-        auto it = reverseRegistry.find(id);
+        auto it = reverseRegistry.find(code);
         if (it != reverseRegistry.end()) {
             return it->second;
         }
@@ -58,8 +57,8 @@ class OtherTypeRegistry {
     }
 
   private:
-    static std::unordered_map<std::string, uint32_t> registry;
-    static std::unordered_map<uint32_t, std::string> reverseRegistry;
+    static std::unordered_map<std::string, TypeCode> registry;
+    static std::unordered_map<TypeCode, std::string> reverseRegistry;
     static std::mutex mtx;
     static std::atomic<uint32_t> counter;
 };
@@ -70,31 +69,12 @@ class OtherType : public Type {
     OtherType(TypeCode code) : Type(code) {}
     virtual ~OtherType() noexcept = default;
 
-    std::string typeName() const {
-        ASSERT((static_cast<uint32_t>(code_) & 0xF0000000) == 0xF0000000, "Not an OtherType");
-        return OtherTypeRegistry::getTypeName(code_);
-    }
+    std::string typeName() const;
 
-    virtual std::string toString() const override = 0;
-
-    virtual std::string mangle() const override = 0;
-
-    virtual bool operator==(const Type &other) const override {
-        if (!isOtherType(other.code())) {
-            return false;
-        }
-        return code_ == other.code();
-    }
-    virtual bool operator!=(const Type &other) const override { return !(*this == other); }
-
-    virtual bool assignable(const type_ptr_t &type) const {
-        if (!isOtherType(type->code())) {
-            return false;
-        }
-        return code_ == type->code();
-    }
-
-    virtual type_ptr_t clone() const override = 0;
-
+    virtual std::string toString() const override                     = 0;
+    virtual std::string mangle() const override                       = 0;
+    virtual type_ptr_t clone() const override                         = 0;
+    virtual bool equals(const type_ptr_t &type) const override        = 0;
     virtual CastSafety castSafetyTo(const Type &other) const override = 0;
+    virtual bool assignable(const type_ptr_t &type) const override    = 0;
 };

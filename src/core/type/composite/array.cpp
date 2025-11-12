@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 11, 2025
+ * Updated: Nov. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
-
 #include "error/diagnostics/diagnostics.h"
+#include "utils/assert.h"
 
 using namespace std;
 
@@ -39,6 +39,26 @@ std::shared_ptr<ArrayType> ArrayType::create(const type_ptr_t &elemType) const {
 
 type_ptr_t ArrayType::elementType() const { return elemType_; }
 
+type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
+    ASSERT(typeList.size() > 0, "Type list is empty");
+    ASSERT(!resolved(), "ArrayType is already resolved");
+
+    type_ptr_t newElemType = elemType_;
+    for (const auto &type : typeList) {
+        if (newElemType->code() == TypeCode::Void) {
+            newElemType = type;
+        } else if (!newElemType->equals(type)) {
+            throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+                .commit("Array", type->toString(), newElemType->toString());
+        }
+    }
+    auto newArray = ArrayType::create(newElemType);
+    ASSERT(newArray->resolved(), "ArrayType is not fully resolved");
+    return newArray;
+}
+
+bool ArrayType::resolved() const { return elemType_->code() != TypeCode::Void; }
+
 string ArrayType::toString() const {
     return (elemType_->code() == TypeCode::Void ? "" : elemType_->toString()) + "[]";
 }
@@ -49,68 +69,25 @@ std::string ArrayType::mangle() const {
     return result;
 }
 
-std::optional<type_ptr_t> ArrayType::typeAt(struct_idx_t idx) const { return elemType_; }
+type_ptr_t ArrayType::clone() const { return ArrayType::create(elemType_); }
 
-bool ArrayType::resolved() const { return elemType_->code() != TypeCode::Void; }
-
-void ArrayType::resolve(const type_vec_t &typeList) {
-    ASSERT(typeList.size() > 0, "Type list is empty");
-    for (const auto &type : typeList) {
-        if (elemType_->code() == TypeCode::Void) {
-            elemType_ = type;
-        } else if (!elemType_->equals(type)) {
-            throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
-                .commit("Array", type->toString(), elemType_->toString());
-        }
-    }
-}
-
-bool ArrayType::operator==(const Type &other) const {
-    if (this == &other) {
+bool ArrayType::equals(const type_ptr_t &other) const {
+    if (this == other.get()) {
         return true;
     }
-    if (other.code() != TypeCode::Array) {
+    if (other->code() != TypeCode::Array) {
         return false;
     }
-    const ArrayType &otherArr = dynamic_cast<const ArrayType &>(other);
+    const ArrayType &otherArr = static_cast<const ArrayType &>(*other);
     return elemType_->code() == TypeCode::Void || otherArr.elemType_->code() == TypeCode::Void ||
            elemType_->equals(otherArr.elemType_);
 }
-
-bool ArrayType::operator!=(const Type &other) const {
-    if (other.code() != TypeCode::Array) {
-        return true;
-    }
-    const ArrayType &otherArr = dynamic_cast<const ArrayType &>(other);
-    return !elemType_->equals(otherArr.elemType_);
-}
-
-type_ptr_t ArrayType::clone() const { return std::make_shared<ArrayType>(elemType_); }
 
 CastSafety ArrayType::castSafetyTo(const Type &other) const {
     if (this == &other) {
         return CastSafety::Safe;
     }
-    if (other.code() == code_) {
-        return CastSafety::Safe;
-    }
-    if (other.composed()) {
-        switch (other.code()) {
-        case TypeCode::Array: {
-            if (elemType_->code() == TypeCode::Void) {
-                return CastSafety::Safe;
-            }
-            const ArrayType &otherVector = dynamic_cast<const ArrayType &>(other);
-            return elemType_->castSafetyTo(*otherVector.elementType());
-        }
-
-        default:
-            return CastSafety::Forbidden;
-        }
-    }
-    if (other.code() == TypeCode::Any) {
-        return CastSafety::Safe;
-    }
-    // primary types and special types are forbidden
     return CastSafety::Forbidden;
 }
+
+bool ArrayType::assignable(const type_ptr_t &type) const { return this->equals(type); }
