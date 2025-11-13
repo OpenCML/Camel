@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 08, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,10 +33,10 @@ class FreeListAllocator : public IAllocator {
   public:
     FreeListAllocator(size_t capacity) : capacity_(capacity) {
         buffer_ = std::make_unique<uint8_t[]>(capacity_);
-        start_ = buffer_.get();
-        end_ = start_ + capacity_;
+        start_  = buffer_.get();
+        end_    = start_ + capacity_;
 
-        freeList_ = reinterpret_cast<FreeBlock *>(start_);
+        freeList_       = reinterpret_cast<FreeBlock *>(start_);
         freeList_->size = capacity_;
         freeList_->next = nullptr;
     }
@@ -50,10 +50,10 @@ class FreeListAllocator : public IAllocator {
         FreeBlock *curr = freeList_;
 
         while (curr) {
-            uint8_t *blockStart = reinterpret_cast<uint8_t *>(curr);
+            uint8_t *blockStart  = reinterpret_cast<uint8_t *>(curr);
             uint8_t *alignedData = alignPointer(blockStart + sizeof(FreeBlock), total_align);
-            size_t padding = alignedData - blockStart;
-            size_t needed = padding + OBJECT_HEADER_SIZE + size;
+            size_t padding       = alignedData - blockStart;
+            size_t needed        = padding + sizeof(ObjectHeader) + size;
 
             if (curr->size >= needed) {
                 uint8_t *allocStart = blockStart + padding;
@@ -62,8 +62,8 @@ class FreeListAllocator : public IAllocator {
                 size_t remaining = curr->size - needed;
                 if (remaining >= sizeof(FreeBlock)) {
                     FreeBlock *newBlock = reinterpret_cast<FreeBlock *>(blockStart + needed);
-                    newBlock->size = remaining;
-                    newBlock->next = curr->next;
+                    newBlock->size      = remaining;
+                    newBlock->next      = curr->next;
                     if (prev)
                         prev->next = newBlock;
                     else
@@ -74,7 +74,7 @@ class FreeListAllocator : public IAllocator {
                     else
                         freeList_ = curr->next;
                 }
-                return allocStart + OBJECT_HEADER_SIZE;
+                return allocStart + sizeof(ObjectHeader);
             }
 
             prev = curr;
@@ -87,9 +87,9 @@ class FreeListAllocator : public IAllocator {
         if (!ptr)
             return;
 
-        uint8_t *blockData = reinterpret_cast<uint8_t *>(ptr) - OBJECT_HEADER_SIZE;
+        uint8_t *blockData   = reinterpret_cast<uint8_t *>(ptr) - sizeof(ObjectHeader);
         ObjectHeader *header = reinterpret_cast<ObjectHeader *>(blockData);
-        size_t total_size = header->size();
+        size_t total_size    = header->size();
 
         insertFreeBlock(blockData, total_size);
     }
@@ -102,13 +102,13 @@ class FreeListAllocator : public IAllocator {
     }
 
     void reset() override {
-        freeList_ = reinterpret_cast<FreeBlock *>(start_);
+        freeList_       = reinterpret_cast<FreeBlock *>(start_);
         freeList_->size = capacity_;
         freeList_->next = nullptr;
     }
 
     size_t available() const override {
-        size_t total = 0;
+        size_t total    = 0;
         FreeBlock *curr = freeList_;
         while (curr) {
             total += curr->size;
@@ -150,8 +150,8 @@ class FreeListAllocator : public IAllocator {
 
     void insertFreeBlock(uint8_t *blockData, size_t total_size) {
         FreeBlock *block = reinterpret_cast<FreeBlock *>(blockData);
-        block->size = total_size;
-        block->next = nullptr;
+        block->size      = total_size;
+        block->next      = nullptr;
 
         // 按地址有序插入
         FreeBlock *prev = nullptr;
@@ -172,7 +172,7 @@ class FreeListAllocator : public IAllocator {
             reinterpret_cast<uint8_t *>(prev) + prev->size == reinterpret_cast<uint8_t *>(block)) {
             prev->size += block->size;
             prev->next = block->next;
-            block = prev;
+            block      = prev;
         }
 
         if (curr &&

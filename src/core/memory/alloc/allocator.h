@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 08, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,17 +34,29 @@ class IAllocator {
     virtual void free(void *ptr) = 0;
 
     // 批量清空（适合半空间 / bump pointer 分配器）
-    virtual void reset() = 0;
+    virtual void reset() { ASSERT(false, "reset() not implemented for this allocator"); };
 
     // 查询剩余可用空间
-    virtual size_t available() const = 0;
+    virtual size_t available() const {
+        ASSERT(false, "available() not implemented for this allocator");
+        return 0;
+    };
 
     // 判断指针是否属于该分配器管理的区域
-    virtual bool contains(void *ptr) const = 0;
+    virtual bool contains(void *ptr) const {
+        ASSERT(false, "contains() not implemented for this allocator");
+        return false;
+    };
 
     // 遍历已分配对象（只读，不允许在回调中直接free）
-    virtual void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const = 0;
+    virtual void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const {
+        ASSERT(false, "iterateAllocated() not implemented for this allocator");
+    };
 
     // 批量释放给定对象头列表
-    virtual void freeBulk(const std::vector<ObjectHeader *> &objects) = 0;
+    virtual void freeBulk(const std::vector<ObjectHeader *> &objects) {
+        for (auto *obj : objects) {
+            free(reinterpret_cast<void *>(reinterpret_cast<uint8_t *>(obj) + sizeof(ObjectHeader)));
+        }
+    };
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 08, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,7 @@ class LargeObjectAllocator : public IAllocator {
 
     void *alloc(size_t size, size_t align) override {
         size_t total_align = adjustAlign(align);
-        size_t total_size = OBJECT_HEADER_SIZE + size;
+        size_t total_size  = sizeof(ObjectHeader) + size;
 
         uint8_t *raw =
             reinterpret_cast<uint8_t *>(::operator new(total_size, std::align_val_t(total_align)));
@@ -49,15 +49,15 @@ class LargeObjectAllocator : public IAllocator {
 
         allocated_.insert(hdr);
 
-        return raw + OBJECT_HEADER_SIZE;
+        return raw + sizeof(ObjectHeader);
     }
 
     void free(void *ptr) override {
         if (!ptr)
             return;
 
-        uint8_t *blockData = reinterpret_cast<uint8_t *>(ptr) - OBJECT_HEADER_SIZE;
-        auto *hdr = reinterpret_cast<ObjectHeader *>(blockData);
+        uint8_t *blockData = reinterpret_cast<uint8_t *>(ptr) - sizeof(ObjectHeader);
+        auto *hdr          = reinterpret_cast<ObjectHeader *>(blockData);
 
         auto it = allocated_.find(hdr);
         if (it != allocated_.end()) {
@@ -79,8 +79,8 @@ class LargeObjectAllocator : public IAllocator {
     bool contains(void *ptr) const override {
         if (!ptr)
             return false;
-        uint8_t *blockData = reinterpret_cast<uint8_t *>(ptr) - OBJECT_HEADER_SIZE;
-        auto *hdr = reinterpret_cast<const ObjectHeader *>(blockData);
+        uint8_t *blockData = reinterpret_cast<uint8_t *>(ptr) - sizeof(ObjectHeader);
+        auto *hdr          = reinterpret_cast<const ObjectHeader *>(blockData);
         return allocated_.find(const_cast<ObjectHeader *>(hdr)) != allocated_.end();
     }
 

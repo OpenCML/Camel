@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Nov. 04, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,6 @@
 #include <unordered_set>
 #include <variant>
 
-#include "core/context/arena.h"
 #include "core/data/composed/func.h"
 #include "core/data/data.h"
 #include "core/operator.h"
@@ -68,15 +67,15 @@ std::string to_string(LinkType type);
 class Graph;
 class Node;
 
-using graph_ptr_t = std::shared_ptr<Graph>;
-using graph_wptr_t = std::weak_ptr<Graph>;
-using graph_vec_t = std::vector<graph_ptr_t>;
+using graph_ptr_t     = std::shared_ptr<Graph>;
+using graph_wptr_t    = std::weak_ptr<Graph>;
+using graph_vec_t     = std::vector<graph_ptr_t>;
 using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
-using node_ptr_t = std::shared_ptr<Node>;
-using node_wptr_t = std::weak_ptr<Node>;
-using node_lst_t = std::list<node_ptr_t>;
-using node_vec_t = std::vector<node_ptr_t>;
-using node_set_t = std::unordered_set<node_ptr_t>;
+using node_ptr_t      = std::shared_ptr<Node>;
+using node_wptr_t     = std::weak_ptr<Node>;
+using node_lst_t      = std::list<node_ptr_t>;
+using node_vec_t      = std::vector<node_ptr_t>;
+using node_set_t      = std::unordered_set<node_ptr_t>;
 
 // 0 represents empty, positive numbers indicate runtime data segment indices,
 // and negative numbers indicate the opposite of static data segment indices.
@@ -101,10 +100,10 @@ struct WeakPtrEqual {
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
-    Graph(const Graph &other) = delete;            // Delete copy constructor
+    Graph(const Graph &other)            = delete; // Delete copy constructor
     Graph &operator=(const Graph &other) = delete; // Delete copy assignment
-    Graph(Graph &&other) = delete;                 // Delete move constructor
-    Graph &operator=(Graph &&other) = delete;      // Delete move assignment
+    Graph(Graph &&other)                 = delete; // Delete move constructor
+    Graph &operator=(Graph &&other)      = delete; // Delete move assignment
 
     explicit Graph(
         const func_type_ptr_t &funcType, const graph_ptr_t &graph = nullptr,
@@ -227,7 +226,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     // Needs to be resolved via rearrange
     bool dirty_ = false;
 
-    bool looped_ = false;
+    bool looped_        = false;
     bool parameterized_ = false;
 };
 
@@ -346,7 +345,7 @@ class DataNode : public Node {
 
     static node_ptr_t create(Graph &graph, const data_ptr_t &data) {
         data_idx_t index = graph.addStaticData(data);
-        auto node = std::make_shared<DataNode>(graph, data->type(), index);
+        auto node        = std::make_shared<DataNode>(graph, data->type(), index);
         graph.addNode(node);
         return node;
     }
@@ -379,7 +378,7 @@ class PortNode : public Node {
     static node_ptr_t
     create(Graph &graph, const type_ptr_t &type, const std::string &name, bool isVar) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<PortNode>(graph, type, index, name, isVar);
+        auto node        = std::make_shared<PortNode>(graph, type, index, name, isVar);
         // This is not automatically called and needs to be added manually because the order of
         // ports is very important. graph.addPort(node);
         return node;
@@ -410,7 +409,7 @@ class CastNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<CastNode>(graph, type, index);
+        auto node        = std::make_shared<CastNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
@@ -432,7 +431,7 @@ class CopyNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<CopyNode>(graph, type, index);
+        auto node        = std::make_shared<CopyNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
@@ -454,7 +453,7 @@ class FillNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<FillNode>(graph, type, index);
+        auto node        = std::make_shared<FillNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
@@ -479,7 +478,7 @@ class AccsNode : public Node {
     static node_ptr_t
     create(Graph &graph, const type_ptr_t &type, const std::variant<std::string, size_t> &accsIdx) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<AccsNode>(graph, type, index, accsIdx);
+        auto node        = std::make_shared<AccsNode>(graph, type, index, accsIdx);
         graph.addNode(node);
         return node;
     }
@@ -514,7 +513,7 @@ class BrchNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<BrchNode>(graph, type, index);
+        auto node        = std::make_shared<BrchNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
@@ -536,7 +535,7 @@ class JoinNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<JoinNode>(graph, type, index);
+        auto node        = std::make_shared<JoinNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
@@ -558,7 +557,7 @@ class CallNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<CallNode>(graph, type, index);
+        auto node        = std::make_shared<CallNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
@@ -580,7 +579,7 @@ class BindNode : public Node {
 
     static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<BindNode>(graph, type, index);
+        auto node        = std::make_shared<BindNode>(graph, type, index);
         graph.addNode(node);
         return node;
     }
@@ -604,7 +603,7 @@ class FuncNode : public Node {
 
     static node_ptr_t create(Graph &graph, func_ptr_t func) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<FuncNode>(graph, index, func);
+        auto node        = std::make_shared<FuncNode>(graph, index, func);
         graph.addNode(node);
         return node;
     }
@@ -637,7 +636,7 @@ class OperNode : public Node {
 
     static node_ptr_t create(Graph &graph, oper_idx_ptr_t op) {
         data_idx_t index = graph.addRuntimeData();
-        auto node = std::make_shared<OperNode>(graph, index, op);
+        auto node        = std::make_shared<OperNode>(graph, index, op);
         graph.addNode(node);
         return node;
     }

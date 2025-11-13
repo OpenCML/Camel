@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 10, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,10 +33,6 @@ class GCString : public GCObject {
 
     GCString(std::string &&s) : str_(std::move(s), GCAllocator<char>{}) {}
 
-    void trace(const std::function<void(GCObject *)> &visit) const override {
-        // 普通字符数据无 GC 引用，这里不调用 visit
-    }
-
     ObjectHeader *header() const override {
         const char *dataPtr = str_.data();
         const char *strPtr  = reinterpret_cast<const char *>(&str_);
@@ -48,6 +44,10 @@ class GCString : public GCObject {
 
         // 否则认为是 GC 分配的堆内存
         return reinterpret_cast<ObjectHeader *>(const_cast<char *>(dataPtr) - sizeof(ObjectHeader));
+    }
+
+    void trace(const std::function<void(GCObject *)> &visit) const override {
+        // 普通字符数据无 GC 引用，这里不调用 visit
     }
 
     const StringType &str() const { return str_; }

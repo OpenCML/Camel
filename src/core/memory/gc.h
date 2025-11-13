@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,8 +27,8 @@
 class GCObject {
   public:
     virtual ~GCObject()                                                    = default;
-    virtual void trace(const std::function<void(GCObject *)> &visit) const = 0;
     virtual ObjectHeader *header() const                                   = 0;
+    virtual void trace(const std::function<void(GCObject *)> &visit) const = 0;
 };
 
 struct GCConfig {
@@ -40,7 +40,7 @@ struct GCConfig {
     size_t promotionAgeThreshold; // 晋升阈值
 };
 
-class GarbageCollector {
+class GarbageCollector : public IAllocator {
   private:
     // 年轻代
     BumpPointerAllocator eden_;
@@ -73,7 +73,7 @@ class GarbageCollector {
     void addRoot(void *obj) { rootSet_.push_back(obj); }
 
     // 普通对象分配
-    void *allocate(size_t payloadSize, size_t align = alignof(std::max_align_t)) {
+    void *alloc(size_t payloadSize, size_t align = alignof(std::max_align_t)) {
         // 大对象直接走大对象分配器
         if (__builtin_expect(payloadSize > 1024, 0)) {
             void *ptr = largeObjSpace_.alloc(payloadSize, align);
@@ -93,17 +93,24 @@ class GarbageCollector {
         return ptr;
     }
 
-    // 持久代分配
-    void *allocatePermanent(size_t payloadSize, size_t align = alignof(std::max_align_t)) {
-        void *ptr = permGen_.alloc(payloadSize, align);
+    void free(void *ptr) {
+        // GC 管理生命周期，不支持手动释放
+        ASSERT(false, "GarbageCollector does not support manual free");
+    }
+
+    // 元数据区分配
+    void *allocMeta(size_t payloadSize, size_t align = alignof(std::max_align_t)) {
+        void *ptr = metaSpace_.alloc(payloadSize, align);
         if (!ptr)
             throw std::bad_alloc();
         return ptr;
     }
 
-    // 元数据区分配
-    void *allocateMeta(size_t payloadSize, size_t align = alignof(std::max_align_t)) {
-        void *ptr = metaSpace_.alloc(payloadSize, align);
+    void freeMeta(void *ptr) { metaSpace_.free(ptr); }
+
+    // 持久代分配
+    void *allocPerm(size_t payloadSize, size_t align = alignof(std::max_align_t)) {
+        void *ptr = permGen_.alloc(payloadSize, align);
         if (!ptr)
             throw std::bad_alloc();
         return ptr;
@@ -134,13 +141,13 @@ class GarbageCollector {
             return nullptr;
 
         auto *header =
-            reinterpret_cast<ObjectHeader *>(static_cast<uint8_t *>(objPtr) - OBJECT_HEADER_SIZE);
+            reinterpret_cast<ObjectHeader *>(static_cast<uint8_t *>(objPtr) - sizeof(ObjectHeader));
 
         if (header->forwarded()) {
             return header->addr(); // 已复制，直接返回新地址
         }
 
-        size_t payloadSize = header->size() - OBJECT_HEADER_SIZE;
+        size_t payloadSize = header->size() - sizeof(ObjectHeader);
         header->age++;
 
         void *newDataPtr = nullptr;

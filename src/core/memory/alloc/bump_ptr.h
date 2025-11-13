@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 08, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,20 +33,20 @@ class BumpPointerAllocator : public IAllocator {
   public:
     BumpPointerAllocator(size_t capacity) : capacity_(capacity) {
         buffer_ = std::make_unique<uint8_t[]>(capacity_);
-        start_ = buffer_.get();
-        top_ = start_;
-        end_ = start_ + capacity_;
+        start_  = buffer_.get();
+        top_    = start_;
+        end_    = start_ + capacity_;
     }
 
     void *alloc(size_t size, size_t align) override {
         ASSERT((align & (align - 1)) == 0, "Alignment must be a power of two");
 
         // 保证对象头 + 数据区整体对齐
-        size_t total_align = adjustAlign(align);
+        size_t total_align  = adjustAlign(align);
         uint8_t *alignedTop = alignPointer(top_, total_align);
 
-        size_t total_size = OBJECT_HEADER_SIZE + size;
-        uint8_t *newTop = alignedTop + total_size;
+        size_t total_size = sizeof(ObjectHeader) + size;
+        uint8_t *newTop   = alignedTop + total_size;
 
         if (__builtin_expect(newTop > end_, 0)) {
             return nullptr;
@@ -55,7 +55,7 @@ class BumpPointerAllocator : public IAllocator {
         installHeader(alignedTop, total_size);
 
         top_ = newTop;
-        return alignedTop + OBJECT_HEADER_SIZE; // 返回数据区指针
+        return alignedTop + sizeof(ObjectHeader); // 返回数据区指针
     }
 
     void free(void * /*ptr*/) override {

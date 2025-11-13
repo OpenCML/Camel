@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 10, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,13 +23,12 @@
 
 class GCArray : public GCObject {
   public:
-    GCArray(TypeCode typeCode)
-        : type_(typeCode), layout_(getLayoutOfType(typeCode)), data_(nullptr), size_(0),
-          capacity_(0) {}
+    GCArray(TypeCode typeCode, IAllocator &allocator = GlobalGC::instance())
+        : data_(nullptr), size_(0), capacity_(0), layout_(DataLayout(typeCode)),
+          allocator_(&allocator) {}
 
     size_t size() const { return size_; }
-    TypeCode typeCode() const { return type_; }
-
+    size_t capacity() const { return capacity_; }
     void *data() { return data_; }
     const void *data() const { return data_; }
 
@@ -39,32 +38,32 @@ class GCArray : public GCObject {
 
     template <typename T> T &at(size_t index) {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == layout_.size, "Type size mismatch");
-        ASSERT(alignof(T) <= layout_.align, "Type alignment mismatch");
-        return *reinterpret_cast<T *>(static_cast<uint8_t *>(data_) + index * layout_.size);
+        ASSERT(sizeof(T) == layout_.size(), "Type size mismatch");
+        ASSERT(alignof(T) <= layout_.align(), "Type alignment mismatch");
+        return *reinterpret_cast<T *>(static_cast<uint8_t *>(data_) + index * layout_.size());
     }
 
     template <typename T> const T &at(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == layout_.size, "Type size mismatch");
-        ASSERT(alignof(T) <= layout_.align, "Type alignment mismatch");
+        ASSERT(sizeof(T) == layout_.size(), "Type size mismatch");
+        ASSERT(alignof(T) <= layout_.align(), "Type alignment mismatch");
         return *reinterpret_cast<const T *>(
-            static_cast<const uint8_t *>(data_) + index * layout_.size);
+            static_cast<const uint8_t *>(data_) + index * layout_.size());
     }
 
     void reserve(size_t size) {
         if (size <= capacity_)
             return;
 
-        size_t totalSize = size * layout_.size;
-        totalSize        = alignUp(totalSize, layout_.align);
+        size_t totalSize = size * layout_.size();
+        totalSize        = alignUp(totalSize, layout_.align());
 
-        void *newData = GlobalGC::instance().allocate(totalSize, layout_.align);
+        void *newData = allocator_->alloc(totalSize, layout_.align());
         if (!newData)
             throw std::bad_alloc();
 
         if (data_) {
-            std::memcpy(newData, data_, size_ * layout_.size);
+            std::memcpy(newData, data_, size_ * layout_.size());
         }
 
         data_     = newData;
@@ -73,31 +72,17 @@ class GCArray : public GCObject {
 
     template <typename T> void append(const T &value) {
         static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-        ASSERT(sizeof(T) == layout_.size, "Type size mismatch");
-        ASSERT(alignof(T) <= layout_.align, "Type alignment mismatch");
+        ASSERT(sizeof(T) == layout_.size(), "Type size mismatch");
+        ASSERT(alignof(T) <= layout_.align(), "Type alignment mismatch");
 
         if (size_ >= capacity_) {
             size_t newCap = capacity_ == 0 ? 1 : capacity_ * 2;
             reserve(newCap);
         }
 
-        void *dest = static_cast<uint8_t *>(data_) + size_ * layout_.size;
-        std::memcpy(dest, &value, layout_.size);
+        void *dest = static_cast<uint8_t *>(data_) + size_ * layout_.size();
+        std::memcpy(dest, &value, layout_.size());
         size_++;
-    }
-
-    // GCObject 接口实现
-    void trace(const std::function<void(GCObject *)> &visit) const override {
-        if (!isGCTraced(type_))
-            return; // 非 GCObject 类型，无需追踪
-
-        for (size_t i = 0; i < size_; ++i) {
-            auto objPtr = *reinterpret_cast<GCObject *const *>(
-                static_cast<const uint8_t *>(data_) + i * layout_.size);
-            if (objPtr) {
-                visit(objPtr);
-            }
-        }
     }
 
     ObjectHeader *header() const override {
@@ -105,13 +90,25 @@ class GCArray : public GCObject {
             reinterpret_cast<uint8_t *>(data_) - sizeof(ObjectHeader));
     }
 
-  private:
-    TypeCode type_;
-    DataLayout layout_;
+    void trace(const std::function<void(GCObject *)> &visit) const override {
+        if (!isGCTraced(layout_.code()))
+            return;
 
+        for (size_t i = 0; i < size_; ++i) {
+            auto objPtr = *reinterpret_cast<GCObject *const *>(
+                static_cast<const uint8_t *>(data_) + i * layout_.size());
+            if (objPtr) {
+                visit(objPtr);
+            }
+        }
+    }
+
+  private:
     void *data_;
-    size_t size_;
-    size_t capacity_;
+    uint32_t size_;
+    uint32_t capacity_;
+    DataLayout layout_;
+    IAllocator *allocator_;
 };
 
 static_assert(alignof(GCArray) == 8, "GCArray alignment mismatch");

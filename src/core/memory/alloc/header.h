@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 10, 2025
+ * Updated: Nov. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,10 +57,7 @@ struct ObjectHeader {
 
 static_assert(sizeof(ObjectHeader) == sizeof(uint64_t), "ObjectHeader size must be 8 bytes");
 
-constexpr size_t OBJECT_HEADER_SIZE  = sizeof(ObjectHeader);
-constexpr size_t OBJECT_HEADER_ALIGN = alignof(ObjectHeader);
-
-inline size_t adjustAlign(size_t align) { return std::max(align, OBJECT_HEADER_ALIGN); }
+inline size_t adjustAlign(size_t align) { return std::max(align, alignof(ObjectHeader)); }
 
 inline uint8_t *alignPointer(uint8_t *ptr, size_t align) {
     uintptr_t p       = reinterpret_cast<uintptr_t>(ptr);
