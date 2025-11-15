@@ -25,7 +25,7 @@
 #include "gc.h"
 #include "utils/assert.h"
 
-class GenerationAllocatorUsingGC : public IAllocator {
+class GenerationalAllocatorUsingGC : public IAllocator {
   private:
     // 年轻代
     BumpPointerAllocator eden_;
@@ -50,7 +50,7 @@ class GenerationAllocatorUsingGC : public IAllocator {
         size_t promotionAgeThreshold; // 晋升阈值
     };
 
-    GenerationAllocatorUsingGC(const Config &config)
+    GenerationalAllocatorUsingGC(const Config &config)
         : eden_(config.edenSize), from_(config.survivorSize), to_(config.survivorSize),
           oldGen_(config.oldGenSize), largeObjSpace_(),
           promotionAgeThreshold_(config.promotionAgeThreshold) {}
@@ -78,7 +78,7 @@ class GenerationAllocatorUsingGC : public IAllocator {
 
     void free(void *ptr) {
         // GC 管理生命周期，不支持手动释放
-        ASSERT(false, "GenerationAllocatorUsingGC does not support manual free");
+        ASSERT(false, "GenerationalAllocatorUsingGC does not support manual free");
     }
 
     GarbageCollector &gc() { return gc_; }

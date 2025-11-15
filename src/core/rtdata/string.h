@@ -106,10 +106,6 @@ template <typename Policy = UseGlobalGC> class GCStringT : public GCObject {
     template <typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseGlobalGC>>>
     explicit GCStringT(const std::string &s) : str_(s.begin(), s.end()) {}
 
-    // 从 StringType 移动构造（GlobalGC 策略）
-    template <typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseGlobalGC>>>
-    explicit GCStringT(StringType &&s) noexcept : str_(std::move(s)) {}
-
     // 自定义分配器构造（CustomAllocator 策略）
     template <
         typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseCustomAllocator>>>
@@ -124,11 +120,6 @@ template <typename Policy = UseGlobalGC> class GCStringT : public GCObject {
         typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseCustomAllocator>>>
     GCStringT(const std::string &s, IAllocator *allocator)
         : str_(s.begin(), s.end(), AllocatorType(allocator)) {}
-
-    // 从 StringType 移动构造（CustomAllocator 策略）
-    template <
-        typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseCustomAllocator>>>
-    explicit GCStringT(StringType &&s) noexcept : str_(std::move(s)) {}
 
     // 不允许从标准string移动构造（因为分配器不同）
     explicit GCStringT(std::string &&s) = delete;

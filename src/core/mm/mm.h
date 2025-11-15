@@ -25,8 +25,8 @@
 
 namespace mm { // Memory Management
 // 由 GC 系统自动管理，需要从根对象可达
-GenerationAllocatorUsingGC &autoSpace() {
-    static GenerationAllocatorUsingGC allocator(GenerationAllocatorUsingGC::Config{
+GenerationalAllocatorUsingGC &autoSpace() {
+    static GenerationalAllocatorUsingGC allocator(GenerationalAllocatorUsingGC::Config{
         .edenSize              = 1024 * 1024 * 16, // 16 MB
         .survivorSize          = 1024 * 1024 * 2,  // 2 MB
         .promotionAgeThreshold = 2                 // 晋升阈值
