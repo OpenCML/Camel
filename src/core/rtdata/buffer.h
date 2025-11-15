@@ -37,7 +37,7 @@ class GCBuffer : public GCObject {
         if (!data_) {
             return nullptr;
         }
-        return reinterpret_cast<ObjectHeader *>(static_cast<char *>(data_)) - 1;
+        return headerOf(data_);
     }
 
     void trace(const std::function<void(GCObject *)> &visit) const override {}

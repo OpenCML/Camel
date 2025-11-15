@@ -27,6 +27,12 @@
 
 class GenerationalAllocatorUsingGC : public IAllocator {
   private:
+    enum RegionId {
+        YoungGen    = 0,
+        OldGen      = 1,
+        LargeObject = 2,
+    };
+
     // 年轻代
     BumpPointerAllocator eden_;
     BumpPointerAllocator from_;
@@ -41,6 +47,8 @@ class GenerationalAllocatorUsingGC : public IAllocator {
     size_t promotionAgeThreshold_;
 
     GarbageCollector gc_;
+
+    bool inYoungGen(ObjectHeader *header) const { return header->regionId() == RegionId::YoungGen; }
 
   public:
     struct Config {
@@ -94,8 +102,7 @@ class GenerationalAllocatorUsingGC : public IAllocator {
         if (!objPtr)
             return nullptr;
 
-        auto *header =
-            reinterpret_cast<ObjectHeader *>(static_cast<uint8_t *>(objPtr) - sizeof(ObjectHeader));
+        auto *header = headerOf(objPtr);
 
         if (header->forwarded()) {
             return header->addr(); // 已复制，直接返回新地址

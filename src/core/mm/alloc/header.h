@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,17 +26,21 @@ struct ObjectHeader {
     union {
         uint64_t raw;
         struct {
-            uint64_t payload : 48;  // 正常模式存总大小(header+padding+block)，GC模式存转发地址
-            uint64_t age : 4;       // 年龄
-            uint64_t marked : 1;    // GC标志
-            uint64_t state : 1;     // 0=Normal, 1=Forwarded
-            uint64_t reserved : 10; // 其他预留位
+            uint64_t payload : 48; // 正常模式存总大小(header+padding+block)，GC模式存转发地址
+            uint64_t age : 4;      // 年龄
+            uint64_t marked : 1;   // GC标志
+            uint64_t state : 1;    // 0=Normal, 1=Forwarded
+            uint64_t region : 4;   // 所在区域（年轻代/老年代/大对象区等）
+            uint64_t reserved : 6; // 其他预留位
         };
     };
 
     ObjectHeader() : raw(0) {}
 
     void mark() { marked = 1; }
+
+    size_t regionId() const { return region; }
+    void setRegionId(size_t regionId) { region = regionId & 0x0F; }
 
     void setSize(uint64_t size) {
         payload = size;
@@ -70,4 +74,12 @@ inline void installHeader(uint8_t *addr, size_t total_alloc_size) {
     header->setSize(total_alloc_size);
     header->age    = 0;
     header->marked = 0;
+}
+
+template <typename T> inline T *payloadOf(ObjectHeader *header) {
+    return reinterpret_cast<T *>(header + 1);
+}
+
+template <typename T> inline ObjectHeader *headerOf(T *payload) {
+    return reinterpret_cast<ObjectHeader *>(payload) - 1;
 }

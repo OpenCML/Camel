@@ -87,11 +87,10 @@ class FreeListAllocator : public IAllocator {
         if (!ptr)
             return;
 
-        uint8_t *blockData   = reinterpret_cast<uint8_t *>(ptr) - sizeof(ObjectHeader);
-        ObjectHeader *header = reinterpret_cast<ObjectHeader *>(blockData);
-        size_t total_size    = header->size();
+        auto header       = headerOf(ptr);
+        size_t total_size = header->size();
 
-        insertFreeBlock(blockData, total_size);
+        insertFreeBlock(reinterpret_cast<uint8_t *>(header), total_size);
     }
 
     void freeBulk(const std::vector<ObjectHeader *> &objects) override {

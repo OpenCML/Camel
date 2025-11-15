@@ -56,8 +56,7 @@ class LargeObjectAllocator : public IAllocator {
         if (!ptr)
             return;
 
-        uint8_t *blockData = reinterpret_cast<uint8_t *>(ptr) - sizeof(ObjectHeader);
-        auto *hdr          = reinterpret_cast<ObjectHeader *>(blockData);
+        auto *hdr = headerOf(ptr);
 
         auto it = allocated_.find(hdr);
         if (it != allocated_.end()) {

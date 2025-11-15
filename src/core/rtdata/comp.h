@@ -50,10 +50,7 @@ class GCCompositeObject : public GCObject {
         }
     }
 
-    ObjectHeader *header() const {
-        return reinterpret_cast<ObjectHeader *>(
-            reinterpret_cast<uint8_t *>(data_) - sizeof(ObjectHeader));
-    }
+    ObjectHeader *header() const { return headerOf(data_); }
 
   protected:
     uint8_t *data() const { return reinterpret_cast<uint8_t *>(data_); }

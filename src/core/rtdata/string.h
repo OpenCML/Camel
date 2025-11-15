@@ -128,7 +128,7 @@ template <typename Policy = UseGlobalGC> class GCStringT : public GCObject {
         if (isSSO()) {
             return nullptr;
         }
-        return reinterpret_cast<ObjectHeader *>(const_cast<char *>(str_.data())) - 1;
+        return headerOf(str_.data());
     }
 
     void trace(const std::function<void(GCObject *)> &visit) const override {
