@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 15, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class GCBuffer : public GCObject {
   public:
-    explicit GCBuffer(size_t size, size_t align, IAllocator &allocator = GlobalGC::instance())
+    explicit GCBuffer(size_t size, size_t align, IAllocator &allocator = mm::autoSpace())
         : size_(size) {
         if (size == 0) {
             data_ = nullptr;

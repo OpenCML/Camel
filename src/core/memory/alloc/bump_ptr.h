@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,7 @@ class BumpPointerAllocator : public IAllocator {
         end_    = start_ + capacity_;
     }
 
-    void *alloc(size_t size, size_t align) override {
+    void *alloc(size_t size, size_t align = alignof(std::max_align_t)) override {
         ASSERT((align & (align - 1)) == 0, "Alignment must be a power of two");
 
         // 保证对象头 + 数据区整体对齐

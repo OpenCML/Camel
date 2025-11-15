@@ -12,12 +12,23 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Nov. 12, 2025
- * Updated: Nov. 12, 2025
+ * Created: Nov. 07, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "base.h"
+#pragma once
 
-#include "array.h"
-#include "string.h"
+#include "comp.h"
+
+namespace GraphIR {
+class Graph;
+} // namespace GraphIR
+
+class GCFunction : public GCCompositeObject {
+    GraphIR::Graph *graph_;
+
+  public:
+    explicit GCFunction(const CompositeDataLayout *layout, IAllocator &allocator = mm::autoSpace())
+        : GCCompositeObject(layout, allocator), graph_(nullptr) {}
+};

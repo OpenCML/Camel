@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 15, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 class GCCompositeObject : public GCObject {
   public:
     explicit GCCompositeObject(
-        const CompositeDataLayout *layout, IAllocator &allocator = GlobalGC::instance())
+        const CompositeDataLayout *layout, IAllocator &allocator = mm::autoSpace())
         : layout_(layout), size_(layout->elemCnt()) {
         data_ = allocator.alloc(layout_->size(), layout_->align());
     }

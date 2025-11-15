@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include "layout.h"
 
 class GCArray : public GCObject {
   public:
-    GCArray(TypeCode typeCode, IAllocator &allocator = GlobalGC::instance())
+    GCArray(TypeCode typeCode, IAllocator &allocator = mm::autoSpace())
         : data_(nullptr), size_(0), capacity_(0), layout_(DataLayout(typeCode)),
           allocator_(&allocator) {}
 

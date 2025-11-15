@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Nov. 15, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,6 @@
 
 class GCTuple : public GCCompositeObject {
   public:
-    explicit GCTuple(
-        const CompositeDataLayout *layout, IAllocator &allocator = GlobalGC::instance())
+    explicit GCTuple(const CompositeDataLayout *layout, IAllocator &allocator = mm::autoSpace())
         : GCCompositeObject(layout, allocator) {}
 };

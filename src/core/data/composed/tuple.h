@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 10, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,8 +71,8 @@ class VariantTuple {
         totalSize_ = offset;
 
         // GC 分配连续内存
-        dataBlock_ = static_cast<uint8_t *>(
-            GlobalGC::instance().allocate(totalSize_, alignof(std::max_align_t)));
+        dataBlock_ =
+            static_cast<uint8_t *>(mm::autoSpace().allocate(totalSize_, alignof(std::max_align_t)));
     }
 
     template <typename T> T &get(size_t index) {

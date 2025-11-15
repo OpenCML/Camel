@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 15, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/memory/gc.h"
+#include "core/memory/mm.h"
 #include "core/type/type.h"
 
 using Int    = int32_t;

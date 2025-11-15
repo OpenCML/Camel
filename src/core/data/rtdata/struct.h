@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 15, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 class GCStruct : public GCCompositeObject {
   public:
-    explicit GCStruct(const StructDataLayout *layout, IAllocator &allocator = GlobalGC::instance())
+    explicit GCStruct(const StructDataLayout *layout, IAllocator &allocator = mm::autoSpace())
         : GCCompositeObject(layout, allocator) {}
 
     // 安全的向下转型

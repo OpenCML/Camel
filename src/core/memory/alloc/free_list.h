@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,7 @@ class FreeListAllocator : public IAllocator {
         freeList_->next = nullptr;
     }
 
-    void *alloc(size_t size, size_t align) override {
+    void *alloc(size_t size, size_t align = alignof(std::max_align_t)) override {
         ASSERT((align & (align - 1)) == 0, "Alignment must be a power of two");
 
         size_t total_align = adjustAlign(align);

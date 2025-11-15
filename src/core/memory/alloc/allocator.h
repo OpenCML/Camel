@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 15, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,7 @@ class IAllocator {
     virtual ~IAllocator() = default;
 
     // 分配内存，可指定对齐
-    virtual void *alloc(size_t size, size_t align) = 0;
+    virtual void *alloc(size_t size, size_t align = alignof(std::max_align_t)) = 0;
 
     // 释放单个对象（在 GC 新生代里可能是空实现）
     virtual void free(void *ptr) = 0;

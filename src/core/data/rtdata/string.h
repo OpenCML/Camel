@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 15, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,9 +39,7 @@ template <typename T> class GCAllocator<T, UseGlobalGC> {
 
     template <typename U> GCAllocator(const GCAllocator<U, UseGlobalGC> &) noexcept {}
 
-    T *allocate(size_type n) {
-        return static_cast<T *>(GlobalGC::instance().allocate(n * sizeof(T)));
-    }
+    T *allocate(size_type n) { return static_cast<T *>(mm::autoSpace().alloc(n * sizeof(T))); }
 
     void deallocate(T *p, size_type n) noexcept {
         // GC 管理，不需要手动释放
@@ -64,13 +62,13 @@ template <typename T> class GCAllocator<T, UseCustomAllocator> {
     using is_always_equal = std::false_type;
 
     explicit GCAllocator(IAllocator *allocator = nullptr) noexcept
-        : allocator_(allocator ? allocator : &GlobalGC::instance()) {}
+        : allocator_(allocator ? allocator : &mm::autoSpace()) {}
 
     template <typename U>
     GCAllocator(const GCAllocator<U, UseCustomAllocator> &other) noexcept
         : allocator_(other.allocator_) {}
 
-    T *allocate(size_type n) { return static_cast<T *>(allocator_->allocate(n * sizeof(T))); }
+    T *allocate(size_type n) { return static_cast<T *>(allocator_->alloc(n * sizeof(T))); }
 
     void deallocate(T *p, size_type n) noexcept {
         // GC 管理

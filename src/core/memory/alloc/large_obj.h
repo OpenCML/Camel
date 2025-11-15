@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ class LargeObjectAllocator : public IAllocator {
         allocated_.clear();
     }
 
-    void *alloc(size_t size, size_t align) override {
+    void *alloc(size_t size, size_t align = alignof(std::max_align_t)) override {
         size_t total_align = adjustAlign(align);
         size_t total_size  = sizeof(ObjectHeader) + size;
 
