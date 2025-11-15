@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "header.h"
+#include "utils/assert.h"
 
 #include <functional>
 

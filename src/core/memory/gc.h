@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -187,29 +187,4 @@ class GlobalGC {
 
   private:
     GlobalGC() = default; // 禁止外部构造
-};
-
-template <typename T> class GCAllocator {
-  public:
-    using value_type = T;
-
-    GCAllocator() noexcept {}
-    template <class U> GCAllocator(const GCAllocator<U> &) noexcept {}
-
-    // GC 分配内存
-    T *allocate(std::size_t n) {
-        void *ptr = GlobalGC::instance().allocate(n * sizeof(T), alignof(T));
-        if (!ptr)
-            throw std::bad_alloc();
-        return static_cast<T *>(ptr);
-    }
-
-    // GC 管理生命周期，这里不释放
-    void deallocate(T *p, std::size_t) noexcept {
-        // 不做释放，GC 负责
-    }
-
-    // 所有内存都是从同一个全局 GC 池里分配的，没有分配器实例的区别，所以它们天然等价
-    template <class U> bool operator==(const GCAllocator<U> &) const noexcept { return true; }
-    template <class U> bool operator!=(const GCAllocator<U> &) const noexcept { return false; }
 };

@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "base.h"
+#include "layout.h"
 
 #include "array.h"
 #include "string.h"
@@ -90,4 +90,69 @@ void CompositeDataLayout::build(const std::vector<DataLayout> &elements) {
 
     size_  = static_cast<uint16_t>(alignUp(currentOffset, maxAlign));
     align_ = static_cast<uint16_t>(maxAlign);
+}
+
+StructDataLayout *StructDataLayout::create(
+    IAllocator *allocator, TypeCode self,
+    const std::vector<std::pair<std::string, DataLayout>> &fields) {
+
+    uint16_t elemCnt = fields.size();
+
+    // 计算需要的内存大小
+    size_t baseSize    = sizeof(StructDataLayout);
+    size_t offsetsSize = elemCnt * sizeof(uint16_t);
+    size_t typesSize   = elemCnt * sizeof(TypeCode);
+    size_t namesSize   = elemCnt * sizeof(const char *);
+
+    // 分配内存
+    size_t totalSize = baseSize + offsetsSize + typesSize + namesSize;
+    void *mem        = allocator->alloc(totalSize, alignof(StructDataLayout));
+
+    // 构造对象
+    auto *layout = new (mem) StructDataLayout(self, elemCnt);
+
+    // 设置数组指针（紧跟在对象后面）
+    uint8_t *ptr = reinterpret_cast<uint8_t *>(layout + 1);
+
+    layout->offsets_ = reinterpret_cast<uint16_t *>(ptr);
+    ptr += offsetsSize;
+
+    layout->types_ = reinterpret_cast<TypeCode *>(ptr);
+    ptr += typesSize;
+
+    layout->fieldNames_ = reinterpret_cast<const char **>(ptr);
+
+    // 提取 DataLayout 向量
+    std::vector<DataLayout> layouts;
+    layouts.reserve(elemCnt);
+    for (const auto &[name, layout] : fields) {
+        layouts.push_back(layout);
+    }
+
+    // 调用父类的 build 来填充 offsets 和 types
+    layout->build(layouts);
+
+    // 填充字段名
+    layout->buildWithNames(fields);
+
+    return layout;
+}
+
+void StructDataLayout::buildWithNames(
+    const std::vector<std::pair<std::string, DataLayout>> &fields) {
+
+    // 字段名可以：
+    // 1. 指向外部字符串池
+    // 2. 分配新的字符串存储
+    // 3. 使用内联存储（小字符串优化）
+
+    for (size_t i = 0; i < fields.size(); ++i) {
+        const auto &[name, layout] = fields[i];
+
+        // 存储字段名（这里假设使用字符串池或持久化存储）
+        fieldNames_[i] = name.c_str(); // 需要确保生命周期
+
+        // 建立索引映射
+        fieldMap_[fieldNames_[i]] = static_cast<uint16_t>(i);
+    }
 }

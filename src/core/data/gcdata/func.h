@@ -13,10 +13,23 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 14, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include "comp.h"
+
+namespace GraphIR {
+class Graph;
+} // namespace GraphIR
+
+class GCFunction : public GCCompositeObject {
+    GraphIR::Graph *graph_;
+
+  public:
+    explicit GCFunction(
+        const CompositeDataLayout *layout, IAllocator &allocator = GlobalGC::instance())
+        : GCCompositeObject(layout, allocator), graph_(nullptr) {}
+};

@@ -13,52 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include "comp.h"
 
-class GCTuple : public GCObject {
+class GCTuple : public GCCompositeObject {
   public:
     explicit GCTuple(
         const CompositeDataLayout *layout, IAllocator &allocator = GlobalGC::instance())
-        : layout_(layout), size_(layout->elemCnt()) {
-        data_ = allocator.alloc(layout_->size(), layout_->align());
-    }
-
-    template <typename T> T &at(size_t index) {
-        ASSERT(index < size_, "Index out of range");
-        return *reinterpret_cast<T *>(data() + layout_->offsets[index]);
-    }
-
-    TypeCode typeCode(size_t index) const {
-        ASSERT(index < size_, "Index out of range");
-        return layout_->typeCode(index);
-    }
-
-    void trace(const std::function<void(GCObject *)> &visit) const override {
-        for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(layout_->typeCode(i))) {
-                auto objPtr = *reinterpret_cast<GCObject *const *>(data() + layout_->offset(i));
-                if (objPtr) {
-                    visit(objPtr);
-                }
-            }
-        }
-    }
-
-    ObjectHeader *header() const {
-        return reinterpret_cast<ObjectHeader *>(
-            reinterpret_cast<uint8_t *>(data_) - sizeof(ObjectHeader));
-    }
-
-  private:
-    uint8_t *data() const { return reinterpret_cast<uint8_t *>(data_); }
-
-    const CompositeDataLayout *layout_;
-    size_t size_;
-    void *data_; // 数据区起始地址
+        : GCCompositeObject(layout, allocator) {}
 };
