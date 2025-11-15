@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 11, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -133,7 +133,7 @@ class Type {
 
     virtual std::string toString() const;
     virtual std::string mangle() const;
-    virtual type_ptr_t clone() const;
+    virtual type_ptr_t clone(bool deep = false) const;
 
     virtual bool equals(const type_ptr_t &type) const;
     virtual CastSafety castSafetyTo(const Type &other) const;

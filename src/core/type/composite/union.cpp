@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,8 +117,12 @@ std::string UnionType::mangle() const {
     return result;
 }
 
-type_ptr_t UnionType::clone() const {
-    return make_shared<UnionType>(vector<type_ptr_t>(types_.begin(), types_.end()));
+type_ptr_t UnionType::clone(bool deep /* = false */) const {
+    auto result = std::make_shared<UnionType>();
+    for (const auto &type : types_) {
+        result->types_.insert(deep ? type->clone(true) : type);
+    }
+    return result;
 }
 
 bool UnionType::equals(const type_ptr_t &other) const {

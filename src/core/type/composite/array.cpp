@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,7 +69,9 @@ std::string ArrayType::mangle() const {
     return result;
 }
 
-type_ptr_t ArrayType::clone() const { return ArrayType::create(elemType_); }
+type_ptr_t ArrayType::clone(bool deep /* = false */) const {
+    return ArrayType::create(deep ? elemType_->clone(true) : elemType_);
+}
 
 bool ArrayType::equals(const type_ptr_t &other) const {
     if (this == other.get()) {

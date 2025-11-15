@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,7 @@ class ArrayType : public CompositeType {
     virtual bool resolved() const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
-    virtual type_ptr_t clone() const override;
+    virtual type_ptr_t clone(bool deep = false) const override;
     virtual bool equals(const type_ptr_t &type) const override;
     virtual CastSafety castSafetyTo(const Type &other) const override;
     virtual bool assignable(const type_ptr_t &type) const override;

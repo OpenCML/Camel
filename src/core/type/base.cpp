@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -114,7 +114,7 @@ std::string Type::mangle() const {
     return ""; // unknown
 }
 
-type_ptr_t Type::clone() const {
+type_ptr_t Type::clone(bool deep) const {
     ASSERT(!isComposite(code_), "Composite type cannot call Type::clone");
     ASSERT(!isOtherType(code_), "Other type cannot call Type::clone");
     return make_shared<Type>(code_);

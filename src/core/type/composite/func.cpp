@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -182,7 +182,7 @@ string FunctionType::mangle() const {
     return result;
 }
 
-type_ptr_t FunctionType::clone() const {
+type_ptr_t FunctionType::clone(bool deep /* = false */) const {
     auto res             = std::make_shared<FunctionType>();
     res->implMark_       = implMark_;
     res->modifiers_      = modifiers_;

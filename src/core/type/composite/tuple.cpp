@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,7 +117,16 @@ std::string TupleType::mangle() const {
     return result;
 }
 
-type_ptr_t TupleType::clone() const { return TupleType::create(types_); }
+type_ptr_t TupleType::clone(bool deep /* = false */) const {
+    if (deep) {
+        std::vector<type_ptr_t> clonedTypes;
+        for (const auto &type : types_) {
+            clonedTypes.push_back(type->clone(true));
+        }
+        return TupleType::create(std::move(clonedTypes));
+    }
+    return TupleType::create(types_);
+}
 
 bool TupleType::equals(const type_ptr_t &other) const {
     if (this == other.get()) {

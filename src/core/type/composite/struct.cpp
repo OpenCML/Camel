@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Nov. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "struct.h"
 #include "utils/assert.h"
+#include "utils/type.h"
 
 #include <algorithm>
 #include <sstream>
@@ -31,169 +32,180 @@ shared_ptr<StructType> StructType::create() const { return make_shared<StructTyp
 
 size_t StructType::size() const { return fields_.size(); }
 
-optional<type_ptr_t> StructType::typeAt(size_t idx) const {
-    if (idx >= fields_.size()) {
+optional<type_ptr_t> StructType::typeOf(const string &idx) const {
+    auto it = fields_.find(idx);
+    if (it == fields_.end()) {
         return nullopt;
     }
-    return fields_[idx];
-}
-
-optional<type_ptr_t> StructType::typeOf(const string &name) const {
-    auto it = fieldIndexMap_.find(name);
-    if (it == fieldIndexMap_.end()) {
-        return nullopt;
-    }
-    return fields_[it->second];
+    return it->second;
 }
 
 bool StructType::add(const string &name, const type_ptr_t &type) {
     if (has(name)) {
         return false;
     }
-    fieldIndexMap_[name] = fields_.size();
-    fields_.push_back(type);
+    fields_.emplace(name, type);
+    if (type->code() == TypeCode::Ref) {
+        refIndices_.push_back(name);
+    }
     return true;
 }
 
-bool StructType::has(const string &name) const {
-    return fieldIndexMap_.find(name) != fieldIndexMap_.end();
-}
+bool StructType::has(const string &name) const { return fields_.find(name) != fields_.end(); }
 
 type_ptr_t StructType::get(const string &name) const {
-    auto it = fieldIndexMap_.find(name);
-    ASSERT(it != fieldIndexMap_.end(), "Field not found: " + name);
-    return fields_[it->second];
+    auto it = fields_.find(name);
+    if (it == fields_.end()) {
+        throw out_of_range("StructType::get: field not found - " + name);
+    }
+    return it->second;
 }
 
 type_ptr_t StructType::operator|(const StructType &other) const {
-    ASSERT(resolved() && other.resolved(), "Cannot union with unresolved StructType");
+    ASSERT(resolved() && other.resolved(), "StructType::operator| requires resolved operands");
+
     auto result = make_shared<StructType>();
 
-    // Copy all fields from this struct
-    for (const auto &kv : fieldIndexMap_) {
-        result->add(kv.first, fields_[kv.second]);
+    // 复制 lhs 的字段
+    for (const auto &kv : fields_) {
+        const auto &name = kv.first;
+        const auto &type = kv.second;
+        result->fields_.emplace(name, type ? type->clone() : nullptr);
     }
 
-    // Add/overwrite fields from other
-    for (const auto &kv : other.fieldIndexMap_) {
-        const string &name     = kv.first;
-        const type_ptr_t &type = other.fields_[kv.second];
-        if (!result->has(name)) {
-            result->add(name, type);
-        } else {
-            result->fields_[result->fieldIndexMap_[name]] = type;
+    // 补齐 rhs 独有的字段
+    for (const auto &kv : other.fields_) {
+        const auto &name = kv.first;
+        if (result->fields_.find(name) == result->fields_.end()) {
+            const auto &type = kv.second;
+            result->fields_.emplace(name, type->clone());
         }
     }
+
     return result;
 }
 
 type_ptr_t StructType::operator&(const StructType &other) const {
-    ASSERT(resolved() && other.resolved(), "Cannot intersect with unresolved StructType");
+    ASSERT(resolved() && other.resolved(), "StructType::operator& requires resolved operands");
+
     auto result = make_shared<StructType>();
-    for (const auto &kv : fieldIndexMap_) {
-        const string &name = kv.first;
-        if (other.has(name)) {
-            result->add(name, other.get(name));
+
+    for (const auto &kv : fields_) {
+        const auto &name = kv.first;
+        if (other.fields_.find(name) != other.fields_.end()) {
+            const auto &type = kv.second;
+            result->fields_.emplace(name, type->clone());
         }
     }
+
     return result;
 }
 
 type_ptr_t StructType::resolve(const type_vec_t &typeList) const {
-    ASSERT(!resolved(), "StructType is already resolved");
+    ASSERT(typeList.size() == refIndices_.size(), "StructType::resolve: typeList size mismatch");
 
-    auto newStruct  = make_shared<StructType>();
-    size_t refCount = 0;
-    size_t j        = 0;
+    auto resolvedStruct = tt::as_shared<StructType>(this->clone(false));
 
-    for (const auto &kv : fieldIndexMap_) {
-        const string &name     = kv.first;
-        const type_ptr_t &type = fields_[kv.second];
-        if (type->code() == TypeCode::Ref) {
-            ASSERT(j < typeList.size(), "Not enough types in typeList");
-            newStruct->add(name, typeList[j++]);
-            refCount++;
-        } else {
-            newStruct->add(name, type);
-        }
+    for (size_t i = 0; i < refIndices_.size(); ++i) {
+        const auto &fieldName              = refIndices_[i];
+        const auto &resolvedType           = typeList[i];
+        resolvedStruct->fields_[fieldName] = resolvedType;
     }
 
-    ASSERT(j == typeList.size(), "Not all types in typeList are used");
-    ASSERT(newStruct->resolved(), "StructType is not fully resolved");
-    return newStruct;
+    resolvedStruct->refIndices_.clear();
+    return resolvedStruct;
 }
 
-bool StructType::resolved() const {
-    return none_of(fields_.begin(), fields_.end(), [](const type_ptr_t &t) {
-        return t->code() == TypeCode::Ref;
-    });
-}
+bool StructType::resolved() const { return refIndices_.empty(); }
 
 string StructType::toString() const {
-    if (fields_.empty()) {
-        return "{}";
-    }
     ostringstream oss;
     oss << "{ ";
-    for (const auto &kv : fieldIndexMap_) {
-        oss << kv.first << ": " << (fields_[kv.second] ? fields_[kv.second]->toString() : "null")
-            << ", ";
+    bool first = true;
+    for (const auto &kv : fields_) {
+        if (!first) {
+            oss << ", ";
+        }
+        first = false;
+        oss << kv.first << ": " << (kv.second ? kv.second->toString() : "<null>");
     }
-    string result = oss.str();
-    result.pop_back();
-    result.pop_back();
-    result += " }";
-    return result;
+    oss << " }";
+    return oss.str();
 }
 
 string StructType::mangle() const {
-    string result = "D";
-    result += to_string(fields_.size());
-    for (const auto &kv : fieldIndexMap_) {
-        const string &name = kv.first;
-        result += "K" + to_string(name.size()) + name;
-        result += "V" + fields_[kv.second]->mangle();
+    ostringstream oss;
+    oss << "S" << fields_.size();
+    for (const auto &kv : fields_) {
+        oss << kv.first.length() << kv.first;
+        oss << (kv.second ? kv.second->mangle() : "N");
     }
+    return oss.str();
+}
+
+type_ptr_t StructType::clone(bool deep /* = false */) const {
+    auto result = make_shared<StructType>();
+
+    result->refIndices_ = refIndices_;
+    result->fields_.reserve(fields_.size());
+
+    for (const auto &kv : fields_) {
+        const auto &name      = kv.first;
+        const auto &fieldType = kv.second;
+        result->fields_.emplace(name, deep ? fieldType->clone(true) : fieldType);
+    }
+
     return result;
 }
 
-type_ptr_t StructType::clone() const {
-    auto newStruct = make_shared<StructType>();
-    for (const auto &kv : fieldIndexMap_) {
-        newStruct->add(kv.first, fields_[kv.second]);
-    }
-    return newStruct;
-}
-
-bool StructType::equals(const type_ptr_t &other) const {
-    if (this == other.get()) {
-        return true;
-    }
-    if (other->code() != TypeCode::Struct) {
+bool StructType::equals(const type_ptr_t &type) const {
+    if (!type || type->code() != TypeCode::Struct) {
         return false;
     }
-    const auto &otherStruct = static_cast<const StructType &>(*other);
-
-    if (fields_.size() != otherStruct.fields_.size()) {
+    auto other = tt::as_shared<const StructType>(type);
+    if (!other) {
         return false;
     }
-    for (const auto &kv : fieldIndexMap_) {
-        const string &name = kv.first;
-        if (!otherStruct.has(name)) {
+    if (fields_.size() != other->fields_.size()) {
+        return false;
+    }
+    for (const auto &kv : fields_) {
+        const auto &name    = kv.first;
+        const auto &lhsType = kv.second;
+
+        auto it = other->fields_.find(name);
+        if (it == other->fields_.end()) {
             return false;
         }
-        if (!fields_[kv.second]->equals(otherStruct.get(name))) {
+        const auto &rhsType = it->second;
+        if (!lhsType || !rhsType || !lhsType->equals(rhsType)) {
             return false;
         }
     }
     return true;
 }
 
-CastSafety StructType::castSafetyTo(const Type &other) const {
-    if (this == &other) {
-        return CastSafety::Safe;
-    }
-    return CastSafety::Forbidden;
-}
+CastSafety StructType::castSafetyTo(const Type &) const { return CastSafety::Unsafe; }
 
-bool StructType::assignable(const type_ptr_t &type) const { return this->equals(type); }
+bool StructType::assignable(const type_ptr_t &type) const {
+    if (!type || type->code() != TypeCode::Struct) {
+        return false;
+    }
+    auto other = tt::as_shared<const StructType>(type);
+    if (!other) {
+        return false;
+    }
+    for (const auto &kv : fields_) {
+        const auto &name    = kv.first;
+        const auto &lhsType = kv.second;
+
+        auto it = other->fields_.find(name);
+        if (it == other->fields_.end()) {
+            return false;
+        }
+        if (!lhsType || !it->second || !lhsType->assignable(it->second)) {
+            return false;
+        }
+    }
+    return true;
+}
