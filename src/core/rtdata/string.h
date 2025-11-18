@@ -124,17 +124,6 @@ template <typename Policy = UseGlobalGC> class GCStringT : public GCObject {
     // 不允许从标准string移动构造（因为分配器不同）
     explicit GCStringT(std::string &&s) = delete;
 
-    ObjectHeader *header() const override {
-        if (isSSO()) {
-            return nullptr;
-        }
-        return headerOf(str_.data());
-    }
-
-    void trace(const std::function<void(GCObject *)> &visit) const override {
-        // 普通字符数据无 GC 引用
-    }
-
     const StringType &str() const { return str_; }
     StringType &str() { return str_; }
     const char *c_str() const { return str_.c_str(); }
@@ -151,6 +140,19 @@ template <typename Policy = UseGlobalGC> class GCStringT : public GCObject {
     template <typename P = Policy>
     std::enable_if_t<std::is_same_v<P, UseCustomAllocator>, IAllocator *> allocator() const {
         return str_.get_allocator().allocator();
+    }
+
+    void *payload() const override {
+        if (isSSO()) {
+            return nullptr;
+        }
+        return str_.data();
+    }
+
+    void onMoved(void *to) override { data_ = to; }
+
+    void traverse(const std::function<void(GCObject *)> &visit) const override {
+        // 普通字符数据无 GC 引用
     }
 
   private:

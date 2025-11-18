@@ -33,15 +33,6 @@ class GCBuffer : public GCObject {
     }
     ~GCBuffer() override = default;
 
-    ObjectHeader *header() const override {
-        if (!data_) {
-            return nullptr;
-        }
-        return headerOf(data_);
-    }
-
-    void trace(const std::function<void(GCObject *)> &visit) const override {}
-
     void *data() const { return data_; }
     size_t size() const { return size_; }
 
@@ -52,6 +43,12 @@ class GCBuffer : public GCObject {
             std::memset(data_, 0, size_);
         }
     }
+
+    void *payload() const override { return data_; }
+
+    void onMoved(void *to) override { data_ = to; }
+
+    void traverse(const std::function<void(GCObject *)> &visit) const override {}
 
   private:
     void *data_;  // 指向实际数据区（header 之后）

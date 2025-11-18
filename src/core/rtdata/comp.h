@@ -39,7 +39,11 @@ class GCCompositeObject : public GCObject {
         return layout_->typeCode(index);
     }
 
-    void trace(const std::function<void(GCObject *)> &visit) const override {
+    void *payload() const override { return data_; }
+
+    void onMoved(void *to) override { data_ = to; }
+
+    void traverse(const std::function<void(GCObject *)> &visit) const override {
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(layout_->typeCode(i))) {
                 auto objPtr = *reinterpret_cast<GCObject *const *>(data() + layout_->offset(i));
@@ -49,8 +53,6 @@ class GCCompositeObject : public GCObject {
             }
         }
     }
-
-    ObjectHeader *header() const { return headerOf(data_); }
 
   protected:
     uint8_t *data() const { return reinterpret_cast<uint8_t *>(data_); }

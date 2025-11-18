@@ -85,9 +85,11 @@ class GCArray : public GCObject {
         size_++;
     }
 
-    ObjectHeader *header() const override { return headerOf(data_); }
+    void *payload() const override { return data_; }
 
-    void trace(const std::function<void(GCObject *)> &visit) const override {
+    void onMoved(void *to) override { data_ = to; }
+
+    void traverse(const std::function<void(GCObject *)> &visit) const override {
         if (!isGCTraced(layout_.code()))
             return;
 
