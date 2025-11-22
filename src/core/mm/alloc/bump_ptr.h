@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Nov. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "allocator.h"
 #include "header.h"
 #include "utils/assert.h"
+#include "utils/brpred.h"
 
 #include <algorithm>
 #include <cassert>
@@ -48,7 +49,7 @@ class BumpPointerAllocator : public IAllocator {
         size_t total_size = sizeof(ObjectHeader) + size;
         uint8_t *newTop   = alignedTop + total_size;
 
-        if (__builtin_expect(newTop > end_, 0)) {
+        if (UNLIKELY(newTop > end_)) {
             return nullptr;
         }
 
@@ -69,9 +70,17 @@ class BumpPointerAllocator : public IAllocator {
 
     bool contains(void *ptr) const override { return ptr >= start_ && ptr < end_; }
 
+    uint8_t *start() const { return start_; }
+    uint8_t *top() const { return top_; }
+    uint8_t *end() const { return end_; }
+
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override {
-        // Bump pointer 分配器不支持遍历已分配对象
-        ASSERT(false, "Bump pointer allocator does not support iterateAllocated");
+        uint8_t *current = start_;
+        while (current < top_) {
+            ObjectHeader *header = reinterpret_cast<ObjectHeader *>(current);
+            visitor(header);
+            current += header->size();
+        }
     }
 
     void freeBulk(const std::vector<ObjectHeader *> & /*objects*/) override {

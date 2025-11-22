@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Nov. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,11 +23,13 @@
 #include "alloc/free_list.h"
 #include "alloc/large_obj.h"
 #include "gc.h"
-#include "utils/assert.h"
 
-class GenerationalAllocatorUsingGC : public IAllocator {
+#include "utils/assert.h"
+#include "utils/brpred.h"
+
+class GenerationalAllocatorWithGC : public IAllocator {
   private:
-    enum RegionId {
+    enum AllocRegion {
         YoungGen    = 0,
         OldGen      = 1,
         LargeObject = 2,
@@ -46,14 +48,16 @@ class GenerationalAllocatorUsingGC : public IAllocator {
 
     size_t promotionAgeThreshold_;
 
-    GarbageCollector gc_;
+    bool inGC_ = false;                                // GC 状态标志
+    std::vector<GCObject *> rootObjectSet_;            // 根对象集合
+    std::unordered_set<ObjectHeader *> rememberedSet_; // 记忆集
 
-    bool inYoungGen(ObjectHeader *header) const { return header->regionId() == RegionId::YoungGen; }
+    bool inYoungGen(ObjectHeader *header) const { return header->region_ == AllocRegion::YoungGen; }
 
-    bool inOldGen(ObjectHeader *header) const { return header->regionId() == RegionId::OldGen; }
+    bool inOldGen(ObjectHeader *header) const { return header->region_ == AllocRegion::OldGen; }
 
     bool inLargeObjSpace(ObjectHeader *header) const {
-        return header->regionId() == RegionId::LargeObject;
+        return header->region_ == AllocRegion::LargeObject;
     }
 
   public:
@@ -64,7 +68,7 @@ class GenerationalAllocatorUsingGC : public IAllocator {
         size_t promotionAgeThreshold;
     };
 
-    GenerationalAllocatorUsingGC(const Config &config)
+    GenerationalAllocatorWithGC(const Config &config)
         : eden_(config.edenSize), from_(config.survivorSize), to_(config.survivorSize),
           oldGen_(config.oldGenSize), largeObjSpace_(),
           promotionAgeThreshold_(config.promotionAgeThreshold) {}
@@ -73,25 +77,25 @@ class GenerationalAllocatorUsingGC : public IAllocator {
         align = adjustAlign(align);
 
         // 大对象直接走大对象分配器
-        if (__builtin_expect(payloadSize > 1024, 0)) {
+        if (UNLIKELY(payloadSize > 1024)) {
             void *ptr = largeObjSpace_.alloc(payloadSize, align);
-            if (__builtin_expect(!ptr, 0)) {
+            if (UNLIKELY(!ptr)) {
                 majorGC();
                 ptr = largeObjSpace_.alloc(payloadSize, align);
                 if (!ptr)
                     throw std::bad_alloc();
             }
             auto *header = headerOf(ptr);
-            header->setRegionId(RegionId::LargeObject);
+            header->setRegion(AllocRegion::LargeObject);
             return ptr;
         }
 
         // 尝试在 Eden 分配
         void *ptr = eden_.alloc(payloadSize, align);
-        if (__builtin_expect(!ptr, 0)) {
+        if (UNLIKELY(!ptr)) {
             minorGC();
             ptr = eden_.alloc(payloadSize, align);
-            if (__builtin_expect(!ptr, 0)) {
+            if (UNLIKELY(!ptr)) {
                 majorGC();
                 ptr = eden_.alloc(payloadSize, align);
                 if (!ptr)
@@ -100,156 +104,309 @@ class GenerationalAllocatorUsingGC : public IAllocator {
         }
 
         auto *header = headerOf(ptr);
-        header->setRegionId(RegionId::YoungGen);
+        header->setRegion(AllocRegion::YoungGen);
         return ptr;
     }
 
     void free(void *ptr) {
-        ASSERT(false, "GenerationalAllocatorUsingGC does not support manual free");
+        ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
     }
 
-    GarbageCollector &gc() { return gc_; }
+    // 添加根对象
+    void addRoot(GCObject *root) { rootObjectSet_.push_back(root); }
+
+    // 移除根对象
+    void removeRoot(GCObject *root) {
+        auto it = std::find(rootObjectSet_.begin(), rootObjectSet_.end(), root);
+        if (it != rootObjectSet_.end()) {
+            rootObjectSet_.erase(it);
+        }
+    }
+
+    // 清空所有根对象
+    void clearRoots() { rootObjectSet_.clear(); }
+
+    void recordOldToYoungRef(void *oldObj, void *youngObj) {
+        ObjectHeader *header = headerOf(oldObj);
+        rememberedSet_.insert(header);
+    }
 
     // Minor GC：清理年轻代（Eden + From）
     void minorGC() {
-        // 1. 清空 To 空间
-        to_.reset();
+        if (inGC_)
+            return; // 防止重入
+        inGC_ = true;
 
-        // 2. 第一遍遍历：复制所有可达的年轻代对象
-        gc_.traverse([this](ObjectHeader *header) {
-            if (inYoungGen(header) && !header->forwarded()) {
-                void *oldPayload = payloadOf<void>(header);
-                copyOrPromote(oldPayload, header);
-            }
-        });
+        try {
+            // 1. 交换 From 和 To 空间
+            std::swap(from_, to_);
+            to_.reset(); // 清空新的 To 空间
 
-        // 3. 第二遍遍历：更新所有对象的内部引用
-        //    遍历根对象和它们可达的所有对象
-        std::unordered_set<GCObject *> visited;
+            // 2. 处理根集合中的年轻代对象
+            for (GCObject *&rootObj : rootObjectSet_) {
+                if (!rootObj)
+                    continue;
 
-        auto updateVisitor = [this, &visited](this auto &&self, GCObject *obj) -> void {
-            if (!obj || visited.count(obj))
-                return;
-            visited.insert(obj);
+                ObjectHeader *header = headerOf(rootObj);
 
-            // 更新这个对象内部的引用
-            obj->traverse([&](GCObject *refObj) {
-                if (!refObj)
-                    return;
-
-                void *refPayload = refObj->payload();
-                auto *refHeader  = headerOf(refPayload);
-
-                // 如果被引用的对象被移动了（转发了），通知引用者更新
-                if (refHeader->forwarded()) {
-                    void *newPayload = refHeader->addr();
-                    refObj->onMoved(newPayload);
+                // 只处理年轻代对象
+                if (inYoungGen(header)) {
+                    rootObj = copyOrPromote(rootObj);
                 }
+            }
 
-                // 递归处理被引用的对象
-                self(refObj);
-            });
-        };
+            // 3. 扫描老年代中指向年轻代的引用（记忆集优化）
+            for (ObjectHeader *oldHeader : rememberedSet_) {
+                if (!oldHeader->isValid())
+                    continue;
 
-        for (auto *root : gc_.rootSet_) {
-            root->traverse(updateVisitor);
+                GCObject *oldObj = payloadOf<GCObject>(oldHeader);
+
+                // 遍历老年代对象的引用
+                oldObj->traverse([this](GCObject *refObj) -> GCObject * {
+                    if (!refObj)
+                        return nullptr;
+
+                    ObjectHeader *refHeader = headerOf(refObj);
+
+                    // 如果引用的是年轻代对象，需要复制
+                    if (inYoungGen(refHeader)) {
+                        return copyOrPromote(refObj);
+                    }
+
+                    return refObj;
+                });
+            }
+
+            // 清空记忆集（因为年轻代已被清空）
+            rememberedSet_.clear();
+
+            // 4. 使用 Cheney 算法扫描 To 空间
+            cheneyScavenge();
+
+            // 5. 清空 Eden 和 From
+            eden_.reset();
+            from_.reset();
+
+            inGC_ = false;
+        } catch (...) {
+            inGC_ = false;
+            throw;
         }
-
-        // 4. 交换 From 和 To
-        std::swap(from_, to_);
-
-        // 5. 清空 Eden
-        eden_.reset();
     }
 
     // Major GC：清理整个堆
     void majorGC() {
         // 1. 标记阶段：标记所有可达对象
-        gc_.traverse([](ObjectHeader *header) { header->mark(); });
+        markPhase();
 
-        // 2. 清理老年代中未标记的对象
-        oldGen_.sweep([](ObjectHeader *header) { return header->marked == 0; });
-
-        // 3. 清理大对象空间中未标记的对象
-        largeObjSpace_.sweep([](ObjectHeader *header) { return header->marked == 0; });
-
-        // 4. 清理标记位
-        gc_.traverse([](ObjectHeader *header) { header->marked = 0; });
-
-        // 5. 同时清理年轻代
+        // 2. 清理年轻代
         minorGC();
+
+        // 3. 压缩老年代（可选，这里使用标记-清除）
+        sweepOldGen();
+
+        // 4. 清理大对象空间
+        sweepLargeObjects();
     }
 
   private:
-    void *copyOrPromote(void *objPayload, ObjectHeader *header) {
-        if (!objPayload)
-            return nullptr;
+    GCObject *copyOrPromote(GCObject *obj) {
+        ObjectHeader *header = headerOf(obj);
+        ASSERT(header->isValid(), "Invalid ObjectHeader encountered during copyOrPromote");
 
         // 如果已经转发过，直接返回新地址
         if (header->forwarded()) {
-            return header->addr();
+            return static_cast<GCObject *>(header->forwardedAddr());
         }
 
-        size_t totalSize   = header->size();
-        size_t payloadSize = totalSize - sizeof(ObjectHeader);
+        size_t totalSize = header->size();
+        size_t objSize   = header->objSize();
 
         // 增加年龄
-        uint64_t newAge = header->age + 1;
+        header->incAge();
+        uint64_t age = header->age();
 
-        void *newPayload        = nullptr;
+        void *newObj            = nullptr;
         ObjectHeader *newHeader = nullptr;
 
         // 判断是否晋升
-        if (newAge >= promotionAgeThreshold_) {
+        if (UNLIKELY(age >= promotionAgeThreshold_)) {
             // 晋升到老年代
-            newPayload = oldGen_.alloc(payloadSize, alignof(std::max_align_t));
-            if (!newPayload) {
+            newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+            if (!newObj) {
                 // 老年代空间不足，触发 Full GC
                 majorGC();
-                newPayload = oldGen_.alloc(payloadSize, alignof(std::max_align_t));
-                if (!newPayload)
+                newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+                if (!newObj)
                     throw std::bad_alloc();
             }
 
-            newHeader        = headerOf(newPayload);
-            newHeader->raw   = header->raw;
-            newHeader->age   = newAge;
-            newHeader->state = 0;
-            newHeader->setRegionId(RegionId::OldGen);
-
+            newHeader = headerOf(newObj);
+            newHeader->setAge(age);
+            newHeader->setRegion(AllocRegion::OldGen);
         } else {
             // 复制到 Survivor To
-            newPayload = to_.alloc(payloadSize, alignof(std::max_align_t));
-            if (!newPayload) {
+            newObj = to_.alloc(objSize, alignof(std::max_align_t));
+            if (UNLIKELY(!newObj)) {
                 // To 空间不足，直接晋升
-                newPayload = oldGen_.alloc(payloadSize, alignof(std::max_align_t));
-                if (!newPayload) {
-                    majorGC();
-                    newPayload = oldGen_.alloc(payloadSize, alignof(std::max_align_t));
-                    if (!newPayload)
+                newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+                if (UNLIKELY(!newObj)) {
+                    if (inGC_) {
+                        // 已经在 GC 中，无法再次触发
+                        throw std::bad_alloc();
+                    }
+
+                    // 标记 GC 状态
+                    inGC_ = true;
+                    try {
+                        majorGC();
+                        newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+                        inGC_  = false;
+                    } catch (...) {
+                        inGC_ = false;
+                        throw;
+                    }
+
+                    if (!newObj)
                         throw std::bad_alloc();
                 }
 
-                newHeader        = headerOf(newPayload);
-                newHeader->raw   = header->raw;
-                newHeader->age   = newAge;
-                newHeader->state = 0;
-                newHeader->setRegionId(RegionId::OldGen);
+                newHeader = headerOf(newObj);
+                newHeader->setAge(age);
+                newHeader->setRegion(AllocRegion::OldGen);
             } else {
-                newHeader        = headerOf(newPayload);
-                newHeader->raw   = header->raw;
-                newHeader->age   = newAge;
-                newHeader->state = 0;
-                newHeader->setRegionId(RegionId::YoungGen);
+                newHeader = headerOf(newObj);
+                newHeader->setAge(age);
+                newHeader->setRegion(AllocRegion::YoungGen);
             }
         }
 
         // 复制 payload 数据
-        std::memcpy(newPayload, objPayload, payloadSize);
+        std::memcpy(newObj, obj, objSize);
 
         // 设置转发地址
-        header->forward(newPayload);
+        header->forward(newObj);
 
-        return newPayload;
+        return static_cast<GCObject *>(newObj);
+    }
+
+    // Cheney 算法：使用 BFS 方式扫描和复制对象
+    void cheneyScavenge() {
+        uint8_t *scan = to_.start(); // 扫描指针，从 To 空间开始
+        uint8_t *free = to_.top();   // 空闲指针，指向下一个可分配位置
+
+        // BFS 遍历：scan 追赶 free
+        while (scan < free) {
+            ObjectHeader *header = reinterpret_cast<ObjectHeader *>(scan);
+            void *payload        = scan + sizeof(ObjectHeader);
+
+            // 获取实际对象
+            GCObject *obj = reinterpret_cast<GCObject *>(payload);
+
+            // 遍历对象的所有引用字段，并转发它们
+            obj->traverse([this](GCObject *refObj) -> GCObject * {
+                if (!refObj)
+                    return nullptr;
+
+                ObjectHeader *refHeader = headerOf(refObj);
+
+                // 老年代对象不需要移动
+                if (!inYoungGen(refHeader)) {
+                    return refObj;
+                }
+
+                // 复制或获取转发地址
+                return copyOrPromote(refObj);
+            });
+
+            // 移动到下一个对象
+            scan += header->size();
+            // 更新 free 指针（可能在 traverse 中有新对象被复制）
+            free = to_.top();
+        }
+    }
+
+    // 标记阶段：深度优先标记所有可达对象
+    void markPhase() {
+        // 清除所有标记
+        clearMarks();
+
+        // 从根集合开始标记
+        for (GCObject *root : rootObjectSet_) {
+            if (root) {
+                markObject(root);
+            }
+        }
+    }
+
+    void clearMarks() {
+        // 清除老年代标记
+        oldGen_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+
+        // 清除大对象空间标记
+        largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+    }
+
+    void markObject(GCObject *obj) {
+        if (!obj)
+            return;
+
+        std::vector<GCObject *> markStack;
+        markStack.push_back(obj);
+
+        while (!markStack.empty()) {
+            GCObject *current = markStack.back();
+            markStack.pop_back();
+
+            if (!current)
+                continue;
+
+            void *payload        = reinterpret_cast<void *>(current);
+            ObjectHeader *header = headerOf(payload);
+
+            // 如果已标记，跳过
+            if (header->marked_)
+                continue;
+
+            // 标记当前对象
+            header->mark();
+
+            // 收集所有引用的对象到栈中
+            current->traverse([&markStack](GCObject *refObj) -> GCObject * {
+                if (refObj) {
+                    markStack.push_back(refObj);
+                }
+                return refObj;
+            });
+        }
+    }
+
+    // 清除老年代中未标记的对象
+    void sweepOldGen() {
+        std::vector<ObjectHeader *> unreachable;
+
+        oldGen_.iterateAllocated([&unreachable](ObjectHeader *header) {
+            if (!header->marked_) {
+                unreachable.push_back(header);
+            }
+        });
+
+        // 批量释放
+        oldGen_.freeBulk(unreachable);
+    }
+
+    // 清除大对象空间中未标记的对象
+    void sweepLargeObjects() {
+        std::vector<ObjectHeader *> unreachable;
+
+        largeObjSpace_.iterateAllocated([&unreachable](ObjectHeader *header) {
+            if (!header->marked_) {
+                unreachable.push_back(header);
+            }
+        });
+
+        // 批量释放
+        largeObjSpace_.freeBulk(unreachable);
     }
 };

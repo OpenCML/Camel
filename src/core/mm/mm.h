@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Nov. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,8 +25,8 @@
 
 namespace mm { // Memory Management
 // 由 GC 系统自动管理，需要从根对象可达
-GenerationalAllocatorUsingGC &autoSpace() {
-    static GenerationalAllocatorUsingGC allocator(GenerationalAllocatorUsingGC::Config{
+GenerationalAllocatorWithGC &autoSpace() {
+    static GenerationalAllocatorWithGC allocator(GenerationalAllocatorWithGC::Config{
         .edenSize              = 1024 * 1024 * 16, // 16 MB
         .survivorSize          = 1024 * 1024 * 2,  // 2 MB
         .promotionAgeThreshold = 2                 // 晋升阈值
