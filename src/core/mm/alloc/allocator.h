@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Nov. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,12 +24,18 @@
 
 #include <functional>
 
+using slot_t = uint64_t;
+
+constexpr size_t KB = 1024;
+constexpr size_t MB = 1024 * KB;
+consteval size_t GB = 1024 * MB;
+
 class IAllocator {
   public:
     virtual ~IAllocator() = default;
 
     // 分配内存，可指定对齐
-    virtual void *alloc(size_t size, size_t align = alignof(std::max_align_t)) = 0;
+    virtual void *alloc(size_t size, size_t align = alignof(slot_t)) = 0;
 
     // 释放单个对象（在 GC 新生代里可能是空实现）
     virtual void free(void *ptr) = 0;
@@ -61,3 +67,5 @@ class IAllocator {
         }
     };
 };
+
+inline size_t alignUp(size_t n, size_t align) { return (n + align - 1) & ~(align - 1); }

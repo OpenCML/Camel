@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 22, 2025
+ * Updated: Nov. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     LargeObjectAllocator largeObjSpace_;
 
     size_t promotionAgeThreshold_;
+    size_t largeObjThreshold_;
+    float minorGCTriggerRatio_;
+    float majorGCTriggerRatio_;
 
     bool inGC_ = false;                                // GC 状态标志
     std::vector<GCObject *> rootObjectSet_;            // 根对象集合
@@ -66,18 +69,24 @@ class GenerationalAllocatorWithGC : public IAllocator {
         size_t survivorSize;
         size_t oldGenSize;
         size_t promotionAgeThreshold;
+        size_t largeObjThreshold;
+        float minorGCTriggerRatio;
+        float majorGCTriggerRatio;
     };
 
     GenerationalAllocatorWithGC(const Config &config)
         : eden_(config.edenSize), from_(config.survivorSize), to_(config.survivorSize),
           oldGen_(config.oldGenSize), largeObjSpace_(),
-          promotionAgeThreshold_(config.promotionAgeThreshold) {}
+          promotionAgeThreshold_(config.promotionAgeThreshold),
+          largeObjThreshold_(config.largeObjThreshold),
+          minorGCTriggerRatio_(config.minorGCTriggerRatio),
+          majorGCTriggerRatio_(config.majorGCTriggerRatio) {}
 
-    void *alloc(size_t payloadSize, size_t align = alignof(std::max_align_t)) {
-        align = adjustAlign(align);
+    void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) {
+        ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
         // 大对象直接走大对象分配器
-        if (UNLIKELY(payloadSize > 1024)) {
+        if (UNLIKELY(payloadSize > largeObjThreshold_)) {
             void *ptr = largeObjSpace_.alloc(payloadSize, align);
             if (UNLIKELY(!ptr)) {
                 majorGC();
@@ -233,11 +242,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // 判断是否晋升
         if (UNLIKELY(age >= promotionAgeThreshold_)) {
             // 晋升到老年代
-            newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+            newObj = oldGen_.alloc(objSize, alignof(slot_t));
             if (!newObj) {
                 // 老年代空间不足，触发 Full GC
                 majorGC();
-                newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+                newObj = oldGen_.alloc(objSize, alignof(slot_t));
                 if (!newObj)
                     throw std::bad_alloc();
             }
@@ -247,10 +256,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
             newHeader->setRegion(AllocRegion::OldGen);
         } else {
             // 复制到 Survivor To
-            newObj = to_.alloc(objSize, alignof(std::max_align_t));
+            newObj = to_.alloc(objSize, alignof(slot_t));
             if (UNLIKELY(!newObj)) {
                 // To 空间不足，直接晋升
-                newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+                newObj = oldGen_.alloc(objSize, alignof(slot_t));
                 if (UNLIKELY(!newObj)) {
                     if (inGC_) {
                         // 已经在 GC 中，无法再次触发
@@ -261,7 +270,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
                     inGC_ = true;
                     try {
                         majorGC();
-                        newObj = oldGen_.alloc(objSize, alignof(std::max_align_t));
+                        newObj = oldGen_.alloc(objSize, alignof(slot_t));
                         inGC_  = false;
                     } catch (...) {
                         inGC_ = false;
@@ -293,8 +302,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     // Cheney 算法：使用 BFS 方式扫描和复制对象
     void cheneyScavenge() {
-        uint8_t *scan = to_.start(); // 扫描指针，从 To 空间开始
-        uint8_t *free = to_.top();   // 空闲指针，指向下一个可分配位置
+        std::byte *scan = to_.start(); // 扫描指针，从 To 空间开始
+        std::byte *free = to_.top();   // 空闲指针，指向下一个可分配位置
 
         // BFS 遍历：scan 追赶 free
         while (scan < free) {

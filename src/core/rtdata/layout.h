@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Nov. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,8 +27,6 @@ struct LayoutInfo {
 };
 
 LayoutInfo getLayoutInfoOfType(TypeCode code);
-
-inline size_t alignUp(size_t n, size_t align) { return (n + align - 1) & ~(align - 1); }
 
 class DataLayout {
   public:

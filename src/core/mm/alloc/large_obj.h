@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Nov. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "allocator.h"
 #include "header.h"
 #include "utils/assert.h"
+#include "utils/brpred.h"
 
 #include <cstddef>
 #include <limits> // for std::numeric_limits
@@ -32,43 +33,46 @@ class LargeObjectAllocator : public IAllocator {
   public:
     ~LargeObjectAllocator() override {
         for (auto *hdr : allocated_) {
-            ::operator delete(hdr, std::align_val_t(alignof(std::max_align_t)));
+            ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
         }
         allocated_.clear();
     }
 
-    void *alloc(size_t size, size_t align = alignof(std::max_align_t)) override {
-        size_t total_align = adjustAlign(align);
-        size_t total_size  = sizeof(ObjectHeader) + size;
+    void *alloc(size_t size, size_t align = alignof(slot_t)) override {
+        ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
-        uint8_t *raw =
-            reinterpret_cast<uint8_t *>(::operator new(total_size, std::align_val_t(total_align)));
+        // total_size 向上对齐到 slot_t
+        size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
 
-        auto *hdr = reinterpret_cast<ObjectHeader *>(raw);
-        hdr->setSize(total_size);
+        std::byte *raw = reinterpret_cast<std::byte *>(
+            ::operator new(total_size, std::align_val_t(alignof(slot_t))));
 
-        allocated_.insert(hdr);
+        // 安装对象头，记录对齐后的 total_size
+        installHeader(raw, total_size);
 
-        return raw + sizeof(ObjectHeader);
+        std::byte *result = raw + sizeof(ObjectHeader);
+        allocated_.insert(reinterpret_cast<ObjectHeader *>(raw));
+
+        return result;
     }
 
     void free(void *ptr) override {
-        if (!ptr)
+        if (UNLIKELY(!ptr)) {
             return;
-
-        auto *hdr = headerOf(ptr);
-
-        auto it = allocated_.find(hdr);
-        if (it != allocated_.end()) {
-            allocated_.erase(it);
         }
 
-        ::operator delete(hdr, std::align_val_t(alignof(std::max_align_t)));
+        ObjectHeader *hdr = headerOf(ptr);
+
+        auto it = allocated_.find(hdr);
+        if (LIKELY(it != allocated_.end())) {
+            allocated_.erase(it);
+            ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
+        }
     }
 
     void reset() override {
         for (auto *hdr : allocated_) {
-            ::operator delete(hdr, std::align_val_t(alignof(std::max_align_t)));
+            ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
         }
         allocated_.clear();
     }
@@ -76,11 +80,12 @@ class LargeObjectAllocator : public IAllocator {
     size_t available() const override { return std::numeric_limits<size_t>::max(); }
 
     bool contains(void *ptr) const override {
-        if (!ptr)
+        if (UNLIKELY(!ptr)) {
             return false;
-        uint8_t *blockData = reinterpret_cast<uint8_t *>(ptr) - sizeof(ObjectHeader);
-        auto *hdr          = reinterpret_cast<const ObjectHeader *>(blockData);
-        return allocated_.find(const_cast<ObjectHeader *>(hdr)) != allocated_.end();
+        }
+
+        ObjectHeader *hdr = headerOf(ptr);
+        return allocated_.find(hdr) != allocated_.end();
     }
 
     void freeBulk(const std::vector<ObjectHeader *> &objects) override {
@@ -88,13 +93,18 @@ class LargeObjectAllocator : public IAllocator {
             auto it = allocated_.find(hdr);
             if (it != allocated_.end()) {
                 allocated_.erase(it);
-                ::operator delete(hdr, std::align_val_t(alignof(std::max_align_t)));
+                ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
             }
         }
     }
 
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override {
         for (auto *hdr : allocated_) {
+            // 验证 header 的合法性
+            size_t obj_size = hdr->size();
+            ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
+            ASSERT(obj_size % alignof(slot_t) == 0, "Object size not aligned");
+
             visitor(hdr);
         }
     }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 22, 2025
+ * Updated: Nov. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -139,15 +139,13 @@ struct ObjectHeader {
 // 静态断言确保大小
 static_assert(sizeof(ObjectHeader) == 8, "ObjectHeader must be 8 bytes");
 
-inline size_t adjustAlign(size_t align) { return std::max(align, alignof(ObjectHeader)); }
-
-inline uint8_t *alignPointer(uint8_t *ptr, size_t align) {
+inline std::byte *alignPointer(std::byte *ptr, size_t align) {
     uintptr_t p       = reinterpret_cast<uintptr_t>(ptr);
     uintptr_t aligned = (p + align - 1) & ~(align - 1);
-    return reinterpret_cast<uint8_t *>(aligned);
+    return reinterpret_cast<std::byte *>(aligned);
 }
 
-inline void installHeader(uint8_t *addr, size_t total_alloc_size) {
+inline void installHeader(std::byte *addr, size_t total_alloc_size) {
     auto *header = reinterpret_cast<ObjectHeader *>(addr);
     new (header) ObjectHeader(total_alloc_size);
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 22, 2025
+ * Updated: Nov. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,22 +27,26 @@ namespace mm { // Memory Management
 // 由 GC 系统自动管理，需要从根对象可达
 GenerationalAllocatorWithGC &autoSpace() {
     static GenerationalAllocatorWithGC allocator(GenerationalAllocatorWithGC::Config{
-        .edenSize              = 1024 * 1024 * 16, // 16 MB
-        .survivorSize          = 1024 * 1024 * 2,  // 2 MB
-        .promotionAgeThreshold = 2                 // 晋升阈值
+        .edenSize              = 32 * MB, // 32 MB
+        .survivorSize          = 4 * MB,  // 4 MB
+        .oldGenSize            = 64 * MB, // 64 MB
+        .promotionAgeThreshold = 4,       // 晋升阈值
+        .largeObjThreshold     = 4 * KB,  // 大对象阈值
+        .minorGCTriggerRatio   = 0.9f,    // 小垃圾回收触发比例
+        .majorGCTriggerRatio   = 0.8f     // 大垃圾回收触发比例
     });
     return allocator;
 }
 
 // 元数据区，手动管理分配和释放
 FreeListAllocator &metaSpace() {
-    static FreeListAllocator allocator(1024 * 1024 * 8); // 8 MB
+    static FreeListAllocator allocator(16 * MB); // 16 MB
     return allocator;
 }
 
 // 永久代，只分配，不释放
 BumpPointerAllocator &permSpace() {
-    static BumpPointerAllocator allocator(1024 * 1024 * 16); // 16 MB
+    static BumpPointerAllocator allocator(32 * MB); // 32 MB
     return allocator;
 }
 } // namespace mm
