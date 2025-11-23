@@ -25,6 +25,8 @@
 #include <cstdint>
 #include <sstream>
 
+using slot_t = uint64_t;
+
 struct ObjectHeader {
     union {
         size_t raw_;

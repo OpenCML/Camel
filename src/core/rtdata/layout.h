@@ -21,39 +21,12 @@
 
 #include "base.h"
 
-struct LayoutInfo {
-    size_t size;
-    size_t align;
-};
-
-LayoutInfo getLayoutInfoOfType(TypeCode code);
-
-class DataLayout {
-  public:
-    DataLayout(TypeCode code) : code_(code) {
-        LayoutInfo info = getLayoutInfoOfType(code_);
-        size_           = info.size;
-        align_          = info.align;
-    }
-
-    TypeCode code() const { return code_; }
-    uint16_t size() const { return size_; }
-    uint16_t align() const { return align_; }
-
-  protected:
-    TypeCode code_;
-    uint16_t size_;  // 总大小
-    uint16_t align_; // 对齐值
-};
-
-static_assert(sizeof(DataLayout) == 8, "DataLayout size must be 8 bytes");
-
-class CompositeDataLayout : public DataLayout {
+class CompositeDataLayout {
   public:
     CompositeDataLayout(TypeCode self, uint16_t elemCnt)
-        : DataLayout(self), elemCnt_(elemCnt), offsets_(nullptr), types_(nullptr) {}
+        : elemCnt_(elemCnt), offsets_(nullptr), types_(nullptr) {}
     static CompositeDataLayout *
-    create(IAllocator *allocator, TypeCode self, const std::vector<DataLayout> &elements);
+    create(IAllocator *allocator, TypeCode self, const std::vector<TypeCode> &elements);
 
     uint16_t elemCnt() const { return elemCnt_; }
     const uint16_t *offsets() const { return offsets_; }
@@ -68,7 +41,7 @@ class CompositeDataLayout : public DataLayout {
     }
 
   protected:
-    void build(const std::vector<DataLayout> &elements);
+    void build(const std::vector<TypeCode> &elements);
 
     uint16_t elemCnt_;
     uint16_t *offsets_;
@@ -79,7 +52,7 @@ class StructDataLayout : public CompositeDataLayout {
   public:
     static StructDataLayout *create(
         IAllocator *allocator, TypeCode self,
-        const std::vector<std::pair<std::string, DataLayout>> &fields);
+        const std::vector<std::pair<std::string, TypeCode>> &fields);
 
     // 按名字查找字段索引
     std::optional<size_t> findField(std::string_view name) const {
@@ -99,7 +72,7 @@ class StructDataLayout : public CompositeDataLayout {
   private:
     StructDataLayout(TypeCode self, uint16_t elemCnt) : CompositeDataLayout(self, elemCnt) {}
 
-    void buildWithNames(const std::vector<std::pair<std::string, DataLayout>> &fields);
+    void buildWithNames(const std::vector<std::pair<std::string, TypeCode>> &fields);
 
     // 字段名数组（紧跟在 offsets/types 之后分配）
     const char **fieldNames_;

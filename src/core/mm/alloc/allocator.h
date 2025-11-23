@@ -24,8 +24,6 @@
 
 #include <functional>
 
-using slot_t = uint64_t;
-
 constexpr size_t KB = 1024;
 constexpr size_t MB = 1024 * KB;
 consteval size_t GB = 1024 * MB;

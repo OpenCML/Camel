@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 22, 2025
+ * Updated: Nov. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,17 @@
 
 #include <functional>
 
+class GCObject;
+
+using GCRef             = GCObject *;
+constexpr GCRef NullRef = nullptr;
+
+static_assert(sizeof(GCRef) == sizeof(slot_t), "GCRef size mismatch");
+
 class GCObject {
   public:
-    virtual ~GCObject()                                                               = default;
-    virtual void traverse(const std::function<GCObject *(GCObject *)> &forward) const = 0;
+    virtual ~GCObject()                                                  = default;
+    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) = 0;
 
     // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
     // {
