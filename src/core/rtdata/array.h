@@ -79,6 +79,11 @@ class GCFixedArray : public GCObject {
         return reinterpret_cast<const T *>(data_)[index];
     }
 
+    void onMoved() override {
+        // 这里不需要更新 data_，因为它指向的是对象内部的灵活数组成员
+        // 灵活数组不是指针，不占用内存空间，在访问时通过偏移量动态计算得到
+    }
+
     void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
         if (!isGCTraced(type_))
             return;
@@ -93,7 +98,7 @@ class GCFixedArray : public GCObject {
     }
 
   private:
-    GCFixedArray(TypeCode typeCode, size_t size) : size_(size), type_(typeCode) {}
+    GCFixedArray(TypeCode type, size_t size) : size_(size), type_(type) {}
 
     uint32_t size_;
     TypeCode type_;
@@ -178,6 +183,14 @@ class GCArray : public GCObject {
         reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
     }
 
+    void onMoved() override {
+        if (fixedArray_) {
+            dataPtr_ = fixedArray_->data();
+        } else {
+            dataPtr_ = inlineData_;
+        }
+    }
+
     void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
         // 更新对GCFixedArray的引用
         if (fixedArray_) {
@@ -194,8 +207,8 @@ class GCArray : public GCObject {
     // 假设GCObject约8-16字节，总大小约76-84字节，略超一个cacheline但在可接受范围
     static constexpr size_t SMALL_ARRAY_SIZE = 4;
 
-    GCArray(TypeCode typeCode, IAllocator &allocator)
-        : allocator_(&allocator), size_(0), capacity_(SMALL_ARRAY_SIZE), type_(typeCode),
+    GCArray(TypeCode type, IAllocator &allocator)
+        : allocator_(&allocator), size_(0), capacity_(SMALL_ARRAY_SIZE), type_(type),
           fixedArray_(nullptr), dataPtr_(inlineData_) { // 初始化时指向内联数组
         // 初始化内联数组
         if (isGCTraced(type_)) {
