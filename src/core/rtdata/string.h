@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Dec. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,157 +21,140 @@
 
 #include "base.h"
 
-struct UseGlobalGC {};
-struct UseCustomAllocator {};
-
-// 基础分配器模板
-template <typename T, typename Policy = UseGlobalGC> class GCAllocator;
-
-// 特化1：默认分配器（无状态开销，默认使用 GlobalGC）
-template <typename T> class GCAllocator<T, UseGlobalGC> {
+class GCString : public GCObject {
   public:
-    using value_type      = T;
-    using size_type       = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using is_always_equal = std::true_type;
+    GCString(const GCString &)            = delete;
+    GCString &operator=(const GCString &) = delete;
 
-    GCAllocator() noexcept = default;
-
-    template <typename U> GCAllocator(const GCAllocator<U, UseGlobalGC> &) noexcept {}
-
-    T *allocate(size_type n) { return static_cast<T *>(mm::autoSpace().alloc(n * sizeof(T))); }
-
-    void deallocate(T *p, size_type n) noexcept {
-        // GC 管理，不需要手动释放
+    static GCString *create(size_t length, IAllocator &allocator = mm::autoSpace()) {
+        size_t totalSize = offsetof(GCString, data_) + (length + 1);
+        void *memory     = allocator.alloc(totalSize, alignof(GCString));
+        if (!memory)
+            throw std::bad_alloc();
+        auto *str          = new (memory) GCString(length);
+        str->data_[length] = '\0';
+        str->size_         = static_cast<uint32_t>(length);
+        return str;
     }
 
-    template <typename U> struct rebind {
-        using other = GCAllocator<U, UseGlobalGC>;
-    };
-
-    bool operator==(const GCAllocator &) const noexcept { return true; }
-    bool operator!=(const GCAllocator &) const noexcept { return false; }
-};
-
-// 特化2：自定义状态分配器（需要保存具体使用的分配器）
-template <typename T> class GCAllocator<T, UseCustomAllocator> {
-  public:
-    using value_type      = T;
-    using size_type       = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using is_always_equal = std::false_type;
-
-    explicit GCAllocator(IAllocator *allocator = nullptr) noexcept
-        : allocator_(allocator ? allocator : &mm::autoSpace()) {}
-
-    template <typename U>
-    GCAllocator(const GCAllocator<U, UseCustomAllocator> &other) noexcept
-        : allocator_(other.allocator_) {}
-
-    T *allocate(size_type n) { return static_cast<T *>(allocator_->alloc(n * sizeof(T))); }
-
-    void deallocate(T *p, size_type n) noexcept {
-        // GC 管理
+    static GCString *from(const char *src, IAllocator &allocator = mm::autoSpace()) {
+        size_t len = std::strlen(src);
+        auto *str  = create(len, allocator);
+        std::memcpy(str->data_, src, len + 1);
+        return str;
     }
 
-    template <typename U> struct rebind {
-        using other = GCAllocator<U, UseCustomAllocator>;
-    };
-
-    IAllocator *allocator() const noexcept { return allocator_; }
-
-    bool operator==(const GCAllocator &other) const noexcept {
-        return allocator_ == other.allocator_;
+    static GCString *from(const std::string &s, IAllocator &allocator = mm::autoSpace()) {
+        auto *str = create(s.size(), allocator);
+        std::memcpy(str->data_, s.data(), s.size());
+        str->data_[s.size()] = '\0';
+        return str;
     }
 
-    bool operator!=(const GCAllocator &other) const noexcept { return !(*this == other); }
+    std::string toString() const { return std::string(data_, size_); }
+
+    static GCString *
+    concat(const GCString *a, const GCString *b, IAllocator &allocator = mm::autoSpace()) {
+        size_t lenA      = a->size();
+        size_t lenB      = b->size();
+        size_t newLen    = lenA + lenB;
+        GCString *result = create(newLen, allocator);
+        std::memcpy(result->data_, a->data_, lenA);
+        std::memcpy(result->data_ + lenA, b->data_, lenB);
+        result->data_[newLen] = '\0';
+        return result;
+    }
+
+    size_t size() const { return size_; }
+    bool empty() const { return size_ == 0; }
+    const char *data() const { return data_; }
+    const char *c_str() const { return data_; }
+
+    char operator[](size_t i) const {
+        assert(i < size_ && "GCString index out of range");
+        return data_[i];
+    }
+
+    int compare(const GCString *other) const {
+        int cmp = std::memcmp(data_, other->data_, std::min(size_, other->size_));
+        if (cmp != 0)
+            return cmp;
+        return (size_ < other->size_) ? -1 : (size_ > other->size_);
+    }
+
+    bool equals(const GCString *other) const {
+        return this == other ||
+               (other->size_ == size_ && std::memcmp(data_, other->data_, size_) == 0);
+    }
+
+    bool equals(const char *cstr) const { return std::strcmp(data_, cstr) == 0; }
+
+    bool operator==(const GCString &other) const { return equals(&other); }
+    bool operator!=(const GCString &other) const { return !equals(&other); }
+    bool operator<(const GCString &other) const { return compare(&other) < 0; }
+
+    size_t find(char ch, size_t start = 0) const {
+        for (size_t i = start; i < size_; ++i)
+            if (data_[i] == ch)
+                return i;
+        return npos;
+    }
+
+    size_t find(const GCString *substr, size_t start = 0) const {
+        if (substr->size_ == 0 || substr->size_ > size_)
+            return npos;
+        for (size_t i = start; i <= size_ - substr->size_; ++i)
+            if (std::memcmp(data_ + i, substr->data_, substr->size_) == 0)
+                return i;
+        return npos;
+    }
+
+    bool startsWith(const GCString *prefix) const {
+        return prefix->size_ <= size_ && std::memcmp(data_, prefix->data_, prefix->size_) == 0;
+    }
+
+    bool endsWith(const GCString *suffix) const {
+        return suffix->size_ <= size_ &&
+               std::memcmp(data_ + size_ - suffix->size_, suffix->data_, suffix->size_) == 0;
+    }
+
+    bool contains(const GCString *substr) const { return find(substr) != npos; }
+
+    GCString *substr(size_t pos, size_t len = npos, IAllocator &allocator = mm::autoSpace()) const {
+        if (pos >= size_)
+            return from("", allocator);
+        if (len > size_ - pos)
+            len = size_ - pos;
+        GCString *result = create(len, allocator);
+        std::memcpy(result->data_, data_ + pos, len);
+        result->data_[len] = '\0';
+        return result;
+    }
+
+    uint32_t hash() const {
+        if (!cachedHash_)
+            cachedHash_ = computeHash(data_, size_);
+        return cachedHash_;
+    }
+
+    void updateRefs(const std::function<GCRef(GCRef)> &) override {}
+    void onMoved() override {}
+
+    static constexpr size_t npos = static_cast<size_t>(-1);
 
   private:
-    IAllocator *allocator_; // 8 字节开销
-};
+    explicit GCString(size_t length) : size_(static_cast<uint32_t>(length)), cachedHash_(0) {}
 
-template <typename Policy = UseGlobalGC> class GCStringT : public GCObject {
-  public:
-    using AllocatorType = GCAllocator<char, Policy>;
-    using StringType    = std::basic_string<char, std::char_traits<char>, AllocatorType>;
-
-    // 默认构造（GlobalGC 策略）
-    template <typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseGlobalGC>>>
-    GCStringT() : str_() {}
-
-    template <typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseGlobalGC>>>
-    explicit GCStringT(const char *s) : str_(s) {}
-
-    // 从 std::string 构造（GlobalGC 策略）
-    template <typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseGlobalGC>>>
-    explicit GCStringT(const std::string &s) : str_(s.begin(), s.end()) {}
-
-    // 自定义分配器构造（CustomAllocator 策略）
-    template <
-        typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseCustomAllocator>>>
-    explicit GCStringT(IAllocator *allocator) : str_(AllocatorType(allocator)) {}
-
-    template <
-        typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseCustomAllocator>>>
-    GCStringT(const char *s, IAllocator *allocator) : str_(s, AllocatorType(allocator)) {}
-
-    // 从 std::string 构造（CustomAllocator 策略）
-    template <
-        typename P = Policy, typename = std::enable_if_t<std::is_same_v<P, UseCustomAllocator>>>
-    GCStringT(const std::string &s, IAllocator *allocator)
-        : str_(s.begin(), s.end(), AllocatorType(allocator)) {}
-
-    // 不允许从标准string移动构造（因为分配器不同）
-    explicit GCStringT(std::string &&s) = delete;
-
-    const StringType &str() const { return str_; }
-    StringType &str() { return str_; }
-    const char *c_str() const { return str_.c_str(); }
-    size_t length() const { return str_.length(); }
-    bool empty() const { return str_.empty(); }
-    size_t size() const { return str_.size(); }
-    size_t capacity() const { return str_.capacity(); }
-
-    bool operator==(const GCString &other) const { return str_ == other.str_; }
-    bool operator!=(const GCString &other) const { return str_ != other.str_; }
-    bool operator<(const GCString &other) const { return str_ < other.str_; }
-
-    // 获取分配器（仅 CustomAllocator 版本）
-    template <typename P = Policy>
-    std::enable_if_t<std::is_same_v<P, UseCustomAllocator>, IAllocator *> allocator() const {
-        return str_.get_allocator().allocator();
-    }
-
-    void *payload() const override {
-        if (isSSO()) {
-            return nullptr;
+    static uint32_t computeHash(const char *s, size_t len) {
+        uint32_t h = 2166136261u;
+        for (size_t i = 0; i < len; ++i) {
+            h ^= static_cast<uint8_t>(s[i]);
+            h *= 16777619u;
         }
-        return str_.data();
+        return h;
     }
 
-    void onMoved(void *to) override { data_ = to; }
-
-    void traverse(const std::function<void(GCObject *)> &visit) const override {
-        // 普通字符数据无 GC 引用
-    }
-
-  private:
-    StringType str_;
-
-    bool isSSO() const {
-        const char *dataPtr = str_.data();
-        const char *strPtr  = reinterpret_cast<const char *>(&str_);
-        return dataPtr >= strPtr && dataPtr < strPtr + sizeof(StringType);
-    }
+    uint32_t size_;
+    mutable uint32_t cachedHash_;
+    char data_[];
 };
-
-using GCString              = GCStringT<UseGlobalGC>;
-using GCStringWithAllocator = GCStringT<UseCustomAllocator>;
-
-static_assert(
-    sizeof(GCString) == sizeof(std::string) + 8,
-    "GCString size should match std::string size (and a vptr)");
-static_assert(
-    sizeof(GCStringWithAllocator) ==
-        sizeof(std::string) + sizeof(GCAllocator<char, UseCustomAllocator>) + 8,
-    "GCStringWithAllocator size should match std::string size + allocator size + vptr");

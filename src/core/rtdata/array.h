@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 24, 2025
+ * Updated: Dec. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,8 +91,8 @@ class GCFixedArray : public GCObject {
         GCRef *refArr = reinterpret_cast<GCRef *>(data_);
 
         for (size_t i = 0; i < size_; ++i) {
-            if (GCRef ref = refArr[i]) {
-                refArr[i] = relocate(ref);
+            if (GCRef &ref = refArr[i]) {
+                ref = relocate(ref);
             }
         }
     }

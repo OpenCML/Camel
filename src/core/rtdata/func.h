@@ -13,22 +13,55 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Dec. 05, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "comp.h"
+#include "tuple.h"
 
 namespace GraphIR {
 class Graph;
 } // namespace GraphIR
 
-class GCFunction : public GCCompositeObject {
-    GraphIR::Graph *graph_;
-
+class GCFunction : public GCObject {
   public:
-    explicit GCFunction(const CompositeDataLayout *layout, IAllocator &allocator = mm::autoSpace())
-        : GCCompositeObject(layout, allocator), graph_(nullptr) {}
+    GCFunction(const GCFunction &)            = delete;
+    GCFunction &operator=(const GCFunction &) = delete;
+
+    static GCFunction *create(
+        GraphIR::Graph *graph, const TypeCode *types, size_t tupleSize,
+        IAllocator &allocator = mm::autoSpace()) {
+        void *mem = allocator.alloc(sizeof(GCFunction), alignof(GCFunction));
+        if (!mem)
+            throw std::bad_alloc();
+
+        auto *fn = new (mem) GCFunction(graph);
+
+        // 独立创建 tuple
+        fn->tuple_ = GCTuple::create(types, tupleSize, allocator);
+        return fn;
+    }
+
+    GraphIR::Graph *graph() const { return graph_; }
+    GCTuple *tuple() { return tuple_; }
+    const GCTuple *tuple() const { return tuple_; }
+
+    void onMoved() override {
+        // graph_ 是外部引用，不需要改动
+        // tuple_ 指向的对象可能被 GC 移动，需要由 GC 更新
+    }
+
+    void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+        if (tuple_) {
+            tuple_->updateRefs(relocate);
+        }
+    }
+
+  private:
+    explicit GCFunction(GraphIR::Graph *g) : graph_(g), tuple_(nullptr) {}
+
+    GraphIR::Graph *graph_;
+    GCTuple *tuple_;
 };
