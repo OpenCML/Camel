@@ -20,6 +20,7 @@
 #pragma once
 
 #include "composite.h"
+#include "utils/assert.h"
 
 #include <optional>
 #include <unordered_map>

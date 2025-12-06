@@ -24,14 +24,14 @@
 
 #include <optional>
 
-class TupleLayout {
+class TupleTypeLayout {
   public:
-    explicit TupleLayout(std::vector<TypeCode> elemTypes) : elemTypes_(std::move(elemTypes)) {}
+    explicit TupleTypeLayout(std::vector<TypeCode> elemTypes) : elemTypes_(std::move(elemTypes)) {}
 
     size_t size() const noexcept { return elemTypes_.size(); }
 
     TypeCode elemType(size_t index) const {
-        ASSERT(index < elemTypes_.size(), "TupleLayout: index out of range");
+        ASSERT(index < elemTypes_.size(), "TupleTypeLayout: index out of range");
         return elemTypes_[index];
     }
 
@@ -44,7 +44,7 @@ class TupleLayout {
 class TupleType : public CompositeType {
   private:
     std::vector<type_ptr_t> types_;
-    mutable std::shared_ptr<TupleLayout> layout_;
+    mutable std::shared_ptr<TupleTypeLayout> layout_;
 
     void computeLayout() const;
 
@@ -64,7 +64,7 @@ class TupleType : public CompositeType {
     const std::vector<type_ptr_t> &types() const;
     std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
     std::optional<type_ptr_t> typeAt(size_t idx) const;
-    const TupleLayout &layout() const;
+    const TupleTypeLayout &layout() const;
 
     virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;

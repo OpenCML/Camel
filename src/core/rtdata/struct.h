@@ -13,69 +13,89 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 16, 2025
+ * Updated: Dec. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "comp.h"
+#include "base.h"
 
-class GCStruct : public GCCompositeObject {
+class GCStruct : public GCObject {
   public:
-    explicit GCStruct(const StructDataLayout *layout, IAllocator &allocator = mm::autoSpace())
-        : GCCompositeObject(layout, allocator) {}
+    GCStruct(const GCStruct &)            = delete;
+    GCStruct &operator=(const GCStruct &) = delete;
 
-    // 安全的向下转型
-    const StructDataLayout *structLayout() const {
-        return static_cast<const StructDataLayout *>(layout_);
+    static GCStruct *
+    create(const StructTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
+        size_t fieldCount = layout.fieldCount();
+        size_t headerSize = offsetof(GCStruct, data_);
+        size_t dataSize   = sizeof(slot_t) * fieldCount;
+        size_t totalSize  = headerSize + dataSize;
+
+        void *memory = allocator.alloc(totalSize, alignof(GCStruct));
+        if (!memory)
+            throw std::bad_alloc();
+
+        GCStruct *s = new (memory) GCStruct(layout.fieldTypes().data(), fieldCount);
+
+        // 初始化所有引用类型的字段为 NullRef
+        GCRef *dataStart = reinterpret_cast<GCRef *>(s->data_);
+        std::fill(dataStart, dataStart + fieldCount, NullRef);
+
+        return s;
     }
 
-    // 按名字访问 - 返回指针（统一接口，适用于所有类型）
-    template <typename T> T *get(std::string_view name) {
-        auto index = structLayout()->findField(name);
-        if (!index)
-            return nullptr;
-        return &at<T>(*index);
+    size_t size() const { return fieldCount_; }
+    const TypeCode *fieldTypes() const { return fieldTypes_; }
+
+    TypeCode fieldType(size_t index) const {
+        ASSERT(index < fieldCount_, "Field index out of range");
+        return fieldTypes_[index];
     }
 
-    template <typename T> const T *get(std::string_view name) const {
-        auto index = structLayout()->findField(name);
-        if (!index)
-            return nullptr;
-        return &at<T>(*index);
+    template <typename T> T &field(size_t index) {
+        ASSERT(index < fieldCount_, "Field index out of range");
+        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
+        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+        return reinterpret_cast<T *>(data_)[index];
     }
 
-    // 按名字访问 - 返回引用（更符合你的 at() 风格，但要确保字段存在）
-    template <typename T> T &getRef(std::string_view name) {
-        auto index = structLayout()->findField(name);
-        ASSERT(index.has_value(), "Field not found");
-        return at<T>(*index);
+    template <typename T> const T &field(size_t index) const {
+        ASSERT(index < fieldCount_, "Field index out of range");
+        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
+        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+        return reinterpret_cast<const T *>(data_)[index];
     }
 
-    template <typename T> const T &getRef(std::string_view name) const {
-        auto index = structLayout()->findField(name);
-        ASSERT(index.has_value(), "Field not found");
-        return at<T>(*index);
+    std::optional<size_t> findField(std::string_view name, const StructTypeLayout &layout) const {
+        return layout.findField(name);
     }
 
-    // 设置字段值（对于 GC 对象需要写屏障的话，可以在这里添加）
-    template <typename T> void set(std::string_view name, const T &value) {
-        auto index = structLayout()->findField(name);
-        ASSERT(index.has_value(), "Field not found");
-        at<T>(*index) = value;
+    slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
+    const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
+
+    void onMoved() override {
+        // fieldTypes_ 指向外部的布局元信息，不需调整
     }
 
-    // 获取字段名
-    std::string_view fieldName(size_t index) const { return structLayout()->fieldName(index); }
-
-    // 检查字段存在
-    bool hasField(std::string_view name) const {
-        return structLayout()->findField(name).has_value();
+    void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+        GCRef *refArr = reinterpret_cast<GCRef *>(data_);
+        for (size_t i = 0; i < fieldCount_; ++i) {
+            if (isGCTraced(fieldTypes_[i])) {
+                if (GCRef &ref = refArr[i]) {
+                    ref = relocate(ref);
+                }
+            }
+        }
     }
 
-    // 获取字段索引（用于缓存）
-    std::optional<size_t> fieldIndex(std::string_view name) const {
-        return structLayout()->findField(name);
-    }
+  private:
+    // 注意：fieldTypes_ 指向的数组由外部（StructLayout）维护，必须保持有效
+    GCStruct(const TypeCode *types, size_t fieldCount)
+        : fieldCount_(static_cast<uint32_t>(fieldCount)), fieldTypes_(types) {}
+
+    uint32_t fieldCount_;
+    const TypeCode *fieldTypes_;       // 指向外部布局信息
+    alignas(slot_t) std::byte data_[]; // 灵活数组成员
 };

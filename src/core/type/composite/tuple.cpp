@@ -31,7 +31,7 @@ void TupleType::computeLayout() const {
         for (const auto &t : types_) {
             elemTypes.push_back(t->code());
         }
-        layout_ = std::make_shared<TupleLayout>(std::move(elemTypes));
+        layout_ = std::make_shared<TupleTypeLayout>(std::move(elemTypes));
     }
 }
 
@@ -75,7 +75,7 @@ std::optional<type_ptr_t> TupleType::typeAt(size_t idx) const {
     return types_[idx];
 }
 
-const TupleLayout &TupleType::layout() const {
+const TupleTypeLayout &TupleType::layout() const {
     if (!layout_) {
         computeLayout();
     }

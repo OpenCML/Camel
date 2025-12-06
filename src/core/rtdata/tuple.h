@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 05, 2025
+ * Updated: Dec. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@ class GCTuple : public GCObject {
 
     /// 创建 GCTuple 实例
     static GCTuple *
-    create(const TypeCode *types, size_t size, IAllocator &allocator = mm::autoSpace()) {
+    create(const TupleTypeLayout &layout, size_t size, IAllocator &allocator = mm::autoSpace()) {
         size_t headerSize = offsetof(GCTuple, data_);
         size_t dataSize   = sizeof(slot_t) * size;
         size_t totalSize  = headerSize + dataSize;
@@ -37,7 +37,7 @@ class GCTuple : public GCObject {
         if (!memory)
             throw std::bad_alloc();
 
-        GCTuple *tuple = new (memory) GCTuple(types, size);
+        GCTuple *tuple = new (memory) GCTuple(layout.elemTypes().data(), size);
 
         // 初始化引用类型为空以避免伪引用
         GCRef *dataStart = reinterpret_cast<GCRef *>(tuple->data_);
