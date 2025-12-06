@@ -13,19 +13,40 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "composite.h"
+#include "utils/assert.h"
 
 #include <optional>
+
+class TupleLayout {
+  public:
+    explicit TupleLayout(std::vector<TypeCode> elemTypes) : elemTypes_(std::move(elemTypes)) {}
+
+    size_t size() const noexcept { return elemTypes_.size(); }
+
+    TypeCode elemType(size_t index) const {
+        ASSERT(index < elemTypes_.size(), "TupleLayout: index out of range");
+        return elemTypes_[index];
+    }
+
+    const std::vector<TypeCode> &elemTypes() const { return elemTypes_; }
+
+  private:
+    std::vector<TypeCode> elemTypes_;
+};
 
 class TupleType : public CompositeType {
   private:
     std::vector<type_ptr_t> types_;
+    mutable std::shared_ptr<TupleLayout> layout_;
+
+    void computeLayout() const;
 
   public:
     TupleType();
@@ -43,6 +64,7 @@ class TupleType : public CompositeType {
     const std::vector<type_ptr_t> &types() const;
     std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
     std::optional<type_ptr_t> typeAt(size_t idx) const;
+    const TupleLayout &layout() const;
 
     virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;

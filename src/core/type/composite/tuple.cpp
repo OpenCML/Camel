@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,17 @@
 #include "utils/type.h"
 
 using namespace std;
+
+void TupleType::computeLayout() const {
+    if (!layout_) {
+        std::vector<TypeCode> elemTypes;
+        elemTypes.reserve(types_.size());
+        for (const auto &t : types_) {
+            elemTypes.push_back(t->code());
+        }
+        layout_ = std::make_shared<TupleLayout>(std::move(elemTypes));
+    }
+}
 
 TupleType::TupleType() : CompositeType(TypeCode::Tuple) {}
 
@@ -62,6 +73,13 @@ std::optional<type_ptr_t> TupleType::typeAt(size_t idx) const {
         return std::nullopt;
     }
     return types_[idx];
+}
+
+const TupleLayout &TupleType::layout() const {
+    if (!layout_) {
+        computeLayout();
+    }
+    return *layout_;
 }
 
 type_ptr_t TupleType::resolve(const type_vec_t &typeList) const {
@@ -118,14 +136,18 @@ std::string TupleType::mangle() const {
 }
 
 type_ptr_t TupleType::clone(bool deep /* = false */) const {
+    std::shared_ptr<TupleType> res;
     if (deep) {
         std::vector<type_ptr_t> clonedTypes;
         for (const auto &type : types_) {
             clonedTypes.push_back(type->clone(true));
         }
-        return TupleType::create(std::move(clonedTypes));
+        res = TupleType::create(std::move(clonedTypes));
+    } else {
+        res = TupleType::create(types_);
     }
-    return TupleType::create(types_);
+    res->layout_ = layout_;
+    return res;
 }
 
 bool TupleType::equals(const type_ptr_t &other) const {

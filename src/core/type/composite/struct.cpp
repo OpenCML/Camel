@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,19 @@
 #include <sstream>
 
 using namespace std;
+
+void StructType::computeLayout() const {
+    vector<pair<string, TypeCode>> fieldList;
+    fieldList.reserve(fields_.size());
+    for (const auto &kv : fields_) {
+        fieldList.emplace_back(kv.first, kv.second->code());
+    }
+    // normalize field order by name to ensure consistent layout
+    sort(fieldList.begin(), fieldList.end(), [](const auto &a, const auto &b) {
+        return a.first < b.first;
+    });
+    layout_ = make_shared<StructTypeLayout>(fieldList);
+}
 
 StructType::StructType() : CompositeType(TypeCode::Struct) {}
 
@@ -59,6 +72,13 @@ type_ptr_t StructType::get(const string &name) const {
         throw out_of_range("StructType::get: field not found - " + name);
     }
     return it->second;
+}
+
+const StructTypeLayout &StructType::layout() const {
+    if (!layout_) {
+        computeLayout();
+    }
+    return *layout_;
 }
 
 type_ptr_t StructType::operator|(const StructType &other) const {
@@ -147,6 +167,7 @@ type_ptr_t StructType::clone(bool deep /* = false */) const {
     auto result = make_shared<StructType>();
 
     result->refIndices_ = refIndices_;
+    result->layout_     = layout_;
     result->fields_.reserve(fields_.size());
 
     for (const auto &kv : fields_) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 06, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,10 +24,54 @@
 #include <optional>
 #include <unordered_map>
 
+class StructTypeLayout {
+  public:
+    StructTypeLayout(std::vector<std::pair<std::string, TypeCode>> fields) {
+        fieldNames_.reserve(fields.size());
+        fieldTypes_.reserve(fields.size());
+
+        for (auto &f : fields) {
+            fieldNames_.push_back(f.first);
+            fieldTypes_.push_back(f.second);
+        }
+    }
+
+    size_t fieldCount() const noexcept { return fieldNames_.size(); }
+
+    std::string_view fieldName(size_t index) const {
+        ASSERT(index < fieldTypes_.size(), "Index out of range");
+        return fieldNames_[index];
+    }
+
+    TypeCode fieldType(size_t index) const {
+        ASSERT(index < fieldTypes_.size(), "Index out of range");
+        return fieldTypes_[index];
+    }
+
+    std::optional<size_t> findField(std::string_view name) const {
+        for (size_t i = 0; i < fieldNames_.size(); ++i) {
+            if (fieldNames_[i] == name) {
+                return i;
+            }
+        }
+        return std::nullopt;
+    }
+
+    const std::vector<std::string> &fieldNames() const { return fieldNames_; }
+    const std::vector<TypeCode> &fieldTypes() const { return fieldTypes_; }
+
+  private:
+    std::vector<std::string> fieldNames_;
+    std::vector<TypeCode> fieldTypes_;
+};
+
 class StructType : public CompositeType {
   private:
     std::vector<std::string> refIndices_;
     std::unordered_map<std::string, type_ptr_t> fields_;
+    mutable std::shared_ptr<StructTypeLayout> layout_;
+
+    void computeLayout() const;
 
   public:
     StructType();
@@ -40,6 +84,7 @@ class StructType : public CompositeType {
     bool add(const std::string &name, const type_ptr_t &type);
     bool has(const std::string &name) const;
     type_ptr_t get(const std::string &name) const;
+    const StructTypeLayout &layout() const;
 
     type_ptr_t operator|(const StructType &other) const;
     type_ptr_t operator&(const StructType &other) const;
