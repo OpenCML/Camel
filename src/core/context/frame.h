@@ -33,7 +33,7 @@ using data_idx_t = int16_t;
 
 class FrameTemplate {
   public:
-    FrameTemplate(GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &dynamicAllocator);
+    FrameTemplate(GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &runtimeAllocator);
 
     GraphIR::Graph *graph() const { return graph_; }
 
@@ -41,20 +41,20 @@ class FrameTemplate {
     GCTuple *makeDynamicArea() const;
 
     IAllocator &staticAllocator() const { return staticAllocator_; }
-    IAllocator &dynamicAllocator() const { return dynamicAllocator_; }
+    IAllocator &runtimeAllocator() const { return runtimeAllocator_; }
 
   private:
     GraphIR::Graph *graph_;
     IAllocator &staticAllocator_;
-    IAllocator &dynamicAllocator_;
-    TupleTypeLayout dynamicDataLayout_;
+    IAllocator &runtimeAllocator_;
+    const TupleTypeLayout *runtimeDataLayout_;
     GCTuple *staticArea_ = nullptr;
 };
 
 class Frame {
   public:
     Frame(const FrameTemplate &layout)
-        : graph_(layout.graph()), allocator_(&layout.dynamicAllocator()),
+        : graph_(layout.graph()), allocator_(&layout.runtimeAllocator()),
           staticArea_(layout.staticArea()) {
         ASSERT(graph_ != nullptr, "Frame graph is null.");
         ASSERT(staticArea_ != nullptr, "Static tuple is null.");

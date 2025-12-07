@@ -18,18 +18,32 @@
  */
 
 #include "frame.h"
-
 #include "compile/gir.h"
+#include "core/rtdata/conv.h"
 
 FrameTemplate::FrameTemplate(
-    GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &dynamicAllocator)
-    : graph_(graph), staticAllocator_(staticAllocator), dynamicAllocator_(dynamicAllocator) {
-    // 创建静态区 Tuple
-    staticArea_ = GCTuple::create(layout_, graph_->staticDataSize(), staticAllocator_);
+    GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &runtimeAllocator)
+    : graph_(graph), staticAllocator_(staticAllocator), runtimeAllocator_(runtimeAllocator) {
+    const auto &layout        = graph_->staticDataType()->layout();
+    staticArea_               = GCTuple::create(layout, staticAllocator_);
+    const auto &staticDataArr = graph_->staticDataArr();
+    for (size_t i = 1; i < layout.size(); ++i) {
+        const auto &elem = staticDataArr[i];
+        if (elem->type()->isGCTraced()) {
+            GCRef elemRef = makeGCRefFromGCTracedData(elem, staticAllocator_);
+            staticArea_->set<GCRef>(i, elemRef);
+        } else if (elem->type()->isPrimitive()) {
+            slot_t slot = makeSlotFromPrimitiveData(elem);
+            staticArea_->set<slot_t>(i, slot);
+        } else {
+            ASSERT(false, "Unsupported element type.");
+        }
+    }
+    runtimeDataLayout_ = &graph_->runtimeDataType()->layout();
 }
 
 GCTuple *FrameTemplate::makeDynamicArea() const {
-    return GCTuple::create(layout_, graph_->argsCount(), dynamicAllocator_);
+    return GCTuple::create(*runtimeDataLayout_, runtimeAllocator_);
 }
 
 inline std::string formatAddress(void *ptr) {
@@ -51,61 +65,4 @@ inline std::string formatAddress(void *ptr) {
     }
 
     return "0x" + formatted;
-}
-
-Frame::Frame(const CompositeDataLayout *layout, GraphIR::Graph *graph, IAllocator &allocator)
-    : graph_(graph), allocator_(&allocator), layout_(layout) {
-    ASSERT(layout_ != nullptr, "Frame layout is null");
-
-    // 指针数组区大小
-    size_t ptrArraySize = sizeof(void *) * layout_->size();
-
-    // 总大小 = 指针数组区 + 数据区
-    size_t totalSize = alignUp(ptrArraySize, layout_->align()) + layout_->size();
-
-    data_ = static_cast<void **>(allocator_->alloc(totalSize, layout_->align()));
-
-    // 数据区起始地址
-    uint8_t *dataRegion =
-        reinterpret_cast<uint8_t *>(data_) + alignUp(ptrArraySize, layout_->align());
-
-    // 初始化指针数组
-    for (size_t i = 0; i < layout_->size(); ++i) {
-        data_[i] = dataRegion + layout_->offset(i);
-    }
-
-    EXEC_WHEN_DEBUG([&]() {
-        l.in("Frame").debug(
-            "Created Frame for Graph: {} | Total Size: {} bytes",
-            graph_->name(),
-            totalSize);
-        for (size_t i = 0; i < layout_->size(); ++i) {
-            l.in("Frame").debug(
-                "  Arg[{}] -> Data Ptr: {} | Offset: {} bytes",
-                i,
-                formatAddress(data_[i]),
-                layout_->offset(i));
-        }
-    }());
-}
-
-Frame::~Frame() {
-    if (allocator_ && data_) {
-        allocator_->free(data_);
-    }
-}
-
-std::string Frame::toString() const {
-    std::stringstream ss;
-    ss << "Frame for Graph: " << (graph_ ? graph_->name() : "<null>") << "\n";
-    if (graph_) {
-        size_t argsCount = graph_->argsCount();
-        ss << "Total Args: " << argsCount << "\n";
-        for (size_t i = 0; i < argsCount; ++i) {
-            ss << "  Arg[" << i << "] -> Data Ptr: " << formatAddress(data_[i]) << "\n";
-        }
-    } else {
-        ss << "Graph is null.\n";
-    }
-    return ss.str();
 }
