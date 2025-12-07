@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ class GCStruct : public GCObject {
         if (!memory)
             throw std::bad_alloc();
 
-        GCStruct *s = new (memory) GCStruct(layout.fieldTypes().data(), fieldCount);
+        GCStruct *s = new (memory) GCStruct(layout, fieldCount);
 
         // 初始化所有引用类型的字段为 NullRef
         GCRef *dataStart = reinterpret_cast<GCRef *>(s->data_);
@@ -46,26 +46,37 @@ class GCStruct : public GCObject {
         return s;
     }
 
-    size_t size() const { return fieldCount_; }
-    const TypeCode *fieldTypes() const { return fieldTypes_; }
+    size_t size() const { return size_; }
 
-    TypeCode fieldType(size_t index) const {
-        ASSERT(index < fieldCount_, "Field index out of range");
-        return fieldTypes_[index];
-    }
-
-    template <typename T> T &field(size_t index) {
-        ASSERT(index < fieldCount_, "Field index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return reinterpret_cast<T *>(data_)[index];
-    }
-
-    template <typename T> const T &field(size_t index) const {
-        ASSERT(index < fieldCount_, "Field index out of range");
+    template <typename T> T get(size_t index) const {
+        ASSERT(index < size_, "Index out of range");
         ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
         return reinterpret_cast<const T *>(data_)[index];
+    }
+
+    template <typename T> T get(std::string_view name) const {
+        auto optIndex = layout_.findField(name);
+        ASSERT(optIndex.has_value(), "Field name not found: {}", name);
+        return get<T>(optIndex.value());
+    }
+
+    template <typename T> void set(size_t index, T value) {
+        ASSERT(index < size_, "Index out of range");
+        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
+        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+
+        T *arr = reinterpret_cast<T *>(data_);
+        if constexpr (std::is_same_v<T, GCRef>) {
+            // writeBarrier(arr[index], value);
+        }
+        arr[index] = value;
+    }
+
+    template <typename T> void set(std::string_view name, T value) {
+        auto optIndex = layout_.findField(name);
+        ASSERT(optIndex.has_value(), "Field name not found: {}", name);
+        set<T>(optIndex.value(), value);
     }
 
     std::optional<size_t> findField(std::string_view name, const StructTypeLayout &layout) const {
@@ -76,13 +87,14 @@ class GCStruct : public GCObject {
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
     void onMoved() override {
-        // fieldTypes_ 指向外部的布局元信息，不需调整
+        // types_ 指向外部的布局元信息，不需调整
     }
 
     void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
-        GCRef *refArr = reinterpret_cast<GCRef *>(data_);
-        for (size_t i = 0; i < fieldCount_; ++i) {
-            if (isGCTraced(fieldTypes_[i])) {
+        GCRef *refArr     = reinterpret_cast<GCRef *>(data_);
+        const auto &types = layout_.fieldTypes();
+        for (size_t i = 0; i < size_; ++i) {
+            if (isGCTraced(types[i])) {
                 if (GCRef &ref = refArr[i]) {
                     ref = relocate(ref);
                 }
@@ -91,11 +103,10 @@ class GCStruct : public GCObject {
     }
 
   private:
-    // 注意：fieldTypes_ 指向的数组由外部（StructLayout）维护，必须保持有效
-    GCStruct(const TypeCode *types, size_t fieldCount)
-        : fieldCount_(static_cast<uint32_t>(fieldCount)), fieldTypes_(types) {}
+    GCStruct(const StructTypeLayout &layout, size_t fieldCount)
+        : size_(static_cast<uint32_t>(fieldCount)), layout_(layout) {}
 
-    uint32_t fieldCount_;
-    const TypeCode *fieldTypes_;       // 指向外部布局信息
+    uint32_t size_;
+    const StructTypeLayout &layout_;
     alignas(slot_t) std::byte data_[]; // 灵活数组成员
 };

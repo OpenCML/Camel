@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -130,6 +130,12 @@ class Type {
     virtual ~Type() noexcept = default;
 
     const TypeCode &code() const;
+
+    inline bool isPrimitive() const { return ::isPrimitive(code_); }
+    inline bool isOtherType() const { return ::isOtherType(code_); }
+    inline bool isComposite() const { return ::isComposite(code_); }
+    inline bool isGCTraced() const { return ::isGCTraced(code_); }
+    inline bool isAuxiliary() const { return ::isAuxiliary(code_); }
 
     virtual std::string toString() const;
     virtual std::string mangle() const;

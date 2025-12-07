@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ StructData::StructData(initializer_list<pair<string, data_ptr_t>> data)
     StructType &structType = *static_cast<StructType *>(type_.get());
     for (const auto &e : data) {
         auto &[key, val] = e;
-        data_[key] = val;
+        data_[key]       = val;
         structType.add(key, val->type());
         if (val->type()->code() == TypeCode::Ref) {
             refIndices_.push_back(key);
@@ -42,7 +42,7 @@ StructData::StructData(initializer_list<pair<string, data_ptr_t>> data)
     }
 }
 
-StructData::StructData(std::unordered_map<std::string, data_ptr_t> &&data)
+StructData::StructData(std::map<std::string, data_ptr_t> &&data)
     : ComposedData(make_shared<StructType>()), data_(std::move(data)) {}
 
 bool StructData::emplace(const std::string &key, const data_ptr_t &val) {
@@ -150,8 +150,8 @@ void StructData::resolve(const data_vec_t &dataList) {
     ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
     for (size_t i = 0; i < refIndices_.size(); i++) {
         const string &key = refIndices_[i];
-        data_ptr_t data = dataList[i];
-        data_[key] = data;
+        data_ptr_t data   = dataList[i];
+        data_[key]        = data;
     }
     refIndices_.clear();
 }

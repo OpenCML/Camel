@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,8 +22,8 @@
 #include "composite.h"
 #include "utils/assert.h"
 
+#include <map>
 #include <optional>
-#include <unordered_map>
 
 class StructTypeLayout {
   public:
@@ -69,7 +69,7 @@ class StructTypeLayout {
 class StructType : public CompositeType {
   private:
     std::vector<std::string> refIndices_;
-    std::unordered_map<std::string, type_ptr_t> fields_;
+    std::map<std::string, type_ptr_t> fields_;
     mutable std::shared_ptr<StructTypeLayout> layout_;
 
     void computeLayout() const;
@@ -78,7 +78,7 @@ class StructType : public CompositeType {
     StructType();
     ~StructType() noexcept override = default;
 
-    std::shared_ptr<StructType> create() const;
+    static std::shared_ptr<StructType> create();
 
     size_t size() const;
     std::optional<type_ptr_t> typeOf(const std::string &idx) const;

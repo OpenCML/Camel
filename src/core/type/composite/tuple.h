@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,8 +55,8 @@ class TupleType : public CompositeType {
     TupleType(std::vector<type_ptr_t> &&types);
     ~TupleType() noexcept override = default;
 
-    std::shared_ptr<TupleType> create(const std::vector<type_ptr_t> &types) const;
-    std::shared_ptr<TupleType> create(std::vector<type_ptr_t> &&types) const;
+    static std::shared_ptr<TupleType> create(const std::vector<type_ptr_t> &types);
+    static std::shared_ptr<TupleType> create(std::vector<type_ptr_t> &&types);
 
     void add(const type_ptr_t &type);
     void set(size_t index, const type_ptr_t &type);

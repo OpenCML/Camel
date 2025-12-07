@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,21 +27,20 @@ class GCTuple : public GCObject {
     GCTuple &operator=(const GCTuple &) = delete;
 
     /// 创建 GCTuple 实例
-    static GCTuple *
-    create(const TupleTypeLayout &layout, size_t size, IAllocator &allocator = mm::autoSpace()) {
+    static GCTuple *create(const TupleTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
         size_t headerSize = offsetof(GCTuple, data_);
-        size_t dataSize   = sizeof(slot_t) * size;
+        size_t dataSize   = sizeof(slot_t) * layout.size();
         size_t totalSize  = headerSize + dataSize;
 
         void *memory = allocator.alloc(totalSize, alignof(GCTuple));
         if (!memory)
             throw std::bad_alloc();
 
-        GCTuple *tuple = new (memory) GCTuple(layout.elemTypes().data(), size);
+        GCTuple *tuple = new (memory) GCTuple(layout.elemTypes().data(), layout.size());
 
         // 初始化引用类型为空以避免伪引用
         GCRef *dataStart = reinterpret_cast<GCRef *>(tuple->data_);
-        std::fill(dataStart, dataStart + size, NullRef);
+        std::fill(dataStart, dataStart + layout.size(), NullRef);
 
         return tuple;
     }
@@ -54,18 +53,23 @@ class GCTuple : public GCObject {
         return types_[index];
     }
 
-    template <typename T> T &at(size_t index) {
-        ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return reinterpret_cast<T *>(data_)[index];
-    }
-
-    template <typename T> const T &at(size_t index) const {
+    template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
         ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
         return reinterpret_cast<const T *>(data_)[index];
+    }
+
+    template <typename T> void set(size_t index, T value) {
+        ASSERT(index < size_, "Index out of range");
+        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
+        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+
+        T *arr = reinterpret_cast<T *>(data_);
+        if constexpr (std::is_same_v<T, GCRef>) {
+            // writeBarrier(arr[index], value);
+        }
+        arr[index] = value;
     }
 
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }

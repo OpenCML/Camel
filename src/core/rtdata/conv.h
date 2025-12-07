@@ -12,15 +12,18 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Nov. 12, 2025
+ * Created: Dec. 07, 2025
  * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "base.h"
+#pragma once
 
-#include "array.h"
-#include "func.h"
-#include "string.h"
-#include "struct.h"
-#include "tuple.h"
+#include "./base.h"
+#include "compile/gir.h"
+#include "core/data/base.h"
+
+slot_t makeSlotFromPrimitiveData(const data_ptr_t &data);
+GCRef makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator);
+
+GCTuple *makeStaticDataOfGraph(const GraphIR::Graph &graph, IAllocator &allocator);

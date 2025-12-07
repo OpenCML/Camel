@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@ using namespace std;
 ArrayType::ArrayType(const type_ptr_t &elementType)
     : CompositeType(TypeCode::Array), elemType_(elementType) {}
 
-std::shared_ptr<ArrayType> ArrayType::create(const type_ptr_t &elemType) const {
+std::shared_ptr<ArrayType> ArrayType::create(const type_ptr_t &elemType) {
     static std::shared_ptr<ArrayType> voidArrayType = nullptr;
     if (!elemType) {
         if (voidArrayType == nullptr) {

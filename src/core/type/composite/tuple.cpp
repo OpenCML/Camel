@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,11 +46,11 @@ TupleType::TupleType(const vector<type_ptr_t> &types)
 TupleType::TupleType(std::vector<type_ptr_t> &&types)
     : CompositeType(TypeCode::Tuple), types_(std::move(types)) {}
 
-std::shared_ptr<TupleType> TupleType::create(const std::vector<type_ptr_t> &types) const {
+std::shared_ptr<TupleType> TupleType::create(const std::vector<type_ptr_t> &types) {
     return std::make_shared<TupleType>(types);
 }
 
-std::shared_ptr<TupleType> TupleType::create(std::vector<type_ptr_t> &&types) const {
+std::shared_ptr<TupleType> TupleType::create(std::vector<type_ptr_t> &&types) {
     return std::make_shared<TupleType>(std::move(types));
 }
 

@@ -13,14 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Nov. 13, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "frame.h"
 
 #include "compile/gir.h"
-#include "core/data/gcdata/base.h"
+
+FrameTemplate::FrameTemplate(
+    GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &dynamicAllocator)
+    : graph_(graph), staticAllocator_(staticAllocator), dynamicAllocator_(dynamicAllocator) {
+    // 创建静态区 Tuple
+    staticArea_ = GCTuple::create(layout_, graph_->staticDataSize(), staticAllocator_);
+}
+
+GCTuple *FrameTemplate::makeDynamicArea() const {
+    return GCTuple::create(layout_, graph_->argsCount(), dynamicAllocator_);
+}
 
 inline std::string formatAddress(void *ptr) {
     std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);

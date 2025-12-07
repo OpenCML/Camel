@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ class ArrayType : public CompositeType {
     ArrayType(const type_ptr_t &elemType);
     ~ArrayType() noexcept override = default;
 
-    std::shared_ptr<ArrayType> create(const type_ptr_t &elemType = nullptr) const;
+    static std::shared_ptr<ArrayType> create(const type_ptr_t &elemType = nullptr);
 
     type_ptr_t elementType() const;
 

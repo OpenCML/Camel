@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ class GCFunction : public GCObject {
     GCFunction &operator=(const GCFunction &) = delete;
 
     static GCFunction *create(
-        GraphIR::Graph *graph, const TupleTypeLayout &layout, size_t tupleSize,
+        GraphIR::Graph *graph, const TupleTypeLayout &layout,
         IAllocator &allocator = mm::autoSpace()) {
         void *mem = allocator.alloc(sizeof(GCFunction), alignof(GCFunction));
         if (!mem)
@@ -40,7 +40,7 @@ class GCFunction : public GCObject {
         auto *fn = new (mem) GCFunction(graph);
 
         // 独立创建 tuple
-        fn->tuple_ = GCTuple::create(layout, tupleSize, allocator);
+        fn->tuple_ = GCTuple::create(layout, allocator);
         return fn;
     }
 

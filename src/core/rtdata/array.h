@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 05, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,22 +61,23 @@ class GCFixedArray : public GCObject {
 
     TypeCode elemType() const { return type_; }
 
-    template <typename T> T &operator[](size_t index) { return at<T>(index); }
-
-    template <typename T> const T &operator[](size_t index) const { return at<T>(index); }
-
-    template <typename T> T &at(size_t index) {
-        ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return reinterpret_cast<T *>(data_)[index];
-    }
-
-    template <typename T> const T &at(size_t index) const {
+    template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
         ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
         return reinterpret_cast<const T *>(data_)[index];
+    }
+
+    template <typename T> void set(size_t index, T value) {
+        ASSERT(index < size_, "Index out of range");
+        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
+        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+
+        T *arr = reinterpret_cast<T *>(data_);
+        if constexpr (std::is_same_v<T, GCRef>) {
+            // writeBarrier(arr[index], value);
+        }
+        arr[index] = value;
     }
 
     void onMoved() override {
@@ -127,18 +128,23 @@ class GCArray : public GCObject {
     size_t size() const { return size_; }
     size_t capacity() const { return capacity_; }
 
-    template <typename T> T &operator[](size_t index) {
+    template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
         ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return static_cast<T *>(dataPtr_)[index];
+        return reinterpret_cast<const T *>(dataPtr_)[index];
     }
 
-    template <typename T> const T &operator[](size_t index) const {
+    template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
         ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return static_cast<const T *>(dataPtr_)[index];
+
+        T *arr = reinterpret_cast<T *>(dataPtr_);
+        if constexpr (std::is_same_v<T, GCRef>) {
+            // writeBarrier(arr[index], value);
+        }
+        arr[index] = value;
     }
 
     void reserve(size_t newCapacity) {
@@ -147,8 +153,7 @@ class GCArray : public GCObject {
         reallocate(newCapacity);
     }
 
-    template <typename T> void append(const T &value) {
-        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+    template <typename T> void append(const T value) {
         ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
 
@@ -159,11 +164,11 @@ class GCArray : public GCObject {
             reserve(capacity_ * 3 / 2);
         }
 
-        // 直接通过 dataPtr_ 添加新元素，零开销
-        static_cast<slot_t *>(dataPtr_)[size_] = *reinterpret_cast<const slot_t *>(&value);
-        size_++;
-
-        // TODO: 对于GCObject*类型的元素，可能需要写屏障
+        T *arr = reinterpret_cast<T *>(dataPtr_);
+        if constexpr (std::is_same_v<T, GCRef>) {
+            // writeBarrier(arr[size_], value);
+        }
+        arr[size_++] = value;
     }
 
     void pop() {

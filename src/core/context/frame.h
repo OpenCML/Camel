@@ -13,12 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "core/rtdata/data.h"
+#include "utils/brpred.h"
 #include "utils/log.h"
 
 class Frame;
@@ -29,17 +31,36 @@ class Graph;
 using data_idx_t = int16_t;
 } // namespace GraphIR
 
+class FrameTemplate {
+  public:
+    FrameTemplate(GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &dynamicAllocator);
+
+    GraphIR::Graph *graph() const { return graph_; }
+
+    GCTuple *staticArea() const { return staticArea_; }
+    GCTuple *makeDynamicArea() const;
+
+    IAllocator &staticAllocator() const { return staticAllocator_; }
+    IAllocator &dynamicAllocator() const { return dynamicAllocator_; }
+
+  private:
+    GraphIR::Graph *graph_;
+    IAllocator &staticAllocator_;
+    IAllocator &dynamicAllocator_;
+    TupleTypeLayout dynamicDataLayout_;
+    GCTuple *staticArea_ = nullptr;
+};
+
 class Frame {
   public:
-    Frame(
-        const TupleTypeLayout &layout, GraphIR::Graph *graph, GCTuple *staticTuple,
-        IAllocator &allocator = mm::autoSpace())
-        : graph_(graph), allocator_(&allocator), staticArea_(staticTuple) {
+    Frame(const FrameTemplate &layout)
+        : graph_(layout.graph()), allocator_(&layout.dynamicAllocator()),
+          staticArea_(layout.staticArea()) {
         ASSERT(graph_ != nullptr, "Frame graph is null.");
         ASSERT(staticArea_ != nullptr, "Static tuple is null.");
 
         // 初始化运行时区（动态区） Tuple
-        dynamicArea_ = GCTuple::create(layout, graph_->argsCount(), allocator);
+        dynamicArea_ = layout.makeDynamicArea();
     }
 
     ~Frame() {
@@ -54,43 +75,35 @@ class Frame {
     GraphIR::Graph *graph() { return graph_; }
     const GraphIR::Graph *graph() const { return graph_; }
 
-    template <typename T> T *get(GraphIR::data_idx_t index) {
+    template <typename T> T get(GraphIR::data_idx_t index) {
         ASSERT(index != 0, "Data index is invalid.");
-        if (index < 0) {
-            // 静态区：index 从 -1, -2, ... 开始
-            size_t idx = static_cast<size_t>(-index - 1);
-            ASSERT(staticArea_ != nullptr, "Static tuple is null.");
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
-            return &staticArea_->at<T>(idx);
-        } else {
-            // 动态区：index 从 1 开始
-            size_t idx = static_cast<size_t>(index - 1);
+        if (LIKELY(index > 0)) {
+            size_t idx = static_cast<size_t>(index);
             ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
-            return &dynamicArea_->at<T>(idx);
+            return dynamicArea_->get<T>(idx);
+        } else {
+            size_t idx = static_cast<size_t>(-index);
+            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            return staticArea_->get<T>(idx);
         }
     }
 
-    template <typename T> void set(GraphIR::data_idx_t index, T &&value) {
+    template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
         if (index < 0) {
-            size_t idx = static_cast<size_t>(-index - 1);
-            ASSERT(staticArea_ != nullptr, "Static tuple is null.");
+            size_t idx = static_cast<size_t>(-index);
             ASSERT(idx < staticArea_->size(), "Invalid static data index");
-            staticArea_->at<T>(idx) = std::forward<T>(value);
+            staticArea_->set<T>(idx, value);
         } else {
-            size_t idx = static_cast<size_t>(index - 1);
+            size_t idx = static_cast<size_t>(index);
             ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
-            dynamicArea_->at<T>(idx) = std::forward<T>(value);
+            dynamicArea_->set<T>(idx, value);
         }
     }
 
   private:
     GraphIR::Graph *graph_ = nullptr;
     IAllocator *allocator_ = nullptr;
-
-    /// 静态区：外部传入
-    GCTuple *staticArea_ = nullptr;
-
-    /// 动态区：本Frame生成并管理的
-    GCTuple *dynamicArea_ = nullptr;
+    GCTuple *staticArea_   = nullptr;
+    GCTuple *dynamicArea_  = nullptr;
 };

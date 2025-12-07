@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 06, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,21 +27,19 @@
 using namespace std;
 
 void StructType::computeLayout() const {
-    vector<pair<string, TypeCode>> fieldList;
+    std::vector<std::pair<std::string, TypeCode>> fieldList;
     fieldList.reserve(fields_.size());
+
     for (const auto &kv : fields_) {
         fieldList.emplace_back(kv.first, kv.second->code());
     }
-    // normalize field order by name to ensure consistent layout
-    sort(fieldList.begin(), fieldList.end(), [](const auto &a, const auto &b) {
-        return a.first < b.first;
-    });
-    layout_ = make_shared<StructTypeLayout>(fieldList);
+
+    layout_ = std::make_shared<StructTypeLayout>(fieldList);
 }
 
 StructType::StructType() : CompositeType(TypeCode::Struct) {}
 
-shared_ptr<StructType> StructType::create() const { return make_shared<StructType>(); }
+shared_ptr<StructType> StructType::create() { return make_shared<StructType>(); }
 
 size_t StructType::size() const { return fields_.size(); }
 
@@ -168,7 +166,6 @@ type_ptr_t StructType::clone(bool deep /* = false */) const {
 
     result->refIndices_ = refIndices_;
     result->layout_     = layout_;
-    result->fields_.reserve(fields_.size());
 
     for (const auto &kv : fields_) {
         const auto &name      = kv.first;

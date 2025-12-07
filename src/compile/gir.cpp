@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -85,8 +85,8 @@ graph_ptr_t
 Graph::create(const func_type_ptr_t &funcType, const graph_ptr_t &graph, const std::string &name) {
     ASSERT(funcType->hasCompileInfo(), "Trying to create a Graph with incomplete FunctionType.");
     static int anonymousIdx = 0;
-    std::string graphName = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
-    const auto newGraph = std::make_shared<Graph>(funcType, graph, graphName);
+    std::string graphName   = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
+    const auto newGraph     = std::make_shared<Graph>(funcType, graph, graphName);
     if (graph) {
         graph->addSubGraph(newGraph);
     }
@@ -100,8 +100,6 @@ Graph::create(const func_type_ptr_t &funcType, const graph_ptr_t &graph, const s
     }
     return newGraph;
 }
-
-func_type_ptr_t Graph::funcType() const { return funcType_; }
 
 void Graph::addNode(const node_ptr_t &node) {
     nodes_.push_back(node);
@@ -304,12 +302,15 @@ void Graph::delDependency(const graph_ptr_t &graph) {
 graph_ptr_t Graph::clone() const {
     graph_ptr_t newGraph =
         Graph::create(tt::as_shared<FunctionType>(funcType_->clone()), outer_.lock(), name_);
-    newGraph->looped_ = looped_;
+    newGraph->looped_        = looped_;
     newGraph->parameterized_ = parameterized_;
 
-    newGraph->funcType_ = funcType_;
-    newGraph->staticDataArr_ = staticDataArr_;
+    newGraph->funcType_        = funcType_;
+    newGraph->staticDataArr_   = staticDataArr_;
     newGraph->runtimeDataSize_ = runtimeDataSize_;
+    newGraph->staticDataType_  = staticDataType_;
+    newGraph->runtimeDataType_ = runtimeDataType_;
+    newGraph->closureType_     = closureType_;
 
     for (const auto &[name, subGraphs] : subGraphs_) {
         for (const auto &subGraph : subGraphs) {
@@ -338,7 +339,7 @@ graph_ptr_t Graph::clone() const {
         newGraph->closure_.push_back(newClosureNode);
     }
     for (const auto &node : nodes_) {
-        const auto &newNode = node->clone(*newGraph);
+        const auto &newNode    = node->clone(*newGraph);
         nodeMap[newNode.get()] = newNode;
     }
 
@@ -357,7 +358,7 @@ graph_ptr_t Graph::clone() const {
 
     ASSERT(exitNode_ != nullptr, "Cloning a graph without output node.");
     const auto &outputNode = exitNode_->normInputs().front();
-    const auto &newOutput = nodeMap[outputNode.get()];
+    const auto &newOutput  = nodeMap[outputNode.get()];
     const auto &newExitNode =
         ExitNode::create(*newGraph, newOutput->dataType(), newOutput->index());
     Node::link(LinkType::Norm, newOutput, newExitNode);
@@ -387,7 +388,7 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
     EXEC_WHEN_DEBUG(l.in("GIR").debug("Inlining node {} in graph {}.", node->toString(), name_));
 
     const auto &funcNode = tt::as_shared<FuncNode>(node);
-    auto &targetGraph = funcNode->func()->graph();
+    auto &targetGraph    = funcNode->func()->graph();
 
     // sync node
     node_ptr_t syncNode = SyncNode::create(*this);
@@ -399,7 +400,7 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
     // internal nodes are not allowed to directly connect to external nodes.
     // Instead, a new NREF node is created as an intermediary,
     // ensuring that all internal nodes execute after the sync node.
-    const auto &normPorts = targetGraph.normPorts();
+    const auto &normPorts  = targetGraph.normPorts();
     const auto &normInputs = node->normInputs();
     ASSERT(
         normPorts.size() == normInputs.size(),
@@ -415,7 +416,7 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
         }
     }
 
-    const auto &withPorts = targetGraph.withPorts();
+    const auto &withPorts  = targetGraph.withPorts();
     const auto &withInputs = node->withInputs();
     ASSERT(
         withPorts.size() == withInputs.size(),
@@ -435,7 +436,7 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
 
     for (const auto &n : targetGraph.nodes()) {
         const auto &clonedNode = n->clone(*this);
-        nodeMap[n.get()] = clonedNode;
+        nodeMap[n.get()]       = clonedNode;
     }
 
     for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
@@ -500,16 +501,20 @@ void Graph::rearrange() {
     // 0 reserved for null
     data_idx_t idx = 1;
     // index 0 reserved for null
-    data_vec_t newStaticDataArr{nullptr};
+    data_vec_t newStaticDataArr{Data::null()};
+    type_vec_t staticDataTypes{Type::Void()}, runtimeDataTypes{Type::Void()}, closureTypes;
 
     for (auto &node : normPorts_) {
         node->setIndex(idx++);
+        runtimeDataTypes.push_back(node->dataType());
     }
     for (auto &node : withPorts_) {
         node->setIndex(idx++);
+        runtimeDataTypes.push_back(node->dataType());
     }
     for (auto &node : closure_) {
         node->setIndex(idx++);
+        closureTypes.push_back(node->dataType());
     }
     for (auto &node : nodes_) {
         NodeType type = node->type();
@@ -518,17 +523,22 @@ void Graph::rearrange() {
             const auto &dataNode = tt::as_shared<DataNode>(node);
             newStaticDataArr.push_back(dataNode->data());
             dataNode->setIndex(-(newStaticDataArr.size() - 1));
+            staticDataTypes.push_back(dataNode->dataType());
         } else {
             if (type == NodeType::SYNC || type == NodeType::NREF) {
                 // Skip nodes without data
                 continue;
             }
             node->setIndex(idx++);
+            runtimeDataTypes.push_back(node->dataType());
         }
     }
 
     runtimeDataSize_ = idx;
-    staticDataArr_ = std::move(newStaticDataArr);
+    staticDataArr_   = std::move(newStaticDataArr);
+    staticDataType_  = TupleType::create(std::move(staticDataTypes));
+    runtimeDataType_ = TupleType::create(std::move(runtimeDataTypes));
+    closureType_     = TupleType::create(std::move(closureTypes));
 
     dirty_ = false;
 }

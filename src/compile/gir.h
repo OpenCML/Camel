@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Nov. 13, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -108,7 +108,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     explicit Graph(
         const func_type_ptr_t &funcType, const graph_ptr_t &graph = nullptr,
         const std::string &name = "")
-        : name_(name), outer_(graph), funcType_(funcType) {
+        : name_(name), outer_(graph), funcType_(funcType),
+          staticDataType_(std::make_shared<TupleType>()),
+          runtimeDataType_(std::make_shared<TupleType>()),
+          closureType_(std::make_shared<TupleType>()) {
         EXEC_WHEN_DEBUG(
             l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
     }
@@ -139,7 +142,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     std::string toString() const;
 
-    func_type_ptr_t funcType() const;
+    const func_type_ptr_t &funcType() const { return funcType_; }
+    const std::shared_ptr<TupleType> &staticDataType() const { return staticDataType_; }
+    const std::shared_ptr<TupleType> &runtimeDataType() const { return runtimeDataType_; }
+    const std::shared_ptr<TupleType> &closureType() const { return closureType_; }
 
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
     data_idx_t addStaticData(const data_ptr_t &data);
@@ -212,6 +218,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> dependents_;
 
     func_type_ptr_t funcType_;
+    std::shared_ptr<TupleType> staticDataType_, runtimeDataType_, closureType_;
     // Static data segment, index 0 is reserved as empty
     data_vec_t staticDataArr_ = {nullptr};
 

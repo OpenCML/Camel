@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Dec. 07, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,22 +21,25 @@
 
 #include "composed.h"
 
+#include <map>
+
 class StructData : public ComposedData {
   private:
     std::vector<std::string> refIndices_;
-    std::unordered_map<std::string, data_ptr_t> data_;
+    // 按字典序存储字段
+    std::map<std::string, data_ptr_t> data_;
 
   public:
     StructData();
     StructData(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
-    StructData(std::unordered_map<std::string, data_ptr_t> &&data);
+    StructData(std::map<std::string, data_ptr_t> &&data);
     virtual ~StructData() = default;
 
     static std::shared_ptr<StructData>
     create(std::initializer_list<std::pair<std::string, data_ptr_t>> data) {
         return std::make_shared<StructData>(data);
     }
-    static std::shared_ptr<StructData> create(std::unordered_map<std::string, data_ptr_t> &&data) {
+    static std::shared_ptr<StructData> create(std::map<std::string, data_ptr_t> &&data) {
         return std::make_shared<StructData>(std::move(data));
     }
 
@@ -45,13 +48,7 @@ class StructData : public ComposedData {
     bool add(const std::string &key, const data_ptr_t &val);
     bool has(const std::string &key) const;
     data_ptr_t get(const std::string &key) const;
-    std::unordered_map<std::string, data_ptr_t> &raw() { return data_; }
-
-    void clear() {
-        StructType &structType = *static_cast<StructType *>(type_.get());
-        structType.clear();
-        data_.clear();
-    }
+    std::map<std::string, data_ptr_t> &raw() { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refIndices_.empty(); }
