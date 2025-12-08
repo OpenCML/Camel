@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,8 +38,8 @@ class FrameTemplate {
 
     GraphIR::Graph *graph() const { return graph_; }
 
-    GCTuple *staticArea() const { return staticArea_; }
-    GCTuple *makeDynamicArea() const;
+    Tuple *staticArea() const { return staticArea_; }
+    Tuple *makeDynamicArea() const;
 
     IAllocator &staticAllocator() const { return staticAllocator_; }
     IAllocator &runtimeAllocator() const { return runtimeAllocator_; }
@@ -49,7 +49,7 @@ class FrameTemplate {
     IAllocator &staticAllocator_;
     IAllocator &runtimeAllocator_;
     const TupleTypeLayout *runtimeDataLayout_;
-    GCTuple *staticArea_ = nullptr;
+    Tuple *staticArea_ = nullptr;
 };
 
 class Frame {
@@ -149,6 +149,6 @@ class Frame {
   private:
     GraphIR::Graph *graph_ = nullptr;
     IAllocator *allocator_ = nullptr;
-    GCTuple *staticArea_   = nullptr;
-    GCTuple *dynamicArea_  = nullptr;
+    Tuple *staticArea_     = nullptr;
+    Tuple *dynamicArea_    = nullptr;
 };

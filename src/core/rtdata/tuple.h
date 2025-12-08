@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,25 +21,25 @@
 
 #include "base.h"
 
-class GCTuple : public GCObject {
+class Tuple : public Object {
   public:
-    GCTuple(const GCTuple &)            = delete;
-    GCTuple &operator=(const GCTuple &) = delete;
+    Tuple(const Tuple &)            = delete;
+    Tuple &operator=(const Tuple &) = delete;
 
-    /// 创建 GCTuple 实例
-    static GCTuple *create(const TupleTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
-        size_t headerSize = offsetof(GCTuple, data_);
+    /// 创建 Tuple 实例
+    static Tuple *create(const TupleTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
+        size_t headerSize = offsetof(Tuple, data_);
         size_t dataSize   = sizeof(slot_t) * layout.size();
         size_t totalSize  = headerSize + dataSize;
 
-        void *memory = allocator.alloc(totalSize, alignof(GCTuple));
+        void *memory = allocator.alloc(totalSize, alignof(Tuple));
         if (!memory)
             throw std::bad_alloc();
 
-        GCTuple *tuple = new (memory) GCTuple(&layout);
+        Tuple *tuple = new (memory) Tuple(&layout);
 
         // 初始化引用类型为空以避免伪引用
-        GCRef *dataStart = reinterpret_cast<GCRef *>(tuple->data_);
+        Object **dataStart = reinterpret_cast<Object **>(tuple->data_);
         std::fill(dataStart, dataStart + layout.size(), NullRef);
 
         return tuple;
@@ -62,7 +62,7 @@ class GCTuple : public GCObject {
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
 
         T *arr = reinterpret_cast<T *>(data_);
-        if constexpr (std::is_same_v<T, GCRef>) {
+        if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
         arr[index] = value;
@@ -71,8 +71,8 @@ class GCTuple : public GCObject {
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
-    virtual bool equals(const GCRef other, bool deep = false) const override {
-        GCTuple *otherTuple = reinterpret_cast<GCTuple *>(other);
+    virtual bool equals(const Object *other, bool deep = false) const override {
+        const Tuple *otherTuple = reinterpret_cast<const Tuple *>(other);
         if (this == otherTuple)
             return true;
         if (!isOfSameCls(this, otherTuple))
@@ -84,8 +84,8 @@ class GCTuple : public GCObject {
         if (deep) {
             for (size_t i = 0; i < size_; ++i) {
                 if (isGCTraced(types[i])) {
-                    GCRef refA = this->get<GCRef>(i);
-                    GCRef refB = otherTuple->get<GCRef>(i);
+                    const Object *refA = this->get<Object *>(i);
+                    const Object *refB = otherTuple->get<Object *>(i);
                     if (!refA->equals(refB, true))
                         return false;
                 } else {
@@ -102,25 +102,26 @@ class GCTuple : public GCObject {
         return true;
     }
 
-    virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
-        GCTuple *newTuple = GCTuple::create(*layout_, allocator);
+    virtual Object *
+    clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
+        Tuple *newTuple   = Tuple::create(*layout_, allocator);
         const auto &types = layout_->elemTypes();
 
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
-                GCRef originalRef = this->get<GCRef>(i);
+                Object *originalRef = this->get<Object *>(i);
                 if (originalRef) {
                     if (deep) {
                         // 深拷贝：递归克隆引用对象
-                        GCObject *obj   = reinterpret_cast<GCObject *>(originalRef);
-                        GCRef clonedRef = obj->clone(allocator, true);
-                        newTuple->set<GCRef>(i, clonedRef);
+                        Object *obj       = reinterpret_cast<Object *>(originalRef);
+                        Object *clonedRef = obj->clone(allocator, true);
+                        newTuple->set<Object *>(i, clonedRef);
                     } else {
                         // 浅拷贝：直接复制引用
-                        newTuple->set<GCRef>(i, originalRef);
+                        newTuple->set<Object *>(i, originalRef);
                     }
                 } else {
-                    newTuple->set<GCRef>(i, NullRef);
+                    newTuple->set<Object *>(i, NullRef);
                 }
             } else {
                 // 非引用类型，直接复制值
@@ -129,18 +130,18 @@ class GCTuple : public GCObject {
             }
         }
 
-        return reinterpret_cast<GCRef>(newTuple);
+        return reinterpret_cast<Object *>(newTuple);
     }
 
     virtual void onMoved() override {}
 
-    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
         const auto &types = layout_->elemTypes();
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
-                GCRef *refArr = reinterpret_cast<GCRef *>(data_);
+                Object **refArr = reinterpret_cast<Object **>(data_);
                 for (size_t i = 0; i < size_; ++i) {
-                    if (GCRef &ref = refArr[i]) {
+                    if (Object *&ref = refArr[i]) {
                         ref = relocate(ref);
                     }
                 }
@@ -149,7 +150,7 @@ class GCTuple : public GCObject {
     }
 
   private:
-    GCTuple(const TupleTypeLayout *layout)
+    Tuple(const TupleTypeLayout *layout)
         : size_(static_cast<uint32_t>(layout->size())), layout_(layout) {}
 
     uint32_t size_;

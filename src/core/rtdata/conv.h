@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,6 @@
 #include "core/data/base.h"
 
 slot_t makeSlotFromPrimitiveData(const data_ptr_t &data);
-GCRef makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator);
+Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator);
 
-GCTuple *makeStaticDataOfGraph(const GraphIR::Graph &graph, IAllocator &allocator);
+Tuple *makeStaticDataOfGraph(const GraphIR::Graph &graph, IAllocator &allocator);

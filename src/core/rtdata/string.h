@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,30 +21,30 @@
 
 #include "base.h"
 
-class GCString : public GCObject {
+class String : public Object {
   public:
-    GCString(const GCString &)            = delete;
-    GCString &operator=(const GCString &) = delete;
+    String(const String &)            = delete;
+    String &operator=(const String &) = delete;
 
-    static GCString *create(size_t length, IAllocator &allocator = mm::autoSpace()) {
-        size_t totalSize = offsetof(GCString, data_) + (length + 1);
-        void *memory     = allocator.alloc(totalSize, alignof(GCString));
+    static String *create(size_t length, IAllocator &allocator = mm::autoSpace()) {
+        size_t totalSize = offsetof(String, data_) + (length + 1);
+        void *memory     = allocator.alloc(totalSize, alignof(String));
         if (!memory)
             throw std::bad_alloc();
-        auto *str          = new (memory) GCString(length);
+        auto *str          = new (memory) String(length);
         str->data_[length] = '\0';
         str->size_         = static_cast<uint32_t>(length);
         return str;
     }
 
-    static GCString *from(const char *src, IAllocator &allocator = mm::autoSpace()) {
+    static String *from(const char *src, IAllocator &allocator = mm::autoSpace()) {
         size_t len = std::strlen(src);
         auto *str  = create(len, allocator);
         std::memcpy(str->data_, src, len + 1);
         return str;
     }
 
-    static GCString *from(const std::string &s, IAllocator &allocator = mm::autoSpace()) {
+    static String *from(const std::string &s, IAllocator &allocator = mm::autoSpace()) {
         auto *str = create(s.size(), allocator);
         std::memcpy(str->data_, s.data(), s.size());
         str->data_[s.size()] = '\0';
@@ -53,12 +53,12 @@ class GCString : public GCObject {
 
     std::string toString() const { return std::string(data_, size_); }
 
-    static GCString *
-    concat(const GCString *a, const GCString *b, IAllocator &allocator = mm::autoSpace()) {
-        size_t lenA      = a->size();
-        size_t lenB      = b->size();
-        size_t newLen    = lenA + lenB;
-        GCString *result = create(newLen, allocator);
+    static String *
+    concat(const String *a, const String *b, IAllocator &allocator = mm::autoSpace()) {
+        size_t lenA    = a->size();
+        size_t lenB    = b->size();
+        size_t newLen  = lenA + lenB;
+        String *result = create(newLen, allocator);
         std::memcpy(result->data_, a->data_, lenA);
         std::memcpy(result->data_ + lenA, b->data_, lenB);
         result->data_[newLen] = '\0';
@@ -71,27 +71,27 @@ class GCString : public GCObject {
     const char *c_str() const { return data_; }
 
     char operator[](size_t i) const {
-        assert(i < size_ && "GCString index out of range");
+        assert(i < size_ && "String index out of range");
         return data_[i];
     }
 
-    int compare(const GCString *other) const {
+    int compare(const String *other) const {
         int cmp = std::memcmp(data_, other->data_, std::min(size_, other->size_));
         if (cmp != 0)
             return cmp;
         return (size_ < other->size_) ? -1 : (size_ > other->size_);
     }
 
-    bool equals(const GCString *other) const {
+    bool equals(const String *other) const {
         return this == other ||
                (other->size_ == size_ && std::memcmp(data_, other->data_, size_) == 0);
     }
 
     bool equals(const char *cstr) const { return std::strcmp(data_, cstr) == 0; }
 
-    bool operator==(const GCString &other) const { return equals(&other); }
-    bool operator!=(const GCString &other) const { return !equals(&other); }
-    bool operator<(const GCString &other) const { return compare(&other) < 0; }
+    bool operator==(const String &other) const { return equals(&other); }
+    bool operator!=(const String &other) const { return !equals(&other); }
+    bool operator<(const String &other) const { return compare(&other) < 0; }
 
     size_t find(char ch, size_t start = 0) const {
         for (size_t i = start; i < size_; ++i)
@@ -100,7 +100,7 @@ class GCString : public GCObject {
         return npos;
     }
 
-    size_t find(const GCString *substr, size_t start = 0) const {
+    size_t find(const String *substr, size_t start = 0) const {
         if (substr->size_ == 0 || substr->size_ > size_)
             return npos;
         for (size_t i = start; i <= size_ - substr->size_; ++i)
@@ -109,23 +109,23 @@ class GCString : public GCObject {
         return npos;
     }
 
-    bool startsWith(const GCString *prefix) const {
+    bool startsWith(const String *prefix) const {
         return prefix->size_ <= size_ && std::memcmp(data_, prefix->data_, prefix->size_) == 0;
     }
 
-    bool endsWith(const GCString *suffix) const {
+    bool endsWith(const String *suffix) const {
         return suffix->size_ <= size_ &&
                std::memcmp(data_ + size_ - suffix->size_, suffix->data_, suffix->size_) == 0;
     }
 
-    bool contains(const GCString *substr) const { return find(substr) != npos; }
+    bool contains(const String *substr) const { return find(substr) != npos; }
 
-    GCString *substr(size_t pos, size_t len = npos, IAllocator &allocator = mm::autoSpace()) const {
+    String *substr(size_t pos, size_t len = npos, IAllocator &allocator = mm::autoSpace()) const {
         if (pos >= size_)
             return from("", allocator);
         if (len > size_ - pos)
             len = size_ - pos;
-        GCString *result = create(len, allocator);
+        String *result = create(len, allocator);
         std::memcpy(result->data_, data_ + pos, len);
         result->data_[len] = '\0';
         return result;
@@ -137,20 +137,20 @@ class GCString : public GCObject {
         return cachedHash_;
     }
 
-    virtual GCObject *clone(IAllocator &allocator, bool /*deep*/) const override {
-        GCString *copy = GCString::create(size_, allocator);
+    virtual Object *clone(IAllocator &allocator, bool /*deep*/) const override {
+        String *copy = String::create(size_, allocator);
         std::memcpy(copy->data_, data_, size_ + 1);
         copy->cachedHash_ = cachedHash_;
         return copy;
     }
 
     virtual void onMoved() override {}
-    virtual void updateRefs(const std::function<GCRef(GCRef)> &) override {}
+    virtual void updateRefs(const std::function<Object *(Object *)> &) override {}
 
     static constexpr size_t npos = static_cast<size_t>(-1);
 
   private:
-    explicit GCString(size_t length) : size_(static_cast<uint32_t>(length)), cachedHash_(0) {}
+    explicit String(size_t length) : size_(static_cast<uint32_t>(length)), cachedHash_(0) {}
 
     static uint32_t computeHash(const char *s, size_t len) {
         uint32_t h = 2166136261u;

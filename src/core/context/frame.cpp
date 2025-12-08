@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,13 +25,13 @@ FrameTemplate::FrameTemplate(
     GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &runtimeAllocator)
     : graph_(graph), staticAllocator_(staticAllocator), runtimeAllocator_(runtimeAllocator) {
     const auto &layout        = graph_->staticDataType()->layout();
-    staticArea_               = GCTuple::create(layout, staticAllocator_);
+    staticArea_               = Tuple::create(layout, staticAllocator_);
     const auto &staticDataArr = graph_->staticDataArr();
     for (size_t i = 1; i < layout.size(); ++i) {
         const auto &elem = staticDataArr[i];
         if (elem->type()->isGCTraced()) {
-            GCRef elemRef = makeGCRefFromGCTracedData(elem, staticAllocator_);
-            staticArea_->set<GCRef>(i, elemRef);
+            Object *elemRef = makeGCRefFromGCTracedData(elem, staticAllocator_);
+            staticArea_->set<Object *>(i, elemRef);
         } else if (elem->type()->isPrimitive()) {
             slot_t slot = makeSlotFromPrimitiveData(elem);
             staticArea_->set<slot_t>(i, slot);
@@ -42,8 +42,8 @@ FrameTemplate::FrameTemplate(
     runtimeDataLayout_ = &graph_->runtimeDataType()->layout();
 }
 
-GCTuple *FrameTemplate::makeDynamicArea() const {
-    return GCTuple::create(*runtimeDataLayout_, runtimeAllocator_);
+Tuple *FrameTemplate::makeDynamicArea() const {
+    return Tuple::create(*runtimeDataLayout_, runtimeAllocator_);
 }
 
 inline std::string formatAddress(void *ptr) {

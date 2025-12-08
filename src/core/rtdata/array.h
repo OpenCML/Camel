@@ -13,42 +13,43 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "core/mm/mm.h"
+#include "core/type/type.h"
 
-// GCFixedArray: 固定大小的数组，对象体和数据区在一块连续内存中
-class GCFixedArray : public GCObject {
+// FixedArray: 固定大小的数组，对象体和数据区在一块连续内存中
+class FixedArray : public Object {
   public:
     // 禁止直接构造
-    GCFixedArray(const GCFixedArray &)            = delete;
-    GCFixedArray &operator=(const GCFixedArray &) = delete;
+    FixedArray(const FixedArray &)            = delete;
+    FixedArray &operator=(const FixedArray &) = delete;
 
     // 静态创建方法
-    static GCFixedArray *
-    create(TypeCode type, size_t size, IAllocator &allocator = mm::autoSpace()) {
+    static FixedArray *create(TypeCode type, size_t size, IAllocator &allocator = mm::autoSpace()) {
         // 计算总内存大小：对象头 + 数组数据
         // offsetof 会自动考虑 data_ 的对齐要求
-        size_t headerSize = offsetof(GCFixedArray, data_);
+        size_t headerSize = offsetof(FixedArray, data_);
         size_t dataSize   = size * sizeof(slot_t);
         size_t totalSize  = headerSize + dataSize;
 
         // 分配连续内存
-        // alignof(GCFixedArray) 已经包含了 slot_t 的对齐要求（因为 data_ 的 alignas）
-        void *memory = allocator.alloc(totalSize, alignof(GCFixedArray));
+        // alignof(FixedArray) 已经包含了 slot_t 的对齐要求（因为 data_ 的 alignas）
+        void *memory = allocator.alloc(totalSize, alignof(FixedArray));
         if (!memory)
             throw std::bad_alloc();
 
         // 在分配的内存上构造对象
-        GCFixedArray *array = new (memory) GCFixedArray(type, size);
+        FixedArray *array = new (memory) FixedArray(type, size);
 
         if (isGCTraced(type)) {
             // 数据区初始化为空，以免空数据区被当作对象引用
-            GCRef *dataStart = reinterpret_cast<GCRef *>(array->data_);
+            Object **dataStart = reinterpret_cast<Object **>(array->data_);
             std::fill(dataStart, dataStart + size, NullRef);
         }
 
@@ -74,14 +75,14 @@ class GCFixedArray : public GCObject {
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
 
         T *arr = reinterpret_cast<T *>(data_);
-        if constexpr (std::is_same_v<T, GCRef>) {
+        if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
         arr[index] = value;
     }
 
-    virtual bool equals(const GCRef other, bool deep = false) const override {
-        const GCFixedArray *otherArray = reinterpret_cast<const GCFixedArray *>(other);
+    virtual bool equals(const Object *other, bool deep = false) const override {
+        const FixedArray *otherArray = reinterpret_cast<const FixedArray *>(other);
         if (this == otherArray)
             return true;
         if (!isOfSameCls(this, otherArray))
@@ -90,47 +91,43 @@ class GCFixedArray : public GCObject {
             return false;
 
         if (isGCTraced(type_)) {
-            const GCRef *dataA = reinterpret_cast<const GCRef *>(data_);
-            const GCRef *dataB = reinterpret_cast<const GCRef *>(otherArray->data_);
+            const Object **dataA = reinterpret_cast<const Object **>(data_);
+            const Object **dataB = reinterpret_cast<const Object **>(otherArray->data_);
 
             if (deep) {
                 // 深比较引用对象
                 for (size_t i = 0; i < size_; ++i) {
-                    const GCRef refA = dataA[i];
-                    const GCRef refB = dataB[i];
-                    if (refA == refB) {
-                        continue; // 同地址
-                    }
-                    if (!refA || !refB)
-                        return false;
+                    const Object *refA = dataA[i];
+                    const Object *refB = dataB[i];
                     if (!refA->equals(refB, true))
                         return false;
                 }
                 return true;
             } else {
                 // 浅比较引用指针地址
-                return std::memcmp(dataA, dataB, size_ * sizeof(GCRef)) == 0;
+                return std::memcmp(dataA, dataB, size_ * sizeof(Object *)) == 0;
             }
         } else {
             return std::memcmp(data_, otherArray->data_, size_ * sizeof(slot_t)) == 0;
         }
     }
 
-    virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
-        GCFixedArray *newArray = GCFixedArray::create(type_, size_, allocator);
+    virtual Object *
+    clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
+        FixedArray *newArray = FixedArray::create(type_, size_, allocator);
 
         if (isGCTraced(type_)) {
-            const GCRef *srcData = reinterpret_cast<const GCRef *>(data_);
-            GCRef *dstData       = reinterpret_cast<GCRef *>(newArray->data_);
+            const Object **srcData = reinterpret_cast<const Object **>(data_);
+            Object **dstData       = reinterpret_cast<Object **>(newArray->data_);
 
             for (size_t i = 0; i < size_; ++i) {
-                GCRef originalRef = srcData[i];
+                Object *originalRef = srcData[i];
                 if (originalRef) {
                     if (deep) {
                         // 深拷贝：递归克隆引用对象
-                        GCObject *obj   = reinterpret_cast<GCObject *>(originalRef);
-                        GCRef clonedRef = obj->clone(allocator, true);
-                        dstData[i]      = clonedRef;
+                        Object *obj       = reinterpret_cast<Object *>(originalRef);
+                        Object *clonedRef = obj->clone(allocator, true);
+                        dstData[i]        = clonedRef;
                     } else {
                         // 浅拷贝：直接复制引用
                         dstData[i] = originalRef;
@@ -144,7 +141,7 @@ class GCFixedArray : public GCObject {
             std::memcpy(newArray->data_, data_, size_ * sizeof(slot_t));
         }
 
-        return reinterpret_cast<GCRef>(newArray);
+        return reinterpret_cast<Object *>(newArray);
     }
 
     virtual void onMoved() override {
@@ -152,21 +149,21 @@ class GCFixedArray : public GCObject {
         // 灵活数组不是指针，不占用内存空间，在访问时通过偏移量动态计算得到
     }
 
-    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
         if (!isGCTraced(type_))
             return;
 
-        GCRef *refArr = reinterpret_cast<GCRef *>(data_);
+        Object **refArr = reinterpret_cast<Object **>(data_);
 
         for (size_t i = 0; i < size_; ++i) {
-            if (GCRef &ref = refArr[i]) {
+            if (Object *&ref = refArr[i]) {
                 ref = relocate(ref);
             }
         }
     }
 
   private:
-    GCFixedArray(TypeCode type, size_t size) : size_(size), type_(type) {}
+    FixedArray(TypeCode type, size_t size) : size_(size), type_(type) {}
 
     uint32_t size_;
     TypeCode type_;
@@ -177,19 +174,19 @@ class GCFixedArray : public GCObject {
     alignas(slot_t) std::byte data_[];
 };
 
-// GCArray: 动态数组，支持小数组内联优化
-class GCArray : public GCObject {
+// Array: 动态数组，支持小数组内联优化
+class Array : public Object {
   public:
     // 禁止直接构造
-    GCArray(const GCArray &)            = delete;
-    GCArray &operator=(const GCArray &) = delete;
+    Array(const Array &)            = delete;
+    Array &operator=(const Array &) = delete;
 
-    static GCArray *create(TypeCode elemType, IAllocator &allocator = mm::autoSpace()) {
-        void *memory = allocator.alloc(sizeof(GCArray), alignof(GCArray));
+    static Array *create(TypeCode elemType, IAllocator &allocator = mm::autoSpace()) {
+        void *memory = allocator.alloc(sizeof(Array), alignof(Array));
         if (!memory)
             throw std::bad_alloc();
 
-        return new (memory) GCArray(elemType, allocator);
+        return new (memory) Array(elemType, allocator);
     }
 
     size_t size() const { return size_; }
@@ -208,7 +205,7 @@ class GCArray : public GCObject {
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
 
         T *arr = reinterpret_cast<T *>(dataPtr_);
-        if constexpr (std::is_same_v<T, GCRef>) {
+        if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
         arr[index] = value;
@@ -232,7 +229,7 @@ class GCArray : public GCObject {
         }
 
         T *arr = reinterpret_cast<T *>(dataPtr_);
-        if constexpr (std::is_same_v<T, GCRef>) {
+        if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[size_], value);
         }
         arr[size_++] = value;
@@ -255,8 +252,8 @@ class GCArray : public GCObject {
         reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
     }
 
-    virtual bool equals(const GCRef other, bool deep = false) const override {
-        const GCArray *otherArray = reinterpret_cast<const GCArray *>(other);
+    virtual bool equals(const Object *other, bool deep = false) const override {
+        const Array *otherArray = reinterpret_cast<const Array *>(other);
 
         if (this == otherArray)
             return true;
@@ -270,41 +267,36 @@ class GCArray : public GCObject {
         const void *rhsData = otherArray->dataPtr_;
 
         if (isGCTraced(type_)) {
-            const GCRef *lhs = reinterpret_cast<const GCRef *>(lhsData);
-            const GCRef *rhs = reinterpret_cast<const GCRef *>(rhsData);
+            const Object **lhs = reinterpret_cast<const Object **>(lhsData);
+            const Object **rhs = reinterpret_cast<const Object **>(rhsData);
 
             if (deep) {
                 for (size_t i = 0; i < size_; ++i) {
-                    GCRef la = lhs[i];
-                    GCRef rb = rhs[i];
-
-                    if (la == rb) {
-                        continue; // 同地址或都为空
-                    }
-                    if (!la || !rb)
-                        return false;
+                    const Object *la = lhs[i];
+                    const Object *rb = rhs[i];
                     if (!la->equals(rb, true))
                         return false;
                 }
                 return true;
             } else {
                 // 浅比较（只比较引用地址）
-                return std::memcmp(lhs, rhs, size_ * sizeof(GCRef)) == 0;
+                return std::memcmp(lhs, rhs, size_ * sizeof(Object *)) == 0;
             }
         }
 
         return std::memcmp(lhsData, rhsData, size_ * sizeof(slot_t)) == 0;
     }
 
-    virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
-        GCArray *newArray = GCArray::create(type_, allocator);
+    virtual Object *
+    clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
+        Array *newArray = Array::create(type_, allocator);
 
         newArray->size_     = size_;
         newArray->capacity_ = capacity_;
 
         if (fixedArray_) {
-            GCRef clonedFixed     = fixedArray_->clone(allocator, deep);
-            newArray->fixedArray_ = reinterpret_cast<GCFixedArray *>(clonedFixed);
+            Object *clonedFixed   = fixedArray_->clone(allocator, deep);
+            newArray->fixedArray_ = reinterpret_cast<FixedArray *>(clonedFixed);
             newArray->dataPtr_    = newArray->fixedArray_->data();
         } else {
             // 内联存储
@@ -312,12 +304,13 @@ class GCArray : public GCObject {
             newArray->dataPtr_    = newArray->inlineData_;
 
             if (isGCTraced(type_)) {
-                const GCRef *src = reinterpret_cast<const GCRef *>(inlineData_);
-                GCRef *dst       = reinterpret_cast<GCRef *>(newArray->inlineData_);
+                const Object **src = reinterpret_cast<const Object **>(inlineData_);
+                Object **dst       = reinterpret_cast<Object **>(newArray->inlineData_);
                 for (size_t i = 0; i < size_; ++i) {
-                    if (GCRef ref = src[i]) {
-                        dst[i] =
-                            deep ? reinterpret_cast<GCObject *>(ref)->clone(allocator, true) : ref;
+                    if (const Object *ref = src[i]) {
+                        dst[i] = deep
+                                     ? reinterpret_cast<const Object *>(ref)->clone(allocator, true)
+                                     : ref;
                     } else {
                         dst[i] = NullRef;
                     }
@@ -327,7 +320,7 @@ class GCArray : public GCObject {
             }
         }
 
-        return reinterpret_cast<GCRef>(newArray);
+        return reinterpret_cast<Object *>(newArray);
     }
 
     void onMoved() override {
@@ -338,28 +331,28 @@ class GCArray : public GCObject {
         }
     }
 
-    void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    void updateRefs(const std::function<Object *(Object *)> &relocate) override {
         // 更新对GCFixedArray的引用
         if (fixedArray_) {
-            GCRef newPtr = relocate(fixedArray_);
-            fixedArray_  = static_cast<GCFixedArray *>(newPtr);
-            dataPtr_     = fixedArray_->data();
+            Object *newPtr = relocate(fixedArray_);
+            fixedArray_    = static_cast<FixedArray *>(newPtr);
+            dataPtr_       = fixedArray_->data();
         }
     }
 
   private:
     // 小数组优化的大小，控制整体在一个cacheline内（64字节）
-    // sizeof(GCObject) + allocator_(8) + size_(4) + capacity_(4) + type_(4) +
-    // fixedArray_(8) + dataPtr_(8) + inlineData_(32) ≈ 68 + GCObject
+    // sizeof(Object) + allocator_(8) + size_(4) + capacity_(4) + type_(4) +
+    // fixedArray_(8) + dataPtr_(8) + inlineData_(32) ≈ 68 + Object
     // 假设GCObject约8-16字节，总大小约76-84字节，略超一个cacheline但在可接受范围
     static constexpr size_t SMALL_ARRAY_SIZE = 4;
 
-    GCArray(TypeCode type, IAllocator &allocator)
+    Array(TypeCode type, IAllocator &allocator)
         : allocator_(&allocator), size_(0), capacity_(SMALL_ARRAY_SIZE), type_(type),
           fixedArray_(nullptr), dataPtr_(inlineData_) { // 初始化时指向内联数组
         // 初始化内联数组
         if (isGCTraced(type_)) {
-            GCRef *refArr = reinterpret_cast<GCRef *>(inlineData_);
+            Object **refArr = reinterpret_cast<Object **>(inlineData_);
             std::fill(refArr, refArr + SMALL_ARRAY_SIZE, NullRef);
         }
     }
@@ -375,7 +368,7 @@ class GCArray : public GCObject {
             capacity_   = SMALL_ARRAY_SIZE;
         } else {
             // 使用外部数组
-            GCFixedArray *newArray = GCFixedArray::create(type_, newCapacity, *allocator_);
+            FixedArray *newArray = FixedArray::create(type_, newCapacity, *allocator_);
             if (size_ > 0) {
                 std::memcpy(newArray->data(), dataPtr_, size_ * sizeof(slot_t));
             }
@@ -385,11 +378,11 @@ class GCArray : public GCObject {
         }
     }
 
-    IAllocator *allocator_;    // 分配器引用（8字节）
-    uint32_t size_;            // 逻辑元素个数（4字节）
-    uint32_t capacity_;        // 缓存的容量信息（4字节）
-    TypeCode type_;            // 元素类型（4字节）
-    GCFixedArray *fixedArray_; // 底层固定数组，nullptr表示使用内联存储（8字节）
+    IAllocator *allocator_;  // 分配器引用（8字节）
+    uint32_t size_;          // 逻辑元素个数（4字节）
+    uint32_t capacity_;      // 缓存的容量信息（4字节）
+    TypeCode type_;          // 元素类型（4字节）
+    FixedArray *fixedArray_; // 底层固定数组，nullptr表示使用内联存储（8字节）
 
     // 关键字段：数据指针，始终指向当前使用的数据区
     // - 当使用内联存储时：dataPtr_ == inlineData_

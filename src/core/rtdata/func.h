@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,38 +25,38 @@ namespace GraphIR {
 class Graph;
 } // namespace GraphIR
 
-class GCFunction : public GCObject {
+class Function : public Object {
   public:
-    GCFunction(const GCFunction &)            = delete;
-    GCFunction &operator=(const GCFunction &) = delete;
+    Function(const Function &)            = delete;
+    Function &operator=(const Function &) = delete;
 
-    static GCFunction *create(
+    static Function *create(
         GraphIR::Graph *graph, const TupleTypeLayout &layout,
         IAllocator &allocator = mm::autoSpace()) {
-        void *mem = allocator.alloc(sizeof(GCFunction), alignof(GCFunction));
+        void *mem = allocator.alloc(sizeof(Function), alignof(Function));
         if (!mem)
             throw std::bad_alloc();
 
-        auto *fn = new (mem) GCFunction(graph);
+        auto *fn = new (mem) Function(graph);
 
         // 独立创建 tuple
-        fn->tuple_ = GCTuple::create(layout, allocator);
+        fn->tuple_ = Tuple::create(layout, allocator);
         return fn;
     }
 
     GraphIR::Graph *graph() const { return graph_; }
-    GCTuple *tuple() { return tuple_; }
-    const GCTuple *tuple() const { return tuple_; }
+    Tuple *tuple() { return tuple_; }
+    const Tuple *tuple() const { return tuple_; }
 
-    virtual GCObject *clone(IAllocator &allocator, bool deep) const override {
-        void *mem = allocator.alloc(sizeof(GCFunction), alignof(GCFunction));
+    virtual Object *clone(IAllocator &allocator, bool deep) const override {
+        void *mem = allocator.alloc(sizeof(Function), alignof(Function));
         if (!mem)
             throw std::bad_alloc();
 
-        GCFunction *fn = new (mem) GCFunction(graph_);
+        Function *fn = new (mem) Function(graph_);
 
         if (tuple_) {
-            fn->tuple_ = deep ? static_cast<GCTuple *>(tuple_->clone(allocator, true)) : tuple_;
+            fn->tuple_ = deep ? static_cast<Tuple *>(tuple_->clone(allocator, true)) : tuple_;
         } else {
             fn->tuple_ = nullptr;
         }
@@ -69,15 +69,15 @@ class GCFunction : public GCObject {
         // tuple_ 指向的对象可能被 GC 移动，需要由 GC 更新
     }
 
-    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
         if (tuple_) {
             tuple_->updateRefs(relocate);
         }
     }
 
   private:
-    explicit GCFunction(GraphIR::Graph *g) : graph_(g), tuple_(nullptr) {}
+    explicit Function(GraphIR::Graph *g) : graph_(g), tuple_(nullptr) {}
 
     GraphIR::Graph *graph_;
-    GCTuple *tuple_;
+    Tuple *tuple_;
 };

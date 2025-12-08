@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -193,7 +193,7 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             case OpCode::COPY: {
                 TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
                 if (isGCTraced(srcType)) {
-                    GCRef srcData = currFrame->get<GCRef>(bc.fastop[0]);
+                    Object *srcData = currFrame->get<Object *>(bc.fastop[0]);
                     currFrame->set(bc.result, srcData->clone(mm::autoSpace(), false));
                 } else {
                     slot_t srcData = currFrame->get<slot_t>(bc.fastop[0]);
@@ -205,13 +205,13 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             case OpCode::ACCS: {
                 TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
                 if (srcType == TypeCode::Tuple) {
-                    GCTuple *t = currFrame->get<GCTuple *>(bc.fastop[0]);
+                    Tuple *t = currFrame->get<Tuple *>(bc.fastop[0]);
                     ASSERT(
                         static_cast<size_t>(bc.fastop[1]) < t->size(),
                         "Tuple access index out of range in FastVM.");
                     currFrame->set(bc.result, t->get<slot_t>(static_cast<size_t>(bc.fastop[1])));
                 } else if (srcType == TypeCode::Struct) {
-                    GCStruct *s = currFrame->get<GCStruct *>(bc.fastop[0]);
+                    Struct *s = currFrame->get<Struct *>(bc.fastop[0]);
                     ASSERT(
                         static_cast<size_t>(bc.fastop[1]) < s->size(),
                         "Struct access index out of range in FastVM.");

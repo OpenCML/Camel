@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,26 +21,25 @@
 
 #include "base.h"
 
-class GCStruct : public GCObject {
+class Struct : public Object {
   public:
-    GCStruct(const GCStruct &)            = delete;
-    GCStruct &operator=(const GCStruct &) = delete;
+    Struct(const Struct &)            = delete;
+    Struct &operator=(const Struct &) = delete;
 
-    static GCStruct *
-    create(const StructTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
+    static Struct *create(const StructTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
         size_t fieldCount = layout.fieldCount();
-        size_t headerSize = offsetof(GCStruct, data_);
+        size_t headerSize = offsetof(Struct, data_);
         size_t dataSize   = sizeof(slot_t) * fieldCount;
         size_t totalSize  = headerSize + dataSize;
 
-        void *memory = allocator.alloc(totalSize, alignof(GCStruct));
+        void *memory = allocator.alloc(totalSize, alignof(Struct));
         if (!memory)
             throw std::bad_alloc();
 
-        GCStruct *s = new (memory) GCStruct(layout, fieldCount);
+        Struct *s = new (memory) Struct(layout, fieldCount);
 
         // 初始化所有引用类型的字段为 NullRef
-        GCRef *dataStart = reinterpret_cast<GCRef *>(s->data_);
+        Object **dataStart = reinterpret_cast<Object **>(s->data_);
         std::fill(dataStart, dataStart + fieldCount, NullRef);
 
         return s;
@@ -67,7 +66,7 @@ class GCStruct : public GCObject {
         ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
 
         T *arr = reinterpret_cast<T *>(data_);
-        if constexpr (std::is_same_v<T, GCRef>) {
+        if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
         arr[index] = value;
@@ -86,8 +85,8 @@ class GCStruct : public GCObject {
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
-    virtual bool equals(const GCRef other, bool deep = false) const override {
-        const GCStruct *rhs = reinterpret_cast<const GCStruct *>(other);
+    virtual bool equals(const Object *other, bool deep = false) const override {
+        const Struct *rhs = reinterpret_cast<const Struct *>(other);
 
         if (this == rhs)
             return true;
@@ -104,8 +103,8 @@ class GCStruct : public GCObject {
         for (size_t i = 0; i < size_; ++i) {
             TypeCode type = types[i];
             if (isGCTraced(type)) {
-                GCRef lhsRef = reinterpret_cast<const GCRef *>(lhsData)[i];
-                GCRef rhsRef = reinterpret_cast<const GCRef *>(rhsData)[i];
+                Object *lhsRef = reinterpret_cast<const Object **>(lhsData)[i];
+                Object *rhsRef = reinterpret_cast<const Object **>(rhsData)[i];
 
                 if (lhsRef == rhsRef)
                     continue;
@@ -128,8 +127,8 @@ class GCStruct : public GCObject {
         return true;
     }
 
-    virtual GCObject *clone(IAllocator &allocator, bool deep) const override {
-        GCStruct *newStruct = GCStruct::create(layout_, allocator);
+    virtual Object *clone(IAllocator &allocator, bool deep) const override {
+        Struct *newStruct = Struct::create(layout_, allocator);
 
         const auto &types = layout_.fieldTypes();
         const slot_t *src = reinterpret_cast<const slot_t *>(data_);
@@ -137,10 +136,10 @@ class GCStruct : public GCObject {
 
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
-                const GCRef ref = reinterpret_cast<const GCRef *>(src)[i];
-                GCRef &dstRef   = reinterpret_cast<GCRef *>(dst)[i];
+                const Object *ref = reinterpret_cast<const Object **>(src)[i];
+                Object *&dstRef   = reinterpret_cast<Object **>(dst)[i];
                 if (ref) {
-                    dstRef = deep ? reinterpret_cast<GCObject *>(ref)->clone(allocator, true) : ref;
+                    dstRef = deep ? reinterpret_cast<Object *>(ref)->clone(allocator, true) : ref;
                 } else {
                     dstRef = NullRef;
                 }
@@ -156,12 +155,12 @@ class GCStruct : public GCObject {
         // types_ 指向外部的布局元信息，不需调整
     }
 
-    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
-        GCRef *refArr     = reinterpret_cast<GCRef *>(data_);
+    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
+        Object **refArr   = reinterpret_cast<Object **>(data_);
         const auto &types = layout_.fieldTypes();
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
-                if (GCRef &ref = refArr[i]) {
+                if (Object *&ref = refArr[i]) {
                     ref = relocate(ref);
                 }
             }
@@ -169,7 +168,7 @@ class GCStruct : public GCObject {
     }
 
   private:
-    GCStruct(const StructTypeLayout &layout, size_t fieldCount)
+    Struct(const StructTypeLayout &layout, size_t fieldCount)
         : size_(static_cast<uint32_t>(fieldCount)), layout_(layout) {}
 
     uint32_t size_;

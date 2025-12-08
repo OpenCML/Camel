@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 24, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "alloc/bump_ptr.h"
 #include "alloc/free_list.h"
 #include "alloc/large_obj.h"
-#include "gc.h"
+#include "core/rtdata/base.h"
 
 #include "utils/assert.h"
 #include "utils/brpred.h"
@@ -244,10 +244,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     }
 
     // 添加根对象
-    void addRoot(GCRef root) { rootObjectSet_.push_back(root); }
+    void addRoot(Object *root) { rootObjectSet_.push_back(root); }
 
     // 移除根对象
-    void removeRoot(GCRef root) {
+    void removeRoot(Object *root) {
         auto it = std::find(rootObjectSet_.begin(), rootObjectSet_.end(), root);
         if (it != rootObjectSet_.end()) {
             rootObjectSet_.erase(it);
@@ -274,7 +274,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             havenSpace_.reset(); // 清空新的 Haven 空间
 
             // 2. 处理根集合中的年轻代对象
-            for (GCRef &rootObj : rootObjectSet_) {
+            for (Object *&rootObj : rootObjectSet_) {
                 if (!rootObj)
                     continue;
 
@@ -291,10 +291,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
                 if (!oldHeader->isValid())
                     continue;
 
-                GCRef oldObj = payloadOf<GCObject>(oldHeader);
+                Object *oldObj = payloadOf<Object>(oldHeader);
 
                 // 遍历更新老年代对象的引用
-                oldObj->updateRefs([this](GCRef ref) -> GCRef {
+                oldObj->updateRefs([this](Object *ref) -> Object * {
                     if (!ref)
                         return nullptr;
 
@@ -398,7 +398,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // GC 状态与根集合
     // ============================================================================
     bool inGC_ = false;                                // GC 重入保护标志
-    std::vector<GCRef> rootObjectSet_;                 // 根对象集合：栈、全局变量等直接可达对象
+    std::vector<Object *> rootObjectSet_;              // 根对象集合：栈、全局变量等直接可达对象
     std::unordered_set<ObjectHeader *> rememberedSet_; // 记忆集：记录老年代→年轻代的跨代引用
 
     bool inYoungGenSpace(ObjectHeader *header) const {
@@ -411,13 +411,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
         return header->region_ == AllocRegion::LargeObj;
     }
 
-    GCRef forward(GCRef obj) {
+    Object *forward(Object *obj) {
         ObjectHeader *header = headerOf(obj);
         ASSERT(header->isValid(), "Invalid ObjectHeader encountered during forwarding");
 
         // 如果已经转发过，直接返回新地址
         if (header->forwarded()) {
-            return static_cast<GCRef>(header->forwardedAddr());
+            return static_cast<Object *>(header->forwardedAddr());
         }
 
         size_t totalSize = header->size();
@@ -486,13 +486,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
         std::memcpy(newObj, obj, objSize);
 
         // 通知复制后的obj已经被移动
-        GCObject *gcObj = reinterpret_cast<GCObject *>(newObj);
+        Object *gcObj = reinterpret_cast<Object *>(newObj);
         gcObj->onMoved();
 
         // 设置转发地址
         header->forward(newObj);
 
-        return static_cast<GCRef>(newObj);
+        return static_cast<Object *>(newObj);
     }
 
     // Cheney 算法：使用 BFS 方式扫描和复制对象
@@ -506,10 +506,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
             void *payload        = scan + sizeof(ObjectHeader);
 
             // 获取实际对象
-            GCRef ref = reinterpret_cast<GCRef>(payload);
+            Object *ref = reinterpret_cast<Object *>(payload);
 
             // 遍历对象的所有引用字段，并转发它们
-            ref->updateRefs([this](GCRef ref) -> GCRef {
+            ref->updateRefs([this](Object *ref) -> Object * {
                 if (!ref)
                     return nullptr;
 
@@ -537,7 +537,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         clearMarks();
 
         // 从根集合开始标记
-        for (GCRef root : rootObjectSet_) {
+        for (Object *root : rootObjectSet_) {
             if (root) {
                 markObject(root);
             }
@@ -552,15 +552,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
         largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
     }
 
-    void markObject(GCRef obj) {
+    void markObject(Object *obj) {
         if (!obj)
             return;
 
-        std::vector<GCRef> markStack;
+        std::vector<Object *> markStack;
         markStack.push_back(obj);
 
         while (!markStack.empty()) {
-            GCRef current = markStack.back();
+            Object *current = markStack.back();
             markStack.pop_back();
 
             if (!current)
@@ -577,7 +577,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             header->mark();
 
             // 收集所有引用的对象到栈中
-            current->updateRefs([&markStack](GCRef ref) -> GCRef {
+            current->updateRefs([&markStack](Object *ref) -> Object * {
                 if (ref) {
                     markStack.push_back(ref);
                 }
