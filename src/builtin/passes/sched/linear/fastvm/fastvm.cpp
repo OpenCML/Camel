@@ -235,8 +235,7 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 size_t jumpIdx = 0;
 
                 if (bc.withCnt() == 0) {
-                    bool cond = tt::as_shared<BoolData>(condData)->data();
-                    if (cond) {
+                    if (static_cast<bool>(condData)) {
                         jumpIdx = 0; // jump to true branch
                     } else {
                         jumpIdx = 1; // jump to false branch

@@ -71,6 +71,37 @@ class GCTuple : public GCObject {
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
+    virtual bool equals(const GCRef other, bool deep = false) const override {
+        GCTuple *otherTuple = reinterpret_cast<GCTuple *>(other);
+        if (this == otherTuple)
+            return true;
+        if (!isOfSameCls(this, otherTuple))
+            return false;
+        if (size_ != otherTuple->size_)
+            return false;
+
+        const auto &types = layout_->elemTypes();
+        if (deep) {
+            for (size_t i = 0; i < size_; ++i) {
+                if (isGCTraced(types[i])) {
+                    GCRef refA = this->get<GCRef>(i);
+                    GCRef refB = otherTuple->get<GCRef>(i);
+                    if (!refA->equals(refB, true))
+                        return false;
+                } else {
+                    slot_t valA = this->get<slot_t>(i);
+                    slot_t valB = otherTuple->get<slot_t>(i);
+                    if (valA != valB)
+                        return false;
+                }
+            }
+        } else {
+            return memcmp(this->data(), otherTuple->data(), size_ * sizeof(slot_t)) == 0;
+        }
+
+        return true;
+    }
+
     virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
         GCTuple *newTuple = GCTuple::create(*layout_, allocator);
         const auto &types = layout_->elemTypes();

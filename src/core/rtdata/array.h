@@ -80,6 +80,42 @@ class GCFixedArray : public GCObject {
         arr[index] = value;
     }
 
+    virtual bool equals(const GCRef other, bool deep = false) const override {
+        const GCFixedArray *otherArray = reinterpret_cast<const GCFixedArray *>(other);
+        if (this == otherArray)
+            return true;
+        if (!isOfSameCls(this, otherArray))
+            return false;
+        if (size_ != otherArray->size_ || type_ != otherArray->type_)
+            return false;
+
+        if (isGCTraced(type_)) {
+            const GCRef *dataA = reinterpret_cast<const GCRef *>(data_);
+            const GCRef *dataB = reinterpret_cast<const GCRef *>(otherArray->data_);
+
+            if (deep) {
+                // 深比较引用对象
+                for (size_t i = 0; i < size_; ++i) {
+                    const GCRef refA = dataA[i];
+                    const GCRef refB = dataB[i];
+                    if (refA == refB) {
+                        continue; // 同地址
+                    }
+                    if (!refA || !refB)
+                        return false;
+                    if (!refA->equals(refB, true))
+                        return false;
+                }
+                return true;
+            } else {
+                // 浅比较引用指针地址
+                return std::memcmp(dataA, dataB, size_ * sizeof(GCRef)) == 0;
+            }
+        } else {
+            return std::memcmp(data_, otherArray->data_, size_ * sizeof(slot_t)) == 0;
+        }
+    }
+
     virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
         GCFixedArray *newArray = GCFixedArray::create(type_, size_, allocator);
 
@@ -217,6 +253,47 @@ class GCArray : public GCObject {
         if (size_ == capacity_)
             return;
         reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
+    }
+
+    virtual bool equals(const GCRef other, bool deep = false) const override {
+        const GCArray *otherArray = reinterpret_cast<const GCArray *>(other);
+
+        if (this == otherArray)
+            return true;
+        if (!isOfSameCls(this, otherArray))
+            return false;
+
+        if (type_ != otherArray->type_ || size_ != otherArray->size_)
+            return false;
+
+        const void *lhsData = dataPtr_;
+        const void *rhsData = otherArray->dataPtr_;
+
+        if (isGCTraced(type_)) {
+            const GCRef *lhs = reinterpret_cast<const GCRef *>(lhsData);
+            const GCRef *rhs = reinterpret_cast<const GCRef *>(rhsData);
+
+            if (deep) {
+                for (size_t i = 0; i < size_; ++i) {
+                    GCRef la = lhs[i];
+                    GCRef rb = rhs[i];
+
+                    if (la == rb) {
+                        continue; // 同地址或都为空
+                    }
+                    if (!la || !rb)
+                        return false;
+                    if (!la->equals(rb, true))
+                        return false;
+                }
+                return true;
+            } else {
+                // 浅比较（只比较引用地址）
+                return std::memcmp(lhs, rhs, size_ * sizeof(GCRef)) == 0;
+            }
+        }
+
+        return std::memcmp(lhsData, rhsData, size_ * sizeof(slot_t)) == 0;
     }
 
     virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {

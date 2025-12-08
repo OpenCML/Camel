@@ -86,6 +86,48 @@ class GCStruct : public GCObject {
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
+    virtual bool equals(const GCRef other, bool deep = false) const override {
+        const GCStruct *rhs = reinterpret_cast<const GCStruct *>(other);
+
+        if (this == rhs)
+            return true;
+        if (!isOfSameCls(this, rhs))
+            return false;
+        if (&layout_ != &rhs->layout_ || size_ != rhs->size_)
+            return false;
+
+        const auto &types = layout_.fieldTypes();
+
+        const slot_t *lhsData = reinterpret_cast<const slot_t *>(data_);
+        const slot_t *rhsData = reinterpret_cast<const slot_t *>(rhs->data_);
+
+        for (size_t i = 0; i < size_; ++i) {
+            TypeCode type = types[i];
+            if (isGCTraced(type)) {
+                GCRef lhsRef = reinterpret_cast<const GCRef *>(lhsData)[i];
+                GCRef rhsRef = reinterpret_cast<const GCRef *>(rhsData)[i];
+
+                if (lhsRef == rhsRef)
+                    continue;
+
+                if (!lhsRef || !rhsRef)
+                    return false;
+
+                if (deep) {
+                    if (!lhsRef->equals(rhsRef, true))
+                        return false;
+                } else {
+                    return false; // 浅比较要求引用相同
+                }
+            } else {
+                if (lhsData[i] != rhsData[i])
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
     virtual GCObject *clone(IAllocator &allocator, bool deep) const override {
         GCStruct *newStruct = GCStruct::create(layout_, allocator);
 
