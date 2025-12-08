@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 07, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,16 +30,6 @@ AnyData::AnyData(const data_ptr_t &data) : Data(Type::Any()) {
 
 bool AnyData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t AnyData::convert(type_ptr_t target, bool inplace) {
-    if (target == type_ || type_->code() == target->code()) {
-        // same type, no need to convert
-        return shared_from_this();
-    }
-    throw DataConvError("Cannot convert any to " + typeCodeToString(target->code()));
-}
-
 data_ptr_t AnyData::clone(bool deep) const { return std::make_shared<AnyData>(data_->clone(deep)); }
 
 const std::string AnyData::toString() const { return data_->toString(); }
-
-void AnyData::print(std::ostream &os) const { os << toString(); }

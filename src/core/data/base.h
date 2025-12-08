@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 14, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,9 @@
 #include "utils/type.h"
 
 class Data;
-using data_ptr_t = std::shared_ptr<Data>;
-using data_vec_t = std::vector<data_ptr_t>;
+using data_ptr_t  = std::shared_ptr<Data>;
+using data_vec_t  = std::vector<data_ptr_t>;
+using data_list_t = std::initializer_list<data_ptr_t>;
 
 class Data : public std::enable_shared_from_this<Data> {
   protected:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,15 +27,11 @@ class ComposedData : public Data {
     ComposedData(type_ptr_t type) : Data(type) {}
     virtual ~ComposedData() = default;
 
-    virtual type_ptr_t type() const override { return type_; }
-
-    virtual std::vector<std::string> refs() const override { return std::vector<std::string>(); }
-    virtual bool resolved() const override { return true; }
-    virtual void resolve(const data_vec_t &dataList) override {}
+    virtual std::vector<std::string> refs() const { return std::vector<std::string>(); }
+    virtual bool resolved() const { return true; }
+    virtual void resolve(const data_vec_t &dataList) {}
 
     virtual bool equals(const data_ptr_t &other) const override = 0;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override = 0;
-    virtual data_ptr_t clone(bool deep = false) const override = 0;
-    virtual const std::string toString() const override = 0;
-    virtual void print(std::ostream &os) const override = 0;
+    virtual data_ptr_t clone(bool deep = false) const override  = 0;
+    virtual const std::string toString() const override         = 0;
 };

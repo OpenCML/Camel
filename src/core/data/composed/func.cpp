@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Oct. 20, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,14 +58,6 @@ void FunctionData::resolve(const data_vec_t &dataList) {
 
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t FunctionData::convert(type_ptr_t target, bool inplace) {
-    if (target->code() == TypeCode::Function) {
-        // TODO: check function type compatibility
-        return shared_from_this();
-    }
-    throw DataConvError("Cannot convert functor to " + typeCodeToString(target->code()));
-}
-
 data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<FunctionData>(graph_); }
 
 const std::string FunctionData::toString() const {
@@ -76,5 +68,3 @@ const std::string FunctionData::toString() const {
         type->toString(),
         strutil::join(refs(), ", ", [](const std::string &s) { return s; }));
 }
-
-void FunctionData::print(std::ostream &os) const { os << toString(); }

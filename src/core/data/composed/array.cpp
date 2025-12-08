@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,41 +61,6 @@ bool ArrayData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t ArrayData::convert(type_ptr_t target, bool inplace) {
-    if (target == type_ || type_->equals(target)) {
-        // same type, no need to convert
-        return shared_from_this();
-    }
-    try {
-        if (target->composed()) {
-            switch (target->code()) {
-                // TODO: implement conversion to other composed types
-            default:
-                throw UnsupportedConvError();
-            }
-        } else if (target->special()) {
-            switch (target->code()) {
-            case TypeCode::Any:
-                return make_shared<AnyData>(shared_from_this());
-                break;
-            case TypeCode::Void:
-                return Data::null();
-                break;
-            default:
-                throw UnsupportedConvError();
-            }
-        }
-        throw UnsupportedConvError();
-    } catch (const UnsupportedConvError &e) {
-        throw DataConvError(
-            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-    } catch (const std::exception &e) {
-        throw DataConvError(e.what());
-    }
-    throw DataConvError(
-        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-}
-
 vector<string> ArrayData::refs() const {
     vector<string> res;
     res.reserve(refIndices_.size());
@@ -138,5 +103,3 @@ const string ArrayData::toString() const {
     str += "]";
     return str;
 }
-
-void ArrayData::print(std::ostream &os) const { os << toString(); }

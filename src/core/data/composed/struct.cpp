@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,41 +98,6 @@ bool StructData::equals(const data_ptr_t &other) const {
     return true;
 }
 
-data_ptr_t StructData::convert(type_ptr_t target, bool inplace) {
-    if (target == type_ || type_->equals(target)) {
-        // same type, no need to convert
-        return shared_from_this();
-    }
-    try {
-        if (target->composed()) {
-            switch (target->code()) {
-                // TODO: implement conversion to other composed types
-            default:
-                throw UnsupportedConvError();
-            }
-        } else if (target->special()) {
-            switch (target->code()) {
-            case TypeCode::Any:
-                return make_shared<AnyData>(shared_from_this());
-                break;
-            case TypeCode::Void:
-                return Data::null();
-                break;
-            default:
-                throw UnsupportedConvError();
-            }
-        }
-        throw UnsupportedConvError();
-    } catch (const UnsupportedConvError &e) {
-        throw DataConvError(
-            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-    } catch (const std::exception &e) {
-        throw DataConvError(e.what());
-    }
-    throw DataConvError(
-        "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
-}
-
 vector<string> StructData::refs() const {
     vector<string> res;
     res.reserve(refIndices_.size());
@@ -175,5 +140,3 @@ const string StructData::toString() const {
     str += " }";
     return str;
 }
-
-void StructData::print(std::ostream &os) const { os << toString(); }
