@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,12 +80,43 @@ class GCFixedArray : public GCObject {
         arr[index] = value;
     }
 
-    void onMoved() override {
+    virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
+        GCFixedArray *newArray = GCFixedArray::create(type_, size_, allocator);
+
+        if (isGCTraced(type_)) {
+            const GCRef *srcData = reinterpret_cast<const GCRef *>(data_);
+            GCRef *dstData       = reinterpret_cast<GCRef *>(newArray->data_);
+
+            for (size_t i = 0; i < size_; ++i) {
+                GCRef originalRef = srcData[i];
+                if (originalRef) {
+                    if (deep) {
+                        // 深拷贝：递归克隆引用对象
+                        GCObject *obj   = reinterpret_cast<GCObject *>(originalRef);
+                        GCRef clonedRef = obj->clone(allocator, true);
+                        dstData[i]      = clonedRef;
+                    } else {
+                        // 浅拷贝：直接复制引用
+                        dstData[i] = originalRef;
+                    }
+                } else {
+                    dstData[i] = NullRef;
+                }
+            }
+        } else {
+            // 非引用类型，直接复制数据
+            std::memcpy(newArray->data_, data_, size_ * sizeof(slot_t));
+        }
+
+        return reinterpret_cast<GCRef>(newArray);
+    }
+
+    virtual void onMoved() override {
         // 这里不需要更新 data_，因为它指向的是对象内部的灵活数组成员
         // 灵活数组不是指针，不占用内存空间，在访问时通过偏移量动态计算得到
     }
 
-    void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
         if (!isGCTraced(type_))
             return;
 
@@ -186,6 +217,40 @@ class GCArray : public GCObject {
         if (size_ == capacity_)
             return;
         reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
+    }
+
+    virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
+        GCArray *newArray = GCArray::create(type_, allocator);
+
+        newArray->size_     = size_;
+        newArray->capacity_ = capacity_;
+
+        if (fixedArray_) {
+            GCRef clonedFixed     = fixedArray_->clone(allocator, deep);
+            newArray->fixedArray_ = reinterpret_cast<GCFixedArray *>(clonedFixed);
+            newArray->dataPtr_    = newArray->fixedArray_->data();
+        } else {
+            // 内联存储
+            newArray->fixedArray_ = nullptr;
+            newArray->dataPtr_    = newArray->inlineData_;
+
+            if (isGCTraced(type_)) {
+                const GCRef *src = reinterpret_cast<const GCRef *>(inlineData_);
+                GCRef *dst       = reinterpret_cast<GCRef *>(newArray->inlineData_);
+                for (size_t i = 0; i < size_; ++i) {
+                    if (GCRef ref = src[i]) {
+                        dst[i] =
+                            deep ? reinterpret_cast<GCObject *>(ref)->clone(allocator, true) : ref;
+                    } else {
+                        dst[i] = NullRef;
+                    }
+                }
+            } else {
+                std::memcpy(newArray->inlineData_, inlineData_, size_ * sizeof(slot_t));
+            }
+        }
+
+        return reinterpret_cast<GCRef>(newArray);
     }
 
     void onMoved() override {

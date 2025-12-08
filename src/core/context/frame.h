@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@ using data_idx_t = int16_t;
 
 class FrameTemplate {
   public:
+    FrameTemplate() = delete;
     FrameTemplate(GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &runtimeAllocator);
 
     GraphIR::Graph *graph() const { return graph_; }
@@ -53,14 +54,45 @@ class FrameTemplate {
 
 class Frame {
   public:
-    Frame(const FrameTemplate &layout)
-        : graph_(layout.graph()), allocator_(&layout.runtimeAllocator()),
-          staticArea_(layout.staticArea()) {
+    Frame() = delete;
+    Frame(const FrameTemplate &temp)
+        : graph_(temp.graph()), allocator_(&temp.runtimeAllocator()),
+          staticArea_(temp.staticArea()) {
         ASSERT(graph_ != nullptr, "Frame graph is null.");
         ASSERT(staticArea_ != nullptr, "Static tuple is null.");
+        dynamicArea_ = temp.makeDynamicArea();
+    }
+    // 不允许拷贝但可移动
+    Frame(const Frame &) = delete;
+    Frame(Frame &&other) noexcept
+        : graph_(other.graph_), allocator_(other.allocator_), staticArea_(other.staticArea_),
+          dynamicArea_(other.dynamicArea_) {
+        // 防止已被移动的对象意外释放数据
+        other.graph_       = nullptr;
+        other.allocator_   = nullptr;
+        other.staticArea_  = nullptr;
+        other.dynamicArea_ = nullptr;
+    }
 
-        // 初始化运行时区（动态区） Tuple
-        dynamicArea_ = layout.makeDynamicArea();
+    Frame &operator=(const Frame &other) = delete;
+    Frame &operator=(Frame &&other) noexcept {
+        if (this != &other) {
+            // 先释放自己的资源
+            if (dynamicArea_) {
+                allocator_->free(dynamicArea_);
+            }
+            // 转移资源
+            graph_       = other.graph_;
+            allocator_   = other.allocator_;
+            staticArea_  = other.staticArea_;
+            dynamicArea_ = other.dynamicArea_;
+            // 防止已被移动的对象意外释放数据
+            other.graph_       = nullptr;
+            other.allocator_   = nullptr;
+            other.staticArea_  = nullptr;
+            other.dynamicArea_ = nullptr;
+        }
+        return *this;
     }
 
     ~Frame() {
@@ -74,6 +106,19 @@ class Frame {
 
     GraphIR::Graph *graph() { return graph_; }
     const GraphIR::Graph *graph() const { return graph_; }
+
+    TypeCode typeAt(GraphIR::data_idx_t index) const {
+        ASSERT(index != 0, "Data index is invalid.");
+        if (LIKELY(index > 0)) {
+            size_t idx = static_cast<size_t>(index);
+            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            return dynamicArea_->typeAt(idx);
+        } else {
+            size_t idx = static_cast<size_t>(-index);
+            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            return staticArea_->typeAt(idx);
+        }
+    }
 
     template <typename T> T get(GraphIR::data_idx_t index) {
         ASSERT(index != 0, "Data index is invalid.");

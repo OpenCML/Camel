@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,12 +48,28 @@ class GCFunction : public GCObject {
     GCTuple *tuple() { return tuple_; }
     const GCTuple *tuple() const { return tuple_; }
 
-    void onMoved() override {
+    virtual GCObject *clone(IAllocator &allocator, bool deep) const override {
+        void *mem = allocator.alloc(sizeof(GCFunction), alignof(GCFunction));
+        if (!mem)
+            throw std::bad_alloc();
+
+        GCFunction *fn = new (mem) GCFunction(graph_);
+
+        if (tuple_) {
+            fn->tuple_ = deep ? static_cast<GCTuple *>(tuple_->clone(allocator, true)) : tuple_;
+        } else {
+            fn->tuple_ = nullptr;
+        }
+
+        return fn;
+    }
+
+    virtual void onMoved() override {
         // graph_ 是外部引用，不需要改动
         // tuple_ 指向的对象可能被 GC 移动，需要由 GC 更新
     }
 
-    void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
         if (tuple_) {
             tuple_->updateRefs(relocate);
         }

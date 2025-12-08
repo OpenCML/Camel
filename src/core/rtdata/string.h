@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 05, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -137,8 +137,15 @@ class GCString : public GCObject {
         return cachedHash_;
     }
 
-    void updateRefs(const std::function<GCRef(GCRef)> &) override {}
-    void onMoved() override {}
+    virtual GCObject *clone(IAllocator &allocator, bool /*deep*/) const override {
+        GCString *copy = GCString::create(size_, allocator);
+        std::memcpy(copy->data_, data_, size_ + 1);
+        copy->cachedHash_ = cachedHash_;
+        return copy;
+    }
+
+    virtual void onMoved() override {}
+    virtual void updateRefs(const std::function<GCRef(GCRef)> &) override {}
 
     static constexpr size_t npos = static_cast<size_t>(-1);
 

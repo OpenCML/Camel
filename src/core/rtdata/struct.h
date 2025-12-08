@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,11 +86,35 @@ class GCStruct : public GCObject {
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
-    void onMoved() override {
+    virtual GCObject *clone(IAllocator &allocator, bool deep) const override {
+        GCStruct *newStruct = GCStruct::create(layout_, allocator);
+
+        const auto &types = layout_.fieldTypes();
+        const slot_t *src = reinterpret_cast<const slot_t *>(data_);
+        slot_t *dst       = reinterpret_cast<slot_t *>(newStruct->data_);
+
+        for (size_t i = 0; i < size_; ++i) {
+            if (isGCTraced(types[i])) {
+                const GCRef ref = reinterpret_cast<const GCRef *>(src)[i];
+                GCRef &dstRef   = reinterpret_cast<GCRef *>(dst)[i];
+                if (ref) {
+                    dstRef = deep ? reinterpret_cast<GCObject *>(ref)->clone(allocator, true) : ref;
+                } else {
+                    dstRef = NullRef;
+                }
+            } else {
+                dst[i] = src[i];
+            }
+        }
+
+        return newStruct;
+    }
+
+    virtual void onMoved() override {
         // types_ 指向外部的布局元信息，不需调整
     }
 
-    void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
         GCRef *refArr     = reinterpret_cast<GCRef *>(data_);
         const auto &types = layout_.fieldTypes();
         for (size_t i = 0; i < size_; ++i) {

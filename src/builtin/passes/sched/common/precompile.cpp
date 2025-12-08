@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Nov. 01, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,8 +58,7 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
     return supportedInlineOperators;
 }
 
-shared_ptr<bytecode_vec_t>
-precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &opt) {
+bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &opt) {
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
     node_ptr_t exitNode = graph->exitNode();
 
@@ -119,8 +118,8 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
         }
     }());
 
-    auto bytecodes = make_shared<bytecode_vec_t>();
-    bytecodes->reserve(topoSortedNodes.size() * 3); // 预估容量
+    auto bytecodes = bytecode_vec_t();
+    bytecodes.reserve(topoSortedNodes.size() * 3); // 预估容量
 
     // 用于回填跳转地址的映射表
     unordered_map<Node *, size_t> brchTargetMap;
@@ -130,13 +129,13 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
     for (size_t i = 0; i < topoSortedNodes.size(); ++i) {
         auto &node = topoSortedNodes[i];
 
-        size_t currIdx = bytecodes->size();
+        size_t currIdx = bytecodes.size();
 
         // 回填之前记录的 JUMP 跳转地址
         if (brchTargetMap.find(node.get()) != brchTargetMap.end()) {
             size_t jumpIndex = brchTargetMap[node.get()];
-            auto &header = (*bytecodes)[jumpIndex];
-            header.fastop[0] = as_index(bytecodes->size());
+            auto &header     = bytecodes[jumpIndex];
+            header.fastop[0] = as_index(bytecodes.size());
             brchTargetMap.erase(node.get());
         }
 
@@ -156,21 +155,21 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
 
         case NodeType::COPY:
             appendBytecode(
-                *bytecodes,
+                bytecodes,
                 OpCode::COPY,
                 node->index(),
                 {node->normInputs().front()->index()});
             break;
 
         case NodeType::FILL:
-            appendBytecode(*bytecodes, OpCode::FILL, node->index(), {}, normOps, withOps);
+            appendBytecode(bytecodes, OpCode::FILL, node->index(), {}, normOps, withOps);
             break;
 
         case NodeType::ACCS: {
             auto accNode = tt::as_shared<AccsNode>(node);
             ASSERT(accNode->isNum(), "Only numeric ACCS indices are supported in bytecode.");
             appendBytecode(
-                *bytecodes,
+                bytecodes,
                 OpCode::ACCS,
                 node->index(),
                 {
@@ -181,15 +180,15 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
         }
 
         case NodeType::BRCH: {
-            appendBytecode(*bytecodes, OpCode::BRCH, node->index(), {}, normOps, withOps);
+            appendBytecode(bytecodes, OpCode::BRCH, node->index(), {}, normOps, withOps);
 
             // 为这个 BRCH 节点的每个控制输出添加一个占位跳转指令
             for (const auto &ctrlOut : node->ctrlOutputs()) {
                 // 记录跳转目标
-                brchTargetMap[ctrlOut.get()] = bytecodes->size();
+                brchTargetMap[ctrlOut.get()] = bytecodes.size();
                 // 占位跳转指令，目标地址稍后回填
                 appendBytecode(
-                    *bytecodes,
+                    bytecodes,
                     OpCode::JUMP,
                     0, // 占位，无实际节点对应
                     {0});
@@ -207,9 +206,9 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
 
             if (joinTargetMap.find(node.get()) != joinTargetMap.end()) {
                 for (const auto &[jumpIdx, fromIdx] : joinTargetMap[node.get()]) {
-                    auto &jump = (*bytecodes)[jumpIdx];
-                    auto &from = (*bytecodes)[fromIdx];
-                    jump.fastop[0] = as_index(bytecodes->size());
+                    auto &jump     = bytecodes[jumpIdx];
+                    auto &from     = bytecodes[fromIdx];
+                    jump.fastop[0] = as_index(bytecodes.size());
                     if (opt.enableTailCallDetection && isTail && from.opcode == OpCode::FUNC) {
                         from.opcode = OpCode::TAIL;
                     }
@@ -217,13 +216,13 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
                 joinTargetMap.erase(node.get());
             }
 
-            appendBytecode(*bytecodes, OpCode::JOIN, node->index(), {}, normOps, withOps);
+            appendBytecode(bytecodes, OpCode::JOIN, node->index(), {}, normOps, withOps);
 
             break;
         }
 
         case NodeType::CALL:
-            appendBytecode(*bytecodes, OpCode::CALL, node->index(), {}, normOps, withOps);
+            appendBytecode(bytecodes, OpCode::CALL, node->index(), {}, normOps, withOps);
             break;
 
         case NodeType::BIND:
@@ -231,10 +230,10 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
             break;
 
         case NodeType::FUNC: {
-            bool isTail = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
+            bool isTail   = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
             auto funcNode = tt::as_shared<FuncNode>(node);
             appendBytecode(
-                *bytecodes,
+                bytecodes,
                 (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
                 node->index(),
                 {},
@@ -248,16 +247,16 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
         }
 
         case NodeType::OPER: {
-            auto opNode = tt::as_shared<OperNode>(node);
+            auto opNode     = tt::as_shared<OperNode>(node);
             const auto &uri = opNode->oper()->uri();
 
             // 尝试内联算子
             if (opt.enableInlineOperators) {
                 const auto &inlineOpMap = getSupportedInlineOperatorsMap();
-                auto it = inlineOpMap.find(uri);
+                auto it                 = inlineOpMap.find(uri);
                 if (it != inlineOpMap.end()) {
                     appendBytecode(
-                        *bytecodes,
+                        bytecodes,
                         it->second,
                         node->index(),
                         {
@@ -286,7 +285,7 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
                 }
 
                 appendBytecode(
-                    *bytecodes,
+                    bytecodes,
                     OpCode::SCHD,
                     node->index(),
                     {},
@@ -306,7 +305,7 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
             }
 
             appendBytecode(
-                *bytecodes,
+                bytecodes,
                 OpCode::OPER,
                 node->index(),
                 {},
@@ -352,10 +351,10 @@ precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &o
             node->withOutputs().front()->type() == NodeType::JOIN) {
             auto joinNode = node->withOutputs().front();
             joinTargetMap[joinNode.get()].push_back({
-                bytecodes->size(),
+                bytecodes.size(),
                 currIdx,
             });
-            appendBytecode(*bytecodes, OpCode::JUMP, 0, {0});
+            appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
         }
     }
 

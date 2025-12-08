@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 24, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,9 +32,10 @@ static_assert(sizeof(GCRef) == sizeof(slot_t), "GCRef size mismatch");
 
 class GCObject {
   public:
-    virtual ~GCObject()                                                  = default;
-    virtual void onMoved()                                               = 0;
-    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) = 0;
+    virtual ~GCObject()                                                                   = default;
+    virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const = 0;
+    virtual void onMoved()                                                                = 0;
+    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate)                  = 0;
 
     // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
     // {

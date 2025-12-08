@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ class GCTuple : public GCObject {
         if (!memory)
             throw std::bad_alloc();
 
-        GCTuple *tuple = new (memory) GCTuple(layout.elemTypes().data(), layout.size());
+        GCTuple *tuple = new (memory) GCTuple(&layout);
 
         // 初始化引用类型为空以避免伪引用
         GCRef *dataStart = reinterpret_cast<GCRef *>(tuple->data_);
@@ -46,12 +46,8 @@ class GCTuple : public GCObject {
     }
 
     size_t size() const { return size_; }
-    const TypeCode *types() const { return types_; }
 
-    TypeCode elemType(size_t index) const {
-        ASSERT(index < size_, "Index out of range");
-        return types_[index];
-    }
+    TypeCode typeAt(size_t index) const { return layout_->typeAt(index); }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -75,14 +71,42 @@ class GCTuple : public GCObject {
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
-    void onMoved() override {
-        // types_ 指向的数组由外部管理，不需要更新
-        // data_ 是灵活数组成员，也在对象内部
+    virtual GCRef clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
+        GCTuple *newTuple = GCTuple::create(*layout_, allocator);
+        const auto &types = layout_->elemTypes();
+
+        for (size_t i = 0; i < size_; ++i) {
+            if (isGCTraced(types[i])) {
+                GCRef originalRef = this->get<GCRef>(i);
+                if (originalRef) {
+                    if (deep) {
+                        // 深拷贝：递归克隆引用对象
+                        GCObject *obj   = reinterpret_cast<GCObject *>(originalRef);
+                        GCRef clonedRef = obj->clone(allocator, true);
+                        newTuple->set<GCRef>(i, clonedRef);
+                    } else {
+                        // 浅拷贝：直接复制引用
+                        newTuple->set<GCRef>(i, originalRef);
+                    }
+                } else {
+                    newTuple->set<GCRef>(i, NullRef);
+                }
+            } else {
+                // 非引用类型，直接复制值
+                slot_t value = this->get<slot_t>(i);
+                newTuple->set<slot_t>(i, value);
+            }
+        }
+
+        return reinterpret_cast<GCRef>(newTuple);
     }
 
-    void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+    virtual void onMoved() override {}
+
+    virtual void updateRefs(const std::function<GCRef(GCRef)> &relocate) override {
+        const auto &types = layout_->elemTypes();
         for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(types_[i])) {
+            if (isGCTraced(types[i])) {
                 GCRef *refArr = reinterpret_cast<GCRef *>(data_);
                 for (size_t i = 0; i < size_; ++i) {
                     if (GCRef &ref = refArr[i]) {
@@ -94,11 +118,10 @@ class GCTuple : public GCObject {
     }
 
   private:
-    // 注意：types_ 指针指向外部共享数组，调用方必须保证在 tuple 生命周期内有效
-    GCTuple(const TypeCode *types, size_t size)
-        : size_(static_cast<uint32_t>(size)), types_(types) {}
+    GCTuple(const TupleTypeLayout *layout)
+        : size_(static_cast<uint32_t>(layout->size())), layout_(layout) {}
 
     uint32_t size_;
-    const TypeCode *types_;            // 外部维护的类型数组的指针
-    alignas(slot_t) std::byte data_[]; // 灵活数组成员
+    const TupleTypeLayout *layout_;
+    alignas(slot_t) std::byte data_[];
 };

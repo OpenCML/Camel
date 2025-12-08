@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@ class TupleTypeLayout {
 
     size_t size() const noexcept { return elemTypes_.size(); }
 
-    TypeCode elemType(size_t index) const {
+    TypeCode typeAt(size_t index) const {
         ASSERT(index < elemTypes_.size(), "TupleTypeLayout: index out of range");
         return elemTypes_[index];
     }

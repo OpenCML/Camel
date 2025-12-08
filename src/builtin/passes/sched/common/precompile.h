@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Dec. 08, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,8 +27,8 @@
 
 struct OptimizationStrategy {
     bool enableTailCallDetection = true;
-    bool enableInlineOperators = false;
+    bool enableInlineOperators   = false;
 };
 
-std::shared_ptr<bytecode_vec_t>
+bytecode_vec_t
 precompile(const context_ptr_t &ctx, GraphIR::Graph *graph, const OptimizationStrategy &opt = {});
