@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,12 @@
 #include "utils/assert.h"
 
 using namespace std;
+
+void ArrayType::computeLayout() const {
+    if (!layout_) {
+        layout_ = std::make_shared<ArrayTypeLayout>(elemType_->code(), 0);
+    }
+}
 
 ArrayType::ArrayType(const type_ptr_t &elementType)
     : CompositeType(TypeCode::Array), elemType_(elementType) {}

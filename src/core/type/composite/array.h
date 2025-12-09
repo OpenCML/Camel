@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,9 +23,25 @@
 
 #include <optional>
 
+class ArrayTypeLayout {
+  public:
+    explicit ArrayTypeLayout(TypeCode elemType, size_t size) : elemType_(elemType), size_(size) {}
+
+    TypeCode elemType() const noexcept { return elemType_; }
+    size_t size() const noexcept { return size_; }
+
+  private:
+    TypeCode elemType_;
+    size_t size_;
+    std::vector<size_t> refs_;
+};
+
 class ArrayType : public CompositeType {
   private:
     type_ptr_t elemType_;
+    mutable std::shared_ptr<ArrayTypeLayout> layout_;
+
+    void computeLayout() const;
 
   public:
     ArrayType(const type_ptr_t &elemType);
@@ -34,6 +50,7 @@ class ArrayType : public CompositeType {
     static std::shared_ptr<ArrayType> create(const type_ptr_t &elemType = nullptr);
 
     type_ptr_t elementType() const;
+    const ArrayTypeLayout &layout() const;
 
     virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;

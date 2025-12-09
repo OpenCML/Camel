@@ -13,14 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tensor.h"
-
-#include "set.h"
-#include "vector.h"
 
 using namespace std;
 

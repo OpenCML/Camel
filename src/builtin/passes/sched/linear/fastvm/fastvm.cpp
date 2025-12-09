@@ -230,25 +230,41 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             case OpCode::BRCH: {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
-                slot_t condData        = currFrame->get<slot_t>(nargs[0]);
 
                 size_t jumpIdx = 0;
-
                 if (bc.withCnt() == 0) {
+                    // 普通的 if-else 分支，cond 是 bool 类型
+                    slot_t condData = currFrame->get<slot_t>(nargs[0]);
                     if (static_cast<bool>(condData)) {
                         jumpIdx = 0; // jump to true branch
                     } else {
                         jumpIdx = 1; // jump to false branch
                     }
                 } else {
-                    size_t j = 0;
-                    for (; j < bc.withCnt(); ++j) {
-                        auto caseData = currFrame->get(wargs[j]);
-                        if (condData->equals(caseData)) {
-                            jumpIdx = j; // jump to matched case
-                            break;
+                    // match-case，依次判断各分支
+                    size_t j          = 0;
+                    TypeCode condType = currFrame->typeAt(nargs[0]);
+
+                    if (isGCTraced(condType)) {
+                        auto condData = currFrame->get<Object *>(nargs[0]);
+                        for (; j < bc.withCnt(); ++j) {
+                            auto caseData = currFrame->get<Object *>(wargs[j]);
+                            if (condData->equals(caseData)) {
+                                jumpIdx = j; // jump to matched case
+                                break;
+                            }
+                        }
+                    } else {
+                        auto condData = currFrame->get<slot_t>(nargs[0]);
+                        for (; j < bc.withCnt(); ++j) {
+                            auto caseData = currFrame->get<slot_t>(wargs[j]);
+                            if (condData == caseData) {
+                                jumpIdx = j; // jump to matched case
+                                break;
+                            }
                         }
                     }
+
                     if (j == bc.withCnt()) {
                         // fallthrough to else case if no match
                         jumpIdx = bc.withCnt();
@@ -264,21 +280,25 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             case OpCode::JOIN: {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
-                const auto &input      = currFrame->get(nargs[0]);
-                int32_t choosenIdx     = tt::as_shared<IntData>(input)->data();
+                int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
                 ASSERT(
-                    choosenIdx >= 0 && static_cast<size_t>(choosenIdx) < bc.withCnt(),
+                    brIndex >= 0 && static_cast<size_t>(brIndex) < bc.withCnt(),
                     "JOIN opcode choosen index out of range in FastVM.");
-                auto resultData = currFrame->get(wargs[static_cast<size_t>(choosenIdx)]);
-                currFrame->set(bc.result, resultData);
+                slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
+                currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::FILL: {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
-                auto target            = currFrame->get(nargs[0])->clone();
+
+                TypeCode targetType = currFrame->typeAt(nargs[0]);
+                ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+
+                auto target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
                 ASSERT(target != nullptr, "FILL target data is null.");
+
                 data_vec_t inputs;
                 inputs.reserve(bc.withCnt());
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
