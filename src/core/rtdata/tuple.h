@@ -72,61 +72,64 @@ class Tuple : public Object {
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
-        const Tuple *otherTuple = reinterpret_cast<const Tuple *>(other);
-        if (this == otherTuple)
-            return true;
-        if (!isOfSameCls(this, otherTuple))
+        if (!isOfSameCls(this, other))
             return false;
+
+        const Tuple *otherTuple = reinterpret_cast<const Tuple *>(other);
         if (size_ != otherTuple->size_)
             return false;
 
-        const auto &types = layout_->elemTypes();
+        const auto &types   = layout_->elemTypes();
+        const slot_t *dataA = reinterpret_cast<const slot_t *>(data_);
+        const slot_t *dataB = reinterpret_cast<const slot_t *>(otherTuple->data_);
+
         if (deep) {
+            // 深比较：引用类型递归比较，普通类型直接值比较
             for (size_t i = 0; i < size_; ++i) {
                 if (isGCTraced(types[i])) {
-                    const Object *refA = this->get<Object *>(i);
-                    const Object *refB = otherTuple->get<Object *>(i);
+                    const Object *refA = reinterpret_cast<const Object *const *>(dataA)[i];
+                    const Object *refB = reinterpret_cast<const Object *const *>(dataB)[i];
+                    if (refA == refB)
+                        continue;
                     if (!refA->equals(refB, true))
                         return false;
                 } else {
-                    slot_t valA = this->get<slot_t>(i);
-                    slot_t valB = otherTuple->get<slot_t>(i);
-                    if (valA != valB)
+                    if (dataA[i] != dataB[i])
                         return false;
                 }
             }
+            return true;
         } else {
-            return memcmp(this->data(), otherTuple->data(), size_ * sizeof(slot_t)) == 0;
+            // 浅比较：所有 slot 原样比较（对于引用，仅比较指针地址）
+            return std::memcmp(dataA, dataB, size_ * sizeof(slot_t)) == 0;
         }
-
-        return true;
     }
 
-    virtual Object *
-    clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
+    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
         Tuple *newTuple   = Tuple::create(*layout_, allocator);
         const auto &types = layout_->elemTypes();
 
+        const slot_t *src = reinterpret_cast<const slot_t *>(data_);
+        slot_t *dst       = reinterpret_cast<slot_t *>(newTuple->data_);
+
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
-                Object *originalRef = this->get<Object *>(i);
-                if (originalRef) {
+                const Object *oriRef = reinterpret_cast<const Object *const *>(src)[i];
+                Object *newRef       = NullRef;
+
+                if (oriRef) {
                     if (deep) {
                         // 深拷贝：递归克隆引用对象
-                        Object *obj       = reinterpret_cast<Object *>(originalRef);
-                        Object *clonedRef = obj->clone(allocator, true);
-                        newTuple->set<Object *>(i, clonedRef);
+                        newRef = oriRef->clone(allocator, true);
                     } else {
-                        // 浅拷贝：直接复制引用
-                        newTuple->set<Object *>(i, originalRef);
+                        // 浅拷贝：仅复制引用指针
+                        newRef = const_cast<Object *>(oriRef);
                     }
-                } else {
-                    newTuple->set<Object *>(i, NullRef);
                 }
+                reinterpret_cast<Object **>(dst)[i] = newRef;
             } else {
-                // 非引用类型，直接复制值
-                slot_t value = this->get<slot_t>(i);
-                newTuple->set<slot_t>(i, value);
+                // 非引用类型，直接复制 slot 数据
+                dst[i] = src[i];
             }
         }
 
@@ -137,13 +140,12 @@ class Tuple : public Object {
 
     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
         const auto &types = layout_->elemTypes();
+        Object **refArr   = reinterpret_cast<Object **>(data_);
+
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
-                Object **refArr = reinterpret_cast<Object **>(data_);
-                for (size_t i = 0; i < size_; ++i) {
-                    if (Object *&ref = refArr[i]) {
-                        ref = relocate(ref);
-                    }
+                if (Object *&ref = refArr[i]) {
+                    ref = relocate(ref);
                 }
             }
         }

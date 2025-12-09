@@ -86,40 +86,36 @@ class Struct : public Object {
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
-        const Struct *rhs = reinterpret_cast<const Struct *>(other);
-
-        if (this == rhs)
-            return true;
-        if (!isOfSameCls(this, rhs))
-            return false;
-        if (&layout_ != &rhs->layout_ || size_ != rhs->size_)
+        if (!isOfSameCls(this, other))
             return false;
 
-        const auto &types = layout_.fieldTypes();
+        const Struct *otherStruct = reinterpret_cast<const Struct *>(other);
 
-        const slot_t *lhsData = reinterpret_cast<const slot_t *>(data_);
-        const slot_t *rhsData = reinterpret_cast<const slot_t *>(rhs->data_);
+        // 布局或字段数量不同则不相等
+        if (&layout_ != &otherStruct->layout_ || size_ != otherStruct->size_)
+            return false;
 
+        const auto &types   = layout_.fieldTypes();
+        const slot_t *dataA = reinterpret_cast<const slot_t *>(data_);
+        const slot_t *dataB = reinterpret_cast<const slot_t *>(otherStruct->data_);
+
+        if (!deep) {
+            // 浅比较：直接比较整个内存块（引用字段只比较指针）
+            return std::memcmp(dataA, dataB, size_ * sizeof(slot_t)) == 0;
+        }
+
+        // 深比较：逐字段递归比较
         for (size_t i = 0; i < size_; ++i) {
             TypeCode type = types[i];
             if (isGCTraced(type)) {
-                Object *lhsRef = reinterpret_cast<const Object **>(lhsData)[i];
-                Object *rhsRef = reinterpret_cast<const Object **>(rhsData)[i];
-
-                if (lhsRef == rhsRef)
+                const Object *refA = reinterpret_cast<const Object *const *>(dataA)[i];
+                const Object *refB = reinterpret_cast<const Object *const *>(dataB)[i];
+                if (refA == refB)
                     continue;
-
-                if (!lhsRef || !rhsRef)
+                if (!refA->equals(refB, true))
                     return false;
-
-                if (deep) {
-                    if (!lhsRef->equals(rhsRef, true))
-                        return false;
-                } else {
-                    return false; // 浅比较要求引用相同
-                }
             } else {
-                if (lhsData[i] != rhsData[i])
+                if (dataA[i] != dataB[i])
                     return false;
             }
         }
@@ -127,7 +123,7 @@ class Struct : public Object {
         return true;
     }
 
-    virtual Object *clone(IAllocator &allocator, bool deep) const override {
+    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
         Struct *newStruct = Struct::create(layout_, allocator);
 
         const auto &types = layout_.fieldTypes();
@@ -136,19 +132,27 @@ class Struct : public Object {
 
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
-                const Object *ref = reinterpret_cast<const Object **>(src)[i];
-                Object *&dstRef   = reinterpret_cast<Object **>(dst)[i];
-                if (ref) {
-                    dstRef = deep ? reinterpret_cast<Object *>(ref)->clone(allocator, true) : ref;
-                } else {
-                    dstRef = NullRef;
+                const Object *oriRef = reinterpret_cast<const Object *const *>(src)[i];
+                Object *newRef       = NullRef;
+
+                if (oriRef) {
+                    if (deep) {
+                        // 递归克隆引用对象
+                        newRef = oriRef->clone(allocator, true);
+                    } else {
+                        // 浅拷贝：直接引用原指针
+                        newRef = const_cast<Object *>(oriRef);
+                    }
                 }
+
+                reinterpret_cast<Object **>(dst)[i] = newRef;
             } else {
+                // 非引用类型：直接复制 slot 数据
                 dst[i] = src[i];
             }
         }
 
-        return newStruct;
+        return reinterpret_cast<Object *>(newStruct);
     }
 
     virtual void onMoved() override {

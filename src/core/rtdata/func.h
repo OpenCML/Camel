@@ -48,20 +48,34 @@ class Function : public Object {
     Tuple *tuple() { return tuple_; }
     const Tuple *tuple() const { return tuple_; }
 
-    virtual Object *clone(IAllocator &allocator, bool deep) const override {
+    virtual bool equals(const Object *other, bool deep = false) const override {
+        if (this == other)
+            return true;
+        if (!isOfSameCls(this, other))
+            return false;
+
+        const Function *fnOther = reinterpret_cast<const Function *>(other);
+
+        if (graph_ != fnOther->graph_)
+            return false;
+
+        return tuple_->equals(fnOther->tuple_, deep);
+    }
+
+    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
         void *mem = allocator.alloc(sizeof(Function), alignof(Function));
         if (!mem)
             throw std::bad_alloc();
 
-        Function *fn = new (mem) Function(graph_);
+        Function *fnNew = new (mem) Function(graph_);
 
         if (tuple_) {
-            fn->tuple_ = deep ? static_cast<Tuple *>(tuple_->clone(allocator, true)) : tuple_;
+            fnNew->tuple_ = deep ? static_cast<Tuple *>(tuple_->clone(allocator, true)) : tuple_;
         } else {
-            fn->tuple_ = nullptr;
+            fnNew->tuple_ = nullptr;
         }
 
-        return fn;
+        return reinterpret_cast<Object *>(fnNew);
     }
 
     virtual void onMoved() override {

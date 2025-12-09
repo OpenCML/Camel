@@ -137,7 +137,24 @@ class String : public Object {
         return cachedHash_;
     }
 
-    virtual Object *clone(IAllocator &allocator, bool /*deep*/) const override {
+    virtual bool equals(const Object *other, bool /*deep*/ = false) const override {
+        if (this == other)
+            return true;
+
+        if (!isOfSameCls(this, other))
+            return false;
+
+        const String *rhs = reinterpret_cast<const String *>(other);
+
+        // 长度不同直接判不等
+        if (size_ != rhs->size_)
+            return false;
+
+        // 比较内容
+        return std::memcmp(data_, rhs->data_, size_) == 0;
+    }
+
+    virtual Object *clone(IAllocator &allocator, bool /*deep*/ = false) const override {
         String *copy = String::create(size_, allocator);
         std::memcpy(copy->data_, data_, size_ + 1);
         copy->cachedHash_ = cachedHash_;

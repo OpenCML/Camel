@@ -25,11 +25,11 @@
 
 class Object {
   public:
-    virtual ~Object()                                                           = default;
-    virtual bool equals(const Object *other, bool deep = false) const           = 0;
-    virtual Object *clone(const IAllocator &allocator, bool deep = false) const = 0;
-    virtual void onMoved()                                                      = 0;
-    virtual void updateRefs(const std::function<Object *(Object *)> &relocate)  = 0;
+    virtual ~Object()                                                          = default;
+    virtual bool equals(const Object *other, bool deep = false) const          = 0;
+    virtual Object *clone(IAllocator &allocator, bool deep = false) const      = 0;
+    virtual void onMoved()                                                     = 0;
+    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) = 0;
 
     // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
     // {
@@ -50,7 +50,7 @@ class Object {
 
 constexpr Object *NullRef = nullptr;
 
-template <typename T> inline bool isOfSameCls(const T *a, const T *b) noexcept {
+template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b) noexcept {
     if (!a || !b)
         return false;
     // 借助 vtable 指针判断是否为同一对象

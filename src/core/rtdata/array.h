@@ -82,63 +82,64 @@ class FixedArray : public Object {
     }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
-        const FixedArray *otherArray = reinterpret_cast<const FixedArray *>(other);
-        if (this == otherArray)
+        if (this == other)
             return true;
-        if (!isOfSameCls(this, otherArray))
+        if (!isOfSameCls(this, other))
             return false;
+
+        const FixedArray *otherArray = reinterpret_cast<const FixedArray *>(other);
         if (size_ != otherArray->size_ || type_ != otherArray->type_)
             return false;
 
-        if (isGCTraced(type_)) {
-            const Object **dataA = reinterpret_cast<const Object **>(data_);
-            const Object **dataB = reinterpret_cast<const Object **>(otherArray->data_);
+        const Object *const *arrA = reinterpret_cast<const Object *const *>(data_);
+        const Object *const *arrB = reinterpret_cast<const Object *const *>(otherArray->data_);
 
+        if (isGCTraced(type_)) {
             if (deep) {
                 // 深比较引用对象
                 for (size_t i = 0; i < size_; ++i) {
-                    const Object *refA = dataA[i];
-                    const Object *refB = dataB[i];
+                    const Object *refA = arrA[i];
+                    const Object *refB = arrB[i];
+                    if (refA == refB)
+                        continue;
                     if (!refA->equals(refB, true))
                         return false;
                 }
                 return true;
             } else {
                 // 浅比较引用指针地址
-                return std::memcmp(dataA, dataB, size_ * sizeof(Object *)) == 0;
+                return std::memcmp(arrA, arrB, size_ * sizeof(Object *)) == 0;
             }
         } else {
-            return std::memcmp(data_, otherArray->data_, size_ * sizeof(slot_t)) == 0;
+            return std::memcmp(arrA, arrB, size_ * sizeof(slot_t)) == 0;
         }
     }
 
-    virtual Object *
-    clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
-        FixedArray *newArray = FixedArray::create(type_, size_, allocator);
+    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
+        FixedArray *newArray        = FixedArray::create(type_, size_, allocator);
+        const Object *const *srcArr = reinterpret_cast<const Object *const *>(data_);
+        const Object **dstArr       = reinterpret_cast<const Object **>(newArray->data_);
 
         if (isGCTraced(type_)) {
-            const Object **srcData = reinterpret_cast<const Object **>(data_);
-            Object **dstData       = reinterpret_cast<Object **>(newArray->data_);
-
             for (size_t i = 0; i < size_; ++i) {
-                Object *originalRef = srcData[i];
-                if (originalRef) {
+                const Object *oriRef = srcArr[i];
+                if (oriRef) {
                     if (deep) {
                         // 深拷贝：递归克隆引用对象
-                        Object *obj       = reinterpret_cast<Object *>(originalRef);
+                        const Object *obj = reinterpret_cast<const Object *>(oriRef);
                         Object *clonedRef = obj->clone(allocator, true);
-                        dstData[i]        = clonedRef;
+                        dstArr[i]         = clonedRef;
                     } else {
                         // 浅拷贝：直接复制引用
-                        dstData[i] = originalRef;
+                        dstArr[i] = oriRef;
                     }
                 } else {
-                    dstData[i] = NullRef;
+                    dstArr[i] = NullRef;
                 }
             }
         } else {
             // 非引用类型，直接复制数据
-            std::memcpy(newArray->data_, data_, size_ * sizeof(slot_t));
+            std::memcpy(dstArr, srcArr, size_ * sizeof(slot_t));
         }
 
         return reinterpret_cast<Object *>(newArray);
@@ -253,77 +254,75 @@ class Array : public Object {
     }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
+        if (!isOfSameCls(this, other))
+            return false;
+
         const Array *otherArray = reinterpret_cast<const Array *>(other);
-
-        if (this == otherArray)
-            return true;
-        if (!isOfSameCls(this, otherArray))
+        if (size_ != otherArray->size_ || type_ != otherArray->type_)
             return false;
 
-        if (type_ != otherArray->type_ || size_ != otherArray->size_)
-            return false;
-
-        const void *lhsData = dataPtr_;
-        const void *rhsData = otherArray->dataPtr_;
+        const Object *const *arrA = reinterpret_cast<const Object *const *>(dataPtr_);
+        const Object *const *arrB = reinterpret_cast<const Object *const *>(otherArray->dataPtr_);
 
         if (isGCTraced(type_)) {
-            const Object **lhs = reinterpret_cast<const Object **>(lhsData);
-            const Object **rhs = reinterpret_cast<const Object **>(rhsData);
-
             if (deep) {
+                // 深比较引用对象
                 for (size_t i = 0; i < size_; ++i) {
-                    const Object *la = lhs[i];
-                    const Object *rb = rhs[i];
-                    if (!la->equals(rb, true))
+                    const Object *refA = arrA[i];
+                    const Object *refB = arrB[i];
+                    if (refA == refB)
+                        continue;
+                    if (!refA->equals(refB, true))
                         return false;
                 }
                 return true;
             } else {
-                // 浅比较（只比较引用地址）
-                return std::memcmp(lhs, rhs, size_ * sizeof(Object *)) == 0;
+                // 浅比较引用地址
+                return std::memcmp(arrA, arrB, size_ * sizeof(Object *)) == 0;
             }
+        } else {
+            // 基本类型比较
+            return std::memcmp(arrA, arrB, size_ * sizeof(slot_t)) == 0;
         }
-
-        return std::memcmp(lhsData, rhsData, size_ * sizeof(slot_t)) == 0;
     }
 
-    virtual Object *
-    clone(IAllocator &allocator = mm::autoSpace(), bool deep = false) const override {
-        Array *newArray = Array::create(type_, allocator);
-
+    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
+        Array *newArray     = Array::create(type_, allocator);
         newArray->size_     = size_;
         newArray->capacity_ = capacity_;
 
         if (fixedArray_) {
-            Object *clonedFixed   = fixedArray_->clone(allocator, deep);
-            newArray->fixedArray_ = reinterpret_cast<FixedArray *>(clonedFixed);
-            newArray->dataPtr_    = newArray->fixedArray_->data();
+            // 外部存储：直接克隆 FixedArray，它会处理内部的元素复制
+            newArray->fixedArray_ =
+                reinterpret_cast<FixedArray *>(fixedArray_->clone(allocator, deep));
+            newArray->dataPtr_ = newArray->fixedArray_->data();
         } else {
-            // 内联存储
+            // 内联存储：需要自己复制数据
             newArray->fixedArray_ = nullptr;
             newArray->dataPtr_    = newArray->inlineData_;
 
+            const Object *const *srcArr = reinterpret_cast<const Object *const *>(dataPtr_);
+            Object **dstArr             = reinterpret_cast<Object **>(newArray->dataPtr_);
+
             if (isGCTraced(type_)) {
-                const Object **src = reinterpret_cast<const Object **>(inlineData_);
-                Object **dst       = reinterpret_cast<Object **>(newArray->inlineData_);
                 for (size_t i = 0; i < size_; ++i) {
-                    if (const Object *ref = src[i]) {
-                        dst[i] = deep
-                                     ? reinterpret_cast<const Object *>(ref)->clone(allocator, true)
-                                     : ref;
+                    const Object *oriRef = srcArr[i];
+                    if (oriRef) {
+                        dstArr[i] =
+                            deep ? oriRef->clone(allocator, true) : const_cast<Object *>(oriRef);
                     } else {
-                        dst[i] = NullRef;
+                        dstArr[i] = NullRef;
                     }
                 }
             } else {
-                std::memcpy(newArray->inlineData_, inlineData_, size_ * sizeof(slot_t));
+                std::memcpy(dstArr, srcArr, size_ * sizeof(slot_t));
             }
         }
 
         return reinterpret_cast<Object *>(newArray);
     }
 
-    void onMoved() override {
+    virtual void onMoved() override {
         if (fixedArray_) {
             dataPtr_ = fixedArray_->data();
         } else {
@@ -331,7 +330,7 @@ class Array : public Object {
         }
     }
 
-    void updateRefs(const std::function<Object *(Object *)> &relocate) override {
+    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
         // 更新对GCFixedArray的引用
         if (fixedArray_) {
             Object *newPtr = relocate(fixedArray_);
