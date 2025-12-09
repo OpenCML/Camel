@@ -27,7 +27,7 @@ class Tuple : public Object {
     Tuple &operator=(const Tuple &) = delete;
 
     /// 创建 Tuple 实例
-    static Tuple *create(const TupleTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
+    static Tuple *create(const TupleTypeLayout &layout, IAllocator &allocator) {
         size_t headerSize = offsetof(Tuple, data_);
         size_t dataSize   = sizeof(slot_t) * layout.size();
         size_t totalSize  = headerSize + dataSize;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -180,10 +180,8 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &lftElemType =
-                                tt::as_shared<ArrayType>(norm[0])->elementType();
-                            const auto &rgtElemType =
-                                tt::as_shared<ArrayType>(norm[1])->elementType();
+                            const auto &lftElemType = tt::as_shared<ArrayType>(norm[0])->elemType();
+                            const auto &rgtElemType = tt::as_shared<ArrayType>(norm[1])->elemType();
                             if (!lftElemType->equals(rgtElemType))
                                 return nullopt;
                             const auto &vecType = tt::as_shared<ArrayType>(norm[0]);

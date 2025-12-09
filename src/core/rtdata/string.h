@@ -26,7 +26,7 @@ class String : public Object {
     String(const String &)            = delete;
     String &operator=(const String &) = delete;
 
-    static String *create(size_t length, IAllocator &allocator = mm::autoSpace()) {
+    static String *create(size_t length, IAllocator &allocator) {
         size_t totalSize = offsetof(String, data_) + (length + 1);
         void *memory     = allocator.alloc(totalSize, alignof(String));
         if (!memory)
@@ -37,14 +37,14 @@ class String : public Object {
         return str;
     }
 
-    static String *from(const char *src, IAllocator &allocator = mm::autoSpace()) {
+    static String *from(const char *src, IAllocator &allocator) {
         size_t len = std::strlen(src);
         auto *str  = create(len, allocator);
         std::memcpy(str->data_, src, len + 1);
         return str;
     }
 
-    static String *from(const std::string &s, IAllocator &allocator = mm::autoSpace()) {
+    static String *from(const std::string &s, IAllocator &allocator) {
         auto *str = create(s.size(), allocator);
         std::memcpy(str->data_, s.data(), s.size());
         str->data_[s.size()] = '\0';
@@ -53,8 +53,7 @@ class String : public Object {
 
     std::string toString() const { return std::string(data_, size_); }
 
-    static String *
-    concat(const String *a, const String *b, IAllocator &allocator = mm::autoSpace()) {
+    static String *concat(const String *a, const String *b, IAllocator &allocator) {
         size_t lenA    = a->size();
         size_t lenB    = b->size();
         size_t newLen  = lenA + lenB;
@@ -120,7 +119,7 @@ class String : public Object {
 
     bool contains(const String *substr) const { return find(substr) != npos; }
 
-    String *substr(size_t pos, size_t len = npos, IAllocator &allocator = mm::autoSpace()) const {
+    String *substr(size_t pos, size_t len = npos, IAllocator &allocator) const {
         if (pos >= size_)
             return from("", allocator);
         if (len > size_ - pos)

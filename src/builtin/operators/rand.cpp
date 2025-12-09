@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,10 +52,10 @@ void __randn__(
 
 void __randint__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &low_val = frame.get(nargs[0]);
+    const data_ptr_t &low_val  = frame.get(nargs[0]);
     const data_ptr_t &high_val = frame.get(nargs[1]);
 
-    int32_t low = low_val->as<IntData>(Type::Int())->data();
+    int32_t low  = low_val->as<IntData>(Type::Int())->data();
     int32_t high = high_val->as<IntData>(Type::Int())->data();
 
     if (low > high)
@@ -83,11 +83,11 @@ void __choice__(
 void __sample__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &arr_val = frame.get(nargs[0]);
-    const data_ptr_t &n_val = frame.get(nargs[1]);
+    const data_ptr_t &n_val   = frame.get(nargs[1]);
 
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    int32_t n = n_val->as<IntData>(Type::Int())->data();
+    auto arr      = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elemType();
+    int32_t n     = n_val->as<IntData>(Type::Int())->data();
 
     if (n < 0 || static_cast<size_t>(n) > arr->raw().size()) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<sample> size out of range");
@@ -106,8 +106,8 @@ void __shuffle__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &arr_val = frame.get(nargs[0]);
 
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
+    auto arr                     = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType                = tt::as_shared<ArrayType>(arr_val->type())->elemType();
     std::vector<data_ptr_t> copy = arr->raw();
     std::shuffle(copy.begin(), copy.end(), g_rng);
 

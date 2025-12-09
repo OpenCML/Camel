@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@ enum class SortAlgo { Insertion, Quick, Merge };
 template <typename T, typename Compare>
 static void insertionSort(std::vector<T> &vals, Compare comp) {
     for (size_t i = 1; i < vals.size(); ++i) {
-        T key = vals[i];
+        T key    = vals[i];
         size_t j = i;
         while (j > 0 && comp(key, vals[j - 1])) {
             vals[j] = vals[j - 1];
@@ -116,10 +116,10 @@ void doSort(
 void __insert_sort__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    auto arr                  = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType             = tt::as_shared<ArrayType>(arr_val->type())->elemType();
+    const auto &rawCopy       = arr->raw();
+    auto &raw                 = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
     if (elemType == Type::Int()) {
         doSort<int32_t, IntData>(
@@ -172,10 +172,10 @@ void __insert_sort__(
 void __insert_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    auto arr                  = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType             = tt::as_shared<ArrayType>(arr_val->type())->elemType();
+    const auto &rawCopy       = arr->raw();
+    auto &raw                 = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
     if (elemType == Type::Int()) {
         doSort<int32_t, IntData>(
@@ -229,10 +229,10 @@ void __quick_sort__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    auto arr                  = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType             = tt::as_shared<ArrayType>(arr_val->type())->elemType();
+    const auto &rawCopy       = arr->raw();
+    auto &raw                 = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
     if (elemType == Type::Int()) {
         doSort<int32_t, IntData>(
@@ -286,10 +286,10 @@ void __quick_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    auto arr                  = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType             = tt::as_shared<ArrayType>(arr_val->type())->elemType();
+    const auto &rawCopy       = arr->raw();
+    auto &raw                 = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
     if (elemType == Type::Int()) {
         doSort<int32_t, IntData>(
@@ -343,10 +343,10 @@ void __merge_sort__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    auto arr                  = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType             = tt::as_shared<ArrayType>(arr_val->type())->elemType();
+    const auto &rawCopy       = arr->raw();
+    auto &raw                 = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
     if (elemType == Type::Int()) {
         doSort<int32_t, IntData>(
@@ -400,10 +400,10 @@ void __merge_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
     const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    auto arr                  = arr_val->as<ArrayData>(arr_val->type());
+    auto elemType             = tt::as_shared<ArrayType>(arr_val->type())->elemType();
+    const auto &rawCopy       = arr->raw();
+    auto &raw                 = const_cast<std::vector<data_ptr_t> &>(arr->raw());
 
     if (elemType == Type::Int()) {
         doSort<int32_t, IntData>(
@@ -481,12 +481,12 @@ merge_sorted_arrays(const std::vector<data_ptr_t> &L, const std::vector<data_ptr
 void __merge_sorted_arrays__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 
-    const data_ptr_t &left_arr_val = frame.get(nargs[0]);
+    const data_ptr_t &left_arr_val  = frame.get(nargs[0]);
     const data_ptr_t &right_arr_val = frame.get(nargs[1]);
 
-    auto left = left_arr_val->as<ArrayData>(left_arr_val->type());
-    auto right = right_arr_val->as<ArrayData>(right_arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(left_arr_val->type())->elementType();
+    auto left     = left_arr_val->as<ArrayData>(left_arr_val->type());
+    auto right    = right_arr_val->as<ArrayData>(right_arr_val->type());
+    auto elemType = tt::as_shared<ArrayType>(left_arr_val->type())->elemType();
 
     const auto &L = left->raw();
     const auto &R = right->raw();

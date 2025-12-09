@@ -25,20 +25,21 @@
 
 class ArrayTypeLayout {
   public:
-    explicit ArrayTypeLayout(TypeCode elemType, size_t size) : elemType_(elemType), size_(size) {}
+    explicit ArrayTypeLayout(TypeCode elemType, std::vector<size_t> refs)
+        : elemType_(elemType), refs_(std::move(refs)) {}
 
     TypeCode elemType() const noexcept { return elemType_; }
-    size_t size() const noexcept { return size_; }
+    const std::vector<size_t> &refs() const noexcept { return refs_; }
 
   private:
     TypeCode elemType_;
-    size_t size_;
     std::vector<size_t> refs_;
 };
 
 class ArrayType : public CompositeType {
   private:
     type_ptr_t elemType_;
+    std::vector<size_t> refs_;
     mutable std::shared_ptr<ArrayTypeLayout> layout_;
 
     void computeLayout() const;
@@ -49,7 +50,9 @@ class ArrayType : public CompositeType {
 
     static std::shared_ptr<ArrayType> create(const type_ptr_t &elemType = nullptr);
 
-    type_ptr_t elementType() const;
+    void addRef(size_t index);
+    void setRefs(const std::vector<size_t> &refs);
+    type_ptr_t elemType() const;
     const ArrayTypeLayout &layout() const;
 
     virtual type_ptr_t resolve(const type_vec_t &typeList) const override;

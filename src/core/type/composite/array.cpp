@@ -25,7 +25,7 @@ using namespace std;
 
 void ArrayType::computeLayout() const {
     if (!layout_) {
-        layout_ = std::make_shared<ArrayTypeLayout>(elemType_->code(), 0);
+        layout_ = std::make_shared<ArrayTypeLayout>(elemType_->code(), 0, refs_);
     }
 }
 
@@ -43,11 +43,19 @@ std::shared_ptr<ArrayType> ArrayType::create(const type_ptr_t &elemType) {
     return std::make_shared<ArrayType>(elemType);
 }
 
-type_ptr_t ArrayType::elementType() const { return elemType_; }
+void ArrayType::addRef(size_t index) { refs_.push_back(index); }
+
+void ArrayType::setRefs(const std::vector<size_t> &refs) { refs_ = refs; }
+
+type_ptr_t ArrayType::elemType() const { return elemType_; }
 
 type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "ArrayType is already resolved");
+
+    ASSERT(
+        typeList.size() == refs_.size(),
+        "Type list size does not match the number of references in ArrayType");
 
     type_ptr_t newElemType = elemType_;
     for (const auto &type : typeList) {
@@ -63,7 +71,7 @@ type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
     return newArray;
 }
 
-bool ArrayType::resolved() const { return elemType_->code() != TypeCode::Void; }
+bool ArrayType::resolved() const { return refs_.empty(); }
 
 string ArrayType::toString() const {
     return (elemType_->code() == TypeCode::Void ? "" : elemType_->toString()) + "[]";
@@ -76,7 +84,10 @@ std::string ArrayType::mangle() const {
 }
 
 type_ptr_t ArrayType::clone(bool deep /* = false */) const {
-    return ArrayType::create(deep ? elemType_->clone(true) : elemType_);
+    auto newType     = ArrayType::create(deep ? elemType_->clone(true) : elemType_);
+    newType->refs_   = refs_;
+    newType->layout_ = layout_;
+    return newType;
 }
 
 bool ArrayType::equals(const type_ptr_t &other) const {

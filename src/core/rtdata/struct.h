@@ -26,7 +26,7 @@ class Struct : public Object {
     Struct(const Struct &)            = delete;
     Struct &operator=(const Struct &) = delete;
 
-    static Struct *create(const StructTypeLayout &layout, IAllocator &allocator = mm::autoSpace()) {
+    static Struct *create(const StructTypeLayout &layout, IAllocator &allocator) {
         size_t fieldCount = layout.fieldCount();
         size_t headerSize = offsetof(Struct, data_);
         size_t dataSize   = sizeof(slot_t) * fieldCount;

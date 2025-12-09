@@ -30,9 +30,8 @@ class Function : public Object {
     Function(const Function &)            = delete;
     Function &operator=(const Function &) = delete;
 
-    static Function *create(
-        GraphIR::Graph *graph, const TupleTypeLayout &layout,
-        IAllocator &allocator = mm::autoSpace()) {
+    static Function *
+    create(GraphIR::Graph *graph, const TupleTypeLayout &layout, IAllocator &allocator) {
         void *mem = allocator.alloc(sizeof(Function), alignof(Function));
         if (!mem)
             throw std::bad_alloc();

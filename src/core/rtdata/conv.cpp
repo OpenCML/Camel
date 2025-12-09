@@ -91,7 +91,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<ArrayData>(data);
         const auto &arrayType = tt::as_shared<ArrayType>(arrayData->type());
-        Array *gcArray        = Array::create(arrayType->elementType()->code(), allocator);
+        Array *gcArray        = Array::create(arrayType->elemType()->code(), allocator);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);

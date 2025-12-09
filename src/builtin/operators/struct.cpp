@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Nov. 01, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,12 +45,12 @@ void __zip__(
     const data_ptr_t &a = frame.get(nargs[0]);
     const data_ptr_t &b = frame.get(nargs[1]);
 
-    const auto &lhsArr = tt::as_shared<ArrayData>(a);
-    const auto &rhsArr = tt::as_shared<ArrayData>(b);
-    const auto &lhsElems = lhsArr->raw();
-    const auto &rhsElems = rhsArr->raw();
-    const auto &lhsElemType = tt::as_shared<ArrayType>(a->type())->elementType();
-    const auto &rhsElemType = tt::as_shared<ArrayType>(b->type())->elementType();
+    const auto &lhsArr      = tt::as_shared<ArrayData>(a);
+    const auto &rhsArr      = tt::as_shared<ArrayData>(b);
+    const auto &lhsElems    = lhsArr->raw();
+    const auto &rhsElems    = rhsArr->raw();
+    const auto &lhsElemType = tt::as_shared<ArrayType>(a->type())->elemType();
+    const auto &rhsElemType = tt::as_shared<ArrayType>(b->type())->elemType();
     const auto &resElemType = Type::Tuple({lhsElemType, rhsElemType});
 
     if (lhsElems.size() != rhsElems.size()) {
@@ -91,25 +91,25 @@ void __tail_arr__(
         return arr.size() <= 1 ? data_vec_t{} : data_vec_t(arr.begin() + 1, arr.end());
     };
 
-    auto array = tt::as_shared<ArrayData>(collect)->raw();
-    auto new_vec = slice_tail(array);
-    auto elem_type = tt::as_shared<ArrayType>(collect->type())->elementType();
+    auto array     = tt::as_shared<ArrayData>(collect)->raw();
+    auto new_vec   = slice_tail(array);
+    auto elem_type = tt::as_shared<ArrayType>(collect->type())->elemType();
     frame.set(self, ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
 }
 
 void __range__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &startData = frame.get(nargs[0]);
-    const data_ptr_t &stopData = frame.get(nargs[1]);
-    data_ptr_t stepData = nullptr;
+    const data_ptr_t &stopData  = frame.get(nargs[1]);
+    data_ptr_t stepData         = nullptr;
 
     if (nargs.size == 3) {
         stepData = frame.get(nargs[2]);
     }
 
     int32_t start = startData->as<IntData>(Type::Int())->data();
-    int32_t stop = stopData->as<IntData>(Type::Int())->data();
-    int32_t step = stepData ? stepData->as<IntData>(Type::Int())->data() : 1;
+    int32_t stop  = stopData->as<IntData>(Type::Int())->data();
+    int32_t step  = stepData ? stepData->as<IntData>(Type::Int())->data() : 1;
 
     if (step == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<range> step cannot be zero");
@@ -126,19 +126,19 @@ void __range__(
     }
 
     auto arrayType = Type::Array(Type::Int());
-    auto result = ArrayData::from(arrayType, std::move(values));
+    auto result    = ArrayData::from(arrayType, std::move(values));
 
     frame.set(self, result);
 }
 
 void __slice_arr__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &collect = frame.get(nargs[0]);
+    const data_ptr_t &collect  = frame.get(nargs[0]);
     const data_ptr_t &startArg = frame.get(wargs[0]);
-    const data_ptr_t &endArg = frame.get(wargs[1]);
+    const data_ptr_t &endArg   = frame.get(wargs[1]);
 
     int32_t start = startArg->as<IntData>(Type::Int())->data();
-    int32_t end = endArg->as<IntData>(Type::Int())->data();
+    int32_t end   = endArg->as<IntData>(Type::Int())->data();
 
     auto slice_range = [](int32_t size, int32_t &start, int32_t &end) {
         if (start < 0)
@@ -146,7 +146,7 @@ void __slice_arr__(
         if (end < 0)
             end += size;
         start = std::max(0, std::min(start, size));
-        end = std::max(0, std::min(end, size));
+        end   = std::max(0, std::min(end, size));
         if (end < start)
             end = start; // empty slice
     };
@@ -157,31 +157,31 @@ void __slice_arr__(
     frame.set(
         self,
         ArrayData::from(
-            Type::Array(tt::as_shared<ArrayType>(collect->type())->elementType()),
+            Type::Array(tt::as_shared<ArrayType>(collect->type())->elemType()),
             std::move(sliced)));
 }
 
 void __concat_arr__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &left = frame.get(nargs[0]);
+    const data_ptr_t &left  = frame.get(nargs[0]);
     const data_ptr_t &right = frame.get(nargs[1]);
 
     auto l = tt::as_shared<ArrayData>(left)->raw();
     auto r = tt::as_shared<ArrayData>(right)->raw();
     l.insert(l.end(), r.begin(), r.end());
-    auto elemType = tt::as_shared<ArrayType>(left->type())->elementType();
+    auto elemType = tt::as_shared<ArrayType>(left->type())->elemType();
     frame.set(self, ArrayData::from(Type::Array(elemType), std::move(l)));
 }
 
 void __append_arr__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &collectIdx = nargs[0];
+    const auto &collectIdx       = nargs[0];
     const data_ptr_t &collection = frame.get(collectIdx);
-    const data_ptr_t &element = frame.get(wargs[0]);
+    const data_ptr_t &element    = frame.get(wargs[0]);
 
     auto arr = tt::as_shared<ArrayData>(collection)->raw();
     arr.push_back(element);
-    auto elemType = tt::as_shared<ArrayType>(collection->type())->elementType();
+    auto elemType = tt::as_shared<ArrayType>(collection->type())->elemType();
     frame.set(collectIdx, ArrayData::from(Type::Array(elemType), std::move(arr)));
 
     frame.set(self, collection);
@@ -189,9 +189,9 @@ void __append_arr__(
 
 void __extend_arr__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const auto &collectNode = nargs[0];
+    const auto &collectNode      = nargs[0];
     const data_ptr_t &collection = frame.get(collectNode);
-    const data_ptr_t &other = frame.get(wargs[0]);
+    const data_ptr_t &other      = frame.get(wargs[0]);
 
     auto arr = tt::as_shared<ArrayData>(collection)->raw();
     auto ext = tt::as_shared<ArrayData>(other)->raw();
@@ -202,7 +202,7 @@ void __extend_arr__(
 void __contains_arr__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     const data_ptr_t &collection = frame.get(nargs[0]);
-    const data_ptr_t &target = frame.get(wargs[0]);
+    const data_ptr_t &target     = frame.get(wargs[0]);
 
     bool found = false;
 

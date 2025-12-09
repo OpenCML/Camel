@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Nov. 01, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1284,7 +1284,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Int)
                                 return nullopt;
-                            return tt::as_shared<ArrayType>(norm[0])->elementType();
+                            return tt::as_shared<ArrayType>(norm[0])->elemType();
                         }),
                 },
                 {
@@ -1478,7 +1478,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             }
                             const auto &arrType = tt::as_shared<ArrayType>(type);
-                            if (arrType->elementType()->code() != TypeCode::String) {
+                            if (arrType->elemType()->code() != TypeCode::String) {
                                 return nullopt;
                             }
                             return Type::String();
@@ -1525,7 +1525,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             type_vec_t tupleTypes;
                             for (size_t i = 0; i < norm.size(); i++) {
                                 const auto &elemType =
-                                    tt::as_shared<ArrayType>(norm[i])->elementType();
+                                    tt::as_shared<ArrayType>(norm[i])->elemType();
                                 tupleTypes.push_back(elemType);
                             }
                             return Type::Array(Type::Tuple(tupleTypes));
@@ -1545,7 +1545,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
-                            return arrType->elementType();
+                            return arrType->elemType();
                         }),
                 },
             }),
@@ -1562,7 +1562,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
-                            return Type::Array(arrType->elementType());
+                            return Type::Array(arrType->elemType());
                         }),
                 },
             }),
@@ -1619,11 +1619,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType      = tt::as_shared<ArrayType>(norm[0]);
                             const auto &otherArrType = tt::as_shared<ArrayType>(norm[1]);
-                            if (!arrType->elementType()->equals(otherArrType->elementType()))
+                            if (!arrType->elemType()->equals(otherArrType->elemType()))
                                 return nullopt;
-                            return Type::Array(arrType->elementType());
+                            return Type::Array(arrType->elemType());
                         }),
                 },
             }),
@@ -1640,7 +1640,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
-                            const auto &eleType = arrType->elementType();
+                            const auto &eleType = arrType->elemType();
                             if (eleType != Type::Void() && !eleType->equals(with[0]))
                                 return nullopt;
                             return arrType;
@@ -1661,7 +1661,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType      = tt::as_shared<ArrayType>(norm[0]);
                             const auto &otherArrType = tt::as_shared<ArrayType>(with[0]);
                             if (!arrType->equals(otherArrType))
                                 return nullopt;
@@ -1689,7 +1689,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
-                            if (!arrType->elementType()->equals(with[0]))
+                            if (!arrType->elemType()->equals(with[0]))
                                 return nullopt;
                             return Type::Bool();
                         }),
@@ -1708,8 +1708,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
-                            const auto &elemType = arrType->elementType();
+                            const auto &arrType  = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &elemType = arrType->elemType();
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(with[0]);
@@ -1735,8 +1735,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
-                            const auto &elemType = arrType->elementType();
+                            const auto &arrType  = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &elemType = arrType->elemType();
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(with[0]);
@@ -1790,9 +1790,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_shared<FunctionType>(with[0]);
+                            const auto &funcType  = tt::as_shared<FunctionType>(with[0]);
                             const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[1].first->equals(arrType->elementType()))
+                            if (!normTypes[1].first->equals(arrType->elemType()))
                                 return nullopt;
                             if (!normTypes[0].first->equals(with[1]))
                                 return nullopt;
@@ -1821,7 +1821,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (funcType->normTypes().size() != 1)
                                 return nullopt;
                             const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[0].first->equals(arrType->elementType()))
+                            if (!normTypes[0].first->equals(arrType->elemType()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Void()))
                                 return nullopt;
@@ -1844,10 +1844,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &lhsFuncType = tt::as_shared<FunctionType>(norm[0]);
-                            const auto &rhsFuncType = tt::as_shared<FunctionType>(norm[1]);
+                            const auto &lhsFuncType   = tt::as_shared<FunctionType>(norm[0]);
+                            const auto &rhsFuncType   = tt::as_shared<FunctionType>(norm[1]);
                             const auto &lhsReturnType = lhsFuncType->exitType();
-                            const auto &rhsNormTypes = rhsFuncType->normTypes();
+                            const auto &rhsNormTypes  = rhsFuncType->normTypes();
                             if (rhsNormTypes.size() != 1)
                                 return nullopt;
                             if (!rhsNormTypes[0].first->equals(lhsReturnType))

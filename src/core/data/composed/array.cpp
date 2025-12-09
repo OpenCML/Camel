@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 09, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,11 +41,12 @@ ArrayData::ArrayData(type_ptr_t arrType, data_vec_t &&data)
 
 void ArrayData::emplace(const data_ptr_t &e) {
     if (e->type()->code() == TypeCode::Ref) {
-        refIndices_.push_back(data_.size());
+        refs_.push_back(data_.size());
+        tt::as_shared<ArrayType>(type_)->addRef(data_.size());
     } else {
         const auto &arrType = tt::as_shared<ArrayType>(type_);
         ASSERT(arrType, "ArrayData type is not ArrayType");
-        const auto &elemType = arrType->elementType();
+        const auto &elemType = arrType->elemType();
         if (elemType == Type::Void()) {
             type_ = std::make_shared<ArrayType>(e->type());
         } else if (!e->type()->assignable(elemType)) {
@@ -63,8 +64,8 @@ bool ArrayData::equals(const data_ptr_t &other) const {
 
 vector<string> ArrayData::refs() const {
     vector<string> res;
-    res.reserve(refIndices_.size());
-    for (const auto &idx : refIndices_) {
+    res.reserve(refs_.size());
+    for (const auto &idx : refs_) {
         data_ptr_t ref = data_[idx];
         res.push_back(tt::as_shared<RefData>(ref)->ref());
     }
@@ -72,15 +73,15 @@ vector<string> ArrayData::refs() const {
 }
 
 void ArrayData::resolve(const data_vec_t &dataList) {
-    if (refIndices_.empty()) {
+    if (refs_.empty()) {
         return;
     }
-    ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refIndices_.size(); i++) {
-        size_t idx = refIndices_[i];
+    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < refs_.size(); i++) {
+        size_t idx = refs_[i];
         data_[idx] = dataList[i];
     }
-    refIndices_.clear();
+    refs_.clear();
 }
 
 data_ptr_t ArrayData::clone(bool deep) const {
