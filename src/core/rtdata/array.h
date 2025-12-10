@@ -13,14 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
-#include "core/mm/mm.h"
 #include "core/type/type.h"
 
 // FixedArray: 固定大小的数组，对象体和数据区在一块连续内存中
@@ -59,6 +58,7 @@ class FixedArray : public Object {
     size_t size() const { return size_; }
     void *data() { return data_; }
     const void *data() const { return data_; }
+    const ArrayTypeLayout *layout() const { return layout_; }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -196,6 +196,9 @@ class Array : public Object {
 
     size_t size() const { return size_; }
     size_t capacity() const { return capacity_; }
+    slot_t *data() { return static_cast<slot_t *>(dataPtr_); }
+    const slot_t *data() const { return static_cast<const slot_t *>(dataPtr_); }
+    const ArrayTypeLayout &layout() const { return *layout_; }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");

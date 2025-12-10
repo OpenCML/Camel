@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "core/type/type.h"
 
 class Struct : public Object {
   public:
@@ -84,6 +85,7 @@ class Struct : public Object {
 
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
+    const StructTypeLayout &layout() const { return *layout_; }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
         if (!isOfSameCls(this, other))
@@ -95,7 +97,7 @@ class Struct : public Object {
         if (&layout_ != &otherStruct->layout_ || size_ != otherStruct->size_)
             return false;
 
-        const auto &types   = layout_.fieldTypes();
+        const auto &types   = layout_->fieldTypes();
         const slot_t *dataA = reinterpret_cast<const slot_t *>(data_);
         const slot_t *dataB = reinterpret_cast<const slot_t *>(otherStruct->data_);
 
@@ -124,9 +126,9 @@ class Struct : public Object {
     }
 
     virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
-        Struct *newStruct = Struct::create(layout_, allocator);
+        Struct *newStruct = Struct::create(*layout_, allocator);
 
-        const auto &types = layout_.fieldTypes();
+        const auto &types = layout_->fieldTypes();
         const slot_t *src = reinterpret_cast<const slot_t *>(data_);
         slot_t *dst       = reinterpret_cast<slot_t *>(newStruct->data_);
 
@@ -161,7 +163,7 @@ class Struct : public Object {
 
     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
         Object **refArr   = reinterpret_cast<Object **>(data_);
-        const auto &types = layout_.fieldTypes();
+        const auto &types = layout_->fieldTypes();
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
                 if (Object *&ref = refArr[i]) {
@@ -173,9 +175,9 @@ class Struct : public Object {
 
   private:
     Struct(const StructTypeLayout &layout, size_t fieldCount)
-        : size_(static_cast<uint32_t>(fieldCount)), layout_(layout) {}
+        : size_(static_cast<uint32_t>(fieldCount)), layout_(&layout) {}
 
     uint32_t size_;
-    const StructTypeLayout &layout_;
+    const StructTypeLayout *layout_;
     alignas(slot_t) std::byte data_[]; // 灵活数组成员
 };

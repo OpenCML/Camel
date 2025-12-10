@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "core/type/type.h"
 
 class Tuple : public Object {
   public:
@@ -46,7 +47,7 @@ class Tuple : public Object {
     }
 
     size_t size() const { return size_; }
-
+    const TupleTypeLayout &layout() const { return *layout_; }
     TypeCode typeAt(size_t index) const { return layout_->typeAt(index); }
 
     template <typename T> T get(size_t index) const {

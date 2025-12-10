@@ -20,6 +20,7 @@
 #pragma once
 
 #include "core/mm/alloc/allocator.h"
+#include "utils/brpred.h"
 
 #include <functional>
 

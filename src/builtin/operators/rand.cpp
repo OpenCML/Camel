@@ -28,88 +28,122 @@ static std::mt19937_64 g_rng;
 
 void __seed__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &seed_val = frame.get(nargs[0]);
-
-    auto v = seed_val->as<IntData>(Type::Int());
-    g_rng.seed(static_cast<uint64_t>(v->data()));
-
-    frame.set(self, Data::null());
+    auto seed_val = frame.get<Long>(nargs[0]);
+    g_rng.seed(seed_val);
 }
 
 void __rand__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
-    double v = dist(g_rng);
-    frame.set(self, std::make_shared<DoubleData>(v));
+    frame.set(self, dist(g_rng));
 }
 
 void __randn__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     std::normal_distribution<double> dist(0.0, 1.0);
-    double v = dist(g_rng);
-    frame.set(self, std::make_shared<DoubleData>(v));
+    frame.set(self, dist(g_rng));
 }
 
 void __randint__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &low_val  = frame.get(nargs[0]);
-    const data_ptr_t &high_val = frame.get(nargs[1]);
-
-    int32_t low  = low_val->as<IntData>(Type::Int())->data();
-    int32_t high = high_val->as<IntData>(Type::Int())->data();
+    Int low  = frame.get<Int>(nargs[0]);
+    Int high = frame.get<Int>(nargs[1]);
 
     if (low > high)
         std::swap(low, high);
 
     std::uniform_int_distribution<int32_t> dist(low, high);
-    frame.set(self, std::make_shared<IntData>(dist(g_rng)));
+    frame.set(self, dist(g_rng));
 }
 
 void __choice__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    if (arr->raw().size() == 0) {
+    if (arr->size() == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<choice> array is empty");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
-    std::uniform_int_distribution<size_t> dist(0, arr->raw().size() - 1);
-    frame.set(self, arr->raw()[dist(g_rng)]);
+    std::uniform_int_distribution<size_t> dist(0, arr->size() - 1);
+    frame.set(self, arr->get<Long>(dist(g_rng)));
+}
+
+// Fisher–Yates 洗牌（原地随机置换）
+static inline void shuffleArray(Array *arr) {
+    size_t sz = arr->size();
+    if (sz <= 1)
+        return;
+    slot_t *data = arr->data();
+    for (size_t i = sz - 1; i > 0; --i) {
+        size_t j   = g_rng() % (i + 1);
+        slot_t tmp = data[i];
+        data[i]    = data[j];
+        data[j]    = tmp;
+    }
+}
+
+static inline Array *sampleArray(const Array *arr, int32_t n) {
+    const auto &layout = arr->layout();
+    Array *res         = Array::create(layout, mm::autoSpace());
+
+    if (n <= 0)
+        return res; // 空数组
+
+    size_t sz = arr->size();
+    if (sz == 0)
+        return res;
+
+    // 限制 n 不超过源数组大小
+    if ((size_t)n > sz)
+        n = static_cast<int32_t>(sz);
+
+    // 创建目标数组并预分配容量 n
+    res->reserve(n);
+
+    slot_t *dst       = reinterpret_cast<slot_t *>(res->data());
+    const slot_t *src = reinterpret_cast<const slot_t *>(arr->data());
+
+    // ---- Fisher–Yates 采样算法 (Knuth shuffle 样本法) ----
+    // 只需要前 n 个随机样本，无需完整洗牌
+    // 时间复杂度 O(sz)，但最多做 sz 次交换，适合较大样本采样
+    for (size_t i = 0; i < (size_t)n; ++i)
+        dst[i] = src[i];
+
+    for (size_t i = n; i < sz; ++i) {
+        size_t j = g_rng() % (i + 1);
+        if (j < (size_t)n)
+            dst[j] = src[i];
+    }
+
+    return res;
 }
 
 void __sample__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
-    const data_ptr_t &n_val   = frame.get(nargs[1]);
+    Array *arr = frame.get<Array *>(nargs[0]);
+    int32_t n  = frame.get<Int>(nargs[1]);
 
-    auto arr      = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elemType();
-    int32_t n     = n_val->as<IntData>(Type::Int())->data();
-
-    if (n < 0 || static_cast<size_t>(n) > arr->raw().size()) {
+    // 样本数量检查
+    if (n < 0 || (size_t)n > arr->size()) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<sample> size out of range");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
-    std::vector<data_ptr_t> copy = arr->raw();
-    std::shuffle(copy.begin(), copy.end(), g_rng);
-    copy.resize(static_cast<size_t>(n));
-
-    frame.set(self, std::make_shared<ArrayData>(ArrayType::create(elemType), std::move(copy)));
+    Array *res = sampleArray(arr, n);
+    frame.set(self, res);
 }
 
 void __shuffle__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    auto arr                     = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType                = tt::as_shared<ArrayType>(arr_val->type())->elemType();
-    std::vector<data_ptr_t> copy = arr->raw();
-    std::shuffle(copy.begin(), copy.end(), g_rng);
+    Array *res = static_cast<Array *>(arr->clone(mm::autoSpace()));
 
-    frame.set(self, std::make_shared<ArrayData>(ArrayType::create(elemType), std::move(copy)));
+    // 原地洗牌（Fisher–Yates）
+    shuffleArray(res);
+
+    frame.set(self, res);
 }

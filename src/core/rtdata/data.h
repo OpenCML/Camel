@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "base.h"
+#include "core/mm/mm.h"
 
 #include "array.h"
 #include "func.h"

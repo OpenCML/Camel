@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,7 +70,7 @@ class String : public Object {
     const char *c_str() const { return data_; }
 
     char operator[](size_t i) const {
-        assert(i < size_ && "String index out of range");
+        ASSERT(i < size_, "String index out of range");
         return data_[i];
     }
 
