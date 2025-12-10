@@ -1421,7 +1421,7 @@ type_ptr_t Builder::visitTupleType(const AST::node_ptr_t &ast) {
         types.push_back(type);
     }
     // Create a TupleType object using the collected types
-    type_ptr_t tupleType = Type::Tuple(types);
+    type_ptr_t tupleType = TupleType::create(types);
     LEAVE("TupleType");
     return tupleType;
 }

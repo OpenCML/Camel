@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "core/type/base.h"
+
+#include <optional>
 
 class CompositeType : public Type {
   public:
@@ -30,6 +32,7 @@ class CompositeType : public Type {
     // 不修改原类型，返回新的类型
     virtual type_ptr_t resolve(const type_vec_t &typeList) const = 0;
     virtual bool resolved() const                                = 0;
+    virtual std::optional<type_ptr_t> typeAt(size_t index) const = 0;
 
     virtual std::string toString() const override                     = 0;
     virtual std::string mangle() const override                       = 0;

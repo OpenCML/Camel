@@ -780,7 +780,7 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of ACCS node.");
     node_ptr_t tgtNode = any_cast<node_ptr_t>(res);
     ASSERT(tgtNode != nullptr, "Access node target is null.");
-    if (!tgtNode->dataType()->composed()) {
+    if (!tgtNode->dataType()->isComposite()) {
         diags_->of(SemanticDiag::TypeNotIndexable).commit(tgtNode->dataType()->toString());
         throw BuildAbortException();
     }
@@ -788,7 +788,8 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     graph_ptr_t &graph   = currGraph_;
     // TODO: here may need inplace access to the data
-    const auto &optEleType = tgtType->typeAt(accsLoad->index());
+    ASSERT(accsLoad->isNum(), "Access index must be a number");
+    const auto &optEleType = tgtType->typeAt(accsLoad->index<size_t>());
     if (!optEleType.has_value()) {
         diags_->of(SemanticDiag::InvalidAccessIndex)
             .commit(

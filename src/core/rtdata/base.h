@@ -34,6 +34,13 @@ class Object {
     virtual void onMoved()                                                     = 0;
     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) = 0;
 
+    template <typename T> static T *clone(const T *obj, IAllocator &allocator, bool deep = false) {
+        if (!obj) {
+            return nullptr;
+        }
+        return static_cast<T *>(obj->clone(allocator, deep));
+    }
+
     // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
     // {
     //     ObjectHeader *thisHeader = headerOf(this);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -135,6 +135,15 @@ type_ptr_t StructType::resolve(const type_vec_t &typeList) const {
 }
 
 bool StructType::resolved() const { return refIndices_.empty(); }
+
+std::optional<type_ptr_t> StructType::typeAt(size_t idx) const {
+    if (idx >= fields_.size()) {
+        return std::nullopt;
+    }
+    auto it = fields_.begin();
+    std::advance(it, idx);
+    return it->second;
+}
 
 string StructType::toString() const {
     ostringstream oss;

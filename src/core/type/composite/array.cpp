@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,6 +49,13 @@ void ArrayType::setRefs(const std::vector<size_t> &refs) { refs_ = refs; }
 
 type_ptr_t ArrayType::elemType() const { return elemType_; }
 
+const ArrayTypeLayout &ArrayType::layout() const {
+    if (!layout_) {
+        computeLayout();
+    }
+    return *layout_;
+}
+
 type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "ArrayType is already resolved");
@@ -72,6 +79,8 @@ type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
 }
 
 bool ArrayType::resolved() const { return refs_.empty(); }
+
+std::optional<type_ptr_t> ArrayType::typeAt(size_t idx) const { return elemType_; }
 
 string ArrayType::toString() const {
     return (elemType_->code() == TypeCode::Void ? "" : elemType_->toString()) + "[]";

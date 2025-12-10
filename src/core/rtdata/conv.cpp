@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,7 +91,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<ArrayData>(data);
         const auto &arrayType = tt::as_shared<ArrayType>(arrayData->type());
-        Array *gcArray        = Array::create(arrayType->elemType()->code(), allocator);
+        Array *gcArray        = Array::create(arrayType->layout(), allocator);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
@@ -169,25 +169,4 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
         ASSERT(false, "Unsupported GC traced type conversion.");
         return NullRef;
     }
-}
-
-Tuple *makeStaticDataOfGraph(const GraphIR::Graph &graph, IAllocator &allocator) {
-    Tuple *gcTuple = Tuple::create(graph.staticDataType()->layout(), allocator);
-
-    const auto &staticDataArr = graph.staticDataArr();
-    // 从 1 开始，0 号位置保留为空
-    for (size_t i = 1; i < staticDataArr.size(); ++i) {
-        const auto &data = staticDataArr[i];
-        if (data->type()->isGCTraced()) {
-            Object *dataRef = makeGCRefFromGCTracedData(data, allocator);
-            gcTuple->set<Object *>(i, dataRef);
-        } else if (data->type()->isPrimitive()) {
-            slot_t slot = makeSlotFromPrimitiveData(data);
-            gcTuple->set<slot_t>(i, slot);
-        } else {
-            ASSERT(false, "Unsupported static data type conversion.");
-        }
-    }
-
-    return gcTuple;
 }

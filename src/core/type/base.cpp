@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Nov. 15, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,8 +82,8 @@ const TypeCode &Type::code() const { return code_; }
 std::string Type::toString() const { return typeCodeToString(code_); }
 
 std::string Type::mangle() const {
-    ASSERT(!isComposite(code_), "Composite type cannot call Type::mangle");
-    ASSERT(!isOtherType(code_), "Other type cannot call Type::mangle");
+    ASSERT(!::isComposite(code_), "Composite type cannot call Type::mangle");
+    ASSERT(!::isOtherType(code_), "Other type cannot call Type::mangle");
 
     switch (code_) {
     case TypeCode::Int:
@@ -115,28 +115,28 @@ std::string Type::mangle() const {
 }
 
 type_ptr_t Type::clone(bool deep) const {
-    ASSERT(!isComposite(code_), "Composite type cannot call Type::clone");
-    ASSERT(!isOtherType(code_), "Other type cannot call Type::clone");
+    ASSERT(!::isComposite(code_), "Composite type cannot call Type::clone");
+    ASSERT(!::isOtherType(code_), "Other type cannot call Type::clone");
     return make_shared<Type>(code_);
 }
 
 bool Type::equals(const type_ptr_t &type) const {
-    ASSERT(!isComposite(code_), "Composite type cannot call Type::equals");
-    ASSERT(!isOtherType(code_), "Other type cannot call Type::equals");
+    ASSERT(!::isComposite(code_), "Composite type cannot call Type::equals");
+    ASSERT(!::isOtherType(code_), "Other type cannot call Type::equals");
     return code_ == type->code_;
 }
 
 CastSafety Type::castSafetyTo(const Type &other) const {
-    ASSERT(!isComposite(code_), "Composite type cannot call Type::castSafetyTo");
-    ASSERT(!isOtherType(code_), "Other type cannot call Type::castSafetyTo");
+    ASSERT(!::isComposite(code_), "Composite type cannot call Type::castSafetyTo");
+    ASSERT(!::isOtherType(code_), "Other type cannot call Type::castSafetyTo");
 
     // 这里要先排除掉辅助类型
-    if (isAuxiliary(code_) || isAuxiliary(other.code())) {
+    if (::isAuxiliary(code_) || ::isAuxiliary(other.code())) {
         return CastSafety::Forbidden;
     }
 
     // 排除掉辅助类型后，原始类型只剩8个
-    if (isPrimitive(code_) && isPrimitive(other.code())) {
+    if (::isPrimitive(code_) && ::isPrimitive(other.code())) {
         const int thisIndex  = static_cast<int>(code_) & 0b1111;
         const int otherIndex = static_cast<int>(other.code()) & 0b1111;
         return static_cast<CastSafety>(primitiveTypeConvMatrix[thisIndex][otherIndex]);
@@ -171,12 +171,12 @@ bool Type::assignable(const type_ptr_t &type) const {
     }
 
     // 复合类型目前需要完全相等才能赋值
-    if (isComposite(code_) && isComposite(type->code_)) {
+    if (::isComposite(code_) && ::isComposite(type->code_)) {
         return this->equals(type);
     }
 
     // 第三方类型交由第三方自己重载的 assignable 方法处理
-    if (isOtherType(code_)) {
+    if (::isOtherType(code_)) {
         const auto &self = static_cast<const OtherType &>(*this);
         return self.assignable(type);
     }

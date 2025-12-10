@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,11 +63,11 @@ class TupleType : public CompositeType {
     size_t size() const;
     const std::vector<type_ptr_t> &types() const;
     std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
-    std::optional<type_ptr_t> typeAt(size_t idx) const;
     const TupleTypeLayout &layout() const;
 
     virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
+    virtual std::optional<type_ptr_t> typeAt(size_t idx) const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
     virtual type_ptr_t clone(bool deep = false) const override;
