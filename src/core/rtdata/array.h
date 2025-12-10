@@ -200,12 +200,13 @@ class Array : public Object {
     Array(const Array &)            = delete;
     Array &operator=(const Array &) = delete;
 
-    static Array *create(const ArrayTypeLayout &layout, IAllocator &allocator) {
+    static Array *
+    create(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity = 0) {
         void *memory = allocator.alloc(sizeof(Array), alignof(Array));
         if (!memory)
             throw std::bad_alloc();
 
-        return new (memory) Array(layout, allocator);
+        return new (memory) Array(layout, allocator, initialCapacity);
     }
 
     size_t size() const { return size_; }
@@ -213,6 +214,7 @@ class Array : public Object {
     slot_t *data() { return static_cast<slot_t *>(dataPtr_); }
     const slot_t *data() const { return static_cast<const slot_t *>(dataPtr_); }
     const ArrayTypeLayout &layout() const { return *layout_; }
+    TypeCode elemType() const { return layout_->elemType(); }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -378,13 +380,22 @@ class Array : public Object {
   private:
     static constexpr size_t SMALL_ARRAY_SIZE = 10;
 
-    Array(const ArrayTypeLayout &layout, IAllocator &allocator)
-        : allocator_(&allocator), size_(0), capacity_(SMALL_ARRAY_SIZE), layout_(&layout),
-          fixedArray_(nullptr), dataPtr_(inlineData_) { // 初始化时指向内联数组
-        // 初始化内联数组
-        if (isGCTraced(layout_->elemType())) {
-            Object **refArr = reinterpret_cast<Object **>(inlineData_);
-            std::fill(refArr, refArr + SMALL_ARRAY_SIZE, NullRef);
+    Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity)
+        : allocator_(&allocator), size_(0), layout_(&layout), fixedArray_(nullptr) {
+        if (initialCapacity > SMALL_ARRAY_SIZE) {
+            // 使用外部数组
+            capacity_   = initialCapacity;
+            fixedArray_ = FixedArray::create(layout, capacity_, allocator);
+            dataPtr_    = fixedArray_->data();
+        } else {
+            // 使用内联存储
+            capacity_ = SMALL_ARRAY_SIZE;
+            dataPtr_  = inlineData_;
+            // 初始化内联数组
+            if (isGCTraced(layout_->elemType())) {
+                Object **refArr = reinterpret_cast<Object **>(inlineData_);
+                std::fill(refArr, refArr + SMALL_ARRAY_SIZE, NullRef);
+            }
         }
     }
 

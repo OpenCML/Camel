@@ -67,7 +67,7 @@ using Long   = int64_t;
 using Float  = float;
 using Double = double;
 using Bool   = bool;
-using Byte   = char;
+using Byte   = std::byte;
 
 inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
     if (obj) {
@@ -100,7 +100,11 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
             os << (static_cast<bool>(data) ? "true" : "false");
             break;
         case TypeCode::Byte:
-            os << "'" << static_cast<char>(data) << "'";
+            os << "0x" << std::hex << static_cast<uint32_t>(data) << std::dec;
+            break;
+        default:
+            ASSERT(false, "Unsupported slot type for printing");
+            os << "<unknown slot type>";
             break;
         }
     }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -120,21 +120,42 @@ class Frame {
         }
     }
 
-    template <typename T> T get(GraphIR::data_idx_t index) {
+    template <typename T> std::shared_ptr<T> typePtrAt(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         if (LIKELY(index > 0)) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
-            return dynamicArea_->get<T>(idx);
+            auto res = graph_->runtimeDataType()->typeAt(idx);
+            ASSERT(res.has_value(), "Type at index {} is null.", idx);
+            return tt::as_shared<T>(res.value());
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(idx < staticArea_->size(), "Invalid static data index");
-            return staticArea_->get<T>(idx);
+            auto res = graph_->staticDataType()->typeAt(idx);
+            ASSERT(res.has_value(), "Type at index {} is null.", idx);
+            return tt::as_shared<T>(res.value());
         }
+    }
+
+    template <typename T> T get(GraphIR::data_idx_t index) {
+        ASSERT(index != 0, "Data index is invalid.");
+        T res;
+        if (LIKELY(index > 0)) {
+            size_t idx = static_cast<size_t>(index);
+            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            res = dynamicArea_->get<T>(idx);
+        } else {
+            size_t idx = static_cast<size_t>(-index);
+            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            res = staticArea_->get<T>(idx);
+        }
+        ASSERT(res != nullptr, "Retrieved null data from frame at index {}", index);
+        return res;
     }
 
     template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
+        ASSERT(value != nullptr, "Cannot set null data into frame at index {}", index);
         if (index < 0) {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(idx < staticArea_->size(), "Invalid static data index");

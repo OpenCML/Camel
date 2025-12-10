@@ -39,23 +39,28 @@ std::string format_vector(const std::string &fmtStr, const std::vector<std::stri
 
 void __format__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &fmtStrData = frame.get(nargs[0]);
+    String *fmtStrObj = frame.get<String *>(nargs[0]);
 
-    std::string fmtStr = fmtStrData->as<StringData>(Type::String())->data();
+    std::string fmtStr = fmtStrObj->toString();
+
     std::vector<std::string> argStrs;
+    argStrs.reserve(wargs.size);
 
     for (size_t i = 0; i < wargs.size; ++i) {
-        const data_ptr_t &arg = frame.get(wargs[i]);
         std::ostringstream oss;
-        arg->print(oss);
+        TypeCode type = frame.typeAt(wargs[i]);
+        slot_t slot   = frame.get<slot_t>(wargs[i]);
+        printSlot(oss, slot, type);
         argStrs.push_back(oss.str());
     }
 
     try {
-        frame.set(self, std::make_shared<StringData>(format_vector(fmtStr, argStrs)));
+        std::string resultStr = format_vector(fmtStr, argStrs);
+        String *resultObj     = String::from(resultStr, mm::autoSpace());
+        frame.set(self, resultObj);
     } catch (const fmt::format_error &e) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<format>", e.what());
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
     }
 
     return;
@@ -63,20 +68,38 @@ void __format__(
 
 void __join__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &sepData = frame.get(wargs[0]);
+    String *sepObj = frame.get<String *>(wargs[0]);
+    if (!sepObj) {
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<join>", "invalid separator");
+        frame.set(self, NullSlot);
+        return;
+    }
+    std::string separator = sepObj->toString();
 
-    std::string separator = sepData->as<StringData>(Type::String())->data();
+    Array *arrObj = frame.get<Array *>(nargs[0]);
 
     std::ostringstream joined;
+    size_t len = arrObj->size();
 
-    const data_ptr_t &arr = frame.get(nargs[0]);
-    auto vecData          = arr->as<ArrayData>(ArrayType::create(Type::String()));
-    for (auto &arg : vecData->raw()) {
-        if (joined.tellp() > 0)
-            joined << separator;
-        arg->print(joined);
+    TypeCode elemType = arrObj->elemType();
+
+    if (isGCTraced(elemType)) {
+        // 引用类型
+        for (size_t i = 0; i < len; ++i) {
+            if (i > 0)
+                joined << separator;
+            joined << arrObj->get<Object *>(i);
+        }
+    } else {
+        // 非引用类型
+        for (size_t i = 0; i < len; ++i) {
+            if (i > 0)
+                joined << separator;
+            slot_t slot = arrObj->get<slot_t>(i);
+            printSlot(joined, slot, elemType);
+        }
     }
 
-    frame.set(self, std::make_shared<StringData>(joined.str()));
-    return;
+    String *resultObj = String::from(joined.str(), mm::autoSpace());
+    frame.set(self, resultObj);
 }

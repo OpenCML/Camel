@@ -85,6 +85,7 @@ class Struct : public Object {
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
     const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
     const StructTypeLayout &layout() const { return *layout_; }
+    TypeCode typeAt(size_t index) const { return layout_->fieldType(index); }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
         if (!isOfSameCls(this, other))

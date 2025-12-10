@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,93 +35,79 @@ namespace GIR = GraphIR;
 
 void __now__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    auto now = std::chrono::system_clock::now();
-    auto epoch = now.time_since_epoch();
+    auto now       = std::chrono::system_clock::now();
+    auto epoch     = now.time_since_epoch();
     double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count() / 1000.0;
 
     // Add 8 hours offset (UTC+8)
-    seconds += 8 * 3600;
+    seconds += 8 * 3600.0;
 
-    frame.set(self, std::make_shared<DoubleData>(seconds));
-    return;
+    frame.set(self, seconds);
 }
 
 void __strftime__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &time_val = frame.get(nargs[0]);
-    const data_ptr_t &fmt_val = frame.get(nargs[1]);
-
-    double timestamp = time_val->as<DoubleData>(Type::Double())->data();
+    Double timestamp = frame.get<Double>(nargs[0]);
+    String *fmt_obj  = frame.get<String *>(nargs[1]);
 
     // Subtract UTC+8 offset to convert to UTC
-    timestamp -= 8 * 3600;
+    timestamp -= 8 * 3600.0;
 
     std::time_t tt = static_cast<std::time_t>(timestamp);
-    std::tm tm;
-    std::memset(&tm, 0, sizeof(std::tm));
-
+    std::tm tm{};
 #if defined(_WIN32)
-    // Windows: localtime_s
-    if (localtime_s(&tm, &tt) != 0) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<strftime> failed to convert time using localtime_s");
-        frame.set(self, Data::null());
-        return;
-    }
+    if (localtime_s(&tm, &tt) != 0)
 #else
-    // POSIX: localtime_r
-    if (localtime_r(&tt, &tm) == nullptr) {
+    if (localtime_r(&tt, &tm) == nullptr)
+#endif
+    {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<strftime> failed to convert time using localtime_r");
-        frame.set(self, Data::null());
+            .commit("<strftime> failed to convert time using localtime");
+        frame.set(self, NullSlot);
         return;
     }
-#endif
 
-    auto fmt = fmt_val->as<StringData>(Type::String())->data();
+    const std::string &fmt = fmt_obj->toString();
+    char buffer[128]       = {0};
 
-    char buffer[128] = {0};
     if (std::strftime(buffer, sizeof(buffer), fmt.c_str(), &tm) == 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> formatting failed (buffer too small or invalid format)");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
-    frame.set(self, std::make_shared<StringData>(std::string(buffer)));
-    return;
+    String *result = String::from(buffer, mm::autoSpace());
+    frame.set(self, result);
 }
 
 void __strptime__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &str_val = frame.get(nargs[0]);
-    const data_ptr_t &fmt_val = frame.get(nargs[1]);
+    String *str_obj = frame.get<String *>(nargs[0]);
+    String *fmt_obj = frame.get<String *>(nargs[1]);
 
-    auto time_str = str_val->as<StringData>(Type::String())->data();
-    auto fmt_str = fmt_val->as<StringData>(Type::String())->data();
+    const std::string &time_str = str_obj->toString();
+    const std::string &fmt_str  = fmt_obj->toString();
 
-    std::tm tm = {};
+    std::tm tm{};
     if (!myStrptime(time_str, fmt_str, tm)) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strptime> failed to parse time string with format: " + fmt_str);
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
     std::time_t time_epoch = std::mktime(&tm);
     if (time_epoch == -1) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strptime> mktime conversion failed");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
     // Add UTC+8 offset
-    double seconds = static_cast<double>(time_epoch) + 8 * 3600;
-
-    frame.set(self, std::make_shared<DoubleData>(seconds));
-    return;
+    double seconds = static_cast<double>(time_epoch) + 8 * 3600.0;
+    frame.set(self, seconds);
 }
