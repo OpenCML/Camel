@@ -107,8 +107,7 @@ class FreeListAllocator : public IAllocator {
             std::byte *block_end = blockData + total_size;
 
             // 检查重叠（不包括相邻情况）
-            bool overlaps = (blockData < fb_end && block_end > fb_start);
-            ASSERT(!overlaps, "Double free detected");
+            ASSERT(!(blockData < fb_end && block_end > fb_start), "Double free detected");
 
             fb = fb->next;
         }
@@ -152,8 +151,7 @@ class FreeListAllocator : public IAllocator {
                 std::byte *block_end = addr + size;
 
                 // 检查重叠
-                bool overlaps = (addr < fb_end && block_end > fb_start);
-                ASSERT(!overlaps, "Double free in bulk");
+                ASSERT(!(addr < fb_end && block_end > fb_start), "Double free in bulk");
 
                 fb = fb->next;
             }

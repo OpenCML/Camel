@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 23, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -101,9 +101,8 @@ class LargeObjectAllocator : public IAllocator {
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override {
         for (auto *hdr : allocated_) {
             // 验证 header 的合法性
-            size_t obj_size = hdr->size();
-            ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
-            ASSERT(obj_size % alignof(slot_t) == 0, "Object size not aligned");
+            ASSERT(hdr->size() >= sizeof(ObjectHeader), "Invalid object size");
+            ASSERT(hdr->size() % alignof(slot_t) == 0, "Object size not aligned");
 
             visitor(hdr);
         }
