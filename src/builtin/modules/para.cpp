@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,9 +38,9 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             const auto &vecType = tt::as_shared<ArrayType>(with[0]);
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_shared<FunctionType>(norm[0]);
+                            const auto &funcType  = tt::as_shared<FunctionType>(norm[0]);
                             const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[1].first->equals(vecType->elementType()))
+                            if (!normTypes[1].first->equals(vecType->elemType()))
                                 return nullopt;
                             if (!normTypes[0].first->equals(norm[1]))
                                 return nullopt;
@@ -69,7 +69,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (funcType->normTypes().size() != 1)
                                 return nullopt;
                             const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[0].first->equals(vecType->elementType()))
+                            if (!normTypes[0].first->equals(vecType->elemType()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Void()))
                                 return nullopt;

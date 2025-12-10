@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
-#include "core/data/composed/func.h"
+#include "core/data/composite/func.h"
 #include "core/operator.h"
 
 #include "builtin/modules/algo.h"

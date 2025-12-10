@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 25, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "core/data/data.h"
+#include "core/type/resolver.h"
 #include "utils/rawarr.h"
 
 #include <functional>
@@ -34,9 +35,9 @@ class OperatorGroup;
 namespace GraphIR {
 class Node;
 class Graph;
-using data_idx_t = int16_t;
-using arr_size_t = uint16_t;
-using node_ptr_t = std::shared_ptr<Node>;
+using data_idx_t  = int16_t;
+using arr_size_t  = uint16_t;
+using node_ptr_t  = std::shared_ptr<Node>;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 
@@ -44,8 +45,8 @@ using data_arr_t = RawArray<const GraphIR::data_idx_t>;
 
 using operator_t = void (*)(GraphIR::data_idx_t, data_arr_t, data_arr_t, Frame &, Context &);
 
-using oper_idx_ptr_t = std::shared_ptr<OperatorIndex>;
-using oper_idx_vec_t = std::vector<oper_idx_ptr_t>;
+using oper_idx_ptr_t     = std::shared_ptr<OperatorIndex>;
+using oper_idx_vec_t     = std::vector<oper_idx_ptr_t>;
 using oper_idx_vec_ptr_t = std::shared_ptr<oper_idx_vec_t>;
 
 class OperatorIndex {

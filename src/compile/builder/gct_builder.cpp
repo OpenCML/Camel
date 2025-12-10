@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,7 +46,7 @@ data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
 }
 
 pair<node_ptr_t, data_ptr_t> Builder::makeRefData(const node_ptr_t &expr) {
-    const string id = std::to_string(idIndex_++);
+    const string id    = std::to_string(idIndex_++);
     node_ptr_t refNode = createNodeAs<NRefLoad>(id);
     *refNode << expr;
     data_ptr_t data = make_shared<RefData>(id);
@@ -85,11 +85,9 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("f64"), Type::Double());
     typeScope_->insert(Reference("real"), Type::Double());
     typeScope_->insert(Reference("bool"), Type::Bool());
-    typeScope_->insert(Reference("char"), Type::Char());
     typeScope_->insert(Reference("string"), Type::String());
     typeScope_->insert(Reference("any"), Type::Any());
     typeScope_->insert(Reference("void"), Type::Void());
-    typeScope_->insert(Reference("functor"), Type::Func());
 }
 
 /*
@@ -101,9 +99,9 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Module, "Expected ModuleLoad type");
 
     // Extract different parts of the module node
-    auto importNodes = ast->atAs<AST::RepeatedLoad>(0);
+    auto importNodes   = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
-    auto stmtNodes = ast->atAs<AST::RepeatedLoad>(2);
+    auto stmtNodes     = ast->atAs<AST::RepeatedLoad>(2);
 
     // Process import declarations
     for (const auto &import : *importNodes) {
@@ -123,8 +121,8 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             } else if (node->type() == GCT::LoadType::FUNC) {
                 // Handle function declarations
                 const auto &funcLoad = node->loadAs<FuncLoad>();
-                node_ptr_t declNode = createNodeAs<DeclLoad>(funcLoad->name(), true);
-                node_ptr_t typeNode = node->atAs<TypeLoad>(0);
+                node_ptr_t declNode  = createNodeAs<DeclLoad>(funcLoad->name(), true);
+                node_ptr_t typeNode  = node->atAs<TypeLoad>(0);
                 *declNode << typeNode->clone();
                 decls.push_back(declNode);
                 stmts.push_back(node);
@@ -268,10 +266,10 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // Extract data declaration details, including whether it's a variable, references, type nodes,
     // and data nodes
     const auto &dataDeclLoad = ast->loadAs<AST::DataDeclLoad>();
-    bool isVar = dataDeclLoad->isVar();
-    const auto &refs = dataDeclLoad->refs();
-    const auto &typeNodes = ast->atAs<AST::RepeatedLoad>(0);
-    const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(1);
+    bool isVar               = dataDeclLoad->isVar();
+    const auto &refs         = dataDeclLoad->refs();
+    const auto &typeNodes    = ast->atAs<AST::RepeatedLoad>(0);
+    const auto &dataNodes    = ast->atAs<AST::RepeatedLoad>(1);
 
     // Create an execution node as the initial result
     node_ptr_t res = createNodeAs<ExecLoad>();
@@ -295,7 +293,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     case AST::UnpackType::Tuple: {
         if (refs.size() == dataNodes->size()) {
             for (size_t i = 0; i < refs.size(); ++i) {
-                const auto &ref = refs[i];
+                const auto &ref      = refs[i];
                 const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
                 // Validate the identifier
                 if (!validateIdent(ref.ident())) {
@@ -317,10 +315,10 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             if (dataNodes->size() == 1) {
                 // If there is only one data node, process it as a reference and access node
                 const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
-                node_ptr_t dataNode = visitData(dataASTNode);
-                const string id = std::to_string(idIndex_++);
-                node_ptr_t nRefNode = createNodeAs<NRefLoad>(id);
-                node_ptr_t dRefNode = createNodeAs<DRefLoad>(id);
+                node_ptr_t dataNode     = visitData(dataASTNode);
+                const string id         = std::to_string(idIndex_++);
+                node_ptr_t nRefNode     = createNodeAs<NRefLoad>(id);
+                node_ptr_t dRefNode     = createNodeAs<DRefLoad>(id);
                 *nRefNode << dataNode;
                 *res << nRefNode;
                 for (size_t i = 0; i < refs.size(); ++i) {
@@ -370,8 +368,8 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ENTER("FuncDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
-    const auto &funcLoad = ast->loadAs<AST::FuncDeclLoad>();
-    node_ptr_t funcNode = visitFuncData(funcDataNode);
+    const auto &funcLoad     = ast->loadAs<AST::FuncDeclLoad>();
+    node_ptr_t funcNode      = visitFuncData(funcDataNode);
     LEAVE("FuncDecl");
     return funcNode;
 }
@@ -385,7 +383,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     type_ptr_t type;
     ASSERT(typeNode, "TypeDecl must have a type");
-    type = visitType(typeNode);
+    type                 = visitType(typeNode);
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     typeScope_->insert(typeLoad->ref(), type);
     node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
@@ -438,19 +436,19 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
         // Case 1: Single data node
         if (dataNodes->size() == 1) {
             const auto &dataNode = dataNodes->front();
-            node_ptr_t d = visitData(dataNode);
+            node_ptr_t d         = visitData(dataNode);
             *exitNode << visitData(dataNode);
         } else {
             // Case 2: Multiple data nodes
-            auto tupleData = make_shared<TupleData>();
+            auto tupleData      = make_shared<TupleData>();
             node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
-            bool dangling = false;
+            bool dangling       = false;
             node_ptr_t execNode = createNodeAs<ExecLoad>();
 
             // Process each data node and add it to the tuple
             for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
-                auto [data, _] = extractData(dataNode, execNode, dangling);
+                auto [data, _]      = extractData(dataNode, execNode, dangling);
                 tupleData->emplace(data);
             }
 
@@ -480,7 +478,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
-    node_ptr_t execNode = createNodeAs<ExecLoad>(stmtBlock->synced());
+    node_ptr_t execNode   = createNodeAs<ExecLoad>(stmtBlock->synced());
 
     // Push a new scope for the statement block
     pushScope();
@@ -565,7 +563,7 @@ node_ptr_t Builder::visitUnaryExpr(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for UnaryExpr");
 
     // Extract the unary expression load and the associated data node
-    const auto &unaryExpr = ast->loadAs<AST::UnaryExprLoad>();
+    const auto &unaryExpr   = ast->loadAs<AST::UnaryExprLoad>();
     const auto &dataASTNode = ast->atAs<AST::DataLoad>(0);
 
     node_ptr_t opNode;
@@ -782,8 +780,8 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     node_ptr_t res;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
-    bool waited = reservedExpr->waited();
-    const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
+    bool waited              = reservedExpr->waited();
+    const auto &lhsASTNode   = ast->atAs<AST::DataLoad>(0);
 
     // Handle different reserved operators
     switch (reservedExpr->op()) {
@@ -808,10 +806,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Call: {
         // Handle the "Call" operator
-        const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
+        const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
-        res = createNodeAs<LinkLoad>(argsNode->size());
-        const auto &linkLoad = res->loadAs<LinkLoad>();
+        res                    = createNodeAs<LinkLoad>(argsNode->size());
+        const auto &linkLoad   = res->loadAs<LinkLoad>();
         *res << visitData(lhsASTNode);
         for (auto &argNode : *argsNode) {
             *res << visitData(argNode);
@@ -833,10 +831,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::ReservedDataOp::Bind: {
-        const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
+        const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
-        res = createNodeAs<WithLoad>(argsNode->size());
-        const auto &linkLoad = res->loadAs<WithLoad>();
+        res                    = createNodeAs<WithLoad>(argsNode->size());
+        const auto &linkLoad   = res->loadAs<WithLoad>();
         *res << visitData(lhsASTNode);
         for (auto &argNode : *argsNode) {
             *res << visitData(argNode);
@@ -858,8 +856,8 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        node_ptr_t opNode = createNodeAs<DRefLoad>("__cmp__");
-        res = createNodeAs<LinkLoad>(2);
+        node_ptr_t opNode      = createNodeAs<DRefLoad>("__cmp__");
+        res                    = createNodeAs<LinkLoad>(2);
         *res << opNode << visitData(lhsASTNode) << visitData(rhsASTNode);
     } break;
 
@@ -878,12 +876,12 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::ReservedDataOp::Access: {
-        const auto &refASTNode = ast->atAs<AST::RefDataLoad>(1);
+        const auto &refASTNode  = ast->atAs<AST::RefDataLoad>(1);
         const auto &refDataLoad = refASTNode->loadAs<AST::RefDataLoad>();
-        const auto &ref = refDataLoad->ref();
+        const auto &ref         = refDataLoad->ref();
         try {
             size_t index = std::stoul(ref.ident());
-            res = createNodeAs<AccsLoad>(index);
+            res          = createNodeAs<AccsLoad>(index);
         } catch (const std::exception &) {
             // Not an index, treat as named access
             res = createNodeAs<AccsLoad>(ref);
@@ -922,14 +920,14 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 
     // Process the "then" block and attach it as the "True" case
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
-    node_ptr_t thenNode = visitStmtBlock(thenBlock);
-    node_ptr_t trueCase = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
+    node_ptr_t thenNode   = visitStmtBlock(thenBlock);
+    node_ptr_t trueCase   = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
     *trueCase << thenNode;
     *brchNode << trueCase;
 
     // Process the optional "else" block and attach it as the "Else" case
     const auto &elseNode = ast->optAtAs<AST::StmtBlockLoad>(2);
-    node_ptr_t elseCase = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+    node_ptr_t elseCase  = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
     *brchNode << elseCase;
     if (elseNode) {
         // If an "else" block exists, process and attach it
@@ -964,16 +962,16 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     for (const auto &aCaseNode : *ast->atAs<AST::RepeatedLoad>(0)) {
         // Handle a value case
         const auto &caseLoadType = aCaseNode->front()->type();
-        node_ptr_t gCaseNode = nullptr;
+        node_ptr_t gCaseNode     = nullptr;
 
         if (caseLoadType != AST::LoadType::Null) {
-            gCaseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::Value);
+            gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Value);
             node_ptr_t caseDataNode = visitData(aCaseNode->atAs<AST::DataLoad>(0));
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseDataNode << caseExprNode;
         } else {
             // Handle the "else" case
-            gCaseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseExprNode;
         }
@@ -1019,9 +1017,9 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for Literal");
 
     // Extract the literal load and its value
-    const auto &literal = ast->loadAs<AST::LiteralLoad>();
+    const auto &literal  = ast->loadAs<AST::LiteralLoad>();
     const Literal &value = literal->value();
-    const auto &str = value.data();
+    const auto &str      = value.data();
     data_ptr_t data;
 
     // Handle different literal types
@@ -1029,7 +1027,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     case LiteralType::String: {
         // Decode escaped characters in the string and create a StringData object
         std::string decoded = decodeEscapes(str);
-        data = tt::as_shared<Data>(make_shared<StringData>(decoded));
+        data                = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
         // FString (formatted string) is not supported
@@ -1084,15 +1082,15 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
 
     // Create an empty ArrayData object and wrap it in a DataLoad node
-    auto arrayData = ArrayData::from(Type::Array(), {});
+    auto arrayData = ArrayData::from(ArrayType::create(), {});
     node_ptr_t res = createNodeAs<DataLoad>(arrayData);
 
-    bool dangling = false;
+    bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
-        auto [data, _] = extractData(dataNode, execNode, dangling);
+        auto [data, _]      = extractData(dataNode, execNode, dangling);
         arrayData->emplace(data);
     }
 
@@ -1115,16 +1113,16 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
 
     // Create an empty StructData object and wrap it in a DataLoad node
     auto structData = std::make_shared<StructData>();
-    node_ptr_t res = createNodeAs<DataLoad>(structData);
+    node_ptr_t res  = createNodeAs<DataLoad>(structData);
 
-    bool dangling = false;
+    bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
-        const string &name = namedPair->ref().ident();
-        node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
-        auto [data, _] = extractData(dataNode, execNode, dangling);
+        const string &name    = namedPair->ref().ident();
+        node_ptr_t dataNode   = visitData(child->atAs<AST::DataLoad>(0));
+        auto [data, _]        = extractData(dataNode, execNode, dangling);
         structData->emplace(name, data);
     }
 
@@ -1149,12 +1147,12 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     auto tupleData = make_shared<TupleData>();
     node_ptr_t res = createNodeAs<DataLoad>(tupleData);
 
-    bool dangling = false;
+    bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
-        auto [data, _] = extractData(dataNode, execNode, dangling);
+        auto [data, _]      = extractData(dataNode, execNode, dangling);
         tupleData->emplace(data);
     }
 
@@ -1177,9 +1175,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
     func_type_ptr_t funcType =
         tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
-    node_ptr_t typeNode = createNodeAs<TypeLoad>(funcType, funcType->implMark());
+    node_ptr_t typeNode  = createNodeAs<TypeLoad>(funcType, funcType->implMark());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
-    node_ptr_t funcNode = createNodeAs<FuncLoad>(funcData->ref().ident());
+    node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().ident());
     *funcNode << typeNode << stmtsNode;
     LEAVE("FuncData");
     return funcNode;
@@ -1192,7 +1190,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
     ENTER("RefData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for RefData");
     const auto &refData = ast->loadAs<AST::RefDataLoad>();
-    node_ptr_t refNode = createNodeAs<DRefLoad>(refData->ref());
+    node_ptr_t refNode  = createNodeAs<DRefLoad>(refData->ref());
     LEAVE("RefData");
     return refNode;
 }
@@ -1284,7 +1282,7 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 
     type_ptr_t res;
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
-    AST::TypeOp op = typeExpr->op();
+    AST::TypeOp op       = typeExpr->op();
 
     // Handle different type operations based on the TypeOp enumeration
     switch (op) {
@@ -1292,7 +1290,7 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         // Handle union types (e.g., T | U)
         const auto &lhsType = visitType(ast->atAs<AST::TypeLoad>(0));
         const auto &rhsType = visitType(ast->atAs<AST::TypeLoad>(1));
-        res = make_shared<UnionType>(lhsType, rhsType);
+        res                 = make_shared<UnionType>(lhsType, rhsType);
     } break;
 
     case AST::TypeOp::Inter: {
@@ -1374,8 +1372,8 @@ type_ptr_t Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
     // TODO: 这里的dims信息暂时没用到
     // const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
-    type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
-    const auto &arrayType = Type::Array(type);
+    type_ptr_t type       = visitType(ast->atAs<AST::TypeLoad>(0));
+    const auto &arrayType = ArrayType::create(type);
     LEAVE("ArrayType");
     return arrayType;
 }
@@ -1393,8 +1391,8 @@ type_ptr_t Builder::visitStructType(const AST::node_ptr_t &ast) {
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
-        const string &name = namedType->getRef().ident();
-        type_ptr_t type = visitType(child->atAs<AST::TypeLoad>(0));
+        const string &name    = namedType->getRef().ident();
+        type_ptr_t type       = visitType(child->atAs<AST::TypeLoad>(0));
 
         // Attempt to add the field to the StructType object
         data_ptr_t data = nullptr;
@@ -1423,7 +1421,7 @@ type_ptr_t Builder::visitTupleType(const AST::node_ptr_t &ast) {
         types.push_back(type);
     }
     // Create a TupleType object using the collected types
-    type_ptr_t tupleType = Type::Tuple(types);
+    type_ptr_t tupleType = TupleType::create(types);
     LEAVE("TupleType");
     return tupleType;
 }
@@ -1458,7 +1456,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // Process "with" parameters (context parameters)
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-        bool isVar = paramLoad->isVar();
+        bool isVar            = paramLoad->isVar();
         if (isVar && !typeLoad->modifiers().sync()) {
             // Variable parameters are not allowed in asynchronous functions
             diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
@@ -1472,8 +1470,8 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
-        type_ptr_t type = visitType(paramPair->atAs<AST::TypeLoad>(0));
-        data_ptr_t data = nullptr;
+        type_ptr_t type    = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        data_ptr_t data    = nullptr;
 
         // Process optional default values for parameters
         const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
@@ -1505,7 +1503,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // Process normal parameters
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-        bool isVar = paramLoad->isVar();
+        bool isVar            = paramLoad->isVar();
         if (isVar && !typeLoad->modifiers().sync()) {
             // variable parameters are not allowed in asynchronous functions
             diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
@@ -1519,8 +1517,8 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
-        type_ptr_t type = visitType(paramPair->atAs<AST::TypeLoad>(0));
-        data_ptr_t data = nullptr;
+        type_ptr_t type    = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        data_ptr_t data    = nullptr;
 
         // Process optional default values for parameters
         const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);

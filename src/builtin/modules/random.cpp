@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,7 +71,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
-                            return vecType->elementType();
+                            return vecType->elemType();
                         }),
                 },
             }),

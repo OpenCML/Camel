@@ -13,21 +13,27 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "algo.h"
 #include "core/context/context.h"
 
+#include <algorithm>
+#include <stdexcept>
+#include <vector>
+
 enum class SortAlgo { Insertion, Quick, Merge };
 
+// ---------- 排序核心模板 ----------
+
 template <typename T, typename Compare>
-static void insertionSort(std::vector<T> &vals, Compare comp) {
-    for (size_t i = 1; i < vals.size(); ++i) {
-        T key = vals[i];
+static void insertionSortSlots(slot_t *vals, size_t n, Compare comp) {
+    for (size_t i = 1; i < n; ++i) {
+        T key    = (T)vals[i];
         size_t j = i;
-        while (j > 0 && comp(key, vals[j - 1])) {
+        while (j > 0 && comp(key, (T)vals[j - 1])) {
             vals[j] = vals[j - 1];
             --j;
         }
@@ -36,478 +42,280 @@ static void insertionSort(std::vector<T> &vals, Compare comp) {
 }
 
 template <typename T, typename Compare>
-static void quickSort(std::vector<T> &vals, Compare comp, int left, int right) {
+static void quickSortSlots(slot_t *vals, int left, int right, Compare comp) {
     if (left >= right)
         return;
-    T pivot = vals[left];
+    T pivot = (T)vals[left];
     int i = left, j = right;
     while (i < j) {
-        while (i < j && !comp(vals[j], pivot))
+        while (i < j && !comp((T)vals[j], pivot))
             --j;
-        while (i < j && comp(vals[i], pivot))
+        while (i < j && comp((T)vals[i], pivot))
             ++i;
         if (i < j)
             std::swap(vals[i], vals[j]);
     }
     std::swap(vals[left], vals[i]);
-    quickSort(vals, comp, left, i - 1);
-    quickSort(vals, comp, i + 1, right);
+    quickSortSlots<T>(vals, left, i - 1, comp);
+    quickSortSlots<T>(vals, i + 1, right, comp);
 }
 
-template <typename T, typename Compare> static void mergeSort(std::vector<T> &vals, Compare comp) {
-    if (vals.size() <= 1)
+template <typename T, typename Compare>
+static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
+    if (n <= 1)
         return;
-    auto mid = vals.size() / 2;
-    std::vector<T> left(vals.begin(), vals.begin() + mid);
-    std::vector<T> right(vals.begin() + mid, vals.end());
-    mergeSort(left, comp);
-    mergeSort(right, comp);
+    size_t mid = n / 2;
+    mergeSortSlots<T>(vals, mid, comp, tmp);
+    mergeSortSlots<T>(vals + mid, n - mid, comp, tmp);
 
-    size_t i = 0, j = 0, k = 0;
-    while (i < left.size() && j < right.size()) {
-        if (comp(left[i], right[j])) {
-            vals[k++] = left[i++];
-        } else {
-            vals[k++] = right[j++];
-        }
+    size_t i = 0, j = mid, k = 0;
+    while (i < mid && j < n) {
+        if (comp((T)vals[i], (T)vals[j]))
+            tmp[k++] = vals[i++];
+        else
+            tmp[k++] = vals[j++];
     }
-    while (i < left.size())
-        vals[k++] = left[i++];
-    while (j < right.size())
-        vals[k++] = right[j++];
+    while (i < mid)
+        tmp[k++] = vals[i++];
+    while (j < n)
+        tmp[k++] = vals[j++];
+    for (i = 0; i < n; ++i)
+        vals[i] = tmp[i];
 }
 
-template <typename T, typename DataType>
-void doSort(
-    bool inplace, const std::vector<data_ptr_t> &rawCopy, std::vector<data_ptr_t> &raw,
-    const type_ptr_t &elemType, GraphIR::data_idx_t self, GraphIR::data_idx_t arr, Frame &frame,
-    SortAlgo algo) {
+// ---------- 统一排序执行 ----------
 
-    auto comparator = [&](const data_ptr_t &a, const data_ptr_t &b) {
-        return static_cast<DataType &>(*a).data() < static_cast<DataType &>(*b).data();
-    };
-
-    auto runSort = [&](std::vector<data_ptr_t> &vec) {
-        switch (algo) {
-        case SortAlgo::Insertion:
-            insertionSort<data_ptr_t>(vec, comparator);
-            break;
-        case SortAlgo::Quick:
-            quickSort<data_ptr_t>(vec, comparator, 0, (int)vec.size() - 1);
-            break;
-        case SortAlgo::Merge:
-            mergeSort<data_ptr_t>(vec, comparator);
-            break;
-        default:
-            throw std::runtime_error("Unknown sort algorithm");
-        }
-    };
-
-    if (inplace) {
-        runSort(raw);
-        frame.set(self, frame.get(arr)); // 原数组已修改
-    } else {
-        std::vector<data_ptr_t> sorted = rawCopy;
-        runSort(sorted);
-        frame.set(self, std::make_shared<ArrayData>(Type::Array(elemType), std::move(sorted)));
+template <typename T>
+static Array *__doSortSlots__(bool inplace, Array *arr, SortAlgo algo, Frame &frame, Context &ctx) {
+    size_t n = arr->size();
+    if (n <= 1) {
+        if (!inplace)
+            return Object::clone(arr, mm::autoSpace());
+        return arr;
     }
+
+    Array *target = inplace ? arr : Object::clone(arr, mm::autoSpace());
+    slot_t *slots = target->data();
+    auto comp     = [](T a, T b) { return a < b; };
+
+    switch (algo) {
+    case SortAlgo::Insertion:
+        insertionSortSlots<T>(slots, n, comp);
+        break;
+    case SortAlgo::Quick:
+        quickSortSlots<T>(slots, 0, (int)n - 1, comp);
+        break;
+    case SortAlgo::Merge: {
+        std::vector<slot_t> tmp(n);
+        mergeSortSlots<T>(slots, n, comp, tmp.data());
+        break;
+    }
+    default:
+        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Unknown sort algorithm");
+        return nullptr;
+    }
+
+    return target;
 }
 
-void __insert_sort__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+// =============================================================
+// 通用工具函数：
+// 根据元素类型 TypeCode 分派到模板
+// =============================================================
 
-    if (elemType == Type::Int()) {
-        doSort<int32_t, IntData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else if (elemType == Type::Long()) {
-        doSort<int64_t, LongData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else if (elemType == Type::Float()) {
-        doSort<float, FloatData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else if (elemType == Type::Double()) {
-        doSort<double, DoubleData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else {
+template <SortAlgo Algo>
+static Array *__doSortWithTypeCode__(
+    bool inplace, Array *arr, TypeCode code, Frame &frame, Context &ctx, std::string_view fname) {
+    Array *result = nullptr;
+
+    switch (code) {
+    case TypeCode::Int:
+        result = __doSortSlots__<Int>(inplace, arr, Algo, frame, ctx);
+        break;
+    case TypeCode::Long:
+        result = __doSortSlots__<Long>(inplace, arr, Algo, frame, ctx);
+        break;
+    case TypeCode::Float:
+        result = __doSortSlots__<Float>(inplace, arr, Algo, frame, ctx);
+        break;
+    case TypeCode::Double:
+        result = __doSortSlots__<Double>(inplace, arr, Algo, frame, ctx);
+        break;
+    default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<insert_sort> not supported for element type " + elemType->toString());
-        frame.set(self, Data::null());
+            .commit(
+                std::string(fname) + " not supported for element type " + typeCodeToString(code));
+        return nullptr;
     }
+    return result;
+}
+
+// ---------- 实际内建函数实现 ----------
+
+void __insert_sort__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Array *arr = frame.get<Array *>(nargs[0]);
+
+    Array *result = __doSortWithTypeCode__<SortAlgo::Insertion>(
+        /*inplace*/ false,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<insert_sort>");
+
+    if (!result)
+        frame.set(self, NullSlot);
+    else
+        frame.set(self, result);
 }
 
 void __insert_sort_inplace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    if (elemType == Type::Int()) {
-        doSort<int32_t, IntData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else if (elemType == Type::Long()) {
-        doSort<int64_t, LongData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else if (elemType == Type::Float()) {
-        doSort<float, FloatData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else if (elemType == Type::Double()) {
-        doSort<double, DoubleData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Insertion);
-    } else {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<insert_sort> not supported for element type " + elemType->toString());
-        frame.set(self, Data::null());
-    }
+    Array *result = __doSortWithTypeCode__<SortAlgo::Insertion>(
+        /*inplace*/ true,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<insert_sort_inplace>");
+
+    if (!result)
+        frame.set(self, NullSlot);
+    else
+        frame.set(self, result);
 }
 
 void __quick_sort__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    Array *result = __doSortWithTypeCode__<SortAlgo::Quick>(
+        false,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<quick_sort>");
 
-    if (elemType == Type::Int()) {
-        doSort<int32_t, IntData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else if (elemType == Type::Long()) {
-        doSort<int64_t, LongData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else if (elemType == Type::Float()) {
-        doSort<float, FloatData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else if (elemType == Type::Double()) {
-        doSort<double, DoubleData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<quick_sort> not supported for element type " + elemType->toString());
-        frame.set(self, Data::null());
-    }
+    if (!result)
+        frame.set(self, NullSlot);
+    else
+        frame.set(self, result);
 }
 
 void __quick_sort_inplace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    Array *result = __doSortWithTypeCode__<SortAlgo::Quick>(
+        true,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<quick_sort_inplace>");
 
-    if (elemType == Type::Int()) {
-        doSort<int32_t, IntData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else if (elemType == Type::Long()) {
-        doSort<int64_t, LongData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else if (elemType == Type::Float()) {
-        doSort<float, FloatData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else if (elemType == Type::Double()) {
-        doSort<double, DoubleData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Quick);
-    } else {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<quick_sort> not supported for element type " + elemType->toString());
-        frame.set(self, Data::null());
-    }
+    if (!result)
+        frame.set(self, NullSlot);
+    else
+        frame.set(self, result);
 }
 
 void __merge_sort__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    Array *result = __doSortWithTypeCode__<SortAlgo::Merge>(
+        false,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<merge_sort>");
 
-    if (elemType == Type::Int()) {
-        doSort<int32_t, IntData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else if (elemType == Type::Long()) {
-        doSort<int64_t, LongData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else if (elemType == Type::Float()) {
-        doSort<float, FloatData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else if (elemType == Type::Double()) {
-        doSort<double, DoubleData>(
-            false,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<merge_sort> not supported for element type " + elemType->toString());
-        frame.set(self, Data::null());
-    }
+    if (!result)
+        frame.set(self, NullSlot);
+    else
+        frame.set(self, result);
 }
 
 void __merge_sort_inplace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    const data_ptr_t &arr_val = frame.get(nargs[0]);
-    auto arr = arr_val->as<ArrayData>(arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(arr_val->type())->elementType();
-    const auto &rawCopy = arr->raw();
-    auto &raw = const_cast<std::vector<data_ptr_t> &>(arr->raw());
+    Array *result = __doSortWithTypeCode__<SortAlgo::Merge>(
+        true,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<merge_sort_inplace>");
 
-    if (elemType == Type::Int()) {
-        doSort<int32_t, IntData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else if (elemType == Type::Long()) {
-        doSort<int64_t, LongData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else if (elemType == Type::Float()) {
-        doSort<float, FloatData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else if (elemType == Type::Double()) {
-        doSort<double, DoubleData>(
-            true,
-            rawCopy,
-            raw,
-            elemType,
-            self,
-            nargs[0],
-            frame,
-            SortAlgo::Merge);
-    } else {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<merge_sort> not supported for element type " + elemType->toString());
-        frame.set(self, Data::null());
-    }
+    if (!result)
+        frame.set(self, NullSlot);
+    else
+        frame.set(self, result);
 }
 
-template <typename T, typename DataT>
-static std::vector<data_ptr_t>
-merge_sorted_arrays(const std::vector<data_ptr_t> &L, const std::vector<data_ptr_t> &R) {
+// ---------- 合并已排序数组 ----------
 
-    std::vector<data_ptr_t> merged;
-    merged.reserve(L.size() + R.size());
+template <typename T>
+static Array *__merge_sorted_arrays_slots__(Array *lhs, Array *rhs, const ArrayTypeLayout &layout) {
+    size_t nL     = lhs->size();
+    size_t nR     = rhs->size();
+    Array *result = Array::create(layout, mm::autoSpace());
+    result->reserve(nL + nR);
 
-    size_t i = 0, j = 0;
-    while (i < L.size() && j < R.size()) {
-        auto li = static_cast<DataT &>(*L[i]).data();
-        auto rj = static_cast<DataT &>(*R[j]).data();
-        if (li < rj) {
-            merged.push_back(L[i++]);
-        } else {
-            merged.push_back(R[j++]);
-        }
+    size_t i = 0, j = 0, k = 0;
+    while (i < nL && j < nR) {
+        T a = lhs->get<T>(i);
+        T b = rhs->get<T>(j);
+        if (a < b)
+            result->set(k++, a), ++i;
+        else
+            result->set(k++, b), ++j;
     }
-    while (i < L.size())
-        merged.push_back(L[i++]);
-    while (j < R.size())
-        merged.push_back(R[j++]);
+    while (i < nL)
+        result->set(k++, lhs->get<T>(i++));
+    while (j < nR)
+        result->set(k++, rhs->get<T>(j++));
 
-    return merged;
+    return result;
 }
 
 void __merge_sorted_arrays__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Array *lhs    = frame.get<Array *>(nargs[0]);
+    Array *rhs    = frame.get<Array *>(nargs[1]);
+    Array *merged = nullptr;
 
-    const data_ptr_t &left_arr_val = frame.get(nargs[0]);
-    const data_ptr_t &right_arr_val = frame.get(nargs[1]);
+    TypeCode code = lhs->elemType();
 
-    auto left = left_arr_val->as<ArrayData>(left_arr_val->type());
-    auto right = right_arr_val->as<ArrayData>(right_arr_val->type());
-    auto elemType = tt::as_shared<ArrayType>(left_arr_val->type())->elementType();
-
-    const auto &L = left->raw();
-    const auto &R = right->raw();
-
-    std::vector<data_ptr_t> merged;
-
-    if (elemType == Type::Int()) {
-        merged = merge_sorted_arrays<int32_t, IntData>(L, R);
-    } else if (elemType == Type::Long()) {
-        merged = merge_sorted_arrays<int64_t, LongData>(L, R);
-    } else if (elemType == Type::Float()) {
-        merged = merge_sorted_arrays<float, FloatData>(L, R);
-    } else if (elemType == Type::Double()) {
-        merged = merge_sorted_arrays<double, DoubleData>(L, R);
-    } else {
+    switch (code) {
+    case TypeCode::Int:
+        merged = __merge_sorted_arrays_slots__<Int>(lhs, rhs, lhs->layout());
+        break;
+    case TypeCode::Long:
+        merged = __merge_sorted_arrays_slots__<Long>(lhs, rhs, lhs->layout());
+        break;
+    case TypeCode::Float:
+        merged = __merge_sorted_arrays_slots__<Float>(lhs, rhs, lhs->layout());
+        break;
+    case TypeCode::Double:
+        merged = __merge_sorted_arrays_slots__<Double>(lhs, rhs, lhs->layout());
+        break;
+    default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<merge_sorted> not supported for element type " + elemType->toString());
-        frame.set(self, Data::null());
+            .commit(
+                "<merge_sorted_arrays> not supported for element type " + typeCodeToString(code));
+        frame.set(self, NullSlot);
         return;
     }
 
-    frame.set(self, std::make_shared<ArrayData>(Type::Array(elemType), std::move(merged)));
+    frame.set(self, merged);
 }
