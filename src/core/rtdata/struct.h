@@ -47,6 +47,8 @@ class Struct : public Object {
 
     size_t size() const { return size_; }
 
+    bool has(std::string_view name) const { return layout_->findField(name).has_value(); }
+
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
         ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
@@ -55,7 +57,7 @@ class Struct : public Object {
     }
 
     template <typename T> T get(std::string_view name) const {
-        auto optIndex = layout_.findField(name);
+        auto optIndex = layout_->findField(name);
         ASSERT(optIndex.has_value(), "Field name not found: {}", name);
         return get<T>(optIndex.value());
     }
@@ -76,10 +78,6 @@ class Struct : public Object {
         auto optIndex = layout_.findField(name);
         ASSERT(optIndex.has_value(), "Field name not found: {}", name);
         set<T>(optIndex.value(), value);
-    }
-
-    std::optional<size_t> findField(std::string_view name, const StructTypeLayout &layout) const {
-        return layout.findField(name);
     }
 
     slot_t *data() { return reinterpret_cast<slot_t *>(data_); }

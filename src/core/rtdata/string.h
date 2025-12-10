@@ -68,6 +68,7 @@ class String : public Object {
     bool empty() const { return size_ == 0; }
     const char *data() const { return data_; }
     const char *c_str() const { return data_; }
+    std::string_view view() const noexcept { return std::string_view(data_, size_); }
 
     char operator[](size_t i) const {
         ASSERT(i < size_, "String index out of range");
