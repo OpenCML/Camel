@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,8 +48,6 @@ class Object {
     // }
 };
 
-constexpr Object *NullRef = nullptr;
-
 template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b) noexcept {
     if (!a || !b)
         return false;
@@ -67,3 +65,6 @@ using Float  = float;
 using Double = double;
 using Bool   = bool;
 using Byte   = char;
+
+constexpr slot_t NullSlot = 0;
+constexpr Object *NullRef = nullptr;

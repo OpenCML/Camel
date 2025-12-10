@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,7 +53,7 @@ GraphExecInfo *FastVMSchedPass::getExecInfoGraph(Graph *graph) {
     return &it->second;
 }
 
-data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
+slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
@@ -69,8 +69,7 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
     Frame nextFrame(info->ftemp); // for mutual-tail-recursion optimization
     frame_rptr_t currFrame = &frame, twinFrame = nullptr;
 
-    auto __call =
-        [&](GraphIR::Graph &targetGraph, const Bytecode &bc, bool isTailCall) -> data_ptr_t {
+    auto __call = [&](GraphIR::Graph &targetGraph, const Bytecode &bc, bool isTailCall) -> slot_t {
         EXEC_WHEN_DEBUG(l.in("FastVM").debug(
             "Calling function: {} (tail-call: {})",
             targetGraph.name(),
@@ -140,7 +139,7 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
 
                     // 切换到新栈帧
                     currFrame = &nextFrame;
-                    return nullptr; // indicate tail-call
+                    return NullSlot;
                 }
             }
 
@@ -151,7 +150,7 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
             }
 
-            return nullptr; // indicate tail-call
+            return NullSlot;
         }
 
         // 如果不是尾调用，则新建栈帧并递归调用 call 函数
@@ -296,15 +295,26 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 TypeCode targetType = currFrame->typeAt(nargs[0]);
                 ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
 
-                auto target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
+                Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
                 ASSERT(target != nullptr, "FILL target data is null.");
 
-                data_vec_t inputs;
-                inputs.reserve(bc.withCnt());
-                for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    inputs.push_back(currFrame->get(wargs[j]));
+                switch (targetType) {
+                case TypeCode::Tuple: {
+                    auto tuple = static_cast<Tuple *>(target);
+                    break;
                 }
-                target->resolve(inputs);
+                default:
+                    ASSERT(false, "Unsupported FILL target type.");
+                }
+
+                // data_vec_t inputs;
+                // inputs.reserve(bc.withCnt());
+                // for (size_t j = 0; j < bc.withCnt(); ++j) {
+                //     inputs.push_back(currFrame->get(wargs[j]));
+                // }
+                // target->resolve(inputs);
+
+                ASSERT(false, "FILL opcode not fully implemented in FastVM.");
                 currFrame->set(bc.result, target);
                 break;
             }
@@ -312,25 +322,23 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             case OpCode::CALL: {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
-                auto funcData          = currFrame->get(wargs[0]);
-                auto function          = tt::as_shared<FunctionData>(funcData);
-                auto &targetGraph      = function->graph();
-                Frame funcFrame(&targetGraph);
+                auto function          = currFrame->get<Function *>(wargs[0]);
+                auto targetGraph       = function->graph();
+
+                GraphExecInfo *targetInfo = getExecInfoGraph(targetGraph);
+                Frame funcFrame(targetInfo->ftemp);
 
                 size_t i = 0;
                 for (; i < nargs.size; ++i) {
-                    funcFrame.set(i + 1, currFrame->get(nargs[i]));
+                    funcFrame.set(i + 1, currFrame->get<slot_t>(nargs[i]));
                 }
 
-                const auto &closureData = function->closure();
-                ASSERT(
-                    targetGraph.closure().size() == closureData.size(),
-                    "Function closure size mismatch in FastVM.");
-                for (size_t j = 0; j < closureData.size(); ++j) {
-                    funcFrame.set(i + j + 1, closureData[j]);
+                Tuple *closureData = function->tuple();
+                for (size_t j = 0; j < closureData->size(); ++j) {
+                    funcFrame.set(i + j + 1, closureData->get<slot_t>(j));
                 }
 
-                const auto &result = call(&targetGraph, funcFrame);
+                const auto &result = call(targetGraph, funcFrame);
                 currFrame->set(bc.result, result);
                 break;
             }
@@ -369,277 +377,243 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
 
             default: {
                 if (isOpCodeOfInlinedOperator(bc.opcode)) {
-                    const data_ptr_t &lhs = currFrame->get(bc.fastop[0]);
-                    const data_ptr_t &rhs = currFrame->get(bc.fastop[1]);
+                    slot_t lhs = currFrame->get<slot_t>(bc.fastop[0]);
+                    slot_t rhs = currFrame->get<slot_t>(bc.fastop[1]);
 
                     switch (bc.opcode) {
+                    // 加法
                     case OpCode::IADD: {
-                        int32_t res = tt::as_shared<IntData>(lhs)->data() +
-                                      tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<IntData>(res));
+                        int32_t res = static_cast<int32_t>(lhs) + static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LADD: {
-                        int64_t res = tt::as_shared<LongData>(lhs)->data() +
-                                      tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<LongData>(res));
+                        int64_t res = static_cast<int64_t>(lhs) + static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FADD: {
-                        float res = tt::as_shared<FloatData>(lhs)->data() +
-                                    tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        float res = static_cast<float>(lhs) + static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DADD: {
-                        double res = tt::as_shared<DoubleData>(lhs)->data() +
-                                     tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        double res = static_cast<double>(lhs) + static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
+                    // 减法
                     case OpCode::ISUB: {
-                        int32_t res = tt::as_shared<IntData>(lhs)->data() -
-                                      tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<IntData>(res));
+                        int32_t res = static_cast<int32_t>(lhs) - static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LSUB: {
-                        int64_t res = tt::as_shared<LongData>(lhs)->data() -
-                                      tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<LongData>(res));
+                        int64_t res = static_cast<int64_t>(lhs) - static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FSUB: {
-                        float res = tt::as_shared<FloatData>(lhs)->data() -
-                                    tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        float res = static_cast<float>(lhs) - static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DSUB: {
-                        double res = tt::as_shared<DoubleData>(lhs)->data() -
-                                     tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        double res = static_cast<double>(lhs) - static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
+                    // 乘法
                     case OpCode::IMUL: {
-                        int32_t res = tt::as_shared<IntData>(lhs)->data() *
-                                      tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<IntData>(res));
+                        int32_t res = static_cast<int32_t>(lhs) * static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LMUL: {
-                        int64_t res = tt::as_shared<LongData>(lhs)->data() *
-                                      tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<LongData>(res));
+                        int64_t res = static_cast<int64_t>(lhs) * static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FMUL: {
-                        float res = tt::as_shared<FloatData>(lhs)->data() *
-                                    tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        float res = static_cast<float>(lhs) * static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DMUL: {
-                        double res = tt::as_shared<DoubleData>(lhs)->data() *
-                                     tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        double res = static_cast<double>(lhs) * static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
+                    // 除法（带除零检测）
                     case OpCode::IDIV: {
-                        int32_t divisor = tt::as_shared<IntData>(rhs)->data();
+                        int32_t divisor = static_cast<int32_t>(rhs);
                         if (divisor == 0) {
                             context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
                         }
-                        int32_t res = tt::as_shared<IntData>(lhs)->data() / divisor;
-                        currFrame->set(bc.result, std::make_shared<IntData>(res));
+                        int32_t res = static_cast<int32_t>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LDIV: {
-                        int64_t divisor = tt::as_shared<LongData>(rhs)->data();
+                        int64_t divisor = static_cast<int64_t>(rhs);
                         if (divisor == 0) {
                             context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
                         }
-                        int64_t res = tt::as_shared<LongData>(lhs)->data() / divisor;
-                        currFrame->set(bc.result, std::make_shared<LongData>(res));
+                        int64_t res = static_cast<int64_t>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FDIV: {
-                        float divisor = tt::as_shared<FloatData>(rhs)->data();
+                        float divisor = static_cast<float>(rhs);
                         if (divisor == 0.0f) {
                             context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
                         }
-                        float res = tt::as_shared<FloatData>(lhs)->data() / divisor;
-                        currFrame->set(bc.result, std::make_shared<FloatData>(res));
+                        float res = static_cast<float>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DDIV: {
-                        double divisor = tt::as_shared<DoubleData>(rhs)->data();
+                        double divisor = static_cast<double>(rhs);
                         if (divisor == 0.0) {
                             context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
                         }
-                        double res = tt::as_shared<DoubleData>(lhs)->data() / divisor;
-                        currFrame->set(bc.result, std::make_shared<DoubleData>(res));
+                        double res = static_cast<double>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
+                    // 比较 (<, >, ==, !=, <=, >=)
                     case OpCode::ILT: {
-                        bool res = tt::as_shared<IntData>(lhs)->data() <
-                                   tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int32_t>(lhs) < static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LLT: {
-                        bool res = tt::as_shared<LongData>(lhs)->data() <
-                                   tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int64_t>(lhs) < static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FLT: {
-                        bool res = tt::as_shared<FloatData>(lhs)->data() <
-                                   tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<float>(lhs) < static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DLT: {
-                        bool res = tt::as_shared<DoubleData>(lhs)->data() <
-                                   tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<double>(lhs) < static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
                     case OpCode::IGT: {
-                        bool res = tt::as_shared<IntData>(lhs)->data() >
-                                   tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int32_t>(lhs) > static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LGT: {
-                        bool res = tt::as_shared<LongData>(lhs)->data() >
-                                   tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int64_t>(lhs) > static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FGT: {
-                        bool res = tt::as_shared<FloatData>(lhs)->data() >
-                                   tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<float>(lhs) > static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DGT: {
-                        bool res = tt::as_shared<DoubleData>(lhs)->data() >
-                                   tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<double>(lhs) > static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
                     case OpCode::IEQ: {
-                        bool res = tt::as_shared<IntData>(lhs)->data() ==
-                                   tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int32_t>(lhs) == static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LEQ: {
-                        bool res = tt::as_shared<LongData>(lhs)->data() ==
-                                   tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int64_t>(lhs) == static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FEQ: {
-                        bool res = tt::as_shared<FloatData>(lhs)->data() ==
-                                   tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<float>(lhs) == static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DEQ: {
-                        bool res = tt::as_shared<DoubleData>(lhs)->data() ==
-                                   tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<double>(lhs) == static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
                     case OpCode::INE: {
-                        bool res = tt::as_shared<IntData>(lhs)->data() !=
-                                   tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int32_t>(lhs) != static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LNE: {
-                        bool res = tt::as_shared<LongData>(lhs)->data() !=
-                                   tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int64_t>(lhs) != static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FNE: {
-                        bool res = tt::as_shared<FloatData>(lhs)->data() !=
-                                   tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<float>(lhs) != static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DNE: {
-                        bool res = tt::as_shared<DoubleData>(lhs)->data() !=
-                                   tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<double>(lhs) != static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
                     case OpCode::ILE: {
-                        bool res = tt::as_shared<IntData>(lhs)->data() <=
-                                   tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int32_t>(lhs) <= static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LLE: {
-                        bool res = tt::as_shared<LongData>(lhs)->data() <=
-                                   tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int64_t>(lhs) <= static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FLE: {
-                        bool res = tt::as_shared<FloatData>(lhs)->data() <=
-                                   tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<float>(lhs) <= static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DLE: {
-                        bool res = tt::as_shared<DoubleData>(lhs)->data() <=
-                                   tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<double>(lhs) <= static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
 
                     case OpCode::IGE: {
-                        bool res = tt::as_shared<IntData>(lhs)->data() >=
-                                   tt::as_shared<IntData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int32_t>(lhs) >= static_cast<int32_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::LGE: {
-                        bool res = tt::as_shared<LongData>(lhs)->data() >=
-                                   tt::as_shared<LongData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<int64_t>(lhs) >= static_cast<int64_t>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::FGE: {
-                        bool res = tt::as_shared<FloatData>(lhs)->data() >=
-                                   tt::as_shared<FloatData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<float>(lhs) >= static_cast<float>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
                     }
                     case OpCode::DGE: {
-                        bool res = tt::as_shared<DoubleData>(lhs)->data() >=
-                                   tt::as_shared<DoubleData>(rhs)->data();
-                        currFrame->set(bc.result, std::make_shared<BoolData>(res));
+                        bool res = static_cast<double>(lhs) >= static_cast<double>(rhs);
+                        currFrame->set(bc.result, res);
                         break;
-                    }
-
                     default:
                         ASSERT(false, "Unsupported inlined operator.");
                     }
-
-                    break;
+                    }
                 }
 
                 context_->rtmDiags()
@@ -661,22 +635,7 @@ data_ptr_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
 
-    data_ptr_t result;
-    if (input.empty()) {
-        result = Data::null();
-    } else {
-        // Check if input data is initialized, if not create a default value
-        auto inputData = currFrame->get(input.front()->index());
-        if (inputData == nullptr) {
-            // If input data is not initialized, create a default integer value 0
-            // For recursive function counters, this is typically an integer type
-            inputData = std::make_shared<IntData>(0);
-            currFrame->set(input.front()->index(), inputData);
-        }
-        result = inputData;
-    }
-
-    return result;
+    return currFrame->get<slot_t>(input.front()->index());
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
@@ -685,7 +644,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             ->of(RuntimeDiag::MissingMainFunction)
             .commit(context_->mainModule()->name());
     }
-    Frame rootFrame(graph.get());
+    const GraphExecInfo *info = getExecInfoGraph(graph.get());
+    Frame rootFrame(info->ftemp);
     call(graph.get(), rootFrame);
     return Graph::null();
 }
@@ -715,174 +675,174 @@ void FastVMSchedPass::evalMarkedOperator(
 
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    auto targetData = currFrame.get(nargs[0]);
-    auto funcData   = currFrame.get(wargs[0]);
+    // auto targetData = currFrame.get(nargs[0]);
+    // auto funcData   = currFrame.get(wargs[0]);
 
-    auto func              = tt::as_shared<FunctionData>(funcData);
-    type_ptr_t funcRetType = func->funcType()->exitType();
+    // auto func              = tt::as_shared<FunctionData>(funcData);
+    // type_ptr_t funcRetType = func->funcType()->exitType();
 
-    auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
-        data_vec_t res;
-        res.reserve(inputVec.size());
-        for (const auto &item : inputVec) {
-            auto &targetGraph = func->graph();
-            Frame frame(&targetGraph);
-            if (targetGraph.hasClosure()) {
-                const auto &functionData = tt::as_shared<FunctionData>(funcData);
-                const auto &closureData  = functionData->closure();
-                ASSERT(
-                    closureData.size() == targetGraph.closure().size(),
-                    "Function closure size mismatch.");
-                for (size_t ci = 0; ci < closureData.size(); ++ci) {
-                    frame.set(ci + 2, closureData[ci]);
-                }
-            }
-            frame.set(1, item);
-            res.push_back(call(&targetGraph, frame));
-        }
-        return res;
-    };
+    // auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
+    //     data_vec_t res;
+    //     res.reserve(inputVec.size());
+    //     for (const auto &item : inputVec) {
+    //         auto &targetGraph = func->graph();
+    //         Frame frame(&targetGraph);
+    //         if (targetGraph.hasClosure()) {
+    //             const auto &functionData = tt::as_shared<FunctionData>(funcData);
+    //             const auto &closureData  = functionData->closure();
+    //             ASSERT(
+    //                 closureData.size() == targetGraph.closure().size(),
+    //                 "Function closure size mismatch.");
+    //             for (size_t ci = 0; ci < closureData.size(); ++ci) {
+    //                 frame.set(ci + 2, closureData[ci]);
+    //             }
+    //         }
+    //         frame.set(1, item);
+    //         res.push_back(call(&targetGraph, frame));
+    //     }
+    //     return res;
+    // };
 
-    auto arrayData = tt::as_shared<ArrayData>(targetData);
-    currFrame.set(self, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
+    // auto arrayData = tt::as_shared<ArrayData>(targetData);
+    // currFrame.set(self, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
 }
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    auto targetData = currFrame.get(nargs[0]);
-    auto funcData   = currFrame.get(wargs[0]);
-    auto func       = tt::as_shared<FunctionData>(funcData);
+    // auto targetData = currFrame.get(nargs[0]);
+    // auto funcData   = currFrame.get(wargs[0]);
+    // auto func       = tt::as_shared<FunctionData>(funcData);
 
-    auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
-        auto &targetGraph = func->graph();
-        Frame frame(&targetGraph);
-        if (targetGraph.hasClosure()) {
-            const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureData  = functionData->closure();
-            ASSERT(
-                closureData.size() == targetGraph.closure().size(),
-                "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureData.size(); ++ci) {
-                frame.set(ci + 2, closureData[ci]);
-            }
-        }
-        frame.set(1, item);
-        return call(&targetGraph, frame);
-    };
+    // auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
+    //     auto &targetGraph = func->graph();
+    //     Frame frame(&targetGraph);
+    //     if (targetGraph.hasClosure()) {
+    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
+    //         const auto &closureData  = functionData->closure();
+    //         ASSERT(
+    //             closureData.size() == targetGraph.closure().size(),
+    //             "Function closure size mismatch.");
+    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
+    //             frame.set(ci + 2, closureData[ci]);
+    //         }
+    //     }
+    //     frame.set(1, item);
+    //     return call(&targetGraph, frame);
+    // };
 
-    for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
-        item = applyFunc(item);
-    }
+    // for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
+    //     item = applyFunc(item);
+    // }
 
-    currFrame.set(self, targetData);
+    // currFrame.set(self, targetData);
 }
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    auto targetData = currFrame.get(nargs[0]);
-    auto funcData   = currFrame.get(wargs[0]);
-    auto func       = tt::as_shared<FunctionData>(funcData);
+    // auto targetData = currFrame.get(nargs[0]);
+    // auto funcData   = currFrame.get(wargs[0]);
+    // auto func       = tt::as_shared<FunctionData>(funcData);
 
-    auto shouldKeep = [&](const data_ptr_t &item) -> bool {
-        auto &targetGraph = func->graph();
-        Frame frame(&targetGraph);
-        if (targetGraph.hasClosure()) {
-            const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureData  = functionData->closure();
-            ASSERT(
-                closureData.size() == targetGraph.closure().size(),
-                "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureData.size(); ++ci) {
-                frame.set(ci + 2, closureData[ci]);
-            }
-        }
-        frame.set(1, item);
-        auto result = call(&targetGraph, frame);
-        return result->as<BoolData>(Type::Bool())->data();
-    };
+    // auto shouldKeep = [&](const data_ptr_t &item) -> bool {
+    //     auto &targetGraph = func->graph();
+    //     Frame frame(&targetGraph);
+    //     if (targetGraph.hasClosure()) {
+    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
+    //         const auto &closureData  = functionData->closure();
+    //         ASSERT(
+    //             closureData.size() == targetGraph.closure().size(),
+    //             "Function closure size mismatch.");
+    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
+    //             frame.set(ci + 2, closureData[ci]);
+    //         }
+    //     }
+    //     frame.set(1, item);
+    //     auto result = call(&targetGraph, frame);
+    //     return result->as<BoolData>(Type::Bool())->data();
+    // };
 
-    auto filterSequence = [&](auto containerData, auto createFunc) {
-        const auto &raw = containerData->raw();
-        data_vec_t res;
-        for (const auto &item : raw) {
-            if (shouldKeep(item))
-                res.push_back(item);
-        }
-        currFrame.set(self, createFunc(containerData->type(), std::move(res)));
-    };
+    // auto filterSequence = [&](auto containerData, auto createFunc) {
+    //     const auto &raw = containerData->raw();
+    //     data_vec_t res;
+    //     for (const auto &item : raw) {
+    //         if (shouldKeep(item))
+    //             res.push_back(item);
+    //     }
+    //     currFrame.set(self, createFunc(containerData->type(), std::move(res)));
+    // };
 
-    filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
-        return ArrayData::from(t, std::move(v));
-    });
+    // filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
+    //     return ArrayData::from(t, std::move(v));
+    // });
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    auto targetData = currFrame.get(nargs[0]);
-    auto funcData   = currFrame.get(wargs[0]);
-    auto initData   = currFrame.get(wargs[1]);
+    // auto targetData = currFrame.get(nargs[0]);
+    // auto funcData   = currFrame.get(wargs[0]);
+    // auto initData   = currFrame.get(wargs[1]);
 
-    auto func = tt::as_shared<FunctionData>(funcData);
+    // auto func = tt::as_shared<FunctionData>(funcData);
 
-    data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
+    // data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
 
-    if (elements.empty()) {
-        currFrame.set(self, initData);
-        return;
-    }
+    // if (elements.empty()) {
+    //     currFrame.set(self, initData);
+    //     return;
+    // }
 
-    data_ptr_t result = initData;
-    for (const auto &item : elements) {
-        auto &targetGraph = func->graph();
-        Frame frame(&targetGraph);
+    // data_ptr_t result = initData;
+    // for (const auto &item : elements) {
+    //     auto &targetGraph = func->graph();
+    //     Frame frame(&targetGraph);
 
-        if (targetGraph.hasClosure()) {
-            const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureData  = functionData->closure();
-            ASSERT(
-                closureData.size() == targetGraph.closure().size(),
-                "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureData.size(); ++ci) {
-                frame.set(ci + 3, closureData[ci]);
-            }
-        }
+    //     if (targetGraph.hasClosure()) {
+    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
+    //         const auto &closureData  = functionData->closure();
+    //         ASSERT(
+    //             closureData.size() == targetGraph.closure().size(),
+    //             "Function closure size mismatch.");
+    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
+    //             frame.set(ci + 3, closureData[ci]);
+    //         }
+    //     }
 
-        const auto &ports = targetGraph.ports();
-        frame.set(ports[0]->index(), result); // acc
-        frame.set(ports[1]->index(), item);   // cur
+    //     const auto &ports = targetGraph.ports();
+    //     frame.set(ports[0]->index(), result); // acc
+    //     frame.set(ports[1]->index(), item);   // cur
 
-        result = call(&targetGraph, frame); // 更新 result
-    }
+    //     result = call(&targetGraph, frame); // 更新 result
+    // }
 
-    currFrame.set(self, result);
+    // currFrame.set(self, result);
 }
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    auto targetData = currFrame.get(nargs[0]);
-    auto funcData   = currFrame.get(wargs[0]);
-    auto func       = tt::as_shared<FunctionData>(funcData);
+    // auto targetData = currFrame.get(nargs[0]);
+    // auto funcData   = currFrame.get(wargs[0]);
+    // auto func       = tt::as_shared<FunctionData>(funcData);
 
-    auto applyFunc = [&](const data_ptr_t &item) {
-        auto &targetGraph = func->graph();
-        Frame frame(&targetGraph);
-        if (targetGraph.hasClosure()) {
-            const auto &functionData = tt::as_shared<FunctionData>(funcData);
-            const auto &closureData  = functionData->closure();
-            ASSERT(
-                closureData.size() == targetGraph.closure().size(),
-                "Function closure size mismatch.");
-            for (size_t ci = 0; ci < closureData.size(); ++ci) {
-                frame.set(ci + 2, closureData[ci]);
-            }
-        }
-        frame.set(1, item);
-        call(&targetGraph, frame); // 忽略返回值
-    };
+    // auto applyFunc = [&](const data_ptr_t &item) {
+    //     auto &targetGraph = func->graph();
+    //     Frame frame(&targetGraph);
+    //     if (targetGraph.hasClosure()) {
+    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
+    //         const auto &closureData  = functionData->closure();
+    //         ASSERT(
+    //             closureData.size() == targetGraph.closure().size(),
+    //             "Function closure size mismatch.");
+    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
+    //             frame.set(ci + 2, closureData[ci]);
+    //         }
+    //     }
+    //     frame.set(1, item);
+    //     call(&targetGraph, frame); // 忽略返回值
+    // };
 
-    for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
-        applyFunc(item);
-    }
+    // for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
+    //     applyFunc(item);
+    // }
 
-    currFrame.set(self, Data::null());
+    // currFrame.set(self, Data::null());
 }

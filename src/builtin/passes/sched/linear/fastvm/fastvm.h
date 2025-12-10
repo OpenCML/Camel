@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,7 @@ class FastVMSchedPass : public LinearSchedPass {
     BumpPointerAllocator staticAllocator_{16 * MB};
     BumpPointerAllocator stackAllocator_{16 * MB};
 
-    data_ptr_t call(GraphIR::Graph *graph, Frame &frame);
+    slot_t call(GraphIR::Graph *graph, Frame &frame);
     GraphExecInfo *getExecInfoGraph(GraphIR::Graph *graph);
 
     void evalMarkedOperator(
