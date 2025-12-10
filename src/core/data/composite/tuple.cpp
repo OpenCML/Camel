@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,7 @@ TupleData::TupleData(data_list_t data) : data_(data) {
 }
 
 TupleData::TupleData(type_ptr_t type, data_vec_t &&data)
-    : ComposedData(type), data_(std::move(data)) {
+    : CompositeData(type), data_(std::move(data)) {
     ASSERT(type->code() == TypeCode::Tuple, "Type is not TupleType");
     ASSERT(
         (*static_cast<TupleType *>(type_.get())).size() == data_.size(),

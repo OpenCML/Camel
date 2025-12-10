@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,11 +21,11 @@
 
 #include "../base.h"
 
-class ComposedData : public Data {
+class CompositeData : public Data {
   public:
-    ComposedData() = default;
-    ComposedData(type_ptr_t type) : Data(type) {}
-    virtual ~ComposedData() = default;
+    CompositeData() = default;
+    CompositeData(type_ptr_t type) : Data(type) {}
+    virtual ~CompositeData() = default;
 
     virtual std::vector<std::string> refs() const { return std::vector<std::string>(); }
     virtual bool resolved() const { return true; }

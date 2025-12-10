@@ -289,7 +289,7 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     node_ptr_t node   = nullptr;
     TypeCode dataType = data->type()->code();
     if (isComposite(dataType)) {
-        auto composedData = tt::as_shared<ComposedData>(data);
+        auto composedData = tt::as_shared<CompositeData>(data);
         if (!composedData->resolved()) {
             node_ptr_t srcNode   = DataNode::create(*currGraph_, data);
             const auto &dataType = tt::as_shared<CompositeType>(data->type());

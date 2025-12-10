@@ -1,5 +1,5 @@
 #include "taskflow.h"
-#include "core/data/composed/array.h"
+#include "core/data/composite/array.h"
 #include "core/data/primary.h"
 
 #include <fstream>

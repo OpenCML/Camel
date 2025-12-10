@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,8 @@
 
 using namespace std;
 
-FunctionData::FunctionData(GraphIR::Graph &graph) : ComposedData(graph.funcType()), graph_(graph) {}
+FunctionData::FunctionData(GraphIR::Graph &graph)
+    : CompositeData(graph.funcType()), graph_(graph) {}
 
 func_ptr_t FunctionData::create(GraphIR::Graph &graph) {
     ASSERT(graph.funcType() != nullptr, "Graph must have a function type for FunctionData.");

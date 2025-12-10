@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composed.h"
+#include "composite.h"
 
-class ArrayData : public ComposedData {
+class ArrayData : public CompositeData {
   private:
     std::vector<size_t> refs_;
     std::vector<data_ptr_t> data_;

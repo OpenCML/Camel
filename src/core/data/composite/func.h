@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composed.h"
+#include "composite.h"
 
 namespace GraphIR {
 class Graph;
@@ -34,7 +34,7 @@ using func_lst_t  = std::list<func_ptr_t>;
 using func_vec_t  = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
-class FunctionData : public ComposedData {
+class FunctionData : public CompositeData {
     GraphIR::Graph &graph_;
     data_vec_t closure_;
 

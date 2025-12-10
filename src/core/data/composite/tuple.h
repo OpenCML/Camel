@@ -13,42 +13,36 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composed.h"
+#include "composite.h"
 
-#include <map>
-
-class StructData : public ComposedData {
+class TupleData : public CompositeData {
   private:
-    std::vector<std::string> refIndices_;
-    // 按字典序存储字段
-    std::map<std::string, data_ptr_t> data_;
+    std::vector<size_t> refIndices_;
+    std::vector<data_ptr_t> data_;
 
   public:
-    StructData();
-    StructData(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
-    StructData(std::map<std::string, data_ptr_t> &&data);
-    virtual ~StructData() = default;
+    TupleData(data_list_t data = {});
+    TupleData(type_ptr_t type, data_vec_t &&data);
+    virtual ~TupleData() = default;
 
-    static std::shared_ptr<StructData>
-    create(std::initializer_list<std::pair<std::string, data_ptr_t>> data) {
-        return std::make_shared<StructData>(data);
+    static std::shared_ptr<TupleData> create(data_list_t data = {}) {
+        return std::make_shared<TupleData>(data);
     }
-    static std::shared_ptr<StructData> create(std::map<std::string, data_ptr_t> &&data) {
-        return std::make_shared<StructData>(std::move(data));
+    static std::shared_ptr<TupleData> create(type_ptr_t type, data_vec_t &&data) {
+        return std::make_shared<TupleData>(type, std::move(data));
     }
 
-    bool emplace(const std::string &key, const data_ptr_t &val);
+    void emplace(const data_ptr_t &e);
 
-    bool add(const std::string &key, const data_ptr_t &val);
-    bool has(const std::string &key) const;
-    data_ptr_t get(const std::string &key) const;
-    std::map<std::string, data_ptr_t> &raw() { return data_; }
+    data_ptr_t get(size_t index) const;
+    std::vector<data_ptr_t> &raw() { return data_; }
+    size_t size() const { return data_.size(); }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refIndices_.empty(); }

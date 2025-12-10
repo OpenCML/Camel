@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,10 +27,10 @@
 
 using namespace std;
 
-StructData::StructData() : ComposedData(std::make_shared<StructType>()) {}
+StructData::StructData() : CompositeData(std::make_shared<StructType>()) {}
 
 StructData::StructData(initializer_list<pair<string, data_ptr_t>> data)
-    : ComposedData(make_shared<StructType>()) {
+    : CompositeData(make_shared<StructType>()) {
     StructType &structType = *static_cast<StructType *>(type_.get());
     for (const auto &e : data) {
         auto &[key, val] = e;
@@ -43,7 +43,7 @@ StructData::StructData(initializer_list<pair<string, data_ptr_t>> data)
 }
 
 StructData::StructData(std::map<std::string, data_ptr_t> &&data)
-    : ComposedData(make_shared<StructType>()), data_(std::move(data)) {}
+    : CompositeData(make_shared<StructType>()), data_(std::move(data)) {}
 
 bool StructData::emplace(const std::string &key, const data_ptr_t &val) {
     StructType &structType = *static_cast<StructType *>(type_.get());

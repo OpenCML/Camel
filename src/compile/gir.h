@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 #include <unordered_set>
 #include <variant>
 
-#include "core/data/composed/func.h"
+#include "core/data/composite/func.h"
 #include "core/data/data.h"
 #include "core/operator.h"
 #include "utils/log.h"

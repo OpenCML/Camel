@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,14 +28,14 @@
 
 using namespace std;
 
-ArrayData::ArrayData(type_ptr_t arrType, data_list_t data) : ComposedData(arrType), data_(data) {
+ArrayData::ArrayData(type_ptr_t arrType, data_list_t data) : CompositeData(arrType), data_(data) {
     for (const auto &e : data) {
         emplace(e);
     }
 }
 
 ArrayData::ArrayData(type_ptr_t arrType, data_vec_t &&data)
-    : ComposedData(arrType), data_(std::move(data)) {
+    : CompositeData(arrType), data_(std::move(data)) {
     ASSERT(arrType->code() == TypeCode::Array, "Type is not ArrayType");
 }
 
