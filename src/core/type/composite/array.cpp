@@ -25,7 +25,7 @@ using namespace std;
 
 void ArrayType::computeLayout() const {
     if (!layout_) {
-        layout_ = std::make_shared<ArrayTypeLayout>(elemType_->code(), 0, refs_);
+        layout_ = std::make_shared<ArrayTypeLayout>(elemType_->code(), refs_);
     }
 }
 

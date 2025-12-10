@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -113,7 +113,7 @@ enum class CastSafety {
 
 std::string typeCodeToString(TypeCode code);
 
-extern const signed char primitiveTypeConvMatrix[7][7];
+extern const signed char primitiveTypeConvMatrix[8][8];
 
 class Type;
 using type_ptr_t  = std::shared_ptr<Type>;

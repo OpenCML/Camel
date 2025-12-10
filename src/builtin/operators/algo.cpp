@@ -86,8 +86,7 @@ static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
 // ---------- 统一排序执行 ----------
 
 template <typename T>
-static Array *__doSortSlots__(
-    bool inplace, Array *arr, const ArrayType *arrType, SortAlgo algo, Frame &frame, Context &ctx) {
+static Array *__doSortSlots__(bool inplace, Array *arr, SortAlgo algo, Frame &frame, Context &ctx) {
     size_t n = arr->size();
     if (n <= 1) {
         if (!inplace)
@@ -126,23 +125,21 @@ static Array *__doSortSlots__(
 
 template <SortAlgo Algo>
 static Array *__doSortWithTypeCode__(
-    bool inplace, Array *arr, const ArrayType *arrType, Frame &frame, Context &ctx,
-    std::string_view fname) {
-    TypeCode code = arrType->elemCode();
+    bool inplace, Array *arr, TypeCode code, Frame &frame, Context &ctx, std::string_view fname) {
     Array *result = nullptr;
 
     switch (code) {
     case TypeCode::Int:
-        result = __doSortSlots__<Int>(inplace, arr, arrType, Algo, frame, ctx);
+        result = __doSortSlots__<Int>(inplace, arr, Algo, frame, ctx);
         break;
     case TypeCode::Long:
-        result = __doSortSlots__<Long>(inplace, arr, arrType, Algo, frame, ctx);
+        result = __doSortSlots__<Long>(inplace, arr, Algo, frame, ctx);
         break;
     case TypeCode::Float:
-        result = __doSortSlots__<Float>(inplace, arr, arrType, Algo, frame, ctx);
+        result = __doSortSlots__<Float>(inplace, arr, Algo, frame, ctx);
         break;
     case TypeCode::Double:
-        result = __doSortSlots__<Double>(inplace, arr, arrType, Algo, frame, ctx);
+        result = __doSortSlots__<Double>(inplace, arr, Algo, frame, ctx);
         break;
     default:
         ctx.rtmDiags()
@@ -158,13 +155,12 @@ static Array *__doSortWithTypeCode__(
 
 void __insert_sort__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr               = frame.get<Array *>(nargs[0]);
-    const ArrayType *arrType = frame.typePtrAt<ArrayType>(nargs[0]).get();
+    Array *arr = frame.get<Array *>(nargs[0]);
 
     Array *result = __doSortWithTypeCode__<SortAlgo::Insertion>(
         /*inplace*/ false,
         arr,
-        arrType,
+        arr->elemType(),
         frame,
         ctx,
         "<insert_sort>");
@@ -177,13 +173,12 @@ void __insert_sort__(
 
 void __insert_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr               = frame.get<Array *>(nargs[0]);
-    const ArrayType *arrType = frame.typePtrAt<ArrayType>(nargs[0]).get();
+    Array *arr = frame.get<Array *>(nargs[0]);
 
     Array *result = __doSortWithTypeCode__<SortAlgo::Insertion>(
         /*inplace*/ true,
         arr,
-        arrType,
+        arr->elemType(),
         frame,
         ctx,
         "<insert_sort_inplace>");
@@ -196,11 +191,15 @@ void __insert_sort_inplace__(
 
 void __quick_sort__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr               = frame.get<Array *>(nargs[0]);
-    const ArrayType *arrType = frame.typePtrAt<ArrayType>(nargs[0]).get();
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    Array *result =
-        __doSortWithTypeCode__<SortAlgo::Quick>(false, arr, arrType, frame, ctx, "<quick_sort>");
+    Array *result = __doSortWithTypeCode__<SortAlgo::Quick>(
+        false,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<quick_sort>");
 
     if (!result)
         frame.set(self, NullSlot);
@@ -210,13 +209,12 @@ void __quick_sort__(
 
 void __quick_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr               = frame.get<Array *>(nargs[0]);
-    const ArrayType *arrType = frame.typePtrAt<ArrayType>(nargs[0]).get();
+    Array *arr = frame.get<Array *>(nargs[0]);
 
     Array *result = __doSortWithTypeCode__<SortAlgo::Quick>(
         true,
         arr,
-        arrType,
+        arr->elemType(),
         frame,
         ctx,
         "<quick_sort_inplace>");
@@ -229,11 +227,15 @@ void __quick_sort_inplace__(
 
 void __merge_sort__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr               = frame.get<Array *>(nargs[0]);
-    const ArrayType *arrType = frame.typePtrAt<ArrayType>(nargs[0]).get();
+    Array *arr = frame.get<Array *>(nargs[0]);
 
-    Array *result =
-        __doSortWithTypeCode__<SortAlgo::Merge>(false, arr, arrType, frame, ctx, "<merge_sort>");
+    Array *result = __doSortWithTypeCode__<SortAlgo::Merge>(
+        false,
+        arr,
+        arr->elemType(),
+        frame,
+        ctx,
+        "<merge_sort>");
 
     if (!result)
         frame.set(self, NullSlot);
@@ -243,13 +245,12 @@ void __merge_sort__(
 
 void __merge_sort_inplace__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr               = frame.get<Array *>(nargs[0]);
-    const ArrayType *arrType = frame.typePtrAt<ArrayType>(nargs[0]).get();
+    Array *arr = frame.get<Array *>(nargs[0]);
 
     Array *result = __doSortWithTypeCode__<SortAlgo::Merge>(
         true,
         arr,
-        arrType,
+        arr->elemType(),
         frame,
         ctx,
         "<merge_sort_inplace>");
