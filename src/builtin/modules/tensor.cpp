@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":tensor/ones",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Array(Type::Int()), false}},
+                        {{ArrayType::create(Type::Int()), false}},
                         TensorType::Default()),
                 },
             }),
@@ -45,7 +45,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":tensor/zeros",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Array(Type::Int()), false}},
+                        {{ArrayType::create(Type::Int()), false}},
                         TensorType::Default()),
                 },
             }),
@@ -168,7 +168,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() == TensorType::typeCode()) {
-                                auto int32Type = std::make_shared<PrimaryType>(TypeCode::Int);
+                                auto int32Type = Type::Int();
                                 return std::make_shared<ArrayType>(int32Type);
                             }
                             return nullopt;

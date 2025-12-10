@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,7 +70,7 @@ void __join__(
     std::ostringstream joined;
 
     const data_ptr_t &arr = frame.get(nargs[0]);
-    auto vecData = arr->as<ArrayData>(Type::Array(Type::String()));
+    auto vecData          = arr->as<ArrayData>(ArrayType::create(Type::String()));
     for (auto &arg : vecData->raw()) {
         if (joined.tellp() > 0)
             joined << separator;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -109,7 +109,9 @@ void doSort(
     } else {
         std::vector<data_ptr_t> sorted = rawCopy;
         runSort(sorted);
-        frame.set(self, std::make_shared<ArrayData>(Type::Array(elemType), std::move(sorted)));
+        frame.set(
+            self,
+            std::make_shared<ArrayData>(ArrayType::create(elemType), std::move(sorted)));
     }
 }
 
@@ -509,5 +511,5 @@ void __merge_sorted_arrays__(
         return;
     }
 
-    frame.set(self, std::make_shared<ArrayData>(Type::Array(elemType), std::move(merged)));
+    frame.set(self, std::make_shared<ArrayData>(ArrayType::create(elemType), std::move(merged)));
 }

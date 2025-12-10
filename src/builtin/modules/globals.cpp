@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1528,7 +1528,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                     tt::as_shared<ArrayType>(norm[i])->elemType();
                                 tupleTypes.push_back(elemType);
                             }
-                            return Type::Array(Type::Tuple(tupleTypes));
+                            return ArrayType::create(Type::Tuple(tupleTypes));
                         }),
                 },
             }),
@@ -1562,7 +1562,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
-                            return Type::Array(arrType->elemType());
+                            return ArrayType::create(arrType->elemType());
                         }),
                 },
             }),
@@ -1580,7 +1580,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Int)
                                 return nullopt;
-                            return Type::Array(Type::Int());
+                            return ArrayType::create(Type::Int());
                         }),
                 },
             }),
@@ -1623,7 +1623,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             const auto &otherArrType = tt::as_shared<ArrayType>(norm[1]);
                             if (!arrType->elemType()->equals(otherArrType->elemType()))
                                 return nullopt;
-                            return Type::Array(arrType->elemType());
+                            return ArrayType::create(arrType->elemType());
                         }),
                 },
             }),
@@ -1719,7 +1719,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (!normTypes[0].first->equals(elemType))
                                 return nullopt;
                             ASSERT(funcType->hasExitType(), "Function must have exit type");
-                            return Type::Array(funcType->exitType());
+                            return ArrayType::create(funcType->exitType());
                         }),
                 },
             }),

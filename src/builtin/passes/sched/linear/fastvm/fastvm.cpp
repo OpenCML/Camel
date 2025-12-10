@@ -704,7 +704,8 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
     // };
 
     // auto arrayData = tt::as_shared<ArrayData>(targetData);
-    // currFrame.set(self, ArrayData::from(Type::Array(funcRetType), applyMap(arrayData->raw())));
+    // currFrame.set(self, ArrayData::from(ArrayType::create(funcRetType),
+    // applyMap(arrayData->raw())));
 }
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(

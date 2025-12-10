@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,7 +69,7 @@ void __zip__(
         zipped.push_back(TupleData::create(resElemType, std::move(pair)));
     }
 
-    frame.set(self, ArrayData::from(Type::Array(resElemType), std::move(zipped)));
+    frame.set(self, ArrayData::from(ArrayType::create(resElemType), std::move(zipped)));
 }
 
 void __head_arr__(
@@ -94,7 +94,7 @@ void __tail_arr__(
     auto array     = tt::as_shared<ArrayData>(collect)->raw();
     auto new_vec   = slice_tail(array);
     auto elem_type = tt::as_shared<ArrayType>(collect->type())->elemType();
-    frame.set(self, ArrayData::from(Type::Array(elem_type), std::move(new_vec)));
+    frame.set(self, ArrayData::from(ArrayType::create(elem_type), std::move(new_vec)));
 }
 
 void __range__(
@@ -125,7 +125,7 @@ void __range__(
         }
     }
 
-    auto arrayType = Type::Array(Type::Int());
+    auto arrayType = ArrayType::create(Type::Int());
     auto result    = ArrayData::from(arrayType, std::move(values));
 
     frame.set(self, result);
@@ -157,7 +157,7 @@ void __slice_arr__(
     frame.set(
         self,
         ArrayData::from(
-            Type::Array(tt::as_shared<ArrayType>(collect->type())->elemType()),
+            ArrayType::create(tt::as_shared<ArrayType>(collect->type())->elemType()),
             std::move(sliced)));
 }
 
@@ -170,7 +170,7 @@ void __concat_arr__(
     auto r = tt::as_shared<ArrayData>(right)->raw();
     l.insert(l.end(), r.begin(), r.end());
     auto elemType = tt::as_shared<ArrayType>(left->type())->elemType();
-    frame.set(self, ArrayData::from(Type::Array(elemType), std::move(l)));
+    frame.set(self, ArrayData::from(ArrayType::create(elemType), std::move(l)));
 }
 
 void __append_arr__(
@@ -182,7 +182,7 @@ void __append_arr__(
     auto arr = tt::as_shared<ArrayData>(collection)->raw();
     arr.push_back(element);
     auto elemType = tt::as_shared<ArrayType>(collection->type())->elemType();
-    frame.set(collectIdx, ArrayData::from(Type::Array(elemType), std::move(arr)));
+    frame.set(collectIdx, ArrayData::from(ArrayType::create(elemType), std::move(arr)));
 
     frame.set(self, collection);
 }

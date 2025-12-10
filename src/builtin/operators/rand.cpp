@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,7 +99,7 @@ void __sample__(
     std::shuffle(copy.begin(), copy.end(), g_rng);
     copy.resize(static_cast<size_t>(n));
 
-    frame.set(self, std::make_shared<ArrayData>(Type::Array(elemType), std::move(copy)));
+    frame.set(self, std::make_shared<ArrayData>(ArrayType::create(elemType), std::move(copy)));
 }
 
 void __shuffle__(
@@ -111,5 +111,5 @@ void __shuffle__(
     std::vector<data_ptr_t> copy = arr->raw();
     std::shuffle(copy.begin(), copy.end(), g_rng);
 
-    frame.set(self, std::make_shared<ArrayData>(Type::Array(elemType), std::move(copy)));
+    frame.set(self, std::make_shared<ArrayData>(ArrayType::create(elemType), std::move(copy)));
 }
