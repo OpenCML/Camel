@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,192 +26,269 @@
 
 namespace GIR = GraphIR;
 
-void __abs__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &val = frame.get(nargs[0]);
+void __abs__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
 
-    data_ptr_t result;
-
-    if (val->type() == Type::Int()) {
-        auto v = val->as<IntData>(Type::Int());
-        result = std::make_shared<IntData>(std::abs(v->data()));
-    } else if (val->type() == Type::Long()) {
-        auto v = val->as<LongData>(Type::Long());
-        result = std::make_shared<LongData>(std::abs(v->data()));
-    } else if (val->type() == Type::Float()) {
-        auto v = val->as<FloatData>(Type::Float());
-        result = std::make_shared<FloatData>(std::fabs(v->data()));
-    } else if (val->type() == Type::Double()) {
-        auto v = val->as<DoubleData>(Type::Double());
-        result = std::make_shared<DoubleData>(std::fabs(v->data()));
-    } else {
+    switch (tp) {
+    case TypeCode::Int: {
+        Int v = frame.get<Int>(nargs[0]);
+        frame.set(self, std::abs(v));
+        break;
+    }
+    case TypeCode::Long: {
+        Long v = frame.get<Long>(nargs[0]);
+        frame.set(self, std::abs(v));
+        break;
+    }
+    case TypeCode::Float: {
+        Float v = frame.get<Float>(nargs[0]);
+        frame.set(self, std::fabs(v));
+        break;
+    }
+    case TypeCode::Double: {
+        Double v = frame.get<Double>(nargs[0]);
+        frame.set(self, std::fabs(v));
+        break;
+    }
+    default: {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<abs> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
-        return;
+            .commit("<abs> not supported for type " + typeCodeToString(tp));
+        frame.set(self, NullSlot);
+        break;
     }
-
-    frame.set(self, result);
+    }
 }
 
-void __exp__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &x = frame.get(nargs[0]);
+void __exp__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
 
-    data_ptr_t result;
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::exp(frame.get<Float>(nargs[0])));
+        break;
 
-    if (x->type() == Type::Float()) {
-        auto val = x->as<FloatData>(Type::Float());
-        result = std::make_shared<FloatData>(std::exp(val->data()));
-    } else if (x->type() == Type::Double()) {
-        auto val = x->as<DoubleData>(Type::Double());
-        result = std::make_shared<DoubleData>(std::exp(val->data()));
-    } else if (x->type() == Type::Int()) {
-        auto val = x->as<IntData>(Type::Int());
-        result = std::make_shared<DoubleData>(std::exp(static_cast<double>(val->data())));
-    } else if (x->type() == Type::Long()) {
-        auto val = x->as<LongData>(Type::Long());
-        result = std::make_shared<DoubleData>(std::exp(static_cast<double>(val->data())));
-    } else {
+    case TypeCode::Double:
+        frame.set(self, std::exp(frame.get<Double>(nargs[0])));
+        break;
+
+    default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<exp> operator not supported for type " + x->type()->toString());
-        frame.set(self, Data::null());
-        return;
+            .commit("<exp> only supports Float and Double");
+        frame.set(self, NullSlot);
     }
-
-    frame.set(self, result);
 }
 
-void __round__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+void __round__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
 
-    const data_ptr_t &val = frame.get(nargs[0]);
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::round(frame.get<Float>(nargs[0])));
+        break;
 
-    data_ptr_t result;
+    case TypeCode::Double:
+        frame.set(self, std::round(frame.get<Double>(nargs[0])));
+        break;
 
-    if (val->type() == Type::Float()) {
-        auto v = val->as<FloatData>(Type::Float());
-        result = std::make_shared<FloatData>(std::round(v->data()));
-    } else if (val->type() == Type::Double()) {
-        auto v = val->as<DoubleData>(Type::Double());
-        result = std::make_shared<DoubleData>(std::round(v->data()));
-    } else {
+    default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<round> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
-        return;
+            .commit("<round> only supports Float and Double");
+        frame.set(self, NullSlot);
     }
-
-    frame.set(self, result);
 }
 
-void __ceil__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &val = frame.get(nargs[0]);
+void __ceil__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
 
-    data_ptr_t result;
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::ceil(frame.get<Float>(nargs[0])));
+        break;
 
-    if (val->type() == Type::Float()) {
-        auto v = val->as<FloatData>(Type::Float());
-        result = std::make_shared<FloatData>(std::ceil(v->data()));
-    } else if (val->type() == Type::Double()) {
-        auto v = val->as<DoubleData>(Type::Double());
-        result = std::make_shared<DoubleData>(std::ceil(v->data()));
-    } else {
+    case TypeCode::Double:
+        frame.set(self, std::ceil(frame.get<Double>(nargs[0])));
+        break;
+
+    default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<ceil> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
-        return;
+            .commit("<ceil> only supports Float and Double");
+        frame.set(self, NullSlot);
     }
-
-    frame.set(self, result);
 }
 
-void __floor__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &val = frame.get(nargs[0]);
+void __floor__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
 
-    data_ptr_t result;
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::floor(frame.get<Float>(nargs[0])));
+        break;
 
-    if (val->type() == Type::Float()) {
-        auto v = val->as<FloatData>(Type::Float());
-        result = std::make_shared<FloatData>(std::floor(v->data()));
-    } else if (val->type() == Type::Double()) {
-        auto v = val->as<DoubleData>(Type::Double());
-        result = std::make_shared<DoubleData>(std::floor(v->data()));
-    } else {
+    case TypeCode::Double:
+        frame.set(self, std::floor(frame.get<Double>(nargs[0])));
+        break;
+
+    default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
-            .commit("<floor> not supported for type " + val->type()->toString());
-        frame.set(self, Data::null());
-        return;
+            .commit("<floor> only supports Float and Double");
+        frame.set(self, NullSlot);
     }
-
-    frame.set(self, result);
 }
 
-void __bin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &val = frame.get(nargs[0]);
-
+void __bin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp    = frame.typeAt(nargs[0]);
     int64_t number = 0;
-    if (val->type() == Type::Int()) {
-        number = val->as<IntData>(Type::Int())->data();
-    } else {
-        number = val->as<LongData>(Type::Long())->data();
+
+    switch (tp) {
+    case TypeCode::Int:
+        number = static_cast<int64_t>(frame.get<Int>(nargs[0]));
+        break;
+    case TypeCode::Long:
+        number = static_cast<int64_t>(frame.get<Long>(nargs[0]));
+        break;
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<bin> operator requires integer type");
+        frame.set(self, NullSlot);
+        return;
     }
 
-    std::string result = "0b" + std::bitset<64>(number).to_string();
-    result.erase(2, result.find('1') - 2); // remove leading zeros
-    frame.set(self, std::make_shared<StringData>(result));
+    std::string bits = std::bitset<64>(number).to_string();
+    // 去掉前导零，只保留一个 '0b' 前缀
+    auto first_one     = bits.find('1');
+    std::string body   = (first_one == std::string::npos) ? "0" : bits.substr(first_one);
+    std::string result = "0b" + body;
+
+    String *str = String::from(result, mm::autoSpace());
+    frame.set(self, str);
 }
 
-void __oct__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &val = frame.get(nargs[0]);
+void __oct__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
 
-    if (val->type() != Type::Int() && val->type() != Type::Long()) {
+    if (tp != TypeCode::Int && tp != TypeCode::Long) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<oct> operator requires integer type");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
     std::ostringstream oss;
     oss << "0o" << std::oct;
-    if (val->type() == Type::Int()) {
-        oss << val->as<IntData>(Type::Int())->data();
-    } else {
-        oss << val->as<LongData>(Type::Long())->data();
-    }
+    if (tp == TypeCode::Int)
+        oss << frame.get<Int>(nargs[0]);
+    else
+        oss << frame.get<Long>(nargs[0]);
 
-    frame.set(self, std::make_shared<StringData>(oss.str()));
+    String *result = String::from(oss.str(), mm::autoSpace());
+    frame.set(self, result);
 }
 
-void __hex__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &val = frame.get(nargs[0]);
+void __hex__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
 
-    if (val->type() != Type::Int() && val->type() != Type::Long()) {
+    if (tp != TypeCode::Int && tp != TypeCode::Long) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<hex> operator requires integer type");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
     std::ostringstream oss;
     oss << "0x" << std::hex << std::uppercase;
-    if (val->type() == Type::Int()) {
-        oss << val->as<IntData>(Type::Int())->data();
-    } else {
-        oss << val->as<LongData>(Type::Long())->data();
-    }
+    if (tp == TypeCode::Int)
+        oss << frame.get<Int>(nargs[0]);
+    else
+        oss << frame.get<Long>(nargs[0]);
 
-    frame.set(self, std::make_shared<StringData>(oss.str()));
+    String *result = String::from(oss.str(), mm::autoSpace());
+    frame.set(self, result);
+}
+
+void __sqrt__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
+
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::sqrt(frame.get<Float>(nargs[0])));
+        break;
+
+    case TypeCode::Double:
+        frame.set(self, std::sqrt(frame.get<Double>(nargs[0])));
+        break;
+
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<sqrt> only supports Float and Double");
+        frame.set(self, NullSlot);
+    }
+}
+
+void __sin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
+
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::sin(frame.get<Float>(nargs[0])));
+        break;
+
+    case TypeCode::Double:
+        frame.set(self, std::sin(frame.get<Double>(nargs[0])));
+        break;
+
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<sin> only supports Float and Double");
+        frame.set(self, NullSlot);
+    }
+}
+
+void __cos__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
+
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::cos(frame.get<Float>(nargs[0])));
+        break;
+
+    case TypeCode::Double:
+        frame.set(self, std::cos(frame.get<Double>(nargs[0])));
+        break;
+
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<cos> only supports Float and Double");
+        frame.set(self, NullSlot);
+    }
+}
+
+void __tan__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    TypeCode tp = frame.typeAt(nargs[0]);
+
+    switch (tp) {
+    case TypeCode::Float:
+        frame.set(self, std::tan(frame.get<Float>(nargs[0])));
+        break;
+
+    case TypeCode::Double:
+        frame.set(self, std::tan(frame.get<Double>(nargs[0])));
+        break;
+
+    default:
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit("<tan> only supports Float and Double");
+        frame.set(self, NullSlot);
+    }
 }
