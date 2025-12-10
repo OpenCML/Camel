@@ -289,23 +289,24 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             }
 
             case OpCode::FILL: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
+                ASSERT(false, "FILL opcode not fully implemented in FastVM.");
+                // const data_arr_t nargs = bc.nargs();
+                // const data_arr_t wargs = bc.wargs();
 
-                TypeCode targetType = currFrame->typeAt(nargs[0]);
-                ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+                // TypeCode targetType = currFrame->typeAt(nargs[0]);
+                // ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
 
-                Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
-                ASSERT(target != nullptr, "FILL target data is null.");
+                // Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
+                // ASSERT(target != nullptr, "FILL target data is null.");
 
-                switch (targetType) {
-                case TypeCode::Tuple: {
-                    auto tuple = static_cast<Tuple *>(target);
-                    break;
-                }
-                default:
-                    ASSERT(false, "Unsupported FILL target type.");
-                }
+                // switch (targetType) {
+                // case TypeCode::Tuple: {
+                //     auto tuple = static_cast<Tuple *>(target);
+                //     break;
+                // }
+                // default:
+                //     ASSERT(false, "Unsupported FILL target type.");
+                // }
 
                 // data_vec_t inputs;
                 // inputs.reserve(bc.withCnt());
@@ -314,8 +315,7 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 // }
                 // target->resolve(inputs);
 
-                ASSERT(false, "FILL opcode not fully implemented in FastVM.");
-                currFrame->set(bc.result, target);
+                // currFrame->set(bc.result, target);
                 break;
             }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -420,8 +420,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             return static_cast<Object *>(header->forwardedAddr());
         }
 
-        size_t totalSize = header->size();
-        size_t objSize   = header->objSize();
+        size_t objSize = header->objSize();
 
         // 增加年龄
         header->incAge();
@@ -483,7 +482,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         }
 
         // 复制 payload 数据
-        std::memcpy(newObj, obj, objSize);
+        std::memcpy(newObj, (void *)obj, objSize);
 
         // 通知复制后的obj已经被移动
         Object *gcObj = reinterpret_cast<Object *>(newObj);

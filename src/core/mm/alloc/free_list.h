@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 23, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -374,7 +374,7 @@ class FreeListAllocator : public IAllocator {
         FreeBlock *prev     = nullptr;
         FreeBlock *curr     = freeList_;
 
-        // 找到插入位置
+        // 找到插入位置（保持按地址排序）
         while (curr && reinterpret_cast<std::byte *>(curr) < blockData) {
             prev    = curr;
             prevPtr = &(curr->next);
@@ -384,25 +384,22 @@ class FreeListAllocator : public IAllocator {
         std::byte *blockEnd = blockData + total_size;
 
         // 检查与后块合并
-        bool mergeNext = false;
         if (LIKELY(curr) && UNLIKELY(blockEnd == reinterpret_cast<std::byte *>(curr))) {
             total_size += curr->size;
-            curr      = curr->next;
-            mergeNext = true;
+            curr = curr->next;
         }
 
         // 检查与前块合并
         if (LIKELY(prev)) {
             std::byte *prevEnd = reinterpret_cast<std::byte *>(prev) + prev->size;
             if (UNLIKELY(prevEnd == blockData)) {
-                // 与前块合并
                 prev->size += total_size;
                 prev->next = curr;
                 return;
             }
         }
 
-        // 创建新块（可能已经与后块合并）
+        // 否则，创建新的 free block
         FreeBlock *newBlock = reinterpret_cast<FreeBlock *>(blockData);
         newBlock->size      = total_size;
         newBlock->next      = curr;

@@ -183,8 +183,8 @@ class FixedArray : public Object {
   private:
     FixedArray(const ArrayTypeLayout &layout, size_t size) : layout_(&layout), size_(size) {}
 
-    size_t size_;
     const ArrayTypeLayout *layout_;
+    size_t size_;
 
     // 灵活数组成员 (Flexible Array Member)
     // 必须是最后一个成员
@@ -380,7 +380,7 @@ class Array : public Object {
     static constexpr size_t SMALL_ARRAY_SIZE = 10;
 
     Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity)
-        : allocator_(&allocator), layout_(&layout), size_(0), fixedArray_(nullptr) {
+        : allocator_(&allocator), layout_(&layout), fixedArray_(nullptr), size_(0) {
         if (initialCapacity > SMALL_ARRAY_SIZE) {
             // 使用外部数组
             capacity_   = initialCapacity;
