@@ -20,7 +20,6 @@
 #pragma once
 
 #include "base.h"
-#include "core/type/type.h"
 
 // FixedArray: 固定大小的数组，对象体和数据区在一块连续内存中
 class FixedArray : public Object {
@@ -145,6 +144,21 @@ class FixedArray : public Object {
         }
 
         return reinterpret_cast<Object *>(newArray);
+    }
+
+    virtual void print(std::ostream &os) const override {
+        os << "[";
+
+        TypeCode elemType     = layout_->elemType();
+        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(data_);
+
+        for (size_t i = 0; i < size_; ++i) {
+            if (i > 0)
+                os << ", ";
+            printSlot(os, dataPtr[i], elemType);
+        }
+
+        os << "]";
     }
 
     virtual void onMoved() override {
@@ -327,6 +341,21 @@ class Array : public Object {
         }
 
         return reinterpret_cast<Object *>(newArray);
+    }
+
+    virtual void print(std::ostream &os) const override {
+        os << "[";
+
+        TypeCode elemType     = layout_->elemType();
+        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(dataPtr_);
+
+        for (size_t i = 0; i < size_; ++i) {
+            if (i > 0)
+                os << ", ";
+            printSlot(os, dataPtr[i], elemType);
+        }
+
+        os << "]";
     }
 
     virtual void onMoved() override {

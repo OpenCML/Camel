@@ -20,7 +20,6 @@
 #pragma once
 
 #include "base.h"
-#include "core/type/type.h"
 
 class Tuple : public Object {
   public:
@@ -135,6 +134,21 @@ class Tuple : public Object {
         }
 
         return reinterpret_cast<Object *>(newTuple);
+    }
+
+    virtual void print(std::ostream &os) const override {
+        os << "(";
+
+        const auto &types     = layout_->elemTypes();
+        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(data_);
+
+        for (size_t i = 0; i < size_; ++i) {
+            if (i > 0)
+                os << ", ";
+            printSlot(os, dataPtr[i], types[i]);
+        }
+
+        os << ")";
     }
 
     virtual void onMoved() override {}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -75,6 +75,11 @@ class Function : public Object {
         }
 
         return reinterpret_cast<Object *>(fnNew);
+    }
+
+    virtual void print(std::ostream &os) const override {
+        os << "Function(graph=" << reinterpret_cast<uint64_t>(graph_) << ", tuple=";
+        tuple_->print(os);
     }
 
     virtual void onMoved() override {

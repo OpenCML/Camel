@@ -160,6 +160,8 @@ class String : public Object {
         return copy;
     }
 
+    virtual void print(std::ostream &os) const override { os << data_; }
+
     virtual void onMoved() override {}
     virtual void updateRefs(const std::function<Object *(Object *)> &) override {}
 

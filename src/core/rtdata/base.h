@@ -20,6 +20,7 @@
 #pragma once
 
 #include "core/mm/alloc/allocator.h"
+#include "core/type/type.h"
 #include "utils/brpred.h"
 
 #include <functional>
@@ -29,6 +30,7 @@ class Object {
     virtual ~Object()                                                          = default;
     virtual bool equals(const Object *other, bool deep = false) const          = 0;
     virtual Object *clone(IAllocator &allocator, bool deep = false) const      = 0;
+    virtual void print(std::ostream &os) const                                 = 0;
     virtual void onMoved()                                                     = 0;
     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) = 0;
 
@@ -66,6 +68,43 @@ using Float  = float;
 using Double = double;
 using Bool   = bool;
 using Byte   = char;
+
+inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
+    if (obj) {
+        obj->print(os);
+    } else {
+        os << "null";
+    }
+    return os;
+}
+
+inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
+    if (isGCTraced(t)) {
+        os << reinterpret_cast<const Object *const *>(data);
+    } else {
+        // 非引用类型，根据 type code 输出
+        switch (t) {
+        case TypeCode::Int:
+            os << static_cast<int32_t>(data);
+            break;
+        case TypeCode::Long:
+            os << static_cast<int64_t>(data);
+            break;
+        case TypeCode::Float:
+            os << static_cast<float>(data);
+            break;
+        case TypeCode::Double:
+            os << static_cast<double>(data);
+            break;
+        case TypeCode::Bool:
+            os << (static_cast<bool>(data) ? "true" : "false");
+            break;
+        case TypeCode::Byte:
+            os << "'" << static_cast<char>(data) << "'";
+            break;
+        }
+    }
+}
 
 constexpr slot_t NullSlot = 0;
 constexpr Object *NullRef = nullptr;

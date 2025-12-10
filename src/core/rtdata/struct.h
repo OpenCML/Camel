@@ -20,7 +20,6 @@
 #pragma once
 
 #include "base.h"
-#include "core/type/type.h"
 
 class Struct : public Object {
   public:
@@ -155,6 +154,29 @@ class Struct : public Object {
         }
 
         return reinterpret_cast<Object *>(newStruct);
+    }
+
+    virtual void print(std::ostream &os) const override {
+        if (size_ == 0) {
+            os << "{}";
+            return;
+        }
+
+        os << "{ ";
+
+        const auto &names     = layout_->fieldNames();
+        const auto &types     = layout_->fieldTypes();
+        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(data_);
+
+        for (size_t i = 0; i < size_; ++i) {
+            if (i > 0)
+                os << ", ";
+
+            os << names[i] << ": ";
+            printSlot(os, dataPtr[i], types[i]);
+        }
+
+        os << " }";
     }
 
     virtual void onMoved() override {
