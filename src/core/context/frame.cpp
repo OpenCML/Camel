@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "frame.h"
-#include "compile/gir.h"
 #include "core/rtdata/conv.h"
 
 FrameTemplate::FrameTemplate(

@@ -104,7 +104,7 @@ std::string TensorType::mangle() const {
     return result;
 }
 
-type_ptr_t TensorType::clone(bool deep = false) const {
+type_ptr_t TensorType::clone(bool deep) const {
     ASSERT(false, "clone() not implemented");
     return nullptr;
 }

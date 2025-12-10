@@ -19,17 +19,13 @@
 
 #pragma once
 
+#include "compile/gir.h"
 #include "core/rtdata/data.h"
 #include "utils/brpred.h"
 #include "utils/log.h"
 
 class Frame;
 using frame_rptr_t = Frame *;
-
-namespace GraphIR {
-class Graph;
-using data_idx_t = int16_t;
-} // namespace GraphIR
 
 class FrameTemplate {
   public:

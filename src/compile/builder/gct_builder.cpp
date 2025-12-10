@@ -85,11 +85,9 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("f64"), Type::Double());
     typeScope_->insert(Reference("real"), Type::Double());
     typeScope_->insert(Reference("bool"), Type::Bool());
-    typeScope_->insert(Reference("char"), Type::Char());
     typeScope_->insert(Reference("string"), Type::String());
     typeScope_->insert(Reference("any"), Type::Any());
     typeScope_->insert(Reference("void"), Type::Void());
-    typeScope_->insert(Reference("functor"), Type::Func());
 }
 
 /*

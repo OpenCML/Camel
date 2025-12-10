@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -285,36 +285,44 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     ENTER("DATA");
     const auto &dataLoad   = gct->loadAs<GCT::DataLoad>();
     const data_ptr_t &data = dataLoad->data();
-    node_ptr_t node        = nullptr;
-    if (data->resolved()) {
-        node = DataNode::create(*currGraph_, data);
-        if (varied_ && currGraph_->outer() != nullptr) {
-            // If it is a global variable, no longer maintain a copy
-            // For local variables, still need to create a new copy for each call
-            // The mechanism of local shared variables is yet to be designed
-            node_ptr_t copyNode = CopyNode::create(*currGraph_, data->type());
-            Node::link(LinkType::Norm, node, copyNode);
-            node = copyNode;
-        }
-    } else {
-        node_ptr_t srcNode = DataNode::create(*currGraph_, data);
-        ASSERT(data->type()->composed(), "Unresolved data must be of composed type");
-        const auto &dataType = tt::as_shared<CompositeType>(data->type());
-        type_vec_t refTypes;
-        node_vec_t refNodes;
-        for (const auto &ref : data->refs()) {
-            const auto &refNode = resolveNodeByRef(ref);
-            refTypes.push_back(refNode->dataType());
-            refNodes.push_back(refNode);
-        }
-        auto fillType = tt::as_shared<CompositeType>(dataType->clone());
-        fillType->resolve(refTypes);
-        node = FillNode::create(*currGraph_, fillType);
-        Node::link(LinkType::Norm, srcNode, node);
-        for (const auto &refNode : refNodes) {
-            Node::link(LinkType::With, refNode, node);
+
+    node_ptr_t node   = nullptr;
+    TypeCode dataType = data->type()->code();
+    if (isComposite(dataType)) {
+        auto composedData = tt::as_shared<ComposedData>(data);
+        if (!composedData->resolved()) {
+            node_ptr_t srcNode   = DataNode::create(*currGraph_, data);
+            const auto &dataType = tt::as_shared<CompositeType>(data->type());
+            type_vec_t refTypes;
+            node_vec_t refNodes;
+            for (const auto &ref : composedData->refs()) {
+                const auto &refNode = resolveNodeByRef(ref);
+                refTypes.push_back(refNode->dataType());
+                refNodes.push_back(refNode);
+            }
+            auto fillType = tt::as_shared<CompositeType>(dataType->clone());
+            fillType->resolve(refTypes);
+            node = FillNode::create(*currGraph_, fillType);
+            Node::link(LinkType::Norm, srcNode, node);
+            for (const auto &refNode : refNodes) {
+                Node::link(LinkType::With, refNode, node);
+            }
+
+            LEAVE("DATA");
+            return node;
         }
     }
+
+    node = DataNode::create(*currGraph_, data);
+    if (varied_ && currGraph_->outer() != nullptr) {
+        // If it is a global variable, no longer maintain a copy
+        // For local variables, still need to create a new copy for each call
+        // The mechanism of local shared variables is yet to be designed
+        node_ptr_t copyNode = CopyNode::create(*currGraph_, data->type());
+        Node::link(LinkType::Norm, node, copyNode);
+        node = copyNode;
+    }
+
     LEAVE("DATA");
     return node;
 }

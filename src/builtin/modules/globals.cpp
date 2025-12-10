@@ -1528,7 +1528,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                     tt::as_shared<ArrayType>(norm[i])->elemType();
                                 tupleTypes.push_back(elemType);
                             }
-                            return ArrayType::create(Type::Tuple(tupleTypes));
+                            return ArrayType::create(TupleType::create(std::move(tupleTypes)));
                         }),
                 },
             }),
@@ -1767,7 +1767,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (with[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_shared<FunctionType>(with[1]);
-                            if (!funcType->assignable(Type::Func()))
+                            if (!funcType->assignable(FunctionType::create()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Bool()))
                                 return nullopt;
