@@ -27,7 +27,7 @@ class String : public Object {
     String &operator=(const String &) = delete;
 
     static String *create(size_t length, IAllocator &allocator) {
-        size_t totalSize = offsetof(String, data_) + (length + 1);
+        size_t totalSize = sizeof(String) + (length + 1);
         void *memory     = allocator.alloc(totalSize, alignof(String));
         if (!memory)
             throw std::bad_alloc();
@@ -120,7 +120,7 @@ class String : public Object {
 
     bool contains(const String *substr) const { return find(substr) != npos; }
 
-    String *substr(size_t pos, size_t len = npos, IAllocator &allocator) const {
+    String *substr(IAllocator &allocator, size_t pos, size_t len = npos) const {
         if (pos >= size_)
             return from("", allocator);
         if (len > size_ - pos)

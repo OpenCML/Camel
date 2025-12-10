@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 09, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,31 @@ TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shap
 vector<size_t> TensorType::shape() const { return shape_; }
 
 type_ptr_t TensorType::dType() const { return element_type_; }
+
+void TensorType::registerStaticMethod(
+    const std::string &methodName, const std::string &operatorUri) {
+    staticMethods_[methodName] = operatorUri;
+}
+
+std::string TensorType::getStaticMethodUri(const std::string &methodName) {
+    auto it = staticMethods_.find(methodName);
+    if (it != staticMethods_.end()) {
+        return it->second;
+    }
+    return "";
+}
+
+bool TensorType::hasStaticMethod(const std::string &methodName) {
+    return staticMethods_.find(methodName) != staticMethods_.end();
+}
+
+type_ptr_t TensorType::Tensor(const std::vector<size_t> &shape) {
+    return std::make_shared<TensorType>(shape);
+}
+
+type_ptr_t TensorType::Default() {
+    return std::make_shared<TensorType>(Type::Float(), std::vector<size_t>{0});
+}
 
 string TensorType::toString() const {
     string result = "Tensor<[";
@@ -79,74 +104,36 @@ std::string TensorType::mangle() const {
     return result;
 }
 
-bool TensorType::operator==(const Type &other) const {
-    if (this == &other) {
+type_ptr_t TensorType::clone(bool deep = false) const {
+    ASSERT(false, "clone() not implemented");
+    return nullptr;
+}
+
+bool TensorType::equals(const type_ptr_t &other) const {
+    if (this == other.get()) {
         return true;
     }
-    if (other.code() != typeCode()) {
+    if (other->code() != typeCode()) {
         return false;
     }
-    const TensorType &otherMatrix = dynamic_cast<const TensorType &>(other);
+    const TensorType &otherMatrix = dynamic_cast<const TensorType &>(*other);
     return shape_ == otherMatrix.shape_ && (element_type_ == otherMatrix.element_type_ ||
                                             (element_type_ && otherMatrix.element_type_ &&
                                              element_type_->equals(otherMatrix.element_type_)));
 }
 
-bool TensorType::operator!=(const Type &other) const { return !(*this == other); }
-
 CastSafety TensorType::castSafetyTo(const Type &other) const {
     if (this == &other) {
-        return CastSafety::Safe;
-    }
-    if (other.code() == typeCode()) {
-        const TensorType &otherTensor = dynamic_cast<const TensorType &>(other);
-        if (shape_ == otherTensor.shape_) {
-            if (!element_type_ && !otherTensor.element_type_) {
-                return CastSafety::Safe;
-            }
-            if (element_type_ && otherTensor.element_type_) {
-                return element_type_->castSafetyTo(*otherTensor.element_type_);
-            }
-            return CastSafety::Unsafe;
-        }
-        return CastSafety::Forbidden;
-    }
-    if (other.composed()) {
-        switch (other.code()) {
-        case TypeCode::Array: {
-            return CastSafety::Safe;
-        }
-        default:
-            return CastSafety::Forbidden;
-        }
-    }
-    if (other.code() == TypeCode::Any) {
         return CastSafety::Safe;
     }
     return CastSafety::Forbidden;
 }
 
-void TensorType::registerStaticMethod(
-    const std::string &methodName, const std::string &operatorUri) {
-    staticMethods_[methodName] = operatorUri;
-}
-
-std::string TensorType::getStaticMethodUri(const std::string &methodName) {
-    auto it = staticMethods_.find(methodName);
-    if (it != staticMethods_.end()) {
-        return it->second;
+bool TensorType::assignable(const type_ptr_t &type) const {
+    // 目标必须是 Tensor 类型
+    if (type->code() != typeCode()) {
+        return false;
     }
-    return "";
-}
-
-bool TensorType::hasStaticMethod(const std::string &methodName) {
-    return staticMethods_.find(methodName) != staticMethods_.end();
-}
-
-type_ptr_t TensorType::Tensor(const std::vector<size_t> &shape) {
-    return std::make_shared<TensorType>(shape);
-}
-
-type_ptr_t TensorType::Default() {
-    return std::make_shared<TensorType>(Type::Float(), std::vector<size_t>{0});
+    // 暂时先不考虑元素类型和形状的兼容性问题
+    return true;
 }

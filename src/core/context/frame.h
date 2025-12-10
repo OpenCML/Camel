@@ -126,13 +126,13 @@ class Frame {
             size_t idx = static_cast<size_t>(index);
             ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
             auto res = graph_->runtimeDataType()->typeAt(idx);
-            ASSERT(res.has_value(), "Type at index {} is null.", idx);
+            ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
             return tt::as_shared<T>(res.value());
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(idx < staticArea_->size(), "Invalid static data index");
             auto res = graph_->staticDataType()->typeAt(idx);
-            ASSERT(res.has_value(), "Type at index {} is null.", idx);
+            ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
             return tt::as_shared<T>(res.value());
         }
     }
@@ -149,13 +149,17 @@ class Frame {
             ASSERT(idx < staticArea_->size(), "Invalid static data index");
             res = staticArea_->get<T>(idx);
         }
-        ASSERT(res != nullptr, "Retrieved null data from frame at index {}", index);
+        ASSERT(
+            res != static_cast<T>(0),
+            std::format("Retrieved null data from frame at index {}", index));
         return res;
     }
 
     template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
-        ASSERT(value != nullptr, "Cannot set null data into frame at index {}", index);
+        ASSERT(
+            value != static_cast<T>(0),
+            std::format("Cannot set null data into frame at index {}", index));
         if (index < 0) {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(idx < staticArea_->size(), "Invalid static data index");

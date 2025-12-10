@@ -31,8 +31,7 @@ class FixedArray : public Object {
     // 静态创建方法
     static FixedArray *create(const ArrayTypeLayout &layout, size_t size, IAllocator &allocator) {
         // 计算总内存大小：对象头 + 数组数据
-        // offsetof 会自动考虑 data_ 的对齐要求
-        size_t headerSize = offsetof(FixedArray, data_);
+        size_t headerSize = sizeof(FixedArray);
         size_t dataSize   = size * sizeof(slot_t);
         size_t totalSize  = headerSize + dataSize;
 
@@ -381,7 +380,7 @@ class Array : public Object {
     static constexpr size_t SMALL_ARRAY_SIZE = 10;
 
     Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity)
-        : allocator_(&allocator), size_(0), layout_(&layout), fixedArray_(nullptr) {
+        : allocator_(&allocator), layout_(&layout), size_(0), fixedArray_(nullptr) {
         if (initialCapacity > SMALL_ARRAY_SIZE) {
             // 使用外部数组
             capacity_   = initialCapacity;
@@ -422,9 +421,10 @@ class Array : public Object {
 
     IAllocator *allocator_;         // 分配器引用（8字节）
     const ArrayTypeLayout *layout_; // 类型布局（8字节）
-    uint32_t size_;                 // 逻辑元素个数（4字节）
-    uint32_t capacity_;             // 缓存的容量信息（4字节）
     FixedArray *fixedArray_;        // 底层固定数组，nullptr表示使用内联存储（8字节）
+
+    uint32_t size_;     // 逻辑元素个数（4字节）
+    uint32_t capacity_; // 缓存的容量信息（4字节）
 
     // 关键字段：数据指针，始终指向当前使用的数据区
     // - 当使用内联存储时：dataPtr_ == inlineData_

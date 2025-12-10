@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 23, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 
 constexpr size_t KB = 1024;
 constexpr size_t MB = 1024 * KB;
-consteval size_t GB = 1024 * MB;
+constexpr size_t GB = 1024 * MB;
 
 class IAllocator {
   public:

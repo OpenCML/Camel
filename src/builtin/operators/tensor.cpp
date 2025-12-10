@@ -496,8 +496,6 @@ void __tensor_random__(
 void __tensor_randn__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
 
-void __tensor_shape__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
 // Tensor arithmetic operations
 void __tensor_add__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}

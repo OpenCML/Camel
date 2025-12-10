@@ -28,7 +28,7 @@ class Struct : public Object {
 
     static Struct *create(const StructTypeLayout &layout, IAllocator &allocator) {
         size_t fieldCount = layout.fieldCount();
-        size_t headerSize = offsetof(Struct, data_);
+        size_t headerSize = sizeof(Struct);
         size_t dataSize   = sizeof(slot_t) * fieldCount;
         size_t totalSize  = headerSize + dataSize;
 
@@ -58,14 +58,18 @@ class Struct : public Object {
 
     template <typename T> T get(std::string_view name) const {
         auto optIndex = layout_->findField(name);
-        ASSERT(optIndex.has_value(), "Field name not found: {}", name);
+        ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
         return get<T>(optIndex.value());
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+        ASSERT(index < size_, std::format("Index out of range: {}", index));
+        ASSERT(
+            sizeof(T) == sizeof(slot_t),
+            std::format("Type size mismatch: {}", typeid(T).name()));
+        ASSERT(
+            alignof(T) <= alignof(slot_t),
+            std::format("Type alignment mismatch: {}", typeid(T).name()));
 
         T *arr = reinterpret_cast<T *>(data_);
         if constexpr (std::is_same_v<T, Object *>) {
@@ -75,8 +79,8 @@ class Struct : public Object {
     }
 
     template <typename T> void set(std::string_view name, T value) {
-        auto optIndex = layout_.findField(name);
-        ASSERT(optIndex.has_value(), "Field name not found: {}", name);
+        auto optIndex = layout_->findField(name);
+        ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
         set<T>(optIndex.value(), value);
     }
 

@@ -610,9 +610,9 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                         bool res = static_cast<double>(lhs) >= static_cast<double>(rhs);
                         currFrame->set(bc.result, res);
                         break;
+                    }
                     default:
                         ASSERT(false, "Unsupported inlined operator.");
-                    }
                     }
                 }
 

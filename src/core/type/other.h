@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Nov. 12, 2025
+ * Updated: Dec. 10, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -73,7 +73,7 @@ class OtherType : public Type {
 
     virtual std::string toString() const override                     = 0;
     virtual std::string mangle() const override                       = 0;
-    virtual type_ptr_t clone() const override                         = 0;
+    virtual type_ptr_t clone(bool deep = false) const override        = 0;
     virtual bool equals(const type_ptr_t &type) const override        = 0;
     virtual CastSafety castSafetyTo(const Type &other) const override = 0;
     virtual bool assignable(const type_ptr_t &type) const override    = 0;

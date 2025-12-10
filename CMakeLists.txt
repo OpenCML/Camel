@@ -70,6 +70,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Debug>:-g3>
     -Wall -Wextra -Wpedantic
     -Wno-unused-parameter
+    -Wno-c99-extensions
     -Wno-language-extension-token # for antlr4-runtime
     -Wno-dollar-in-identifier-extension # for antlr4-runtime
     -Wno-nan-infinity-disabled
