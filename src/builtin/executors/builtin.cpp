@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 #include "../operators/other.h"
 #include "../operators/profiler.h"
 #include "../operators/rand.h"
+#include "../operators/statistics.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
 #include "../operators/tensor.h"
@@ -337,6 +338,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"math/hex_i", __hex__},
         {"math/hex_l", __hex__},
 
+        {"math/sqrt", __sqrt__},
+
         // time
         {"time/now", __now__},
         {"time/strftime", __strftime__},
@@ -362,6 +365,10 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"algo/merge_sort", __merge_sort_inplace__},
         {"algo/merge_sorted", __merge_sort__},
         {"algo/merge_sorted_arrays", __merge_sorted_arrays__}, // 双指针合并法
+
+        // statistics
+        {"statistics/mean", __mean__},
+        {"statistics/stdev", __stdev__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},

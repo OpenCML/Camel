@@ -97,11 +97,6 @@ class Frame {
     Frame &operator=(const Frame &other) = delete;
     Frame &operator=(Frame &&other) noexcept {
         ASSERT(graph_ == nullptr, "Only allow move construction from an empty Frame.");
-        EXEC_WHEN_DEBUG(l.in("Frame").info(
-            "[{}] Moved Frame({}) for Graph <{}>",
-            formatAddress(this, true),
-            formatAddress(dynamicArea_, true),
-            graph_->name()));
         if (this != &other) {
             // 转移资源
             graph_       = other.graph_;
