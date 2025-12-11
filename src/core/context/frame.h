@@ -50,7 +50,8 @@ class FrameTemplate {
 
 class Frame {
   public:
-    Frame() = delete;
+    // 构造一个空 Frame，仅供移动使用
+    Frame() : graph_(nullptr), allocator_(nullptr), staticArea_(nullptr), dynamicArea_(nullptr) {};
     Frame(const FrameTemplate &temp)
         : graph_(temp.graph()), allocator_(&temp.runtimeAllocator()),
           staticArea_(temp.staticArea()) {
@@ -68,6 +69,7 @@ class Frame {
     Frame(Frame &&other) noexcept
         : graph_(other.graph_), allocator_(other.allocator_), staticArea_(other.staticArea_),
           dynamicArea_(other.dynamicArea_) {
+        ASSERT(graph_ == nullptr, "Only allow move construction from an empty Frame.");
         EXEC_WHEN_DEBUG(l.in("Frame").info(
             "[{}] Moved Frame({}) for Graph <{}>",
             formatAddress(this, true),
@@ -87,7 +89,6 @@ class Frame {
             formatAddress(dynamicArea_, true),
             graph_ ? graph_->name() : "null"));
         if (dynamicArea_) {
-            // dynamicArea_->~GCTuple();
             allocator_->free(dynamicArea_);
             dynamicArea_ = nullptr;
         }
@@ -95,15 +96,13 @@ class Frame {
 
     Frame &operator=(const Frame &other) = delete;
     Frame &operator=(Frame &&other) noexcept {
+        ASSERT(graph_ == nullptr, "Only allow move construction from an empty Frame.");
         EXEC_WHEN_DEBUG(l.in("Frame").info(
             "[{}] Moved Frame({}) for Graph <{}>",
             formatAddress(this, true),
             formatAddress(dynamicArea_, true),
             graph_->name()));
         if (this != &other) {
-            // 这里不释放自己的资源
-            // 因为 Frame 通常是分配在栈上的，释放更早分配的内存会导致后分配的内存全部被释放
-            // 通过析构函数释放就足够了
             // 转移资源
             graph_       = other.graph_;
             allocator_   = other.allocator_;

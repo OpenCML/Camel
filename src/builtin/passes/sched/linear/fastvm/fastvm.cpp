@@ -58,7 +58,7 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
     auto info  = getExecInfoGraph(graph);
     auto codes = &info->codes;
 
-    Frame nextFrame(info->ftemp); // for mutual-tail-recursion optimization
+    Frame nextFrame; // for mutual-tail-recursion optimization
     frame_rptr_t currFrame = &frame, twinFrame = nullptr;
 
     auto __call = [&](GraphIR::Graph &targetGraph, const Bytecode &bc, bool isTailCall) -> slot_t {
