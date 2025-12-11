@@ -233,8 +233,8 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 size_t jumpIdx = 0;
                 if (bc.withCnt() == 0) {
                     // 普通的 if-else 分支，cond 是 bool 类型
-                    slot_t condData = currFrame->get<slot_t>(nargs[0]);
-                    if (static_cast<bool>(condData)) {
+                    bool condData = currFrame->get<bool>(nargs[0]);
+                    if (condData) {
                         jumpIdx = 0; // jump to true branch
                     } else {
                         jumpIdx = 1; // jump to false branch

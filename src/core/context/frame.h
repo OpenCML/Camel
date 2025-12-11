@@ -27,6 +27,27 @@
 class Frame;
 using frame_rptr_t = Frame *;
 
+inline std::string formatAddress(void *ptr) {
+    std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);
+
+    std::stringstream ss;
+    ss << std::hex << std::uppercase << addr;
+    std::string hexStr = ss.str();
+
+    if (hexStr.length() < 16) {
+        hexStr = std::string(16 - hexStr.length(), '0') + hexStr;
+    }
+
+    std::string formatted;
+    for (size_t i = 0; i < hexStr.length(); ++i) {
+        formatted += hexStr[i];
+        if ((i + 1) % 4 == 0 && i + 1 != hexStr.length())
+            formatted += '\'';
+    }
+
+    return "0x" + formatted;
+}
+
 class FrameTemplate {
   public:
     FrameTemplate() = delete;
@@ -107,11 +128,21 @@ class Frame {
         ASSERT(index != 0, "Data index is invalid.");
         if (LIKELY(index > 0)) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             return dynamicArea_->typeAt(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
             return staticArea_->typeAt(idx);
         }
     }
@@ -120,13 +151,23 @@ class Frame {
         ASSERT(index != 0, "Data index is invalid.");
         if (LIKELY(index > 0)) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             auto res = graph_->runtimeDataType()->typeAt(idx);
             ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
             return tt::as_shared<T>(res.value());
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
             auto res = graph_->staticDataType()->typeAt(idx);
             ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
             return tt::as_shared<T>(res.value());
@@ -155,11 +196,33 @@ class Frame {
                     staticArea_->size()));
             res = staticArea_->get<T>(idx);
         }
+        EXEC_WHEN_DEBUG([&]() {
+            std::ostringstream oss;
+            printSlot(oss, toSlot(res), typeAt(index));
+            l.in("Frame").info(
+                "[{}] Getting data of <{}> at index {} ({}): {}",
+                formatAddress(this).substr(17, 4),
+                graph_->name(),
+                index,
+                typeCodeToString(typeAt(index)),
+                oss.str());
+        }());
         return res;
     }
 
     template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
+        EXEC_WHEN_DEBUG([&]() {
+            std::ostringstream oss;
+            printSlot(oss, toSlot(value), typeAt(index));
+            l.in("Frame").info(
+                "[{}] Setting data of <{}> at index {} ({}): {}",
+                formatAddress(this).substr(17, 4),
+                graph_->name(),
+                index,
+                typeCodeToString(typeAt(index)),
+                oss.str());
+        }());
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(

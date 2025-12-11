@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,9 +51,7 @@ class Struct : public Object {
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return reinterpret_cast<const T *>(data_)[index];
+        return fromSlot<T>(data_[index]);
     }
 
     template <typename T> T get(std::string_view name) const {
@@ -64,18 +62,10 @@ class Struct : public Object {
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, std::format("Index out of range: {}", index));
-        ASSERT(
-            sizeof(T) == sizeof(slot_t),
-            std::format("Type size mismatch: {}", typeid(T).name()));
-        ASSERT(
-            alignof(T) <= alignof(slot_t),
-            std::format("Type alignment mismatch: {}", typeid(T).name()));
-
-        T *arr = reinterpret_cast<T *>(data_);
         if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
-        arr[index] = value;
+        data_[index] = toSlot(value);
     }
 
     template <typename T> void set(std::string_view name, T value) {
@@ -84,8 +74,8 @@ class Struct : public Object {
         set<T>(optIndex.value(), value);
     }
 
-    slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
-    const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
+    slot_t *data() { return data_; }
+    const slot_t *data() const { return data_; }
     const StructTypeLayout &layout() const { return *layout_; }
     TypeCode typeAt(size_t index) const { return layout_->fieldType(index); }
 
@@ -100,8 +90,8 @@ class Struct : public Object {
             return false;
 
         const auto &types   = layout_->fieldTypes();
-        const slot_t *dataA = reinterpret_cast<const slot_t *>(data_);
-        const slot_t *dataB = reinterpret_cast<const slot_t *>(otherStruct->data_);
+        const slot_t *dataA = data_;
+        const slot_t *dataB = otherStruct->data_;
 
         if (!deep) {
             // 浅比较：直接比较整个内存块（引用字段只比较指针）
@@ -131,8 +121,8 @@ class Struct : public Object {
         Struct *newStruct = Struct::create(*layout_, allocator);
 
         const auto &types = layout_->fieldTypes();
-        const slot_t *src = reinterpret_cast<const slot_t *>(data_);
-        slot_t *dst       = reinterpret_cast<slot_t *>(newStruct->data_);
+        const slot_t *src = data_;
+        slot_t *dst       = newStruct->data_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
@@ -169,7 +159,7 @@ class Struct : public Object {
 
         const auto &names     = layout_->fieldNames();
         const auto &types     = layout_->fieldTypes();
-        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(data_);
+        const slot_t *dataPtr = data_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
@@ -204,5 +194,5 @@ class Struct : public Object {
 
     uint32_t size_;
     const StructTypeLayout *layout_;
-    alignas(slot_t) std::byte data_[]; // 灵活数组成员
+    slot_t data_[]; // 灵活数组成员
 };

@@ -69,6 +69,32 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 
 using slot_t = uint64_t;
 
+template <typename T> slot_t toSlot(T value) {
+    if constexpr (std::is_same_v<T, slot_t>) {
+        return value;
+    } else {
+        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
+        slot_t slot_value{};
+        std::memcpy(&slot_value, &value, sizeof(T));
+        return slot_value;
+    }
+}
+
+template <typename T> T fromSlot(slot_t slot_value) {
+    if constexpr (std::is_same_v<T, slot_t>) {
+        return slot_value;
+    } else {
+        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
+        T value{};
+        std::memcpy(&value, &slot_value, sizeof(T));
+        return value;
+    }
+}
+
 using Int    = int32_t;
 using Long   = int64_t;
 using Float  = float;
@@ -109,9 +135,11 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
         case TypeCode::Byte:
             os << "0x" << std::hex << static_cast<uint32_t>(data) << std::dec;
             break;
+        case TypeCode::Void:
+            os << "null";
+            break;
         default:
-            ASSERT(false, "Unsupported slot type for printing");
-            os << "<unknown slot type>";
+            os << std::format("<slot of type: {}>", typeCodeToString(t));
             break;
         }
     }
