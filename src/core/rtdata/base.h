@@ -118,22 +118,22 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
         // 非引用类型，根据 type code 输出
         switch (t) {
         case TypeCode::Int:
-            os << static_cast<int32_t>(data);
+            os << fromSlot<Int>(data);
             break;
         case TypeCode::Long:
-            os << static_cast<int64_t>(data);
+            os << fromSlot<Long>(data);
             break;
         case TypeCode::Float:
-            os << static_cast<float>(data);
+            os << fromSlot<Float>(data);
             break;
         case TypeCode::Double:
-            os << static_cast<double>(data);
+            os << fromSlot<Double>(data);
             break;
         case TypeCode::Bool:
-            os << (static_cast<bool>(data) ? "true" : "false");
+            os << (fromSlot<Bool>(data) ? "true" : "false");
             break;
         case TypeCode::Byte:
-            os << "0x" << std::hex << static_cast<uint32_t>(data) << std::dec;
+            os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
             break;
         case TypeCode::Void:
             os << "null";

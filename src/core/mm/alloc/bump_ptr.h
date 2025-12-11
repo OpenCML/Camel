@@ -23,6 +23,7 @@
 #include "header.h"
 #include "utils/assert.h"
 #include "utils/brpred.h"
+#include "utils/log.h"
 
 #include <algorithm>
 #include <cassert>
@@ -60,15 +61,68 @@ class BumpPointerAllocator : public IAllocator {
         installHeader(top_, total_size);
 
         std::byte *result = top_ + sizeof(ObjectHeader);
-        top_              = newTop;
 
+        EXEC_WHEN_DEBUG([&]() {
+            l.in("BumpPtr").debug(
+                "[{}] Allocated {} bytes ({}) from {}, obj size {}, now top at {}",
+                formatAddress(start_, true),
+                total_size,
+                formatAddress(result, true),
+                formatAddress(top_, true),
+                size,
+                formatAddress(newTop, true));
+
+            // 调试时：把新分配的空间 (top_ 到 newTop) 填充为 0xABCDABCD
+            std::size_t bytes_to_fill = static_cast<std::size_t>(newTop - top_);
+            std::size_t words         = bytes_to_fill / sizeof(uint32_t);
+            uint32_t *p               = reinterpret_cast<uint32_t *>(top_);
+            for (std::size_t i = 0; i < words; ++i) {
+                p[i] = 0xABCDABCD;
+            }
+
+            // 若末尾不是 4 字节对齐，处理残余字节
+            std::size_t remain = bytes_to_fill % sizeof(uint32_t);
+            if (remain > 0) {
+                std::byte *byteTail = reinterpret_cast<std::byte *>(p + words);
+                std::memset(byteTail, 0xCD, remain);
+            }
+        }());
+
+        top_ = newTop;
         return result;
     }
 
     void free(void *ptr) override {
         ASSERT(contains(ptr), "Pointer does not belong to this allocator");
-        // 重置 top_ 指针直接释放到 ptr 的位置
-        top_ = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
+
+        // 将 top_ 回退到对象头部位置
+        auto newTop = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
+
+        EXEC_WHEN_DEBUG([&] {
+            l.in("BumpPtr").debug(
+                "[{}] Freeing object at {}, now top at {}",
+                formatAddress(start_, true),
+                formatAddress(ptr, true),
+                formatAddress(newTop, true));
+
+            // 调试时：把释放掉的空间 (newTop 到 top_) 填充为 0xDEADBEEF
+            std::size_t bytes_to_fill = static_cast<std::size_t>(top_ - newTop);
+            std::size_t words         = bytes_to_fill / sizeof(uint32_t);
+
+            uint32_t *p = reinterpret_cast<uint32_t *>(newTop);
+            for (std::size_t i = 0; i < words; ++i) {
+                p[i] = 0xDEADBEEF;
+            }
+
+            // 若末尾不是 4 字节对齐，处理残余字节
+            std::size_t remain = bytes_to_fill % sizeof(uint32_t);
+            if (remain > 0) {
+                std::byte *byteTail = reinterpret_cast<std::byte *>(p + words);
+                std::memset(byteTail, 0xEF, remain);
+            }
+        }());
+
+        top_ = newTop;
     }
 
     void reset() override { top_ = start_; }

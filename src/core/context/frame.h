@@ -27,27 +27,6 @@
 class Frame;
 using frame_rptr_t = Frame *;
 
-inline std::string formatAddress(void *ptr) {
-    std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);
-
-    std::stringstream ss;
-    ss << std::hex << std::uppercase << addr;
-    std::string hexStr = ss.str();
-
-    if (hexStr.length() < 16) {
-        hexStr = std::string(16 - hexStr.length(), '0') + hexStr;
-    }
-
-    std::string formatted;
-    for (size_t i = 0; i < hexStr.length(); ++i) {
-        formatted += hexStr[i];
-        if ((i + 1) % 4 == 0 && i + 1 != hexStr.length())
-            formatted += '\'';
-    }
-
-    return "0x" + formatted;
-}
-
 class FrameTemplate {
   public:
     FrameTemplate() = delete;
@@ -78,12 +57,22 @@ class Frame {
         ASSERT(graph_ != nullptr, "Frame graph is null.");
         ASSERT(staticArea_ != nullptr, "Static tuple is null.");
         dynamicArea_ = temp.makeDynamicArea();
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Created Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_->name()));
     }
     // 不允许拷贝但可移动
     Frame(const Frame &) = delete;
     Frame(Frame &&other) noexcept
         : graph_(other.graph_), allocator_(other.allocator_), staticArea_(other.staticArea_),
           dynamicArea_(other.dynamicArea_) {
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Moved Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_->name()));
         // 防止已被移动的对象意外释放数据
         other.graph_       = nullptr;
         other.allocator_   = nullptr;
@@ -91,13 +80,30 @@ class Frame {
         other.dynamicArea_ = nullptr;
     }
 
+    ~Frame() {
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Destroyed Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_ ? graph_->name() : "null"));
+        if (dynamicArea_) {
+            // dynamicArea_->~GCTuple();
+            allocator_->free(dynamicArea_);
+            dynamicArea_ = nullptr;
+        }
+    }
+
     Frame &operator=(const Frame &other) = delete;
     Frame &operator=(Frame &&other) noexcept {
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Moved Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_->name()));
         if (this != &other) {
-            // 先释放自己的资源
-            if (dynamicArea_) {
-                allocator_->free(dynamicArea_);
-            }
+            // 这里不释放自己的资源
+            // 因为 Frame 通常是分配在栈上的，释放更早分配的内存会导致后分配的内存全部被释放
+            // 通过析构函数释放就足够了
             // 转移资源
             graph_       = other.graph_;
             allocator_   = other.allocator_;
@@ -110,15 +116,6 @@ class Frame {
             other.dynamicArea_ = nullptr;
         }
         return *this;
-    }
-
-    ~Frame() {
-        if (dynamicArea_) {
-            // dynamicArea_->~GCTuple();
-            allocator_->free(dynamicArea_);
-            dynamicArea_ = nullptr;
-        }
-        // staticArea_ 由外部管理，不释放。
     }
 
     GraphIR::Graph *graph() { return graph_; }
@@ -201,7 +198,7 @@ class Frame {
             printSlot(oss, toSlot(res), typeAt(index));
             l.in("Frame").info(
                 "[{}] Getting data of <{}> at index {} ({}): {}",
-                formatAddress(this).substr(17, 4),
+                formatAddress(this, true),
                 graph_->name(),
                 index,
                 typeCodeToString(typeAt(index)),
@@ -217,7 +214,7 @@ class Frame {
             printSlot(oss, toSlot(value), typeAt(index));
             l.in("Frame").info(
                 "[{}] Setting data of <{}> at index {} ({}): {}",
-                formatAddress(this).substr(17, 4),
+                formatAddress(this, true),
                 graph_->name(),
                 index,
                 typeCodeToString(typeAt(index)),

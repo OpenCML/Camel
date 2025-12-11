@@ -12,7 +12,7 @@ func sum(n: int, a: int, d: int, acc: int): int {
 }
 
 func main(): int sync {
-    let n = 10  // number of terms
+    let n = 100000  // number of terms
     let a = 1       // first term
     let d = 3       // common difference
     'Start computing arithmetic_sum(n={}, a={}, d={})...'->format<n, a, d>->println
