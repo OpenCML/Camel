@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Nov. 01, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,11 +33,11 @@ void __print__(
         if (i > 0) {
             std::cout << " ";
         }
-        const data_ptr_t &data = frame.get(nargs[i]);
-        data->print(std::cout);
+        TypeCode type = frame.typeAt(nargs[i]);
+        slot_t data   = frame.get<slot_t>(nargs[i]);
+        printSlot(std::cout, data, type);
     }
-    frame.set(self, Data::null());
-    return;
+    frame.set(self, NullSlot);
 }
 
 void __println__(
@@ -46,12 +46,12 @@ void __println__(
         if (i > 0) {
             std::cout << std::endl;
         }
-        const data_ptr_t &data = frame.get(nargs[i]);
-        data->print(std::cout);
+        TypeCode type = frame.typeAt(nargs[i]);
+        slot_t data   = frame.get<slot_t>(nargs[i]);
+        printSlot(std::cout, data, type);
     }
     std::cout << std::endl;
-    frame.set(self, Data::null());
-    return;
+    frame.set(self, NullSlot);
 }
 
 void __input__(
@@ -62,8 +62,9 @@ void __input__(
         if (i > 0) {
             oss << " ";
         }
-        const data_ptr_t &data = frame.get(nargs[i]);
-        data->print(oss);
+        TypeCode type = frame.typeAt(nargs[i]);
+        slot_t data   = frame.get<slot_t>(nargs[i]);
+        printSlot(oss, data, type);
     }
 
     std::cout << oss.str();
@@ -71,6 +72,5 @@ void __input__(
     std::string input;
     std::getline(std::cin, input);
 
-    frame.set(self, std::make_shared<StringData>(input));
-    return;
+    frame.set(self, String::from(input, mm::autoSpace()));
 }

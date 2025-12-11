@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,16 +54,9 @@ void ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
         throw CamelRuntimeException(RuntimeExceptionCode::InvalidURI, "Invalid URI format");
     }
     const std::string protocol = uri.substr(0, pos);
-    auto itExec = loadedExecutors.find(protocol);
+    auto itExec                = loadedExecutors.find(protocol);
     if (itExec != loadedExecutors.end()) {
         itExec->second->eval(uri.substr(pos + 1), self, frame);
-        ASSERT(
-            frame.has(self->index()),
-            std::format(
-                "Operator <{}> did not set result for node {}. "
-                "Make sure to return Data::null() if the return type is void.",
-                uri,
-                self->toString()));
         return;
     }
     auto itFact = executorFactories.find(protocol);
@@ -76,13 +69,6 @@ void ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, executor);
     executor->eval(uri.substr(pos + 1), self, frame);
-    ASSERT(
-        frame.has(self->index()),
-        std::format(
-            "Operator <{}> did not set result for node {}. "
-            "Make sure to return Data::null() if the return type is void.",
-            uri,
-            self->toString()));
 }
 
 std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
@@ -91,7 +77,7 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
         return std::nullopt;
     }
     const std::string protocol = uri.substr(0, pos);
-    auto itExec = loadedExecutors.find(protocol);
+    auto itExec                = loadedExecutors.find(protocol);
     if (itExec != loadedExecutors.end()) {
         return itExec->second->find(uri.substr(pos + 1));
     }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 22, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,5 @@ void __zen__(
     std::string zen =
 #include "ZEN"
         ;
-    frame.set(self, std::make_shared<StringData>(zen));
-    return;
+    frame.set(self, String::from(zen, mm::autoSpace()));
 }

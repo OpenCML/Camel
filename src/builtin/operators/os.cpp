@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,8 +43,8 @@
 // Terminal control namespace
 namespace Terminal {
 
-static DWORD originalMode = 0;
-static HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+static DWORD originalMode  = 0;
+static HANDLE hStdin       = GetStdHandle(STD_INPUT_HANDLE);
 static bool rawModeEnabled = false;
 
 // 设置或取消原始输入模式
@@ -111,7 +111,7 @@ bool setRawMode(bool enable) {
 
         struct termios raw = originalTermios;
         raw.c_lflag &= ~(ECHO | ICANON); // 关闭回显和标准缓冲
-        raw.c_cc[VMIN] = 1;
+        raw.c_cc[VMIN]  = 1;
         raw.c_cc[VTIME] = 0;
 
         if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) == -1)
@@ -161,35 +161,32 @@ void clearInputBuffer() {
 
 namespace GIR = GraphIR;
 
-void __sleep__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arg = frame.get(nargs[0]);
+void __sleep__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Int ms = frame.get<Int>(nargs[0]);
 
-    auto pd = arg->as<IntData>(Type::Int());
-
-    if (pd->data() < 0) {
+    if (ms < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sleep> requires a non-negative integer");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
     try {
-        std::this_thread::sleep_for(std::chrono::milliseconds(pd->data()));
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("<sleep> encountered an error: ") + e.what());
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 
-    frame.set(self, Data::null());
+    frame.set(self, NullSlot);
 }
 
 void __whoami__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     std::string username;
 
 #ifdef _WIN32
@@ -199,7 +196,7 @@ void __whoami__(
         username = buffer;
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 #else
@@ -208,26 +205,21 @@ void __whoami__(
         username = pw->pw_name;
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
-        frame.set(self, Data::null());
+        frame.set(self, NullSlot);
         return;
     }
 #endif
 
-    data_ptr_t result = std::make_shared<StringData>(username);
-    frame.set(self, result);
-    return;
+    frame.set(self, String::from(username, mm::autoSpace()));
 }
 
-void __exit__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+void __exit__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     throw CamelRuntimeException(RuntimeExceptionCode::ForceExit, "<exit> operator invoked");
 }
 
 void __set_terminal_raw_mode__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    const data_ptr_t &arg = frame.get(nargs[0]);
-
-    bool enable = arg->as<BoolData>(Type::Bool())->data();
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+    Bool enable  = frame.get<Bool>(nargs[0]);
     bool success = Terminal::setRawMode(enable);
 
     if (!success) {
@@ -236,42 +228,29 @@ void __set_terminal_raw_mode__(
             .commit("<set_terminal_raw_mode> failed to modify terminal mode");
     }
 
-    frame.set(self, Data::null());
-    return;
+    frame.set(self, NullSlot);
 }
 
 void __has_input__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    bool available = Terminal::hasInput();
-
-    frame.set(self, std::make_shared<BoolData>(available));
-    return;
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
+    Bool available = Terminal::hasInput();
+    frame.set(self, available);
 }
 
-void __get_char__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+void __get_char__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
     std::string input = Terminal::readInput(1);
-
-    frame.set(self, std::make_shared<StringData>(input));
-    return;
+    frame.set(self, String::from(input, mm::autoSpace()));
 }
 
 void __get_chars__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    int maxChars = -1; // Default to read all available characters
-    maxChars = frame.get(nargs[0])->as<IntData>(Type::Int())->data();
-
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
+    Int maxChars      = frame.get<Int>(nargs[0]);
     std::string input = Terminal::readInput(maxChars);
-
-    frame.set(self, std::make_shared<StringData>(input));
-    return;
+    frame.set(self, String::from(input, mm::autoSpace()));
 }
 
 void __clear_input_buffer__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
     Terminal::clearInputBuffer();
-
-    frame.set(self, Data::null());
-    return;
+    frame.set(self, NullSlot);
 }

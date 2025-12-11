@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,14 +40,13 @@ void __profiler_begin__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
 #ifndef NDEBUG
     const std::string name = "profiler_scope";
-    bool is_tracing = profiler::AdvancedTracer::getInstance().isTracing();
+    bool is_tracing        = profiler::AdvancedTracer::getInstance().isTracing();
     if (is_tracing) {
         profiler::AdvancedTracer::getInstance().traceFunctionCall(name);
     } else {
     }
     std::cout << "[PROFILER] Begin: " << name << std::endl;
 #endif
-    frame.set(self, Data::null());
 }
 
 void __profiler_end__(
@@ -59,7 +58,6 @@ void __profiler_end__(
     }
     std::cout << "[PROFILER] End: " << name << std::endl;
 #endif
-    frame.set(self, Data::null());
 }
 
 void __profiler_instant__(
@@ -71,7 +69,6 @@ void __profiler_instant__(
     }
     std::cout << "[PROFILER] Instant: " << name << std::endl;
 #endif
-    frame.set(self, Data::null());
 }
 
 void __profiler_enable__(
@@ -79,11 +76,10 @@ void __profiler_enable__(
 #ifndef NDEBUG
     profiler::AdvancedTracer::Config config;
     config.enablePerfettoIntegration = true;
-    config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
-    config.outputFile = "profile_reports/camel_trace.json";
+    config.perfettoOutput            = "profile_reports/camel_trace.perfetto-trace";
+    config.outputFile                = "profile_reports/camel_trace.json";
     profiler::AdvancedTracer::getInstance().initialize(config);
     profiler::AdvancedTracer::getInstance().startTracing();
     std::cout << "[PROFILER] Profiling enabled" << std::endl;
 #endif
-    frame.set(self, Data::null());
 }

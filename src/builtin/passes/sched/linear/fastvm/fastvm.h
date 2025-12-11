@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Nov. 02, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,16 +22,27 @@
 #include "../linear.h"
 #include "builtin/passes/sched/common/bytecode.h"
 #include "core/context/frame.h"
+#include "core/mm/mm.h"
 
-#include <stack>
+#include <list>
+
+struct GraphExecInfo {
+    FrameTemplate ftemp;
+    bytecode_vec_t codes;
+
+    GraphExecInfo(FrameTemplate ftemp, bytecode_vec_t &&codes)
+        : ftemp(std::move(ftemp)), codes(std::move(codes)) {}
+};
 
 class FastVMSchedPass : public LinearSchedPass {
     inline static const size_t maxRecursionDepth_ = 128; // default max recursion depth
-    size_t currRecursionDepth_ = 0;
-    std::unordered_map<GraphIR::Graph *, std::shared_ptr<bytecode_vec_t>> compiledCodesMap_;
+    size_t currRecursionDepth_                    = 0;
+    std::list<GraphExecInfo> execInfos_; // 用于缓存图的执行信息，使用list保证指针稳定性
+    BumpPointerAllocator staticAllocator_{16 * MB};
+    BumpPointerAllocator stackAllocator_{16 * MB};
 
-    data_ptr_t call(GraphIR::Graph *graph, Frame &frame);
-    std::shared_ptr<bytecode_vec_t> getCodeOfGraph(GraphIR::Graph *graph);
+    slot_t call(GraphIR::Graph *graph, Frame &frame);
+    GraphExecInfo *getExecInfoGraph(GraphIR::Graph *graph);
 
     void evalMarkedOperator(
         const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);

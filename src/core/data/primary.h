@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,11 +30,6 @@ template <typename T> class PrimaryData : public Data {
   private:
     mutable T data_;
 
-    template <typename Dest, typename Src>
-    std::shared_ptr<PrimaryData<Dest>> convertAndMakeShared(const Src &data) {
-        return std::make_shared<PrimaryData<Dest>>(static_cast<Dest>(data));
-    }
-
   public:
     PrimaryData() = delete;
     PrimaryData(const T &data) : Data(), data_(data) {
@@ -49,7 +44,7 @@ template <typename T> class PrimaryData : public Data {
         } else if constexpr (std::is_same_v<T, bool>) {
             type_ = Type::Bool();
         } else if constexpr (std::is_same_v<T, char>) {
-            type_ = Type::Char();
+            type_ = Type::Byte();
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
@@ -57,14 +52,7 @@ template <typename T> class PrimaryData : public Data {
 
     T &data() const { return data_; }
 
-    virtual bool equals(const data_ptr_t &other) const override {
-        if (auto o = std::dynamic_pointer_cast<PrimaryData<T>>(other)) {
-            return data_ == o->data_;
-        }
-        return false;
-    }
-
-    virtual bool isZero() const override {
+    bool isZero() const {
         if constexpr (
             std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> || std::is_same_v<T, float> ||
             std::is_same_v<T, double>) {
@@ -78,96 +66,17 @@ template <typename T> class PrimaryData : public Data {
         }
     }
 
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override {
-        ASSERT(inplace == false, "In-place conversion not supported for PrimaryData");
-        if (target == type_ || type_->code() == target->code()) {
-            // same type, no need to convert
-            return shared_from_this();
+    virtual bool equals(const data_ptr_t &other) const override {
+        if (auto o = std::dynamic_pointer_cast<PrimaryData<T>>(other)) {
+            return data_ == o->data_;
         }
-        try {
-            if (target->primary()) {
-                if constexpr (
-                    std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
-                    std::is_same_v<T, float> || std::is_same_v<T, double>) {
-                    switch (target->code()) {
-                    case TypeCode::Int:
-                        return convertAndMakeShared<int32_t>(data_);
-                    case TypeCode::Long:
-                        return convertAndMakeShared<int64_t>(data_);
-                    case TypeCode::Float:
-                        return convertAndMakeShared<float>(data_);
-                    case TypeCode::Double:
-                        return convertAndMakeShared<double>(data_);
-                    case TypeCode::Bool:
-                        return convertAndMakeShared<bool>(data_);
-                    case TypeCode::Char:
-                        return convertAndMakeShared<char>(data_);
-
-                    default:
-                        throw UnsupportedConvError();
-                    }
-                } else if constexpr (std::is_same_v<T, bool>) {
-                    const bool &b = data_;
-                    switch (target->code()) {
-                    case TypeCode::Int:
-                        return std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(b));
-                    case TypeCode::Long:
-                        return std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(b));
-                    case TypeCode::Float:
-                        return std::make_shared<PrimaryData<float>>(static_cast<float>(b));
-                    case TypeCode::Double:
-                        return std::make_shared<PrimaryData<double>>(static_cast<double>(b));
-                    case TypeCode::String:
-                        return std::static_pointer_cast<Data>(
-                            std::make_shared<StringData>(b ? "true" : "false"));
-                    case TypeCode::Char:
-                        return std::make_shared<PrimaryData<char>>(static_cast<char>(b));
-
-                    default:
-                        throw UnsupportedConvError();
-                    }
-                } else if constexpr (std::is_same_v<T, char>) {
-                    const char &c = data_;
-                    switch (target->code()) {
-                    case TypeCode::Int:
-                        return std::static_pointer_cast<Data>(
-                            std::make_shared<PrimaryData<int32_t>>(static_cast<int32_t>(c)));
-                    case TypeCode::Long:
-                        return std::static_pointer_cast<Data>(
-                            std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(c)));
-                    case TypeCode::Float:
-                        return std::static_pointer_cast<Data>(
-                            std::make_shared<PrimaryData<float>>(static_cast<float>(c)));
-                    case TypeCode::Double:
-                        return std::static_pointer_cast<Data>(
-                            std::make_shared<PrimaryData<double>>(static_cast<double>(c)));
-                    case TypeCode::String:
-                        return std::static_pointer_cast<Data>(
-                            std::make_shared<StringData>(std::string(1, c)));
-                    case TypeCode::Bool:
-                        return std::static_pointer_cast<Data>(
-                            std::make_shared<PrimaryData<bool>>(c != 0));
-                    default:
-                        throw UnsupportedConvError();
-                    }
-
-                } else {
-                    static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
-                }
-            }
-        } catch (const UnsupportedConvError &e) {
-            throw DataConvError(
-                "Cannot convert " + typeCodeToString(type_->code()) + " to " +
-                typeCodeToString(target->code()));
-        } catch (const std::exception &e) {
-            throw DataConvError(e.what());
-        }
-        throw DataConvError(
-            "Cannot convert " + type_->toString() + " to " + typeCodeToString(target->code()));
+        return false;
     }
+
     virtual data_ptr_t clone(bool deep = false) const override {
         return std::make_shared<PrimaryData<T>>(data_);
     }
+
     virtual const std::string toString() const override {
         if constexpr (std::is_same_v<T, bool>) {
             return data_ ? "true" : "false";
@@ -189,15 +98,14 @@ template <typename T> class PrimaryData : public Data {
             return std::to_string(data_);
         }
     }
-    virtual void print(std::ostream &os) const override { os << std::to_string(data_); }
 };
 
-using IntData = PrimaryData<int32_t>;
-using LongData = PrimaryData<int64_t>;
-using FloatData = PrimaryData<float>;
+using IntData    = PrimaryData<int32_t>;
+using LongData   = PrimaryData<int64_t>;
+using FloatData  = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
-using BoolData = PrimaryData<bool>;
-using CharData = PrimaryData<char>;
+using BoolData   = PrimaryData<bool>;
+using ByteData   = PrimaryData<std::byte>;
 
 class StringData : public Data {
   private:
@@ -210,9 +118,6 @@ class StringData : public Data {
     const std::string &data() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
-
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual void print(std::ostream &os) const override;
 };

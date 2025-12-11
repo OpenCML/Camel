@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":tensor/ones",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Array(Type::Int()), false}},
+                        {{ArrayType::create(Type::Int()), false}},
                         TensorType::Default()),
                 },
             }),
@@ -45,7 +45,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":tensor/zeros",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Array(Type::Int()), false}},
+                        {{ArrayType::create(Type::Int()), false}},
                         TensorType::Default()),
                 },
             }),
@@ -115,7 +115,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() == TypeCode::Array) {
                                 auto arrType = tt::as_shared<ArrayType>(norm[0]);
-                                if (arrType->elementType()->equals(Type::Int())) {
+                                if (arrType->elemType()->equals(Type::Int())) {
                                     if (norm.size() == 1) {
                                         return TensorType::Default();
                                     } else if (norm.size() == 3) {
@@ -142,7 +142,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() == TypeCode::Array) {
                                 auto arrType = tt::as_shared<ArrayType>(norm[0]);
-                                if (arrType->elementType()->equals(Type::Int())) {
+                                if (arrType->elemType()->equals(Type::Int())) {
                                     if (norm.size() == 1) {
                                         return TensorType::Default();
                                     } else if (norm.size() == 3) {
@@ -168,7 +168,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             if (norm[0]->code() == TensorType::typeCode()) {
-                                auto int32Type = std::make_shared<PrimaryType>(TypeCode::Int);
+                                auto int32Type = Type::Int();
                                 return std::make_shared<ArrayType>(int32Type);
                             }
                             return nullopt;

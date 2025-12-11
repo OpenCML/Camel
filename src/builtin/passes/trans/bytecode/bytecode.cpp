@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,21 +38,23 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
     std::unordered_set<graph_ptr_t> visited;
 
+    os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
+
     for (const auto &g : allGraphs) {
         if (visited.count(g))
             continue;
         visited.insert(g);
 
-        auto bytecodes = precompile(context_, g.get(), {.enableInlineOperators = true});
+        auto bytecodes = precompile(context_, g.get(), {});
         os << g->mangledName() << ":\n";
-        for (size_t i = 0; i < bytecodes->size();) {
-            const auto &bc = (*bytecodes)[i];
+        for (size_t i = 0; i < bytecodes.size();) {
+            const auto &bc = bytecodes[i];
             std::string operandStr;
 
             if (bc.hasOperands()) {
                 size_t withCnt = bc.fastop[0];
                 size_t normCnt = bc.fastop[1];
-                operandStr = "<";
+                operandStr     = "<";
                 for (size_t j = 0; j < withCnt; j++) {
                     operandStr += std::to_string(bc.operands()[j]);
                     if (j + 1 < withCnt)
@@ -80,10 +82,7 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             i += bc.opsize;
         }
 
-        os << std::format(
-            "  [used: {}, allocated: {}]\n",
-            bytecodes->size(),
-            bytecodes->capacity());
+        os << std::format("  [used: {}, allocated: {}]\n", bytecodes.size(), bytecodes.capacity());
     }
 
     return graph;

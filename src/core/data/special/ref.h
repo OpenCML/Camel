@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,8 +32,6 @@ class RefData : public Data {
     const std::string &ref() const;
 
     virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual void print(std::ostream &os) const override;
 };
