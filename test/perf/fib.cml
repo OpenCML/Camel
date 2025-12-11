@@ -1,42 +1,23 @@
 module fib
 
-import { now } from time
-import { sqrt } from math
-import { mean, stdev } from statistics
+import { perfms } from util
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-with <var result: double[], repeat: int>
-sync func timeit(fn: () => void): void sync {
-    let start = now()
-    fn()
-    let duration = now() - start
-    result->append<duration>
-    return timeit<result, repeat>(fn)
-}
-
 func main(): int sync {
-    let idx = 35
+    let idx = 30
     let runs = 100
-    var results: double[] = []
 
-    timeit<results, runs>(() => sync {
-        fib(idx)
-        return null
+    let (average, margin_error) = perfms(() => sync {
+        let res = fib(idx)
+        'fib({}) = {}'->format<idx, res>->println
     })
 
-    // 计算均值和标准差
-    let average_ms = mean(results)
-    let std_dev_ms = stdev(results)
-
-    // 95% 置信区间（Z 值 1.96）
-    let z_value = 1.96
-    let margin_error_ms = z_value * (float(std_dev_ms) / sqrt(float(runs)))
-
-    'fib({}) = {}'->format<idx, fib(idx)>->println
-    '平均耗时: {:.2f} ± {:.2f} ms (95% CI)'->format<average_ms, margin_error_ms>->println
+    'average time cost: {:.2f} ± {:.2f} ms (95% CI)'
+        ->format<average, margin_error>
+        ->println
 
     return 0
 }
