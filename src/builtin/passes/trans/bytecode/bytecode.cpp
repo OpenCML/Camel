@@ -45,7 +45,7 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             continue;
         visited.insert(g);
 
-        auto bytecodes = precompile(context_, g.get(), {.enableInlineOperators = true});
+        auto bytecodes = precompile(context_, g.get(), {});
         os << g->mangledName() << ":\n";
         for (size_t i = 0; i < bytecodes.size();) {
             const auto &bc = bytecodes[i];

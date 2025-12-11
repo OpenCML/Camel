@@ -36,13 +36,7 @@ class Tuple : public Object {
         if (!memory)
             throw std::bad_alloc();
 
-        Tuple *tuple = new (memory) Tuple(&layout);
-
-        // 初始化引用类型为空以避免伪引用
-        Object **dataStart = reinterpret_cast<Object **>(tuple->data_);
-        std::fill(dataStart, dataStart + layout.size(), NullRef);
-
-        return tuple;
+        return new (memory) Tuple(&layout);
     }
 
     size_t size() const { return size_; }

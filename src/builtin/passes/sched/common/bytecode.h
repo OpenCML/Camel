@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Nov. 01, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,57 +44,6 @@ enum class OpCode : uint8_t {
     TAIL = 0b10000101, // 标记尾调用
     OPER = 0b10000110,
     SCHD = 0b10000111, // 使用 fastop[0] 作为调度策略 ID
-
-    // 常用算子快捷指令（定长）
-    IADD = 0b01000000,
-    LADD = 0b01000001,
-    FADD = 0b01000010,
-    DADD = 0b01000011,
-
-    ISUB = 0b01000100,
-    LSUB = 0b01000101,
-    FSUB = 0b01000110,
-    DSUB = 0b01000111,
-
-    IMUL = 0b01001000,
-    LMUL = 0b01001001,
-    FMUL = 0b01001010,
-    DMUL = 0b01001011,
-
-    IDIV = 0b01001100,
-    LDIV = 0b01001101,
-    FDIV = 0b01001110,
-    DDIV = 0b01001111,
-
-    ILT = 0b01010000,
-    LLT = 0b01010001,
-    FLT = 0b01010010,
-    DLT = 0b01010011,
-
-    IGT = 0b01010100,
-    LGT = 0b01010101,
-    FGT = 0b01010110,
-    DGT = 0b01010111,
-
-    IEQ = 0b01011000,
-    LEQ = 0b01011001,
-    FEQ = 0b01011010,
-    DEQ = 0b01011011,
-
-    INE = 0b01011100,
-    LNE = 0b01011101,
-    FNE = 0b01011110,
-    DNE = 0b01011111,
-
-    ILE = 0b01100000,
-    LLE = 0b01100001,
-    FLE = 0b01100010,
-    DLE = 0b01100011,
-
-    IGE = 0b01100100,
-    LGE = 0b01100101,
-    FGE = 0b01100110,
-    DGE = 0b01100111,
 };
 
 enum class MarkOpCode {

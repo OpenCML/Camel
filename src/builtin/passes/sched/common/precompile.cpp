@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 08, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,41 +22,6 @@
 
 using namespace std;
 using namespace GraphIR;
-
-const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
-    static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
-        {":op/add_i", OpCode::IADD}, {":op/add_l", OpCode::LADD},
-        {":op/add_f", OpCode::FADD}, {":op/add_d", OpCode::DADD},
-
-        {":op/sub_i", OpCode::ISUB}, {":op/sub_l", OpCode::LSUB},
-        {":op/sub_f", OpCode::FSUB}, {":op/sub_d", OpCode::DSUB},
-
-        {":op/mul_i", OpCode::IMUL}, {":op/mul_l", OpCode::LMUL},
-        {":op/mul_f", OpCode::FMUL}, {":op/mul_d", OpCode::DMUL},
-
-        {":op/div_i", OpCode::IDIV}, {":op/div_l", OpCode::LDIV},
-        {":op/div_f", OpCode::FDIV}, {":op/div_d", OpCode::DDIV},
-
-        {":op/lt_i", OpCode::ILT},   {":op/lt_l", OpCode::LLT},
-        {":op/lt_f", OpCode::FLT},   {":op/lt_d", OpCode::DLT},
-
-        {":op/gt_i", OpCode::IGT},   {":op/gt_l", OpCode::LGT},
-        {":op/gt_f", OpCode::FGT},   {":op/gt_d", OpCode::DGT},
-
-        {":op/eq_i", OpCode::IEQ},   {":op/eq_l", OpCode::LEQ},
-        {":op/eq_f", OpCode::FEQ},   {":op/eq_d", OpCode::DEQ},
-
-        {":op/ne_i", OpCode::INE},   {":op/ne_l", OpCode::LNE},
-        {":op/ne_f", OpCode::FNE},   {":op/ne_d", OpCode::DNE},
-
-        {":op/le_i", OpCode::ILE},   {":op/le_l", OpCode::LLE},
-        {":op/le_f", OpCode::FLE},   {":op/le_d", OpCode::DLE},
-
-        {":op/ge_i", OpCode::IGE},   {":op/ge_l", OpCode::LGE},
-        {":op/ge_f", OpCode::FGE},   {":op/ge_d", OpCode::DGE},
-    };
-    return supportedInlineOperators;
-}
 
 bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &opt) {
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
@@ -249,23 +214,6 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
         case NodeType::OPER: {
             auto opNode     = tt::as_shared<OperNode>(node);
             const auto &uri = opNode->oper()->uri();
-
-            // 尝试内联算子
-            if (opt.enableInlineOperators) {
-                const auto &inlineOpMap = getSupportedInlineOperatorsMap();
-                auto it                 = inlineOpMap.find(uri);
-                if (it != inlineOpMap.end()) {
-                    appendBytecode(
-                        bytecodes,
-                        it->second,
-                        node->index(),
-                        {
-                            normOps.front(),
-                            normOps.back(),
-                        });
-                    break;
-                }
-            }
 
             if (uri.starts_with(":mark/")) {
                 MarkOpCode markOp;
