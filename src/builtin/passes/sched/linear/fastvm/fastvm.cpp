@@ -31,26 +31,23 @@ using namespace std;
 using namespace GraphIR;
 
 GraphExecInfo *FastVMSchedPass::getExecInfoGraph(Graph *graph) {
-    auto it = graphExecInfoMap_.find(graph);
-    if (it == graphExecInfoMap_.end()) {
+    GraphExecInfo *info = graph->getExtra<GraphExecInfo>();
+    if (LIKELY(info != nullptr)) {
+        return info;
+    } else {
         auto codes = precompile(
             context_,
             graph,
             {
                 .enableInlineOperators = true,
             });
-
-        auto [insertedIt, success] = graphExecInfoMap_.emplace(
-            graph,
-            GraphExecInfo{
-                .ftemp = FrameTemplate(graph, staticAllocator_, stackAllocator_),
-                .codes = std::move(codes),
-            });
-
-        return &insertedIt->second;
+        execInfos_.emplace_back(
+            FrameTemplate(graph, staticAllocator_, stackAllocator_),
+            std::move(codes));
+        info = &execInfos_.back();
+        graph->setExtra<GraphExecInfo>(info);
+        return info;
     }
-
-    return &it->second;
 }
 
 slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {

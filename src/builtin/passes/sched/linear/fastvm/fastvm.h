@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,17 +24,20 @@
 #include "core/context/frame.h"
 #include "core/mm/mm.h"
 
-#include <stack>
+#include <list>
 
 struct GraphExecInfo {
     FrameTemplate ftemp;
     bytecode_vec_t codes;
+
+    GraphExecInfo(FrameTemplate ftemp, bytecode_vec_t &&codes)
+        : ftemp(std::move(ftemp)), codes(std::move(codes)) {}
 };
 
 class FastVMSchedPass : public LinearSchedPass {
     inline static const size_t maxRecursionDepth_ = 128; // default max recursion depth
     size_t currRecursionDepth_                    = 0;
-    std::unordered_map<GraphIR::Graph *, GraphExecInfo> graphExecInfoMap_;
+    std::list<GraphExecInfo> execInfos_; // 用于缓存图的执行信息，使用list保证指针稳定性
     BumpPointerAllocator staticAllocator_{16 * MB};
     BumpPointerAllocator stackAllocator_{16 * MB};
 
