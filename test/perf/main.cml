@@ -7,7 +7,7 @@ func fib(n: int): int {
 }
 
 func main(): int sync {
-    let idx = 30
+    let idx = 35
     'Start computing fibonacci({})...'->format<idx>->println
     let start = now()
     let res = fib(idx)

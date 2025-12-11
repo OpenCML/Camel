@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,27 +54,21 @@ class FixedArray : public Object {
     }
 
     size_t size() const { return size_; }
-    void *data() { return data_; }
-    const void *data() const { return data_; }
+    slot_t *data() { return data_; }
+    const slot_t *data() const { return data_; }
     const ArrayTypeLayout *layout() const { return layout_; }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return reinterpret_cast<const T *>(data_)[index];
+        return fromSlot<T>(data_[index]);
     }
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-
-        T *arr = reinterpret_cast<T *>(data_);
         if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
-        arr[index] = value;
+        data_[index] = toSlot(value);
     }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
@@ -149,7 +143,7 @@ class FixedArray : public Object {
         os << "[";
 
         TypeCode elemType     = layout_->elemType();
-        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(data_);
+        const slot_t *dataPtr = data_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
@@ -189,7 +183,7 @@ class FixedArray : public Object {
     // 灵活数组成员 (Flexible Array Member)
     // 必须是最后一个成员
     // alignas 确保正确对齐
-    alignas(slot_t) std::byte data_[];
+    slot_t data_[];
 };
 
 // Array: 动态数组，支持小数组内联优化
@@ -217,21 +211,15 @@ class Array : public Object {
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return reinterpret_cast<const T *>(dataPtr_)[index];
+        return fromSlot<T>(dataPtr_[index]);
     }
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-
-        T *arr = reinterpret_cast<T *>(dataPtr_);
         if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
-        arr[index] = value;
+        dataPtr_[index] = toSlot(value);
     }
 
     void reserve(size_t newCapacity) {
@@ -241,8 +229,6 @@ class Array : public Object {
     }
 
     template <typename T> void append(const T value) {
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
 
         // 检查是否需要扩容
         if (size_ >= capacity_) {
@@ -348,7 +334,7 @@ class Array : public Object {
         os << "[";
 
         TypeCode elemType     = layout_->elemType();
-        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(dataPtr_);
+        const slot_t *dataPtr = dataPtr_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
@@ -430,8 +416,8 @@ class Array : public Object {
     // - 当使用内联存储时：dataPtr_ == inlineData_
     // - 当使用外部数组时：dataPtr_ == fixedArray_->data()
     // 这使得随机访问（operator[]）可以零开销地直接解引用
-    void *dataPtr_; // 当前数据区指针（8字节）
+    slot_t *dataPtr_; // 当前数据区指针（8字节）
 
     // 小数组优化：内联存储
-    alignas(slot_t) std::byte inlineData_[SMALL_ARRAY_SIZE * sizeof(slot_t)];
+    slot_t inlineData_[SMALL_ARRAY_SIZE]; // 内联数据区
 };

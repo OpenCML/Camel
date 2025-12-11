@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,26 +31,18 @@ using namespace std;
 using namespace GraphIR;
 
 GraphExecInfo *FastVMSchedPass::getExecInfoGraph(Graph *graph) {
-    auto it = graphExecInfoMap_.find(graph);
-    if (it == graphExecInfoMap_.end()) {
-        auto codes = precompile(
-            context_,
-            graph,
-            {
-                .enableInlineOperators = true,
-            });
-
-        auto [insertedIt, success] = graphExecInfoMap_.emplace(
-            graph,
-            GraphExecInfo{
-                .ftemp = FrameTemplate(graph, staticAllocator_, stackAllocator_),
-                .codes = std::move(codes),
-            });
-
-        return &insertedIt->second;
+    GraphExecInfo *info = graph->getExtra<GraphExecInfo>();
+    if (LIKELY(info != nullptr)) {
+        return info;
+    } else {
+        auto codes = precompile(context_, graph);
+        execInfos_.emplace_back(
+            FrameTemplate(graph, staticAllocator_, stackAllocator_),
+            std::move(codes));
+        info = &execInfos_.back();
+        graph->setExtra<GraphExecInfo>(info);
+        return info;
     }
-
-    return &it->second;
 }
 
 slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
@@ -233,8 +225,8 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 size_t jumpIdx = 0;
                 if (bc.withCnt() == 0) {
                     // 普通的 if-else 分支，cond 是 bool 类型
-                    slot_t condData = currFrame->get<slot_t>(nargs[0]);
-                    if (static_cast<bool>(condData)) {
+                    bool condData = currFrame->get<bool>(nargs[0]);
+                    if (condData) {
                         jumpIdx = 0; // jump to true branch
                     } else {
                         jumpIdx = 1; // jump to false branch
@@ -270,7 +262,7 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                     }
                 }
 
-                currFrame->set(bc.result, std::make_shared<IntData>(static_cast<int32_t>(jumpIdx)));
+                currFrame->set(bc.result, fromSlot<Int>(jumpIdx));
                 i += bc.opsize + jumpIdx;
 
                 continue; // skip i increment
@@ -376,246 +368,6 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             }
 
             default: {
-                if (isOpCodeOfInlinedOperator(bc.opcode)) {
-                    slot_t lhs = currFrame->get<slot_t>(bc.fastop[0]);
-                    slot_t rhs = currFrame->get<slot_t>(bc.fastop[1]);
-
-                    switch (bc.opcode) {
-                    // 加法
-                    case OpCode::IADD: {
-                        int32_t res = static_cast<int32_t>(lhs) + static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LADD: {
-                        int64_t res = static_cast<int64_t>(lhs) + static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FADD: {
-                        float res = static_cast<float>(lhs) + static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DADD: {
-                        double res = static_cast<double>(lhs) + static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    // 减法
-                    case OpCode::ISUB: {
-                        int32_t res = static_cast<int32_t>(lhs) - static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LSUB: {
-                        int64_t res = static_cast<int64_t>(lhs) - static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FSUB: {
-                        float res = static_cast<float>(lhs) - static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DSUB: {
-                        double res = static_cast<double>(lhs) - static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    // 乘法
-                    case OpCode::IMUL: {
-                        int32_t res = static_cast<int32_t>(lhs) * static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LMUL: {
-                        int64_t res = static_cast<int64_t>(lhs) * static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FMUL: {
-                        float res = static_cast<float>(lhs) * static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DMUL: {
-                        double res = static_cast<double>(lhs) * static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    // 除法（带除零检测）
-                    case OpCode::IDIV: {
-                        int32_t divisor = static_cast<int32_t>(rhs);
-                        if (divisor == 0) {
-                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-                        }
-                        int32_t res = static_cast<int32_t>(lhs) / divisor;
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LDIV: {
-                        int64_t divisor = static_cast<int64_t>(rhs);
-                        if (divisor == 0) {
-                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-                        }
-                        int64_t res = static_cast<int64_t>(lhs) / divisor;
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FDIV: {
-                        float divisor = static_cast<float>(rhs);
-                        if (divisor == 0.0f) {
-                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-                        }
-                        float res = static_cast<float>(lhs) / divisor;
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DDIV: {
-                        double divisor = static_cast<double>(rhs);
-                        if (divisor == 0.0) {
-                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-                        }
-                        double res = static_cast<double>(lhs) / divisor;
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    // 比较 (<, >, ==, !=, <=, >=)
-                    case OpCode::ILT: {
-                        bool res = static_cast<int32_t>(lhs) < static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LLT: {
-                        bool res = static_cast<int64_t>(lhs) < static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FLT: {
-                        bool res = static_cast<float>(lhs) < static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DLT: {
-                        bool res = static_cast<double>(lhs) < static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    case OpCode::IGT: {
-                        bool res = static_cast<int32_t>(lhs) > static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LGT: {
-                        bool res = static_cast<int64_t>(lhs) > static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FGT: {
-                        bool res = static_cast<float>(lhs) > static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DGT: {
-                        bool res = static_cast<double>(lhs) > static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    case OpCode::IEQ: {
-                        bool res = static_cast<int32_t>(lhs) == static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LEQ: {
-                        bool res = static_cast<int64_t>(lhs) == static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FEQ: {
-                        bool res = static_cast<float>(lhs) == static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DEQ: {
-                        bool res = static_cast<double>(lhs) == static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    case OpCode::INE: {
-                        bool res = static_cast<int32_t>(lhs) != static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LNE: {
-                        bool res = static_cast<int64_t>(lhs) != static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FNE: {
-                        bool res = static_cast<float>(lhs) != static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DNE: {
-                        bool res = static_cast<double>(lhs) != static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    case OpCode::ILE: {
-                        bool res = static_cast<int32_t>(lhs) <= static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LLE: {
-                        bool res = static_cast<int64_t>(lhs) <= static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FLE: {
-                        bool res = static_cast<float>(lhs) <= static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DLE: {
-                        bool res = static_cast<double>(lhs) <= static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-
-                    case OpCode::IGE: {
-                        bool res = static_cast<int32_t>(lhs) >= static_cast<int32_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::LGE: {
-                        bool res = static_cast<int64_t>(lhs) >= static_cast<int64_t>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::FGE: {
-                        bool res = static_cast<float>(lhs) >= static_cast<float>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    case OpCode::DGE: {
-                        bool res = static_cast<double>(lhs) >= static_cast<double>(rhs);
-                        currFrame->set(bc.result, res);
-                        break;
-                    }
-                    default:
-                        ASSERT(false, "Unsupported inlined operator.");
-                    }
-                }
-
                 context_->rtmDiags()
                     ->of(RuntimeDiag::UnsupportedBytecode)
                     .commit(to_string(bc.opcode));

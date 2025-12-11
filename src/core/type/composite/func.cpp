@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,8 @@
 
 #include "core/data/data.h"
 #include "utils/str.h"
+
+#include <algorithm>
 
 using namespace std;
 

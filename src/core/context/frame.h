@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,12 +57,22 @@ class Frame {
         ASSERT(graph_ != nullptr, "Frame graph is null.");
         ASSERT(staticArea_ != nullptr, "Static tuple is null.");
         dynamicArea_ = temp.makeDynamicArea();
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Created Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_->name()));
     }
     // 不允许拷贝但可移动
     Frame(const Frame &) = delete;
     Frame(Frame &&other) noexcept
         : graph_(other.graph_), allocator_(other.allocator_), staticArea_(other.staticArea_),
           dynamicArea_(other.dynamicArea_) {
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Moved Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_->name()));
         // 防止已被移动的对象意外释放数据
         other.graph_       = nullptr;
         other.allocator_   = nullptr;
@@ -70,13 +80,30 @@ class Frame {
         other.dynamicArea_ = nullptr;
     }
 
+    ~Frame() {
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Destroyed Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_ ? graph_->name() : "null"));
+        if (dynamicArea_) {
+            // dynamicArea_->~GCTuple();
+            allocator_->free(dynamicArea_);
+            dynamicArea_ = nullptr;
+        }
+    }
+
     Frame &operator=(const Frame &other) = delete;
     Frame &operator=(Frame &&other) noexcept {
+        EXEC_WHEN_DEBUG(l.in("Frame").info(
+            "[{}] Moved Frame({}) for Graph <{}>",
+            formatAddress(this, true),
+            formatAddress(dynamicArea_, true),
+            graph_->name()));
         if (this != &other) {
-            // 先释放自己的资源
-            if (dynamicArea_) {
-                allocator_->free(dynamicArea_);
-            }
+            // 这里不释放自己的资源
+            // 因为 Frame 通常是分配在栈上的，释放更早分配的内存会导致后分配的内存全部被释放
+            // 通过析构函数释放就足够了
             // 转移资源
             graph_       = other.graph_;
             allocator_   = other.allocator_;
@@ -91,15 +118,6 @@ class Frame {
         return *this;
     }
 
-    ~Frame() {
-        if (dynamicArea_) {
-            // dynamicArea_->~GCTuple();
-            allocator_->free(dynamicArea_);
-            dynamicArea_ = nullptr;
-        }
-        // staticArea_ 由外部管理，不释放。
-    }
-
     GraphIR::Graph *graph() { return graph_; }
     const GraphIR::Graph *graph() const { return graph_; }
 
@@ -107,11 +125,21 @@ class Frame {
         ASSERT(index != 0, "Data index is invalid.");
         if (LIKELY(index > 0)) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             return dynamicArea_->typeAt(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
             return staticArea_->typeAt(idx);
         }
     }
@@ -120,13 +148,23 @@ class Frame {
         ASSERT(index != 0, "Data index is invalid.");
         if (LIKELY(index > 0)) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             auto res = graph_->runtimeDataType()->typeAt(idx);
             ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
             return tt::as_shared<T>(res.value());
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
             auto res = graph_->staticDataType()->typeAt(idx);
             ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
             return tt::as_shared<T>(res.value());
@@ -138,32 +176,68 @@ class Frame {
         T res;
         if (LIKELY(index > 0)) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             res = dynamicArea_->get<T>(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
             res = staticArea_->get<T>(idx);
         }
-        ASSERT(
-            res != static_cast<T>(0),
-            std::format("Retrieved null data from frame at index {}", index));
+        EXEC_WHEN_DEBUG([&]() {
+            std::ostringstream oss;
+            printSlot(oss, toSlot(res), typeAt(index));
+            l.in("Frame").info(
+                "[{}] Getting data of <{}> at index {} ({}): {}",
+                formatAddress(this, true),
+                graph_->name(),
+                index,
+                typeCodeToString(typeAt(index)),
+                oss.str());
+        }());
         return res;
     }
 
     template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
-        ASSERT(
-            value != static_cast<T>(0),
-            std::format("Cannot set null data into frame at index {}", index));
-        if (index < 0) {
-            size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
-            staticArea_->set<T>(idx, value);
-        } else {
+        EXEC_WHEN_DEBUG([&]() {
+            std::ostringstream oss;
+            printSlot(oss, toSlot(value), typeAt(index));
+            l.in("Frame").info(
+                "[{}] Setting data of <{}> at index {} ({}): {}",
+                formatAddress(this, true),
+                graph_->name(),
+                index,
+                typeCodeToString(typeAt(index)),
+                oss.str());
+        }());
+        if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             dynamicArea_->set<T>(idx, value);
+        } else {
+            size_t idx = static_cast<size_t>(-index);
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
+            staticArea_->set<T>(idx, value);
         }
     }
 

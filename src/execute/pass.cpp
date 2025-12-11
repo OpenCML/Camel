@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,6 +93,10 @@ std::unordered_map<
             [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
         },
         {
+            "std::bc",
+            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
+        },
+        {
             "std::tns",
             [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
         },
@@ -115,7 +119,7 @@ int applyPasses(
         auto it = passRegistry.find(p);
         if (it != passRegistry.end()) {
             auto pass = it->second(ctx);
-            graph = pass->apply(graph, os);
+            graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
                 return 1;
             }
@@ -130,8 +134,8 @@ int applyPasses(
             std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
 
         if (passes.empty()) {
-            // 如果用户没有指定任何遍，则默认使用 NodeVMSchedPass 进行调度
-            auto fallback = std::make_unique<NodeVMSchedPass>(ctx);
+            // 如果用户没有指定任何遍，则默认使用 FastVMSchedPass 进行调度
+            auto fallback = std::make_unique<FastVMSchedPass>(ctx);
             fallback->apply(graph, os);
         } else {
             // 如果用户指定了遍，则会将没有处理完的图直接丢弃

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,12 +21,17 @@
 
 #include "composite.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 
 #include <optional>
 
 class TupleTypeLayout {
   public:
     explicit TupleTypeLayout(std::vector<TypeCode> elemTypes) : elemTypes_(std::move(elemTypes)) {}
+    ~TupleTypeLayout() {
+        l.in("TupleTypeLayout")
+            .debug("Destroying TupleTypeLayout with {} elements", elemTypes_.size());
+    }
 
     size_t size() const noexcept { return elemTypes_.size(); }
 

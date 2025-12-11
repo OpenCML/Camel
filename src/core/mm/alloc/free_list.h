@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -100,17 +100,19 @@ class FreeListAllocator : public IAllocator {
         std::byte *blockData = reinterpret_cast<std::byte *>(header);
 
         // 检测重复释放：检查是否与任何空闲块重叠
-        FreeBlock *fb = freeList_;
-        while (fb) {
-            std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
-            std::byte *fb_end    = fb_start + fb->size;
-            std::byte *block_end = blockData + total_size;
+        EXEC_WHEN_DEBUG([&]() {
+            FreeBlock *fb = freeList_;
+            while (fb) {
+                std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
+                std::byte *fb_end    = fb_start + fb->size;
+                std::byte *block_end = blockData + total_size;
 
-            // 检查重叠（不包括相邻情况）
-            ASSERT(!(blockData < fb_end && block_end > fb_start), "Double free detected");
+                // 检查重叠（不包括相邻情况）
+                ASSERT(!(blockData < fb_end && block_end > fb_start), "Double free detected");
 
-            fb = fb->next;
-        }
+                fb = fb->next;
+            }
+        }());
 
         insertAndCoalesce(blockData, total_size);
     }
@@ -143,19 +145,21 @@ class FreeListAllocator : public IAllocator {
         }
 
         // 检测重复释放
-        for (const auto &[addr, size] : blocks) {
-            FreeBlock *fb = freeList_;
-            while (fb) {
-                std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
-                std::byte *fb_end    = fb_start + fb->size;
-                std::byte *block_end = addr + size;
+        EXEC_WHEN_DEBUG([&]() {
+            for (const auto &[addr, size] : blocks) {
+                FreeBlock *fb = freeList_;
+                while (fb) {
+                    std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
+                    std::byte *fb_end    = fb_start + fb->size;
+                    std::byte *block_end = addr + size;
 
-                // 检查重叠
-                ASSERT(!(addr < fb_end && block_end > fb_start), "Double free in bulk");
+                    // 检查重叠
+                    ASSERT(!(addr < fb_end && block_end > fb_start), "Double free in bulk");
 
-                fb = fb->next;
+                    fb = fb->next;
+                }
             }
-        }
+        }());
 
         // 逐个插入并合并
         for (const auto &[addr, size] : blocks) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "core/type/type.h"
 #include "utils/brpred.h"
 
+#include <cstring> // for std::memcpy
 #include <functional>
 
 class Object {
@@ -69,6 +70,32 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 
 using slot_t = uint64_t;
 
+template <typename T> slot_t toSlot(T value) {
+    if constexpr (std::is_same_v<T, slot_t>) {
+        return value;
+    } else {
+        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
+        slot_t slot_value{};
+        std::memcpy(&slot_value, &value, sizeof(T));
+        return slot_value;
+    }
+}
+
+template <typename T> T fromSlot(slot_t slot_value) {
+    if constexpr (std::is_same_v<T, slot_t>) {
+        return slot_value;
+    } else {
+        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
+        T value{};
+        std::memcpy(&value, &slot_value, sizeof(T));
+        return value;
+    }
+}
+
 using Int    = int32_t;
 using Long   = int64_t;
 using Float  = float;
@@ -87,31 +114,33 @@ inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
 
 inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
     if (isGCTraced(t)) {
-        os << reinterpret_cast<const Object *const *>(data);
+        os << reinterpret_cast<const Object *>(data);
     } else {
         // 非引用类型，根据 type code 输出
         switch (t) {
         case TypeCode::Int:
-            os << static_cast<int32_t>(data);
+            os << fromSlot<Int>(data);
             break;
         case TypeCode::Long:
-            os << static_cast<int64_t>(data);
+            os << fromSlot<Long>(data);
             break;
         case TypeCode::Float:
-            os << static_cast<float>(data);
+            os << fromSlot<Float>(data);
             break;
         case TypeCode::Double:
-            os << static_cast<double>(data);
+            os << fromSlot<Double>(data);
             break;
         case TypeCode::Bool:
-            os << (static_cast<bool>(data) ? "true" : "false");
+            os << (fromSlot<Bool>(data) ? "true" : "false");
             break;
         case TypeCode::Byte:
-            os << "0x" << std::hex << static_cast<uint32_t>(data) << std::dec;
+            os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
+            break;
+        case TypeCode::Void:
+            os << "null";
             break;
         default:
-            ASSERT(false, "Unsupported slot type for printing");
-            os << "<unknown slot type>";
+            os << std::format("<slot of type: {}>", typeCodeToString(t));
             break;
         }
     }

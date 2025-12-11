@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -207,6 +207,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool dirty() const { return dirty_; }
     void rearrange();
 
+    template <typename T> T *getExtra() const { return static_cast<T *>(extra_); }
+    template <typename T> void setExtra(T *ptr) const { extra_ = static_cast<void *>(ptr); }
+
   private:
     std::string name_;
     graph_wptr_t outer_;
@@ -233,6 +236,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     bool looped_        = false;
     bool parameterized_ = false;
+
+    // 用于快速查询 Graph 附属信息
+    mutable void *extra_ = nullptr;
 };
 
 class Node : public std::enable_shared_from_this<Node> {

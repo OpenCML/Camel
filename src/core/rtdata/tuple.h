@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,13 +36,7 @@ class Tuple : public Object {
         if (!memory)
             throw std::bad_alloc();
 
-        Tuple *tuple = new (memory) Tuple(&layout);
-
-        // 初始化引用类型为空以避免伪引用
-        Object **dataStart = reinterpret_cast<Object **>(tuple->data_);
-        std::fill(dataStart, dataStart + layout.size(), NullRef);
-
-        return tuple;
+        return new (memory) Tuple(&layout);
     }
 
     size_t size() const { return size_; }
@@ -51,25 +45,19 @@ class Tuple : public Object {
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-        return reinterpret_cast<const T *>(data_)[index];
+        return fromSlot<T>(data_[index]);
     }
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
-
-        T *arr = reinterpret_cast<T *>(data_);
         if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[index], value);
         }
-        arr[index] = value;
+        data_[index] = toSlot(value);
     }
 
-    slot_t *data() { return reinterpret_cast<slot_t *>(data_); }
-    const slot_t *data() const { return reinterpret_cast<const slot_t *>(data_); }
+    slot_t *data() { return data_; }
+    const slot_t *data() const { return data_; }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
         if (!isOfSameCls(this, other))
@@ -80,8 +68,8 @@ class Tuple : public Object {
             return false;
 
         const auto &types   = layout_->elemTypes();
-        const slot_t *dataA = reinterpret_cast<const slot_t *>(data_);
-        const slot_t *dataB = reinterpret_cast<const slot_t *>(otherTuple->data_);
+        const slot_t *dataA = data_;
+        const slot_t *dataB = otherTuple->data_;
 
         if (deep) {
             // 深比较：引用类型递归比较，普通类型直接值比较
@@ -109,8 +97,8 @@ class Tuple : public Object {
         Tuple *newTuple   = Tuple::create(*layout_, allocator);
         const auto &types = layout_->elemTypes();
 
-        const slot_t *src = reinterpret_cast<const slot_t *>(data_);
-        slot_t *dst       = reinterpret_cast<slot_t *>(newTuple->data_);
+        const slot_t *src = data_;
+        slot_t *dst       = newTuple->data_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (isGCTraced(types[i])) {
@@ -140,7 +128,7 @@ class Tuple : public Object {
         os << "(";
 
         const auto &types     = layout_->elemTypes();
-        const slot_t *dataPtr = reinterpret_cast<const slot_t *>(data_);
+        const slot_t *dataPtr = data_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
@@ -172,5 +160,5 @@ class Tuple : public Object {
 
     uint32_t size_;
     const TupleTypeLayout *layout_;
-    alignas(slot_t) std::byte data_[];
+    slot_t data_[];
 };

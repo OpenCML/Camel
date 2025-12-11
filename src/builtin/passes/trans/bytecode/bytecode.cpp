@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,12 +38,14 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
     std::unordered_set<graph_ptr_t> visited;
 
+    os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
+
     for (const auto &g : allGraphs) {
         if (visited.count(g))
             continue;
         visited.insert(g);
 
-        auto bytecodes = precompile(context_, g.get(), {.enableInlineOperators = true});
+        auto bytecodes = precompile(context_, g.get(), {});
         os << g->mangledName() << ":\n";
         for (size_t i = 0; i < bytecodes.size();) {
             const auto &bc = bytecodes[i];

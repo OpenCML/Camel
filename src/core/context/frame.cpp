@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,25 +43,4 @@ FrameTemplate::FrameTemplate(
 
 Tuple *FrameTemplate::makeDynamicArea() const {
     return Tuple::create(*runtimeDataLayout_, runtimeAllocator_);
-}
-
-inline std::string formatAddress(void *ptr) {
-    std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);
-
-    std::stringstream ss;
-    ss << std::hex << std::uppercase << addr;
-    std::string hexStr = ss.str();
-
-    if (hexStr.length() < 16) {
-        hexStr = std::string(16 - hexStr.length(), '0') + hexStr;
-    }
-
-    std::string formatted;
-    for (size_t i = 0; i < hexStr.length(); ++i) {
-        formatted += hexStr[i];
-        if ((i + 1) % 4 == 0 && i + 1 != hexStr.length())
-            formatted += '\'';
-    }
-
-    return "0x" + formatted;
 }

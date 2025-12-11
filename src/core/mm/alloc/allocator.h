@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,3 +67,32 @@ class IAllocator {
 };
 
 inline size_t alignUp(size_t n, size_t align) { return (n + align - 1) & ~(align - 1); }
+
+inline std::string formatAddress(void *ptr, bool half = false) {
+    std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);
+
+    std::stringstream ss;
+    ss << std::hex << std::uppercase << addr;
+    std::string hexStr = ss.str();
+
+    if (half) {
+        if (hexStr.length() < 8) {
+            hexStr = std::string(8 - hexStr.length(), '0') + hexStr;
+        } else {
+            hexStr = hexStr.substr(hexStr.length() - 8);
+        }
+    } else {
+        if (hexStr.length() < 16) {
+            hexStr = std::string(16 - hexStr.length(), '0') + hexStr;
+        }
+    }
+
+    std::string formatted;
+    for (size_t i = 0; i < hexStr.length(); ++i) {
+        formatted += hexStr[i];
+        if ((i + 1) % 4 == 0 && i + 1 != hexStr.length())
+            formatted += '\'';
+    }
+
+    return "0x" + formatted;
+}

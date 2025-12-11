@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,6 @@
 
 struct OptimizationStrategy {
     bool enableTailCallDetection = true;
-    bool enableInlineOperators   = false;
 };
 
 bytecode_vec_t
