@@ -23,6 +23,7 @@
 #include "core/type/type.h"
 #include "utils/brpred.h"
 
+#include <cstring> // for std::memcpy
 #include <functional>
 
 class Object {
