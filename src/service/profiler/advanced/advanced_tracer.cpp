@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 20, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "scope_guard.h"
 #include "utils/log.h"
 
+#include <atomic>
 #include <iostream>
 
 #ifndef NDEBUG
@@ -37,8 +38,9 @@ class ProfilingCleanup {
     ~ProfilingCleanup() {
         if (g_profiling_enabled && !g_profiling_stopped) {
             l.in("Profiler")
-                .warn("Profiling was enabled but not properly stopped with enable(false). "
-                      "Performance data may not have been saved.");
+                .warn(
+                    "Profiling was enabled but not properly stopped with enable(false). "
+                    "Performance data may not have been saved.");
         }
     }
 };
@@ -71,10 +73,10 @@ void AdvancedTracer::startTracing() {
         return;
     g_profiling_enabled = true;
     g_profiling_stopped = false;
-    tracingEnabled_ = true;
-    tracingPaused_ = false;
+    tracingEnabled_     = true;
+    tracingPaused_      = false;
 
-    traceStartTime_ = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
+    traceStartTime_  = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
     traceEventCount_ = 0;
 
     CallTracer::getInstance().startTracing();
@@ -91,7 +93,7 @@ void AdvancedTracer::stopTracing() {
         return;
     }
 
-    tracingEnabled_ = false;
+    tracingEnabled_     = false;
     g_profiling_stopped = true;
     traceEndTime_ = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
 
@@ -373,8 +375,8 @@ void generate_advanced_report(const std::string &output_file) {
 
 #ifdef _WIN32
     char *profile_mode = nullptr;
-    size_t len = 0;
-    errno_t err = _dupenv_s(&profile_mode, &len, "CAMEL_PROFILE_MODE");
+    size_t len         = 0;
+    errno_t err        = _dupenv_s(&profile_mode, &len, "CAMEL_PROFILE_MODE");
     bool is_full_profile =
         (err == 0 && profile_mode != nullptr && std::string(profile_mode) == "FULL");
     if (profile_mode) {
@@ -382,7 +384,7 @@ void generate_advanced_report(const std::string &output_file) {
     }
 #else
     const char *profile_mode = std::getenv("CAMEL_PROFILE_MODE");
-    bool is_full_profile = (profile_mode && std::string(profile_mode) == "FULL");
+    bool is_full_profile     = (profile_mode && std::string(profile_mode) == "FULL");
 #endif
     if (is_full_profile) {
         l.in("Profiler").info("Full profiling mode detected, opening Perfetto UI...");

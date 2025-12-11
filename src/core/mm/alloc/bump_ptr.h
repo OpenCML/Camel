@@ -29,6 +29,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring> // for std::memset
 #include <memory>
 
 class BumpPointerAllocator : public IAllocator {
