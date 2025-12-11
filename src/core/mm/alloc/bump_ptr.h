@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Nov. 23, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,8 +65,10 @@ class BumpPointerAllocator : public IAllocator {
         return result;
     }
 
-    void free(void * /*ptr*/) override {
-        ASSERT(false, "Bump pointer allocator does not support single free");
+    void free(void *ptr) override {
+        ASSERT(contains(ptr), "Pointer does not belong to this allocator");
+        // 重置 top_ 指针直接释放到 ptr 的位置
+        top_ = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
     }
 
     void reset() override { top_ = start_; }

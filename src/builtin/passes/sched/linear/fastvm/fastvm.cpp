@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -270,7 +270,7 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                     }
                 }
 
-                currFrame->set(bc.result, std::make_shared<IntData>(static_cast<int32_t>(jumpIdx)));
+                currFrame->set(bc.result, static_cast<int32_t>(jumpIdx));
                 i += bc.opsize + jumpIdx;
 
                 continue; // skip i increment
@@ -614,11 +614,11 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                     default:
                         ASSERT(false, "Unsupported inlined operator.");
                     }
+                } else {
+                    context_->rtmDiags()
+                        ->of(RuntimeDiag::UnsupportedBytecode)
+                        .commit(to_string(bc.opcode));
                 }
-
-                context_->rtmDiags()
-                    ->of(RuntimeDiag::UnsupportedBytecode)
-                    .commit(to_string(bc.opcode));
             }
             }
 

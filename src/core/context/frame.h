@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -138,32 +138,46 @@ class Frame {
         T res;
         if (LIKELY(index > 0)) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             res = dynamicArea_->get<T>(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
             res = staticArea_->get<T>(idx);
         }
-        ASSERT(
-            res != static_cast<T>(0),
-            std::format("Retrieved null data from frame at index {}", index));
         return res;
     }
 
     template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
-        ASSERT(
-            value != static_cast<T>(0),
-            std::format("Cannot set null data into frame at index {}", index));
-        if (index < 0) {
-            size_t idx = static_cast<size_t>(-index);
-            ASSERT(idx < staticArea_->size(), "Invalid static data index");
-            staticArea_->set<T>(idx, value);
-        } else {
+        if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(idx < dynamicArea_->size(), "Invalid argument index");
+            ASSERT(
+                idx < dynamicArea_->size(),
+                std::format(
+                    "Invalid argument index, idx = {}, size = {}",
+                    idx,
+                    dynamicArea_->size()));
             dynamicArea_->set<T>(idx, value);
+        } else {
+            size_t idx = static_cast<size_t>(-index);
+            ASSERT(
+                idx < staticArea_->size(),
+                std::format(
+                    "Invalid static data index, idx = {}, size = {}",
+                    idx,
+                    staticArea_->size()));
+            staticArea_->set<T>(idx, value);
         }
     }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,7 +87,7 @@ inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
 
 inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
     if (isGCTraced(t)) {
-        os << reinterpret_cast<const Object *const *>(data);
+        os << reinterpret_cast<const Object *>(data);
     } else {
         // 非引用类型，根据 type code 输出
         switch (t) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Nov. 01, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -85,58 +85,58 @@ std::string to_string(const OpCode &op) {
         return "DDIV";
 
     case OpCode::ILT:
-        return "ILT";
+        return " ILT";
     case OpCode::LLT:
-        return "LLT";
+        return " LLT";
     case OpCode::FLT:
-        return "FLT";
+        return " FLT";
     case OpCode::DLT:
-        return "DLT";
+        return " DLT";
 
     case OpCode::IGT:
-        return "IGT";
+        return " IGT";
     case OpCode::LGT:
-        return "LGT";
+        return " LGT";
     case OpCode::FGT:
-        return "FGT";
+        return " FGT";
     case OpCode::DGT:
-        return "DGT";
+        return " DGT";
 
     case OpCode::IEQ:
-        return "IEQ";
+        return " IEQ";
     case OpCode::LEQ:
-        return "LEQ";
+        return " LEQ";
     case OpCode::FEQ:
-        return "FEQ";
+        return " FEQ";
     case OpCode::DEQ:
-        return "DEQ";
+        return " DEQ";
 
     case OpCode::INE:
-        return "INE";
+        return " INE";
     case OpCode::LNE:
-        return "LNE";
+        return " LNE";
     case OpCode::FNE:
-        return "FNE";
+        return " FNE";
     case OpCode::DNE:
-        return "DNE";
+        return " DNE";
 
     case OpCode::ILE:
-        return "ILE";
+        return " ILE";
     case OpCode::LLE:
-        return "LLE";
+        return " LLE";
     case OpCode::FLE:
-        return "FLE";
+        return " FLE";
     case OpCode::DLE:
-        return "DLE";
+        return " DLE";
 
     case OpCode::IGE:
-        return "IGE";
+        return " IGE";
     case OpCode::LGE:
-        return "LGE";
+        return " LGE";
     case OpCode::FGE:
-        return "FGE";
+        return " FGE";
     case OpCode::DGE:
-        return "DGE";
+        return " DGE";
 
     default:
         ASSERT(false, "Unknown OpCode encountered.");
@@ -205,9 +205,9 @@ Bytecode *appendBytecode(
 
     size_t operandUnits = 0;
     if (fastops.empty()) {
-        size_t operandBytes = operandCount * sizeof(data_idx_t);
+        size_t operandBytes       = operandCount * sizeof(data_idx_t);
         size_t paddedOperandBytes = roundUp8(operandBytes);
-        operandUnits = paddedOperandBytes / sizeof(Bytecode);
+        operandUnits              = paddedOperandBytes / sizeof(Bytecode);
     }
 
     size_t totalUnits = 1 + operandUnits + (hasExtra ? 1 : 0);
@@ -218,9 +218,9 @@ Bytecode *appendBytecode(
 
     // Step 1: 写入 Header
     BytecodeHeader *header = reinterpret_cast<BytecodeHeader *>(&vec[offset]);
-    header->opcode = opcode;
-    header->opsize = static_cast<uint8_t>(totalUnits);
-    header->result = result;
+    header->opcode         = opcode;
+    header->opsize         = static_cast<uint8_t>(totalUnits);
+    header->result         = result;
 
     // Step 2: 写入 Operands（如果没有 fastop）
     if (!fastops.empty()) {
@@ -231,8 +231,8 @@ Bytecode *appendBytecode(
     } else {
         header->fastop[0] = normCnt;
         header->fastop[1] = withCnt;
-        uint8_t *raw = reinterpret_cast<uint8_t *>(&vec[offset + 1]);
-        data_idx_t *ops = reinterpret_cast<data_idx_t *>(raw);
+        uint8_t *raw      = reinterpret_cast<uint8_t *>(&vec[offset + 1]);
+        data_idx_t *ops   = reinterpret_cast<data_idx_t *>(raw);
 
         for (data_idx_t idx : normOperands) {
             *ops++ = idx;
@@ -245,7 +245,7 @@ Bytecode *appendBytecode(
     // Step 3: 写入 Extra（如果有）
     if (hasExtra) {
         BytecodeExtra *ex = reinterpret_cast<BytecodeExtra *>(&vec[offset + totalUnits - 1]);
-        *ex = extra;
+        *ex               = extra;
     }
 
     return header;

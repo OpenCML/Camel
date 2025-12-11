@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,15 +51,15 @@ class Tuple : public Object {
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+        static_assert(sizeof(T) <= sizeof(slot_t), "Type size mismatch");
+        static_assert(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
         return reinterpret_cast<const T *>(data_)[index];
     }
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        ASSERT(sizeof(T) == sizeof(slot_t), "Type size mismatch");
-        ASSERT(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
+        static_assert(sizeof(T) <= sizeof(slot_t), "Type size mismatch");
+        static_assert(alignof(T) <= alignof(slot_t), "Type alignment mismatch");
 
         T *arr = reinterpret_cast<T *>(data_);
         if constexpr (std::is_same_v<T, Object *>) {

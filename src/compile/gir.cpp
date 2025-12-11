@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Dec. 07, 2025
+ * Updated: Dec. 11, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -499,21 +499,22 @@ void Graph::rearrange() {
     l.in("GIR").debug("Rearranging graph {}.", name_);
 
     // 0 reserved for null
-    data_idx_t idx = 1;
+    data_idx_t stcIdx = -1, rtmIdx = 1;
     // index 0 reserved for null
     data_vec_t newStaticDataArr{Data::null()};
     type_vec_t staticDataTypes{Type::Void()}, runtimeDataTypes{Type::Void()}, closureTypes;
 
     for (auto &node : normPorts_) {
-        node->setIndex(idx++);
+        node->setIndex(rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
     }
     for (auto &node : withPorts_) {
-        node->setIndex(idx++);
+        node->setIndex(rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
     }
     for (auto &node : closure_) {
-        node->setIndex(idx++);
+        node->setIndex(rtmIdx++);
+        runtimeDataTypes.push_back(node->dataType());
         closureTypes.push_back(node->dataType());
     }
     for (auto &node : nodes_) {
@@ -522,19 +523,19 @@ void Graph::rearrange() {
         if (type == NodeType::DATA) {
             const auto &dataNode = tt::as_shared<DataNode>(node);
             newStaticDataArr.push_back(dataNode->data());
-            dataNode->setIndex(-(newStaticDataArr.size() - 1));
+            dataNode->setIndex(stcIdx--);
             staticDataTypes.push_back(dataNode->dataType());
         } else {
             if (type == NodeType::SYNC || type == NodeType::NREF) {
                 // Skip nodes without data
                 continue;
             }
-            node->setIndex(idx++);
+            node->setIndex(rtmIdx++);
             runtimeDataTypes.push_back(node->dataType());
         }
     }
 
-    runtimeDataSize_ = idx;
+    runtimeDataSize_ = rtmIdx;
     staticDataArr_   = std::move(newStaticDataArr);
     staticDataType_  = TupleType::create(std::move(staticDataTypes));
     runtimeDataType_ = TupleType::create(std::move(runtimeDataTypes));
