@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,23 +26,18 @@
 
 #include <list>
 
-struct GraphExecInfo {
-    FrameTemplate ftemp;
-    bytecode_vec_t codes;
-
-    GraphExecInfo(FrameTemplate ftemp, bytecode_vec_t &&codes)
-        : ftemp(std::move(ftemp)), codes(std::move(codes)) {}
-};
-
 class FastVMSchedPass : public LinearSchedPass {
-    inline static const size_t maxRecursionDepth_ = 128; // default max recursion depth
+    inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
     size_t currRecursionDepth_                    = 0;
-    std::list<GraphExecInfo> execInfos_; // 用于缓存图的执行信息，使用list保证指针稳定性
-    BumpPointerAllocator staticAllocator_{16 * MB};
-    BumpPointerAllocator stackAllocator_{16 * MB};
 
-    slot_t call(GraphIR::Graph *graph, Frame &frame);
-    GraphExecInfo *getExecInfoGraph(GraphIR::Graph *graph);
+    // 栈帧池
+    FramePool framePool_{1 * MB};
+    // 字节码存储
+    std::list<bytecode_vec_t> bytecodes_;
+
+    bytecode_vec_t *getBytecodesOfGraph(GraphIR::Graph *graph);
+
+    slot_t call(GraphIR::Graph *graph, Frame *frame);
 
     void evalMarkedOperator(
         const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
