@@ -200,7 +200,6 @@ class Frame : public Object {
 };
 
 class FramePool {
-
   public:
     FramePool(size_t totalSize) {
         base_ = reinterpret_cast<std::byte *>(std::malloc(totalSize));
@@ -236,6 +235,7 @@ class FramePool {
                         formatAddress(lastFrame, true),
                         graph ? graph->name() : "(null)");
             }());
+            frameObjects_.push_back(lastFrame);
             return lastFrame;
         }
 
@@ -282,6 +282,7 @@ class FramePool {
         // 避免无效数据误用
         reinterpret_cast<Frame *>(top_)->graph_ = nullptr;
 
+        frameObjects_.push_back(frame);
         return frame;
     }
 
@@ -295,7 +296,15 @@ class FramePool {
                     frame->graph_ ? frame->graph_->name() : "(null)");
         }());
 
+        ASSERT(
+            frameObjects_.back() == frame,
+            std::format(
+                "Trying to free a frame that is not on top, last={}, frame={}.",
+                formatAddress(frameObjects_.back(), true),
+                formatAddress(frame, true)));
+
         top_ = reinterpret_cast<std::byte *>(frame);
+        frameObjects_.pop_back();
 
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
@@ -306,8 +315,11 @@ class FramePool {
         }());
     }
 
+    std::vector<Object *> *frameObjects() { return &frameObjects_; }
+
   private:
     std::byte *base_;
     std::byte *top_;
     std::byte *end_;
+    std::vector<Object *> frameObjects_;
 };

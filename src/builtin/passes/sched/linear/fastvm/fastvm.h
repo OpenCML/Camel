@@ -54,7 +54,9 @@ class FastVMSchedPass : public LinearSchedPass {
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
 
   public:
-    FastVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
+    FastVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {
+        mm::autoSpace().setObjectRootSet(framePool_.frameObjects());
+    };
     virtual ~FastVMSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
