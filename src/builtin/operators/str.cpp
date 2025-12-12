@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,7 +59,9 @@ void __format__(
         String *resultObj     = String::from(resultStr, mm::autoSpace());
         frame.set(self, resultObj);
     } catch (const fmt::format_error &e) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<format>", e.what());
+        ctx.rtmDiags()
+            ->of(RuntimeDiag::RuntimeError)
+            .commit(std::string("<format>") + std::string(e.what()));
         frame.set(self, NullSlot);
     }
 

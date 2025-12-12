@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 12, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,7 +69,6 @@ class Frame {
     Frame(Frame &&other) noexcept
         : graph_(other.graph_), allocator_(other.allocator_), staticArea_(other.staticArea_),
           dynamicArea_(other.dynamicArea_) {
-        ASSERT(graph_ == nullptr, "Only allow move construction from an empty Frame.");
         EXEC_WHEN_DEBUG(l.in("Frame").info(
             "[{}] Moved Frame({}) for Graph <{}>",
             formatAddress(this, true),
@@ -96,7 +95,6 @@ class Frame {
 
     Frame &operator=(const Frame &other) = delete;
     Frame &operator=(Frame &&other) noexcept {
-        ASSERT(graph_ == nullptr, "Only allow move construction from an empty Frame.");
         if (this != &other) {
             // 转移资源
             graph_       = other.graph_;

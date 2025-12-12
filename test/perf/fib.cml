@@ -1,6 +1,6 @@
 module fib
 
-import { perfms } from util
+import { perfms } from perf
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
