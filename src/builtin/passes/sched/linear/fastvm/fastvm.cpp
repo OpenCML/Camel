@@ -19,7 +19,6 @@
 
 #include "fastvm.h"
 #include "builtin/algo/topo.h"
-#include "builtin/passes/sched/common/precompile.h"
 #include "core/data/primary.h"
 
 #ifndef NDEBUG
@@ -29,15 +28,6 @@
 
 using namespace std;
 using namespace GraphIR;
-
-bytecode_vec_t *FastVMSchedPass::getBytecodesOfGraph(GraphIR::Graph *graph) {
-    bytecode_vec_t *codes = graph->getExtra<bytecode_vec_t, 1>();
-    if (codes == nullptr) {
-        codes = &bytecodes_.emplace_back(precompile(context_, graph));
-        graph->setExtra<bytecode_vec_t, 1>(codes);
-    }
-    return codes;
-}
 
 slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));

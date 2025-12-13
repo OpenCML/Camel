@@ -21,6 +21,7 @@
 
 #include "../linear.h"
 #include "builtin/passes/sched/common/bytecode.h"
+#include "builtin/passes/sched/common/precompile.h"
 #include "core/context/frame.h"
 #include "core/mm/mm.h"
 
@@ -35,7 +36,14 @@ class FastVMSchedPass : public LinearSchedPass {
     // 字节码存储
     std::list<bytecode_vec_t> bytecodes_;
 
-    bytecode_vec_t *getBytecodesOfGraph(GraphIR::Graph *graph);
+    inline bytecode_vec_t *getBytecodesOfGraph(GraphIR::Graph *graph) {
+        bytecode_vec_t *codes = graph->getExtra<bytecode_vec_t, 1>();
+        if (codes == nullptr) {
+            codes = &bytecodes_.emplace_back(precompile(context_, graph));
+            graph->setExtra<bytecode_vec_t, 1>(codes);
+        }
+        return codes;
+    }
 
     slot_t call(GraphIR::Graph *graph, Frame *frame);
 
