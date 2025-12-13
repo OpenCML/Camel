@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -243,19 +243,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
     }
 
-    // 添加根对象
-    void addRoot(Object *root) { rootObjectSet_.push_back(root); }
-
-    // 移除根对象
-    void removeRoot(Object *root) {
-        auto it = std::find(rootObjectSet_.begin(), rootObjectSet_.end(), root);
-        if (it != rootObjectSet_.end()) {
-            rootObjectSet_.erase(it);
-        }
-    }
-
-    // 清空所有根对象
-    void clearRoots() { rootObjectSet_.clear(); }
+    void setObjectRootSet(std::vector<Object *> *rootSet) { rootObjectSet_ = rootSet; }
 
     void recordOldToYoungRef(void *oldObj, void *youngObj) {
         ObjectHeader *header = headerOf(oldObj);
@@ -274,7 +262,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             havenSpace_.reset(); // 清空新的 Haven 空间
 
             // 2. 处理根集合中的年轻代对象
-            for (Object *&rootObj : rootObjectSet_) {
+            for (Object *&rootObj : *rootObjectSet_) {
                 if (!rootObj)
                     continue;
 
@@ -398,7 +386,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // GC 状态与根集合
     // ============================================================================
     bool inGC_ = false;                                // GC 重入保护标志
-    std::vector<Object *> rootObjectSet_;              // 根对象集合：栈、全局变量等直接可达对象
+    std::vector<Object *> *rootObjectSet_;             // 根对象集合：栈、全局变量等直接可达对象
     std::unordered_set<ObjectHeader *> rememberedSet_; // 记忆集：记录老年代→年轻代的跨代引用
 
     bool inYoungGenSpace(ObjectHeader *header) const {
@@ -536,7 +524,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         clearMarks();
 
         // 从根集合开始标记
-        for (Object *root : rootObjectSet_) {
+        for (Object *root : *rootObjectSet_) {
             if (root) {
                 markObject(root);
             }

@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 #include "builtin/algo/topo.h"
-#include "builtin/passes/sched/common/precompile.h"
 #include "core/data/primary.h"
 
 #ifndef NDEBUG
@@ -30,133 +29,51 @@
 using namespace std;
 using namespace GraphIR;
 
-GraphExecInfo *FastVMSchedPass::getExecInfoGraph(Graph *graph) {
-    GraphExecInfo *info = graph->getExtra<GraphExecInfo>();
-    if (LIKELY(info != nullptr)) {
-        return info;
-    } else {
-        auto codes = precompile(context_, graph);
-        execInfos_.emplace_back(
-            FrameTemplate(graph, staticAllocator_, stackAllocator_),
-            std::move(codes));
-        info = &execInfos_.back();
-        graph->setExtra<GraphExecInfo>(info);
-        return info;
-    }
-}
+// 互调用涉及第三方函数时帧管理的三种情形
+//
+// A 是根帧，A、B 互相尾调用，并在中途调用 C
+//
+// 情形一：
+// A 或 B 普通调用 C，正常释放即可
+// ┌────────┬────────┬────────┐
+// │  (A)   │  (B)   │  (C)   │
+// └────────┴────────┴────────┘
+//     ↑                  ↑
+//   root1              root2
+//
+// 情形二：
+// A 在中途尾调用 C，此时孪生帧指针指向 B，需要先释放原孪生帧 B，再申请 C
+// ┌────────┬────────┐
+// │  (A)   │  (C)   │
+// └────────┴────────┘
+//     ↑         ↑
+//   root      curr
+//     ↑
+// twin(B->A)
+//
+// 情形三：
+// B 在中途尾调用 C，此时孪生帧指向 A，但不能释放根帧 A，只能在退出C++栈帧时依次释放
+// ┌────────┬────────┬────────┐
+// │  (A)   │  (B)   │  (C)   │
+// └────────┴────────┴────────┘
+//     ↑         ↑         ↑
+//   root   twin(A->B)   curr
 
-slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));
+slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", rootGraph->name()));
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()
             ->of(RuntimeDiag::MaxRecursionDepthExceeded)
-            .commit(graph->name(), maxRecursionDepth_);
+            .commit(rootGraph->name(), maxRecursionDepth_);
     }
 
-    bool loop  = false;
-    auto info  = getExecInfoGraph(graph);
-    auto codes = &info->codes;
+    bool loop = false;
 
-    Frame nextFrame(info->ftemp); // for mutual-tail-recursion optimization
-    frame_rptr_t currFrame = &frame, twinFrame = nullptr;
+    bytecode_vec_t *codes = getBytecodesOfGraph(rootGraph);
 
-    auto __call = [&](GraphIR::Graph &targetGraph, const Bytecode &bc, bool isTailCall) -> slot_t {
-        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-            "Calling function: {} (tail-call: {})",
-            targetGraph.name(),
-            isTailCall ? "yes" : "no"));
-
-        ASSERT(
-            bc.argsCnt() == targetGraph.normPorts().size() + targetGraph.withPorts().size(),
-            std::format(
-                "Function {} expects {} arguments, but got {}.",
-                targetGraph.name(),
-                targetGraph.normPorts().size() + targetGraph.withPorts().size(),
-                bc.argsCnt()));
-
-        // 如果是尾调用，则尝试复用当前 C++ 栈帧
-        if (isTailCall) {
-            // enable tail-call optimization
-            // 设置 loop flag 为 true
-            // 当前字节码执行子循环结束后不会退出大循环
-            // 而会根据新指定的 currFrame 和 bytecodes 执行新图
-            // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
-            loop = true;
-            // 设置 lastFrame 为当前帧 currFrame 备用
-            const frame_rptr_t lastFrame = currFrame;
-
-            // 下面准备将 currFrame 重新指向新栈帧
-            if (&targetGraph == currFrame->graph()) {
-                // 如果目标图就是当前帧的图，说明在进行自递归尾调用
-                // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
-                EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                    "Optimizing self-recursion for graph: {}",
-                    currFrame->graph()->name()));
-            } else {
-                // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
-                auto targetInfo = getExecInfoGraph(&targetGraph);
-                codes           = &targetInfo->codes;
-
-                // 即便目标图不是当前图，仍可能存在互调用尾递归现象
-                // 即 A 尾调用 B，B 又尾调用 A
-                // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
-                // 思路是在互调用时维护一个孪生栈帧 twinFrame
-                // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
-                // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
-
-                if (twinFrame && twinFrame->graph() == &targetGraph) {
-                    // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
-                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                        "Optimizing mutual-tail-recursion for graph: {}",
-                        currFrame->graph()->name()));
-                    currFrame = twinFrame;
-                    twinFrame = lastFrame;
-                } else {
-                    // 将当前栈帧设置为孪生帧
-                    twinFrame = currFrame;
-
-                    // 创建新的栈帧并设置参数
-                    Frame targetFrame(targetInfo->ftemp);
-                    size_t argsCnt         = bc.argsCnt();
-                    const data_idx_t *args = bc.operands();
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        targetFrame.set(i + 1, currFrame->get<slot_t>(args[i]));
-                    }
-
-                    // 将栈帧对象保存到 nextFrame 中，以免离开作用域后销毁
-                    // 这里不能直接覆写 currFrame 所指向的栈帧
-                    // 因为该栈帧要保留以备互调用使用
-                    nextFrame = std::move(targetFrame);
-
-                    // 切换到新栈帧
-                    currFrame = &nextFrame;
-                    return NullSlot;
-                }
-            }
-
-            // 自递归和互递归的情况在这里集中设置参数
-            size_t argsCnt         = bc.argsCnt();
-            const data_idx_t *args = bc.operands();
-            for (size_t i = 0; i < argsCnt; ++i) {
-                currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
-            }
-
-            return NullSlot;
-        }
-
-        // 如果不是尾调用，则新建栈帧并递归调用 call 函数
-        auto targetInfo = getExecInfoGraph(&targetGraph);
-        Frame targetFrame(targetInfo->ftemp);
-
-        size_t argsCnt         = bc.argsCnt();
-        const data_idx_t *args = bc.operands();
-        for (size_t i = 0; i < argsCnt; ++i) {
-            targetFrame.set(i + 1, currFrame->get<slot_t>(args[i]));
-        }
-
-        return call(&targetGraph, targetFrame);
-    };
+    Frame *nextFrame = nullptr; // for mutual-tail-recursion optimization
+    Frame *currFrame = rootFrame, *twinFrame = nullptr;
 
     // for tail-call optimization
     // reuse the current frame for tail-recursive calls
@@ -317,31 +234,110 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 auto function          = currFrame->get<Function *>(wargs[0]);
                 auto targetGraph       = function->graph();
 
-                GraphExecInfo *targetInfo = getExecInfoGraph(targetGraph);
-                Frame funcFrame(targetInfo->ftemp);
+                Frame *funcFrame = framePool_.acquire(targetGraph);
 
                 size_t i = 0;
                 for (; i < nargs.size; ++i) {
-                    funcFrame.set(i + 1, currFrame->get<slot_t>(nargs[i]));
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
                 }
 
                 Tuple *closureData = function->tuple();
                 for (size_t j = 0; j < closureData->size(); ++j) {
-                    funcFrame.set(i + j + 1, closureData->get<slot_t>(j));
+                    funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
                 }
 
                 const auto &result = call(targetGraph, funcFrame);
+
                 currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::FUNC: {
-                currFrame->set(bc.result, __call(*bc.extra()->graph, bc, false));
+                Frame *funcFrame = framePool_.acquire(bc.extra()->graph);
+
+                size_t argsCnt         = bc.argsCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                }
+
+                slot_t result = call(bc.extra()->graph, funcFrame);
+
+                currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::TAIL: {
-                __call(*bc.extra()->graph, bc, true);
+                // 尾调用优化
+                Graph *funcFrame = bc.extra()->graph;
+
+                // enable tail-call optimization
+                // 设置 loop flag 为 true
+                // 当前字节码执行子循环结束后不会退出大循环
+                // 而会根据新指定的 currFrame 和 bytecodes 执行新图
+                // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
+                loop = true;
+                // 设置 lastFrame 为当前帧 currFrame 备用
+                Frame *lastFrame = currFrame;
+
+                // 下面准备将 currFrame 重新指向新栈帧
+                if (funcFrame == currFrame->graph()) {
+                    // 如果目标图就是当前帧的图，说明在进行自递归尾调用
+                    // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
+                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+                        "Optimizing self-recursion for graph: {}",
+                        currFrame->graph()->name()));
+                } else {
+                    // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
+                    codes = getBytecodesOfGraph(funcFrame);
+
+                    // 即便目标图不是当前图，仍可能存在互调用尾递归现象
+                    // 即 A 尾调用 B，B 又尾调用 A
+                    // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
+                    // 思路是在互调用时维护一个孪生栈帧 twinFrame
+                    // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
+                    // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
+                    if (twinFrame && twinFrame->graph() == funcFrame) {
+                        // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
+                        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+                            "Optimizing mutual-tail-recursion for graph: {}",
+                            currFrame->graph()->name()));
+                        // 交换孪生帧
+                        currFrame = twinFrame;
+                        twinFrame = lastFrame;
+                    } else {
+                        // 不可复用栈帧的尾调用
+                        if (twinFrame != nullptr && twinFrame != rootFrame) {
+                            // 如果孪生帧不为空，覆写前需要先释放
+                            // 如果孪生帧刚好指向根帧，不能先释放
+                            framePool_.release(twinFrame);
+                        }
+                        // 将当前栈帧设置为孪生帧
+                        twinFrame = currFrame;
+
+                        // 创建新的栈帧并设置参数
+                        nextFrame              = framePool_.acquire(funcFrame);
+                        size_t argsCnt         = bc.argsCnt();
+                        const data_idx_t *args = bc.operands();
+                        for (size_t i = 0; i < argsCnt; ++i) {
+                            nextFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                        }
+
+                        // 切换到新栈帧
+                        currFrame = nextFrame;
+
+                        // 跳过后续字节码，进行下一轮循环
+                        i = codeSize;
+                        continue;
+                    }
+                }
+
+                // 自递归和互递归的情况在这里集中设置参数
+                size_t argsCnt         = bc.argsCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
+                }
 
                 // 跳过后续字节码，进行下一轮循环
                 i = codeSize;
@@ -387,7 +383,29 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
 
-    return currFrame->get<slot_t>(input.front()->index());
+    slot_t res = currFrame->get<slot_t>(input.front()->index());
+
+    if (twinFrame != nullptr) {
+        // 说明已经触发了相互尾调用，要把孪生帧也释放掉
+        // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
+        // 把与传入的 rootFrame 不相等的那个先释放掉即可
+        if (currFrame != rootFrame) {
+            // 对应情形一
+            framePool_.release(currFrame);
+        } else {
+            if (twinFrame == rootFrame) {
+                // 对应情形二
+                framePool_.release(twinFrame);
+            } else {
+                // 对应情形三
+                framePool_.release(currFrame);
+                framePool_.release(twinFrame);
+            }
+        }
+    }
+    framePool_.release(rootFrame);
+
+    return res;
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
@@ -396,8 +414,7 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             ->of(RuntimeDiag::MissingMainFunction)
             .commit(context_->mainModule()->name());
     }
-    const GraphExecInfo *info = getExecInfoGraph(graph.get());
-    Frame rootFrame(info->ftemp);
+    Frame *rootFrame = framePool_.acquire(graph.get());
     call(graph.get(), rootFrame);
     return Graph::null();
 }

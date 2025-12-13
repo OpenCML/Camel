@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,8 @@
 #include "utils/assert.h"
 
 #include <functional>
+#include <type_traits>
+#include <utility> // for std::forward
 
 constexpr size_t KB = 1024;
 constexpr size_t MB = 1024 * KB;
@@ -66,9 +68,21 @@ class IAllocator {
     };
 };
 
+template <typename T, typename... Args>
+inline T *constructAt(IAllocator &allocator, Args &&...args) {
+    // 分配内存，按 T 的对齐方式对齐
+    void *ptr = allocator.alloc(sizeof(T), alignof(T));
+    if (!ptr) {
+        throw std::bad_alloc();
+    }
+
+    // 用 placement new 在分配的内存地址上构造对象
+    return new (ptr) T(std::forward<Args>(args)...);
+}
+
 inline size_t alignUp(size_t n, size_t align) { return (n + align - 1) & ~(align - 1); }
 
-inline std::string formatAddress(void *ptr, bool half = false) {
+template <typename T> inline std::string formatAddress(T *ptr, bool half = false) {
     std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);
 
     std::stringstream ss;

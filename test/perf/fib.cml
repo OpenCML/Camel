@@ -1,0 +1,23 @@
+module fib
+
+import { perfms } from perf
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func main(): int sync {
+    let idx = 30
+    let runs = 100
+
+    let (average, margin_error) = perfms(() => sync {
+        let res = fib(idx)
+        'fib({}) = {}'->format<idx, res>->println
+    })
+
+    'average time cost: {:.2f} ± {:.2f} ms (95% CI)'
+        ->format<average, margin_error>
+        ->println
+
+    return 0
+}

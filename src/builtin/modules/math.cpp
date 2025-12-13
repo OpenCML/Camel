@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,7 +126,27 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":math/hex_l",
                     StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::String()),
                 },
-            })};
+            }),
+        OperatorGroup::create(
+            "sqrt",
+            {
+                {
+                    ":math/sqrt",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(val: float | double) => float | double",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<type_ptr_t> {
+                            TypeCode tp = norm[0]->code();
+                            if (tp == TypeCode::Float || tp == TypeCode::Int)
+                                return Type::Float();
+                            if (tp == TypeCode::Double || tp == TypeCode::Long)
+                                return Type::Double();
+                            return nullopt;
+                        }),
+                },
+            }),
+    };
 
     return groups;
 }

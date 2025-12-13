@@ -12,15 +12,15 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 04, 2025
+ * Created: Dec. 11, 2025
  * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "log.h"
+#pragma once
 
-Logger l("");
+#include "core/context/frame.h"
+#include "core/operator.h"
 
-#ifndef NDEBUG
-const std::string filteredLoggerScope = "";
-#endif
+void __mean__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
+void __stdev__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);

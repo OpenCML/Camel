@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,29 +70,43 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 
 using slot_t = uint64_t;
 
-template <typename T> slot_t toSlot(T value) {
+template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
+    static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
     if constexpr (std::is_same_v<T, slot_t>) {
         return value;
+    } else if constexpr (std::is_pointer_v<T>) {
+        // 指针 -> 整数再放入 slot_t
+        return static_cast<slot_t>(reinterpret_cast<std::uintptr_t>(value));
     } else {
-        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
-        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-
-        slot_t slot_value{};
-        std::memcpy(&slot_value, &value, sizeof(T));
-        return slot_value;
+        if constexpr (sizeof(T) == sizeof(slot_t)) {
+            return std::bit_cast<slot_t>(value);
+        } else {
+            // 小于 slot_t 的情况：低位保存，其他位补零
+            slot_t tmp{};
+            std::memcpy(&tmp, &value, sizeof(T));
+            return tmp;
+        }
     }
 }
 
-template <typename T> T fromSlot(slot_t slot_value) {
+template <typename T> constexpr T fromSlot(slot_t slot_value) noexcept {
+    static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially_copyable");
+
     if constexpr (std::is_same_v<T, slot_t>) {
         return slot_value;
+    } else if constexpr (std::is_pointer_v<T>) {
+        return reinterpret_cast<T>(static_cast<std::uintptr_t>(slot_value));
     } else {
-        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
-        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-
-        T value{};
-        std::memcpy(&value, &slot_value, sizeof(T));
-        return value;
+        if constexpr (sizeof(T) == sizeof(slot_t)) {
+            return std::bit_cast<T>(slot_value);
+        } else {
+            T tmp{};
+            std::memcpy(&tmp, &slot_value, sizeof(T));
+            return tmp;
+        }
     }
 }
 
