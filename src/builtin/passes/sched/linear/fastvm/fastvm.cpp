@@ -29,21 +29,51 @@
 using namespace std;
 using namespace GraphIR;
 
-slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));
+// 互调用涉及第三方函数时帧管理的三种情形
+//
+// A 是根帧，A、B 互相尾调用，并在中途调用 C
+//
+// 情形一：
+// A 或 B 普通调用 C，正常释放即可
+// ┌────────┬────────┬────────┐
+// │  (A)   │  (B)   │  (C)   │
+// └────────┴────────┴────────┘
+//     ↑                  ↑
+//   root1              root2
+//
+// 情形二：
+// A 在中途尾调用 C，此时孪生帧指针指向 B，需要先释放原孪生帧 B，再申请 C
+// ┌────────┬────────┐
+// │  (A)   │  (C)   │
+// └────────┴────────┘
+//     ↑         ↑
+//   root      curr
+//     ↑
+// twin(B->A)
+//
+// 情形三：
+// B 在中途尾调用 C，此时孪生帧指向 A，但不能释放根帧 A，只能在退出C++栈帧时依次释放
+// ┌────────┬────────┬────────┐
+// │  (A)   │  (B)   │  (C)   │
+// └────────┴────────┴────────┘
+//     ↑         ↑         ↑
+//   root   twin(A->B)   curr
+
+slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", rootGraph->name()));
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()
             ->of(RuntimeDiag::MaxRecursionDepthExceeded)
-            .commit(graph->name(), maxRecursionDepth_);
+            .commit(rootGraph->name(), maxRecursionDepth_);
     }
 
     bool loop = false;
 
-    bytecode_vec_t *codes = getBytecodesOfGraph(graph);
+    bytecode_vec_t *codes = getBytecodesOfGraph(rootGraph);
 
     Frame *nextFrame = nullptr; // for mutual-tail-recursion optimization
-    Frame *currFrame = frame, *twinFrame = nullptr;
+    Frame *currFrame = rootFrame, *twinFrame = nullptr;
 
     // for tail-call optimization
     // reuse the current frame for tail-recursive calls
@@ -276,11 +306,12 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
                         currFrame = twinFrame;
                         twinFrame = lastFrame;
                     } else {
-                        if (twinFrame != nullptr) {
+                        // 不可复用栈帧的尾调用
+                        if (twinFrame != nullptr && twinFrame != rootFrame) {
                             // 如果孪生帧不为空，覆写前需要先释放
+                            // 如果孪生帧刚好指向根帧，不能先释放
                             framePool_.release(twinFrame);
                         }
-                        // 不可复用栈帧的尾调用
                         // 将当前栈帧设置为孪生帧
                         twinFrame = currFrame;
 
@@ -357,14 +388,22 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
     if (twinFrame != nullptr) {
         // 说明已经触发了相互尾调用，要把孪生帧也释放掉
         // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
-        // 把与传入的 frame 不相等的那个先释放掉即可
-        if (currFrame == frame) {
-            framePool_.release(twinFrame);
-        } else {
+        // 把与传入的 rootFrame 不相等的那个先释放掉即可
+        if (currFrame != rootFrame) {
+            // 对应情形一
             framePool_.release(currFrame);
+        } else {
+            if (twinFrame == rootFrame) {
+                // 对应情形二
+                framePool_.release(twinFrame);
+            } else {
+                // 对应情形三
+                framePool_.release(currFrame);
+                framePool_.release(twinFrame);
+            }
         }
     }
-    framePool_.release(frame);
+    framePool_.release(rootFrame);
 
     return res;
 }
