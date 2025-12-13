@@ -146,7 +146,7 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
         slot_t res = call(targetGraph, targetFrame);
 
         // 释放栈帧
-        framePool_.release(targetFrame);
+        // framePool_.release(targetFrame);
 
         return res;
     };
@@ -381,11 +381,21 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
     ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
     const auto &input = retNode->normInputs();
 
-    if (nextFrame != nullptr) {
-        framePool_.release(nextFrame);
-    }
+    slot_t res = currFrame->get<slot_t>(input.front()->index());
 
-    return currFrame->get<slot_t>(input.front()->index());
+    if (twinFrame != nullptr) {
+        // 说明已经触发了相互尾调用，要把孪生帧也释放掉
+        // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
+        // 把与传入的 frame 不相等的那个先释放掉即可
+        if (currFrame == frame) {
+            framePool_.release(twinFrame);
+        } else {
+            framePool_.release(currFrame);
+        }
+    }
+    framePool_.release(frame);
+
+    return res;
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
@@ -396,7 +406,6 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     }
     Frame *rootFrame = framePool_.acquire(graph.get());
     call(graph.get(), rootFrame);
-    framePool_.release(rootFrame);
     return Graph::null();
 }
 

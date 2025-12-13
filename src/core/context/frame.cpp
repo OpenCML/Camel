@@ -21,6 +21,7 @@
 #include "core/rtdata/conv.h"
 
 FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
+    auto runtimeAreaLayout = &graph->runtimeDataType()->layout();
     // Graph 的静态数据直接放在持久数据区，永不释放
     const auto &layout        = graph->staticDataType()->layout();
     Tuple *staticArea         = Tuple::create(layout, mm::permSpace());
@@ -41,7 +42,8 @@ FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
 
     // 将数据存储到元数据区
     FrameMeta *meta         = constructAt<FrameMeta>(mm::metaSpace());
-    meta->runtimeAreaLayout = &graph->runtimeDataType()->layout();
+    meta->frameSize         = sizeof(Frame) + sizeof(slot_t) * runtimeAreaLayout->size();
+    meta->runtimeAreaLayout = runtimeAreaLayout;
     meta->staticArea        = staticArea;
 
     // 安装到 Graph 的 extra 中以便于查找

@@ -25,6 +25,7 @@
 #include "utils/log.h"
 
 struct FrameMeta {
+    size_t frameSize;
     const TupleTypeLayout *runtimeAreaLayout;
     Tuple *staticArea;
 };
@@ -47,7 +48,8 @@ class Frame : public Object {
             ASSERT(
                 idx < dynamicAreaLayout_->size(),
                 std::format(
-                    "Invalid argument index, idx = {}, size = {}",
+                    "[{}] Invalid argument index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     dynamicAreaLayout_->size()));
             return dynamicAreaLayout_->typeAt(idx);
@@ -56,7 +58,8 @@ class Frame : public Object {
             ASSERT(
                 idx < staticArea_->size(),
                 std::format(
-                    "Invalid static data index, idx = {}, size = {}",
+                    "[{}] Invalid static data index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
             return staticArea_->typeAt(idx);
@@ -70,7 +73,8 @@ class Frame : public Object {
             ASSERT(
                 idx < dynamicAreaLayout_->size(),
                 std::format(
-                    "Invalid argument index, idx = {}, size = {}",
+                    "[{}] Invalid argument index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     dynamicAreaLayout_->size()));
             auto res = graph_->runtimeDataType()->typeAt(idx);
@@ -81,7 +85,8 @@ class Frame : public Object {
             ASSERT(
                 idx < staticArea_->size(),
                 std::format(
-                    "Invalid static data index, idx = {}, size = {}",
+                    "[{}] Invalid static data index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
             auto res = graph_->staticDataType()->typeAt(idx);
@@ -98,19 +103,24 @@ class Frame : public Object {
             ASSERT(
                 idx < dynamicAreaLayout_->size(),
                 std::format(
-                    "Invalid argument index, idx = {}, size = {}",
+                    "[{}] Invalid argument index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     dynamicAreaLayout_->size()));
             res = fromSlot<T>(dynamicArea_[idx]);
             ASSERT(
                 dynamicArea_[idx] != kDebugUninitializedSlot,
-                std::format("Accessing uninitialized slot: idx={}", index));
+                std::format(
+                    "[{}] Accessing uninitialized slot: idx = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
+                    index));
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
                 idx < staticArea_->size(),
                 std::format(
-                    "Invalid static data index, idx = {}, size = {}",
+                    "[{}] Invalid static data index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
             res = staticArea_->get<T>(idx);
@@ -205,6 +215,7 @@ class Frame : public Object {
     }
 
     GraphIR::Graph *graph_;
+    Frame *nextFrame_;
     Tuple *staticArea_; // 外部提供的静态区
     const TupleTypeLayout *dynamicAreaLayout_;
     slot_t dynamicArea_[]; // 紧跟对象后存放动态区
@@ -228,7 +239,7 @@ class FramePool {
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(
-                    "[{}] Acquire request for graph <{}>, top={}, end={}",
+                    "[{}] Acquire request for graph <{}>, top = {}, end = {}",
                     formatAddress(this, true),
                     graph ? graph->name() : "(null)",
                     formatAddress(top_, true),
@@ -239,14 +250,21 @@ class FramePool {
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (lastFrame->graph_ == graph) {
             EXEC_WHEN_DEBUG([&]() {
+                // 把 dynamic 区所有 slot 写成 魔数，用于检测脏读
+                size_t n = lastFrame->dynamicAreaLayout_->size();
+                for (size_t i = 0; i < n; ++i) {
+                    lastFrame->dynamicArea_[i] = kDebugUninitializedSlot;
+                }
                 l.in("FramePool")
                     .info(
-                        "[{}] Reusing existing frame at {}, graph={}",
+                        "[{}] Reusing existing frame at {}, graph = {}",
                         formatAddress(this, true),
                         formatAddress(lastFrame, true),
                         graph ? graph->name() : "(null)");
             }());
+
             frameObjects_.push_back(lastFrame);
+            top_ = reinterpret_cast<std::byte *>(lastFrame->nextFrame_);
             return lastFrame;
         }
 
@@ -262,12 +280,12 @@ class FramePool {
                         graph->name());
             }());
         }
-        size_t frameSize = sizeof(Frame) + sizeof(slot_t) * meta->runtimeAreaLayout->size();
+        size_t frameSize = meta->frameSize;
         if (top_ + frameSize > end_) {
             EXEC_WHEN_DEBUG([&]() {
                 l.in("FramePool")
                     .error(
-                        "[{}] Out of memory: top={}, need={}, end={}",
+                        "[{}] Out of memory: top={}, need = {}, end = {}",
                         formatAddress(this, true),
                         formatAddress(top_, true),
                         frameSize,
@@ -280,7 +298,7 @@ class FramePool {
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(
-                    "[{}] Allocated new Frame at {}, size={}, graph={}",
+                    "[{}] Allocated new Frame at {}, size = {}, graph = {}",
                     formatAddress(this, true),
                     formatAddress(frame, true),
                     frameSize,
@@ -301,26 +319,31 @@ class FramePool {
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(
-                    "[{}] Releasing frame at {}, graph={}",
+                    "[{}] Releasing frame at {}, graph = {}",
                     formatAddress(this, true),
                     formatAddress(frame, true),
                     frame->graph_ ? frame->graph_->name() : "(null)");
         }());
 
         ASSERT(
+            reinterpret_cast<std::byte *>(frame) < top_,
+            "Trying to free a frame that is already released.");
+
+        ASSERT(
             frameObjects_.back() == frame,
             std::format(
-                "Trying to free a frame that is not on top, last={}, frame={}.",
+                "Trying to free a frame that is not on top, last = {}, frame = {}.",
                 formatAddress(frameObjects_.back(), true),
                 formatAddress(frame, true)));
 
-        top_ = reinterpret_cast<std::byte *>(frame);
+        frame->nextFrame_ = reinterpret_cast<Frame *>(top_);
+        top_              = reinterpret_cast<std::byte *>(frame);
         frameObjects_.pop_back();
 
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(
-                    "[{}] Frame released. New top={}",
+                    "[{}] Frame released. New top = {}",
                     formatAddress(this, true),
                     formatAddress(top_, true));
         }());
