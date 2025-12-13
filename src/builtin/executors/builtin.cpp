@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -118,6 +118,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         {"op/assn_and", __builtin__assn_and__},
         {"op/assn_or", __builtin__assn_or__},
+
         {"op/and", __builtin__and__},
         {"op/or", __builtin__or__},
 
@@ -140,33 +141,33 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/strict_eq", __builtin__strict_eq__},
         {"op/strict_ne", __builtin__strict_ne__},
 
-        {"op/lt_i", __builtin__lt__},
-        {"op/lt_l", __builtin__lt__},
-        {"op/lt_f", __builtin__lt__},
-        {"op/lt_d", __builtin__lt__},
-        {"op/lt_s", __builtin__lt__},
-        {"op/lt", __builtin__lt__},
+        {"op/lt_i", __builtin__lt__<Int>},
+        {"op/lt_l", __builtin__lt__<Long>},
+        {"op/lt_f", __builtin__lt__<Float>},
+        {"op/lt_d", __builtin__lt__<Double>},
+        {"op/lt_s", __not_implemented__},
+        {"op/lt", __not_implemented__},
 
-        {"op/le_i", __builtin__le__},
-        {"op/le_l", __builtin__le__},
-        {"op/le_f", __builtin__le__},
-        {"op/le_d", __builtin__le__},
-        {"op/le_s", __builtin__le__},
-        {"op/le", __builtin__le__},
+        {"op/le_i", __builtin__le__<Int>},
+        {"op/le_l", __builtin__le__<Long>},
+        {"op/le_f", __builtin__le__<Float>},
+        {"op/le_d", __builtin__le__<Double>},
+        {"op/le_s", __not_implemented__},
+        {"op/le", __not_implemented__},
 
-        {"op/gt_i", __builtin__gt__},
-        {"op/gt_l", __builtin__gt__},
-        {"op/gt_f", __builtin__gt__},
-        {"op/gt_d", __builtin__gt__},
-        {"op/gt_s", __builtin__gt__},
-        {"op/gt", __builtin__gt__},
+        {"op/gt_i", __builtin__gt__<Int>},
+        {"op/gt_l", __builtin__gt__<Long>},
+        {"op/gt_f", __builtin__gt__<Float>},
+        {"op/gt_d", __builtin__gt__<Double>},
+        {"op/gt_s", __not_implemented__},
+        {"op/gt", __not_implemented__},
 
-        {"op/ge_i", __builtin__ge__},
-        {"op/ge_l", __builtin__ge__},
-        {"op/ge_f", __builtin__ge__},
-        {"op/ge_d", __builtin__ge__},
-        {"op/ge_s", __builtin__ge__},
-        {"op/ge", __builtin__ge__},
+        {"op/ge_i", __builtin__ge__<Int>},
+        {"op/ge_l", __builtin__ge__<Long>},
+        {"op/ge_f", __builtin__ge__<Float>},
+        {"op/ge_d", __builtin__ge__<Double>},
+        {"op/ge_s", __not_implemented__},
+        {"op/ge", __not_implemented__},
 
         {"op/add_i", __builtin__add_ii__},
         {"op/add_l", __builtin__add_ll__},

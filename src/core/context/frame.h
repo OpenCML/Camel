@@ -102,6 +102,9 @@ class Frame : public Object {
                     idx,
                     dynamicAreaLayout_->size()));
             res = fromSlot<T>(dynamicArea_[idx]);
+            ASSERT(
+                dynamicArea_[idx] != kDebugUninitializedSlot,
+                std::format("Accessing uninitialized slot: idx={}", index));
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
@@ -191,7 +194,15 @@ class Frame : public Object {
     friend class FramePool;
     // 只能由 FramePool 调用
     Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleTypeLayout *dynamicAreaLayout)
-        : graph_(graph), staticArea_(staticArea), dynamicAreaLayout_(dynamicAreaLayout) {}
+        : graph_(graph), staticArea_(staticArea), dynamicAreaLayout_(dynamicAreaLayout) {
+        EXEC_WHEN_DEBUG([&]() {
+            // 把 dynamic 区所有 slot 写成 魔数，用于检测脏读
+            size_t n = dynamicAreaLayout_->size();
+            for (size_t i = 0; i < n; ++i) {
+                dynamicArea_[i] = kDebugUninitializedSlot;
+            }
+        }());
+    }
 
     GraphIR::Graph *graph_;
     Tuple *staticArea_; // 外部提供的静态区
