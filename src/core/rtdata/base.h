@@ -77,39 +77,36 @@ template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
     if constexpr (std::is_same_v<T, slot_t>) {
         return value;
     } else if constexpr (std::is_pointer_v<T>) {
-        return static_cast<slot_t>(reinterpret_cast<uintptr_t>(value));
-    } else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
-        slot_t s{};
-        std::memcpy(&s, &value, sizeof(T));
-        return s;
+        // 指针 -> 整数再放入 slot_t
+        return static_cast<slot_t>(reinterpret_cast<std::uintptr_t>(value));
     } else {
-        slot_t s{};
-        std::memcpy(&s, &value, sizeof(T));
-        return s;
+        if constexpr (sizeof(T) == sizeof(slot_t)) {
+            return std::bit_cast<slot_t>(value);
+        } else {
+            // 小于 slot_t 的情况：低位保存，其他位补零
+            slot_t tmp{};
+            std::memcpy(&tmp, &value, sizeof(T));
+            return tmp;
+        }
     }
 }
 
 template <typename T> constexpr T fromSlot(slot_t slot_value) noexcept {
     static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
-    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially_copyable");
 
     if constexpr (std::is_same_v<T, slot_t>) {
         return slot_value;
     } else if constexpr (std::is_pointer_v<T>) {
-        // 指针类型先转换成整数，再 reinterpret_cast
-        return reinterpret_cast<T>(static_cast<uintptr_t>(slot_value));
-    } else if constexpr (std::is_integral_v<T>) {
-        // 整数：普通 static_cast
-        return static_cast<T>(slot_value);
-    } else if constexpr (std::is_floating_point_v<T>) {
-        // 浮点数：memcpy 转换，保证按位还原
-        T value{};
-        std::memcpy(&value, &slot_value, sizeof(T));
-        return value;
+        return reinterpret_cast<T>(static_cast<std::uintptr_t>(slot_value));
     } else {
-        T value{};
-        std::memcpy(&value, &slot_value, sizeof(T));
-        return value;
+        if constexpr (sizeof(T) == sizeof(slot_t)) {
+            return std::bit_cast<T>(slot_value);
+        } else {
+            T tmp{};
+            std::memcpy(&tmp, &slot_value, sizeof(T));
+            return tmp;
+        }
     }
 }
 
