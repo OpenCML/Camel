@@ -276,6 +276,10 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
                         currFrame = twinFrame;
                         twinFrame = lastFrame;
                     } else {
+                        if (twinFrame != nullptr) {
+                            // 如果孪生帧不为空，覆写前需要先释放
+                            framePool_.release(twinFrame);
+                        }
                         // 不可复用栈帧的尾调用
                         // 将当前栈帧设置为孪生帧
                         twinFrame = currFrame;
