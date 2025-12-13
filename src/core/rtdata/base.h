@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,26 +70,43 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 
 using slot_t = uint64_t;
 
-template <typename T> slot_t toSlot(T value) {
+template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
+    static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
     if constexpr (std::is_same_v<T, slot_t>) {
         return value;
+    } else if constexpr (std::is_pointer_v<T>) {
+        return static_cast<slot_t>(reinterpret_cast<uintptr_t>(value));
+    } else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
+        slot_t s{};
+        std::memcpy(&s, &value, sizeof(T));
+        return s;
     } else {
-        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
-        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-
-        slot_t slot_value{};
-        std::memcpy(&slot_value, &value, sizeof(T));
-        return slot_value;
+        slot_t s{};
+        std::memcpy(&s, &value, sizeof(T));
+        return s;
     }
 }
 
-template <typename T> T fromSlot(slot_t slot_value) {
+template <typename T> constexpr T fromSlot(slot_t slot_value) noexcept {
+    static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
+    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
     if constexpr (std::is_same_v<T, slot_t>) {
         return slot_value;
+    } else if constexpr (std::is_pointer_v<T>) {
+        // 指针类型先转换成整数，再 reinterpret_cast
+        return reinterpret_cast<T>(static_cast<uintptr_t>(slot_value));
+    } else if constexpr (std::is_integral_v<T>) {
+        // 整数：普通 static_cast
+        return static_cast<T>(slot_value);
+    } else if constexpr (std::is_floating_point_v<T>) {
+        // 浮点数：memcpy 转换，保证按位还原
+        T value{};
+        std::memcpy(&value, &slot_value, sizeof(T));
+        return value;
     } else {
-        static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
-        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-
         T value{};
         std::memcpy(&value, &slot_value, sizeof(T));
         return value;
