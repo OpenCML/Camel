@@ -256,7 +256,7 @@ class FramePool {
 
         // 尝试复用
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
-        if (LIKELY(lastFrame->graph_ == graph)) {
+        if (lastFrame->graph_ == graph) {
             EXEC_WHEN_DEBUG([&]() {
                 // 把 dynamic 区所有 slot 写成 魔数，用于检测脏读
                 size_t n = lastFrame->dynamicAreaLayout_->size();
