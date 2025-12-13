@@ -21,4 +21,6 @@
 
 Logger l("");
 
+#ifndef NDEBUG
 const std::string filteredLoggerScope = "";
+#endif

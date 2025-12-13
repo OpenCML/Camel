@@ -67,7 +67,9 @@ class Logger {
 #include <iostream>
 #include <mutex>
 
+#ifndef NDEBUG
 extern const std::string filteredLoggerScope;
+#endif
 
 class Logger {
   public:
@@ -112,7 +114,11 @@ class Logger {
     }
 
     bool filtered() const {
+#ifndef NDEBUG
         return filteredLoggerScope.empty() || this->scope_ == filteredLoggerScope;
+#else
+        return true
+#endif
     }
 
     template <typename... Args> void info(std::format_string<Args...> fmt, Args &&...args) const {

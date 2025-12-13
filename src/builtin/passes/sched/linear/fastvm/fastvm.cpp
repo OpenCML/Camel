@@ -32,7 +32,7 @@ using namespace GraphIR;
 
 bytecode_vec_t *FastVMSchedPass::getBytecodesOfGraph(GraphIR::Graph *graph) {
     bytecode_vec_t *codes = graph->getExtra<bytecode_vec_t, 1>();
-    if (codes == nullptr) {
+    if (UNLIKELY(codes == nullptr)) {
         codes = &bytecodes_.emplace_back(precompile(context_, graph));
         graph->setExtra<bytecode_vec_t, 1>(codes);
     }
