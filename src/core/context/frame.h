@@ -100,36 +100,40 @@ class Frame : public Object {
         T res;
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(
-                idx < dynamicAreaLayout_->size(),
-                std::format(
-                    "[{}] Invalid argument index, idx = {}, size = {}",
-                    formatAddress(const_cast<Frame *>(this), true),
-                    idx,
-                    dynamicAreaLayout_->size()));
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < dynamicAreaLayout_->size(),
+                    std::format(
+                        "[{}] Invalid argument index, idx = {}, size = {}",
+                        formatAddress(const_cast<Frame *>(this), true),
+                        idx,
+                        dynamicAreaLayout_->size()));
+                ASSERT(
+                    dynamicArea_[idx] != kDebugUninitializedSlot,
+                    std::format(
+                        "[{}] Accessing uninitialized slot: idx = {}",
+                        formatAddress(const_cast<Frame *>(this), true),
+                        index));
+            }());
             res = fromSlot<T>(dynamicArea_[idx]);
-            ASSERT(
-                dynamicArea_[idx] != kDebugUninitializedSlot,
-                std::format(
-                    "[{}] Accessing uninitialized slot: idx = {}",
-                    formatAddress(const_cast<Frame *>(this), true),
-                    index));
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(
-                idx < staticArea_->size(),
-                std::format(
-                    "[{}] Invalid static data index, idx = {}, size = {}",
-                    formatAddress(const_cast<Frame *>(this), true),
-                    idx,
-                    staticArea_->size()));
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < staticArea_->size(),
+                    std::format(
+                        "[{}] Invalid static data index, idx = {}, size = {}",
+                        formatAddress(const_cast<Frame *>(this), true),
+                        idx,
+                        staticArea_->size()));
+            }());
             res = staticArea_->get<T>(idx);
         }
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
             printSlot(oss, toSlot(res), typeAt(index));
             l.in("Frame").info(
-                "[{}] Getting data of <{}> at index {} ({}): {}",
+                "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 formatAddress(const_cast<Frame *>(this), true),
                 graph_->name(),
                 index,
@@ -145,7 +149,7 @@ class Frame : public Object {
             std::ostringstream oss;
             printSlot(oss, toSlot(value), typeAt(index));
             l.in("Frame").info(
-                "[{}] Setting data of <{}> at index {} ({}): {}",
+                "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 formatAddress(this, true),
                 graph_->name(),
                 index,
@@ -154,21 +158,25 @@ class Frame : public Object {
         }());
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(
-                idx < dynamicAreaLayout_->size(),
-                std::format(
-                    "Invalid argument index, idx = {}, size = {}",
-                    idx,
-                    dynamicAreaLayout_->size()));
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < dynamicAreaLayout_->size(),
+                    std::format(
+                        "Invalid argument index, idx = {}, size = {}",
+                        idx,
+                        dynamicAreaLayout_->size()));
+            }());
             dynamicArea_[idx] = toSlot(value);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(
-                idx < staticArea_->size(),
-                std::format(
-                    "Invalid static data index, idx = {}, size = {}",
-                    idx,
-                    staticArea_->size()));
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < staticArea_->size(),
+                    std::format(
+                        "Invalid static data index, idx = {}, size = {}",
+                        idx,
+                        staticArea_->size()));
+            }());
             staticArea_->set<T>(idx, value);
         }
     }
@@ -257,10 +265,10 @@ class FramePool {
                 }
                 l.in("FramePool")
                     .info(
-                        "[{}] Reusing existing frame at {}, graph = {}",
+                        "[{}] Reusing existing frame of graph <{}> at {}",
                         formatAddress(this, true),
-                        formatAddress(lastFrame, true),
-                        graph ? graph->name() : "(null)");
+                        graph ? graph->name() : "(null)",
+                        formatAddress(lastFrame, true));
             }());
 
             frameObjects_.push_back(lastFrame);
@@ -285,7 +293,7 @@ class FramePool {
             EXEC_WHEN_DEBUG([&]() {
                 l.in("FramePool")
                     .error(
-                        "[{}] Out of memory: top={}, need = {}, end = {}",
+                        "[{}] Out of memory: top = {}, need = {}, end = {}",
                         formatAddress(this, true),
                         formatAddress(top_, true),
                         frameSize,
@@ -298,11 +306,11 @@ class FramePool {
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(
-                    "[{}] Allocated new Frame at {}, size = {}, graph = {}",
+                    "[{}] Allocated new Frame for graph <{}> at {}, size = {}",
                     formatAddress(this, true),
+                    graph->name(),
                     formatAddress(frame, true),
-                    frameSize,
-                    graph->name());
+                    frameSize);
         }());
 
         // 更新 top 指针
@@ -319,22 +327,22 @@ class FramePool {
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(
-                    "[{}] Releasing frame at {}, graph = {}",
+                    "[{}] Releasing frame of graph <{}> at {}",
                     formatAddress(this, true),
-                    formatAddress(frame, true),
-                    frame->graph_ ? frame->graph_->name() : "(null)");
+                    frame->graph_ ? frame->graph_->name() : "(null)",
+                    formatAddress(frame, true));
+            ASSERT(
+                reinterpret_cast<std::byte *>(frame) < top_,
+                "Trying to release a frame that is already released.");
+            Frame *last = reinterpret_cast<Frame *>(frameObjects_.back());
+            ASSERT(
+                last == frame,
+                std::format(
+                    "Trying to release a frame that is not on top, top frame of graph <{}> is at "
+                    "{}.",
+                    last->graph_->name(),
+                    formatAddress(last, true)));
         }());
-
-        ASSERT(
-            reinterpret_cast<std::byte *>(frame) < top_,
-            "Trying to free a frame that is already released.");
-
-        ASSERT(
-            frameObjects_.back() == frame,
-            std::format(
-                "Trying to free a frame that is not on top, last = {}, frame = {}.",
-                formatAddress(frameObjects_.back(), true),
-                formatAddress(frame, true)));
 
         frame->nextFrame_ = reinterpret_cast<Frame *>(top_);
         top_              = reinterpret_cast<std::byte *>(frame);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,6 +67,8 @@ class Logger {
 #include <iostream>
 #include <mutex>
 
+extern const std::string filteredLoggerScope;
+
 class Logger {
   public:
     enum class Level { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
@@ -109,26 +111,30 @@ class Logger {
             localLevel);
     }
 
+    bool filtered() const {
+        return filteredLoggerScope.empty() || this->scope_ == filteredLoggerScope;
+    }
+
     template <typename... Args> void info(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_) {
+        if (verboseEnabled_ && filtered()) {
             log(Level::Info, std::format(fmt, std::forward<Args>(args)...));
         }
     }
 
     template <typename... Args> void warn(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_) {
+        if (verboseEnabled_ && filtered()) {
             log(Level::Warn, std::format(fmt, std::forward<Args>(args)...));
         }
     }
 
     template <typename... Args> void debug(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_) {
+        if (verboseEnabled_ && filtered()) {
             log(Level::Debug, std::format(fmt, std::forward<Args>(args)...));
         }
     }
 
     template <typename... Args> void error(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_) {
+        if (verboseEnabled_ && filtered()) {
             log(Level::Error, std::format(fmt, std::forward<Args>(args)...));
         }
     }
@@ -140,7 +146,7 @@ class Logger {
     Level effectiveLogLevel_;
 
     static inline Level globalLogLevel_ = Level::Debug;
-    static inline bool verboseEnabled_ = false;
+    static inline bool verboseEnabled_  = false;
     static inline std::ofstream logFile_;
     static inline std::mutex logMutex_;
 
@@ -178,8 +184,8 @@ class Logger {
         if (level < effectiveLogLevel_)
             return;
 
-        std::string tag = levelToTag(level);
-        std::string plainTag = levelToPlain(level);
+        std::string tag         = levelToTag(level);
+        std::string plainTag    = levelToPlain(level);
         std::string fullMessage = std::format("[{}] <{}> {}", plainTag, scope_, message);
 
         std::lock_guard<std::mutex> lock(logMutex_);

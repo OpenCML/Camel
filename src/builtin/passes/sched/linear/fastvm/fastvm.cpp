@@ -55,102 +55,6 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
     Frame *nextFrame = nullptr; // for mutual-tail-recursion optimization
     Frame *currFrame = frame, *twinFrame = nullptr;
 
-    auto __call = [&](GraphIR::Graph *targetGraph, const Bytecode &bc, bool isTailCall) -> slot_t {
-        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-            "Calling function: {} (tail-call: {})",
-            targetGraph->name(),
-            isTailCall ? "yes" : "no"));
-
-        ASSERT(
-            bc.argsCnt() == targetGraph->normPorts().size() + targetGraph->withPorts().size(),
-            std::format(
-                "Function {} expects {} arguments, but got {}.",
-                targetGraph->name(),
-                targetGraph->normPorts().size() + targetGraph->withPorts().size(),
-                bc.argsCnt()));
-
-        // 如果是尾调用，则尝试复用当前 C++ 栈帧
-        if (isTailCall) {
-            // enable tail-call optimization
-            // 设置 loop flag 为 true
-            // 当前字节码执行子循环结束后不会退出大循环
-            // 而会根据新指定的 currFrame 和 bytecodes 执行新图
-            // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
-            loop = true;
-            // 设置 lastFrame 为当前帧 currFrame 备用
-            Frame *lastFrame = currFrame;
-
-            // 下面准备将 currFrame 重新指向新栈帧
-            if (targetGraph == currFrame->graph()) {
-                // 如果目标图就是当前帧的图，说明在进行自递归尾调用
-                // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
-                EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                    "Optimizing self-recursion for graph: {}",
-                    currFrame->graph()->name()));
-            } else {
-                // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
-                codes = getBytecodesOfGraph(targetGraph);
-
-                // 即便目标图不是当前图，仍可能存在互调用尾递归现象
-                // 即 A 尾调用 B，B 又尾调用 A
-                // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
-                // 思路是在互调用时维护一个孪生栈帧 twinFrame
-                // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
-                // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
-                if (twinFrame && twinFrame->graph() == targetGraph) {
-                    // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
-                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                        "Optimizing mutual-tail-recursion for graph: {}",
-                        currFrame->graph()->name()));
-                    // 交换孪生帧
-                    currFrame = twinFrame;
-                    twinFrame = lastFrame;
-                } else {
-                    // 不可复用栈帧的尾调用
-                    // 将当前栈帧设置为孪生帧
-                    twinFrame = currFrame;
-
-                    // 创建新的栈帧并设置参数
-                    nextFrame              = framePool_.acquire(targetGraph);
-                    size_t argsCnt         = bc.argsCnt();
-                    const data_idx_t *args = bc.operands();
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        nextFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                    }
-
-                    // 切换到新栈帧
-                    currFrame = nextFrame;
-                    return NullSlot;
-                }
-            }
-
-            // 自递归和互递归的情况在这里集中设置参数
-            size_t argsCnt         = bc.argsCnt();
-            const data_idx_t *args = bc.operands();
-            for (size_t i = 0; i < argsCnt; ++i) {
-                currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
-            }
-
-            return NullSlot;
-        }
-
-        // 如果不是尾调用，则新建栈帧并递归调用 call 函数
-        Frame *targetFrame = framePool_.acquire(targetGraph);
-
-        size_t argsCnt         = bc.argsCnt();
-        const data_idx_t *args = bc.operands();
-        for (size_t i = 0; i < argsCnt; ++i) {
-            targetFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-        }
-
-        slot_t res = call(targetGraph, targetFrame);
-
-        // 释放栈帧
-        // framePool_.release(targetFrame);
-
-        return res;
-    };
-
     // for tail-call optimization
     // reuse the current frame for tail-recursive calls
     do {
@@ -323,19 +227,92 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame *frame) {
                 }
 
                 const auto &result = call(targetGraph, funcFrame);
-                framePool_.release(funcFrame);
 
                 currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::FUNC: {
-                currFrame->set(bc.result, __call(bc.extra()->graph, bc, false));
+                Frame *funcFrame = framePool_.acquire(bc.extra()->graph);
+
+                size_t argsCnt         = bc.argsCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                }
+
+                slot_t result = call(bc.extra()->graph, funcFrame);
+
+                currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::TAIL: {
-                __call(bc.extra()->graph, bc, true);
+                // 尾调用优化
+                Graph *funcFrame = bc.extra()->graph;
+
+                // enable tail-call optimization
+                // 设置 loop flag 为 true
+                // 当前字节码执行子循环结束后不会退出大循环
+                // 而会根据新指定的 currFrame 和 bytecodes 执行新图
+                // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
+                loop = true;
+                // 设置 lastFrame 为当前帧 currFrame 备用
+                Frame *lastFrame = currFrame;
+
+                // 下面准备将 currFrame 重新指向新栈帧
+                if (funcFrame == currFrame->graph()) {
+                    // 如果目标图就是当前帧的图，说明在进行自递归尾调用
+                    // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
+                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+                        "Optimizing self-recursion for graph: {}",
+                        currFrame->graph()->name()));
+                } else {
+                    // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
+                    codes = getBytecodesOfGraph(funcFrame);
+
+                    // 即便目标图不是当前图，仍可能存在互调用尾递归现象
+                    // 即 A 尾调用 B，B 又尾调用 A
+                    // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
+                    // 思路是在互调用时维护一个孪生栈帧 twinFrame
+                    // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
+                    // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
+                    if (twinFrame && twinFrame->graph() == funcFrame) {
+                        // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
+                        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+                            "Optimizing mutual-tail-recursion for graph: {}",
+                            currFrame->graph()->name()));
+                        // 交换孪生帧
+                        currFrame = twinFrame;
+                        twinFrame = lastFrame;
+                    } else {
+                        // 不可复用栈帧的尾调用
+                        // 将当前栈帧设置为孪生帧
+                        twinFrame = currFrame;
+
+                        // 创建新的栈帧并设置参数
+                        nextFrame              = framePool_.acquire(funcFrame);
+                        size_t argsCnt         = bc.argsCnt();
+                        const data_idx_t *args = bc.operands();
+                        for (size_t i = 0; i < argsCnt; ++i) {
+                            nextFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                        }
+
+                        // 切换到新栈帧
+                        currFrame = nextFrame;
+
+                        // 跳过后续字节码，进行下一轮循环
+                        i = codeSize;
+                        continue;
+                    }
+                }
+
+                // 自递归和互递归的情况在这里集中设置参数
+                size_t argsCnt         = bc.argsCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
+                }
 
                 // 跳过后续字节码，进行下一轮循环
                 i = codeSize;

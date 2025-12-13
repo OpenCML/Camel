@@ -13,10 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Sep. 04, 2025
+ * Updated: Dec. 13, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "log.h"
 
 Logger l("");
+
+const std::string filteredLoggerScope = "";
