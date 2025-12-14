@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 14, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -305,6 +305,8 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
             appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
         }
     }
+
+    appendBytecode(bytecodes, OpCode::RETN, 0, {graph->exitNode()->index()});
 
     ASSERT(
         brchTargetMap.empty(),

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 14, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -533,6 +533,10 @@ void Graph::rearrange() {
             node->setIndex(rtmIdx++);
             runtimeDataTypes.push_back(node->dataType());
         }
+    }
+
+    if (exitNode_) {
+        exitNode_->setIndex(exitNode_->normInputs().front()->index());
     }
 
     runtimeDataSize_ = rtmIdx;

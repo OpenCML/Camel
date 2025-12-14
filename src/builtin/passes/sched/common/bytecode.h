@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 14, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,7 @@
 
 enum class OpCode : uint8_t {
     // 定长参数指令
-    NOOP = 0b00000000, // no operation
+    RETN = 0b00000000,
     CAST = 0b00000001,
     COPY = 0b00000010, // 使用 fastop[0] 作为待拷贝索引
     ACCS = 0b00000011, // fastop[0] 作为目标索引，fastop[1] 作为访问的下标
@@ -135,7 +135,7 @@ union BytecodeExtra;
 // total_size = opsize * 8 bytes
 
 struct BytecodeHeader {                  // 8 bytes
-    OpCode opcode        = OpCode::NOOP; // 1 byte
+    OpCode opcode        = OpCode::RETN; // 1 byte
     uint8_t opsize       = 0;            // 1 byte，单位为 8 字节
     data_idx_t result    = 0;            // 2 bytes
     data_idx_t fastop[2] = {0, 0};       // 4 bytes

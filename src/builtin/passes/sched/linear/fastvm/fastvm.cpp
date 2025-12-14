@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 13, 2025
+ * Updated: Dec. 14, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,7 +68,8 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             .commit(rootGraph->name(), maxRecursionDepth_);
     }
 
-    bool loop = false;
+    bool loop      = false;
+    slot_t funcRes = NullSlot;
 
     bytecode_vec_t *codes = getBytecodesOfGraph(rootGraph);
 
@@ -88,8 +89,8 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode[{}]: {}", i, bc.toString()));
 
             switch (bc.opcode) {
-            case OpCode::NOOP: {
-                // do nothing
+            case OpCode::RETN: {
+                funcRes = currFrame->get<slot_t>(bc.fastop[0]);
                 break;
             }
 
@@ -350,7 +351,7 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 auto func              = bc.extra()->func;
                 EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                     "Executing operator {}.",
-                    context_->execMgr().getNameOfAnOperator(bc.extra()->func)));
+                    context_->execMgr().getNameOfAnOperator(func)));
                 func(bc.result, nargs, wargs, *currFrame, *context_);
                 break;
             }
@@ -378,13 +379,6 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
     currRecursionDepth_--;
 
-    const auto &retNode = currFrame->graph()->exitNode();
-    ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
-    ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
-    const auto &input = retNode->normInputs();
-
-    slot_t res = currFrame->get<slot_t>(input.front()->index());
-
     if (twinFrame != nullptr) {
         // 说明已经触发了相互尾调用，要把孪生帧也释放掉
         // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
@@ -405,7 +399,7 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     }
     framePool_.release(rootFrame);
 
-    return res;
+    return funcRes;
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {

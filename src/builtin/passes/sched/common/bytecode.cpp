@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 14, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,8 +21,8 @@
 
 std::string to_string(const OpCode &op) {
     switch (op) {
-    case OpCode::NOOP:
-        return "NOOP";
+    case OpCode::RETN:
+        return "RETN";
     case OpCode::CAST:
         return "CAST";
     case OpCode::COPY:
