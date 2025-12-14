@@ -39,7 +39,7 @@ func main(): int sync {
     let z_value = 1.96
     let margin_error = z_value * (std_dev / sqrt(repeat))
 
-    'average time cost: {} +/- {} ms (95% CI)'
+    'average time cost: {:.2f} +/- {:.2f} ms (95% CI)'
         ->format<average, margin_error>
         ->println
 

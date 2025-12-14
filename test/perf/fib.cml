@@ -15,7 +15,7 @@ func main(): int sync {
         'fib({}) = {}'->format<idx, res>->println
     })
 
-    'average time cost: {:.2f} ± {:.2f} ms (95% CI)'
+    'average time cost: {:.2f} +/- {:.2f} ms (95% CI)'
         ->format<average, margin_error>
         ->println
 
