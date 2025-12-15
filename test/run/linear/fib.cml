@@ -12,6 +12,6 @@ func main(): int sync {
     let start = now()
     let res = fib(idx)
     let duration = now() - start
-    'Fibonacci({}) = {} (computed in {} seconds)'->format<idx, res, duration>->println
+    'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
     return 0
 }

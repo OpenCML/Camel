@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 14, 2025
+ * Updated: Dec. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 #include "builtin/algo/topo.h"
 #include "core/data/primary.h"
+#include "utils/opperf.h"
 
 #ifndef NDEBUG
 #include "service/profiler/advanced/advanced_tracer.h"
@@ -87,6 +88,16 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
         while (i < codeSize) {
             const Bytecode &bc = code[i];
             EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode[{}]: {}", i, bc.toString()));
+
+#ifdef OPPERF_ENABLED
+            std::string tag;
+            if (bc.opcode == OpCode::OPER) {
+                tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
+            } else if (bc.opcode == OpCode::FUNC) {
+                tag = bc.extra()->graph->name();
+            }
+            opperf::ScopeTimer _timer(bc.opcode, tag);
+#endif
 
             switch (bc.opcode) {
             case OpCode::RETN: {
@@ -408,8 +419,15 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             ->of(RuntimeDiag::MissingMainFunction)
             .commit(context_->mainModule()->name());
     }
+
+    opperf::start();
+
     Frame *rootFrame = framePool_.acquire(graph.get());
     call(graph.get(), rootFrame);
+
+    opperf::stop();
+    opperf::report(std::cout);
+
     return Graph::null();
 }
 
