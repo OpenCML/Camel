@@ -13,16 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 15, 2025
- * Updated: Dec. 15, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-// #define OPPERF_ENABLED
+#define OPPERF_ENABLED
 
 #include "builtin/passes/sched/common/bytecode.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -39,7 +40,8 @@ namespace opperf {
 
 inline uint64_t rdtsc() noexcept {
     unsigned lo, hi;
-    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+    __asm__ __volatile__("rdtscp" : "=a"(lo), "=d"(hi)::"%rcx");
+    __asm__ __volatile__("lfence"); // 确保后续指令不乱序
     return ((uint64_t)hi << 32) | lo;
 }
 
@@ -225,17 +227,14 @@ inline void report(std::ostream &os) { PerfMonitor::instance().report(os); }
 struct ScopeTimer {
     OpCode opcode;
     std::string tag;
-    bool skipped;
     uint64_t paused;
     uint64_t start;
 
     ScopeTimer(OpCode code, const std::string &t = "")
-        : opcode(code), tag(t), skipped(false), paused(0), start(rdtsc()) {}
+        : opcode(code), tag(t), paused(0), start(rdtsc()) {}
     ~ScopeTimer() {
-        if (!skipped) {
-            uint64_t end = rdtsc();
-            PerfMonitor::instance().record(opcode, end - start - paused, tag);
-        }
+        uint64_t end = rdtsc();
+        PerfMonitor::instance().record(opcode, end - start - paused, tag);
     }
 
     void pause() { paused = rdtsc(); }
