@@ -93,11 +93,12 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             std::string tag;
             if (bc.opcode == OpCode::OPER) {
                 tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
+            } else if (bc.opcode == OpCode::FUNC) {
+                tag = bc.extra()->graph->name();
             }
             opperf::ScopeTimer _timer(bc.opcode, tag);
-            if (bc.opcode == OpCode::FUNC) {
-                _timer.skip();
-            }
+#else
+            opperf::ScopeTimer _timer(bc.opcode);
 #endif
 
             switch (bc.opcode) {
@@ -259,7 +260,9 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
                 }
 
+                _timer.pause();
                 const auto &result = call(targetGraph, funcFrame);
+                _timer.resume();
 
                 currFrame->set(bc.result, result);
                 break;
@@ -274,7 +277,9 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
                 }
 
+                _timer.pause();
                 slot_t result = call(bc.extra()->graph, funcFrame);
+                _timer.resume();
 
                 currFrame->set(bc.result, result);
                 break;

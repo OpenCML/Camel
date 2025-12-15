@@ -19,7 +19,7 @@
 
 #pragma once
 
-#define OPPERF_ENABLED
+// #define OPPERF_ENABLED
 
 #include "builtin/passes/sched/common/bytecode.h"
 
@@ -102,11 +102,11 @@ class PerfMonitor {
         }
 
         os << "\n=========== FastVM Opcode Perf Report ===========\n";
-        os << std::left << std::setw(15) << "Opcode" << std::right << std::setw(15) << "Count"
+        os << std::left << std::setw(25) << "Opcode" << std::right << std::setw(15) << "Count"
            << std::setw(20) << "Total Cycles" << std::setw(15) << "Avg Cycles" << std::setw(15)
            << "Avg Time" << std::setw(15) << "Total Time" << std::setw(10) << "Pct(%)"
            << "\n";
-        os << std::string(105, '-') << "\n";
+        os << std::string(115, '-') << "\n";
 
         std::vector<std::pair<const OpCode *, const OpcodeStat *>> sorted_ops;
         sorted_ops.reserve(opstats_.size());
@@ -131,7 +131,7 @@ class PerfMonitor {
             double total_ns   = stat.total_cycles * ns_per_cycle;
             double pct_total  = (total_ns / total_ns_all_stats) * 100.0;
 
-            os << std::left << std::setw(15) << to_string(code) << std::right << std::setw(15)
+            os << std::left << std::setw(25) << to_string(code) << std::right << std::setw(15)
                << fmt_num(stat.count) << std::setw(20) << fmt_num(stat.total_cycles)
                << std::setw(15) << fmt_num((uint64_t)avg_cycles) << std::setw(15) << std::fixed
                << std::setprecision(3) << fmt_time_ns(avg_ns) << std::setw(15)
@@ -156,7 +156,7 @@ class PerfMonitor {
                 double total_ns_sub   = sub.total_cycles * ns_per_cycle;
                 double pct_sub        = (total_ns_sub / total_ns_all_stats) * 100.0;
 
-                os << " -> " << std::left << std::setw(11) << tag << std::right << std::setw(15)
+                os << " -> " << std::left << std::setw(21) << tag << std::right << std::setw(15)
                    << fmt_num(sub.count) << std::setw(20) << fmt_num(sub.total_cycles)
                    << std::setw(15) << fmt_num((uint64_t)avg_cycles_sub) << std::setw(15)
                    << std::fixed << std::setprecision(3) << fmt_time_ns(avg_ns_sub) << std::setw(15)
@@ -165,13 +165,13 @@ class PerfMonitor {
             }
         }
 
-        os << std::string(105, '-') << "\n";
+        os << std::string(115, '-') << "\n";
         double avg_cycles_total = total_count ? (double)total_cycles / total_count : 0.0;
         double avg_ns_total     = avg_cycles_total * ns_per_cycle;
         double total_ns_cycles  = total_cycles * ns_per_cycle;
         double pct_cycles_total = (total_ns_cycles / total_ns_all_stats) * 100.0;
 
-        os << std::left << std::setw(15) << "TOTAL" << std::right << std::setw(15)
+        os << std::left << std::setw(25) << "TOTAL" << std::right << std::setw(15)
            << fmt_num(total_count) << std::setw(20) << fmt_num(total_cycles) << std::setw(15)
            << fmt_num((uint64_t)avg_cycles_total) << std::setw(15) << std::fixed
            << std::setprecision(3) << fmt_time_ns(avg_ns_total) << std::setw(15)
@@ -225,17 +225,21 @@ inline void report(std::ostream &os) { PerfMonitor::instance().report(os); }
 struct ScopeTimer {
     OpCode opcode;
     std::string tag;
-    uint64_t start;
     bool skipped;
+    uint64_t paused;
+    uint64_t start;
+
     ScopeTimer(OpCode code, const std::string &t = "")
-        : opcode(code), tag(t), start(rdtsc()), skipped(false) {}
+        : opcode(code), tag(t), skipped(false), paused(0), start(rdtsc()) {}
     ~ScopeTimer() {
-        uint64_t end = rdtsc();
         if (!skipped) {
-            PerfMonitor::instance().record(opcode, end - start, tag);
+            uint64_t end = rdtsc();
+            PerfMonitor::instance().record(opcode, end - start - paused, tag);
         }
     }
-    void skip() { skipped = true; }
+
+    void pause() { paused = rdtsc(); }
+    void resume() { paused = rdtsc() - paused; }
 };
 
 #else
@@ -247,7 +251,8 @@ inline void report(std::ostream &) {}
 
 struct ScopeTimer {
     explicit ScopeTimer(OpCode code, const std::string &tag = "") {}
-    void skip() {}
+    void pause() {}
+    void resume() {}
 };
 
 #endif // OPPERF_ENABLED
