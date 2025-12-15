@@ -19,7 +19,7 @@
 
 #pragma once
 
-// #define OPPERF_ENABLED
+#define OPPERF_ENABLED
 
 #include "builtin/passes/sched/common/bytecode.h"
 
@@ -52,19 +52,21 @@ struct OpcodeStat {
 class PerfMonitor {
   public:
     void start() {
-        running_     = true;
-        total_start_ = std::chrono::steady_clock::now();
+        running_      = true;
+        time_start_   = std::chrono::steady_clock::now();
+        cycles_start_ = rdtsc();
     }
 
     void stop() {
-        running_   = false;
-        total_end_ = std::chrono::steady_clock::now();
+        running_    = false;
+        time_end_   = std::chrono::steady_clock::now();
+        cycles_end_ = rdtsc();
     }
 
     void reset() {
         opstats_.clear();
-        total_start_ = {};
-        total_end_   = {};
+        time_start_ = {};
+        time_end_   = {};
     }
 
     void record(const OpCode &opcode, uint64_t cycles, const std::string &tag = "") {
@@ -82,8 +84,8 @@ class PerfMonitor {
     }
 
     void report(std::ostream &os) {
-        double elapsed_sec = std::chrono::duration<double>(total_end_ - total_start_).count();
-        uint64_t total_cycles_sum = total_cycles_all();
+        double elapsed_sec        = std::chrono::duration<double>(time_end_ - time_start_).count();
+        uint64_t total_cycles_sum = cycles_end_ - cycles_start_;
 
         if (elapsed_sec <= 0.0 || total_cycles_sum == 0) {
             os << "No performance data collected.\n";
@@ -92,12 +94,17 @@ class PerfMonitor {
 
         double cycles_per_ns = total_cycles_sum / (elapsed_sec * 1e9);
         double ns_per_cycle  = 1.0 / cycles_per_ns;
-        double total_ns_all  = elapsed_sec * 1e9; // 总运行时间纳秒
+
+        // 累计统计到的总时间
+        double total_ns_all_stats = 0.0;
+        for (auto &kv : opstats_) {
+            total_ns_all_stats += kv.second.total_cycles * ns_per_cycle;
+        }
 
         os << "\n=========== FastVM Opcode Perf Report ===========\n";
         os << std::left << std::setw(15) << "Opcode" << std::right << std::setw(15) << "Count"
            << std::setw(20) << "Total Cycles" << std::setw(15) << "Avg Cycles" << std::setw(15)
-           << "Avg(ns)" << std::setw(15) << "Total Time" << std::setw(10) << "Pct(%)"
+           << "Avg Time" << std::setw(15) << "Total Time" << std::setw(10) << "Pct(%)"
            << "\n";
         os << std::string(105, '-') << "\n";
 
@@ -106,7 +113,6 @@ class PerfMonitor {
         for (auto &kv : opstats_) {
             sorted_ops.emplace_back(&kv.first, &kv.second);
         }
-
         std::sort(sorted_ops.begin(), sorted_ops.end(), [](auto &a, auto &b) {
             return a.second->total_cycles > b.second->total_cycles;
         });
@@ -123,25 +129,24 @@ class PerfMonitor {
             double avg_cycles = stat.count ? (double)stat.total_cycles / stat.count : 0.0;
             double avg_ns     = avg_cycles * ns_per_cycle;
             double total_ns   = stat.total_cycles * ns_per_cycle;
-            double pct_total  = (total_ns / total_ns_all) * 100.0;
+            double pct_total  = (total_ns / total_ns_all_stats) * 100.0;
 
             os << std::left << std::setw(15) << to_string(code) << std::right << std::setw(15)
                << fmt_num(stat.count) << std::setw(20) << fmt_num(stat.total_cycles)
                << std::setw(15) << fmt_num((uint64_t)avg_cycles) << std::setw(15) << std::fixed
-               << std::setprecision(3) << avg_ns << std::setw(15) << fmt_time_ns(total_ns)
-               << std::setw(10) << std::fixed << std::setprecision(2) << pct_total << "\n";
+               << std::setprecision(3) << fmt_time_ns(avg_ns) << std::setw(15)
+               << fmt_time_ns(total_ns) << std::setw(10) << std::fixed << std::setprecision(2)
+               << pct_total << "\n";
 
-            // === 子标签统计 ===
+            // 子标签部分保留原有逻辑，不变
             std::vector<std::pair<const std::string *, const OpcodeStat *>> sorted_sub;
             sorted_sub.reserve(stat.substats.size());
             for (auto &kv : stat.substats) {
                 sorted_sub.emplace_back(&kv.first, &kv.second);
             }
-
             std::sort(sorted_sub.begin(), sorted_sub.end(), [](auto &a, auto &b) {
                 return a.second->total_cycles > b.second->total_cycles;
             });
-
             for (auto &[tag_ptr, sub_ptr] : sorted_sub) {
                 const auto &tag = *tag_ptr;
                 const auto &sub = *sub_ptr;
@@ -149,12 +154,12 @@ class PerfMonitor {
                 double avg_cycles_sub = sub.count ? (double)sub.total_cycles / sub.count : 0.0;
                 double avg_ns_sub     = avg_cycles_sub * ns_per_cycle;
                 double total_ns_sub   = sub.total_cycles * ns_per_cycle;
-                double pct_sub        = (total_ns_sub / total_ns_all) * 100.0;
+                double pct_sub        = (total_ns_sub / total_ns_all_stats) * 100.0;
 
                 os << " -> " << std::left << std::setw(11) << tag << std::right << std::setw(15)
                    << fmt_num(sub.count) << std::setw(20) << fmt_num(sub.total_cycles)
                    << std::setw(15) << fmt_num((uint64_t)avg_cycles_sub) << std::setw(15)
-                   << std::fixed << std::setprecision(3) << avg_ns_sub << std::setw(15)
+                   << std::fixed << std::setprecision(3) << fmt_time_ns(avg_ns_sub) << std::setw(15)
                    << fmt_time_ns(total_ns_sub) << std::setw(10) << std::fixed
                    << std::setprecision(2) << pct_sub << "\n";
             }
@@ -164,13 +169,14 @@ class PerfMonitor {
         double avg_cycles_total = total_count ? (double)total_cycles / total_count : 0.0;
         double avg_ns_total     = avg_cycles_total * ns_per_cycle;
         double total_ns_cycles  = total_cycles * ns_per_cycle;
-        double pct_cycles_total = (total_ns_cycles / total_ns_all) * 100.0;
+        double pct_cycles_total = (total_ns_cycles / total_ns_all_stats) * 100.0;
 
         os << std::left << std::setw(15) << "TOTAL" << std::right << std::setw(15)
            << fmt_num(total_count) << std::setw(20) << fmt_num(total_cycles) << std::setw(15)
            << fmt_num((uint64_t)avg_cycles_total) << std::setw(15) << std::fixed
-           << std::setprecision(3) << avg_ns_total << std::setw(15) << fmt_time_ns(total_ns_cycles)
-           << std::setw(10) << std::fixed << std::setprecision(2) << pct_cycles_total << "\n";
+           << std::setprecision(3) << fmt_time_ns(avg_ns_total) << std::setw(15)
+           << fmt_time_ns(total_ns_cycles) << std::setw(10) << std::fixed << std::setprecision(2)
+           << pct_cycles_total << "\n";
 
         os << "\nElapsed time: " << std::fixed << std::setprecision(6) << elapsed_sec << " s\n";
         os << "=================================================\n";
@@ -183,7 +189,8 @@ class PerfMonitor {
 
   private:
     bool running_ = false;
-    std::chrono::steady_clock::time_point total_start_, total_end_;
+    std::chrono::steady_clock::time_point time_start_, time_end_;
+    std::atomic<uint64_t> cycles_start_, cycles_end_;
     std::unordered_map<OpCode, OpcodeStat> opstats_;
 
     static std::string fmt_num(uint64_t num) {
@@ -206,13 +213,6 @@ class PerfMonitor {
             oss << ns / 1e9 << " s ";
         return oss.str();
     }
-
-    uint64_t total_cycles_all() const {
-        uint64_t total = 0;
-        for (auto &kv : opstats_)
-            total += kv.second.total_cycles;
-        return total;
-    }
 };
 
 // === 外部接口 ===
@@ -226,11 +226,16 @@ struct ScopeTimer {
     OpCode opcode;
     std::string tag;
     uint64_t start;
-    ScopeTimer(OpCode code, const std::string &t = "") : opcode(code), tag(t), start(rdtsc()) {}
+    bool skipped;
+    ScopeTimer(OpCode code, const std::string &t = "")
+        : opcode(code), tag(t), start(rdtsc()), skipped(false) {}
     ~ScopeTimer() {
         uint64_t end = rdtsc();
-        PerfMonitor::instance().record(opcode, end - start, tag);
+        if (!skipped) {
+            PerfMonitor::instance().record(opcode, end - start, tag);
+        }
     }
+    void skip() { skipped = true; }
 };
 
 #else
@@ -242,6 +247,7 @@ inline void report(std::ostream &) {}
 
 struct ScopeTimer {
     explicit ScopeTimer(OpCode code, const std::string &tag = "") {}
+    void skip() {}
 };
 
 #endif // OPPERF_ENABLED
