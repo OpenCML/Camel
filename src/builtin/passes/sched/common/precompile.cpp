@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 15, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,13 +70,13 @@ void optimize(bytecode_vec_t &codes, size_t start) {
             if (tbc.opcode == OpCode::JUMP) {
                 bc.fastop[0] = tbc.fastop[0];
                 removeop(codes, next);
-                redirect(codes, curr);
+                redirect(codes, curr, -1);
                 return optimize(codes, curr);
             }
             // 如果刚好跳到下一个指令，则移除该跳转指令
             if (next == curr + 1) {
-                removeop(codes, next);
-                redirect(codes, curr);
+                removeop(codes, curr);
+                redirect(codes, curr, -1);
                 return optimize(codes, curr);
             }
             // 如果刚好跳到 TAIL 指令或者 RETN 指令，则移除该跳转指令
@@ -89,39 +89,40 @@ void optimize(bytecode_vec_t &codes, size_t start) {
             // }
         }
         // 如果是 TAIL 或者 RETN 指令
-        if (bc.opcode == OpCode::TAIL || bc.opcode == OpCode::RETN) {
-            size_t next = curr + bc.opsize;
-            if (next >= codes.size()) {
-                return;
-            }
-            Bytecode &tbc = codes[next];
-            if (tbc.opcode == OpCode::JUMP || tbc.opcode == OpCode::RETN) {
-                // 如果后面紧跟着跳转指令，则直接移除该跳转指令
-                removeop(codes, next);
-                redirect(codes, curr);
-                return optimize(codes, curr);
-            }
-        }
+        // if (bc.opcode == OpCode::TAIL || bc.opcode == OpCode::RETN) {
+        //     size_t next = curr + bc.opsize;
+        //     if (next >= codes.size()) {
+        //         return;
+        //     }
+        //     Bytecode &tbc = codes[next];
+        //     if (tbc.opcode == OpCode::JUMP || tbc.opcode == OpCode::RETN) {
+        //         // 如果后面紧跟着跳转指令，则直接移除该跳转指令
+        //         removeop(codes, next);
+        //         redirect(codes, curr, -1);
+        //         return optimize(codes, curr);
+        //     }
+        // }
         // 如果是 JOIN，检查是否有跳转到自己的 JUMP
         // 因为有时候会删除 JUMP
-        if (bc.opcode == OpCode::JOIN) {
-            bool flag = false;
-            for (size_t j = 0; j < codes.size(); j++) {
-                Bytecode &nbc = codes[curr];
-                if (nbc.opcode == OpCode::JUMP) {
-                    size_t next = nbc.fastop[0];
-                    if (next == static_cast<size_t>(bc.result)) {
-                        flag = true;
-                        break;
-                    }
-                }
-            }
-            if (!flag) {
-                removeop(codes, curr);
-                redirect(codes, curr);
-                return optimize(codes, curr);
-            }
-        }
+        // 这里应该从 JOIN 出发反推
+        // if (bc.opcode == OpCode::JOIN) {
+        //     bool flag = false;
+        //     for (size_t j = 0; j < codes.size(); j++) {
+        //         Bytecode &nbc = codes[curr];
+        //         if (nbc.opcode == OpCode::JUMP) {
+        //             size_t next = nbc.fastop[0];
+        //             if (next == curr) {
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }
+        //     }
+        //     if (!flag) {
+        //         removeop(codes, curr);
+        //         redirect(codes, curr, -1);
+        //         return optimize(codes, curr);
+        //     }
+        // }
     }
 }
 
