@@ -271,7 +271,7 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             case OpCode::FUNC: {
                 Frame *funcFrame = framePool_.acquire(bc.extra()->graph);
 
-                size_t argsCnt         = bc.argsCnt();
+                size_t argsCnt         = bc.normCnt();
                 const data_idx_t *args = bc.operands();
                 for (size_t i = 0; i < argsCnt; ++i) {
                     funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
@@ -335,7 +335,7 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
                         // 创建新的栈帧并设置参数
                         nextFrame              = framePool_.acquire(funcFrame);
-                        size_t argsCnt         = bc.argsCnt();
+                        size_t argsCnt         = bc.normCnt();
                         const data_idx_t *args = bc.operands();
                         for (size_t i = 0; i < argsCnt; ++i) {
                             nextFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
@@ -351,7 +351,7 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 }
 
                 // 自递归和互递归的情况在这里集中设置参数
-                size_t argsCnt         = bc.argsCnt();
+                size_t argsCnt         = bc.normCnt();
                 const data_idx_t *args = bc.operands();
                 for (size_t i = 0; i < argsCnt; ++i) {
                     currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));

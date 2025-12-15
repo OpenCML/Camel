@@ -13,15 +13,117 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 14, 2025
+ * Updated: Dec. 15, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "precompile.h"
 #include "builtin/algo/topo.h"
 
+#include <algorithm>
+
 using namespace std;
 using namespace GraphIR;
+
+void moveup(bytecode_vec_t &codes, size_t from, size_t to) {
+    ASSERT(from > to, "from should be larger than to");
+    Bytecode &bc  = codes[from];
+    size_t opsize = bc.opsize;
+    std::rotate(codes.begin() + to, codes.begin() + from, codes.begin() + from + opsize);
+    for (size_t i = 0; i < codes.size(); i++) {
+        Bytecode &bc = codes[i];
+        if (bc.opcode == OpCode::JUMP) {
+            size_t target = static_cast<size_t>(bc.fastop[0]);
+            if (target >= to && target < from) {
+                bc.fastop[0] += opsize;
+            } else if (target >= from && target < from + opsize) {
+                bc.fastop[0] -= from - to;
+            }
+        }
+    }
+}
+
+void redirect(bytecode_vec_t &codes, size_t start, int step = -1) {
+    for (size_t i = 0; i < codes.size(); i++) {
+        Bytecode &bc = codes[i];
+        if (bc.opcode == OpCode::JUMP) {
+            if (static_cast<size_t>(bc.fastop[0]) > start) {
+                bc.fastop[0] += step;
+            }
+        }
+    }
+}
+
+void removeop(bytecode_vec_t &codes, size_t index) {
+    Bytecode &bc = codes[index];
+    codes.erase(codes.begin() + index, codes.begin() + index + bc.opsize);
+}
+
+void optimize(bytecode_vec_t &codes, size_t start) {
+    for (size_t curr = start; curr < codes.size(); curr++) {
+        Bytecode &bc = codes[curr];
+        // 如果是跳转指令
+        if (bc.opcode == OpCode::JUMP) {
+            size_t next   = bc.fastop[0];
+            Bytecode &tbc = codes[next];
+            // 如果跳转到另一个跳转指令，则移除第二个跳转指令，直接跳转到目标指令
+            if (tbc.opcode == OpCode::JUMP) {
+                bc.fastop[0] = tbc.fastop[0];
+                removeop(codes, next);
+                redirect(codes, curr);
+                return optimize(codes, curr);
+            }
+            // 如果刚好跳到下一个指令，则移除该跳转指令
+            if (next == curr + 1) {
+                removeop(codes, next);
+                redirect(codes, curr);
+                return optimize(codes, curr);
+            }
+            // 如果刚好跳到 TAIL 指令或者 RETN 指令，则移除该跳转指令
+            // 并将目标指令前移到跳转指令所在的位置
+            // if (tbc.opcode == OpCode::TAIL || tbc.opcode == OpCode::RETN) {
+            //     removeop(codes, curr);
+            //     redirect(codes, curr);
+            //     moveup(codes, next, curr);
+            //     return optimize(codes, curr);
+            // }
+        }
+        // 如果是 TAIL 或者 RETN 指令
+        if (bc.opcode == OpCode::TAIL || bc.opcode == OpCode::RETN) {
+            size_t next = curr + bc.opsize;
+            if (next >= codes.size()) {
+                return;
+            }
+            Bytecode &tbc = codes[next];
+            if (tbc.opcode == OpCode::JUMP || tbc.opcode == OpCode::RETN) {
+                // 如果后面紧跟着跳转指令，则直接移除该跳转指令
+                removeop(codes, next);
+                redirect(codes, curr);
+                return optimize(codes, curr);
+            }
+        }
+        // 如果是 JOIN，检查是否有跳转到自己的 JUMP
+        // 因为有时候会删除 JUMP
+        if (bc.opcode == OpCode::JOIN) {
+            bool flag = false;
+            for (size_t j = 0; j < codes.size(); j++) {
+                Bytecode &nbc = codes[curr];
+                if (nbc.opcode == OpCode::JUMP) {
+                    size_t next = nbc.fastop[0];
+                    if (next == static_cast<size_t>(bc.result)) {
+                        flag = true;
+                        break;
+                    }
+                }
+            }
+            if (!flag) {
+                removeop(codes, curr);
+                redirect(codes, curr);
+                return optimize(codes, curr);
+            }
+        }
+    }
+}
 
 bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &opt) {
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
@@ -197,13 +299,16 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
         case NodeType::FUNC: {
             bool isTail   = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
             auto funcNode = tt::as_shared<FuncNode>(node);
+            // 将上下文参数合并到普通参数中，因为函数调用不区分参数类型
+            // 这样还可以把 fastop[1] 留空，以便放其他内容
+            normOps.insert(normOps.end(), withOps.begin(), withOps.end());
             appendBytecode(
                 bytecodes,
                 (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
                 node->index(),
                 {},
                 normOps,
-                withOps,
+                {},
                 true,
                 {
                     .graph = &(funcNode->func()->graph()),
@@ -307,6 +412,9 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
     }
 
     appendBytecode(bytecodes, OpCode::RETN, 0, {graph->exitNode()->index()});
+
+    // 简单的字节码优化
+    optimize(bytecodes, 0);
 
     ASSERT(
         brchTargetMap.empty(),
