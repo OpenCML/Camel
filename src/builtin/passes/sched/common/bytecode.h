@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 14, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>

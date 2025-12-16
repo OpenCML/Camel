@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 15, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,6 +46,7 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         visited.insert(g);
 
         auto bytecodes = precompile(context_, g.get(), {});
+        optimizer_.optimize(bytecodes);
         os << g->mangledName() << ":\n";
         for (size_t i = 0; i < bytecodes.size();) {
             const auto &bc = bytecodes[i];
