@@ -246,8 +246,21 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     }
                     break;
                 }
+                case TypeCode::Function: {
+                    auto f             = static_cast<Function *>(target);
+                    Tuple *closureData = f->tuple();
+                    const auto &refs   = closureData->layout().refs();
+                    for (size_t j = 0; j < refs.size(); ++j) {
+                        closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                    }
+                    break;
+                }
                 default:
-                    ASSERT(false, "Unsupported FILL target type.");
+                    ASSERT(
+                        false,
+                        std::format(
+                            "Unsupported FILL target type {} in FastVM.",
+                            typeCodeToString(targetType)));
                 }
 
                 currFrame->set(bc.result, target);

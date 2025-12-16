@@ -54,13 +54,30 @@ void redirect(bytecode_vec_t &codes, size_t start, int step = -1) {
     }
 }
 
+size_t findPrev(bytecode_vec_t &codes, size_t index) {
+    // 必须从头开始查找，因为字节码是变长的
+    for (size_t i = 0; i < index;) {
+        Bytecode &bc = codes[i];
+        size_t next  = i + bc.opsize;
+        if (next == index) {
+            return i; // 如果找到，则返回该指令的索引，表示该指令就是前一个指令
+        } else {
+            i = next;
+        }
+    }
+    return index; // 如果找不到，则返回 index，表示当前指令就是第一个指令
+}
+
 void removeop(bytecode_vec_t &codes, size_t index) {
     Bytecode &bc = codes[index];
     codes.erase(codes.begin() + index, codes.begin() + index + bc.opsize);
 }
 
 void optimize(bytecode_vec_t &codes, size_t start) {
-    for (size_t curr = start; curr < codes.size(); curr++) {
+    if (start >= codes.size()) {
+        return;
+    }
+    for (size_t curr = start; curr < codes.size();) {
         Bytecode &bc = codes[curr];
         // 如果是跳转指令
         if (bc.opcode == OpCode::JUMP) {
@@ -79,50 +96,60 @@ void optimize(bytecode_vec_t &codes, size_t start) {
                 redirect(codes, curr, -1);
                 return optimize(codes, curr);
             }
-            // 如果刚好跳到 TAIL 指令或者 RETN 指令，则移除该跳转指令
-            // 并将目标指令前移到跳转指令所在的位置
-            // if (tbc.opcode == OpCode::TAIL || tbc.opcode == OpCode::RETN) {
-            //     removeop(codes, curr);
-            //     redirect(codes, curr);
-            //     moveup(codes, next, curr);
-            //     return optimize(codes, curr);
-            // }
+            // 如果刚好跳到 RETN 指令，则将该 RETN 指令复制到 JUMP 位置
+            if (tbc.opcode == OpCode::RETN) {
+                bc = tbc;
+                return optimize(codes, curr + 1);
+            }
         }
-        // 如果是 TAIL 或者 RETN 指令
-        // if (bc.opcode == OpCode::TAIL || bc.opcode == OpCode::RETN) {
-        //     size_t next = curr + bc.opsize;
-        //     if (next >= codes.size()) {
-        //         return;
-        //     }
-        //     Bytecode &tbc = codes[next];
-        //     if (tbc.opcode == OpCode::JUMP || tbc.opcode == OpCode::RETN) {
-        //         // 如果后面紧跟着跳转指令，则直接移除该跳转指令
-        //         removeop(codes, next);
-        //         redirect(codes, curr, -1);
-        //         return optimize(codes, curr);
-        //     }
-        // }
         // 如果是 JOIN，检查是否有跳转到自己的 JUMP
         // 因为有时候会删除 JUMP
         // 这里应该从 JOIN 出发反推
-        // if (bc.opcode == OpCode::JOIN) {
-        //     bool flag = false;
-        //     for (size_t j = 0; j < codes.size(); j++) {
-        //         Bytecode &nbc = codes[curr];
-        //         if (nbc.opcode == OpCode::JUMP) {
-        //             size_t next = nbc.fastop[0];
-        //             if (next == curr) {
-        //                 flag = true;
-        //                 break;
-        //             }
-        //         }
-        //     }
-        //     if (!flag) {
-        //         removeop(codes, curr);
-        //         redirect(codes, curr, -1);
-        //         return optimize(codes, curr);
-        //     }
-        // }
+        if (bc.opcode == OpCode::JOIN) {
+            bool flag = false;
+            // 遍历所有跳转到自己的 JUMP
+            for (size_t j = 0; j < codes.size(); j++) {
+                Bytecode &nbc = codes[j];
+                if (nbc.opcode == OpCode::JUMP) {
+                    size_t next = nbc.fastop[0];
+                    if (next == curr) {
+                        // 如果 JUMP 前紧挨着是 TAIL 或者 RETN 指令，则删除该 JUMP
+                        size_t prev   = findPrev(codes, j);
+                        Bytecode &pbc = codes[prev];
+                        if (pbc.opcode == OpCode::TAIL || pbc.opcode == OpCode::RETN) {
+                            removeop(codes, j);
+                            redirect(codes, j, -1);
+                            // 这里从前一个指令开始优化，因为前面的 JUMP 被删除
+                            // 需要重新从当前的 JOIN 开始优化
+                            // 直到没有任何新的 JUMP 被删除或者 JOIN 被删除为止
+                            return optimize(codes, curr - 1);
+                        } else {
+                            // 表明至少有一个 JUMP 跳转到自己，不能删除 JOIN
+                            flag = true;
+                        }
+                    }
+                }
+            }
+
+            if (!flag) {
+                removeop(codes, curr);
+                redirect(codes, curr, -1);
+
+                // 如果 JOIN 后面紧跟着有 RETN 指令，一并删掉
+                // 因为如果前面还有直接跳转到 RETN 指令的地方，已经被优化掉了
+                // 这里的 RETN 一定是没用的
+                // 注意，此时无需计算 next，直接用 curr 即可
+                Bytecode &tbc = codes[curr];
+                if (tbc.opcode == OpCode::RETN) {
+                    removeop(codes, curr);
+                    redirect(codes, curr, -1);
+                }
+
+                return optimize(codes, curr);
+            }
+        }
+
+        curr += bc.opsize;
     }
 }
 
