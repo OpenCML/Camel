@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,8 @@
 
 class TupleTypeLayout {
   public:
-    explicit TupleTypeLayout(std::vector<TypeCode> elemTypes) : elemTypes_(std::move(elemTypes)) {}
+    explicit TupleTypeLayout(std::vector<TypeCode> &&elemTypes, std::vector<size_t> &&refs)
+        : elemTypes_(std::move(elemTypes)), refs_(std::move(refs)) {}
     ~TupleTypeLayout() {
         l.in("TupleTypeLayout")
             .debug("Destroying TupleTypeLayout with {} elements", elemTypes_.size());
@@ -41,9 +42,11 @@ class TupleTypeLayout {
     }
 
     const std::vector<TypeCode> &elemTypes() const { return elemTypes_; }
+    const std::vector<size_t> &refs() const { return refs_; }
 
   private:
     std::vector<TypeCode> elemTypes_;
+    std::vector<size_t> refs_;
 };
 
 class TupleType : public CompositeType {

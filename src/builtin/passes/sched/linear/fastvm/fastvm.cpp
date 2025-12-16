@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 15, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -212,33 +212,45 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             }
 
             case OpCode::FILL: {
-                ASSERT(false, "FILL opcode not fully implemented in FastVM.");
-                // const data_arr_t nargs = bc.nargs();
-                // const data_arr_t wargs = bc.wargs();
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
 
-                // TypeCode targetType = currFrame->typeAt(nargs[0]);
-                // ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+                TypeCode targetType = currFrame->typeAt(nargs[0]);
+                ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
 
-                // Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
-                // ASSERT(target != nullptr, "FILL target data is null.");
+                Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
+                ASSERT(target != nullptr, "FILL target data is null.");
 
-                // switch (targetType) {
-                // case TypeCode::Tuple: {
-                //     auto tuple = static_cast<Tuple *>(target);
-                //     break;
-                // }
-                // default:
-                //     ASSERT(false, "Unsupported FILL target type.");
-                // }
+                switch (targetType) {
+                case TypeCode::Tuple: {
+                    auto tuple       = static_cast<Tuple *>(target);
+                    const auto &refs = tuple->layout().refs();
+                    for (size_t j = 0; j < refs.size(); ++j) {
+                        tuple->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                    }
+                    break;
+                }
+                case TypeCode::Array: {
+                    auto a           = static_cast<Array *>(target);
+                    const auto &refs = a->layout().refs();
+                    for (size_t j = 0; j < refs.size(); ++j) {
+                        a->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                    }
+                    break;
+                }
+                case TypeCode::Struct: {
+                    auto s           = static_cast<Struct *>(target);
+                    const auto &refs = s->layout().refs();
+                    for (size_t j = 0; j < refs.size(); ++j) {
+                        s->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                    }
+                    break;
+                }
+                default:
+                    ASSERT(false, "Unsupported FILL target type.");
+                }
 
-                // data_vec_t inputs;
-                // inputs.reserve(bc.withCnt());
-                // for (size_t j = 0; j < bc.withCnt(); ++j) {
-                //     inputs.push_back(currFrame->get(wargs[j]));
-                // }
-                // target->resolve(inputs);
-
-                // currFrame->set(bc.result, target);
+                currFrame->set(bc.result, target);
                 break;
             }
 

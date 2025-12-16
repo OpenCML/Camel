@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,7 +87,7 @@ string ArrayType::toString() const {
 }
 
 std::string ArrayType::mangle() const {
-    std::string result = "V";
+    std::string result = "A";
     result += elemType_->mangle();
     return result;
 }

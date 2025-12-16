@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,13 +27,22 @@
 
 class StructTypeLayout {
   public:
-    StructTypeLayout(std::vector<std::pair<std::string, TypeCode>> fields) {
+    StructTypeLayout(
+        std::vector<std::pair<std::string, TypeCode>> fields,
+        const std::vector<std::string> &refs) {
         fieldNames_.reserve(fields.size());
         fieldTypes_.reserve(fields.size());
+        refs_.reserve(refs.size());
 
         for (auto &f : fields) {
             fieldNames_.push_back(f.first);
             fieldTypes_.push_back(f.second);
+        }
+
+        for (auto &name : refs) {
+            auto it = std::find(fieldNames_.begin(), fieldNames_.end(), name);
+            ASSERT(it != fieldNames_.end(), "Name not found.");
+            refs_.push_back(static_cast<size_t>(std::distance(fieldNames_.begin(), it)));
         }
     }
 
@@ -61,14 +70,17 @@ class StructTypeLayout {
     const std::vector<std::string> &fieldNames() const { return fieldNames_; }
     const std::vector<TypeCode> &fieldTypes() const { return fieldTypes_; }
 
+    const std::vector<size_t> &refs() const { return refs_; }
+
   private:
     std::vector<std::string> fieldNames_;
     std::vector<TypeCode> fieldTypes_;
+    std::vector<size_t> refs_;
 };
 
 class StructType : public CompositeType {
   private:
-    std::vector<std::string> refIndices_;
+    std::vector<std::string> refs_;
     std::map<std::string, type_ptr_t> fields_;
     mutable std::shared_ptr<StructTypeLayout> layout_;
 

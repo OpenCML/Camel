@@ -19,7 +19,7 @@
 
 #pragma once
 
-#define OPPERF_ENABLED
+// #define OPPERF_ENABLED
 
 #include "builtin/passes/sched/common/bytecode.h"
 

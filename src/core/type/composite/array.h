@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 16, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 class ArrayTypeLayout {
   public:
     explicit ArrayTypeLayout(TypeCode elemType, std::vector<size_t> refs)
-        : elemType_(elemType), refs_(std::move(refs)) {}
+        : elemType_(elemType), refs_(refs) {}
 
     TypeCode elemType() const noexcept { return elemType_; }
     const std::vector<size_t> &refs() const noexcept { return refs_; }
