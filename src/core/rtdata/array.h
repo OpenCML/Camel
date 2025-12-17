@@ -237,7 +237,6 @@ class Array : public Object {
     }
 
     template <typename T> void append(const T value) {
-
         // 检查是否需要扩容
         if (size_ >= capacity_) {
             // 类似std::vector，增长1.5倍或2倍
@@ -245,11 +244,10 @@ class Array : public Object {
             reserve(capacity_ * 3 / 2);
         }
 
-        T *arr = reinterpret_cast<T *>(dataPtr_);
         if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[size_], value);
         }
-        arr[size_++] = value;
+        dataPtr_[size_++] = toSlot(value);
     }
 
     void pop() {

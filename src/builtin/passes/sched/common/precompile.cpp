@@ -357,3 +357,39 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
 
     return bytecodes;
 }
+
+std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
+    std::string operandStr;
+
+    if (bc.hasOperands()) {
+        size_t normCnt = bc.fastop[0];
+        size_t withCnt = bc.fastop[1];
+        operandStr     = "(";
+
+        for (size_t j = 0; j < normCnt; j++) {
+            operandStr += std::to_string(bc.operands()[j]);
+            if (j + 1 < normCnt)
+                operandStr += ", ";
+        }
+
+        operandStr += ") <";
+
+        for (size_t j = 0; j < withCnt; j++) {
+            operandStr += std::to_string(bc.operands()[normCnt + j]);
+            if (j + 1 < withCnt)
+                operandStr += ", ";
+        }
+
+        operandStr += ">";
+    } else {
+        operandStr = "() <>";
+    }
+
+    return std::format(
+        "  [{}] {} | {} | {}",
+        formatIndex(index),
+        bc.toString(),
+        operandStr,
+        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                  : bc.extra()->toString(bc.opcode));
+}

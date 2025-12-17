@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 16, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,39 +48,10 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         auto bytecodes = precompile(context_, g.get(), {});
         optimizer_.optimize(bytecodes);
         os << g->mangledName() << ":\n";
+
         for (size_t i = 0; i < bytecodes.size();) {
-            const auto &bc = bytecodes[i];
-            std::string operandStr;
-
-            if (bc.hasOperands()) {
-                size_t normCnt = bc.fastop[0];
-                size_t withCnt = bc.fastop[1];
-                operandStr     = "(";
-                for (size_t j = 0; j < normCnt; j++) {
-                    operandStr += std::to_string(bc.operands()[j]);
-                    if (j + 1 < normCnt)
-                        operandStr += ", ";
-                }
-                operandStr += ") <";
-                for (size_t j = 0; j < withCnt; j++) {
-                    operandStr += std::to_string(bc.operands()[normCnt + j]);
-                    if (j + 1 < withCnt)
-                        operandStr += ", ";
-                }
-                operandStr += ">";
-            } else {
-                operandStr = "() <>";
-            }
-
-            os << std::format(
-                "  [{}] {} | {} | {}\n",
-                formatIndex(i),
-                bc.toString(),
-                operandStr,
-                bc.opcode == OpCode::OPER
-                    ? context_->execMgr().getNameOfAnOperator(bc.extra()->func)
-                    : bc.extra()->toString(bc.opcode));
-            i += bc.opsize;
+            os << opCodeToString(bytecodes[i], i, context_) << "\n";
+            i += bytecodes[i].opsize;
         }
 
         os << std::format("  [used: {}, allocated: {}]\n", bytecodes.size(), bytecodes.capacity());

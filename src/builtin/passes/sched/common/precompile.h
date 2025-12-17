@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,3 +31,5 @@ struct OptimizationStrategy {
 
 bytecode_vec_t
 precompile(const context_ptr_t &ctx, GraphIR::Graph *graph, const OptimizationStrategy &opt = {});
+
+std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);

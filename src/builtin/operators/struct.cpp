@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -162,9 +162,8 @@ void __concat_arr__(
 
 void __append_arr__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    GraphIR::data_idx_t targetIdx = nargs[0];
-    Array *arr                    = frame.get<Array *>(targetIdx);
-    slot_t elem                   = frame.get<slot_t>(wargs[0]);
+    Array *arr  = frame.get<Array *>(nargs[0]);
+    slot_t elem = frame.get<slot_t>(wargs[0]);
     arr->append(elem);
     frame.set(self, arr);
 }

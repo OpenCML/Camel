@@ -93,7 +93,8 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
         size_t i = 0;
         while (i < codeSize) {
             const Bytecode &bc = code[i];
-            EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode[{}]: {}", i, bc.toString()));
+            EXEC_WHEN_DEBUG(
+                l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, i, context_)));
 
 #ifdef OPPERF_ENABLED
             std::string tag;
