@@ -20,6 +20,7 @@
 #include "fastvm.h"
 #include "builtin/algo/topo.h"
 #include "core/data/primary.h"
+#include "core/rtdata/base.h"
 #include "utils/opperf.h"
 
 #ifndef NDEBUG
@@ -279,16 +280,8 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
                     auto f             = static_cast<Function *>(target);
                     Tuple *closureData = f->tuple();
-                    const auto &refs   = closureData->layout().refs();
-                    ASSERT(
-                        refs.size() == bc.withCnt(),
-                        std::format(
-                            "Function layout refs size mismatch in FastVM. Expected: {}, Actual: "
-                            "{}",
-                            bc.withCnt(),
-                            refs.size()));
                     for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        closureData->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                        closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
                     }
                     break;
                 }
@@ -517,175 +510,144 @@ void FastVMSchedPass::evalMarkedOperator(
 
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto func              = tt::as_shared<FunctionData>(funcData);
-    // type_ptr_t funcRetType = func->funcType()->exitType();
+    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
+    Array *res             = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
 
-    // auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
-    //     data_vec_t res;
-    //     res.reserve(inputVec.size());
-    //     for (const auto &item : inputVec) {
-    //         auto &targetGraph = func->graph();
-    //         Frame frame(&targetGraph);
-    //         if (targetGraph.hasClosure()) {
-    //             const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //             const auto &closureData  = functionData->closure();
-    //             ASSERT(
-    //                 closureData.size() == targetGraph.closure().size(),
-    //                 "Function closure size mismatch.");
-    //             for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //                 frame.set(ci + 2, closureData[ci]);
-    //             }
-    //         }
-    //         frame.set(1, item);
-    //         res.push_back(call(&targetGraph, frame));
-    //     }
-    //     return res;
-    // };
+    slot_t *from = arr->data();
+    slot_t *to   = res->data();
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
 
-    // auto arrayData = tt::as_shared<ArrayData>(targetData);
-    // currFrame.set(self, ArrayData::from(ArrayType::create(funcRetType),
-    // applyMap(arrayData->raw())));
+        frame->set(1, from[i]); // 设置第一个参数
+        // 如果有闭包
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
+
+        to[i] = call(func->graph(), frame);
+    }
+
+    currFrame.set(self, res);
 }
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto func       = tt::as_shared<FunctionData>(funcData);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 2, closureData[ci]);
-    //         }
-    //     }
-    //     frame.set(1, item);
-    //     return call(&targetGraph, frame);
-    // };
+    slot_t *data = arr->data();
 
-    // for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
-    //     item = applyFunc(item);
-    // }
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
+        frame->set(1, data[i]);
 
-    // currFrame.set(self, targetData);
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
+
+        data[i] = call(func->graph(), frame);
+    }
+
+    currFrame.set(self, arr);
 }
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto func       = tt::as_shared<FunctionData>(funcData);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto shouldKeep = [&](const data_ptr_t &item) -> bool {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 2, closureData[ci]);
-    //         }
-    //     }
-    //     frame.set(1, item);
-    //     auto result = call(&targetGraph, frame);
-    //     return result->as<BoolData>(Type::Bool())->data();
-    // };
+    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
+    Array *filtered        = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
 
-    // auto filterSequence = [&](auto containerData, auto createFunc) {
-    //     const auto &raw = containerData->raw();
-    //     data_vec_t res;
-    //     for (const auto &item : raw) {
-    //         if (shouldKeep(item))
-    //             res.push_back(item);
-    //     }
-    //     currFrame.set(self, createFunc(containerData->type(), std::move(res)));
-    // };
+    slot_t *from = arr->data();
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
+        frame->set(1, from[i]);
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
 
-    // filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
-    //     return ArrayData::from(t, std::move(v));
-    // });
+        slot_t result = call(func->graph(), frame);
+
+        if (fromSlot<bool>(result)) {
+            filtered->append(from[i]);
+        }
+    }
+
+    filtered->shrinkToFit();
+
+    currFrame.set(self, filtered);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto initData   = currFrame.get(wargs[1]);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    slot_t init    = currFrame.get<slot_t>(wargs[1]);
+    Tuple *closure = func->tuple();
 
-    // auto func = tt::as_shared<FunctionData>(funcData);
+    // 空数组直接返回初始值
+    if (arr->size() == 0) {
+        currFrame.set(self, init);
+        return;
+    }
 
-    // data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
+    slot_t acc   = init;
+    slot_t *from = arr->data();
 
-    // if (elements.empty()) {
-    //     currFrame.set(self, initData);
-    //     return;
-    // }
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
 
-    // data_ptr_t result = initData;
-    // for (const auto &item : elements) {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
+        // reduce(acc, cur)
+        frame->set(1, acc);
+        frame->set(2, from[i]);
 
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 3, closureData[ci]);
-    //         }
-    //     }
+        // 如果有闭包参数
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 3, closure->get<slot_t>(j));
+            }
+        }
 
-    //     const auto &ports = targetGraph.ports();
-    //     frame.set(ports[0]->index(), result); // acc
-    //     frame.set(ports[1]->index(), item);   // cur
+        acc = call(func->graph(), frame);
+    }
 
-    //     result = call(&targetGraph, frame); // 更新 result
-    // }
-
-    // currFrame.set(self, result);
+    currFrame.set(self, acc);
 }
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto func       = tt::as_shared<FunctionData>(funcData);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto applyFunc = [&](const data_ptr_t &item) {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 2, closureData[ci]);
-    //         }
-    //     }
-    //     frame.set(1, item);
-    //     call(&targetGraph, frame); // 忽略返回值
-    // };
+    slot_t *from = arr->data();
 
-    // for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
-    //     applyFunc(item);
-    // }
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
+        frame->set(1, from[i]);
 
-    // currFrame.set(self, Data::null());
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
+
+        call(func->graph(), frame);
+    }
+
+    // foreach 无返回值
+    currFrame.set(self, NullSlot);
 }

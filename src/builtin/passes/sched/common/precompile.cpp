@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 16, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "builtin/algo/topo.h"
 
 #include <algorithm>
+#include <cstddef>
 
 using namespace std;
 using namespace GraphIR;
@@ -133,15 +134,49 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
             break;
 
         case NodeType::ACCS: {
-            auto accNode = tt::as_shared<AccsNode>(node);
-            ASSERT(accNode->isNum(), "Only numeric ACCS indices are supported in bytecode.");
+            const auto &accNode     = tt::as_shared<AccsNode>(node);
+            const auto &srcNode     = node->normInputs().front();
+            const auto &srcDataType = srcNode->dataType();
+            ASSERT(srcDataType->isComposite(), "ACCS source node must be composite.");
+
+            size_t index = 0;
+
+            switch (srcDataType->code()) {
+            case TypeCode::Tuple: {
+                ASSERT(accNode->isNum(), "ACCS index must be numeric.");
+                index                  = accNode->index<size_t>();
+                const auto &tupleType  = tt::as_shared<TupleType>(srcDataType);
+                const auto &optEleType = tupleType->typeAt(accNode->index<size_t>());
+                if (!optEleType.has_value()) {
+                    ctx->rtmDiags()
+                        ->of(SemanticDiag::InvalidAccessIndex)
+                        .commit(to_string(accNode->index<size_t>()));
+                }
+                break;
+            }
+            case TypeCode::Struct: {
+                ASSERT(!accNode->isNum(), "ACCS index must be string.");
+                const auto &structType = tt::as_shared<StructType>(srcDataType);
+                const auto &optIndex   = structType->findField(accNode->index<std::string>());
+                if (!optIndex.has_value()) {
+                    ctx->rtmDiags()
+                        ->of(SemanticDiag::InvalidAccessIndex)
+                        .commit(accNode->index<std::string>());
+                }
+                index = optIndex.value();
+                break;
+            }
+            default:
+                ASSERT(false, "Unsupported ACCS source node type.");
+            }
+
             appendBytecode(
                 bytecodes,
                 OpCode::ACCS,
                 node->index(),
                 {
-                    node->normInputs().front()->index(),
-                    as_index(accNode->index<size_t>()),
+                    srcNode->index(),
+                    as_index(index),
                 });
             break;
         }

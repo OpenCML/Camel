@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 16, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,12 +64,31 @@ bool StructType::add(const string &name, const type_ptr_t &type) {
 
 bool StructType::has(const string &name) const { return fields_.find(name) != fields_.end(); }
 
-type_ptr_t StructType::get(const string &name) const {
+std::optional<type_ptr_t> StructType::get(const string &name) const {
     auto it = fields_.find(name);
     if (it == fields_.end()) {
-        throw out_of_range("StructType::get: field not found - " + name);
+        return nullopt;
     }
     return it->second;
+}
+
+std::optional<type_ptr_t> StructType::get(const size_t &idx) const {
+    if (idx >= fields_.size()) {
+        return nullopt;
+    }
+    auto it = fields_.begin();
+    std::advance(it, idx);
+    return it->second;
+}
+
+std::optional<size_t> StructType::findField(const std::string_view &name) const {
+    auto it = std::find_if(fields_.begin(), fields_.end(), [&](const auto &kv) {
+        return kv.first == name;
+    });
+    if (it == fields_.end()) {
+        return std::nullopt;
+    }
+    return std::distance(fields_.begin(), it);
 }
 
 const StructTypeLayout &StructType::layout() const {
@@ -135,15 +154,6 @@ type_ptr_t StructType::resolve(const type_vec_t &typeList) const {
 }
 
 bool StructType::resolved() const { return refs_.empty(); }
-
-std::optional<type_ptr_t> StructType::typeAt(size_t idx) const {
-    if (idx >= fields_.size()) {
-        return std::nullopt;
-    }
-    auto it = fields_.begin();
-    std::advance(it, idx);
-    return it->second;
-}
 
 string StructType::toString() const {
     ostringstream oss;

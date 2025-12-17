@@ -70,6 +70,10 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 
 using slot_t = uint64_t;
 
+constexpr slot_t NullSlot = 0;
+constexpr slot_t DeadSlot = 0xDEADBEAFDEADBEAFULL;
+constexpr Object *NullRef = nullptr;
+
 template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
     static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
     static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
@@ -94,6 +98,8 @@ template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
 template <typename T> constexpr T fromSlot(slot_t slot_value) noexcept {
     static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
     static_assert(std::is_trivially_copyable_v<T>, "T must be trivially_copyable");
+
+    ASSERT(slot_value != DeadSlot, std::format("Accessing uninitialized slot"));
 
     if constexpr (std::is_same_v<T, slot_t>) {
         return slot_value;
@@ -127,6 +133,9 @@ inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
 }
 
 inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
+    ASSERT(
+        data != DeadSlot,
+        std::format("Accessing uninitialized slot in printSlot: {}", typeCodeToString(t)));
     if (isGCTraced(t)) {
         os << reinterpret_cast<const Object *>(data);
     } else {
@@ -162,6 +171,3 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
         }
     }
 }
-
-constexpr slot_t NullSlot = 0;
-constexpr Object *NullRef = nullptr;

@@ -76,8 +76,6 @@ type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
 
 bool ArrayType::resolved() const { return refs_.empty(); }
 
-std::optional<type_ptr_t> ArrayType::typeAt(size_t idx) const { return elemType_; }
-
 string ArrayType::toString() const {
     return (elemType_->code() == TypeCode::Void ? "" : elemType_->toString()) + "[]";
 }

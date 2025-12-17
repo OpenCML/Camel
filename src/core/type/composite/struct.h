@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 16, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "composite.h"
 #include "utils/assert.h"
 
+#include <cstddef>
 #include <map>
 #include <optional>
 
@@ -96,7 +97,9 @@ class StructType : public CompositeType {
     std::optional<type_ptr_t> typeOf(const std::string &idx) const;
     bool add(const std::string &name, const type_ptr_t &type);
     bool has(const std::string &name) const;
-    type_ptr_t get(const std::string &name) const;
+    std::optional<type_ptr_t> get(const std::string &name) const;
+    std::optional<type_ptr_t> get(const size_t &idx) const;
+    std::optional<size_t> findField(const std::string_view &name) const;
     const StructTypeLayout &layout() const;
 
     type_ptr_t operator|(const StructType &other) const;
@@ -104,7 +107,6 @@ class StructType : public CompositeType {
 
     virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
-    virtual std::optional<type_ptr_t> typeAt(size_t idx) const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
     virtual type_ptr_t clone(bool deep = false) const override;

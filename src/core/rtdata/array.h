@@ -195,15 +195,21 @@ class Array : public Object {
     Array &operator=(const Array &) = delete;
 
     static Array *
-    create(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity = 0) {
+    create(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initSize = 0) {
         void *memory = allocator.alloc(sizeof(Array), alignof(Array));
         if (!memory)
             throw std::bad_alloc();
 
-        return new (memory) Array(layout, allocator, initialCapacity);
+        return new (memory) Array(layout, allocator, initSize);
     }
 
     size_t size() const { return size_; }
+    void resize(size_t newSize) {
+        if (newSize > capacity_) {
+            reserve(newSize);
+        }
+        size_ = newSize;
+    }
     size_t capacity() const { return capacity_; }
     slot_t *data() { return static_cast<slot_t *>(dataPtr_); }
     const slot_t *data() const { return static_cast<const slot_t *>(dataPtr_); }
@@ -367,11 +373,11 @@ class Array : public Object {
   private:
     static constexpr size_t SMALL_ARRAY_SIZE = 10;
 
-    Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity)
-        : allocator_(&allocator), layout_(&layout), fixedArray_(nullptr), size_(0) {
-        if (initialCapacity > SMALL_ARRAY_SIZE) {
+    Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initSize)
+        : allocator_(&allocator), layout_(&layout), fixedArray_(nullptr), size_(initSize) {
+        if (initSize > SMALL_ARRAY_SIZE) {
             // 使用外部数组
-            capacity_   = initialCapacity;
+            capacity_   = initSize;
             fixedArray_ = FixedArray::create(layout, capacity_, allocator);
             dataPtr_    = fixedArray_->data();
         } else {
