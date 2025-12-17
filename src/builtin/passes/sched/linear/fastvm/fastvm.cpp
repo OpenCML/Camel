@@ -230,31 +230,49 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 case TypeCode::Tuple: {
                     const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
                     auto t           = static_cast<Tuple *>(target);
-                    t->updateLayout(&type->layout());
                     const auto &refs = t->layout().refs();
-                    for (size_t j = 0; j < refs.size(); ++j) {
+                    ASSERT(
+                        refs.size() == bc.withCnt(),
+                        std::format(
+                            "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                            bc.withCnt(),
+                            refs.size()));
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
                         t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
+                    t->updateLayout(&type->layout());
                     break;
                 }
                 case TypeCode::Array: {
                     const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
                     auto a           = static_cast<Array *>(target);
-                    a->updateLayout(&type->layout());
                     const auto &refs = a->layout().refs();
-                    for (size_t j = 0; j < refs.size(); ++j) {
+                    ASSERT(
+                        refs.size() == bc.withCnt(),
+                        std::format(
+                            "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                            bc.withCnt(),
+                            refs.size()));
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
                         a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
+                    a->updateLayout(&type->layout());
                     break;
                 }
                 case TypeCode::Struct: {
                     const auto &type = currFrame->typePtrAt<StructType>(bc.result);
                     auto s           = static_cast<Struct *>(target);
-                    s->updateLayout(&type->layout());
                     const auto &refs = s->layout().refs();
-                    for (size_t j = 0; j < refs.size(); ++j) {
+                    ASSERT(
+                        refs.size() == bc.withCnt(),
+                        std::format(
+                            "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                            bc.withCnt(),
+                            refs.size()));
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
                         s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
+                    s->updateLayout(&type->layout());
                     break;
                 }
                 case TypeCode::Function: {
@@ -262,7 +280,14 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     auto f             = static_cast<Function *>(target);
                     Tuple *closureData = f->tuple();
                     const auto &refs   = closureData->layout().refs();
-                    for (size_t j = 0; j < refs.size(); ++j) {
+                    ASSERT(
+                        refs.size() == bc.withCnt(),
+                        std::format(
+                            "Function layout refs size mismatch in FastVM. Expected: {}, Actual: "
+                            "{}",
+                            bc.withCnt(),
+                            refs.size()));
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
                         closureData->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
                     break;
