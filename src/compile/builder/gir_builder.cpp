@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -300,9 +300,9 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 refTypes.push_back(refNode->dataType());
                 refNodes.push_back(refNode);
             }
-            auto fillType = tt::as_shared<CompositeType>(dataType->clone());
-            fillType->resolve(refTypes);
-            node = FillNode::create(*currGraph_, fillType);
+            auto fillType   = tt::as_shared<CompositeType>(dataType->clone());
+            auto filledType = fillType->resolve(refTypes);
+            node            = FillNode::create(*currGraph_, filledType);
             Node::link(LinkType::Norm, srcNode, node);
             for (const auto &refNode : refNodes) {
                 Node::link(LinkType::With, refNode, node);

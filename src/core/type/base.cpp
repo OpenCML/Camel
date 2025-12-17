@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -161,8 +161,10 @@ bool Type::assignable(const type_ptr_t &type) const {
     if (code_ == TypeCode::Any)
         return false;
 
-    // void 类型不能赋值给任何类型，任何类型也不能赋值给 void 类型
-    if (code_ == TypeCode::Void || type->code_ == TypeCode::Void)
+    // Void 类型可以接受任何类型的赋值，但不可以赋值给其他类型
+    if (type->code_ == TypeCode::Void)
+        return true;
+    if (code_ == TypeCode::Void)
         return false;
 
     if (code_ == TypeCode::Function && type->code_ == TypeCode::Function) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1082,23 +1082,8 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
 
     // Create an empty ArrayData object and wrap it in a DataLoad node
-    auto arrayData = ArrayData::from(ArrayType::create(), {});
+    auto arrayData = ArrayData::create(nullptr, {});
     node_ptr_t res = createNodeAs<DataLoad>(arrayData);
-
-    bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
-
-    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
-        node_ptr_t dataNode = visitData(item);
-        auto [data, _]      = extractData(dataNode, execNode, dangling);
-        arrayData->emplace(data);
-    }
-
-    // If there are dangling nodes, attach them to the execution node
-    if (dangling) {
-        *execNode << res;
-        res = execNode;
-    }
     LEAVE("ArrayData");
     return res;
 }
