@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -133,15 +133,8 @@ int applyPasses(
             !graph->dirty(),
             std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
 
-        if (passes.empty()) {
-            // 如果用户没有指定任何遍，则默认使用 FastVMSchedPass 进行调度
-            auto fallback = std::make_unique<FastVMSchedPass>(ctx);
-            fallback->apply(graph, os);
-        } else {
-            // 如果用户指定了遍，则会将没有处理完的图直接丢弃
-            auto fallback = std::make_unique<NullGraphIRPass>(ctx);
-            fallback->apply(graph, os);
-        }
+        auto fallback = std::make_unique<FastVMSchedPass>(ctx);
+        fallback->apply(graph, os);
     }
 
     return 0;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jul. 29, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,5 +56,9 @@ class UserDefinedModule : public Module {
     static module_ptr_t
     fromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
 
-    bool load() override { return compile(); }
+    bool load() override {
+        bool success = compile();
+        loaded_      = success;
+        return success;
+    }
 };

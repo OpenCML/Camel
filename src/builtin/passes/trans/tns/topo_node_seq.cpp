@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Oct. 20, 2025
+ * Updated: Dec. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,7 @@ string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, b
         ptrVal = mapForPrefix[ptrVal];
     }
 
-    int hexDigits = 1;
+    int hexDigits  = 1;
     uintptr_t temp = ptrVal;
     while (temp >>= 4) {
         ++hexDigits;
@@ -76,7 +76,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
         node_ptr_t exitNode = g->exitNode();
-        auto sortedNodes = findReachable(
+        auto sortedNodes    = findReachable(
             exitNode,
             [](const node_ptr_t &n) {
                 vector<node_ptr_t> ins;
@@ -130,27 +130,27 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             switch (n->type()) {
             case NodeType::FUNC: {
                 func_ptr_t func = tt::as_shared<FuncNode>(n)->func();
-                string name = func->name().empty() ? func->graph().name() : func->name();
-                res = format("CALL: {}", name);
+                string name     = func->name().empty() ? func->graph().name() : func->name();
+                res             = format("CALL: {}", name);
                 for (const auto &inputNode : n->dataInputs()) {
                     res += format(", {}", pointerToIdent(inputNode.get()));
                 }
                 break;
             }
             case NodeType::OPER: {
-                auto oper = tt::as_shared<OperNode>(n);
+                auto oper   = tt::as_shared<OperNode>(n);
                 string name = oper->oper()->name();
-                res = format("CALL: <{}>", name);
+                res         = format("CALL: <{}>", name);
                 for (const auto &inputNode : n->dataInputs()) {
                     res += format(", {}", pointerToIdent(inputNode.get()));
                 }
                 break;
             }
             case NodeType::BRCH: {
-                auto brchNode = tt::as_shared<BrchNode>(n);
-                const auto &ins = brchNode->dataInputs();
+                auto brchNode    = tt::as_shared<BrchNode>(n);
+                const auto &ins  = brchNode->dataInputs();
                 const auto &outs = brchNode->ctrlOutputs();
-                res = format(
+                res              = format(
                     "BRCH: {}? {}: {}",
                     pointerToIdent(ins[0].get()),
                     pointerToIdent(outs[0].get()),
@@ -158,9 +158,9 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 break;
             }
             case NodeType::JOIN: {
-                auto joinNode = tt::as_shared<JoinNode>(n);
+                auto joinNode   = tt::as_shared<JoinNode>(n);
                 const auto &ins = joinNode->withInputs();
-                res = format(
+                res             = format(
                     "JOIN: {}, {}",
                     pointerToIdent(ins[0].get()),
                     pointerToIdent(ins[1].get()));
@@ -179,5 +179,5 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
     os << oss.str();
 
-    return graph;
+    return GraphIR::Graph::null();
 }

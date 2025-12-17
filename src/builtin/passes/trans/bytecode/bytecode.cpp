@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 17, 2025
+ * Updated: Dec. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,5 +57,5 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         os << std::format("  [used: {}, allocated: {}]\n", bytecodes.size(), bytecodes.capacity());
     }
 
-    return graph;
+    return GraphIR::Graph::null();
 }
