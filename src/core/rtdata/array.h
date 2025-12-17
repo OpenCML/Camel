@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,6 +57,7 @@ class FixedArray : public Object {
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
     const ArrayTypeLayout *layout() const { return layout_; }
+    void updateLayout(const ArrayTypeLayout *layout) { layout_ = layout; }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -207,6 +208,7 @@ class Array : public Object {
     slot_t *data() { return static_cast<slot_t *>(dataPtr_); }
     const slot_t *data() const { return static_cast<const slot_t *>(dataPtr_); }
     const ArrayTypeLayout &layout() const { return *layout_; }
+    void updateLayout(const ArrayTypeLayout *layout) { layout_ = layout; }
     TypeCode elemType() const { return layout_->elemType(); }
 
     template <typename T> T get(size_t index) const {

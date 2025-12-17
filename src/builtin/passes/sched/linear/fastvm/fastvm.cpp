@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 16, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,6 +59,11 @@ using namespace GraphIR;
 // └────────┴────────┴────────┘
 //     ↑         ↑         ↑
 //   root   twin(A->B)   curr
+//
+// 总结
+// 释放栈帧时，如果 curr 不是 root，优先释放 curr
+// 接下来，如果 twin 不是 root，则优先释放 twin
+// 最后释放 root
 
 slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", rootGraph->name()));
@@ -223,35 +228,42 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
                 switch (targetType) {
                 case TypeCode::Tuple: {
-                    auto tuple       = static_cast<Tuple *>(target);
-                    const auto &refs = tuple->layout().refs();
+                    const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
+                    auto t           = static_cast<Tuple *>(target);
+                    t->updateLayout(&type->layout());
+                    const auto &refs = t->layout().refs();
                     for (size_t j = 0; j < refs.size(); ++j) {
-                        tuple->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                        t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
                     break;
                 }
                 case TypeCode::Array: {
+                    const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
                     auto a           = static_cast<Array *>(target);
+                    a->updateLayout(&type->layout());
                     const auto &refs = a->layout().refs();
                     for (size_t j = 0; j < refs.size(); ++j) {
-                        a->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                        a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
                     break;
                 }
                 case TypeCode::Struct: {
+                    const auto &type = currFrame->typePtrAt<StructType>(bc.result);
                     auto s           = static_cast<Struct *>(target);
+                    s->updateLayout(&type->layout());
                     const auto &refs = s->layout().refs();
                     for (size_t j = 0; j < refs.size(); ++j) {
-                        s->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                        s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
                     break;
                 }
                 case TypeCode::Function: {
+                    // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
                     auto f             = static_cast<Function *>(target);
                     Tuple *closureData = f->tuple();
                     const auto &refs   = closureData->layout().refs();
                     for (size_t j = 0; j < refs.size(); ++j) {
-                        closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                        closureData->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                     }
                     break;
                 }
@@ -426,17 +438,10 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
         // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
         // 把与传入的 rootFrame 不相等的那个先释放掉即可
         if (currFrame != rootFrame) {
-            // 对应情形一
             framePool_.release(currFrame);
-        } else {
-            if (twinFrame == rootFrame) {
-                // 对应情形二
-                framePool_.release(twinFrame);
-            } else {
-                // 对应情形三
-                framePool_.release(currFrame);
-                framePool_.release(twinFrame);
-            }
+        }
+        if (twinFrame != rootFrame) {
+            framePool_.release(twinFrame);
         }
     }
     framePool_.release(rootFrame);

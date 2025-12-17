@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,7 @@ class Tuple : public Object {
 
     size_t size() const { return size_; }
     const TupleTypeLayout &layout() const { return *layout_; }
+    void updateLayout(const TupleTypeLayout *layout) { layout_ = layout; }
     TypeCode typeAt(size_t index) const { return layout_->typeAt(index); }
 
     template <typename T> T get(size_t index) const {

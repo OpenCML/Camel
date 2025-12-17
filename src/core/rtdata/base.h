@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 13, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,8 +153,11 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
         case TypeCode::Void:
             os << "null";
             break;
+        case TypeCode::Ref:
+            os << "ref";
+            break;
         default:
-            os << std::format("<slot of type: {}>", typeCodeToString(t));
+            os << std::format("<{}>", typeCodeToString(t));
             break;
         }
     }

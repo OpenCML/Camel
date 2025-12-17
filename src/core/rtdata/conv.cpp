@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
                 slot_t slot = makeSlotFromPrimitiveData(elem);
                 gcArray->append<slot_t>(slot);
             } else {
-                ASSERT(false, "Unsupported array element type conversion.");
+                gcArray->append<slot_t>(NullSlot);
             }
         }
         return gcArray;
@@ -118,7 +118,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
                 slot_t slot = makeSlotFromPrimitiveData(elem);
                 gcTuple->set<slot_t>(i, slot);
             } else {
-                ASSERT(false, "Unsupported tuple element type conversion.");
+                gcTuple->set<slot_t>(i, NullSlot);
             }
         }
         return gcTuple;
@@ -136,7 +136,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
                 slot_t slot = makeSlotFromPrimitiveData(data);
                 gcStruct->set<slot_t>(name, slot);
             } else {
-                ASSERT(false, "Unsupported struct field type conversion.");
+                gcStruct->set<slot_t>(name, NullSlot);
             }
         }
         return gcStruct;

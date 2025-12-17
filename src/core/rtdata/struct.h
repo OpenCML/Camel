@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 17, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,6 +77,7 @@ class Struct : public Object {
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
     const StructTypeLayout &layout() const { return *layout_; }
+    void updateLayout(const StructTypeLayout *layout) { layout_ = layout; }
     TypeCode typeAt(size_t index) const { return layout_->fieldType(index); }
 
     virtual bool equals(const Object *other, bool deep = false) const override {

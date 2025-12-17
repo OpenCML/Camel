@@ -1084,6 +1084,22 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     // Create an empty ArrayData object and wrap it in a DataLoad node
     auto arrayData = ArrayData::create(nullptr, {});
     node_ptr_t res = createNodeAs<DataLoad>(arrayData);
+
+    bool dangling       = false;
+    node_ptr_t execNode = createNodeAs<ExecLoad>();
+
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        node_ptr_t dataNode = visitData(item);
+        auto [data, _]      = extractData(dataNode, execNode, dangling);
+        arrayData->emplace(data);
+    }
+
+    // If there are dangling nodes, attach them to the execution node
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+
     LEAVE("ArrayData");
     return res;
 }
