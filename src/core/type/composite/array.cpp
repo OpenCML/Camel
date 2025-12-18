@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,12 +33,8 @@ ArrayType::ArrayType(const type_ptr_t &elementType)
     : CompositeType(TypeCode::Array), elemType_(elementType) {}
 
 std::shared_ptr<ArrayType> ArrayType::create(const type_ptr_t &elemType) {
-    static std::shared_ptr<ArrayType> voidArrayType = nullptr;
     if (!elemType) {
-        if (voidArrayType == nullptr) {
-            voidArrayType = std::make_shared<ArrayType>(Type::Void());
-        }
-        return voidArrayType;
+        return std::make_shared<ArrayType>(Type::Void());
     }
     return std::make_shared<ArrayType>(elemType);
 }
@@ -80,14 +76,12 @@ type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
 
 bool ArrayType::resolved() const { return refs_.empty(); }
 
-std::optional<type_ptr_t> ArrayType::typeAt(size_t idx) const { return elemType_; }
-
 string ArrayType::toString() const {
     return (elemType_->code() == TypeCode::Void ? "" : elemType_->toString()) + "[]";
 }
 
 std::string ArrayType::mangle() const {
-    std::string result = "V";
+    std::string result = "A";
     result += elemType_->mangle();
     return result;
 }

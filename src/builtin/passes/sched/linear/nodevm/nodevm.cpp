@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -111,7 +111,7 @@ data_ptr_t NodeVMSchedPass::call(Graph *graph, Frame &frame) {
     // auto nodesPtr = getTopoNodes(graph);
 
     // Frame targetFrame(graph);
-    // frame_rptr_t currFrame = &frame, tailFrame = nullptr;
+    // Frame * currFrame = &frame, tailFrame = nullptr;
 
     // auto _call = [&](const node_ptr_t &n, bool isTailCall) {
     //     auto func = tt::as_shared<FuncNode>(n)->func();
@@ -120,7 +120,7 @@ data_ptr_t NodeVMSchedPass::call(Graph *graph, Frame &frame) {
     //         "Calling function: {} (tail-call: {})",
     //         func->name().empty() ? targetGraph.name() : func->name(),
     //         isTailCall ? "yes" : "no"));
-    //     frame_rptr_t nextFrame = nullptr;
+    //     Frame * nextFrame = nullptr;
 
     //     data_vec_t args;
     //     const auto &inNodes = n->dataInputs();
@@ -141,7 +141,7 @@ data_ptr_t NodeVMSchedPass::call(Graph *graph, Frame &frame) {
     //     if (isTailCall) {
     //         // Tail-call optimization
     //         loop = true;
-    //         frame_rptr_t lastFrame = currFrame;
+    //         Frame * lastFrame = currFrame;
 
     //         if (&targetGraph == currFrame->graph()) {
     //             // Self-recursion optimization

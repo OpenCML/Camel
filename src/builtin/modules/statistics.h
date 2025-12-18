@@ -12,24 +12,21 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 21, 2025
+ * Created: Dec. 11, 2025
  * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "bytecode.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
+#include "core/module/builtin.h"
 
-#include <memory>
+class StatisticsBuiltinModule : public BuiltinModule {
+  public:
+    StatisticsBuiltinModule(context_ptr_t ctx);
+    virtual ~StatisticsBuiltinModule() = default;
 
-struct OptimizationStrategy {
-    bool enableTailCallDetection = true;
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx);
 };
-
-bytecode_vec_t
-precompile(const context_ptr_t &ctx, GraphIR::Graph *graph, const OptimizationStrategy &opt = {});
-
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);

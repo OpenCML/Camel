@@ -36,7 +36,7 @@ graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os
     return Graph::null();
 }
 
-inline data_ptr_t get_graph_return(Graph *g, const frame_rptr_t &frame) {
+inline data_ptr_t get_graph_return(Graph *g, const Frame *&frame) {
     // const auto &retNode = g->exitNode();
     // // 与 nodevm 保持一致：仅使用 normInputs 作为返回
     // if (retNode->normInputs().empty()) {
@@ -47,7 +47,7 @@ inline data_ptr_t get_graph_return(Graph *g, const frame_rptr_t &frame) {
     return Data::null();
 }
 
-data_ptr_t TaskflowExecSchedPass::evalGraphTF(Graph *graph, const frame_rptr_t &frame) {
+data_ptr_t TaskflowExecSchedPass::evalGraphTF(Graph *graph, const Frame *&frame) {
     // EXEC_WHEN_DEBUG(l.in("TF").debug("Evaluating graph (TF): {}", graph->name()));
     // instantiate_graph_instance_generic(mainFlow_, graph, frame);
     // EXEC_WHEN_DEBUG(l.in("TF").debug("Submitting taskflow and wait: {}", graph->name()));
@@ -107,7 +107,7 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
 
 template <typename FlowT>
 void TaskflowExecSchedPass::instantiate_graph_instance_generic(
-    FlowT &flowLike, Graph *graph, const frame_rptr_t &frame) {
+    FlowT &flowLike, Graph *graph, const Frame *&frame) {
     // (void)frame;
     // std::unordered_map<Node *, tf::Task> taskMap;
     // buildNormalNodeTasks(flowLike, graph, frame, taskMap);
@@ -118,8 +118,8 @@ void TaskflowExecSchedPass::instantiate_graph_instance_generic(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildExitTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildExitTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // auto t = flowLike
     //              .emplace([n, frame]() {
     //                  ASSERT(n->withInputs().size() == 0, "Return node cannot have with inputs.");
@@ -141,8 +141,8 @@ tf::Task TaskflowExecSchedPass::buildExitTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildDataTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildDataTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame]() {
     //         auto v = frame->get(n->index());
@@ -152,8 +152,8 @@ tf::Task TaskflowExecSchedPass::buildDataTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildPortTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildPortTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame]() {
     //         auto v = frame->get(n->index());
@@ -163,8 +163,8 @@ tf::Task TaskflowExecSchedPass::buildPortTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildCopyTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildCopyTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame]() {
     //         auto src = n->normInputs().front();
@@ -179,8 +179,8 @@ tf::Task TaskflowExecSchedPass::buildCopyTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildFillTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildFillTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame]() {
     //         ASSERT(!n->normInputs().empty(), "FILL expects a source value on norm input.");
@@ -201,8 +201,8 @@ tf::Task TaskflowExecSchedPass::buildFillTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildAccsTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildAccsTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame]() {
     //         data_ptr_t source = frame->get(n->dataInputs().front()->index());
@@ -223,8 +223,8 @@ tf::Task TaskflowExecSchedPass::buildAccsTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildFuncTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildFuncTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame, this](tf::Subflow &sf) {
     //         auto func = tt::as_shared<FuncNode>(n)->func();
@@ -273,8 +273,8 @@ tf::Task TaskflowExecSchedPass::buildFuncTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildCallTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildCallTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame, this](tf::Subflow &sf) {
     //         const auto &funcNode = n->withInputs().front();
@@ -324,8 +324,8 @@ tf::Task TaskflowExecSchedPass::buildCallTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildOperTask(
-    FlowT &flowLike, const node_ptr_t &n, const frame_rptr_t &frame) {
+tf::Task
+TaskflowExecSchedPass::buildOperTask(FlowT &flowLike, const node_ptr_t &n, const Frame *&frame) {
     // return flowLike
     //     .emplace([n, frame, this](tf::Subflow &sf) {
     //         auto opNode = tt::as_shared<OperNode>(n);
@@ -359,7 +359,7 @@ tf::Task TaskflowExecSchedPass::buildOperTask(
 
 template <typename FlowT>
 void TaskflowExecSchedPass::buildBranchJoinRegion(
-    FlowT &flowLike, Graph *graph, const frame_rptr_t &frame,
+    FlowT &flowLike, Graph *graph, const Frame *&frame,
     std::unordered_map<Node *, tf::Task> &taskMap, const node_ptr_t &brch) {
     // node_vec_t candidates = brch->ctrlOutputs();
     // node_ptr_t join = brch->dataOutputs().front();
@@ -544,7 +544,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
 
 template <typename FlowT>
 void TaskflowExecSchedPass::buildNormalNodeTasks(
-    FlowT &flowLike, Graph *graph, const frame_rptr_t &frame,
+    FlowT &flowLike, Graph *graph, const Frame *&frame,
     std::unordered_map<Node *, tf::Task> &taskMap) {
     // std::unordered_set<Node *> &skipNodes = globalBuildCtx_.skipNodes;
     // for (const auto &n : graph->nodes()) {
@@ -645,8 +645,7 @@ void TaskflowExecSchedPass::connectDependencies(
     // }
 }
 
-void TaskflowExecSchedPass::mark_map_arr(
-    const node_ptr_t &node, frame_rptr_t frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_map_arr(const node_ptr_t &node, Frame *frame, tf::Subflow &sf) {
     // auto targetData = frame->get(node->normInputs().front()->index());
     // auto funcData = frame->get(node->withInputs().front()->index());
 
@@ -693,8 +692,7 @@ void TaskflowExecSchedPass::mark_map_arr(
     // std::move(results)));
 }
 
-void TaskflowExecSchedPass::mark_apply_arr(
-    const node_ptr_t &node, frame_rptr_t frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_apply_arr(const node_ptr_t &node, Frame *frame, tf::Subflow &sf) {
     // auto targetData = frame->get(node->normInputs().front()->index());
     // auto funcData = frame->get(node->withInputs().front()->index());
     // auto func = funcData->as<FunctionData>(Type::Func());
@@ -742,8 +740,7 @@ void TaskflowExecSchedPass::mark_apply_arr(
     // });
 }
 
-void TaskflowExecSchedPass::mark_filter_arr(
-    const node_ptr_t &node, frame_rptr_t frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_filter_arr(const node_ptr_t &node, Frame *frame, tf::Subflow &sf) {
     // auto targetData = frame->get(node->normInputs().front()->index());
     // auto funcData = frame->get(node->withInputs().front()->index());
     // auto func = funcData->as<FunctionData>(Type::Func());
@@ -804,8 +801,7 @@ void TaskflowExecSchedPass::mark_filter_arr(
     //     arr->type());
 }
 
-void TaskflowExecSchedPass::mark_reduce_arr(
-    const node_ptr_t &node, frame_rptr_t frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_reduce_arr(const node_ptr_t &node, Frame *frame, tf::Subflow &sf) {
     // auto targetData = frame->get(node->normInputs().front()->index());
     // auto funcData = frame->get(node->withInputs()[0]->index());
     // auto initData = frame->get(node->withInputs()[1]->index());
@@ -860,7 +856,7 @@ void TaskflowExecSchedPass::mark_reduce_arr(
 }
 
 void TaskflowExecSchedPass::mark_unordered_reduce_arr(
-    const node_ptr_t &node, frame_rptr_t frame, tf::Subflow &sf) {
+    const node_ptr_t &node, Frame *frame, tf::Subflow &sf) {
     // auto targetData = frame->get(node->normInputs().front()->index());
     // auto funcData = frame->get(node->withInputs()[0]->index());
     // auto initData = frame->get(node->withInputs()[1]->index());
@@ -1016,7 +1012,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
 }
 
 void TaskflowExecSchedPass::mark_foreach_arr(
-    const node_ptr_t &node, frame_rptr_t frame, tf::Subflow &sf) {
+    const node_ptr_t &node, Frame *frame, tf::Subflow &sf) {
     // auto targetData = frame->get(node->normInputs().front()->index());
     // auto funcData = frame->get(node->withInputs().front()->index());
     // auto func = funcData->as<FunctionData>(Type::Func());
@@ -1066,7 +1062,7 @@ void TaskflowExecSchedPass::mark_foreach_arr(
 }
 
 void TaskflowExecSchedPass::mark_unordered_foreach_arr(
-    const node_ptr_t &node, frame_rptr_t frame, tf::Subflow &sf) {
+    const node_ptr_t &node, Frame *frame, tf::Subflow &sf) {
     // auto targetData = frame->get(node->normInputs().front()->index());
     // auto funcData = frame->get(node->withInputs().front()->index());
     // ASSERT(funcData->type()->code() == TypeCode::Function, "foreach expects a function.");

@@ -13,14 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 #include "builtin/algo/topo.h"
-#include "builtin/passes/sched/common/precompile.h"
 #include "core/data/primary.h"
+#include "core/rtdata/base.h"
+#include "utils/opperf.h"
 
 #ifndef NDEBUG
 #include "service/profiler/advanced/advanced_tracer.h"
@@ -30,133 +31,57 @@
 using namespace std;
 using namespace GraphIR;
 
-GraphExecInfo *FastVMSchedPass::getExecInfoGraph(Graph *graph) {
-    GraphExecInfo *info = graph->getExtra<GraphExecInfo>();
-    if (LIKELY(info != nullptr)) {
-        return info;
-    } else {
-        auto codes = precompile(context_, graph);
-        execInfos_.emplace_back(
-            FrameTemplate(graph, staticAllocator_, stackAllocator_),
-            std::move(codes));
-        info = &execInfos_.back();
-        graph->setExtra<GraphExecInfo>(info);
-        return info;
-    }
-}
+// 互调用涉及第三方函数时帧管理的三种情形
+//
+// A 是根帧，A、B 互相尾调用，并在中途调用 C
+//
+// 情形一：
+// A 或 B 普通调用 C，正常释放即可
+// ┌────────┬────────┬────────┐
+// │  (A)   │  (B)   │  (C)   │
+// └────────┴────────┴────────┘
+//     ↑                  ↑
+//   root1              root2
+//
+// 情形二：
+// A 在中途尾调用 C，此时孪生帧指针指向 B，需要先释放原孪生帧 B，再申请 C
+// ┌────────┬────────┐
+// │  (A)   │  (C)   │
+// └────────┴────────┘
+//     ↑         ↑
+//   root      curr
+//     ↑
+// twin(B->A)
+//
+// 情形三：
+// B 在中途尾调用 C，此时孪生帧指向 A，但不能释放根帧 A，只能在退出C++栈帧时依次释放
+// ┌────────┬────────┬────────┐
+// │  (A)   │  (B)   │  (C)   │
+// └────────┴────────┴────────┘
+//     ↑         ↑         ↑
+//   root   twin(A->B)   curr
+//
+// 总结
+// 释放栈帧时，如果 curr 不是 root，优先释放 curr
+// 接下来，如果 twin 不是 root，则优先释放 twin
+// 最后释放 root
 
-slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", graph->name()));
+slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", rootGraph->name()));
 
     if (currRecursionDepth_++ > maxRecursionDepth_) {
         context_->rtmDiags()
             ->of(RuntimeDiag::MaxRecursionDepthExceeded)
-            .commit(graph->name(), maxRecursionDepth_);
+            .commit(rootGraph->name(), maxRecursionDepth_);
     }
 
-    bool loop  = false;
-    auto info  = getExecInfoGraph(graph);
-    auto codes = &info->codes;
+    bool loop      = false;
+    slot_t funcRes = NullSlot;
 
-    Frame nextFrame(info->ftemp); // for mutual-tail-recursion optimization
-    frame_rptr_t currFrame = &frame, twinFrame = nullptr;
+    bytecode_vec_t *codes = getBytecodesOfGraph(rootGraph);
 
-    auto __call = [&](GraphIR::Graph &targetGraph, const Bytecode &bc, bool isTailCall) -> slot_t {
-        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-            "Calling function: {} (tail-call: {})",
-            targetGraph.name(),
-            isTailCall ? "yes" : "no"));
-
-        ASSERT(
-            bc.argsCnt() == targetGraph.normPorts().size() + targetGraph.withPorts().size(),
-            std::format(
-                "Function {} expects {} arguments, but got {}.",
-                targetGraph.name(),
-                targetGraph.normPorts().size() + targetGraph.withPorts().size(),
-                bc.argsCnt()));
-
-        // 如果是尾调用，则尝试复用当前 C++ 栈帧
-        if (isTailCall) {
-            // enable tail-call optimization
-            // 设置 loop flag 为 true
-            // 当前字节码执行子循环结束后不会退出大循环
-            // 而会根据新指定的 currFrame 和 bytecodes 执行新图
-            // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
-            loop = true;
-            // 设置 lastFrame 为当前帧 currFrame 备用
-            const frame_rptr_t lastFrame = currFrame;
-
-            // 下面准备将 currFrame 重新指向新栈帧
-            if (&targetGraph == currFrame->graph()) {
-                // 如果目标图就是当前帧的图，说明在进行自递归尾调用
-                // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
-                EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                    "Optimizing self-recursion for graph: {}",
-                    currFrame->graph()->name()));
-            } else {
-                // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
-                auto targetInfo = getExecInfoGraph(&targetGraph);
-                codes           = &targetInfo->codes;
-
-                // 即便目标图不是当前图，仍可能存在互调用尾递归现象
-                // 即 A 尾调用 B，B 又尾调用 A
-                // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
-                // 思路是在互调用时维护一个孪生栈帧 twinFrame
-                // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
-                // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
-
-                if (twinFrame && twinFrame->graph() == &targetGraph) {
-                    // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
-                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                        "Optimizing mutual-tail-recursion for graph: {}",
-                        currFrame->graph()->name()));
-                    currFrame = twinFrame;
-                    twinFrame = lastFrame;
-                } else {
-                    // 将当前栈帧设置为孪生帧
-                    twinFrame = currFrame;
-
-                    // 创建新的栈帧并设置参数
-                    Frame targetFrame(targetInfo->ftemp);
-                    size_t argsCnt         = bc.argsCnt();
-                    const data_idx_t *args = bc.operands();
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        targetFrame.set(i + 1, currFrame->get<slot_t>(args[i]));
-                    }
-
-                    // 将栈帧对象保存到 nextFrame 中，以免离开作用域后销毁
-                    // 这里不能直接覆写 currFrame 所指向的栈帧
-                    // 因为该栈帧要保留以备互调用使用
-                    nextFrame = std::move(targetFrame);
-
-                    // 切换到新栈帧
-                    currFrame = &nextFrame;
-                    return NullSlot;
-                }
-            }
-
-            // 自递归和互递归的情况在这里集中设置参数
-            size_t argsCnt         = bc.argsCnt();
-            const data_idx_t *args = bc.operands();
-            for (size_t i = 0; i < argsCnt; ++i) {
-                currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
-            }
-
-            return NullSlot;
-        }
-
-        // 如果不是尾调用，则新建栈帧并递归调用 call 函数
-        auto targetInfo = getExecInfoGraph(&targetGraph);
-        Frame targetFrame(targetInfo->ftemp);
-
-        size_t argsCnt         = bc.argsCnt();
-        const data_idx_t *args = bc.operands();
-        for (size_t i = 0; i < argsCnt; ++i) {
-            targetFrame.set(i + 1, currFrame->get<slot_t>(args[i]));
-        }
-
-        return call(&targetGraph, targetFrame);
-    };
+    Frame *nextFrame = nullptr; // for mutual-tail-recursion optimization
+    Frame *currFrame = rootFrame, *twinFrame = nullptr;
 
     // for tail-call optimization
     // reuse the current frame for tail-recursive calls
@@ -168,11 +93,24 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
         size_t i = 0;
         while (i < codeSize) {
             const Bytecode &bc = code[i];
-            EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode[{}]: {}", i, bc.toString()));
+            EXEC_WHEN_DEBUG(
+                l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, i, context_)));
+
+#ifdef OPPERF_ENABLED
+            std::string tag;
+            if (bc.opcode == OpCode::OPER) {
+                tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
+            } else if (bc.opcode == OpCode::FUNC) {
+                tag = bc.extra()->graph->name();
+            }
+            opperf::ScopeTimer _timer(bc.opcode, tag);
+#else
+            opperf::ScopeTimer _timer(bc.opcode);
+#endif
 
             switch (bc.opcode) {
-            case OpCode::NOOP: {
-                // do nothing
+            case OpCode::RETN: {
+                funcRes = currFrame->get<slot_t>(bc.fastop[0]);
                 break;
             }
 
@@ -281,33 +219,82 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
             }
 
             case OpCode::FILL: {
-                ASSERT(false, "FILL opcode not fully implemented in FastVM.");
-                // const data_arr_t nargs = bc.nargs();
-                // const data_arr_t wargs = bc.wargs();
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
 
-                // TypeCode targetType = currFrame->typeAt(nargs[0]);
-                // ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+                TypeCode targetType = currFrame->typeAt(nargs[0]);
+                ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
 
-                // Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
-                // ASSERT(target != nullptr, "FILL target data is null.");
+                Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
+                ASSERT(target != nullptr, "FILL target data is null.");
 
-                // switch (targetType) {
-                // case TypeCode::Tuple: {
-                //     auto tuple = static_cast<Tuple *>(target);
-                //     break;
-                // }
-                // default:
-                //     ASSERT(false, "Unsupported FILL target type.");
-                // }
+                switch (targetType) {
+                case TypeCode::Tuple: {
+                    const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
+                    auto t           = static_cast<Tuple *>(target);
+                    const auto &refs = t->layout().refs();
+                    ASSERT(
+                        refs.size() == bc.withCnt(),
+                        std::format(
+                            "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                            bc.withCnt(),
+                            refs.size()));
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
+                        t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    }
+                    t->updateLayout(&type->layout());
+                    break;
+                }
+                case TypeCode::Array: {
+                    const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
+                    auto a           = static_cast<Array *>(target);
+                    const auto &refs = a->layout().refs();
+                    ASSERT(
+                        refs.size() == bc.withCnt(),
+                        std::format(
+                            "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                            bc.withCnt(),
+                            refs.size()));
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
+                        a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    }
+                    a->updateLayout(&type->layout());
+                    break;
+                }
+                case TypeCode::Struct: {
+                    const auto &type = currFrame->typePtrAt<StructType>(bc.result);
+                    auto s           = static_cast<Struct *>(target);
+                    const auto &refs = s->layout().refs();
+                    ASSERT(
+                        refs.size() == bc.withCnt(),
+                        std::format(
+                            "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                            bc.withCnt(),
+                            refs.size()));
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
+                        s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    }
+                    s->updateLayout(&type->layout());
+                    break;
+                }
+                case TypeCode::Function: {
+                    // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
+                    auto f             = static_cast<Function *>(target);
+                    Tuple *closureData = f->tuple();
+                    for (size_t j = 0; j < bc.withCnt(); ++j) {
+                        closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+                    }
+                    break;
+                }
+                default:
+                    ASSERT(
+                        false,
+                        std::format(
+                            "Unsupported FILL target type {} in FastVM.",
+                            typeCodeToString(targetType)));
+                }
 
-                // data_vec_t inputs;
-                // inputs.reserve(bc.withCnt());
-                // for (size_t j = 0; j < bc.withCnt(); ++j) {
-                //     inputs.push_back(currFrame->get(wargs[j]));
-                // }
-                // target->resolve(inputs);
-
-                // currFrame->set(bc.result, target);
+                currFrame->set(bc.result, target);
                 break;
             }
 
@@ -317,31 +304,114 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 auto function          = currFrame->get<Function *>(wargs[0]);
                 auto targetGraph       = function->graph();
 
-                GraphExecInfo *targetInfo = getExecInfoGraph(targetGraph);
-                Frame funcFrame(targetInfo->ftemp);
+                Frame *funcFrame = framePool_.acquire(targetGraph);
 
                 size_t i = 0;
                 for (; i < nargs.size; ++i) {
-                    funcFrame.set(i + 1, currFrame->get<slot_t>(nargs[i]));
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
                 }
 
                 Tuple *closureData = function->tuple();
                 for (size_t j = 0; j < closureData->size(); ++j) {
-                    funcFrame.set(i + j + 1, closureData->get<slot_t>(j));
+                    funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
                 }
 
+                _timer.pause();
                 const auto &result = call(targetGraph, funcFrame);
+                _timer.resume();
+
                 currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::FUNC: {
-                currFrame->set(bc.result, __call(*bc.extra()->graph, bc, false));
+                Frame *funcFrame = framePool_.acquire(bc.extra()->graph);
+
+                size_t argsCnt         = bc.normCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                }
+
+                _timer.pause();
+                slot_t result = call(bc.extra()->graph, funcFrame);
+                _timer.resume();
+
+                currFrame->set(bc.result, result);
                 break;
             }
 
             case OpCode::TAIL: {
-                __call(*bc.extra()->graph, bc, true);
+                // 尾调用优化
+                Graph *funcFrame = bc.extra()->graph;
+
+                // enable tail-call optimization
+                // 设置 loop flag 为 true
+                // 当前字节码执行子循环结束后不会退出大循环
+                // 而会根据新指定的 currFrame 和 bytecodes 执行新图
+                // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
+                loop = true;
+                // 设置 lastFrame 为当前帧 currFrame 备用
+                Frame *lastFrame = currFrame;
+
+                // 下面准备将 currFrame 重新指向新栈帧
+                if (funcFrame == currFrame->graph()) {
+                    // 如果目标图就是当前帧的图，说明在进行自递归尾调用
+                    // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
+                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+                        "Optimizing self-recursion for graph: {}",
+                        currFrame->graph()->name()));
+                } else {
+                    // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
+                    codes = getBytecodesOfGraph(funcFrame);
+
+                    // 即便目标图不是当前图，仍可能存在互调用尾递归现象
+                    // 即 A 尾调用 B，B 又尾调用 A
+                    // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
+                    // 思路是在互调用时维护一个孪生栈帧 twinFrame
+                    // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
+                    // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
+                    if (twinFrame && twinFrame->graph() == funcFrame) {
+                        // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
+                        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+                            "Optimizing mutual-tail-recursion for graph: {}",
+                            currFrame->graph()->name()));
+                        // 交换孪生帧
+                        currFrame = twinFrame;
+                        twinFrame = lastFrame;
+                    } else {
+                        // 不可复用栈帧的尾调用
+                        if (twinFrame != nullptr && twinFrame != rootFrame) {
+                            // 如果孪生帧不为空，覆写前需要先释放
+                            // 如果孪生帧刚好指向根帧，不能先释放
+                            framePool_.release(twinFrame);
+                        }
+                        // 将当前栈帧设置为孪生帧
+                        twinFrame = currFrame;
+
+                        // 创建新的栈帧并设置参数
+                        nextFrame              = framePool_.acquire(funcFrame);
+                        size_t argsCnt         = bc.normCnt();
+                        const data_idx_t *args = bc.operands();
+                        for (size_t i = 0; i < argsCnt; ++i) {
+                            nextFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                        }
+
+                        // 切换到新栈帧
+                        currFrame = nextFrame;
+
+                        // 跳过后续字节码，进行下一轮循环
+                        i = codeSize;
+                        continue;
+                    }
+                }
+
+                // 自递归和互递归的情况在这里集中设置参数
+                size_t argsCnt         = bc.normCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
+                }
 
                 // 跳过后续字节码，进行下一轮循环
                 i = codeSize;
@@ -354,7 +424,7 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
                 auto func              = bc.extra()->func;
                 EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                     "Executing operator {}.",
-                    context_->execMgr().getNameOfAnOperator(bc.extra()->func)));
+                    context_->execMgr().getNameOfAnOperator(func)));
                 func(bc.result, nargs, wargs, *currFrame, *context_);
                 break;
             }
@@ -382,12 +452,20 @@ slot_t FastVMSchedPass::call(Graph *graph, Frame &frame) {
 
     currRecursionDepth_--;
 
-    const auto &retNode = currFrame->graph()->exitNode();
-    ASSERT(retNode->withInputs().size() == 0, "Return node cannot have with inputs.");
-    ASSERT(retNode->normInputs().size() <= 1, "Return node cannot have multiple norm inputs.");
-    const auto &input = retNode->normInputs();
+    if (twinFrame != nullptr) {
+        // 说明已经触发了相互尾调用，要把孪生帧也释放掉
+        // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
+        // 把与传入的 rootFrame 不相等的那个先释放掉即可
+        if (currFrame != rootFrame) {
+            framePool_.release(currFrame);
+        }
+        if (twinFrame != rootFrame) {
+            framePool_.release(twinFrame);
+        }
+    }
+    framePool_.release(rootFrame);
 
-    return currFrame->get<slot_t>(input.front()->index());
+    return funcRes;
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
@@ -396,9 +474,15 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             ->of(RuntimeDiag::MissingMainFunction)
             .commit(context_->mainModule()->name());
     }
-    const GraphExecInfo *info = getExecInfoGraph(graph.get());
-    Frame rootFrame(info->ftemp);
+
+    opperf::start();
+
+    Frame *rootFrame = framePool_.acquire(graph.get());
     call(graph.get(), rootFrame);
+
+    opperf::stop();
+    opperf::report(std::cout);
+
     return Graph::null();
 }
 
@@ -427,175 +511,144 @@ void FastVMSchedPass::evalMarkedOperator(
 
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto func              = tt::as_shared<FunctionData>(funcData);
-    // type_ptr_t funcRetType = func->funcType()->exitType();
+    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
+    Array *res             = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
 
-    // auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
-    //     data_vec_t res;
-    //     res.reserve(inputVec.size());
-    //     for (const auto &item : inputVec) {
-    //         auto &targetGraph = func->graph();
-    //         Frame frame(&targetGraph);
-    //         if (targetGraph.hasClosure()) {
-    //             const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //             const auto &closureData  = functionData->closure();
-    //             ASSERT(
-    //                 closureData.size() == targetGraph.closure().size(),
-    //                 "Function closure size mismatch.");
-    //             for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //                 frame.set(ci + 2, closureData[ci]);
-    //             }
-    //         }
-    //         frame.set(1, item);
-    //         res.push_back(call(&targetGraph, frame));
-    //     }
-    //     return res;
-    // };
+    slot_t *from = arr->data();
+    slot_t *to   = res->data();
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
 
-    // auto arrayData = tt::as_shared<ArrayData>(targetData);
-    // currFrame.set(self, ArrayData::from(ArrayType::create(funcRetType),
-    // applyMap(arrayData->raw())));
+        frame->set(1, from[i]); // 设置第一个参数
+        // 如果有闭包
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
+
+        to[i] = call(func->graph(), frame);
+    }
+
+    currFrame.set(self, res);
 }
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto func       = tt::as_shared<FunctionData>(funcData);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto applyFunc = [&](const data_ptr_t &item) -> data_ptr_t {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 2, closureData[ci]);
-    //         }
-    //     }
-    //     frame.set(1, item);
-    //     return call(&targetGraph, frame);
-    // };
+    slot_t *data = arr->data();
 
-    // for (auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
-    //     item = applyFunc(item);
-    // }
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
+        frame->set(1, data[i]);
 
-    // currFrame.set(self, targetData);
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
+
+        data[i] = call(func->graph(), frame);
+    }
+
+    currFrame.set(self, arr);
 }
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto func       = tt::as_shared<FunctionData>(funcData);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto shouldKeep = [&](const data_ptr_t &item) -> bool {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 2, closureData[ci]);
-    //         }
-    //     }
-    //     frame.set(1, item);
-    //     auto result = call(&targetGraph, frame);
-    //     return result->as<BoolData>(Type::Bool())->data();
-    // };
+    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
+    Array *filtered        = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
 
-    // auto filterSequence = [&](auto containerData, auto createFunc) {
-    //     const auto &raw = containerData->raw();
-    //     data_vec_t res;
-    //     for (const auto &item : raw) {
-    //         if (shouldKeep(item))
-    //             res.push_back(item);
-    //     }
-    //     currFrame.set(self, createFunc(containerData->type(), std::move(res)));
-    // };
+    slot_t *from = arr->data();
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
+        frame->set(1, from[i]);
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
 
-    // filterSequence(tt::as_shared<ArrayData>(targetData), [](auto t, data_vec_t v) {
-    //     return ArrayData::from(t, std::move(v));
-    // });
+        slot_t result = call(func->graph(), frame);
+
+        if (fromSlot<bool>(result)) {
+            filtered->append(from[i]);
+        }
+    }
+
+    filtered->shrinkToFit();
+
+    currFrame.set(self, filtered);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto initData   = currFrame.get(wargs[1]);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    slot_t init    = currFrame.get<slot_t>(wargs[1]);
+    Tuple *closure = func->tuple();
 
-    // auto func = tt::as_shared<FunctionData>(funcData);
+    // 空数组直接返回初始值
+    if (arr->size() == 0) {
+        currFrame.set(self, init);
+        return;
+    }
 
-    // data_vec_t elements = tt::as_shared<ArrayData>(targetData)->raw();
+    slot_t acc   = init;
+    slot_t *from = arr->data();
 
-    // if (elements.empty()) {
-    //     currFrame.set(self, initData);
-    //     return;
-    // }
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
 
-    // data_ptr_t result = initData;
-    // for (const auto &item : elements) {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
+        // reduce(acc, cur)
+        frame->set(1, acc);
+        frame->set(2, from[i]);
 
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 3, closureData[ci]);
-    //         }
-    //     }
+        // 如果有闭包参数
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 3, closure->get<slot_t>(j));
+            }
+        }
 
-    //     const auto &ports = targetGraph.ports();
-    //     frame.set(ports[0]->index(), result); // acc
-    //     frame.set(ports[1]->index(), item);   // cur
+        acc = call(func->graph(), frame);
+    }
 
-    //     result = call(&targetGraph, frame); // 更新 result
-    // }
-
-    // currFrame.set(self, result);
+    currFrame.set(self, acc);
 }
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    // auto targetData = currFrame.get(nargs[0]);
-    // auto funcData   = currFrame.get(wargs[0]);
-    // auto func       = tt::as_shared<FunctionData>(funcData);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    Tuple *closure = func->tuple();
 
-    // auto applyFunc = [&](const data_ptr_t &item) {
-    //     auto &targetGraph = func->graph();
-    //     Frame frame(&targetGraph);
-    //     if (targetGraph.hasClosure()) {
-    //         const auto &functionData = tt::as_shared<FunctionData>(funcData);
-    //         const auto &closureData  = functionData->closure();
-    //         ASSERT(
-    //             closureData.size() == targetGraph.closure().size(),
-    //             "Function closure size mismatch.");
-    //         for (size_t ci = 0; ci < closureData.size(); ++ci) {
-    //             frame.set(ci + 2, closureData[ci]);
-    //         }
-    //     }
-    //     frame.set(1, item);
-    //     call(&targetGraph, frame); // 忽略返回值
-    // };
+    slot_t *from = arr->data();
 
-    // for (const auto &item : tt::as_shared<ArrayData>(targetData)->raw()) {
-    //     applyFunc(item);
-    // }
+    for (size_t i = 0; i < arr->size(); ++i) {
+        Frame *frame = framePool_.acquire(func->graph());
+        frame->set(1, from[i]);
 
-    // currFrame.set(self, Data::null());
+        if (closure->size() > 0) {
+            for (size_t j = 0; j < closure->size(); ++j) {
+                frame->set(j + 2, closure->get<slot_t>(j));
+            }
+        }
+
+        call(func->graph(), frame);
+    }
+
+    // foreach 无返回值
+    currFrame.set(self, NullSlot);
 }

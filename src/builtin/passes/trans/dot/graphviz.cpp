@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 26, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,7 +66,7 @@ std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) 
             size_t splitPos = len / 2;
 
             // Try to split at whitespace near the middle
-            size_t left = paragraph.rfind(' ', splitPos);
+            size_t left  = paragraph.rfind(' ', splitPos);
             size_t right = paragraph.find(' ', splitPos);
 
             if (left != std::string::npos && (splitPos - left) <= (right - splitPos)) {
@@ -75,7 +75,7 @@ std::string wrapText(const std::string &text, size_t maxWidth, size_t maxLines) 
                 splitPos = right;
             }
 
-            std::string first = paragraph.substr(0, splitPos);
+            std::string first  = paragraph.substr(0, splitPos);
             std::string second = paragraph.substr(splitPos);
             // Trim leading space of second line
             if (!second.empty() && second[0] == ' ')
@@ -140,7 +140,7 @@ string GraphVizDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
         ptrVal = mapForPrefix[ptrVal];
     }
 
-    int hexDigits = 1;
+    int hexDigits  = 1;
     uintptr_t temp = ptrVal;
     while (temp >>= 4) {
         ++hexDigits;
@@ -171,7 +171,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
         visitedGraphs_.insert(graph);
     }
 
-    string funcId = pointerToIdent(graph.get(), "F");
+    string funcId   = pointerToIdent(graph.get(), "F");
     string funcName = graph->name();
     string res;
 
@@ -228,8 +228,8 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     // Draw ports of the graph
     for (const auto &port : graph->ports()) {
         const auto &portNode = tt::as_shared<PortNode>(port);
-        string label = portNode->name();
-        string tooltip = graph->name() + "::" + portNode->toString();
+        string label         = portNode->name();
+        string tooltip       = graph->name() + "::" + portNode->toString();
         res += std::format(
             "{}{}{} [label=\"{}\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
             baseIndent_,
@@ -240,8 +240,8 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     }
     for (const auto &port : graph->closure()) {
         const auto &portNode = tt::as_shared<PortNode>(port);
-        string label = portNode->name();
-        string tooltip = graph->name() + "::" + portNode->toString();
+        string label         = portNode->name();
+        string tooltip       = graph->name() + "::" + portNode->toString();
         res += std::format(
             "{}{}{} [label=\"{}\", shape=circle, style=dashed, tooltip=\"{}\"];\r\n",
             baseIndent_,
@@ -264,7 +264,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
         case NodeType::DATA: {
             auto sourceNode = tt::as_shared<DataNode>(node);
             data_ptr_t data = sourceNode->data();
-            label = data->toString();
+            label           = data->toString();
             break;
         }
         case NodeType::COPY: {
@@ -279,8 +279,8 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
         }
         case NodeType::ACCS: {
             auto accessNode = tt::as_shared<AccsNode>(node);
-            label = "." + accessNode->index2String();
-            shape = "diamond";
+            label           = "." + accessNode->index2String();
+            shape           = "diamond";
             break;
         }
         case NodeType::BRCH: {
@@ -305,21 +305,21 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
         }
         case NodeType::FUNC: {
             func_ptr_t func = tt::as_shared<FuncNode>(node)->func();
-            label = func->name().empty() ? func->graph().name() : func->name();
-            shape = "Mdiamond";
-            size = "width=1.1, height=1.1";
+            label           = func->name().empty() ? func->graph().name() : func->name();
+            shape           = "Mdiamond";
+            size            = "width=1.1, height=1.1";
             break;
         }
         case NodeType::OPER: {
             auto oper = tt::as_shared<OperNode>(node);
-            label = oper->oper()->name();
-            shape = "diamond";
+            label     = oper->oper()->name();
+            shape     = "diamond";
             break;
         }
         case NodeType::EXIT: {
             label = "EXIT";
             shape = "doublecircle";
-            size = "width=0.9, height=0.9";
+            size  = "width=0.9, height=0.9";
             break;
         }
         case NodeType::SYNC: {
@@ -449,5 +449,5 @@ GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context) : GraphTranslat
 
 graph_ptr_t GraphVizDumpPass::apply(GraphIR::graph_ptr_t &graph, std::ostream &os) {
     os << dumpGraph(graph);
-    return graph;
+    return GraphIR::Graph::null();
 }

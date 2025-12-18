@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -300,9 +300,9 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 refTypes.push_back(refNode->dataType());
                 refNodes.push_back(refNode);
             }
-            auto fillType = tt::as_shared<CompositeType>(dataType->clone());
-            fillType->resolve(refTypes);
-            node = FillNode::create(*currGraph_, fillType);
+            auto fillType   = tt::as_shared<CompositeType>(dataType->clone());
+            auto filledType = fillType->resolve(refTypes);
+            node            = FillNode::create(*currGraph_, filledType);
             Node::link(LinkType::Norm, srcNode, node);
             for (const auto &refNode : refNodes) {
                 Node::link(LinkType::With, refNode, node);
@@ -784,20 +784,43 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::TypeNotIndexable).commit(tgtNode->dataType()->toString());
         throw BuildAbortException();
     }
-    const auto tgtType   = tt::as_shared<CompositeType>(tgtNode->dataType());
+
+    const auto tgtType   = tgtNode->dataType();
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
-    graph_ptr_t &graph   = currGraph_;
-    // TODO: here may need inplace access to the data
-    ASSERT(accsLoad->isNum(), "Access index must be a number");
-    const auto &optEleType = tgtType->typeAt(accsLoad->index<size_t>());
-    if (!optEleType.has_value()) {
-        diags_->of(SemanticDiag::InvalidAccessIndex)
-            .commit(
-                accsLoad->isNum() ? std::to_string(accsLoad->index<size_t>())
-                                  : accsLoad->index<std::string>());
-        throw BuildAbortException();
+    type_ptr_t elemType  = nullptr;
+
+    switch (tgtType->code()) {
+    case TypeCode::Tuple: {
+        const auto &tupleType  = tt::as_shared<TupleType>(tgtType);
+        const auto &optEleType = tupleType->typeAt(accsLoad->index<size_t>());
+        if (!optEleType.has_value()) {
+            diags_->of(SemanticDiag::InvalidAccessIndex).commit(accsLoad->index<std::string>());
+            throw BuildAbortException();
+        }
+        elemType = *optEleType;
+        break;
     }
-    node_ptr_t accsNode = AccsNode::create(*graph, *optEleType, accsLoad->index());
+    case TypeCode::Array: {
+        const auto &arrayType = tt::as_shared<ArrayType>(tgtType);
+        elemType              = arrayType->elemType();
+        break;
+    }
+    case TypeCode::Struct: {
+        const auto &structType = tt::as_shared<StructType>(tgtType);
+        const auto &optEleType = structType->get(accsLoad->index<std::string>());
+        if (!optEleType.has_value()) {
+            diags_->of(SemanticDiag::InvalidAccessIndex).commit(accsLoad->index<std::string>());
+            throw BuildAbortException();
+        }
+        elemType = *optEleType;
+        break;
+    }
+    default:
+        ASSERT(false, "Unexpected target type in ACCS node.");
+    }
+
+    graph_ptr_t &graph  = currGraph_;
+    node_ptr_t accsNode = AccsNode::create(*graph, elemType, accsLoad->index());
     Node::link(LinkType::Norm, tgtNode, accsNode);
     LEAVE("ACCS");
     return accsNode;

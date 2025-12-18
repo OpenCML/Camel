@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
                 slot_t slot = makeSlotFromPrimitiveData(elem);
                 gcArray->append<slot_t>(slot);
             } else {
-                ASSERT(false, "Unsupported array element type conversion.");
+                gcArray->append<slot_t>(NullSlot);
             }
         }
         return gcArray;
@@ -118,7 +118,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
                 slot_t slot = makeSlotFromPrimitiveData(elem);
                 gcTuple->set<slot_t>(i, slot);
             } else {
-                ASSERT(false, "Unsupported tuple element type conversion.");
+                gcTuple->set<slot_t>(i, NullSlot);
             }
         }
         return gcTuple;
@@ -136,7 +136,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
                 slot_t slot = makeSlotFromPrimitiveData(data);
                 gcStruct->set<slot_t>(name, slot);
             } else {
-                ASSERT(false, "Unsupported struct field type conversion.");
+                gcStruct->set<slot_t>(name, NullSlot);
             }
         }
         return gcStruct;
@@ -147,19 +147,41 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
         auto &graph      = funcData->graph();
         Function *gcFunc = Function::create(&graph, graph.closureType()->layout(), allocator);
         Tuple *gcTuple   = gcFunc->tuple();
+
+        if (gcTuple->size() == 0) {
+            return gcFunc;
+        }
+
+        // 说明函数包含闭包
+        // 下面填充已捕获的闭包值
         const auto &closureData = funcData->closure();
-        for (size_t i = 0; i < closureData.size(); ++i) {
-            const auto &elem = closureData[i];
-            if (elem->type()->isGCTraced()) {
-                Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                gcTuple->set<Object *>(i, elemRef);
-            } else if (elem->type()->isPrimitive()) {
-                slot_t slot = makeSlotFromPrimitiveData(elem);
-                gcTuple->set<slot_t>(i, slot);
-            } else {
-                ASSERT(false, "Unsupported function closure element type conversion.");
+
+        if (closureData.size() > 0) {
+            ASSERT(
+                closureData.size() == gcTuple->size(),
+                std::format(
+                    "Closure data size mismatch in FunctionData. Expected: {}, Actual: {}",
+                    gcTuple->size(),
+                    closureData.size()));
+            for (size_t i = 0; i < closureData.size(); ++i) {
+                const auto &elem = closureData[i];
+                if (elem->type()->isGCTraced()) {
+                    Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
+                    gcTuple->set<Object *>(i, elemRef);
+                } else if (elem->type()->isPrimitive()) {
+                    slot_t slot = makeSlotFromPrimitiveData(elem);
+                    gcTuple->set<slot_t>(i, slot);
+                } else {
+                    gcTuple->set<slot_t>(i, NullSlot);
+                }
+            }
+        } else {
+            // 没有已捕获的闭包值，则填充空值
+            for (size_t i = 0; i < gcTuple->size(); ++i) {
+                gcTuple->set<slot_t>(i, NullSlot);
             }
         }
+
         return gcFunc;
     }
 

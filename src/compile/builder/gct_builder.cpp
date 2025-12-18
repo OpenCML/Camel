@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1082,7 +1082,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
 
     // Create an empty ArrayData object and wrap it in a DataLoad node
-    auto arrayData = ArrayData::from(ArrayType::create(), {});
+    auto arrayData = ArrayData::create(nullptr, {});
     node_ptr_t res = createNodeAs<DataLoad>(arrayData);
 
     bool dangling       = false;
@@ -1099,6 +1099,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
         *execNode << res;
         res = execNode;
     }
+
     LEAVE("ArrayData");
     return res;
 }

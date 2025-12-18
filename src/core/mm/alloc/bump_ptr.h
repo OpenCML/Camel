@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -73,12 +73,12 @@ class BumpPointerAllocator : public IAllocator {
                 size,
                 formatAddress(newTop, true));
 
-            // 调试时：把新分配的空间 (top_ 到 newTop) 填充为 0xABCDABCD
+            // 调试时：把新分配的空间 (top_ 到 newTop) 填充为 0xDEADBEAF
             std::size_t bytes_to_fill = static_cast<std::size_t>(newTop - top_);
             std::size_t words         = bytes_to_fill / sizeof(uint32_t);
             uint32_t *p               = reinterpret_cast<uint32_t *>(top_);
             for (std::size_t i = 0; i < words; ++i) {
-                p[i] = 0xABCDABCD;
+                p[i] = 0xDEADBEAF;
             }
 
             // 若末尾不是 4 字节对齐，处理残余字节

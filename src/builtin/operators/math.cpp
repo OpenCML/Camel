@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -217,8 +217,16 @@ void __sqrt__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
+    case TypeCode::Int:
+        frame.set(self, std::sqrt(static_cast<Float>(frame.get<Int>(nargs[0]))));
+        break;
+
     case TypeCode::Float:
         frame.set(self, std::sqrt(frame.get<Float>(nargs[0])));
+        break;
+
+    case TypeCode::Long:
+        frame.set(self, std::sqrt(static_cast<Float>(frame.get<Long>(nargs[0]))));
         break;
 
     case TypeCode::Double:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include "core/data/composite/func.h"
 #include "core/data/data.h"
 #include "core/operator.h"
+#include "utils/exstore.h"
 #include "utils/log.h"
 #include "utils/type.h"
 
@@ -207,8 +208,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool dirty() const { return dirty_; }
     void rearrange();
 
-    template <typename T> T *getExtra() const { return static_cast<T *>(extra_); }
-    template <typename T> void setExtra(T *ptr) const { extra_ = static_cast<void *>(ptr); }
+    template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
+    template <typename T, std::size_t Index> void setExtra(T *ptr) const {
+        extras_.set<T, Index>(ptr);
+    }
 
   private:
     std::string name_;
@@ -238,7 +241,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool parameterized_ = false;
 
     // 用于快速查询 Graph 附属信息
-    mutable void *extra_ = nullptr;
+    mutable ExtraStorage<4> extras_;
 };
 
 class Node : public std::enable_shared_from_this<Node> {

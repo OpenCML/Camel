@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "core/context/frame.h"
 #include "core/operator.h"
 #include "core/type/type.h"
 
@@ -72,10 +73,38 @@ void __builtin__assn_and__(
 void __builtin__assn_or__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
 
-void __builtin__or__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __builtin__and__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+template <typename T>
+void __builtin__lt__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    T l = frame.get<T>(nargs[0]);
+    T r = frame.get<T>(nargs[1]);
+    frame.set(self, Bool(l < r));
+}
+
+template <typename T>
+void __builtin__le__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    T l = frame.get<T>(nargs[0]);
+    T r = frame.get<T>(nargs[1]);
+    frame.set(self, Bool(l <= r));
+}
+
+template <typename T>
+void __builtin__gt__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    T l = frame.get<T>(nargs[0]);
+    T r = frame.get<T>(nargs[1]);
+    frame.set(self, Bool(l > r));
+}
+
+template <typename T>
+void __builtin__ge__(
+    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+    T l = frame.get<T>(nargs[0]);
+    T r = frame.get<T>(nargs[1]);
+    frame.set(self, Bool(l >= r));
+}
+
 void __builtin__eq__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
 void __builtin__ne__(
@@ -84,13 +113,10 @@ void __builtin__strict_eq__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
 void __builtin__strict_ne__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __builtin__lt__(
+
+void __builtin__and__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __builtin__le__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __builtin__gt__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __builtin__ge__(
+void __builtin__or__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
 
 void __builtin__add_ii__(

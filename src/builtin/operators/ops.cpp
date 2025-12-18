@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,6 @@
 #include "builtin/types/tensor.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
 #include "utils/assert.h"
 
 #include <cmath>
@@ -334,34 +333,6 @@ void __builtin__strict_ne__(
     slot_t rhs = frame.get<slot_t>(nargs[1]);
     Bool res   = (lhs != rhs);
     frame.set(self, res);
-}
-
-void __builtin__lt__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double l = frame.get<Double>(nargs[0]);
-    Double r = frame.get<Double>(nargs[1]);
-    frame.set(self, Bool(l < r));
-}
-
-void __builtin__le__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double l = frame.get<Double>(nargs[0]);
-    Double r = frame.get<Double>(nargs[1]);
-    frame.set(self, Bool(l <= r));
-}
-
-void __builtin__gt__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double l = frame.get<Double>(nargs[0]);
-    Double r = frame.get<Double>(nargs[1]);
-    frame.set(self, Bool(l > r));
-}
-
-void __builtin__ge__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double l = frame.get<Double>(nargs[0]);
-    Double r = frame.get<Double>(nargs[1]);
-    frame.set(self, Bool(l >= r));
 }
 
 void __builtin__add_ii__(

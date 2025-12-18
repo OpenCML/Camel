@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,8 @@
 #include <cstdint>
 #include <sstream>
 
-using slot_t = uint64_t;
+using slot_t                                    = uint64_t;
+static constexpr slot_t kDebugUninitializedSlot = 0xDEADBEEFDEADBEEFULL;
 
 struct ObjectHeader {
     union {

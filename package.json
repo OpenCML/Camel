@@ -1,7 +1,7 @@
 {
     "name": "camel-scripts",
     "private": true,
-    "version": "0.1.11",
+    "version": "0.1.12",
     "type": "module",
     "pre-commit": [
         "upd"

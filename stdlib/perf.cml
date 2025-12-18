@@ -1,0 +1,36 @@
+module util
+
+import { now } from time
+import { sqrt } from math
+import { mean, stdev } from statistics
+
+with <var result: float[], repeat: int>
+export sync func timeit(fn: () => void): void {
+    if repeat <= 0 then {
+        return null
+    } else sync {
+        let start = now()
+        fn()
+        let duration = now() - start
+        append<float(duration)>(result)
+        '[{:>3}] {:.6f} ms'->format<repeat, duration>->println
+        return timeit<result, repeat - 1>(fn)
+    }
+}
+
+with <repeat: int>
+export func perfms(fn: () => void): (float, float) sync {
+    var results: float[] = []
+
+    timeit<results, repeat>(fn)
+
+    // 计算均值和标准差
+    let average = float(mean(results)) * 1000.0
+    let std_dev = float(stdev(results)) * 1000.0
+
+    // 95% 置信区间（Z 值 1.96）
+    let z_value = 1.96
+    let margin_error = z_value * (std_dev / sqrt(repeat))
+
+    return (average, margin_error)
+}

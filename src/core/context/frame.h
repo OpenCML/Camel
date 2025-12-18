@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,123 +21,44 @@
 
 #include "compile/gir.h"
 #include "core/rtdata/data.h"
-#include "utils/brpred.h"
 #include "utils/log.h"
 
-class Frame;
-using frame_rptr_t = Frame *;
-
-class FrameTemplate {
-  public:
-    FrameTemplate() = delete;
-    FrameTemplate(GraphIR::Graph *graph, IAllocator &staticAllocator, IAllocator &runtimeAllocator);
-
-    GraphIR::Graph *graph() const { return graph_; }
-
-    Tuple *staticArea() const { return staticArea_; }
-    Tuple *makeDynamicArea() const;
-
-    IAllocator &staticAllocator() const { return staticAllocator_; }
-    IAllocator &runtimeAllocator() const { return runtimeAllocator_; }
-
-  private:
-    GraphIR::Graph *graph_;
-    IAllocator &staticAllocator_;
-    IAllocator &runtimeAllocator_;
-    const TupleTypeLayout *runtimeDataLayout_;
-    Tuple *staticArea_ = nullptr;
+struct FrameMeta {
+    size_t frameSize;
+    const TupleTypeLayout *runtimeAreaLayout;
+    Tuple *staticArea;
 };
 
-class Frame {
+FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph);
+
+class FramePool;
+
+class Frame : public Object {
   public:
     Frame() = delete;
-    Frame(const FrameTemplate &temp)
-        : graph_(temp.graph()), allocator_(&temp.runtimeAllocator()),
-          staticArea_(temp.staticArea()) {
-        ASSERT(graph_ != nullptr, "Frame graph is null.");
-        ASSERT(staticArea_ != nullptr, "Static tuple is null.");
-        dynamicArea_ = temp.makeDynamicArea();
-        EXEC_WHEN_DEBUG(l.in("Frame").info(
-            "[{}] Created Frame({}) for Graph <{}>",
-            formatAddress(this, true),
-            formatAddress(dynamicArea_, true),
-            graph_->name()));
-    }
-    // 不允许拷贝但可移动
-    Frame(const Frame &) = delete;
-    Frame(Frame &&other) noexcept
-        : graph_(other.graph_), allocator_(other.allocator_), staticArea_(other.staticArea_),
-          dynamicArea_(other.dynamicArea_) {
-        EXEC_WHEN_DEBUG(l.in("Frame").info(
-            "[{}] Moved Frame({}) for Graph <{}>",
-            formatAddress(this, true),
-            formatAddress(dynamicArea_, true),
-            graph_->name()));
-        // 防止已被移动的对象意外释放数据
-        other.graph_       = nullptr;
-        other.allocator_   = nullptr;
-        other.staticArea_  = nullptr;
-        other.dynamicArea_ = nullptr;
-    }
-
-    ~Frame() {
-        EXEC_WHEN_DEBUG(l.in("Frame").info(
-            "[{}] Destroyed Frame({}) for Graph <{}>",
-            formatAddress(this, true),
-            formatAddress(dynamicArea_, true),
-            graph_ ? graph_->name() : "null"));
-        if (dynamicArea_) {
-            // dynamicArea_->~GCTuple();
-            allocator_->free(dynamicArea_);
-            dynamicArea_ = nullptr;
-        }
-    }
-
-    Frame &operator=(const Frame &other) = delete;
-    Frame &operator=(Frame &&other) noexcept {
-        EXEC_WHEN_DEBUG(l.in("Frame").info(
-            "[{}] Moved Frame({}) for Graph <{}>",
-            formatAddress(this, true),
-            formatAddress(dynamicArea_, true),
-            graph_->name()));
-        if (this != &other) {
-            // 这里不释放自己的资源
-            // 因为 Frame 通常是分配在栈上的，释放更早分配的内存会导致后分配的内存全部被释放
-            // 通过析构函数释放就足够了
-            // 转移资源
-            graph_       = other.graph_;
-            allocator_   = other.allocator_;
-            staticArea_  = other.staticArea_;
-            dynamicArea_ = other.dynamicArea_;
-            // 防止已被移动的对象意外释放数据
-            other.graph_       = nullptr;
-            other.allocator_   = nullptr;
-            other.staticArea_  = nullptr;
-            other.dynamicArea_ = nullptr;
-        }
-        return *this;
-    }
 
     GraphIR::Graph *graph() { return graph_; }
     const GraphIR::Graph *graph() const { return graph_; }
 
     TypeCode typeAt(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
-        if (LIKELY(index > 0)) {
+        if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(
-                idx < dynamicArea_->size(),
+                idx < dynamicAreaLayout_->size(),
                 std::format(
-                    "Invalid argument index, idx = {}, size = {}",
+                    "[{}] Invalid argument index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
-                    dynamicArea_->size()));
-            return dynamicArea_->typeAt(idx);
+                    dynamicAreaLayout_->size()));
+            return dynamicAreaLayout_->typeAt(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
                 idx < staticArea_->size(),
                 std::format(
-                    "Invalid static data index, idx = {}, size = {}",
+                    "[{}] Invalid static data index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
             return staticArea_->typeAt(idx);
@@ -146,14 +67,15 @@ class Frame {
 
     template <typename T> std::shared_ptr<T> typePtrAt(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
-        if (LIKELY(index > 0)) {
+        if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(
-                idx < dynamicArea_->size(),
+                idx < dynamicAreaLayout_->size(),
                 std::format(
-                    "Invalid argument index, idx = {}, size = {}",
+                    "[{}] Invalid argument index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
-                    dynamicArea_->size()));
+                    dynamicAreaLayout_->size()));
             auto res = graph_->runtimeDataType()->typeAt(idx);
             ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
             return tt::as_shared<T>(res.value());
@@ -162,7 +84,8 @@ class Frame {
             ASSERT(
                 idx < staticArea_->size(),
                 std::format(
-                    "Invalid static data index, idx = {}, size = {}",
+                    "[{}] Invalid static data index, idx = {}, size = {}",
+                    formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
             auto res = graph_->staticDataType()->typeAt(idx);
@@ -171,34 +94,46 @@ class Frame {
         }
     }
 
-    template <typename T> T get(GraphIR::data_idx_t index) {
+    template <typename T> T get(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         T res;
-        if (LIKELY(index > 0)) {
+        if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(
-                idx < dynamicArea_->size(),
-                std::format(
-                    "Invalid argument index, idx = {}, size = {}",
-                    idx,
-                    dynamicArea_->size()));
-            res = dynamicArea_->get<T>(idx);
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < dynamicAreaLayout_->size(),
+                    std::format(
+                        "[{}] Invalid argument index, idx = {}, size = {}",
+                        formatAddress(const_cast<Frame *>(this), true),
+                        idx,
+                        dynamicAreaLayout_->size()));
+                ASSERT(
+                    dynamicArea_[idx] != kDebugUninitializedSlot,
+                    std::format(
+                        "[{}] Accessing uninitialized slot: idx = {}",
+                        formatAddress(const_cast<Frame *>(this), true),
+                        index));
+            }());
+            res = fromSlot<T>(dynamicArea_[idx]);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(
-                idx < staticArea_->size(),
-                std::format(
-                    "Invalid static data index, idx = {}, size = {}",
-                    idx,
-                    staticArea_->size()));
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < staticArea_->size(),
+                    std::format(
+                        "[{}] Invalid static data index, idx = {}, size = {}",
+                        formatAddress(const_cast<Frame *>(this), true),
+                        idx,
+                        staticArea_->size()));
+            }());
             res = staticArea_->get<T>(idx);
         }
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
             printSlot(oss, toSlot(res), typeAt(index));
             l.in("Frame").info(
-                "[{}] Getting data of <{}> at index {} ({}): {}",
-                formatAddress(this, true),
+                "[{}] Getting data of graph <{}> at index {} ({}): {}",
+                formatAddress(const_cast<Frame *>(this), true),
                 graph_->name(),
                 index,
                 typeCodeToString(typeAt(index)),
@@ -213,7 +148,7 @@ class Frame {
             std::ostringstream oss;
             printSlot(oss, toSlot(value), typeAt(index));
             l.in("Frame").info(
-                "[{}] Setting data of <{}> at index {} ({}): {}",
+                "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 formatAddress(this, true),
                 graph_->name(),
                 index,
@@ -222,28 +157,215 @@ class Frame {
         }());
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(
-                idx < dynamicArea_->size(),
-                std::format(
-                    "Invalid argument index, idx = {}, size = {}",
-                    idx,
-                    dynamicArea_->size()));
-            dynamicArea_->set<T>(idx, value);
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < dynamicAreaLayout_->size(),
+                    std::format(
+                        "Invalid argument index, idx = {}, size = {}",
+                        idx,
+                        dynamicAreaLayout_->size()));
+            }());
+            dynamicArea_[idx] = toSlot(value);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(
-                idx < staticArea_->size(),
-                std::format(
-                    "Invalid static data index, idx = {}, size = {}",
-                    idx,
-                    staticArea_->size()));
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < staticArea_->size(),
+                    std::format(
+                        "Invalid static data index, idx = {}, size = {}",
+                        idx,
+                        staticArea_->size()));
+            }());
             staticArea_->set<T>(idx, value);
         }
     }
 
+    virtual bool equals(const Object *other, bool deep = false) const override {
+        return false; // Frame 没有实际意义的比较
+    }
+
+    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
+        return nullptr; // 不支持克隆
+    }
+
+    virtual void print(std::ostream &os) const override {
+        os << "Frame(dynamicSize=" << dynamicAreaLayout_->size()
+           << ", staticSize=" << staticArea_->size() << ")";
+    }
+
+    virtual void onMoved() override {}
+
+    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
+        const auto &types = dynamicAreaLayout_->elemTypes();
+        Object **refArr   = reinterpret_cast<Object **>(dynamicArea_);
+        for (size_t i = 0; i < dynamicAreaLayout_->size(); ++i) {
+            if (isGCTraced(types[i])) {
+                if (Object *&ref = refArr[i]) {
+                    ref = relocate(ref);
+                }
+            }
+        }
+    }
+
   private:
-    GraphIR::Graph *graph_ = nullptr;
-    IAllocator *allocator_ = nullptr;
-    Tuple *staticArea_     = nullptr;
-    Tuple *dynamicArea_    = nullptr;
+    friend class FramePool;
+    // 只能由 FramePool 调用
+    Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleTypeLayout *dynamicAreaLayout)
+        : graph_(graph), staticArea_(staticArea), dynamicAreaLayout_(dynamicAreaLayout) {
+        EXEC_WHEN_DEBUG([&]() {
+            // 把 dynamic 区所有 slot 写成魔数，用于检测脏读
+            size_t n = dynamicAreaLayout_->size();
+            for (size_t i = 0; i < n; ++i) {
+                dynamicArea_[i] = kDebugUninitializedSlot;
+            }
+        }());
+    }
+
+    GraphIR::Graph *graph_;
+    Frame *next_;
+    Tuple *staticArea_; // 外部提供的静态区
+    const TupleTypeLayout *dynamicAreaLayout_;
+    slot_t dynamicArea_[]; // 紧跟对象后存放动态区
+};
+
+class FramePool {
+  public:
+    FramePool(size_t totalSize) {
+        base_ = reinterpret_cast<std::byte *>(std::malloc(totalSize));
+        if (!base_)
+            throw std::bad_alloc();
+        end_ = base_ + totalSize;
+        top_ = base_;
+        // 初始时该位置无有效 Frame
+        reinterpret_cast<Frame *>(top_)->graph_ = nullptr;
+    }
+
+    ~FramePool() { std::free(base_); }
+
+    Frame *acquire(GraphIR::Graph *graph) {
+        EXEC_WHEN_DEBUG([&]() {
+            l.in("FramePool")
+                .info(
+                    "[{}] Acquire request for graph <{}>, top = {}, end = {}",
+                    formatAddress(this, true),
+                    graph ? graph->name() : "(null)",
+                    formatAddress(top_, true),
+                    formatAddress(end_, true));
+        }());
+
+        // 尝试复用
+        Frame *lastFrame = reinterpret_cast<Frame *>(top_);
+        if (lastFrame->graph_ == graph) {
+            EXEC_WHEN_DEBUG([&]() {
+                // 把 dynamic 区所有 slot 写成 魔数，用于检测脏读
+                size_t n = lastFrame->dynamicAreaLayout_->size();
+                for (size_t i = 0; i < n; ++i) {
+                    lastFrame->dynamicArea_[i] = kDebugUninitializedSlot;
+                }
+                l.in("FramePool")
+                    .info(
+                        "[{}] Reusing existing frame of graph <{}> at {}",
+                        formatAddress(this, true),
+                        graph ? graph->name() : "(null)",
+                        formatAddress(lastFrame, true));
+                frames_.push_back(lastFrame);
+            }());
+
+            top_ = reinterpret_cast<std::byte *>(lastFrame->next_);
+            return lastFrame;
+        }
+
+        // 分配新 Frame 并初始化
+        FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
+        if (meta == nullptr) {
+            meta = installFrameMetaInfoForGraph(graph);
+            EXEC_WHEN_DEBUG([&]() {
+                l.in("FramePool")
+                    .info(
+                        "[{}] Installed FrameMeta for graph <{}>",
+                        formatAddress(this, true),
+                        graph->name());
+            }());
+        }
+        size_t frameSize = meta->frameSize;
+        if (top_ + frameSize > end_) {
+            EXEC_WHEN_DEBUG([&]() {
+                l.in("FramePool")
+                    .error(
+                        "[{}] Out of memory: top = {}, need = {}, end = {}",
+                        formatAddress(this, true),
+                        formatAddress(top_, true),
+                        frameSize,
+                        formatAddress(end_, true));
+            }());
+            throw std::bad_alloc{};
+        }
+        Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeAreaLayout);
+
+        EXEC_WHEN_DEBUG([&]() {
+            l.in("FramePool")
+                .info(
+                    "[{}] Allocated new Frame for graph <{}> at {}, size = {}",
+                    formatAddress(this, true),
+                    graph->name(),
+                    formatAddress(frame, true),
+                    frameSize);
+        }());
+
+        top_ += frameSize;
+        reinterpret_cast<Frame *>(top_)->graph_ = nullptr;
+
+        EXEC_WHEN_DEBUG([&]() { frames_.push_back(frame); }());
+
+        return frame;
+    }
+
+    void release(Frame *frame) {
+        EXEC_WHEN_DEBUG([&]() {
+            l.in("FramePool")
+                .info(
+                    "[{}] Releasing frame of graph <{}> at {}",
+                    formatAddress(this, true),
+                    frame->graph_ ? frame->graph_->name() : "(null)",
+                    formatAddress(frame, true));
+            ASSERT(
+                reinterpret_cast<std::byte *>(frame) < top_,
+                "Trying to release a frame that is already released.");
+            Frame *last = frames_.back();
+            ASSERT(
+                last == frame,
+                std::format(
+                    "Trying to release a frame that is not on top, top frame of graph <{}> is at "
+                    "{}.",
+                    last->graph_->name(),
+                    formatAddress(last, true)));
+        }());
+
+        frame->next_ = reinterpret_cast<Frame *>(top_);
+        top_         = reinterpret_cast<std::byte *>(frame);
+
+        EXEC_WHEN_DEBUG([&]() {
+            frames_.pop_back();
+            l.in("FramePool")
+                .info(
+                    "[{}] Frame released. New top = {}",
+                    formatAddress(this, true),
+                    formatAddress(top_, true));
+        }());
+    }
+
+    void foreach (const std::function<void(Frame *)> &fn) const {
+        for (Frame *frame = reinterpret_cast<Frame *>(base_); frame != nullptr;
+             frame        = frame->next_) {
+            fn(frame);
+        }
+    }
+
+  private:
+    std::byte *base_;
+    std::byte *top_;
+    std::byte *end_;
+#ifndef NDEBUG
+    std::vector<Frame *> frames_;
+#endif
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 19, 2025
- * Updated: Sep. 24, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,7 +48,7 @@ inline void handle_assert_failure(
 
 #if HAS_STACKTRACE
     std::cerr << "\n\033[1;31mStack Trace:\033[0m\n";
-    auto trace = std::stacktrace::current();
+    auto trace                  = std::stacktrace::current();
     constexpr size_t skip_front = 1;
 
     const size_t frame_count = trace.size();
@@ -59,7 +59,7 @@ inline void handle_assert_failure(
             std::cerr << "<\033[1;36m" << i << "\033[0m> " << trace[i] << "\n";
         }
     }
-    ENABLE_ABORT_BEHAVIOR();
+    // ENABLE_ABORT_BEHAVIOR();
 #else
     std::cerr << "\n\033[1;31mStack Trace:\033[0m (not available on this platform)\n";
 #endif

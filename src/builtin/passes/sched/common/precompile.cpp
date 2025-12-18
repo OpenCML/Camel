@@ -13,12 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "precompile.h"
 #include "builtin/algo/topo.h"
+
+#include <algorithm>
+#include <cstddef>
 
 using namespace std;
 using namespace GraphIR;
@@ -131,15 +134,49 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
             break;
 
         case NodeType::ACCS: {
-            auto accNode = tt::as_shared<AccsNode>(node);
-            ASSERT(accNode->isNum(), "Only numeric ACCS indices are supported in bytecode.");
+            const auto &accNode     = tt::as_shared<AccsNode>(node);
+            const auto &srcNode     = node->normInputs().front();
+            const auto &srcDataType = srcNode->dataType();
+            ASSERT(srcDataType->isComposite(), "ACCS source node must be composite.");
+
+            size_t index = 0;
+
+            switch (srcDataType->code()) {
+            case TypeCode::Tuple: {
+                ASSERT(accNode->isNum(), "ACCS index must be numeric.");
+                index                  = accNode->index<size_t>();
+                const auto &tupleType  = tt::as_shared<TupleType>(srcDataType);
+                const auto &optEleType = tupleType->typeAt(accNode->index<size_t>());
+                if (!optEleType.has_value()) {
+                    ctx->rtmDiags()
+                        ->of(SemanticDiag::InvalidAccessIndex)
+                        .commit(to_string(accNode->index<size_t>()));
+                }
+                break;
+            }
+            case TypeCode::Struct: {
+                ASSERT(!accNode->isNum(), "ACCS index must be string.");
+                const auto &structType = tt::as_shared<StructType>(srcDataType);
+                const auto &optIndex   = structType->findField(accNode->index<std::string>());
+                if (!optIndex.has_value()) {
+                    ctx->rtmDiags()
+                        ->of(SemanticDiag::InvalidAccessIndex)
+                        .commit(accNode->index<std::string>());
+                }
+                index = optIndex.value();
+                break;
+            }
+            default:
+                ASSERT(false, "Unsupported ACCS source node type.");
+            }
+
             appendBytecode(
                 bytecodes,
                 OpCode::ACCS,
                 node->index(),
                 {
-                    node->normInputs().front()->index(),
-                    as_index(accNode->index<size_t>()),
+                    srcNode->index(),
+                    as_index(index),
                 });
             break;
         }
@@ -197,13 +234,16 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
         case NodeType::FUNC: {
             bool isTail   = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
             auto funcNode = tt::as_shared<FuncNode>(node);
+            // 将上下文参数合并到普通参数中，因为函数调用不区分参数类型
+            // 这样还可以把 fastop[1] 留空，以便放其他内容
+            normOps.insert(normOps.end(), withOps.begin(), withOps.end());
             appendBytecode(
                 bytecodes,
                 (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
                 node->index(),
                 {},
                 normOps,
-                withOps,
+                {},
                 true,
                 {
                     .graph = &(funcNode->func()->graph()),
@@ -306,6 +346,8 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
         }
     }
 
+    appendBytecode(bytecodes, OpCode::RETN, 0, {graph->exitNode()->index()});
+
     ASSERT(
         brchTargetMap.empty(),
         "Some BRCH nodes have unmatched control outputs without corresponding JOIN nodes.");
@@ -314,4 +356,40 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
         "Some JOIN nodes have unmatched JUMP instructions without corresponding targets.");
 
     return bytecodes;
+}
+
+std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
+    std::string operandStr;
+
+    if (bc.hasOperands()) {
+        size_t normCnt = bc.fastop[0];
+        size_t withCnt = bc.fastop[1];
+        operandStr     = "(";
+
+        for (size_t j = 0; j < normCnt; j++) {
+            operandStr += std::to_string(bc.operands()[j]);
+            if (j + 1 < normCnt)
+                operandStr += ", ";
+        }
+
+        operandStr += ") <";
+
+        for (size_t j = 0; j < withCnt; j++) {
+            operandStr += std::to_string(bc.operands()[normCnt + j]);
+            if (j + 1 < withCnt)
+                operandStr += ", ";
+        }
+
+        operandStr += ">";
+    } else {
+        operandStr = "() <>";
+    }
+
+    return std::format(
+        "  [{}] {} | {} | {}",
+        formatIndex(index),
+        bc.toString(),
+        operandStr,
+        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                  : bc.extra()->toString(bc.opcode));
 }

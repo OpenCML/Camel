@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,8 @@
 
 class TupleTypeLayout {
   public:
-    explicit TupleTypeLayout(std::vector<TypeCode> elemTypes) : elemTypes_(std::move(elemTypes)) {}
+    explicit TupleTypeLayout(std::vector<TypeCode> &&elemTypes, std::vector<size_t> &&refs)
+        : elemTypes_(std::move(elemTypes)), refs_(std::move(refs)) {}
     ~TupleTypeLayout() {
         l.in("TupleTypeLayout")
             .debug("Destroying TupleTypeLayout with {} elements", elemTypes_.size());
@@ -41,9 +42,11 @@ class TupleTypeLayout {
     }
 
     const std::vector<TypeCode> &elemTypes() const { return elemTypes_; }
+    const std::vector<size_t> &refs() const { return refs_; }
 
   private:
     std::vector<TypeCode> elemTypes_;
+    std::vector<size_t> refs_;
 };
 
 class TupleType : public CompositeType {
@@ -67,12 +70,12 @@ class TupleType : public CompositeType {
     void set(size_t index, const type_ptr_t &type);
     size_t size() const;
     const std::vector<type_ptr_t> &types() const;
+    std::optional<type_ptr_t> typeAt(size_t idx) const;
     std::shared_ptr<TupleType> slice(size_t start, size_t end) const;
     const TupleTypeLayout &layout() const;
 
     virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
-    virtual std::optional<type_ptr_t> typeAt(size_t idx) const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
     virtual type_ptr_t clone(bool deep = false) const override;
