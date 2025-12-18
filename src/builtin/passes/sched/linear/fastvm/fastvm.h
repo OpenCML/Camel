@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 16, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,7 +68,6 @@ class FastVMSchedPass : public LinearSchedPass {
 
   public:
     FastVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {
-        mm::autoSpace().setObjectRootSet(framePool_.frameObjects());
         optimizer_.registerStrategy(std::make_unique<JumpToJumpStrategy>());
         optimizer_.registerStrategy(std::make_unique<JumpToNextStrategy>());
         optimizer_.registerStrategy(std::make_unique<JumpToRetnStrategy>());

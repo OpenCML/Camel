@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 17, 2025
+ * Updated: Dec. 18, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "composite.h"
 #include "utils/assert.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <optional>

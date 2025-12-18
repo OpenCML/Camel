@@ -10,9 +10,8 @@ func main(): int sync {
     let idx = 3
     let runs = 10
 
-    let (average, margin_error) = perfms<runs>(() => sync {
-        let res = fib(idx)
-        'fib({}) = {}'->format<idx, res>->println
+    let (average, margin_error) = perfms<runs>((): void => {
+        fib(idx)
     })
 
     'average time cost: {:.2f} +/- {:.2f} ms (95% CI)'
