@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 13, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,6 @@
 
 #include "compile/gir.h"
 #include "core/rtdata/data.h"
-#include "utils/brpred.h"
 #include "utils/log.h"
 
 struct FrameMeta {
@@ -214,7 +213,7 @@ class Frame : public Object {
     Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleTypeLayout *dynamicAreaLayout)
         : graph_(graph), staticArea_(staticArea), dynamicAreaLayout_(dynamicAreaLayout) {
         EXEC_WHEN_DEBUG([&]() {
-            // 把 dynamic 区所有 slot 写成 魔数，用于检测脏读
+            // 把 dynamic 区所有 slot 写成魔数，用于检测脏读
             size_t n = dynamicAreaLayout_->size();
             for (size_t i = 0; i < n; ++i) {
                 dynamicArea_[i] = kDebugUninitializedSlot;
@@ -223,7 +222,7 @@ class Frame : public Object {
     }
 
     GraphIR::Graph *graph_;
-    Frame *nextFrame_;
+    Frame *next_;
     Tuple *staticArea_; // 外部提供的静态区
     const TupleTypeLayout *dynamicAreaLayout_;
     slot_t dynamicArea_[]; // 紧跟对象后存放动态区
@@ -269,10 +268,10 @@ class FramePool {
                         formatAddress(this, true),
                         graph ? graph->name() : "(null)",
                         formatAddress(lastFrame, true));
+                frames_.push_back(lastFrame);
             }());
 
-            frameObjects_.push_back(lastFrame);
-            top_ = reinterpret_cast<std::byte *>(lastFrame->nextFrame_);
+            top_ = reinterpret_cast<std::byte *>(lastFrame->next_);
             return lastFrame;
         }
 
@@ -313,13 +312,11 @@ class FramePool {
                     frameSize);
         }());
 
-        // 更新 top 指针
         top_ += frameSize;
-
-        // 避免无效数据误用
         reinterpret_cast<Frame *>(top_)->graph_ = nullptr;
 
-        frameObjects_.push_back(frame);
+        EXEC_WHEN_DEBUG([&]() { frames_.push_back(frame); }());
+
         return frame;
     }
 
@@ -334,7 +331,7 @@ class FramePool {
             ASSERT(
                 reinterpret_cast<std::byte *>(frame) < top_,
                 "Trying to release a frame that is already released.");
-            Frame *last = reinterpret_cast<Frame *>(frameObjects_.back());
+            Frame *last = frames_.back();
             ASSERT(
                 last == frame,
                 std::format(
@@ -344,11 +341,11 @@ class FramePool {
                     formatAddress(last, true)));
         }());
 
-        frame->nextFrame_ = reinterpret_cast<Frame *>(top_);
-        top_              = reinterpret_cast<std::byte *>(frame);
-        frameObjects_.pop_back();
+        frame->next_ = reinterpret_cast<Frame *>(top_);
+        top_         = reinterpret_cast<std::byte *>(frame);
 
         EXEC_WHEN_DEBUG([&]() {
+            frames_.pop_back();
             l.in("FramePool")
                 .info(
                     "[{}] Frame released. New top = {}",
@@ -357,11 +354,18 @@ class FramePool {
         }());
     }
 
-    std::vector<Object *> *frameObjects() { return &frameObjects_; }
+    void foreach (const std::function<void(Frame *)> &fn) const {
+        for (Frame *frame = reinterpret_cast<Frame *>(base_); frame != nullptr;
+             frame        = frame->next_) {
+            fn(frame);
+        }
+    }
 
   private:
     std::byte *base_;
     std::byte *top_;
     std::byte *end_;
-    std::vector<Object *> frameObjects_;
+#ifndef NDEBUG
+    std::vector<Frame *> frames_;
+#endif
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,7 +47,8 @@ enum class TypeFlag : uint32_t {
     OtherType = 1u << 31, // 第三方类型，由第三方库在运行时注册实际id
     Composite = 1u << 30, // 组合类型，由多个类型组合而成
     GC_Traced = 1u << 29, // GC 跟踪类型，其数据对象会持有由 GC 管理的内存块引用
-    Auxiliary = 1u << 28  // 辅助类型，参与类型解算但无实际数据对象
+    Auxiliary = 1u << 28, // 辅助类型，参与类型解算但无实际数据对象
+    // Reference = 1u << 27  // 待补全的引用类型
 };
 
 constexpr TypeFlag operator|(TypeFlag a, TypeFlag b) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -267,8 +267,7 @@ template <typename T>
 static Array *__merge_sorted_arrays_slots__(Array *lhs, Array *rhs, const ArrayTypeLayout &layout) {
     size_t nL     = lhs->size();
     size_t nR     = rhs->size();
-    Array *result = Array::create(layout, mm::autoSpace());
-    result->reserve(nL + nR);
+    Array *result = Array::create(layout, mm::autoSpace(), nL + nR);
 
     size_t i = 0, j = 0, k = 0;
     while (i < nL && j < nR) {

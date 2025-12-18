@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 13, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,33 +29,41 @@
 
 namespace GIR = GraphIR;
 
-std::string format_vector(const std::string &fmtStr, const std::vector<std::string> &args) {
-    fmt::dynamic_format_arg_store<fmt::format_context> store;
-    for (const auto &arg : args) {
-        store.push_back(fmt::string_view(arg));
-    }
-    return fmt::vformat(fmtStr, store);
-}
-
 void __format__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     String *fmtStrObj = frame.get<String *>(nargs[0]);
 
     std::string fmtStr = fmtStrObj->toString();
 
-    std::vector<std::string> argStrs;
-    argStrs.reserve(wargs.size);
+    fmt::dynamic_format_arg_store<fmt::format_context> store;
 
     for (size_t i = 0; i < wargs.size; ++i) {
-        std::ostringstream oss;
         TypeCode type = frame.typeAt(wargs[i]);
-        slot_t slot   = frame.get<slot_t>(wargs[i]);
-        printSlot(oss, slot, type);
-        argStrs.push_back(oss.str());
+
+        switch (type) {
+        case TypeCode::Int:
+            store.push_back(frame.get<Int>(wargs[i]));
+            break;
+        case TypeCode::Long:
+            store.push_back(frame.get<Long>(wargs[i]));
+            break;
+        case TypeCode::Float:
+            store.push_back(frame.get<Float>(wargs[i]));
+            break;
+        case TypeCode::Double:
+            store.push_back(frame.get<Double>(wargs[i]));
+            break;
+        default:
+            // fallback to string
+            std::ostringstream oss;
+            printSlot(oss, frame.get<slot_t>(wargs[i]), type);
+            store.push_back(oss.str());
+            break;
+        }
     }
 
     try {
-        std::string resultStr = format_vector(fmtStr, argStrs);
+        std::string resultStr = fmt::vformat(fmtStr, store);
         String *resultObj     = String::from(resultStr, mm::autoSpace());
         frame.set(self, resultObj);
     } catch (const fmt::format_error &e) {

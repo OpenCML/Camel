@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,6 +57,7 @@ class FixedArray : public Object {
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
     const ArrayTypeLayout *layout() const { return layout_; }
+    void updateLayout(const ArrayTypeLayout *layout) { layout_ = layout; }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -194,19 +195,26 @@ class Array : public Object {
     Array &operator=(const Array &) = delete;
 
     static Array *
-    create(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity = 0) {
+    create(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initSize = 0) {
         void *memory = allocator.alloc(sizeof(Array), alignof(Array));
         if (!memory)
             throw std::bad_alloc();
 
-        return new (memory) Array(layout, allocator, initialCapacity);
+        return new (memory) Array(layout, allocator, initSize);
     }
 
     size_t size() const { return size_; }
+    void resize(size_t newSize) {
+        if (newSize > capacity_) {
+            reserve(newSize);
+        }
+        size_ = newSize;
+    }
     size_t capacity() const { return capacity_; }
     slot_t *data() { return static_cast<slot_t *>(dataPtr_); }
     const slot_t *data() const { return static_cast<const slot_t *>(dataPtr_); }
     const ArrayTypeLayout &layout() const { return *layout_; }
+    void updateLayout(const ArrayTypeLayout *layout) { layout_ = layout; }
     TypeCode elemType() const { return layout_->elemType(); }
 
     template <typename T> T get(size_t index) const {
@@ -229,7 +237,6 @@ class Array : public Object {
     }
 
     template <typename T> void append(const T value) {
-
         // 检查是否需要扩容
         if (size_ >= capacity_) {
             // 类似std::vector，增长1.5倍或2倍
@@ -237,11 +244,10 @@ class Array : public Object {
             reserve(capacity_ * 3 / 2);
         }
 
-        T *arr = reinterpret_cast<T *>(dataPtr_);
         if constexpr (std::is_same_v<T, Object *>) {
             // writeBarrier(arr[size_], value);
         }
-        arr[size_++] = value;
+        dataPtr_[size_++] = toSlot(value);
     }
 
     void pop() {
@@ -365,11 +371,11 @@ class Array : public Object {
   private:
     static constexpr size_t SMALL_ARRAY_SIZE = 10;
 
-    Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initialCapacity)
-        : allocator_(&allocator), layout_(&layout), fixedArray_(nullptr), size_(0) {
-        if (initialCapacity > SMALL_ARRAY_SIZE) {
+    Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initSize)
+        : allocator_(&allocator), layout_(&layout), fixedArray_(nullptr), size_(initSize) {
+        if (initSize > SMALL_ARRAY_SIZE) {
             // 使用外部数组
-            capacity_   = initialCapacity;
+            capacity_   = initSize;
             fixedArray_ = FixedArray::create(layout, capacity_, allocator);
             dataPtr_    = fixedArray_->data();
         } else {

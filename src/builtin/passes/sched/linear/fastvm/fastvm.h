@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 13, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "../linear.h"
 #include "builtin/passes/sched/common/bytecode.h"
+#include "builtin/passes/sched/common/optimize.h"
 #include "builtin/passes/sched/common/precompile.h"
 #include "core/context/frame.h"
 #include "core/mm/mm.h"
@@ -31,6 +32,8 @@ class FastVMSchedPass : public LinearSchedPass {
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
     size_t currRecursionDepth_                    = 0;
 
+    BytecodeOptimizer optimizer_;
+
     // 栈帧池
     FramePool framePool_{1 * MB};
     // 字节码存储
@@ -39,7 +42,9 @@ class FastVMSchedPass : public LinearSchedPass {
     inline bytecode_vec_t *getBytecodesOfGraph(GraphIR::Graph *graph) {
         bytecode_vec_t *codes = graph->getExtra<bytecode_vec_t, 1>();
         if (codes == nullptr) {
-            codes = &bytecodes_.emplace_back(precompile(context_, graph));
+            bytecode_vec_t bytecodes = precompile(context_, graph);
+            optimizer_.optimize(bytecodes);
+            codes = &bytecodes_.emplace_back(bytecodes);
             graph->setExtra<bytecode_vec_t, 1>(codes);
         }
         return codes;
@@ -63,7 +68,10 @@ class FastVMSchedPass : public LinearSchedPass {
 
   public:
     FastVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {
-        mm::autoSpace().setObjectRootSet(framePool_.frameObjects());
+        optimizer_.registerStrategy(std::make_unique<JumpToJumpStrategy>());
+        optimizer_.registerStrategy(std::make_unique<JumpToNextStrategy>());
+        optimizer_.registerStrategy(std::make_unique<JumpToRetnStrategy>());
+        optimizer_.registerStrategy(std::make_unique<JoinCleanupStrategy>());
     };
     virtual ~FastVMSchedPass() = default;
 

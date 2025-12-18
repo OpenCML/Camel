@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,11 +27,17 @@ using namespace std;
 void TupleType::computeLayout() const {
     if (!layout_) {
         std::vector<TypeCode> elemTypes;
+        std::vector<size_t> refs;
         elemTypes.reserve(types_.size());
+        size_t i = 0;
         for (const auto &t : types_) {
             elemTypes.push_back(t->code());
+            if (t->code() == TypeCode::Ref) {
+                refs.push_back(i);
+            }
+            i++;
         }
-        layout_ = std::make_shared<TupleTypeLayout>(std::move(elemTypes));
+        layout_ = std::make_shared<TupleTypeLayout>(std::move(elemTypes), std::move(refs));
     }
 }
 

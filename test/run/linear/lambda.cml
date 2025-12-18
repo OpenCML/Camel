@@ -33,7 +33,7 @@ func render(snake: Point[]): void sync {
     rows->foreach<(y: int) => sync {
         let cols = range(0, WIDTH)
         cols->map<(x: int): string => {
-            let p = {x: x, y: y}
+            let p = { x: x, y: y }
             return if cleaned->contains<p> then 'O' else '.'
         }>->join<''>->println
     }>
@@ -44,11 +44,11 @@ func render(snake: Point[]): void sync {
 // 主函数：提供带非法点的蛇
 func main(): int sync {
     let snake = [
-        {x: 5, y: 5},
-        {x: 5, y: 6},
-        {x: 5, y: 7},
-        {x: -1, y: 0},   // 非法点
-        {x: 10, y: 10}   // 非法点
+        { x: 5, y: 5 },
+        { x: 5, y: 6 },
+        { x: 5, y: 7 },
+        { x: -1, y: 0 },   // 非法点
+        { x: 10, y: 10 }   // 非法点
     ]
 
     render(snake)

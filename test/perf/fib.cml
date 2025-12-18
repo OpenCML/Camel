@@ -7,15 +7,14 @@ func fib(n: int): int {
 }
 
 func main(): int sync {
-    let idx = 30
-    let runs = 100
+    let idx = 3
+    let runs = 10
 
-    let (average, margin_error) = perfms(() => sync {
-        let res = fib(idx)
-        'fib({}) = {}'->format<idx, res>->println
+    let (average, margin_error) = perfms<runs>((): void => {
+        fib(idx)
     })
 
-    'average time cost: {:.2f} ± {:.2f} ms (95% CI)'
+    'average time cost: {:.2f} +/- {:.2f} ms (95% CI)'
         ->format<average, margin_error>
         ->println
 

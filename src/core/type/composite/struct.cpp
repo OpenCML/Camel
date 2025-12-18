@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 10, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ void StructType::computeLayout() const {
         fieldList.emplace_back(kv.first, kv.second->code());
     }
 
-    layout_ = std::make_shared<StructTypeLayout>(fieldList);
+    layout_ = std::make_shared<StructTypeLayout>(fieldList, refs_);
 }
 
 StructType::StructType() : CompositeType(TypeCode::Struct) {}
@@ -57,19 +57,38 @@ bool StructType::add(const string &name, const type_ptr_t &type) {
     }
     fields_.emplace(name, type);
     if (type->code() == TypeCode::Ref) {
-        refIndices_.push_back(name);
+        refs_.push_back(name);
     }
     return true;
 }
 
 bool StructType::has(const string &name) const { return fields_.find(name) != fields_.end(); }
 
-type_ptr_t StructType::get(const string &name) const {
+std::optional<type_ptr_t> StructType::get(const string &name) const {
     auto it = fields_.find(name);
     if (it == fields_.end()) {
-        throw out_of_range("StructType::get: field not found - " + name);
+        return nullopt;
     }
     return it->second;
+}
+
+std::optional<type_ptr_t> StructType::get(const size_t &idx) const {
+    if (idx >= fields_.size()) {
+        return nullopt;
+    }
+    auto it = fields_.begin();
+    std::advance(it, idx);
+    return it->second;
+}
+
+std::optional<size_t> StructType::findField(const std::string_view &name) const {
+    auto it = std::find_if(fields_.begin(), fields_.end(), [&](const auto &kv) {
+        return kv.first == name;
+    });
+    if (it == fields_.end()) {
+        return std::nullopt;
+    }
+    return std::distance(fields_.begin(), it);
 }
 
 const StructTypeLayout &StructType::layout() const {
@@ -120,30 +139,21 @@ type_ptr_t StructType::operator&(const StructType &other) const {
 }
 
 type_ptr_t StructType::resolve(const type_vec_t &typeList) const {
-    ASSERT(typeList.size() == refIndices_.size(), "StructType::resolve: typeList size mismatch");
+    ASSERT(typeList.size() == refs_.size(), "StructType::resolve: typeList size mismatch");
 
     auto resolvedStruct = tt::as_shared<StructType>(this->clone(false));
 
-    for (size_t i = 0; i < refIndices_.size(); ++i) {
-        const auto &fieldName              = refIndices_[i];
+    for (size_t i = 0; i < refs_.size(); ++i) {
+        const auto &fieldName              = refs_[i];
         const auto &resolvedType           = typeList[i];
         resolvedStruct->fields_[fieldName] = resolvedType;
     }
 
-    resolvedStruct->refIndices_.clear();
+    resolvedStruct->refs_.clear();
     return resolvedStruct;
 }
 
-bool StructType::resolved() const { return refIndices_.empty(); }
-
-std::optional<type_ptr_t> StructType::typeAt(size_t idx) const {
-    if (idx >= fields_.size()) {
-        return std::nullopt;
-    }
-    auto it = fields_.begin();
-    std::advance(it, idx);
-    return it->second;
-}
+bool StructType::resolved() const { return refs_.empty(); }
 
 string StructType::toString() const {
     ostringstream oss;
@@ -173,8 +183,8 @@ string StructType::mangle() const {
 type_ptr_t StructType::clone(bool deep /* = false */) const {
     auto result = make_shared<StructType>();
 
-    result->refIndices_ = refIndices_;
-    result->layout_     = layout_;
+    result->refs_   = refs_;
+    result->layout_ = layout_;
 
     for (const auto &kv : fields_) {
         const auto &name      = kv.first;
