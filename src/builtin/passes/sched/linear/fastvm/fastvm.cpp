@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,450 +22,269 @@
 #include "core/data/primary.h"
 #include "core/rtdata/base.h"
 #include "utils/opperf.h"
+#include <cstddef>
 
 #ifndef NDEBUG
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
 #endif
 
+#define NEXT()                                                                                     \
+    do {                                                                                           \
+        pc += bc->opsize;                                                                          \
+        bc = &base[pc];                                                                            \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
+    } while (0)
+
+#define JUMP()                                                                                     \
+    do {                                                                                           \
+        bc = &base[pc];                                                                            \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
+    } while (0)
+
 using namespace std;
 using namespace GraphIR;
 
-// 互调用涉及第三方函数时帧管理的三种情形
-//
-// A 是根帧，A、B 互相尾调用，并在中途调用 C
-//
-// 情形一：
-// A 或 B 普通调用 C，正常释放即可
-// ┌────────┬────────┬────────┐
-// │  (A)   │  (B)   │  (C)   │
-// └────────┴────────┴────────┘
-//     ↑                  ↑
-//   root1              root2
-//
-// 情形二：
-// A 在中途尾调用 C，此时孪生帧指针指向 B，需要先释放原孪生帧 B，再申请 C
-// ┌────────┬────────┐
-// │  (A)   │  (C)   │
-// └────────┴────────┘
-//     ↑         ↑
-//   root      curr
-//     ↑
-// twin(B->A)
-//
-// 情形三：
-// B 在中途尾调用 C，此时孪生帧指向 A，但不能释放根帧 A，只能在退出C++栈帧时依次释放
-// ┌────────┬────────┬────────┐
-// │  (A)   │  (B)   │  (C)   │
-// └────────┴────────┴────────┘
-//     ↑         ↑         ↑
-//   root   twin(A->B)   curr
-//
-// 总结
-// 释放栈帧时，如果 curr 不是 root，优先释放 curr
-// 接下来，如果 twin 不是 root，则优先释放 twin
-// 最后释放 root
+inline void evalInlinedOpCode(const Bytecode &bc, Frame *currFrame, const context_ptr_t &context) {
+    slot_t lhs = currFrame->get<slot_t>(bc.fastop[0]);
+    slot_t rhs = currFrame->get<slot_t>(bc.fastop[1]);
 
-slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Evaluating graph: {}", rootGraph->name()));
-
-    if (currRecursionDepth_++ > maxRecursionDepth_) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::MaxRecursionDepthExceeded)
-            .commit(rootGraph->name(), maxRecursionDepth_);
+    switch (static_cast<DenseOpCode>(bc.opcode)) {
+    // 加法
+    case DenseOpCode::IADD: {
+        int32_t res = fromSlot<Int>(lhs) + fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LADD: {
+        int64_t res = fromSlot<Long>(lhs) + fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FADD: {
+        float res = fromSlot<Float>(lhs) + fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DADD: {
+        double res = fromSlot<Double>(lhs) + fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
     }
 
-    bool loop      = false;
-    slot_t funcRes = NullSlot;
-
-    bytecode_vec_t *codes = getBytecodesOfGraph(rootGraph);
-
-    Frame *nextFrame = nullptr; // for mutual-tail-recursion optimization
-    Frame *currFrame = rootFrame, *twinFrame = nullptr;
-
-    // for tail-call optimization
-    // reuse the current frame for tail-recursive calls
-    do {
-        loop                 = false;
-        const Bytecode *code = codes->data();
-        size_t codeSize      = codes->size();
-
-        size_t i = 0;
-        while (i < codeSize) {
-            const Bytecode &bc = code[i];
-            EXEC_WHEN_DEBUG(
-                l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, i, context_)));
-
-#ifdef OPPERF_ENABLED
-            std::string tag;
-            if (bc.opcode == OpCode::OPER) {
-                tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
-            } else if (bc.opcode == OpCode::FUNC) {
-                tag = bc.extra()->graph->name();
-            }
-            opperf::ScopeTimer _timer(bc.opcode, tag);
-#else
-            opperf::ScopeTimer _timer(bc.opcode);
-#endif
-
-            switch (bc.opcode) {
-            case OpCode::RETN: {
-                funcRes = currFrame->get<slot_t>(bc.fastop[0]);
-                break;
-            }
-
-            case OpCode::CAST: {
-                ASSERT(false, "CAST opcode not implemented in FastVM.");
-                break;
-            }
-
-            case OpCode::COPY: {
-                TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
-                if (isGCTraced(srcType)) {
-                    Object *srcData = currFrame->get<Object *>(bc.fastop[0]);
-                    currFrame->set(bc.result, srcData->clone(mm::autoSpace(), false));
-                } else {
-                    slot_t srcData = currFrame->get<slot_t>(bc.fastop[0]);
-                    currFrame->set(bc.result, srcData);
-                }
-                break;
-            }
-
-            case OpCode::ACCS: {
-                TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
-                if (srcType == TypeCode::Tuple) {
-                    Tuple *t = currFrame->get<Tuple *>(bc.fastop[0]);
-                    ASSERT(
-                        static_cast<size_t>(bc.fastop[1]) < t->size(),
-                        "Tuple access index out of range in FastVM.");
-                    currFrame->set(bc.result, t->get<slot_t>(static_cast<size_t>(bc.fastop[1])));
-                } else if (srcType == TypeCode::Struct) {
-                    Struct *s = currFrame->get<Struct *>(bc.fastop[0]);
-                    ASSERT(
-                        static_cast<size_t>(bc.fastop[1]) < s->size(),
-                        "Struct access index out of range in FastVM.");
-                    currFrame->set(bc.result, s->get<slot_t>(static_cast<size_t>(bc.fastop[1])));
-                } else {
-                    ASSERT(false, "ACCS opcode unsupported source type in FastVM.");
-                }
-                break;
-            }
-
-            case OpCode::JUMP: {
-                i = static_cast<arr_size_t>(bc.fastop[0]);
-                continue; // skip i increment
-            }
-
-            case OpCode::BRCH: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-
-                size_t jumpIdx = 0;
-                if (bc.withCnt() == 0) {
-                    // 普通的 if-else 分支，cond 是 bool 类型
-                    bool condData = currFrame->get<bool>(nargs[0]);
-                    if (condData) {
-                        jumpIdx = 0; // jump to true branch
-                    } else {
-                        jumpIdx = 1; // jump to false branch
-                    }
-                } else {
-                    // match-case，依次判断各分支
-                    size_t j          = 0;
-                    TypeCode condType = currFrame->typeAt(nargs[0]);
-
-                    if (isGCTraced(condType)) {
-                        auto condData = currFrame->get<Object *>(nargs[0]);
-                        for (; j < bc.withCnt(); ++j) {
-                            auto caseData = currFrame->get<Object *>(wargs[j]);
-                            if (condData->equals(caseData)) {
-                                jumpIdx = j; // jump to matched case
-                                break;
-                            }
-                        }
-                    } else {
-                        auto condData = currFrame->get<slot_t>(nargs[0]);
-                        for (; j < bc.withCnt(); ++j) {
-                            auto caseData = currFrame->get<slot_t>(wargs[j]);
-                            if (condData == caseData) {
-                                jumpIdx = j; // jump to matched case
-                                break;
-                            }
-                        }
-                    }
-
-                    if (j == bc.withCnt()) {
-                        // fallthrough to else case if no match
-                        jumpIdx = bc.withCnt();
-                    }
-                }
-
-                currFrame->set(bc.result, fromSlot<Int>(jumpIdx));
-                i += bc.opsize + jumpIdx;
-
-                continue; // skip i increment
-            }
-
-            case OpCode::JOIN: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-                int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
-                ASSERT(
-                    brIndex >= 0 && static_cast<size_t>(brIndex) < bc.withCnt(),
-                    "JOIN opcode choosen index out of range in FastVM.");
-                slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
-                currFrame->set(bc.result, result);
-                break;
-            }
-
-            case OpCode::FILL: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-
-                TypeCode targetType = currFrame->typeAt(nargs[0]);
-                ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
-
-                Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
-                ASSERT(target != nullptr, "FILL target data is null.");
-
-                switch (targetType) {
-                case TypeCode::Tuple: {
-                    const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
-                    auto t           = static_cast<Tuple *>(target);
-                    const auto &refs = t->layout().refs();
-                    ASSERT(
-                        refs.size() == bc.withCnt(),
-                        std::format(
-                            "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
-                            bc.withCnt(),
-                            refs.size()));
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
-                    }
-                    t->updateLayout(&type->layout());
-                    break;
-                }
-                case TypeCode::Array: {
-                    const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
-                    auto a           = static_cast<Array *>(target);
-                    const auto &refs = a->layout().refs();
-                    ASSERT(
-                        refs.size() == bc.withCnt(),
-                        std::format(
-                            "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
-                            bc.withCnt(),
-                            refs.size()));
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
-                    }
-                    a->updateLayout(&type->layout());
-                    break;
-                }
-                case TypeCode::Struct: {
-                    const auto &type = currFrame->typePtrAt<StructType>(bc.result);
-                    auto s           = static_cast<Struct *>(target);
-                    const auto &refs = s->layout().refs();
-                    ASSERT(
-                        refs.size() == bc.withCnt(),
-                        std::format(
-                            "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
-                            bc.withCnt(),
-                            refs.size()));
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
-                    }
-                    s->updateLayout(&type->layout());
-                    break;
-                }
-                case TypeCode::Function: {
-                    // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
-                    auto f             = static_cast<Function *>(target);
-                    Tuple *closureData = f->tuple();
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
-                    }
-                    break;
-                }
-                default:
-                    ASSERT(
-                        false,
-                        std::format(
-                            "Unsupported FILL target type {} in FastVM.",
-                            typeCodeToString(targetType)));
-                }
-
-                currFrame->set(bc.result, target);
-                break;
-            }
-
-            case OpCode::CALL: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-                auto function          = currFrame->get<Function *>(wargs[0]);
-                auto targetGraph       = function->graph();
-
-                Frame *funcFrame = framePool_.acquire(targetGraph);
-
-                size_t i = 0;
-                for (; i < nargs.size; ++i) {
-                    funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
-                }
-
-                Tuple *closureData = function->tuple();
-                for (size_t j = 0; j < closureData->size(); ++j) {
-                    funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
-                }
-
-                _timer.pause();
-                const auto &result = call(targetGraph, funcFrame);
-                _timer.resume();
-
-                currFrame->set(bc.result, result);
-                break;
-            }
-
-            case OpCode::FUNC: {
-                Frame *funcFrame = framePool_.acquire(bc.extra()->graph);
-
-                size_t argsCnt         = bc.normCnt();
-                const data_idx_t *args = bc.operands();
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                }
-
-                _timer.pause();
-                slot_t result = call(bc.extra()->graph, funcFrame);
-                _timer.resume();
-
-                currFrame->set(bc.result, result);
-                break;
-            }
-
-            case OpCode::TAIL: {
-                // 尾调用优化
-                Graph *funcFrame = bc.extra()->graph;
-
-                // enable tail-call optimization
-                // 设置 loop flag 为 true
-                // 当前字节码执行子循环结束后不会退出大循环
-                // 而会根据新指定的 currFrame 和 bytecodes 执行新图
-                // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
-                loop = true;
-                // 设置 lastFrame 为当前帧 currFrame 备用
-                Frame *lastFrame = currFrame;
-
-                // 下面准备将 currFrame 重新指向新栈帧
-                if (funcFrame == currFrame->graph()) {
-                    // 如果目标图就是当前帧的图，说明在进行自递归尾调用
-                    // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
-                    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                        "Optimizing self-recursion for graph: {}",
-                        currFrame->graph()->name()));
-                } else {
-                    // 否则需要切换到目标图的新字节码，并修改 currFrame 指向
-                    codes = getBytecodesOfGraph(funcFrame);
-
-                    // 即便目标图不是当前图，仍可能存在互调用尾递归现象
-                    // 即 A 尾调用 B，B 又尾调用 A
-                    // Camel 中分支默认被编译为子图，互调用非常常见，必须针对性优化
-                    // 思路是在互调用时维护一个孪生栈帧 twinFrame
-                    // 在执行 A 时将孪生栈帧指向 B，同理在执行 B 时将其指向 A
-                    // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
-                    if (twinFrame && twinFrame->graph() == funcFrame) {
-                        // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
-                        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                            "Optimizing mutual-tail-recursion for graph: {}",
-                            currFrame->graph()->name()));
-                        // 交换孪生帧
-                        currFrame = twinFrame;
-                        twinFrame = lastFrame;
-                    } else {
-                        // 不可复用栈帧的尾调用
-                        if (twinFrame != nullptr && twinFrame != rootFrame) {
-                            // 如果孪生帧不为空，覆写前需要先释放
-                            // 如果孪生帧刚好指向根帧，不能先释放
-                            framePool_.release(twinFrame);
-                        }
-                        // 将当前栈帧设置为孪生帧
-                        twinFrame = currFrame;
-
-                        // 创建新的栈帧并设置参数
-                        nextFrame              = framePool_.acquire(funcFrame);
-                        size_t argsCnt         = bc.normCnt();
-                        const data_idx_t *args = bc.operands();
-                        for (size_t i = 0; i < argsCnt; ++i) {
-                            nextFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                        }
-
-                        // 切换到新栈帧
-                        currFrame = nextFrame;
-
-                        // 跳过后续字节码，进行下一轮循环
-                        i = codeSize;
-                        continue;
-                    }
-                }
-
-                // 自递归和互递归的情况在这里集中设置参数
-                size_t argsCnt         = bc.normCnt();
-                const data_idx_t *args = bc.operands();
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    currFrame->set(i + 1, lastFrame->get<slot_t>(args[i]));
-                }
-
-                // 跳过后续字节码，进行下一轮循环
-                i = codeSize;
-                continue;
-            }
-
-            case OpCode::OPER: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-                auto func              = bc.extra()->func;
-                EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                    "Executing operator {}.",
-                    context_->execMgr().getNameOfAnOperator(func)));
-                func(bc.result, nargs, wargs, *currFrame, *context_);
-                break;
-            }
-
-            case OpCode::SCHD: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-                auto mark              = bc.extra()->mark;
-                evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
-                break;
-            }
-
-            default: {
-                context_->rtmDiags()
-                    ->of(RuntimeDiag::UnsupportedBytecode)
-                    .commit(to_string(bc.opcode));
-            }
-            }
-
-            // move to the next bytecode
-            i += bc.opsize;
-        }
-
-    } while (loop);
-
-    currRecursionDepth_--;
-
-    if (twinFrame != nullptr) {
-        // 说明已经触发了相互尾调用，要把孪生帧也释放掉
-        // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
-        // 把与传入的 rootFrame 不相等的那个先释放掉即可
-        if (currFrame != rootFrame) {
-            framePool_.release(currFrame);
-        }
-        if (twinFrame != rootFrame) {
-            framePool_.release(twinFrame);
-        }
+    // 减法
+    case DenseOpCode::ISUB: {
+        int32_t res = fromSlot<Int>(lhs) - fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
     }
-    framePool_.release(rootFrame);
+    case DenseOpCode::LSUB: {
+        int64_t res = fromSlot<Long>(lhs) - fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FSUB: {
+        float res = fromSlot<Float>(lhs) - fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DSUB: {
+        double res = fromSlot<Double>(lhs) - fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
 
-    return funcRes;
+    // 乘法
+    case DenseOpCode::IMUL: {
+        int32_t res = fromSlot<Int>(lhs) * fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LMUL: {
+        int64_t res = fromSlot<Long>(lhs) * fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FMUL: {
+        float res = fromSlot<Float>(lhs) * fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DMUL: {
+        double res = fromSlot<Double>(lhs) * fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+
+    // 除法（带除零检测）
+    case DenseOpCode::IDIV: {
+        int32_t divisor = fromSlot<Int>(rhs);
+        if (divisor == 0) {
+            context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+        }
+        int32_t res = fromSlot<Int>(lhs) / divisor;
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LDIV: {
+        int64_t divisor = fromSlot<Long>(rhs);
+        if (divisor == 0) {
+            context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+        }
+        int64_t res = fromSlot<Long>(lhs) / divisor;
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FDIV: {
+        float divisor = fromSlot<Float>(rhs);
+        if (divisor == 0.0f) {
+            context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+        }
+        float res = fromSlot<Float>(lhs) / divisor;
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DDIV: {
+        double divisor = fromSlot<Double>(rhs);
+        if (divisor == 0.0) {
+            context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+        }
+        double res = fromSlot<Double>(lhs) / divisor;
+        currFrame->set(bc.result, res);
+        break;
+    }
+
+    // 比较 (<, >, ==, !=, <=, >=)
+    case DenseOpCode::ILT: {
+        bool res = fromSlot<Int>(lhs) < fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LLT: {
+        bool res = fromSlot<Long>(lhs) < fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FLT: {
+        bool res = fromSlot<Float>(lhs) < fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DLT: {
+        bool res = fromSlot<Double>(lhs) < fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+
+    case DenseOpCode::IGT: {
+        bool res = fromSlot<Int>(lhs) > fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LGT: {
+        bool res = fromSlot<Long>(lhs) > fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FGT: {
+        bool res = fromSlot<Float>(lhs) > fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DGT: {
+        bool res = fromSlot<Double>(lhs) > fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+
+    case DenseOpCode::IEQ: {
+        bool res = fromSlot<Int>(lhs) == fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LEQ: {
+        bool res = fromSlot<Long>(lhs) == fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FEQ: {
+        bool res = fromSlot<Float>(lhs) == fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DEQ: {
+        bool res = fromSlot<Double>(lhs) == fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+
+    case DenseOpCode::INE: {
+        bool res = fromSlot<Int>(lhs) != fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LNE: {
+        bool res = fromSlot<Long>(lhs) != fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FNE: {
+        bool res = fromSlot<Float>(lhs) != fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DNE: {
+        bool res = fromSlot<Double>(lhs) != fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+
+    case DenseOpCode::ILE: {
+        bool res = fromSlot<Int>(lhs) <= fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LLE: {
+        bool res = fromSlot<Long>(lhs) <= fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FLE: {
+        bool res = fromSlot<Float>(lhs) <= fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DLE: {
+        bool res = fromSlot<Double>(lhs) <= fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+
+    case DenseOpCode::IGE: {
+        bool res = fromSlot<Int>(lhs) >= fromSlot<Int>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::LGE: {
+        bool res = fromSlot<Long>(lhs) >= fromSlot<Long>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::FGE: {
+        bool res = fromSlot<Float>(lhs) >= fromSlot<Float>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    case DenseOpCode::DGE: {
+        bool res = fromSlot<Double>(lhs) >= fromSlot<Double>(rhs);
+        currFrame->set(bc.result, res);
+        break;
+    }
+    default:
+        context->rtmDiags()
+            ->of(RuntimeDiag::UnsupportedBytecode)
+            .commit(to_string(bc.opcode, true));
+    }
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
@@ -475,15 +294,746 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .commit(context_->mainModule()->name());
     }
 
+    precompile(graph.get());
+
+    pcStack_.clear();
+    frameStack_.clear();
+
     opperf::start();
 
-    Frame *rootFrame = framePool_.acquire(graph.get());
-    call(graph.get(), rootFrame);
+    size_t pc    = offsetMap_.at(graph.get());
+    Frame *frame = framePool_.acquire(graph.get());
+    push(pc, frame);
+    call(pc, frame);
+    pop();
+    framePool_.release(frame);
 
     opperf::stop();
     opperf::report(std::cout);
 
     return Graph::null();
+}
+
+// slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
+//     Frame *currFrame = rootFrame;
+
+//     while (true) {
+//         const Bytecode &bc = bytecodes_[pc];
+//         EXEC_WHEN_DEBUG(
+//             l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, pc, context_,
+//             true)));
+
+// #ifdef OPPERF_ENABLED
+//         std::string tag;
+//         if (bc.opcode == DenseOpCode::OPER) {
+//             tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
+//         } else if (bc.opcode == DenseOpCode::FUNC) {
+//             tag = bc.extra()->graph->name();
+//         }
+//         opperf::ScopeTimer _timer(bc.opcode, tag);
+// #else
+//         opperf::ScopeTimer _timer(bc.opcode);
+// #endif
+
+//         switch (static_cast<DenseOpCode>(bc.opcode)) {
+//         case DenseOpCode::RETN: {
+//             slot_t result = currFrame->get<slot_t>(bc.fastop[0]);
+
+//             if (currFrame == rootFrame) {
+//                 return result;
+//             }
+
+//             framePool_.release(currFrame);
+
+//             auto [lastPC, lastFrame] = pop();
+//             pc                       = lastPC;
+//             currFrame                = lastFrame;
+
+//             Bytecode &lbc = bytecodes_[pc];
+//             currFrame->set(lbc.result, result);
+
+//             // 从下一条指令继续执行
+//             pc += lbc.opsize;
+//             continue;
+//         } break;
+
+//         case DenseOpCode::CAST: {
+//             ASSERT(false, "CAST opcode not implemented in FastVM.");
+//         } break;
+
+//         case DenseOpCode::COPY: {
+//             TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
+//             if (isGCTraced(srcType)) {
+//                 Object *srcData = currFrame->get<Object *>(bc.fastop[0]);
+//                 currFrame->set(bc.result, srcData->clone(mm::autoSpace(), false));
+//             } else {
+//                 slot_t srcData = currFrame->get<slot_t>(bc.fastop[0]);
+//                 currFrame->set(bc.result, srcData);
+//             }
+//         } break;
+
+//         case DenseOpCode::ACCS: {
+//             TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
+//             if (srcType == TypeCode::Tuple) {
+//                 Tuple *t = currFrame->get<Tuple *>(bc.fastop[0]);
+//                 ASSERT(
+//                     static_cast<size_t>(bc.fastop[1]) < t->size(),
+//                     "Tuple access index out of range in FastVM.");
+//                 currFrame->set(bc.result, t->get<slot_t>(static_cast<size_t>(bc.fastop[1])));
+//             } else if (srcType == TypeCode::Struct) {
+//                 Struct *s = currFrame->get<Struct *>(bc.fastop[0]);
+//                 ASSERT(
+//                     static_cast<size_t>(bc.fastop[1]) < s->size(),
+//                     "Struct access index out of range in FastVM.");
+//                 currFrame->set(bc.result, s->get<slot_t>(static_cast<size_t>(bc.fastop[1])));
+//             } else {
+//                 ASSERT(false, "ACCS opcode unsupported source type in FastVM.");
+//             }
+//         } break;
+
+//         case DenseOpCode::JUMP: {
+//             pc = static_cast<arr_size_t>(bc.fastop[0]);
+//             continue; // skip i increment
+//         } break;
+
+//         case DenseOpCode::BRCH: {
+//             const data_arr_t nargs = bc.nargs();
+//             const data_arr_t wargs = bc.wargs();
+
+//             size_t jumpIdx = 0;
+//             if (bc.withCnt() == 0) {
+//                 // 普通的 if-else 分支，cond 是 bool 类型
+//                 bool condData = currFrame->get<bool>(nargs[0]);
+//                 if (condData) {
+//                     jumpIdx = 0; // jump to true branch
+//                 } else {
+//                     jumpIdx = 1; // jump to false branch
+//                 }
+//             } else {
+//                 // match-case，依次判断各分支
+//                 size_t j          = 0;
+//                 TypeCode condType = currFrame->typeAt(nargs[0]);
+
+//                 if (isGCTraced(condType)) {
+//                     auto condData = currFrame->get<Object *>(nargs[0]);
+//                     for (; j < bc.withCnt(); ++j) {
+//                         auto caseData = currFrame->get<Object *>(wargs[j]);
+//                         if (condData->equals(caseData)) {
+//                             jumpIdx = j; // jump to matched case
+//                             break;
+//                         }
+//                     }
+//                 } else {
+//                     auto condData = currFrame->get<slot_t>(nargs[0]);
+//                     for (; j < bc.withCnt(); ++j) {
+//                         auto caseData = currFrame->get<slot_t>(wargs[j]);
+//                         if (condData == caseData) {
+//                             jumpIdx = j; // jump to matched case
+//                             break;
+//                         }
+//                     }
+//                 }
+
+//                 if (j == bc.withCnt()) {
+//                     // fallthrough to else case if no match
+//                     jumpIdx = bc.withCnt();
+//                 }
+//             }
+
+//             currFrame->set(bc.result, fromSlot<Int>(jumpIdx));
+//             pc += bc.opsize + jumpIdx;
+
+//             continue; // skip i increment
+//         } break;
+
+//         case DenseOpCode::JOIN: {
+//             const data_arr_t nargs = bc.nargs();
+//             const data_arr_t wargs = bc.wargs();
+//             int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
+//             ASSERT(
+//                 brIndex >= 0 && static_cast<size_t>(brIndex) < bc.withCnt(),
+//                 "JOIN opcode choosen index out of range in FastVM.");
+//             slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
+//             currFrame->set(bc.result, result);
+//         } break;
+
+//         case DenseOpCode::FILL: {
+//             const data_arr_t nargs = bc.nargs();
+//             const data_arr_t wargs = bc.wargs();
+
+//             TypeCode targetType = currFrame->typeAt(nargs[0]);
+//             ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+
+//             Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
+//             ASSERT(target != nullptr, "FILL target data is null.");
+
+//             switch (targetType) {
+//             case TypeCode::Tuple: {
+//                 const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
+//                 auto t           = static_cast<Tuple *>(target);
+//                 const auto &refs = t->layout().refs();
+//                 ASSERT(
+//                     refs.size() == bc.withCnt(),
+//                     std::format(
+//                         "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+//                         bc.withCnt(),
+//                         refs.size()));
+//                 for (size_t j = 0; j < bc.withCnt(); ++j) {
+//                     t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+//                 }
+//                 t->updateLayout(&type->layout());
+//             } break;
+
+//             case TypeCode::Array: {
+//                 const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
+//                 auto a           = static_cast<Array *>(target);
+//                 const auto &refs = a->layout().refs();
+//                 ASSERT(
+//                     refs.size() == bc.withCnt(),
+//                     std::format(
+//                         "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+//                         bc.withCnt(),
+//                         refs.size()));
+//                 for (size_t j = 0; j < bc.withCnt(); ++j) {
+//                     a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+//                 }
+//                 a->updateLayout(&type->layout());
+//             } break;
+
+//             case TypeCode::Struct: {
+//                 const auto &type = currFrame->typePtrAt<StructType>(bc.result);
+//                 auto s           = static_cast<Struct *>(target);
+//                 const auto &refs = s->layout().refs();
+//                 ASSERT(
+//                     refs.size() == bc.withCnt(),
+//                     std::format(
+//                         "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+//                         bc.withCnt(),
+//                         refs.size()));
+//                 for (size_t j = 0; j < bc.withCnt(); ++j) {
+//                     s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+//                 }
+//                 s->updateLayout(&type->layout());
+//             } break;
+
+//             case TypeCode::Function: {
+//                 // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
+//                 auto f             = static_cast<Function *>(target);
+//                 Tuple *closureData = f->tuple();
+//                 for (size_t j = 0; j < bc.withCnt(); ++j) {
+//                     closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+//                 }
+//             } break;
+
+//             default:
+//                 ASSERT(
+//                     false,
+//                     std::format(
+//                         "Unsupported FILL target type {} in FastVM.",
+//                         typeCodeToString(targetType)));
+//             }
+
+//             currFrame->set(bc.result, target);
+//         } break;
+
+//         case DenseOpCode::CALL: {
+//             const data_arr_t nargs = bc.nargs();
+//             const data_arr_t wargs = bc.wargs();
+//             auto function          = currFrame->get<Function *>(wargs[0]);
+//             auto targetGraph       = function->graph();
+
+//             Frame *funcFrame = framePool_.acquire(targetGraph);
+
+//             size_t i = 0;
+//             for (; i < nargs.size; ++i) {
+//                 funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
+//             }
+
+//             Tuple *closureData = function->tuple();
+//             for (size_t j = 0; j < closureData->size(); ++j) {
+//                 funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
+//             }
+
+//             _timer.pause();
+//             const auto &result = call(offsetMap_.at(targetGraph), funcFrame);
+//             _timer.resume();
+
+//             framePool_.release(funcFrame);
+
+//             currFrame->set(bc.result, result);
+//         } break;
+
+//         case DenseOpCode::FUNC: {
+//             // 保存当前程序计数器和栈帧
+//             push(pc, currFrame);
+
+//             // 创建新的栈帧并设置参数
+//             Frame *funcFrame       = framePool_.acquire(bc.extra()->graph);
+//             size_t argsCnt         = bc.normCnt();
+//             const data_idx_t *args = bc.operands();
+//             for (size_t i = 0; i < argsCnt; ++i) {
+//                 funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+//             }
+
+//             // 切换到目标图的字节码位置和栈帧
+//             pc        = bc.fastop[1];
+//             currFrame = funcFrame;
+
+//             continue;
+//         } break;
+
+//         case DenseOpCode::TAIL: {
+//             // 尾调用不保存程序计数器和栈帧
+//             // 直接释放当前栈帧
+//             // 如果当前栈帧和目标栈帧属于同一个图
+//             // 栈帧池会自动复用
+//             // 这间接实现了尾调用优化
+//             FrameView lastFrame(currFrame);
+//             framePool_.release(currFrame);
+
+//             // 创建新的栈帧并设置参数
+//             // 对于刚刚释放的栈帧，栈帧池会自动复用
+//             // 所以这里 currFrame 就是目标栈帧
+//             currFrame              = framePool_._acquire(bc.extra()->graph);
+//             size_t argsCnt         = bc.normCnt();
+//             const data_idx_t *args = bc.operands();
+//             for (size_t i = 0; i < argsCnt; ++i) {
+//                 // 注意，这里的 currFrame 已经被释放了
+//                 // 但由于栈帧池不会对已经释放的栈帧进行格式化
+//                 // 所以这里仍然可以安全地获取原栈帧的数据
+//                 // 当然，需要通过 lastFrame 来获取数据
+//                 // lastFrame 中保存了原栈帧的静态数据区指针
+//                 currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+//             }
+//             // 这里需要手动 resetTop，因为 _acquire 不会 resetTop
+//             // 之所以延迟 resetTop，是为了避免 resetTop 破坏刚刚释放的栈帧的数据
+//             framePool_._resetTop();
+
+//             // 切换到目标图的字节码位置
+//             pc = bc.fastop[1];
+
+//             continue;
+//         } break;
+
+//         case DenseOpCode::OPER: {
+//             const data_arr_t nargs = bc.nargs();
+//             const data_arr_t wargs = bc.wargs();
+//             auto func              = bc.extra()->func;
+//             EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+//                 "Executing operator {}.",
+//                 context_->execMgr().getNameOfAnOperator(func)));
+//             func(bc.result, nargs, wargs, *currFrame, *context_);
+//         } break;
+
+//         case DenseOpCode::SCHD: {
+//             const data_arr_t nargs = bc.nargs();
+//             const data_arr_t wargs = bc.wargs();
+//             auto mark              = bc.extra()->mark;
+//             evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
+//         } break;
+
+//         default: {
+//             evalInlinedOpCode(bc, currFrame, context_);
+//         }
+//         }
+
+//         // move to the next bytecode
+//         pc += bc.opsize;
+//     }
+// }
+
+slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
+    Frame *currFrame     = rootFrame;
+    const Bytecode *base = bytecodes_.data();
+    const Bytecode *bc;
+
+    static void *dispatchTable[256] = {
+        &&label_RETN, // 0
+        &&label_CAST, // 1
+        &&label_COPY, // 2
+        &&label_ACCS, // 3
+        &&label_JUMP, // 4
+        &&label_BRCH, // 5
+        &&label_JOIN, // 6
+        &&label_FILL, // 7
+        &&label_CALL, // 8
+        &&label_FUNC, // 9
+        &&label_TAIL, // 10
+        &&label_OPER, // 11
+        &&label_SCHD, // 12
+        [13 ... 255] = &&label_DEFAULT,
+    };
+
+    // 初次分派
+    JUMP();
+
+label_RETN: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
+
+    if (currFrame == rootFrame) {
+        return result;
+    }
+
+    framePool_.release(currFrame);
+
+    auto [lastPC, lastFrame] = pop();
+    pc                       = lastPC;
+    bc                       = &bytecodes_[pc];
+    currFrame                = lastFrame;
+
+    Bytecode &lbc = bytecodes_[pc];
+    currFrame->set(lbc.result, result);
+
+    NEXT();
+}
+
+label_CAST: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    ASSERT(false, "CAST opcode not implemented in FastVM.");
+
+    NEXT();
+}
+
+label_COPY: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
+    if (isGCTraced(srcType)) {
+        Object *srcData = currFrame->get<Object *>(bc->fastop[0]);
+        currFrame->set(bc->result, srcData->clone(mm::autoSpace(), false));
+    } else {
+        slot_t srcData = currFrame->get<slot_t>(bc->fastop[0]);
+        currFrame->set(bc->result, srcData);
+    }
+
+    NEXT();
+}
+
+label_ACCS: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
+    if (srcType == TypeCode::Tuple) {
+        Tuple *t = currFrame->get<Tuple *>(bc->fastop[0]);
+        ASSERT(
+            static_cast<size_t>(bc->fastop[1]) < t->size(),
+            "Tuple access index out of range in FastVM.");
+        currFrame->set(bc->result, t->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
+    } else if (srcType == TypeCode::Struct) {
+        Struct *s = currFrame->get<Struct *>(bc->fastop[0]);
+        ASSERT(
+            static_cast<size_t>(bc->fastop[1]) < s->size(),
+            "Struct access index out of range in FastVM.");
+        currFrame->set(bc->result, s->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
+    } else {
+        ASSERT(false, "ACCS opcode unsupported source type in FastVM.");
+    }
+
+    NEXT();
+}
+
+label_JUMP: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    pc = static_cast<arr_size_t>(bc->fastop[0]);
+
+    JUMP();
+}
+
+label_BRCH: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    const data_arr_t nargs = bc->nargs();
+    const data_arr_t wargs = bc->wargs();
+
+    size_t jumpIdx = 0;
+    if (bc->withCnt() == 0) {
+        // 普通的 if-else 分支，cond 是 bool 类型
+        bool condData = currFrame->get<bool>(nargs[0]);
+        if (condData) {
+            jumpIdx = 0; // jump to true branch
+        } else {
+            jumpIdx = 1; // jump to false branch
+        }
+    } else {
+        // match-case，依次判断各分支
+        size_t j          = 0;
+        TypeCode condType = currFrame->typeAt(nargs[0]);
+
+        if (isGCTraced(condType)) {
+            auto condData = currFrame->get<Object *>(nargs[0]);
+            for (; j < bc->withCnt(); ++j) {
+                auto caseData = currFrame->get<Object *>(wargs[j]);
+                if (condData->equals(caseData)) {
+                    jumpIdx = j; // jump to matched case
+                    break;
+                }
+            }
+        } else {
+            auto condData = currFrame->get<slot_t>(nargs[0]);
+            for (; j < bc->withCnt(); ++j) {
+                auto caseData = currFrame->get<slot_t>(wargs[j]);
+                if (condData == caseData) {
+                    jumpIdx = j; // jump to matched case
+                    break;
+                }
+            }
+        }
+
+        if (j == bc->withCnt()) {
+            // fallthrough to else case if no match
+            jumpIdx = bc->withCnt();
+        }
+    }
+
+    currFrame->set(bc->result, fromSlot<Int>(jumpIdx));
+    pc += bc->opsize + jumpIdx;
+
+    JUMP();
+}
+
+label_JOIN: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    const data_arr_t nargs = bc->nargs();
+    const data_arr_t wargs = bc->wargs();
+    int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
+    ASSERT(
+        brIndex >= 0 && static_cast<size_t>(brIndex) < bc->withCnt(),
+        "JOIN opcode choosen index out of range in FastVM.");
+    slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
+    currFrame->set(bc->result, result);
+
+    NEXT();
+}
+
+label_FILL: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    const data_arr_t nargs = bc->nargs();
+    const data_arr_t wargs = bc->wargs();
+
+    TypeCode targetType = currFrame->typeAt(nargs[0]);
+    ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+
+    Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
+    ASSERT(target != nullptr, "FILL target data is null.");
+
+    switch (targetType) {
+    case TypeCode::Tuple: {
+        const auto &type = currFrame->typePtrAt<TupleType>(bc->result);
+        auto t           = static_cast<Tuple *>(target);
+        const auto &refs = t->layout().refs();
+        ASSERT(
+            refs.size() == bc->withCnt(),
+            std::format(
+                "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                bc->withCnt(),
+                refs.size()));
+        for (size_t j = 0; j < bc->withCnt(); ++j) {
+            t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+        }
+        t->updateLayout(&type->layout());
+    } break;
+
+    case TypeCode::Array: {
+        const auto &type = currFrame->typePtrAt<ArrayType>(bc->result);
+        auto a           = static_cast<Array *>(target);
+        const auto &refs = a->layout().refs();
+        ASSERT(
+            refs.size() == bc->withCnt(),
+            std::format(
+                "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                bc->withCnt(),
+                refs.size()));
+        for (size_t j = 0; j < bc->withCnt(); ++j) {
+            a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+        }
+        a->updateLayout(&type->layout());
+    } break;
+
+    case TypeCode::Struct: {
+        const auto &type = currFrame->typePtrAt<StructType>(bc->result);
+        auto s           = static_cast<Struct *>(target);
+        const auto &refs = s->layout().refs();
+        ASSERT(
+            refs.size() == bc->withCnt(),
+            std::format(
+                "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                bc->withCnt(),
+                refs.size()));
+        for (size_t j = 0; j < bc->withCnt(); ++j) {
+            s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+        }
+        s->updateLayout(&type->layout());
+    } break;
+
+    case TypeCode::Function: {
+        auto f             = static_cast<Function *>(target);
+        Tuple *closureData = f->tuple();
+        for (size_t j = 0; j < bc->withCnt(); ++j) {
+            closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+        }
+    } break;
+
+    default:
+        ASSERT(
+            false,
+            std::format(
+                "Unsupported FILL target type {} in FastVM.",
+                typeCodeToString(targetType)));
+    }
+
+    currFrame->set(bc->result, target);
+
+    NEXT();
+}
+
+label_CALL: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    const data_arr_t nargs = bc->nargs();
+    const data_arr_t wargs = bc->wargs();
+    auto function          = currFrame->get<Function *>(wargs[0]);
+    auto targetGraph       = function->graph();
+
+    Frame *funcFrame = framePool_.acquire(targetGraph);
+
+    size_t i = 0;
+    for (; i < nargs.size; ++i) {
+        funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
+    }
+
+    Tuple *closureData = function->tuple();
+    for (size_t j = 0; j < closureData->size(); ++j) {
+        funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
+    }
+
+    _timer.pause();
+    const auto &result = call(offsetMap_.at(targetGraph), funcFrame);
+    _timer.resume();
+
+    framePool_.release(funcFrame);
+
+    currFrame->set(bc->result, result);
+
+    NEXT();
+}
+
+label_FUNC: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    // 保存当前程序计数器和栈帧
+    push(pc, currFrame);
+
+    // 创建新的栈帧并设置参数
+    Frame *funcFrame       = framePool_.acquire(bc->extra()->graph);
+    size_t argsCnt         = bc->normCnt();
+    const data_idx_t *args = bc->operands();
+    for (size_t i = 0; i < argsCnt; ++i) {
+        funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+    }
+
+    // 切换到目标图的字节码位置和栈帧
+    pc        = bc->fastop[1];
+    currFrame = funcFrame;
+
+    JUMP();
+}
+
+label_TAIL: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    // 尾调用不保存程序计数器和栈帧
+    // 直接释放当前栈帧
+    // 如果当前栈帧和目标栈帧属于同一个图
+    // 栈帧池会自动复用
+    // 这间接实现了尾调用优化
+    FrameView lastFrame(currFrame);
+    framePool_.release(currFrame);
+
+    // 创建新的栈帧并设置参数
+    // 对于刚刚释放的栈帧，栈帧池会自动复用
+    // 所以这里 currFrame 就是目标栈帧
+    currFrame              = framePool_._acquire(bc->extra()->graph);
+    size_t argsCnt         = bc->normCnt();
+    const data_idx_t *args = bc->operands();
+    for (size_t i = 0; i < argsCnt; ++i) {
+        // 注意，这里的 currFrame 已经被释放了
+        // 但由于栈帧池不会对已经释放的栈帧进行格式化
+        // 所以这里仍然可以安全地获取原栈帧的数据
+        // 当然，需要通过 lastFrame 来获取数据
+        // lastFrame 中保存了原栈帧的静态数据区指针
+        currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+    }
+    // 这里需要手动 resetTop，因为 _acquire 不会 resetTop
+    // 之所以延迟 resetTop，是为了避免 resetTop 破坏刚刚释放的栈帧的数据
+    framePool_._resetTop();
+
+    // 切换到目标图的字节码位置
+    pc = bc->fastop[1];
+
+    JUMP();
+}
+
+label_OPER: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    const data_arr_t nargs = bc->nargs();
+    const data_arr_t wargs = bc->wargs();
+    auto func              = bc->extra()->func;
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+        "Executing operator {}.",
+        context_->execMgr().getNameOfAnOperator(func)));
+    func(bc->result, nargs, wargs, *currFrame, *context_);
+
+    NEXT();
+}
+
+label_SCHD: {
+    EXEC_WHEN_DEBUG(
+        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_, true)));
+    opperf::ScopeTimer _timer(bc->opcode);
+
+    const data_arr_t nargs = bc->nargs();
+    const data_arr_t wargs = bc->wargs();
+    auto mark              = bc->extra()->mark;
+    evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+
+    NEXT();
+}
+
+label_DEFAULT:
+    evalInlinedOpCode(*bc, currFrame, context_);
+
+    NEXT();
 }
 
 void FastVMSchedPass::evalMarkedOperator(
@@ -531,7 +1081,8 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
             }
         }
 
-        to[i] = call(func->graph(), frame);
+        to[i] = call(offsetMap_.at(func->graph()), frame);
+        framePool_.release(frame);
     }
 
     currFrame.set(self, res);
@@ -547,15 +1098,16 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
 
     for (size_t i = 0; i < arr->size(); ++i) {
         Frame *frame = framePool_.acquire(func->graph());
-        frame->set(1, data[i]);
 
+        frame->set(1, data[i]);
         if (closure->size() > 0) {
             for (size_t j = 0; j < closure->size(); ++j) {
                 frame->set(j + 2, closure->get<slot_t>(j));
             }
         }
 
-        data[i] = call(func->graph(), frame);
+        data[i] = call(offsetMap_.at(func->graph()), frame);
+        framePool_.release(frame);
     }
 
     currFrame.set(self, arr);
@@ -573,6 +1125,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     slot_t *from = arr->data();
     for (size_t i = 0; i < arr->size(); ++i) {
         Frame *frame = framePool_.acquire(func->graph());
+
         frame->set(1, from[i]);
         if (closure->size() > 0) {
             for (size_t j = 0; j < closure->size(); ++j) {
@@ -580,7 +1133,8 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
             }
         }
 
-        slot_t result = call(func->graph(), frame);
+        slot_t result = call(offsetMap_.at(func->graph()), frame);
+        framePool_.release(frame);
 
         if (fromSlot<bool>(result)) {
             filtered->append(from[i]);
@@ -622,7 +1176,8 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
             }
         }
 
-        acc = call(func->graph(), frame);
+        acc = call(offsetMap_.at(func->graph()), frame);
+        framePool_.release(frame);
     }
 
     currFrame.set(self, acc);
@@ -638,6 +1193,7 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
 
     for (size_t i = 0; i < arr->size(); ++i) {
         Frame *frame = framePool_.acquire(func->graph());
+
         frame->set(1, from[i]);
 
         if (closure->size() > 0) {
@@ -646,7 +1202,8 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
             }
         }
 
-        call(func->graph(), frame);
+        call(offsetMap_.at(func->graph()), frame);
+        framePool_.release(frame);
     }
 
     // foreach 无返回值

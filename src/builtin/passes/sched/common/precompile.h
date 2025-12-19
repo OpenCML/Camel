@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,14 +22,31 @@
 #include "bytecode.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
+#include "optimize.h"
 
 #include <memory>
 
-struct OptimizationStrategy {
+struct CompileStrategy {
     bool enableTailCallDetection = true;
+    bool enableInlineOperators   = false;
+
+    // optimization strategies to apply
+    OptimizationStrategyCode optimizationStrategies = OptimizationStrategyCode::None;
+};
+
+struct BytecodeIndex {
+    size_t offset;
+    size_t length;
+    GraphIR::Graph *graph;
 };
 
 bytecode_vec_t
-precompile(const context_ptr_t &ctx, GraphIR::Graph *graph, const OptimizationStrategy &opt = {});
+compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &opt = {});
 
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);
+std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
+compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt);
+
+std::string
+opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context, bool dense = false);
+
+void convertToDenseBytecode(bytecode_vec_t &src);

@@ -19,6 +19,6 @@ func main(): int sync {
     let start = now()
     let res = sum(n, a, d, 0)
     let duration = now() - start
-    'Sum of arithmetic series = {} (computed in {} seconds)'->format<res, duration>->println
+    'Sum of arithmetic series = {} (computed in {:.6f} seconds)'->format<res, duration>->println
     return 0
 }

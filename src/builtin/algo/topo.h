@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Dec. 19, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include <iterator>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 template <typename InputIt, typename GetInDegreeFunc, typename GetOutputsFunc>
@@ -43,8 +44,8 @@ auto topoSort(
 #endif
 
     for (auto it = first; it != last; ++it) {
-        NodeType node = *it;
-        size_t inDeg = getInDegree(node);
+        NodeType node   = *it;
+        size_t inDeg    = getInDegree(node);
         inDegrees[node] = inDeg;
         if (inDeg == 0) {
             zeroInDegreeQueue.push(node);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,33 +24,52 @@
 #include "builtin/passes/sched/common/optimize.h"
 #include "builtin/passes/sched/common/precompile.h"
 #include "core/context/frame.h"
-#include "core/mm/mm.h"
-
-#include <list>
 
 class FastVMSchedPass : public LinearSchedPass {
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
-    size_t currRecursionDepth_                    = 0;
-
-    BytecodeOptimizer optimizer_;
 
     // 栈帧池
     FramePool framePool_{1 * MB};
-    // 字节码存储
-    std::list<bytecode_vec_t> bytecodes_;
 
-    inline bytecode_vec_t *getBytecodesOfGraph(GraphIR::Graph *graph) {
-        bytecode_vec_t *codes = graph->getExtra<bytecode_vec_t, 1>();
-        if (codes == nullptr) {
-            bytecode_vec_t bytecodes = precompile(context_, graph);
-            optimizer_.optimize(bytecodes);
-            codes = &bytecodes_.emplace_back(bytecodes);
-            graph->setExtra<bytecode_vec_t, 1>(codes);
-        }
-        return codes;
+    bytecode_vec_t bytecodes_;
+    std::unordered_map<GraphIR::Graph *, size_t> offsetMap_;
+
+    // 程序计数器栈和栈帧栈
+    std::vector<size_t> pcStack_{maxRecursionDepth_};
+    std::vector<Frame *> frameStack_{maxRecursionDepth_};
+
+    void precompile(GraphIR::Graph *graph) {
+        auto [bytecodes, _, offsetMap] = compileAndLink(
+            context_,
+            graph,
+            {
+                .enableTailCallDetection = true,
+                .enableInlineOperators   = true,
+                .optimizationStrategies  = OptimizationStrategyCode::All,
+            });
+        convertToDenseBytecode(bytecodes);
+        bytecodes_ = std::move(bytecodes);
+        offsetMap_ = std::move(offsetMap);
     }
 
-    slot_t call(GraphIR::Graph *graph, Frame *frame);
+    slot_t call(size_t pc, Frame *rootFrame);
+
+    inline void push(size_t pc, Frame *frame) {
+        pcStack_.push_back(pc);
+        frameStack_.push_back(frame);
+        if (frameStack_.size() >= maxRecursionDepth_) {
+            context_->rtmDiags()
+                ->of(RuntimeDiag::MaxRecursionDepthExceeded)
+                .commit(frame->graph()->name(), maxRecursionDepth_);
+        }
+    }
+    inline std::pair<size_t, Frame *> pop() {
+        size_t pc = pcStack_.back();
+        pcStack_.pop_back();
+        Frame *frame = frameStack_.back();
+        frameStack_.pop_back();
+        return {pc, frame};
+    }
 
     void evalMarkedOperator(
         const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
@@ -67,12 +86,7 @@ class FastVMSchedPass : public LinearSchedPass {
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
 
   public:
-    FastVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {
-        optimizer_.registerStrategy(std::make_unique<JumpToJumpStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JumpToNextStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JumpToRetnStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JoinCleanupStrategy>());
-    };
+    FastVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
     virtual ~FastVMSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;

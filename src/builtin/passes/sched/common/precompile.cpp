@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,42 @@
 using namespace std;
 using namespace GraphIR;
 
-bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const OptimizationStrategy &opt) {
+const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
+    static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
+        {":op/add_i", OpCode::IADD}, {":op/add_l", OpCode::LADD},
+        {":op/add_f", OpCode::FADD}, {":op/add_d", OpCode::DADD},
+
+        {":op/sub_i", OpCode::ISUB}, {":op/sub_l", OpCode::LSUB},
+        {":op/sub_f", OpCode::FSUB}, {":op/sub_d", OpCode::DSUB},
+
+        {":op/mul_i", OpCode::IMUL}, {":op/mul_l", OpCode::LMUL},
+        {":op/mul_f", OpCode::FMUL}, {":op/mul_d", OpCode::DMUL},
+
+        {":op/div_i", OpCode::IDIV}, {":op/div_l", OpCode::LDIV},
+        {":op/div_f", OpCode::FDIV}, {":op/div_d", OpCode::DDIV},
+
+        {":op/lt_i", OpCode::ILT},   {":op/lt_l", OpCode::LLT},
+        {":op/lt_f", OpCode::FLT},   {":op/lt_d", OpCode::DLT},
+
+        {":op/gt_i", OpCode::IGT},   {":op/gt_l", OpCode::LGT},
+        {":op/gt_f", OpCode::FGT},   {":op/gt_d", OpCode::DGT},
+
+        {":op/eq_i", OpCode::IEQ},   {":op/eq_l", OpCode::LEQ},
+        {":op/eq_f", OpCode::FEQ},   {":op/eq_d", OpCode::DEQ},
+
+        {":op/ne_i", OpCode::INE},   {":op/ne_l", OpCode::LNE},
+        {":op/ne_f", OpCode::FNE},   {":op/ne_d", OpCode::DNE},
+
+        {":op/le_i", OpCode::ILE},   {":op/le_l", OpCode::LLE},
+        {":op/le_f", OpCode::FLE},   {":op/le_d", OpCode::DLE},
+
+        {":op/ge_i", OpCode::IGE},   {":op/ge_l", OpCode::LGE},
+        {":op/ge_f", OpCode::FGE},   {":op/ge_d", OpCode::DGE},
+    };
+    return supportedInlineOperators;
+}
+
+bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStrategy &opt) {
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
     node_ptr_t exitNode = graph->exitNode();
 
@@ -255,6 +290,23 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
             auto opNode     = tt::as_shared<OperNode>(node);
             const auto &uri = opNode->oper()->uri();
 
+            // 尝试内联算子
+            if (opt.enableInlineOperators) {
+                const auto &inlineOpMap = getSupportedInlineOperatorsMap();
+                auto it                 = inlineOpMap.find(uri);
+                if (it != inlineOpMap.end()) {
+                    appendBytecode(
+                        bytecodes,
+                        it->second,
+                        node->index(),
+                        {
+                            normOps.front(),
+                            normOps.back(),
+                        });
+                    break;
+                }
+            }
+
             if (uri.starts_with(":mark/")) {
                 MarkOpCode markOp;
                 if (uri == ":mark/map_arr") {
@@ -355,41 +407,150 @@ bytecode_vec_t precompile(const context_ptr_t &ctx, Graph *graph, const Optimiza
         joinTargetMap.empty(),
         "Some JOIN nodes have unmatched JUMP instructions without corresponding targets.");
 
+    // 优化字节码
+    BytecodeOptimizer optimizer(opt.optimizationStrategies);
+    optimizer.optimize(bytecodes);
+
     return bytecodes;
 }
 
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
-    std::string operandStr;
+std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
+compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt) {
+    bytecode_vec_t linked;
+    std::vector<BytecodeIndex> graphs;
+    std::unordered_map<GraphIR::Graph *, size_t> offsetMap;
 
-    if (bc.hasOperands()) {
-        size_t normCnt = bc.fastop[0];
-        size_t withCnt = bc.fastop[1];
-        operandStr     = "(";
-
-        for (size_t j = 0; j < normCnt; j++) {
-            operandStr += std::to_string(bc.operands()[j]);
-            if (j + 1 < normCnt)
-                operandStr += ", ";
+    // 收集所有被依赖的子图（包含 entry 自身）
+    std::vector<graph_ptr_t> allGraphs;
+    for (const auto &[_, gSet] : entry->subGraphs()) {
+        for (const auto &g : gSet) {
+            auto sortedSubGraphs =
+                findReachable(g, [](const graph_ptr_t &g) { return g->dependencies(); }, false);
+            allGraphs.insert(allGraphs.end(), sortedSubGraphs.begin(), sortedSubGraphs.end());
         }
+    }
+    allGraphs.push_back(entry->shared_from_this());
 
-        operandStr += ") <";
-
-        for (size_t j = 0; j < withCnt; j++) {
-            operandStr += std::to_string(bc.operands()[normCnt + j]);
-            if (j + 1 < withCnt)
-                operandStr += ", ";
+    // 去重
+    std::unordered_set<GraphIR::Graph *> visited;
+    std::vector<GraphIR::Graph *> uniqueGraphs;
+    for (const auto &g : allGraphs) {
+        if (visited.insert(g.get()).second) {
+            uniqueGraphs.push_back(g.get());
         }
+    }
+    reverse(uniqueGraphs.begin(), uniqueGraphs.end());
 
-        operandStr += ">";
-    } else {
-        operandStr = "() <>";
+    // 编译所有图
+    for (auto *graph : uniqueGraphs) {
+        size_t start         = linked.size();
+        bytecode_vec_t codes = compile(ctx, graph, opt);
+
+        offsetMap[graph] = start;
+        graphs.push_back({start, codes.size(), graph});
+
+        linked.insert(linked.end(), codes.begin(), codes.end());
     }
 
-    return std::format(
-        "  [{}] {} | {} | {}",
-        formatIndex(index),
-        bc.toString(),
-        operandStr,
-        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                  : bc.extra()->toString(bc.opcode));
+    // 统一链接 — 修改字节码中的地址引用
+    size_t scanIndex    = 0;
+    size_t currGraphIdx = 0;
+    size_t currGraphEnd = graphs.empty() ? 0 : graphs[0].length;
+
+    while (scanIndex < linked.size()) {
+        if (scanIndex >= currGraphEnd && currGraphIdx + 1 < graphs.size()) {
+            currGraphIdx++;
+            currGraphEnd += graphs[currGraphIdx].length;
+        }
+
+        Bytecode &bc              = linked[scanIndex];
+        const BytecodeIndex &info = graphs[currGraphIdx];
+
+        switch (bc.opcode) {
+        case OpCode::TAIL:
+        case OpCode::FUNC: {
+            auto *targetGraph = bc.extra()->graph;
+            // 写入目标图字节码的起始偏移
+            bc.fastop[1] = as_index(offsetMap.at(targetGraph));
+        } break;
+        case OpCode::JUMP: {
+            // 局部偏移转全局偏移
+            bc.fastop[0] += offsetMap.at(info.graph);
+        } break;
+        default:
+            break;
+        }
+
+        scanIndex += bc.opsize;
+    }
+
+    return {linked, graphs, offsetMap};
+}
+
+std::string
+opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context, bool dense) {
+    OpCode opcode = dense ? fromDense(static_cast<DenseOpCode>(bc.opcode)) : bc.opcode;
+    if (bc.hasOperands()) {
+        std::string operandStr;
+
+        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL) {
+            size_t argsCnt = bc.fastop[0];
+            operandStr     = "(";
+
+            for (size_t j = 0; j < argsCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < argsCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ")";
+
+            if (bc.fastop[1] != 0) {
+                operandStr += " -> ";
+                operandStr += std::to_string(bc.fastop[1]);
+            }
+        } else {
+            size_t normCnt = bc.fastop[0];
+            size_t withCnt = bc.fastop[1];
+            operandStr     = "(";
+
+            for (size_t j = 0; j < normCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < normCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ") <";
+
+            for (size_t j = 0; j < withCnt; j++) {
+                operandStr += std::to_string(bc.operands()[normCnt + j]);
+                if (j + 1 < withCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ">";
+        }
+
+        return std::format(
+            "  [{}] {} | {} | {}",
+            formatIndex(index),
+            bc.toString(dense),
+            operandStr,
+            opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                   : bc.extra()->toString(opcode));
+    } else {
+        return std::format(
+            "  [{}] {} | {}",
+            formatIndex(index),
+            bc.toString(dense),
+            bc.extra()->toString(opcode));
+    }
+}
+
+void convertToDenseBytecode(bytecode_vec_t &src) {
+    for (size_t i = 0; i < src.size();) {
+        Bytecode &bc = src[i];
+        bc.opcode    = static_cast<OpCode>(toDense(bc.opcode));
+        i += bc.opsize;
+    }
 }
