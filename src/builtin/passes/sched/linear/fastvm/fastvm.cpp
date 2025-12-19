@@ -29,6 +29,19 @@
 #include "service/profiler/core/trace.h"
 #endif
 
+#define NEXT()                                                                                     \
+    do {                                                                                           \
+        pc += bc->opsize;                                                                          \
+        bc = &base[pc];                                                                            \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                                           \
+    } while (0)
+
+#define JUMP()                                                                                     \
+    do {                                                                                           \
+        bc = &base[pc];                                                                            \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                                           \
+    } while (0)
+
 using namespace std;
 using namespace GraphIR;
 
@@ -319,8 +332,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         opperf::ScopeTimer _timer(bc.opcode);
 #endif
 
-        switch (bc.opcode) {
-        case OpCode::RETN: {
+        switch (static_cast<DenseOpCode>(bc.opcode)) {
+        case DenseOpCode::RETN: {
             slot_t result = currFrame->get<slot_t>(bc.fastop[0]);
 
             if (currFrame == rootFrame) {
@@ -341,11 +354,11 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             continue;
         } break;
 
-        case OpCode::CAST: {
+        case DenseOpCode::CAST: {
             ASSERT(false, "CAST opcode not implemented in FastVM.");
         } break;
 
-        case OpCode::COPY: {
+        case DenseOpCode::COPY: {
             TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
             if (isGCTraced(srcType)) {
                 Object *srcData = currFrame->get<Object *>(bc.fastop[0]);
@@ -356,7 +369,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             }
         } break;
 
-        case OpCode::ACCS: {
+        case DenseOpCode::ACCS: {
             TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
             if (srcType == TypeCode::Tuple) {
                 Tuple *t = currFrame->get<Tuple *>(bc.fastop[0]);
@@ -375,12 +388,12 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             }
         } break;
 
-        case OpCode::JUMP: {
+        case DenseOpCode::JUMP: {
             pc = static_cast<arr_size_t>(bc.fastop[0]);
             continue; // skip i increment
         } break;
 
-        case OpCode::BRCH: {
+        case DenseOpCode::BRCH: {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
 
@@ -430,7 +443,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             continue; // skip i increment
         } break;
 
-        case OpCode::JOIN: {
+        case DenseOpCode::JOIN: {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
             int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
@@ -441,7 +454,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             currFrame->set(bc.result, result);
         } break;
 
-        case OpCode::FILL: {
+        case DenseOpCode::FILL: {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
 
@@ -520,7 +533,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             currFrame->set(bc.result, target);
         } break;
 
-        case OpCode::CALL: {
+        case DenseOpCode::CALL: {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
             auto function          = currFrame->get<Function *>(wargs[0]);
@@ -547,7 +560,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             currFrame->set(bc.result, result);
         } break;
 
-        case OpCode::FUNC: {
+        case DenseOpCode::FUNC: {
             // 保存当前程序计数器和栈帧
             push(pc, currFrame);
 
@@ -566,7 +579,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             continue;
         } break;
 
-        case OpCode::TAIL: {
+        case DenseOpCode::TAIL: {
             // 尾调用不保存程序计数器和栈帧
             // 直接释放当前栈帧
             // 如果当前栈帧和目标栈帧属于同一个图
@@ -599,7 +612,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             continue;
         } break;
 
-        case OpCode::OPER: {
+        case DenseOpCode::OPER: {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
             auto func              = bc.extra()->func;
@@ -609,7 +622,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             func(bc.result, nargs, wargs, *currFrame, *context_);
         } break;
 
-        case OpCode::SCHD: {
+        case DenseOpCode::SCHD: {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
             auto mark              = bc.extra()->mark;
@@ -631,6 +644,403 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         pc += bc.opsize;
     }
 }
+
+// slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
+//     Frame *currFrame     = rootFrame;
+//     const Bytecode *base = bytecodes_.data();
+//     const Bytecode *bc;
+
+//     static void *dispatchTable[] = {
+//         &&label_RETN,   // 0
+//         &&label_CAST,   // 1
+//         &&label_COPY,   // 2
+//         &&label_ACCS,   // 3
+//         &&label_JUMP,   // 4
+//         &&label_BRCH,   // 5
+//         &&label_JOIN,   // 6
+//         &&label_FILL,   // 7
+//         &&label_CALL,   // 8
+//         &&label_FUNC,   // 9
+//         &&label_TAIL,   // 10
+//         &&label_OPER,   // 11
+//         &&label_SCHD,   // 12
+//         &&label_DEFAULT // 13
+//     };
+
+//     // 初次分派
+//     JUMP();
+
+// label_RETN: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
+
+//     if (currFrame == rootFrame) {
+//         return result;
+//     }
+
+//     framePool_.release(currFrame);
+
+//     auto [lastPC, lastFrame] = pop();
+//     pc                       = lastPC;
+//     currFrame                = lastFrame;
+
+//     Bytecode &lbc = bytecodes_[pc];
+//     currFrame->set(lbc.result, result);
+
+//     NEXT();
+// }
+
+// label_CAST: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     ASSERT(false, "CAST opcode not implemented in FastVM.");
+
+//     NEXT();
+// }
+
+// label_COPY: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
+//     if (isGCTraced(srcType)) {
+//         Object *srcData = currFrame->get<Object *>(bc->fastop[0]);
+//         currFrame->set(bc->result, srcData->clone(mm::autoSpace(), false));
+//     } else {
+//         slot_t srcData = currFrame->get<slot_t>(bc->fastop[0]);
+//         currFrame->set(bc->result, srcData);
+//     }
+
+//     NEXT();
+// }
+
+// label_ACCS: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
+//     if (srcType == TypeCode::Tuple) {
+//         Tuple *t = currFrame->get<Tuple *>(bc->fastop[0]);
+//         ASSERT(
+//             static_cast<size_t>(bc->fastop[1]) < t->size(),
+//             "Tuple access index out of range in FastVM.");
+//         currFrame->set(bc->result, t->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
+//     } else if (srcType == TypeCode::Struct) {
+//         Struct *s = currFrame->get<Struct *>(bc->fastop[0]);
+//         ASSERT(
+//             static_cast<size_t>(bc->fastop[1]) < s->size(),
+//             "Struct access index out of range in FastVM.");
+//         currFrame->set(bc->result, s->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
+//     } else {
+//         ASSERT(false, "ACCS opcode unsupported source type in FastVM.");
+//     }
+
+//     NEXT();
+// }
+
+// label_JUMP: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     pc = static_cast<arr_size_t>(bc->fastop[0]);
+
+//     JUMP();
+// }
+
+// label_BRCH: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     const data_arr_t nargs = bc->nargs();
+//     const data_arr_t wargs = bc->wargs();
+
+//     size_t jumpIdx = 0;
+//     if (bc->withCnt() == 0) {
+//         // 普通的 if-else 分支，cond 是 bool 类型
+//         bool condData = currFrame->get<bool>(nargs[0]);
+//         if (condData) {
+//             jumpIdx = 0; // jump to true branch
+//         } else {
+//             jumpIdx = 1; // jump to false branch
+//         }
+//     } else {
+//         // match-case，依次判断各分支
+//         size_t j          = 0;
+//         TypeCode condType = currFrame->typeAt(nargs[0]);
+
+//         if (isGCTraced(condType)) {
+//             auto condData = currFrame->get<Object *>(nargs[0]);
+//             for (; j < bc->withCnt(); ++j) {
+//                 auto caseData = currFrame->get<Object *>(wargs[j]);
+//                 if (condData->equals(caseData)) {
+//                     jumpIdx = j; // jump to matched case
+//                     break;
+//                 }
+//             }
+//         } else {
+//             auto condData = currFrame->get<slot_t>(nargs[0]);
+//             for (; j < bc->withCnt(); ++j) {
+//                 auto caseData = currFrame->get<slot_t>(wargs[j]);
+//                 if (condData == caseData) {
+//                     jumpIdx = j; // jump to matched case
+//                     break;
+//                 }
+//             }
+//         }
+
+//         if (j == bc->withCnt()) {
+//             // fallthrough to else case if no match
+//             jumpIdx = bc->withCnt();
+//         }
+//     }
+
+//     currFrame->set(bc->result, fromSlot<Int>(jumpIdx));
+//     pc += bc->opsize + jumpIdx;
+
+//     JUMP();
+// }
+
+// label_JOIN: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     const data_arr_t nargs = bc->nargs();
+//     const data_arr_t wargs = bc->wargs();
+//     int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
+//     ASSERT(
+//         brIndex >= 0 && static_cast<size_t>(brIndex) < bc->withCnt(),
+//         "JOIN opcode choosen index out of range in FastVM.");
+//     slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
+//     currFrame->set(bc->result, result);
+
+//     NEXT();
+// }
+
+// label_FILL: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     const data_arr_t nargs = bc->nargs();
+//     const data_arr_t wargs = bc->wargs();
+
+//     TypeCode targetType = currFrame->typeAt(nargs[0]);
+//     ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+
+//     Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
+//     ASSERT(target != nullptr, "FILL target data is null.");
+
+//     switch (targetType) {
+//     case TypeCode::Tuple: {
+//         const auto &type = currFrame->typePtrAt<TupleType>(bc->result);
+//         auto t           = static_cast<Tuple *>(target);
+//         const auto &refs = t->layout().refs();
+//         ASSERT(
+//             refs.size() == bc->withCnt(),
+//             std::format(
+//                 "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+//                 bc->withCnt(),
+//                 refs.size()));
+//         for (size_t j = 0; j < bc->withCnt(); ++j) {
+//             t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+//         }
+//         t->updateLayout(&type->layout());
+//     } break;
+
+//     case TypeCode::Array: {
+//         const auto &type = currFrame->typePtrAt<ArrayType>(bc->result);
+//         auto a           = static_cast<Array *>(target);
+//         const auto &refs = a->layout().refs();
+//         ASSERT(
+//             refs.size() == bc->withCnt(),
+//             std::format(
+//                 "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+//                 bc->withCnt(),
+//                 refs.size()));
+//         for (size_t j = 0; j < bc->withCnt(); ++j) {
+//             a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+//         }
+//         a->updateLayout(&type->layout());
+//     } break;
+
+//     case TypeCode::Struct: {
+//         const auto &type = currFrame->typePtrAt<StructType>(bc->result);
+//         auto s           = static_cast<Struct *>(target);
+//         const auto &refs = s->layout().refs();
+//         ASSERT(
+//             refs.size() == bc->withCnt(),
+//             std::format(
+//                 "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+//                 bc->withCnt(),
+//                 refs.size()));
+//         for (size_t j = 0; j < bc->withCnt(); ++j) {
+//             s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+//         }
+//         s->updateLayout(&type->layout());
+//     } break;
+
+//     case TypeCode::Function: {
+//         auto f             = static_cast<Function *>(target);
+//         Tuple *closureData = f->tuple();
+//         for (size_t j = 0; j < bc->withCnt(); ++j) {
+//             closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
+//         }
+//     } break;
+
+//     default:
+//         ASSERT(
+//             false,
+//             std::format(
+//                 "Unsupported FILL target type {} in FastVM.",
+//                 typeCodeToString(targetType)));
+//     }
+
+//     currFrame->set(bc->result, target);
+
+//     NEXT();
+// }
+
+// label_CALL: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     const data_arr_t nargs = bc->nargs();
+//     const data_arr_t wargs = bc->wargs();
+//     auto function          = currFrame->get<Function *>(wargs[0]);
+//     auto targetGraph       = function->graph();
+
+//     Frame *funcFrame = framePool_.acquire(targetGraph);
+
+//     size_t i = 0;
+//     for (; i < nargs.size; ++i) {
+//         funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
+//     }
+
+//     Tuple *closureData = function->tuple();
+//     for (size_t j = 0; j < closureData->size(); ++j) {
+//         funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
+//     }
+
+//     _timer.pause();
+//     const auto &result = call(offsetMap_.at(targetGraph), funcFrame);
+//     _timer.resume();
+
+//     framePool_.release(funcFrame);
+
+//     currFrame->set(bc->result, result);
+
+//     NEXT();
+// }
+
+// label_FUNC: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     // 保存当前程序计数器和栈帧
+//     push(pc, currFrame);
+
+//     // 创建新的栈帧并设置参数
+//     Frame *funcFrame       = framePool_.acquire(bc->extra()->graph);
+//     size_t argsCnt         = bc->normCnt();
+//     const data_idx_t *args = bc->operands();
+//     for (size_t i = 0; i < argsCnt; ++i) {
+//         funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+//     }
+
+//     // 切换到目标图的字节码位置和栈帧
+//     pc        = bc->fastop[1];
+//     currFrame = funcFrame;
+
+//     JUMP();
+// }
+
+// label_TAIL: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     // 尾调用不保存程序计数器和栈帧
+//     // 直接释放当前栈帧
+//     // 如果当前栈帧和目标栈帧属于同一个图
+//     // 栈帧池会自动复用
+//     // 这间接实现了尾调用优化
+//     FrameView lastFrame(currFrame);
+//     framePool_.release(currFrame);
+
+//     // 创建新的栈帧并设置参数
+//     // 对于刚刚释放的栈帧，栈帧池会自动复用
+//     // 所以这里 currFrame 就是目标栈帧
+//     currFrame              = framePool_._acquire(bc->extra()->graph);
+//     size_t argsCnt         = bc->normCnt();
+//     const data_idx_t *args = bc->operands();
+//     for (size_t i = 0; i < argsCnt; ++i) {
+//         // 注意，这里的 currFrame 已经被释放了
+//         // 但由于栈帧池不会对已经释放的栈帧进行格式化
+//         // 所以这里仍然可以安全地获取原栈帧的数据
+//         // 当然，需要通过 lastFrame 来获取数据
+//         // lastFrame 中保存了原栈帧的静态数据区指针
+//         currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+//     }
+//     // 这里需要手动 resetTop，因为 _acquire 不会 resetTop
+//     // 之所以延迟 resetTop，是为了避免 resetTop 破坏刚刚释放的栈帧的数据
+//     framePool_._resetTop();
+
+//     // 切换到目标图的字节码位置
+//     pc = bc->fastop[1];
+
+//     JUMP();
+// }
+
+// label_OPER: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     const data_arr_t nargs = bc->nargs();
+//     const data_arr_t wargs = bc->wargs();
+//     auto func              = bc->extra()->func;
+//     EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+//         "Executing operator {}.",
+//         context_->execMgr().getNameOfAnOperator(func)));
+//     func(bc->result, nargs, wargs, *currFrame, *context_);
+
+//     NEXT();
+// }
+
+// label_SCHD: {
+//     EXEC_WHEN_DEBUG(
+//         l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+//     opperf::ScopeTimer _timer(bc->opcode);
+
+//     const data_arr_t nargs = bc->nargs();
+//     const data_arr_t wargs = bc->wargs();
+//     auto mark              = bc->extra()->mark;
+//     evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+
+//     NEXT();
+// }
+
+// label_DEFAULT:
+//     if (isOpCodeOfInlinedOperator(bc->opcode)) {
+//         evalInlinedOpCode(*bc, currFrame, context_);
+//     } else {
+//         context_->rtmDiags()->of(RuntimeDiag::UnsupportedBytecode).commit(to_string(bc->opcode));
+//     }
+
+//     NEXT();
+// }
 
 void FastVMSchedPass::evalMarkedOperator(
     const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {

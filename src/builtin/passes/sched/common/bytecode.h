@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,6 +95,101 @@ enum class OpCode : uint8_t {
     FGE = 0b01100110,
     DGE = 0b01100111,
 };
+
+// 分布密集的字节码指令集
+// 用于加速 switch 分派，降低 CPU 分支预测失败率
+enum class DenseOpCode : uint8_t {
+    RETN,
+    CAST,
+    COPY,
+    ACCS,
+    JUMP,
+    BRCH,
+    JOIN,
+    FILL,
+    CALL,
+    FUNC,
+    TAIL,
+    OPER,
+    SCHD,
+    IADD,
+    LADD,
+    FADD,
+    DADD,
+    ISUB,
+    LSUB,
+    FSUB,
+    DSUB,
+    IMUL,
+    LMUL,
+    FMUL,
+    DMUL,
+    IDIV,
+    LDIV,
+    FDIV,
+    DDIV,
+    ILT,
+    LLT,
+    FLT,
+    DLT,
+    IGT,
+    LGT,
+    FGT,
+    DGT,
+    IEQ,
+    LEQ,
+    FEQ,
+    DEQ,
+    INE,
+    LNE,
+    FNE,
+    DNE,
+    ILE,
+    LLE,
+    FLE,
+    DLE,
+    IGE,
+    LGE,
+    FGE,
+    DGE,
+    COUNT // 用于统计总数
+};
+
+// 映射表：DenseOpCode → OpCode
+static constexpr std::array<OpCode, static_cast<size_t>(DenseOpCode::COUNT)> DenseToOpCodeTable = {
+    OpCode::RETN, OpCode::CAST, OpCode::COPY, OpCode::ACCS, OpCode::JUMP, OpCode::BRCH,
+    OpCode::JOIN, OpCode::FILL, OpCode::CALL, OpCode::FUNC, OpCode::TAIL, OpCode::OPER,
+    OpCode::SCHD, OpCode::IADD, OpCode::LADD, OpCode::FADD, OpCode::DADD, OpCode::ISUB,
+    OpCode::LSUB, OpCode::FSUB, OpCode::DSUB, OpCode::IMUL, OpCode::LMUL, OpCode::FMUL,
+    OpCode::DMUL, OpCode::IDIV, OpCode::LDIV, OpCode::FDIV, OpCode::DDIV, OpCode::ILT,
+    OpCode::LLT,  OpCode::FLT,  OpCode::DLT,  OpCode::IGT,  OpCode::LGT,  OpCode::FGT,
+    OpCode::DGT,  OpCode::IEQ,  OpCode::LEQ,  OpCode::FEQ,  OpCode::DEQ,  OpCode::INE,
+    OpCode::LNE,  OpCode::FNE,  OpCode::DNE,  OpCode::ILE,  OpCode::LLE,  OpCode::FLE,
+    OpCode::DLE,  OpCode::IGE,  OpCode::LGE,  OpCode::FGE,  OpCode::DGE};
+
+// 映射表：OpCode → DenseOpCode
+// 用256大小的查找表直接映射，未定义映射值可设置为 COUNT（表示非法）
+static constexpr std::array<DenseOpCode, 256> OpCodeToDenseTable = [] {
+    std::array<DenseOpCode, 256> table{};
+    table.fill(DenseOpCode::COUNT); // 默认非法
+    for (size_t i = 0; i < DenseToOpCodeTable.size(); ++i) {
+        auto oc   = static_cast<uint8_t>(DenseToOpCodeTable[i]);
+        table[oc] = static_cast<DenseOpCode>(i);
+    }
+    return table;
+}();
+
+constexpr DenseOpCode toDense(OpCode oc) { return OpCodeToDenseTable[static_cast<uint8_t>(oc)]; }
+
+constexpr OpCode fromDense(DenseOpCode doc) {
+    if (doc == DenseOpCode::COUNT)
+        throw std::out_of_range("Invalid DenseOpCode");
+    return DenseToOpCodeTable[static_cast<size_t>(doc)];
+}
+
+// inline void makeDense(BytecodeHeader &bc) {
+//     bc.opcode = reinterpret_cast<OpCode>(toDense(bc.opcode));
+// }
 
 enum class MarkOpCode {
     MapArr,

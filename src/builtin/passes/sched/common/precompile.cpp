@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -542,5 +542,13 @@ std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t
             formatIndex(index),
             bc.toString(),
             bc.extra()->toString(bc.opcode));
+    }
+}
+
+void convertToDenseBytecode(bytecode_vec_t &src) {
+    for (size_t i = 0; i < src.size();) {
+        Bytecode &bc = src[i];
+        bc.opcode    = static_cast<OpCode>(toDense(bc.opcode));
+        i += bc.opsize;
     }
 }

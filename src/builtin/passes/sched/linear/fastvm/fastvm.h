@@ -47,6 +47,7 @@ class FastVMSchedPass : public LinearSchedPass {
                 .enableInlineOperators   = true,
                 .optimizationStrategies  = OptimizationStrategyCode::All,
             });
+        convertToDenseBytecode(bytecodes);
         bytecodes_ = std::move(bytecodes);
         offsetMap_ = std::move(offsetMap);
     }
