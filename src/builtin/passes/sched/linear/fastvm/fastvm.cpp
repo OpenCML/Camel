@@ -682,6 +682,7 @@ label_RETN: {
 
     auto [lastPC, lastFrame] = pop();
     pc                       = lastPC;
+    bc                       = &bytecodes_[pc];
     currFrame                = lastFrame;
 
     Bytecode &lbc = bytecodes_[pc];
