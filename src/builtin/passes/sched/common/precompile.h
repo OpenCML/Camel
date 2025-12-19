@@ -22,15 +22,21 @@
 #include "bytecode.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
+#include "optimize.h"
 
 #include <memory>
 
-struct OptimizationStrategy {
+struct CompileStrategy {
     bool enableTailCallDetection = true;
     bool enableInlineOperators   = false;
+
+    // optimization strategies to apply
+    OptimizationStrategyCode optimizationStrategies = OptimizationStrategyCode::None;
 };
 
 bytecode_vec_t
-precompile(const context_ptr_t &ctx, GraphIR::Graph *graph, const OptimizationStrategy &opt = {});
+compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &opt = {});
 
 std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);
+
+bytecode_vec_t compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry);

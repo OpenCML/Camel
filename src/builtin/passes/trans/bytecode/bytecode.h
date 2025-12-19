@@ -24,15 +24,8 @@
 #include "builtin/passes/sched/common/optimize.h"
 
 class BytecodeDumpPass : public GraphTranslatePass {
-    BytecodeOptimizer optimizer_;
-
   public:
-    BytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {
-        optimizer_.registerStrategy(std::make_unique<JumpToJumpStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JumpToNextStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JumpToRetnStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JoinCleanupStrategy>());
-    };
+    BytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
     virtual ~BytecodeDumpPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;

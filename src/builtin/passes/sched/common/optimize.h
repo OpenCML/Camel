@@ -21,39 +21,29 @@
 
 #include "bytecode.h"
 
-struct IOptimizeStrategy {
-    virtual ~IOptimizeStrategy() = default;
-
-    // 返回下一次扫描的起始位置；若没有修改则返回 std::nullopt
-    virtual std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) = 0;
+enum class OptimizationStrategyCode : uint32_t {
+    None                    = 0x00000000,
+    All                     = 0xFFFFFFFF,
+    JumpToJumpOptimization  = 1 << 0,
+    JumpToNextOptimization  = 1 << 1,
+    JumpToRetnOptimization  = 1 << 2,
+    JoinCleanupOptimization = 1 << 3
 };
 
-class BytecodeOptimizer {
-  public:
-    using StrategyPtr = std::unique_ptr<IOptimizeStrategy>;
-    std::vector<StrategyPtr> strategies;
+struct OptimizationStrategyConfig {
+    OptimizationStrategyCode flags = OptimizationStrategyCode::None;
 
-    void registerStrategy(StrategyPtr s) { strategies.push_back(std::move(s)); }
-
-    void optimize(bytecode_vec_t &codes, size_t start = 0) {
-        for (size_t curr = start; curr < codes.size();) {
-            std::optional<size_t> restartPos;
-
-            for (auto &s : strategies) {
-                if (auto res = s->apply(codes, curr)) {
-                    restartPos = res; // 记录新的起始位置
-                    break;            // 修改完，立即停止其他策略
-                }
-            }
-
-            if (restartPos)
-                curr = *restartPos; // 从指定位置重新扫描
-            else if (curr < codes.size())
-                curr += codes[curr].opsize; // 正常前进
-            else
-                break;
-        }
+    OptimizationStrategyConfig(OptimizationStrategyCode f) : flags(f) {}
+    bool enabled(OptimizationStrategyCode code) const {
+        return (static_cast<uint32_t>(flags) & static_cast<uint32_t>(code)) != 0;
     }
+};
+
+struct IOptimizeStrategy {
+    virtual ~IOptimizeStrategy() = default;
+    // 返回下一次扫描的起始位置；若没有修改则返回 std::nullopt
+    virtual std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) = 0;
+    virtual OpCode triggerOp() const                                        = 0;
 };
 
 void moveup(bytecode_vec_t &codes, size_t from, size_t to);
@@ -71,11 +61,10 @@ size_t findNext(bytecode_vec_t &codes, size_t index);
  */
 class JumpToJumpStrategy : public IOptimizeStrategy {
   public:
-    std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
-        Bytecode &bc = codes[curr];
-        if (bc.opcode != OpCode::JUMP)
-            return std::nullopt;
+    OpCode triggerOp() const override { return OpCode::JUMP; }
 
+    std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
+        Bytecode &bc  = codes[curr];
         size_t next   = bc.fastop[0];
         Bytecode &tbc = codes[next];
 
@@ -100,12 +89,11 @@ class JumpToJumpStrategy : public IOptimizeStrategy {
  */
 class JumpToNextStrategy : public IOptimizeStrategy {
   public:
+    OpCode triggerOp() const override { return OpCode::JUMP; }
+
     std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
         Bytecode &bc = codes[curr];
-        if (bc.opcode != OpCode::JUMP)
-            return std::nullopt;
-
-        size_t next = bc.fastop[0];
+        size_t next  = bc.fastop[0];
 
         // 若跳转目标刚好是下一条指令，说明此 JUMP 没有意义
         if (next == curr + 1) {
@@ -125,12 +113,11 @@ class JumpToNextStrategy : public IOptimizeStrategy {
  */
 class JumpToRetnStrategy : public IOptimizeStrategy {
   public:
+    OpCode triggerOp() const override { return OpCode::JUMP; }
+
     std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
         Bytecode &bc = codes[curr];
-        if (bc.opcode != OpCode::JUMP)
-            return std::nullopt;
-
-        size_t next = bc.fastop[0];
+        size_t next  = bc.fastop[0];
         if (next >= codes.size())
             return std::nullopt;
         Bytecode &tbc = codes[next];
@@ -152,6 +139,8 @@ class JumpToRetnStrategy : public IOptimizeStrategy {
  */
 class JoinCleanupStrategy : public IOptimizeStrategy {
   public:
+    OpCode triggerOp() const override { return OpCode::JOIN; }
+
     std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
         Bytecode &bc = codes[curr];
         if (bc.opcode != OpCode::JOIN)
@@ -207,4 +196,47 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
 
         return std::nullopt;
     }
+};
+
+// 全局策略注册表
+// 懒加载
+const std::unordered_map<OptimizationStrategyCode, std::unique_ptr<IOptimizeStrategy>> &
+getGlobalOptimizationStrategyRegistry();
+
+class BytecodeOptimizer {
+  public:
+    explicit BytecodeOptimizer(const OptimizationStrategyCode flags) {
+        OptimizationStrategyConfig cfg(flags);
+        for (auto &[code, strategy] : getGlobalOptimizationStrategyRegistry()) {
+            if (cfg.enabled(code)) {
+                strategies.push_back(strategy.get());
+            }
+        }
+    }
+
+    void optimize(bytecode_vec_t &codes, size_t start = 0) {
+        for (size_t curr = start; curr < codes.size();) {
+            std::optional<size_t> restartPos;
+
+            for (auto *s : strategies) {
+                auto trigOp = s->triggerOp();
+                if (codes[curr].opcode != trigOp)
+                    continue;
+                if (auto res = s->apply(codes, curr)) {
+                    restartPos = res;
+                    break;
+                }
+            }
+
+            if (restartPos)
+                curr = *restartPos;
+            else if (curr < codes.size())
+                curr += codes[curr].opsize;
+            else
+                break;
+        }
+    }
+
+  private:
+    std::vector<IOptimizeStrategy *> strategies;
 };
