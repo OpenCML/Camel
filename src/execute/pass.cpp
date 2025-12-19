@@ -97,6 +97,10 @@ std::unordered_map<
             [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
         },
         {
+            "std::lbc",
+            [](const context_ptr_t &ctx) { return std::make_unique<LinkedBytecodeDumpPass>(ctx); },
+        },
+        {
             "std::tns",
             [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
         },

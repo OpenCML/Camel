@@ -30,3 +30,11 @@ class BytecodeDumpPass : public GraphTranslatePass {
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };
+
+class LinkedBytecodeDumpPass : public GraphTranslatePass {
+  public:
+    LinkedBytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
+    virtual ~LinkedBytecodeDumpPass() = default;
+
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+};

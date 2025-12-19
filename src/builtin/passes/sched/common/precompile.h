@@ -39,4 +39,11 @@ compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &
 
 std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);
 
-bytecode_vec_t compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry);
+struct BytecodeIndex {
+    size_t offset;
+    size_t length;
+    GraphIR::Graph *graph;
+};
+
+std::pair<bytecode_vec_t, std::vector<BytecodeIndex>>
+compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry);

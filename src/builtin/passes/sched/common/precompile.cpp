@@ -417,28 +417,46 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
 std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
     std::string operandStr;
 
-    if (bc.hasOperands()) {
-        size_t normCnt = bc.fastop[0];
-        size_t withCnt = bc.fastop[1];
+    if (bc.opcode == OpCode::OPER) {
+        if (bc.hasOperands()) {
+            size_t normCnt = bc.fastop[0];
+            size_t withCnt = bc.fastop[1];
+            operandStr     = "(";
+
+            for (size_t j = 0; j < normCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < normCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ") <";
+
+            for (size_t j = 0; j < withCnt; j++) {
+                operandStr += std::to_string(bc.operands()[normCnt + j]);
+                if (j + 1 < withCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ">";
+        } else {
+            operandStr = "() <>";
+        }
+    } else if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+        size_t argsCnt = bc.fastop[0];
         operandStr     = "(";
 
-        for (size_t j = 0; j < normCnt; j++) {
+        for (size_t j = 0; j < argsCnt; j++) {
             operandStr += std::to_string(bc.operands()[j]);
-            if (j + 1 < normCnt)
+            if (j + 1 < argsCnt)
                 operandStr += ", ";
         }
 
-        operandStr += ") <";
+        operandStr += ")";
 
-        for (size_t j = 0; j < withCnt; j++) {
-            operandStr += std::to_string(bc.operands()[normCnt + j]);
-            if (j + 1 < withCnt)
-                operandStr += ", ";
+        if (bc.fastop[1] != 0) {
+            operandStr += " -> ";
+            operandStr += std::to_string(bc.fastop[1]);
         }
-
-        operandStr += ">";
-    } else {
-        operandStr = "() <>";
     }
 
     return std::format(
@@ -450,16 +468,11 @@ std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t
                                   : bc.extra()->toString(bc.opcode));
 }
 
-struct GraphInfo {
-    size_t length;
-    GraphIR::Graph *graph;
-};
-
-bytecode_vec_t
+std::pair<bytecode_vec_t, std::vector<BytecodeIndex>>
 compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry) {
     // 数据容器
     bytecode_vec_t linked;
-    std::vector<GraphInfo> graphs;
+    std::vector<BytecodeIndex> graphs;
     std::unordered_map<GraphIR::Graph *, size_t> offsetMap;
 
     // 编译并追加 Graph
@@ -472,7 +485,7 @@ compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *en
         bytecode_vec_t codes = compile(ctx, graph, opt);
 
         offsetMap[graph] = start;
-        graphs.push_back({codes.size(), graph});
+        graphs.push_back({start, codes.size(), graph});
 
         linked.insert(linked.end(), codes.begin(), codes.end());
     };
@@ -490,8 +503,8 @@ compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *en
             currGraphEnd += graphs[currGraphIdx].length;
         }
 
-        Bytecode &bc          = linked[scanIndex];
-        const GraphInfo &info = graphs[currGraphIdx];
+        Bytecode &bc              = linked[scanIndex];
+        const BytecodeIndex &info = graphs[currGraphIdx];
 
         switch (bc.opcode) {
         case OpCode::TAIL:
@@ -512,5 +525,5 @@ compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *en
         scanIndex += bc.opsize;
     }
 
-    return linked;
+    return {linked, graphs};
 }
