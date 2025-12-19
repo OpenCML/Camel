@@ -414,60 +414,6 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
     return bytecodes;
 }
 
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
-    std::string operandStr;
-
-    if (bc.opcode == OpCode::OPER) {
-        if (bc.hasOperands()) {
-            size_t normCnt = bc.fastop[0];
-            size_t withCnt = bc.fastop[1];
-            operandStr     = "(";
-
-            for (size_t j = 0; j < normCnt; j++) {
-                operandStr += std::to_string(bc.operands()[j]);
-                if (j + 1 < normCnt)
-                    operandStr += ", ";
-            }
-
-            operandStr += ") <";
-
-            for (size_t j = 0; j < withCnt; j++) {
-                operandStr += std::to_string(bc.operands()[normCnt + j]);
-                if (j + 1 < withCnt)
-                    operandStr += ", ";
-            }
-
-            operandStr += ">";
-        } else {
-            operandStr = "() <>";
-        }
-    } else if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-        size_t argsCnt = bc.fastop[0];
-        operandStr     = "(";
-
-        for (size_t j = 0; j < argsCnt; j++) {
-            operandStr += std::to_string(bc.operands()[j]);
-            if (j + 1 < argsCnt)
-                operandStr += ", ";
-        }
-
-        operandStr += ")";
-
-        if (bc.fastop[1] != 0) {
-            operandStr += " -> ";
-            operandStr += std::to_string(bc.fastop[1]);
-        }
-    }
-
-    return std::format(
-        "  [{}] {} | {} | {}",
-        formatIndex(index),
-        bc.toString(),
-        operandStr,
-        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                  : bc.extra()->toString(bc.opcode));
-}
-
 std::pair<bytecode_vec_t, std::vector<BytecodeIndex>>
 compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry) {
     // 数据容器
@@ -526,4 +472,58 @@ compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *en
     }
 
     return {linked, graphs};
+}
+
+std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
+    std::string operandStr;
+
+    if (bc.opcode == OpCode::OPER) {
+        if (bc.hasOperands()) {
+            size_t normCnt = bc.fastop[0];
+            size_t withCnt = bc.fastop[1];
+            operandStr     = "(";
+
+            for (size_t j = 0; j < normCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < normCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ") <";
+
+            for (size_t j = 0; j < withCnt; j++) {
+                operandStr += std::to_string(bc.operands()[normCnt + j]);
+                if (j + 1 < withCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ">";
+        } else {
+            operandStr = "() <>";
+        }
+    } else if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+        size_t argsCnt = bc.fastop[0];
+        operandStr     = "(";
+
+        for (size_t j = 0; j < argsCnt; j++) {
+            operandStr += std::to_string(bc.operands()[j]);
+            if (j + 1 < argsCnt)
+                operandStr += ", ";
+        }
+
+        operandStr += ")";
+
+        if (bc.fastop[1] != 0) {
+            operandStr += " -> ";
+            operandStr += std::to_string(bc.fastop[1]);
+        }
+    }
+
+    return std::format(
+        "  [{}] {} | {} | {}",
+        formatIndex(index),
+        bc.toString(),
+        operandStr,
+        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                  : bc.extra()->toString(bc.opcode));
 }

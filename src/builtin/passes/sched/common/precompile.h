@@ -34,16 +34,16 @@ struct CompileStrategy {
     OptimizationStrategyCode optimizationStrategies = OptimizationStrategyCode::None;
 };
 
-bytecode_vec_t
-compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &opt = {});
-
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);
-
 struct BytecodeIndex {
     size_t offset;
     size_t length;
     GraphIR::Graph *graph;
 };
 
+bytecode_vec_t
+compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &opt = {});
+
 std::pair<bytecode_vec_t, std::vector<BytecodeIndex>>
 compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry);
+
+std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);

@@ -36,75 +36,78 @@ graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
     return Graph::null();
 }
 
-std::unordered_map<
-    std::string, std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>>
-    passRegistry = {
-        // Rewrite Passes
-        {
-            "std::inline",
-            [](const context_ptr_t &ctx) { return std::make_unique<InlineRewritePass>(ctx); },
-        },
-        {
-            "std::macro",
-            [](const context_ptr_t &ctx) { return std::make_unique<MacroRewritePass>(ctx); },
-        },
+using PassFactory = std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>;
 
-        // Schedule Passes
-        {
-            "std::linear",
-            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
-        },
-        {
-            "std::fastvm",
-            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
-        },
-        {
-            "std::nodevm",
-            [](const context_ptr_t &ctx) { return std::make_unique<NodeVMSchedPass>(ctx); },
-        },
-        {
-            "std::parallel",
-            [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
-        },
-        {
-            "std::taskflow",
-            [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
-        },
-        {
-            "std::default",
-            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
-        },
-        {
-            "std::null",
-            [](const context_ptr_t &ctx) { return std::make_unique<NullGraphIRPass>(ctx); },
-        },
-
-        // Translate Passes
-        {
-            "std::dot",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
-        },
-        {
-            "std::graphviz",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
-        },
-        {
-            "std::bytecode",
-            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
-        },
-        {
-            "std::bc",
-            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
-        },
-        {
-            "std::lbc",
-            [](const context_ptr_t &ctx) { return std::make_unique<LinkedBytecodeDumpPass>(ctx); },
-        },
-        {
-            "std::tns",
-            [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
-        },
+std::unordered_map<std::string, PassFactory> passRegistry = {
+    {
+        "std::null",
+        [](const context_ptr_t &ctx) { return std::make_unique<NullGraphIRPass>(ctx); },
+    },
+    {
+        "std::macro",
+        [](const context_ptr_t &ctx) { return std::make_unique<MacroRewritePass>(ctx); },
+    },
+    {
+        "std::graphviz",
+        [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+    },
+    {
+        "std::topo_node_seq",
+        [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
+    },
+    {
+        "std::nodevm",
+        [](const context_ptr_t &ctx) { return std::make_unique<NodeVMSchedPass>(ctx); },
+    },
+    {
+        "std::fastvm",
+        [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
+    },
+    {
+        "std::inline",
+        [](const context_ptr_t &ctx) { return std::make_unique<InlineRewritePass>(ctx); },
+    },
+    {
+        "std::taskflow",
+        [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
+    },
+    {
+        "std::bytecode",
+        [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
+    },
+    {
+        "std::linked_bytecode",
+        [](const context_ptr_t &ctx) { return std::make_unique<LinkedBytecodeDumpPass>(ctx); },
+    },
 };
+
+std::unordered_map<std::string, std::string> passAliases = {
+    // 默认调度器
+    {"std::default", "std::fastvm"},
+
+    {"std::linear", "std::fastvm"},
+    {"std::parallel", "std::taskflow"},
+
+    {"std::dot", "std::graphviz"},
+    {"std::tns", "std::topo_node_seq"},
+    {"std::bc", "std::bytecode"},
+    {"std::lbc", "std::linked_bytecode"},
+};
+
+PassFactory findPassFactory(const std::string &name) {
+    std::string stdName = name;
+    auto aliasIt        = passAliases.find(name);
+    if (aliasIt != passAliases.end()) {
+        stdName = aliasIt->second;
+    }
+
+    auto regIt = passRegistry.find(stdName);
+    if (regIt != passRegistry.end()) {
+        return regIt->second;
+    }
+
+    return nullptr;
+}
 
 int applyPasses(
     const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os) {
@@ -120,9 +123,9 @@ int applyPasses(
             return 0;
         }
 
-        auto it = passRegistry.find(p);
-        if (it != passRegistry.end()) {
-            auto pass = it->second(ctx);
+        auto factory = findPassFactory(p);
+        if (factory) {
+            auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
                 return 1;
@@ -133,12 +136,16 @@ int applyPasses(
     }
 
     if (graph != Graph::null()) {
-        ASSERT(
-            !graph->dirty(),
-            std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
-
-        auto fallback = std::make_unique<FastVMSchedPass>(ctx);
-        fallback->apply(graph, os);
+        auto factory = findPassFactory("std::default");
+        if (factory) {
+            auto pass = factory(ctx);
+            graph     = pass->apply(graph, os);
+            if (ctx->rtmDiags()->hasErrors()) {
+                return 1;
+            }
+        } else {
+            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit("std::default");
+        }
     }
 
     return 0;
