@@ -69,12 +69,12 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     const auto &[codes, graphs, _] = compileAndLink(
         context_,
+        graph.get(),
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
             .optimizationStrategies  = OptimizationStrategyCode::All,
-        },
-        graph.get());
+        });
 
     os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
 

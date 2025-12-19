@@ -415,7 +415,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
 }
 
 std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
-compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry) {
+compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt) {
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
     std::unordered_map<GraphIR::Graph *, size_t> offsetMap;

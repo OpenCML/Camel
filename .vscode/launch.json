@@ -4,7 +4,7 @@
         {
             "name": "RUN (build)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Release/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -17,7 +17,7 @@
         },
         {
             "name": "RUN (build) - Linux",
-            "type": "lldb",
+            "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Release/camel",
             "args": ["${file}"],
@@ -29,7 +29,7 @@
         {
             "name": "RUN (debug)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -43,7 +43,7 @@
         {
             "name": "RUN (fastvm/debug)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -57,7 +57,7 @@
         {
             "name": "RUN (inlined/debug)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -70,7 +70,7 @@
         },
         {
             "name": "RUN (debug) - Linux",
-            "type": "lldb",
+            "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel",
             "args": ["-v", "--log-level debug", "--profile", "${file}"],
@@ -91,7 +91,7 @@
         {
             "name": "RUN (debug/clear)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -105,7 +105,7 @@
         {
             "name": "Format (Build)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Release/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -119,7 +119,7 @@
         {
             "name": "Inspect TOK",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -133,7 +133,7 @@
         {
             "name": "Inspect CST",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -147,7 +147,7 @@
         {
             "name": "Inspect AST",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -161,7 +161,7 @@
         {
             "name": "Inspect GCT",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -175,7 +175,7 @@
         {
             "name": "Inspect GIR",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -189,7 +189,7 @@
         {
             "name": "Inspect GIR (inlined)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -203,7 +203,7 @@
         {
             "name": "Inspect TNS",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -217,7 +217,7 @@
         {
             "name": "Inspect Bytecode",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -231,7 +231,7 @@
         {
             "name": "Inspect Bytecode (inlined)",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
@@ -245,7 +245,7 @@
         {
             "name": "Check",
             "cwd": "${workspaceFolder}",
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
