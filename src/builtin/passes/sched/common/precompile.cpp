@@ -487,11 +487,13 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
     return {linked, graphs, offsetMap};
 }
 
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
+std::string
+opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context, bool dense) {
+    OpCode opcode = dense ? fromDense(static_cast<DenseOpCode>(bc.opcode)) : bc.opcode;
     if (bc.hasOperands()) {
         std::string operandStr;
 
-        if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL) {
             size_t argsCnt = bc.fastop[0];
             operandStr     = "(";
 
@@ -532,16 +534,16 @@ std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t
         return std::format(
             "  [{}] {} | {} | {}",
             formatIndex(index),
-            bc.toString(),
+            bc.toString(dense),
             operandStr,
-            bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                      : bc.extra()->toString(bc.opcode));
+            opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                   : bc.extra()->toString(opcode));
     } else {
         return std::format(
             "  [{}] {} | {}",
             formatIndex(index),
-            bc.toString(),
-            bc.extra()->toString(bc.opcode));
+            bc.toString(dense),
+            bc.extra()->toString(opcode));
     }
 }
 

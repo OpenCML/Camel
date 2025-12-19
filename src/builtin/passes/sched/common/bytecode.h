@@ -187,10 +187,6 @@ constexpr OpCode fromDense(DenseOpCode doc) {
     return DenseToOpCodeTable[static_cast<size_t>(doc)];
 }
 
-// inline void makeDense(BytecodeHeader &bc) {
-//     bc.opcode = reinterpret_cast<OpCode>(toDense(bc.opcode));
-// }
-
 enum class MarkOpCode {
     MapArr,
     ApplyArr,
@@ -246,7 +242,7 @@ inline std::string formatIndex(data_idx_t value) {
     return std::format("{:>{}}", value, width);
 }
 
-std::string to_string(const OpCode &op);
+std::string to_string(const OpCode &op, bool dense);
 std::string to_string(const MarkOpCode &op);
 
 struct BytecodeHeader;
@@ -285,39 +281,24 @@ struct BytecodeHeader {                  // 8 bytes
     data_idx_t result    = 0;            // 2 bytes
     data_idx_t fastop[2] = {0, 0};       // 4 bytes
 
-    std::string toString() const;
+    std::string toString(bool dense) const;
 
     bool hasOperands() const { return !isOpCodeWithFixedOperands(opcode); }
 
-    size_t normCnt() const {
-        ASSERT(hasOperands(), "No operands available.");
-        return static_cast<size_t>(fastop[0]);
-    }
-    size_t withCnt() const {
-        ASSERT(hasOperands(), "No operands available.");
-        return static_cast<size_t>(fastop[1]);
-    }
-    size_t argsCnt() const {
-        ASSERT(hasOperands(), "No operands available.");
-        return normCnt() + withCnt();
-    }
+    size_t normCnt() const { return static_cast<size_t>(fastop[0]); }
+    size_t withCnt() const { return static_cast<size_t>(fastop[1]); }
+    size_t argsCnt() const { return normCnt() + withCnt(); }
 
     const data_arr_t nargs() const {
-        ASSERT(hasOperands(), "No operands available.");
         return data_arr_t{reinterpret_cast<const data_idx_t *>(this + 1), normCnt()};
     }
     const data_arr_t wargs() const {
-        ASSERT(hasOperands(), "No operands available.");
         return data_arr_t{reinterpret_cast<const data_idx_t *>(this + 1) + normCnt(), withCnt()};
     }
 
-    inline data_idx_t *operands() {
-        ASSERT(hasOperands(), "No operands available.");
-        return reinterpret_cast<data_idx_t *>(this + 1);
-    }
+    inline data_idx_t *operands() { return reinterpret_cast<data_idx_t *>(this + 1); }
 
     inline const data_idx_t *operands() const {
-        ASSERT(hasOperands(), "No operands available.");
         return reinterpret_cast<const data_idx_t *>(this + 1);
     }
 
@@ -328,6 +309,8 @@ struct BytecodeHeader {                  // 8 bytes
     }
 };
 
+using Bytecode = BytecodeHeader;
+
 union BytecodeExtra {      // 8 bytes
     Type *pType;           // for CAST
     GraphIR::Graph *graph; // for FUNC
@@ -336,8 +319,6 @@ union BytecodeExtra {      // 8 bytes
 
     std::string toString(OpCode opcode) const;
 };
-
-using Bytecode = BytecodeHeader;
 
 static_assert(sizeof(Bytecode) == 8, "Bytecode must be exactly 8 bytes");
 static_assert(sizeof(BytecodeHeader) == 8, "BytecodeHeader must be exactly 8 bytes");

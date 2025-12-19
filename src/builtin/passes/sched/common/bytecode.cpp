@@ -13,14 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "bytecode.h"
 
-std::string to_string(const OpCode &op) {
-    switch (op) {
+std::string to_string(const OpCode &op, bool dense) {
+    OpCode actualOp = op;
+    if (dense) {
+        actualOp = fromDense(static_cast<DenseOpCode>(op));
+    }
+
+    switch (actualOp) {
     case OpCode::RETN:
         return "RETN";
     case OpCode::CAST:
@@ -162,13 +167,13 @@ std::string to_string(const MarkOpCode &op) {
     }
 }
 
-std::string BytecodeHeader::toString() const {
+std::string BytecodeHeader::toString(bool dense) const {
     if (hasOperands()) {
-        return std::format("{} ({}) [{}]", to_string(opcode), opsize, formatIndex(result));
+        return std::format("{} ({}) [{}]", to_string(opcode, dense), opsize, formatIndex(result));
     } else {
         return std::format(
             "{} ({}) [{}] | [{}, {}]",
-            to_string(opcode),
+            to_string(opcode, dense),
             opsize,
             formatIndex(result),
             formatIndex(fastop[0]),

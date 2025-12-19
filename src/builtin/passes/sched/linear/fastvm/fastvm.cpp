@@ -33,13 +33,13 @@
     do {                                                                                           \
         pc += bc->opsize;                                                                          \
         bc = &base[pc];                                                                            \
-        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                                           \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
     } while (0)
 
 #define JUMP()                                                                                     \
     do {                                                                                           \
         bc = &base[pc];                                                                            \
-        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                                           \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
     } while (0)
 
 using namespace std;
@@ -49,75 +49,75 @@ inline void evalInlinedOpCode(const Bytecode &bc, Frame *currFrame, const contex
     slot_t lhs = currFrame->get<slot_t>(bc.fastop[0]);
     slot_t rhs = currFrame->get<slot_t>(bc.fastop[1]);
 
-    switch (bc.opcode) {
+    switch (static_cast<DenseOpCode>(bc.opcode)) {
     // 加法
-    case OpCode::IADD: {
+    case DenseOpCode::IADD: {
         int32_t res = fromSlot<Int>(lhs) + fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LADD: {
+    case DenseOpCode::LADD: {
         int64_t res = fromSlot<Long>(lhs) + fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FADD: {
+    case DenseOpCode::FADD: {
         float res = fromSlot<Float>(lhs) + fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DADD: {
+    case DenseOpCode::DADD: {
         double res = fromSlot<Double>(lhs) + fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
     // 减法
-    case OpCode::ISUB: {
+    case DenseOpCode::ISUB: {
         int32_t res = fromSlot<Int>(lhs) - fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LSUB: {
+    case DenseOpCode::LSUB: {
         int64_t res = fromSlot<Long>(lhs) - fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FSUB: {
+    case DenseOpCode::FSUB: {
         float res = fromSlot<Float>(lhs) - fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DSUB: {
+    case DenseOpCode::DSUB: {
         double res = fromSlot<Double>(lhs) - fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
     // 乘法
-    case OpCode::IMUL: {
+    case DenseOpCode::IMUL: {
         int32_t res = fromSlot<Int>(lhs) * fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LMUL: {
+    case DenseOpCode::LMUL: {
         int64_t res = fromSlot<Long>(lhs) * fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FMUL: {
+    case DenseOpCode::FMUL: {
         float res = fromSlot<Float>(lhs) * fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DMUL: {
+    case DenseOpCode::DMUL: {
         double res = fromSlot<Double>(lhs) * fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
     // 除法（带除零检测）
-    case OpCode::IDIV: {
+    case DenseOpCode::IDIV: {
         int32_t divisor = fromSlot<Int>(rhs);
         if (divisor == 0) {
             context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
@@ -126,7 +126,7 @@ inline void evalInlinedOpCode(const Bytecode &bc, Frame *currFrame, const contex
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LDIV: {
+    case DenseOpCode::LDIV: {
         int64_t divisor = fromSlot<Long>(rhs);
         if (divisor == 0) {
             context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
@@ -135,7 +135,7 @@ inline void evalInlinedOpCode(const Bytecode &bc, Frame *currFrame, const contex
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FDIV: {
+    case DenseOpCode::FDIV: {
         float divisor = fromSlot<Float>(rhs);
         if (divisor == 0.0f) {
             context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
@@ -144,7 +144,7 @@ inline void evalInlinedOpCode(const Bytecode &bc, Frame *currFrame, const contex
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DDIV: {
+    case DenseOpCode::DDIV: {
         double divisor = fromSlot<Double>(rhs);
         if (divisor == 0.0) {
             context->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
@@ -155,133 +155,135 @@ inline void evalInlinedOpCode(const Bytecode &bc, Frame *currFrame, const contex
     }
 
     // 比较 (<, >, ==, !=, <=, >=)
-    case OpCode::ILT: {
+    case DenseOpCode::ILT: {
         bool res = fromSlot<Int>(lhs) < fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LLT: {
+    case DenseOpCode::LLT: {
         bool res = fromSlot<Long>(lhs) < fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FLT: {
+    case DenseOpCode::FLT: {
         bool res = fromSlot<Float>(lhs) < fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DLT: {
+    case DenseOpCode::DLT: {
         bool res = fromSlot<Double>(lhs) < fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
-    case OpCode::IGT: {
+    case DenseOpCode::IGT: {
         bool res = fromSlot<Int>(lhs) > fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LGT: {
+    case DenseOpCode::LGT: {
         bool res = fromSlot<Long>(lhs) > fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FGT: {
+    case DenseOpCode::FGT: {
         bool res = fromSlot<Float>(lhs) > fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DGT: {
+    case DenseOpCode::DGT: {
         bool res = fromSlot<Double>(lhs) > fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
-    case OpCode::IEQ: {
+    case DenseOpCode::IEQ: {
         bool res = fromSlot<Int>(lhs) == fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LEQ: {
+    case DenseOpCode::LEQ: {
         bool res = fromSlot<Long>(lhs) == fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FEQ: {
+    case DenseOpCode::FEQ: {
         bool res = fromSlot<Float>(lhs) == fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DEQ: {
+    case DenseOpCode::DEQ: {
         bool res = fromSlot<Double>(lhs) == fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
-    case OpCode::INE: {
+    case DenseOpCode::INE: {
         bool res = fromSlot<Int>(lhs) != fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LNE: {
+    case DenseOpCode::LNE: {
         bool res = fromSlot<Long>(lhs) != fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FNE: {
+    case DenseOpCode::FNE: {
         bool res = fromSlot<Float>(lhs) != fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DNE: {
+    case DenseOpCode::DNE: {
         bool res = fromSlot<Double>(lhs) != fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
-    case OpCode::ILE: {
+    case DenseOpCode::ILE: {
         bool res = fromSlot<Int>(lhs) <= fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LLE: {
+    case DenseOpCode::LLE: {
         bool res = fromSlot<Long>(lhs) <= fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FLE: {
+    case DenseOpCode::FLE: {
         bool res = fromSlot<Float>(lhs) <= fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DLE: {
+    case DenseOpCode::DLE: {
         bool res = fromSlot<Double>(lhs) <= fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
 
-    case OpCode::IGE: {
+    case DenseOpCode::IGE: {
         bool res = fromSlot<Int>(lhs) >= fromSlot<Int>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::LGE: {
+    case DenseOpCode::LGE: {
         bool res = fromSlot<Long>(lhs) >= fromSlot<Long>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::FGE: {
+    case DenseOpCode::FGE: {
         bool res = fromSlot<Float>(lhs) >= fromSlot<Float>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
-    case OpCode::DGE: {
+    case DenseOpCode::DGE: {
         bool res = fromSlot<Double>(lhs) >= fromSlot<Double>(rhs);
         currFrame->set(bc.result, res);
         break;
     }
     default:
-        ASSERT(false, "Unsupported inlined operator.");
+        context->rtmDiags()
+            ->of(RuntimeDiag::UnsupportedBytecode)
+            .commit(to_string(bc.opcode, true));
     }
 }
 
@@ -318,13 +320,13 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     while (true) {
         const Bytecode &bc = bytecodes_[pc];
         EXEC_WHEN_DEBUG(
-            l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, pc, context_)));
+            l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, pc, context_, true)));
 
 #ifdef OPPERF_ENABLED
         std::string tag;
-        if (bc.opcode == OpCode::OPER) {
+        if (bc.opcode == DenseOpCode::OPER) {
             tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
-        } else if (bc.opcode == OpCode::FUNC) {
+        } else if (bc.opcode == DenseOpCode::FUNC) {
             tag = bc.extra()->graph->name();
         }
         opperf::ScopeTimer _timer(bc.opcode, tag);
@@ -630,13 +632,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         default: {
-            if (isOpCodeOfInlinedOperator(bc.opcode)) {
-                evalInlinedOpCode(bc, currFrame, context_);
-            } else {
-                context_->rtmDiags()
-                    ->of(RuntimeDiag::UnsupportedBytecode)
-                    .commit(to_string(bc.opcode));
-            }
+            evalInlinedOpCode(bc, currFrame, context_);
         }
         }
 
