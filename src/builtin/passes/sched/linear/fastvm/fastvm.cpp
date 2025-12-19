@@ -438,9 +438,249 @@ slot_t FastVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             }
 
             default: {
-                context_->rtmDiags()
-                    ->of(RuntimeDiag::UnsupportedBytecode)
-                    .commit(to_string(bc.opcode));
+                if (isOpCodeOfInlinedOperator(bc.opcode)) {
+                    slot_t lhs = currFrame->get<slot_t>(bc.fastop[0]);
+                    slot_t rhs = currFrame->get<slot_t>(bc.fastop[1]);
+
+                    switch (bc.opcode) {
+                    // 加法
+                    case OpCode::IADD: {
+                        int32_t res = fromSlot<Int>(lhs) + fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LADD: {
+                        int64_t res = fromSlot<Long>(lhs) + fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FADD: {
+                        float res = fromSlot<Float>(lhs) + fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DADD: {
+                        double res = fromSlot<Double>(lhs) + fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    // 减法
+                    case OpCode::ISUB: {
+                        int32_t res = fromSlot<Int>(lhs) - fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LSUB: {
+                        int64_t res = fromSlot<Long>(lhs) - fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FSUB: {
+                        float res = fromSlot<Float>(lhs) - fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DSUB: {
+                        double res = fromSlot<Double>(lhs) - fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    // 乘法
+                    case OpCode::IMUL: {
+                        int32_t res = fromSlot<Int>(lhs) * fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LMUL: {
+                        int64_t res = fromSlot<Long>(lhs) * fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FMUL: {
+                        float res = fromSlot<Float>(lhs) * fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DMUL: {
+                        double res = fromSlot<Double>(lhs) * fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    // 除法（带除零检测）
+                    case OpCode::IDIV: {
+                        int32_t divisor = fromSlot<Int>(rhs);
+                        if (divisor == 0) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        int32_t res = fromSlot<Int>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LDIV: {
+                        int64_t divisor = fromSlot<Long>(rhs);
+                        if (divisor == 0) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        int64_t res = fromSlot<Long>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FDIV: {
+                        float divisor = fromSlot<Float>(rhs);
+                        if (divisor == 0.0f) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        float res = fromSlot<Float>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DDIV: {
+                        double divisor = fromSlot<Double>(rhs);
+                        if (divisor == 0.0) {
+                            context_->rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
+                        }
+                        double res = fromSlot<Double>(lhs) / divisor;
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    // 比较 (<, >, ==, !=, <=, >=)
+                    case OpCode::ILT: {
+                        bool res = fromSlot<Int>(lhs) < fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LLT: {
+                        bool res = fromSlot<Long>(lhs) < fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FLT: {
+                        bool res = fromSlot<Float>(lhs) < fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DLT: {
+                        bool res = fromSlot<Double>(lhs) < fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    case OpCode::IGT: {
+                        bool res = fromSlot<Int>(lhs) > fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LGT: {
+                        bool res = fromSlot<Long>(lhs) > fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FGT: {
+                        bool res = fromSlot<Float>(lhs) > fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DGT: {
+                        bool res = fromSlot<Double>(lhs) > fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    case OpCode::IEQ: {
+                        bool res = fromSlot<Int>(lhs) == fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LEQ: {
+                        bool res = fromSlot<Long>(lhs) == fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FEQ: {
+                        bool res = fromSlot<Float>(lhs) == fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DEQ: {
+                        bool res = fromSlot<Double>(lhs) == fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    case OpCode::INE: {
+                        bool res = fromSlot<Int>(lhs) != fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LNE: {
+                        bool res = fromSlot<Long>(lhs) != fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FNE: {
+                        bool res = fromSlot<Float>(lhs) != fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DNE: {
+                        bool res = fromSlot<Double>(lhs) != fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    case OpCode::ILE: {
+                        bool res = fromSlot<Int>(lhs) <= fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LLE: {
+                        bool res = fromSlot<Long>(lhs) <= fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FLE: {
+                        bool res = fromSlot<Float>(lhs) <= fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DLE: {
+                        bool res = fromSlot<Double>(lhs) <= fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+
+                    case OpCode::IGE: {
+                        bool res = fromSlot<Int>(lhs) >= fromSlot<Int>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::LGE: {
+                        bool res = fromSlot<Long>(lhs) >= fromSlot<Long>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::FGE: {
+                        bool res = fromSlot<Float>(lhs) >= fromSlot<Float>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    case OpCode::DGE: {
+                        bool res = fromSlot<Double>(lhs) >= fromSlot<Double>(rhs);
+                        currFrame->set(bc.result, res);
+                        break;
+                    }
+                    default:
+                        ASSERT(false, "Unsupported inlined operator.");
+                    }
+                } else {
+                    context_->rtmDiags()
+                        ->of(RuntimeDiag::UnsupportedBytecode)
+                        .commit(to_string(bc.opcode));
+                }
             }
             }
 

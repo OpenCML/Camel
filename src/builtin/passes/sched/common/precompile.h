@@ -27,6 +27,7 @@
 
 struct OptimizationStrategy {
     bool enableTailCallDetection = true;
+    bool enableInlineOperators   = false;
 };
 
 bytecode_vec_t

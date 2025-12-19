@@ -42,7 +42,12 @@ class FastVMSchedPass : public LinearSchedPass {
     inline bytecode_vec_t *getBytecodesOfGraph(GraphIR::Graph *graph) {
         bytecode_vec_t *codes = graph->getExtra<bytecode_vec_t, 1>();
         if (codes == nullptr) {
-            bytecode_vec_t bytecodes = precompile(context_, graph);
+            bytecode_vec_t bytecodes = precompile(
+                context_,
+                graph,
+                {
+                    .enableInlineOperators = true,
+                });
             optimizer_.optimize(bytecodes);
             codes = &bytecodes_.emplace_back(bytecodes);
             graph->setExtra<bytecode_vec_t, 1>(codes);
