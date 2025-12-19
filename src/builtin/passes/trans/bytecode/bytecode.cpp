@@ -67,7 +67,7 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 }
 
 graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    const auto &[codes, graphs] = compileAndLink(
+    const auto &[codes, graphs, _] = compileAndLink(
         context_,
         {
             .enableTailCallDetection = true,

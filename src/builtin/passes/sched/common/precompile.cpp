@@ -414,19 +414,35 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
     return bytecodes;
 }
 
-std::pair<bytecode_vec_t, std::vector<BytecodeIndex>>
+std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
 compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *entry) {
-    // 数据容器
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
     std::unordered_map<GraphIR::Graph *, size_t> offsetMap;
 
-    // 编译并追加 Graph
-    auto appendGraph = [&](GraphIR::Graph *graph) {
-        if (offsetMap.find(graph) != offsetMap.end()) {
-            return; // 已编译过
+    // 收集所有被依赖的子图（包含 entry 自身）
+    std::vector<graph_ptr_t> allGraphs;
+    for (const auto &[_, gSet] : entry->subGraphs()) {
+        for (const auto &g : gSet) {
+            auto sortedSubGraphs =
+                findReachable(g, [](const graph_ptr_t &g) { return g->dependencies(); }, false);
+            allGraphs.insert(allGraphs.end(), sortedSubGraphs.begin(), sortedSubGraphs.end());
         }
+    }
+    allGraphs.push_back(entry->shared_from_this());
 
+    // 去重
+    std::unordered_set<GraphIR::Graph *> visited;
+    std::vector<GraphIR::Graph *> uniqueGraphs;
+    for (const auto &g : allGraphs) {
+        if (visited.insert(g.get()).second) {
+            uniqueGraphs.push_back(g.get());
+        }
+    }
+    reverse(uniqueGraphs.begin(), uniqueGraphs.end());
+
+    // 编译所有图
+    for (auto *graph : uniqueGraphs) {
         size_t start         = linked.size();
         bytecode_vec_t codes = compile(ctx, graph, opt);
 
@@ -434,16 +450,14 @@ compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *en
         graphs.push_back({start, codes.size(), graph});
 
         linked.insert(linked.end(), codes.begin(), codes.end());
-    };
+    }
 
-    appendGraph(entry);
-
+    // 统一链接 — 修改字节码中的地址引用
     size_t scanIndex    = 0;
     size_t currGraphIdx = 0;
-    size_t currGraphEnd = graphs[0].length;
+    size_t currGraphEnd = graphs.empty() ? 0 : graphs[0].length;
 
     while (scanIndex < linked.size()) {
-        // 到达当前 Graph 的末尾，进入下一个 Graph
         if (scanIndex >= currGraphEnd && currGraphIdx + 1 < graphs.size()) {
             currGraphIdx++;
             currGraphEnd += graphs[currGraphIdx].length;
@@ -454,31 +468,46 @@ compileAndLink(context_ptr_t ctx, const CompileStrategy &opt, GraphIR::Graph *en
 
         switch (bc.opcode) {
         case OpCode::TAIL:
-            [[fallthrough]];
         case OpCode::FUNC: {
             auto *targetGraph = bc.extra()->graph;
-            appendGraph(targetGraph);
             // 写入目标图字节码的起始偏移
-            bc.fastop[1] = as_index(offsetMap[targetGraph]);
+            bc.fastop[1] = as_index(offsetMap.at(targetGraph));
         } break;
         case OpCode::JUMP: {
             // 局部偏移转全局偏移
-            bc.fastop[0] += offsetMap[info.graph];
+            bc.fastop[0] += offsetMap.at(info.graph);
         } break;
         default:
             break;
         }
+
         scanIndex += bc.opsize;
     }
 
-    return {linked, graphs};
+    return {linked, graphs, offsetMap};
 }
 
 std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
-    std::string operandStr;
+    if (bc.hasOperands()) {
+        std::string operandStr;
 
-    if (bc.opcode == OpCode::OPER) {
-        if (bc.hasOperands()) {
+        if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+            size_t argsCnt = bc.fastop[0];
+            operandStr     = "(";
+
+            for (size_t j = 0; j < argsCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < argsCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ")";
+
+            if (bc.fastop[1] != 0) {
+                operandStr += " -> ";
+                operandStr += std::to_string(bc.fastop[1]);
+            }
+        } else {
             size_t normCnt = bc.fastop[0];
             size_t withCnt = bc.fastop[1];
             operandStr     = "(";
@@ -498,32 +527,20 @@ std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t
             }
 
             operandStr += ">";
-        } else {
-            operandStr = "() <>";
-        }
-    } else if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-        size_t argsCnt = bc.fastop[0];
-        operandStr     = "(";
-
-        for (size_t j = 0; j < argsCnt; j++) {
-            operandStr += std::to_string(bc.operands()[j]);
-            if (j + 1 < argsCnt)
-                operandStr += ", ";
         }
 
-        operandStr += ")";
-
-        if (bc.fastop[1] != 0) {
-            operandStr += " -> ";
-            operandStr += std::to_string(bc.fastop[1]);
-        }
+        return std::format(
+            "  [{}] {} | {} | {}",
+            formatIndex(index),
+            bc.toString(),
+            operandStr,
+            bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                      : bc.extra()->toString(bc.opcode));
+    } else {
+        return std::format(
+            "  [{}] {} | {}",
+            formatIndex(index),
+            bc.toString(),
+            bc.extra()->toString(bc.opcode));
     }
-
-    return std::format(
-        "  [{}] {} | {} | {}",
-        formatIndex(index),
-        bc.toString(),
-        operandStr,
-        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                  : bc.extra()->toString(bc.opcode));
 }
