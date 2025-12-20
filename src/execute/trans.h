@@ -12,14 +12,19 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 25, 2025
- * Updated: Oct. 25, 2025
+ * Created: Sep. 05, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "macro.h"
+#pragma once
 
-using namespace std;
-using namespace GraphIR;
+#include "base.h"
 
-graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) { return graph; }
+class GraphTranslatePass : public GraphIRPass {
+  public:
+    GraphTranslatePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~GraphTranslatePass() = default;
+
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
+};

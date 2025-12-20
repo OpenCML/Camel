@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "gct_builder.h"
 
+#include "parse/ast/type.h"
 #include "utils/escape.h"
 #include "utils/scope.h"
 #include "utils/token.h"
@@ -283,6 +284,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             .commit("Struct Unpacking");
         throw BuildAbortException();
     } break;
+
     case AST::UnpackType::Array: {
         // Array unpacking is not supported; log diagnostics and throw an exception
         diags_->of(SemanticDiag::FeatureNotSupported)
@@ -290,11 +292,14 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             .commit("Array Unpacking");
         throw BuildAbortException();
     } break;
+
     case AST::UnpackType::Tuple: {
         if (refs.size() == dataNodes->size()) {
             for (size_t i = 0; i < refs.size(); ++i) {
-                const auto &ref      = refs[i];
-                const auto &dataNode = dataNodes->atAs<AST::DataLoad>(i);
+                const auto &ref         = refs[i];
+                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
+                node_ptr_t dataNode     = visitData(dataASTNode);
+
                 // Validate the identifier
                 if (!validateIdent(ref.ident())) {
                     diags_->of(SemanticDiag::ReservedIdentifier)
@@ -302,13 +307,38 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                         .commit();
                     throw BuildAbortException();
                 }
+
+                if (i < typeNodes->size()) {
+                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
+                    type_ptr_t type         = visitType(typeASTNode);
+                    // 先尝试做静态类型转换
+                    if (dataNode->type() == LoadType::DATA) {
+                        const auto &dataLoad = dataNode->loadAs<DataLoad>();
+                        const auto &data     = dataLoad->data();
+                        auto convertedData   = data->convertTo(type);
+                        if (convertedData) {
+                            dataNode = createNodeAs<DataLoad>(convertedData);
+                        } else {
+                            diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                                .at(ast->load()->tokenRange())
+                                .commit(data->toString(), type->toString());
+                            throw BuildAbortException();
+                        }
+                    } else {
+                        diags_->of(SemanticDiag::FeatureNotSupported)
+                            .at(ast->load()->tokenRange())
+                            .commit("dynamic type casting");
+                        throw BuildAbortException();
+                    }
+                }
+
                 // Ensure the data node is of type Data
                 ASSERT(
-                    dataNode->type() == AST::LoadType::Data,
+                    dataASTNode->type() == AST::LoadType::Data,
                     "Tuple unpacking requires Data type nodes");
                 // Create a reference node and link the data node to it
                 node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
-                *nRefNode << visitData(dataNode);
+                *nRefNode << dataNode;
                 res = nRefNode;
             }
         } else {
@@ -316,9 +346,34 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 // If there is only one data node, process it as a reference and access node
                 const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
                 node_ptr_t dataNode     = visitData(dataASTNode);
-                const string id         = std::to_string(idIndex_++);
-                node_ptr_t nRefNode     = createNodeAs<NRefLoad>(id);
-                node_ptr_t dRefNode     = createNodeAs<DRefLoad>(id);
+
+                if (typeNodes->size() > 0) {
+                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
+                    type_ptr_t type         = visitType(typeASTNode);
+                    // 先尝试做静态类型转换
+                    if (dataNode->type() == LoadType::DATA) {
+                        const auto &dataLoad = dataNode->loadAs<DataLoad>();
+                        const auto &data     = dataLoad->data();
+                        auto convertedData   = data->convertTo(type);
+                        if (convertedData) {
+                            dataNode = createNodeAs<DataLoad>(convertedData);
+                        } else {
+                            diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                                .at(ast->load()->tokenRange())
+                                .commit(data->toString(), type->toString());
+                            throw BuildAbortException();
+                        }
+                    } else {
+                        diags_->of(SemanticDiag::FeatureNotSupported)
+                            .at(ast->load()->tokenRange())
+                            .commit("dynamic type casting");
+                        throw BuildAbortException();
+                    }
+                }
+
+                const string id     = std::to_string(idIndex_++);
+                node_ptr_t nRefNode = createNodeAs<NRefLoad>(id);
+                node_ptr_t dRefNode = createNodeAs<DRefLoad>(id);
                 *nRefNode << dataNode;
                 *res << nRefNode;
                 for (size_t i = 0; i < refs.size(); ++i) {
@@ -862,17 +917,34 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::ReservedDataOp::As: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("AS Operator");
-        throw BuildAbortException();
+        const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
+        const auto &dataNode   = visitData(lhsASTNode);
+        const auto &type       = visitType(rhsASTNode);
+        if (dataNode->type() == LoadType::DATA) {
+            const auto &dataLoad = dataNode->loadAs<DataLoad>();
+            const auto &data     = dataLoad->data();
+            auto convertedData   = data->convertTo(type);
+            if (convertedData) {
+                res = createNodeAs<DataLoad>(convertedData);
+            } else {
+                diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                    .at(ast->load()->tokenRange())
+                    .commit(data->toString(), type->toString());
+                throw BuildAbortException();
+            }
+        } else {
+            diags_->of(SemanticDiag::FeatureNotSupported)
+                .at(ast->load()->tokenRange())
+                .commit("dynamic type casting (a.k.a. `as` keyword)");
+            res = dataNode;
+        }
     } break;
 
     case AST::ReservedDataOp::Is: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
             .commit("IS Operator");
-        throw BuildAbortException();
+        res = visitData(lhsASTNode);
     } break;
 
     case AST::ReservedDataOp::Access: {

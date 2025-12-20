@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,14 @@
 #include "error/diagnostics/diagnostics.h"
 
 #include "builtin/passes/rewrite/inline/inline.h"
-#include "builtin/passes/rewrite/macro/macro.h"
+#include "builtin/passes/sched/linear/fastvm/bcdump.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
 #include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
-#include "builtin/passes/trans/bytecode/bytecode.h"
 #include "builtin/passes/trans/dot/graphviz.h"
 #include "builtin/passes/trans/tns/topo_node_seq.h"
+
+#include "macro/macro.h"
 
 using namespace GraphIR;
 
@@ -86,9 +87,12 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::default", "std::fastvm"},
 
     {"std::linear", "std::fastvm"},
+    {"std::li", "std::fastvm"},
     {"std::parallel", "std::taskflow"},
+    {"std::par", "std::taskflow"},
 
     {"std::dot", "std::graphviz"},
+    {"std::gir", "std::graphviz"},
     {"std::tns", "std::topo_node_seq"},
     {"std::bc", "std::bytecode"},
     {"std::lbc", "std::linked_bytecode"},

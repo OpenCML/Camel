@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,4 +68,11 @@ const std::string FunctionData::toString() const {
         graph_.name(),
         type->toString(),
         strutil::join(refs(), ", ", [](const std::string &s) { return s; }));
+}
+
+data_ptr_t FunctionData::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return tt::as_shared<FunctionData>(shared_from_this());
+    }
+    return nullptr;
 }

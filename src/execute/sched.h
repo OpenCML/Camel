@@ -12,23 +12,19 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 07, 2024
- * Updated: Dec. 11, 2025
+ * Created: Sep. 05, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/data/base.h"
+#include "base.h"
 
-class AnyData : public Data {
-    data_ptr_t data_;
-
+class GraphSchedulePass : public GraphIRPass {
   public:
-    AnyData(const data_ptr_t &data);
-    virtual ~AnyData() = default;
+    GraphSchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~GraphSchedulePass() = default;
 
-    virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t clone(bool deep = false) const override;
-    virtual const std::string toString() const override;
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
 };

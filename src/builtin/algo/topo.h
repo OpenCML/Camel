@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,10 +39,6 @@ auto topoSort(
     std::queue<NodeType> zeroInDegreeQueue;
     std::vector<NodeType> sortedNodes;
 
-#ifndef NDEBUG
-    size_t count = std::distance(first, last);
-#endif
-
     for (auto it = first; it != last; ++it) {
         NodeType node   = *it;
         size_t inDeg    = getInDegree(node);
@@ -64,8 +60,9 @@ auto topoSort(
         }
     }
 
-    ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
     EXEC_WHEN_DEBUG([&]() {
+        size_t count = std::distance(first, last);
+        ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
         if (!allowUnreachable) {
             if (sortedNodes.size() != count) {
                 // Find unreachable nodes

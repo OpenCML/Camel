@@ -12,40 +12,14 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 21, 2024
- * Updated: Oct. 09, 2025
+ * Created: Dec. 20, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "compile/gir.h"
-#include "core/context/context.h"
-
-class GraphIRPass {
-  protected:
-    context_ptr_t context_;
-
-  public:
-    GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
-    virtual ~GraphIRPass() = default;
-
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) = 0;
-};
-
-class NullGraphIRPass : public GraphIRPass {
-  protected:
-    context_ptr_t context_;
-
-  public:
-    NullGraphIRPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~NullGraphIRPass() = default;
-
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
-};
-
-extern std::unordered_map<
-    std::string, std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>>
-    passRegistry;
-
-int applyPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os);
+#include "base.h"
+#include "rewrite.h"
+#include "sched.h"
+#include "trans.h"

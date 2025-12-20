@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
+#include "core/data/base.h"
 #include "utils/scope.h"
 #include "utils/str.h"
 
-#include "../special/any.h"
 #include "../special/null.h"
 #include "../special/ref.h"
 
@@ -106,4 +106,26 @@ const string TupleData::toString() const {
     str += strutil::join(data_, ", ", [](const data_ptr_t &e) { return e->toString(); });
     str += ")";
     return str;
+}
+
+data_ptr_t TupleData::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return tt::as_shared<TupleData>(shared_from_this());
+    }
+    if (type->code() == TypeCode::Tuple) {
+        const auto &tupleType = tt::as_shared<TupleType>(type);
+        data_vec_t data;
+        data.reserve(data_.size());
+        for (size_t i = 0; i < data_.size(); i++) {
+            const auto &e    = data_[i];
+            const auto &type = tupleType->typeAt(i);
+            if (type) {
+                data.push_back(e->convertTo(*type));
+            } else {
+                data.push_back(nullptr);
+            }
+        }
+        return TupleData::create(tupleType, std::move(data));
+    }
+    return nullptr;
 }
