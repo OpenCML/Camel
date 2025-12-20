@@ -25,6 +25,8 @@
 #include "builtin/passes/sched/common/precompile.h"
 #include "core/context/frame.h"
 
+#define ENABLE_COMPUTED_GOTO
+
 class FastVMSchedPass : public LinearSchedPass {
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
 
@@ -47,7 +49,6 @@ class FastVMSchedPass : public LinearSchedPass {
                 .enableInlineOperators   = true,
                 .optimizationStrategies  = OptimizationStrategyCode::All,
             });
-        convertToDenseBytecode(bytecodes);
         bytecodes_ = std::move(bytecodes);
         offsetMap_ = std::move(offsetMap);
     }

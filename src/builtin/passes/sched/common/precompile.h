@@ -24,8 +24,6 @@
 #include "core/context/context.h"
 #include "optimize.h"
 
-#include <memory>
-
 struct CompileStrategy {
     bool enableTailCallDetection = true;
     bool enableInlineOperators   = false;
@@ -46,7 +44,4 @@ compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &
 std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
 compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt);
 
-std::string
-opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context, bool dense = false);
-
-void convertToDenseBytecode(bytecode_vec_t &src);
+std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);

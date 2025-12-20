@@ -487,70 +487,52 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
     return {linked, graphs, offsetMap};
 }
 
-std::string
-opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context, bool dense) {
-    OpCode opcode = dense ? fromDense(static_cast<DenseOpCode>(bc.opcode)) : bc.opcode;
-    if (bc.hasOperands()) {
-        std::string operandStr;
+std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
+    std::string operandStr;
 
-        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL) {
-            size_t argsCnt = bc.fastop[0];
-            operandStr     = "(";
+    if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+        size_t argsCnt = bc.fastop[0];
+        operandStr     = "(";
 
-            for (size_t j = 0; j < argsCnt; j++) {
-                operandStr += std::to_string(bc.operands()[j]);
-                if (j + 1 < argsCnt)
-                    operandStr += ", ";
-            }
-
-            operandStr += ")";
-
-            if (bc.fastop[1] != 0) {
-                operandStr += " -> ";
-                operandStr += std::to_string(bc.fastop[1]);
-            }
-        } else {
-            size_t normCnt = bc.fastop[0];
-            size_t withCnt = bc.fastop[1];
-            operandStr     = "(";
-
-            for (size_t j = 0; j < normCnt; j++) {
-                operandStr += std::to_string(bc.operands()[j]);
-                if (j + 1 < normCnt)
-                    operandStr += ", ";
-            }
-
-            operandStr += ") <";
-
-            for (size_t j = 0; j < withCnt; j++) {
-                operandStr += std::to_string(bc.operands()[normCnt + j]);
-                if (j + 1 < withCnt)
-                    operandStr += ", ";
-            }
-
-            operandStr += ">";
+        for (size_t j = 0; j < argsCnt; j++) {
+            operandStr += std::to_string(bc.operands()[j]);
+            if (j + 1 < argsCnt)
+                operandStr += ", ";
         }
 
-        return std::format(
-            "  [{}] {} | {} | {}",
-            formatIndex(index),
-            bc.toString(dense),
-            operandStr,
-            opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                   : bc.extra()->toString(opcode));
-    } else {
-        return std::format(
-            "  [{}] {} | {}",
-            formatIndex(index),
-            bc.toString(dense),
-            bc.extra()->toString(opcode));
-    }
-}
+        operandStr += ")";
 
-void convertToDenseBytecode(bytecode_vec_t &src) {
-    for (size_t i = 0; i < src.size();) {
-        Bytecode &bc = src[i];
-        bc.opcode    = static_cast<OpCode>(toDense(bc.opcode));
-        i += bc.opsize;
+        if (bc.fastop[1] != 0) {
+            operandStr += " -> ";
+            operandStr += std::to_string(bc.fastop[1]);
+        }
+    } else {
+        size_t normCnt = bc.fastop[0];
+        size_t withCnt = bc.fastop[1];
+        operandStr     = "(";
+
+        for (size_t j = 0; j < normCnt; j++) {
+            operandStr += std::to_string(bc.operands()[j]);
+            if (j + 1 < normCnt)
+                operandStr += ", ";
+        }
+
+        operandStr += ") <";
+
+        for (size_t j = 0; j < withCnt; j++) {
+            operandStr += std::to_string(bc.operands()[normCnt + j]);
+            if (j + 1 < withCnt)
+                operandStr += ", ";
+        }
+
+        operandStr += ">";
     }
+
+    return std::format(
+        "  [{}] {} | {} | {}",
+        formatIndex(index),
+        bc.toString(),
+        operandStr,
+        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                  : bc.extra()->toString(bc.opcode));
 }

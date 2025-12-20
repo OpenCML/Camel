@@ -19,13 +19,8 @@
 
 #include "bytecode.h"
 
-std::string to_string(const OpCode &op, bool dense) {
-    OpCode actualOp = op;
-    if (dense) {
-        actualOp = fromDense(static_cast<DenseOpCode>(op));
-    }
-
-    switch (actualOp) {
+std::string to_string(const OpCode &op) {
+    switch (op) {
     case OpCode::RETN:
         return "RETN";
     case OpCode::CAST:
@@ -167,18 +162,14 @@ std::string to_string(const MarkOpCode &op) {
     }
 }
 
-std::string BytecodeHeader::toString(bool dense) const {
-    if (hasOperands()) {
-        return std::format("{} ({}) [{}]", to_string(opcode, dense), opsize, formatIndex(result));
-    } else {
-        return std::format(
-            "{} ({}) [{}] | [{}, {}]",
-            to_string(opcode, dense),
-            opsize,
-            formatIndex(result),
-            formatIndex(fastop[0]),
-            formatIndex(fastop[1]));
-    }
+std::string BytecodeHeader::toString() const {
+    return std::format(
+        "{} ({}) [{}] | [{}, {}]",
+        to_string(opcode),
+        opsize,
+        formatIndex(result),
+        formatIndex(fastop[0]),
+        formatIndex(fastop[1]));
 }
 
 std::string BytecodeExtra::toString(OpCode opcode) const {
