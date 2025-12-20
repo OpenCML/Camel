@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,6 +98,8 @@ template <typename T> class PrimaryData : public Data {
             return std::to_string(data_);
         }
     }
+
+    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
 };
 
 using IntData    = PrimaryData<int32_t>;
@@ -106,6 +108,25 @@ using FloatData  = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
 using BoolData   = PrimaryData<bool>;
 using ByteData   = PrimaryData<std::byte>;
+
+template <typename T> data_ptr_t PrimaryData<T>::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return shared_from_this();
+    }
+    if (type->isPrimitive()) {
+        TypeCode from = type_->code(), to = type->code();
+        if (from == TypeCode::Int && to == TypeCode::Long) {
+            return std::make_shared<LongData>(static_cast<int64_t>(data_));
+        } else if (from == TypeCode::Long && to == TypeCode::Int) {
+            return std::make_shared<IntData>(static_cast<int32_t>(data_));
+        } else if (from == TypeCode::Float && to == TypeCode::Double) {
+            return std::make_shared<DoubleData>(static_cast<double>(data_));
+        } else if (from == TypeCode::Double && to == TypeCode::Float) {
+            return std::make_shared<FloatData>(static_cast<float>(data_));
+        }
+    }
+    return nullptr;
+}
 
 class StringData : public Data {
   private:
@@ -120,4 +141,5 @@ class StringData : public Data {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
+    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,9 +37,8 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 return nullopt;
                             TypeCode elemCode =
                                 tt::as_shared<ArrayType>(norm[0])->elemType()->code();
-                            if (elemCode == TypeCode::Void || elemCode == TypeCode::Int ||
-                                elemCode == TypeCode::Long || elemCode == TypeCode::Float ||
-                                elemCode == TypeCode::Double)
+                            if (elemCode == TypeCode::Int || elemCode == TypeCode::Long ||
+                                elemCode == TypeCode::Float || elemCode == TypeCode::Double)
                                 return Type::Double();
                             return nullopt;
                         }),
@@ -59,9 +58,8 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 return nullopt;
                             TypeCode elemCode =
                                 tt::as_shared<ArrayType>(norm[0])->elemType()->code();
-                            if (elemCode == TypeCode::Void || elemCode == TypeCode::Int ||
-                                elemCode == TypeCode::Long || elemCode == TypeCode::Float ||
-                                elemCode == TypeCode::Double)
+                            if (elemCode == TypeCode::Int || elemCode == TypeCode::Long ||
+                                elemCode == TypeCode::Float || elemCode == TypeCode::Double)
                                 return Type::Double();
                             return nullopt;
                         }),

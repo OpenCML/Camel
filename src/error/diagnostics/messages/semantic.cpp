@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -210,6 +210,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ImportNameNotExported",
                 "Reference '{0}' is declared as imported but is not exported by its module.",
                 "Check that the module exports the name '{0}' or remove the import declaration.",
+            },
+        },
+        {
+            SemanticDiag::LiteralStaticCastFailed,
+            {
+                "LiteralStaticCastFailed",
+                "Failed to static cast literal data '{0}' to type '{1}'.",
+                "Ensure the literal value is compatible with the target type or use an appropriate "
+                "conversion.",
             },
         },
 

@@ -13,17 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
-#include "utils/scope.h"
 
-#include "../special/any.h"
-#include "../special/null.h"
 #include "../special/ref.h"
-
 #include "error/diagnostics/diagnostics.h"
 
 using namespace std;
@@ -107,4 +103,15 @@ const string ArrayData::toString() const {
     }
     str += "]";
     return str;
+}
+
+data_ptr_t ArrayData::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return tt::as_shared<ArrayData>(shared_from_this());
+    }
+    if (type->code() == TypeCode::Array) {
+        const auto &arrType = tt::as_shared<ArrayType>(type);
+        return ArrayData::from(arrType->elemType(), data_);
+    }
+    return nullptr;
 }

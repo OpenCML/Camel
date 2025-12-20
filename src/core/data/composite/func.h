@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,4 +57,5 @@ class FunctionData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
+    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
 };

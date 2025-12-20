@@ -24,7 +24,7 @@ export sync func timeit(fn: () => void): void {
 
 func main(): int sync {
     let repeat = 100
-    var results: float[] = [0.0]->tail
+    var results: float[] = []
 
     timeit<results, repeat>((): void => {
         fib(30)
