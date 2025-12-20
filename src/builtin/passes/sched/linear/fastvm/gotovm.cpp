@@ -21,6 +21,31 @@
 
 #ifdef ENABLE_COMPUTED_GOTO
 
+/**
+ * Computed Goto implementation of FastVM.
+ *
+ * This version of FastVM uses the "Computed Goto" technique for bytecode dispatch.
+ *
+ * Basic idea:
+ * Instead of using a large switch-case statement to handle different opcodes,
+ * this approach maintains a jump table that maps each opcode directly to the
+ * corresponding instruction handler (label address). The VM fetches the next
+ * opcode, looks up the handler's address in the jump table, and jumps to it
+ * directly via an indirect goto instruction.
+ *
+ * Why it's faster:
+ * - Avoids the repeated branch comparisons in a switch-based dispatcher.
+ * - Reduces branch misprediction penalties, since the CPU can learn common
+ *   jump patterns in bytecode sequences more easily.
+ * - Eliminates unnecessary instruction dispatch overhead and improves I-cache
+ *   locality in the main interpreter loop.
+ *
+ * In high-frequency dispatch scenarios (such as bytecode interpreters or
+ * state machines), this approach can typically yield a **10%–20% performance
+ * improvement** compared to a traditional switch-based implementation,
+ * depending on workload and CPU architecture.
+ */
+
 #include "utils/opperf.h"
 
 #ifndef NDEBUG

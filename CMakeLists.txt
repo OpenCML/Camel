@@ -74,8 +74,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     -Wno-gnu-anonymous-struct
     -Wno-nested-anon-types
     -Wno-unused-private-field
-    -Wno-gnu-designator
-    -Wno-gnu-label-as-value
+    -Wno-gnu-label-as-value # for Computed Goto
     -Wno-language-extension-token # for antlr4-runtime
     -Wno-dollar-in-identifier-extension # for antlr4-runtime
     -Wno-nan-infinity-disabled
