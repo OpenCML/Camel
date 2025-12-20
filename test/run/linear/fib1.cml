@@ -20,6 +20,6 @@ func main(): int sync {
     let res = fibonacci(idx)
     let duration = now() - start
     'Total calls made: {}'->format<cnt>->println
-    'Fibonacci({}) = {} (computed in {} seconds)'->format<idx, res, duration>->println
+    'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
     return 0
 }

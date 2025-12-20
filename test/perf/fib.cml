@@ -7,8 +7,8 @@ func fib(n: int): int {
 }
 
 func main(): int sync {
-    let idx = 3
-    let runs = 10
+    let idx = 30
+    let runs = 100
 
     let (average, margin_error) = perfms<runs>((): void => {
         fib(idx)

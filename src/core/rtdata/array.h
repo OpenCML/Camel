@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,7 +81,7 @@ class FixedArray : public Object {
         TypeCode type = layout_->elemType();
 
         const FixedArray *otherArray = reinterpret_cast<const FixedArray *>(other);
-        if (size_ != otherArray->size_ || type != otherArray->layout_->elemType())
+        if (size_ != otherArray->size_)
             return false;
 
         const Object *const *arrA = reinterpret_cast<const Object *const *>(data_);

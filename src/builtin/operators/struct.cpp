@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -193,7 +193,7 @@ void __contains_arr__(
 
     if (isGCTraced(elemType)) {
         for (size_t i = 0; i < n; ++i) {
-            if (arr->get<Object *>(i)->equals(reinterpret_cast<Object *>(item))) {
+            if (arr->get<Object *>(i)->equals(fromSlot<Object *>(item))) {
                 found = true;
                 break;
             }

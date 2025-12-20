@@ -345,28 +345,30 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             if (dataNodes->size() == 1) {
                 // If there is only one data node, process it as a reference and access node
                 const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
-                const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                 node_ptr_t dataNode     = visitData(dataASTNode);
-                type_ptr_t type         = visitType(typeASTNode);
 
-                // 先尝试做静态类型转换
-                if (dataNode->type() == LoadType::DATA) {
-                    const auto &dataLoad = dataNode->loadAs<DataLoad>();
-                    const auto &data     = dataLoad->data();
-                    auto convertedData   = data->convertTo(type);
-                    if (convertedData) {
-                        dataNode = createNodeAs<DataLoad>(convertedData);
+                if (typeNodes->size() > 0) {
+                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
+                    type_ptr_t type         = visitType(typeASTNode);
+                    // 先尝试做静态类型转换
+                    if (dataNode->type() == LoadType::DATA) {
+                        const auto &dataLoad = dataNode->loadAs<DataLoad>();
+                        const auto &data     = dataLoad->data();
+                        auto convertedData   = data->convertTo(type);
+                        if (convertedData) {
+                            dataNode = createNodeAs<DataLoad>(convertedData);
+                        } else {
+                            diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                                .at(ast->load()->tokenRange())
+                                .commit(data->toString(), type->toString());
+                            throw BuildAbortException();
+                        }
                     } else {
-                        diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                        diags_->of(SemanticDiag::FeatureNotSupported)
                             .at(ast->load()->tokenRange())
-                            .commit(data->toString(), type->toString());
+                            .commit("dynamic type casting");
                         throw BuildAbortException();
                     }
-                } else {
-                    diags_->of(SemanticDiag::FeatureNotSupported)
-                        .at(ast->load()->tokenRange())
-                        .commit("dynamic type casting");
-                    throw BuildAbortException();
                 }
 
                 const string id     = std::to_string(idIndex_++);
