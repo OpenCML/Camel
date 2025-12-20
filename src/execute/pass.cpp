@@ -87,9 +87,12 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::default", "std::fastvm"},
 
     {"std::linear", "std::fastvm"},
+    {"std::li", "std::fastvm"},
     {"std::parallel", "std::taskflow"},
+    {"std::par", "std::taskflow"},
 
     {"std::dot", "std::graphviz"},
+    {"std::gir", "std::graphviz"},
     {"std::tns", "std::topo_node_seq"},
     {"std::bc", "std::bytecode"},
     {"std::lbc", "std::linked_bytecode"},

@@ -20,8 +20,8 @@
 #pragma once
 
 #include "../linear.h"
+#include "compile.h"
 #include "core/context/frame.h"
-#include "precompile.h"
 
 #define ENABLE_COMPUTED_GOTO
 

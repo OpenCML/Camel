@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "precompile.h"
+#include "compile.h"
 #include "builtin/algo/topo.h"
 
 #include <algorithm>
@@ -488,51 +488,59 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
 }
 
 std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
-    std::string operandStr;
+    if (hasDynamicOperands(bc.opcode)) {
+        std::string operandStr;
 
-    if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-        size_t argsCnt = bc.fastop[0];
-        operandStr     = "(";
+        if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+            size_t argsCnt = bc.fastop[0];
+            operandStr     = "(";
 
-        for (size_t j = 0; j < argsCnt; j++) {
-            operandStr += std::to_string(bc.operands()[j]);
-            if (j + 1 < argsCnt)
-                operandStr += ", ";
+            for (size_t j = 0; j < argsCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < argsCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ")";
+
+            if (bc.fastop[1] != 0) {
+                operandStr += " -> ";
+                operandStr += std::to_string(bc.fastop[1]);
+            }
+        } else {
+            size_t normCnt = bc.fastop[0];
+            size_t withCnt = bc.fastop[1];
+            operandStr     = "(";
+
+            for (size_t j = 0; j < normCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < normCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ") <";
+
+            for (size_t j = 0; j < withCnt; j++) {
+                operandStr += std::to_string(bc.operands()[normCnt + j]);
+                if (j + 1 < withCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ">";
         }
 
-        operandStr += ")";
-
-        if (bc.fastop[1] != 0) {
-            operandStr += " -> ";
-            operandStr += std::to_string(bc.fastop[1]);
-        }
+        return std::format(
+            "  [{}] {} | {} | {}",
+            formatIndex(index),
+            bc.toString(),
+            operandStr,
+            bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                      : bc.extra()->toString(bc.opcode));
     } else {
-        size_t normCnt = bc.fastop[0];
-        size_t withCnt = bc.fastop[1];
-        operandStr     = "(";
-
-        for (size_t j = 0; j < normCnt; j++) {
-            operandStr += std::to_string(bc.operands()[j]);
-            if (j + 1 < normCnt)
-                operandStr += ", ";
-        }
-
-        operandStr += ") <";
-
-        for (size_t j = 0; j < withCnt; j++) {
-            operandStr += std::to_string(bc.operands()[normCnt + j]);
-            if (j + 1 < withCnt)
-                operandStr += ", ";
-        }
-
-        operandStr += ">";
+        return std::format(
+            "  [{}] {} | {}",
+            formatIndex(index),
+            bc.toString(),
+            bc.extra()->toString(bc.opcode));
     }
-
-    return std::format(
-        "  [{}] {} | {} | {}",
-        formatIndex(index),
-        bc.toString(),
-        operandStr,
-        bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                  : bc.extra()->toString(bc.opcode));
 }

@@ -98,6 +98,30 @@ enum class OpCode : uint8_t {
     DGE,
 };
 
+inline bool hasDynamicOperands(OpCode opcode) {
+    // BRCH .. SCHD: 变长参数指令
+    switch (opcode) {
+    case OpCode::BRCH:
+        [[fallthrough]];
+    case OpCode::JOIN:
+        [[fallthrough]];
+    case OpCode::FILL:
+        [[fallthrough]];
+    case OpCode::CALL:
+        [[fallthrough]];
+    case OpCode::FUNC:
+        [[fallthrough]];
+    case OpCode::TAIL:
+        [[fallthrough]];
+    case OpCode::OPER:
+        [[fallthrough]];
+    case OpCode::SCHD:
+        return true;
+    default:
+        return false;
+    }
+}
+
 enum class MarkOpCode {
     MapArr,
     ApplyArr,

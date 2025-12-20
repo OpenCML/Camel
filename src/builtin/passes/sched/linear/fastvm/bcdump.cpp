@@ -20,7 +20,7 @@
 
 #include "bcdump.h"
 #include "builtin/algo/topo.h"
-#include "precompile.h"
+#include "compile.h"
 
 using namespace GraphIR;
 
