@@ -13,13 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "macro.h"
+#pragma once
 
-using namespace std;
-using namespace GraphIR;
+#include "execute/rewrite.h"
 
-graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) { return graph; }
+class MacroRewritePass : public GraphRewritePass {
+  public:
+    MacroRewritePass(const context_ptr_t &ctx) : GraphRewritePass(ctx) {};
+    virtual ~MacroRewritePass() = default;
+
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+};

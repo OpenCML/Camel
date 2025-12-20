@@ -18,7 +18,7 @@
  */
 
 #include "fastvm.h"
-#include "utils/opperf.h"
+#include "opperf.h"
 
 using namespace std;
 using namespace GraphIR;

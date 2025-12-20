@@ -46,7 +46,7 @@
  * depending on workload and CPU architecture.
  */
 
-#include "utils/opperf.h"
+#include "opperf.h"
 
 #ifndef NDEBUG
 #include "service/profiler/advanced/advanced_tracer.h"

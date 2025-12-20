@@ -20,10 +20,8 @@
 #pragma once
 
 #include "../linear.h"
-#include "builtin/passes/sched/common/bytecode.h"
-#include "builtin/passes/sched/common/optimize.h"
-#include "builtin/passes/sched/common/precompile.h"
 #include "core/context/frame.h"
+#include "precompile.h"
 
 #define ENABLE_COMPUTED_GOTO
 

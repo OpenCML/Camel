@@ -14,13 +14,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "bytecode.h"
+#include "bcdump.h"
 #include "builtin/algo/topo.h"
-#include "builtin/passes/sched/common/precompile.h"
+#include "precompile.h"
 
 using namespace GraphIR;
 

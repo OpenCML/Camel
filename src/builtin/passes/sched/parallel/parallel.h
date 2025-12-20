@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 02, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../sched.h"
+#include "execute/sched.h"
 
 class ParallelSchedPass : public GraphSchedulePass {
 

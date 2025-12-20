@@ -14,14 +14,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../trans.h"
-#include "builtin/passes/sched/common/optimize.h"
+#include "execute/trans.h"
 
 class BytecodeDumpPass : public GraphTranslatePass {
   public:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 20, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,14 @@
 #include "error/diagnostics/diagnostics.h"
 
 #include "builtin/passes/rewrite/inline/inline.h"
-#include "builtin/passes/rewrite/macro/macro.h"
+#include "builtin/passes/sched/linear/fastvm/bcdump.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
 #include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
-#include "builtin/passes/trans/bytecode/bytecode.h"
 #include "builtin/passes/trans/dot/graphviz.h"
 #include "builtin/passes/trans/tns/topo_node_seq.h"
+
+#include "macro/macro.h"
 
 using namespace GraphIR;
 
