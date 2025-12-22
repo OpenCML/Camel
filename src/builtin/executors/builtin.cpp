@@ -374,6 +374,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // plot
         {"plot/plot", __plot__},
+        {"plot/run_phot", __run_phot__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},

@@ -11,9 +11,9 @@
  *
  * See the the MIT license for more details.
  *
- * Author: zyx
+ * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,4 +23,5 @@
 #include "core/operator.h"
 
 void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
+void __run_phot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
 

@@ -11,9 +11,9 @@
  *
  * See the the MIT license for more details.
  *
- * Author: zyx
+ * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
