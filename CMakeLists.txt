@@ -37,6 +37,7 @@ find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(pybind11 REQUIRED)
 
 add_definitions(-DNOMINMAX)
 add_executable(${PROJECT_NAME} ${SRC_FILES})
@@ -106,4 +107,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     nlohmann_json::nlohmann_json
     Taskflow::Taskflow
     Eigen3::Eigen
+    pybind11::pybind11
 )
