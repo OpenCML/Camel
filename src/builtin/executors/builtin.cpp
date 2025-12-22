@@ -37,6 +37,7 @@
 #include "../operators/tensor.h"
 #include "../operators/this.h"
 #include "../operators/time.h"
+#include "../operators/plot.h"
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
@@ -370,6 +371,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // statistics
         {"statistics/mean", __mean__},
         {"statistics/stdev", __stdev__},
+
+        // plot
+        {"plot/plot", __plot__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},
