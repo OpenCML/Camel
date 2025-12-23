@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,14 +83,20 @@ std::unordered_map<std::string, PassFactory> passRegistry = {
 };
 
 std::unordered_map<std::string, std::string> passAliases = {
-    // 默认调度器
-    {"std::default", "std::fastvm"},
-
+    // 标准调度器
+    {"std::fallback", "std::fastvm"},
     {"std::linear", "std::fastvm"},
-    {"std::li", "std::fastvm"},
     {"std::parallel", "std::taskflow"},
-    {"std::par", "std::taskflow"},
 
+    // 常用vm缩写
+    {"std::lnr", "std::fastvm"},
+    {"std::prl", "std::taskflow"},
+    {"std::fvm", "std::fastvm"},
+    {"std::nvm", "std::nodevm"},
+    {"std::svm", "std::stackvm"},
+    {"std::tf", "std::taskflow"},
+
+    // 常用转译遍缩写
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
     {"std::tns", "std::topo_node_seq"},
@@ -98,7 +104,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::lbc", "std::linked_bytecode"},
 };
 
-PassFactory findPassFactory(const std::string &name) {
+PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     std::string stdName = name;
     auto aliasIt        = passAliases.find(name);
     if (aliasIt != passAliases.end()) {
@@ -109,6 +115,12 @@ PassFactory findPassFactory(const std::string &name) {
     if (regIt != passRegistry.end()) {
         return regIt->second;
     }
+
+    os << std::format("Pass <{}> not found, available passes are:\n", name);
+    for (const auto &[alias, pass] : passAliases) {
+        os << std::format("  {} -> {}\n", alias, pass);
+    }
+    os << std::endl;
 
     return nullptr;
 }
@@ -127,7 +139,7 @@ int applyPasses(
             return 0;
         }
 
-        auto factory = findPassFactory(p);
+        auto factory = findPassFactory(p, os);
         if (factory) {
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
@@ -140,7 +152,7 @@ int applyPasses(
     }
 
     if (graph != Graph::null()) {
-        auto factory = findPassFactory("std::default");
+        auto factory = findPassFactory("std::fallback", os);
         if (factory) {
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);

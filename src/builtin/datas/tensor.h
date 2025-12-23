@@ -13,19 +13,212 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/data/other/other.h"
-#include "core/type/other.h"
+// #include "core/data/other/other.h"
+// #include "core/type/other.h"
+#include "core/rtdata/array.h"
 
-#include <memory>
-#include <vector>
+// #include <memory>
+// #include <vector>
 
 #include <Eigen/Dense>
+
+#pragma once
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <new>
+#include <ostream>
+#include <stdexcept>
+#include <vector>
+
+// 设备类型枚举
+enum class DeviceType : uint8_t {
+    CPU = 0,
+    GPU = 1
+    // 可以扩展 TPU, NPU, FPGA ...
+};
+
+// class Tensor : public Object {
+//   public:
+//     using DimType = uint16_t;
+
+//     struct DimInfo {
+//         DimType size;
+//         DimType stride;
+//     };
+
+//     // ====== 禁止直接构造 ======
+//     Tensor(const Tensor &)            = delete;
+//     Tensor &operator=(const Tensor &) = delete;
+
+//     // ====== 静态创建方法 ======
+//     static Tensor *create(
+//         TypeCode dtype, DeviceType deviceType, int32_t deviceId, const std::vector<size_t>
+//         &shape, IAllocator &allocator) { size_t ndim     = shape.size(); size_t elemSize =
+//         typeSize(dtype);
+
+//         // 计算 total 元素数
+//         size_t totalElems = 1;
+//         for (auto s : shape)
+//             totalElems *= s;
+
+//         // 对象头部 + 数据
+//         size_t headerSize = sizeof(Tensor) + ndim * sizeof(DimInfo);
+//         size_t dataSize   = totalElems * elemSize;
+//         size_t totalSize  = headerSize + dataSize;
+
+//         void *mem = allocator.alloc(totalSize, alignof(Tensor));
+//         if (!mem)
+//             throw std::bad_alloc();
+
+//         Tensor *t = new (mem) Tensor(dtype, deviceType, deviceId, ndim, totalElems);
+
+//         // 设置 dims
+//         DimInfo *dimArr = t->dims();
+//         for (size_t i = 0; i < ndim; ++i) {
+//             dimArr[i].size = static_cast<DimType>(shape[i]);
+//         }
+//         computeStrides(dimArr, ndim);
+
+//         return t;
+//     }
+
+//     // ====== 基本属性访问 ======
+//     size_t ndim() const { return ndim_; }
+//     size_t size() const { return size_; }
+//     TypeCode dtype() const { return dtype_; }
+//     DeviceType deviceType() const { return deviceType_; }
+//     int32_t deviceId() const { return deviceId_; }
+//     const DimInfo *dims() const { return reinterpret_cast<const DimInfo *>(this + 1); }
+//     DimInfo *dims() { return reinterpret_cast<DimInfo *>(this + 1); }
+
+//     void *data() { return reinterpret_cast<std::byte *>(dims()) + ndim_ * sizeof(DimInfo); }
+//     const void *data() const {
+//         return reinterpret_cast<const std::byte *>(dims()) + ndim_ * sizeof(DimInfo);
+//     }
+
+//     // ====== Object 接口实现 ======
+//     virtual bool equals(const Object *other, bool deep = false) const override {
+//         if (this == other)
+//             return true;
+//         if (!isOfSameCls(this, other))
+//             return false;
+
+//         const Tensor *o = reinterpret_cast<const Tensor *>(other);
+//         if (dtype_ != o->dtype_ || deviceType_ != o->deviceType_ || deviceId_ != o->deviceId_ ||
+//             ndim_ != o->ndim_ || size_ != o->size_)
+//             return false;
+
+//         // shape/stride
+//         if (std::memcmp(dims(), o->dims(), ndim_ * sizeof(DimInfo)) != 0)
+//             return false;
+
+//         // 比较数据
+//         if (isGCTraced(dtype_)) {
+//             const Object *const *arrA = reinterpret_cast<const Object *const *>(data());
+//             const Object *const *arrB = reinterpret_cast<const Object *const *>(o->data());
+//             if (deep) {
+//                 for (size_t i = 0; i < size_; ++i) {
+//                     const Object *a = arrA[i];
+//                     const Object *b = arrB[i];
+//                     if (a == b)
+//                         continue;
+//                     if (!a->equals(b, true))
+//                         return false;
+//                 }
+//                 return true;
+//             } else {
+//                 return std::memcmp(arrA, arrB, size_ * sizeof(Object *)) == 0;
+//             }
+//         } else {
+//             return std::memcmp(data(), o->data(), size_ * typeSize(dtype_)) == 0;
+//         }
+//     }
+
+//     virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
+//         std::vector<size_t> shape;
+//         const DimInfo *d = dims();
+//         for (size_t i = 0; i < ndim_; ++i)
+//             shape.push_back(d[i].size);
+
+//         Tensor *t = Tensor::create(dtype_, deviceType_, deviceId_, shape, allocator);
+
+//         if (isGCTraced(dtype_)) {
+//             const Object *const *src = reinterpret_cast<const Object *const *>(data());
+//             Object **dst             = reinterpret_cast<Object **>(t->data());
+//             for (size_t i = 0; i < size_; ++i) {
+//                 const Object *orig = src[i];
+//                 if (orig) {
+//                     dst[i] = deep ? orig->clone(allocator, true) : const_cast<Object *>(orig);
+//                 } else {
+//                     dst[i] = NullRef;
+//                 }
+//             }
+//         } else {
+//             std::memcpy(t->data(), data(), size_ * typeSize(dtype_));
+//         }
+//         return reinterpret_cast<Object *>(t);
+//     }
+
+//     virtual void print(std::ostream &os) const override {
+//         os << "Tensor(" << ndim_ << "D, dtype=" << int(dtype_) << ", device=" << int(deviceType_)
+//            << ", shape=[";
+//         for (size_t i = 0; i < ndim_; ++i) {
+//             os << dims()[i].size;
+//             if (i + 1 < ndim_)
+//                 os << ",";
+//         }
+//         os << "], strides=[";
+//         for (size_t i = 0; i < ndim_; ++i) {
+//             os << dims()[i].stride;
+//             if (i + 1 < ndim_)
+//                 os << ",";
+//         }
+//         os << "])";
+//     }
+
+//     virtual void onMoved() override {
+//         // 因为 dims 和 data 都是 FAM 内部，内存相对对象本身是固定偏移，所以不需要更新
+//     }
+
+//     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
+//         if (!isGCTraced(dtype_))
+//             return;
+//         Object **ptr = reinterpret_cast<Object **>(data());
+//         for (size_t i = 0; i < size_; ++i) {
+//             if (ptr[i]) {
+//                 ptr[i] = relocate(ptr[i]);
+//             }
+//         }
+//     }
+
+//   private:
+//     Tensor(TypeCode dtype, DeviceType deviceType, int32_t deviceId, size_t ndim, size_t size)
+//         : dtype_(dtype), deviceType_(deviceType), deviceId_(deviceId),
+//           ndim_(static_cast<uint8_t>(ndim)), size_(size) {}
+
+//     static void computeStrides(DimInfo *dims, size_t ndim) {
+//         size_t stride = 1;
+//         for (size_t i = ndim; i-- > 0;) {
+//             dims[i].stride = static_cast<DimType>(stride);
+//             stride *= dims[i].size;
+//         }
+//     }
+
+//     TypeCode dtype_;
+//     DeviceType deviceType_;
+//     int32_t deviceId_;
+//     uint8_t ndim_;
+//     size_t size_;
+//     // 之后紧跟 DimInfo dims_[ndim_] + 数据 data_[]
+// };
 
 // class TensorData : public OtherData {
 //   private:
