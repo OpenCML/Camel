@@ -37,6 +37,27 @@ find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
 find_package(Eigen3 REQUIRED)
+
+# 优先使用当前目录的 venv（最可靠）
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/venv/Scripts/python.exe")
+    set(Python_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/venv")
+    message(STATUS "Found venv in current directory: ${CMAKE_CURRENT_SOURCE_DIR}/venv")
+elseif(DEFINED ENV{VIRTUAL_ENV})
+    set(Python_ROOT_DIR "$ENV{VIRTUAL_ENV}")
+    message(STATUS "Using Python from VIRTUAL_ENV: $ENV{VIRTUAL_ENV}")
+endif()
+
+# 查找 Python（包含 Interpreter 和 Development 组件）
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+
+# 验证找到的 Python 是否在虚拟环境中
+if(Python_EXECUTABLE)
+    message(STATUS "Python executable: ${Python_EXECUTABLE}")
+    if(NOT "${Python_EXECUTABLE}" MATCHES "venv")
+        message(WARNING "Python executable is not from virtual environment! This may cause module import issues.")
+    endif()
+endif()
+
 find_package(pybind11 REQUIRED)
 
 add_definitions(-DNOMINMAX)
@@ -108,5 +129,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     nlohmann_json::nlohmann_json
     Taskflow::Taskflow
     Eigen3::Eigen
-    pybind11::pybind11
+    pybind11::embed
+    Python::Python
 )

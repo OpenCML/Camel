@@ -27,7 +27,6 @@
 #include <pybind11/numpy.h>
 #include <vector>
 #include <string>
-#include <fstream>
 
 namespace py = pybind11;
 
@@ -113,80 +112,6 @@ void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("plot error: ") + e.what());
-        frame.set(self, NullSlot);
-    }
-}
-
-void __run_phot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    // 获取Python脚本文件路径参数
-    if (nargs.size < 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("run_phot: requires at least one argument (Python script path)");
-        frame.set(self, NullSlot);
-        return;
-    }
-
-    String *scriptPathObj = frame.get<String *>(nargs[0]);
-    std::string scriptPath = scriptPathObj->toString();
-
-    // 获取可选的参数（传递给Python脚本的参数）
-    std::vector<std::string> pyArgs;
-    for (size_t i = 1; i < nargs.size; ++i) {
-        String *argObj = frame.get<String *>(nargs[i]);
-        pyArgs.push_back(argObj->toString());
-    }
-
-    try {
-        // 初始化Python解释器（如果还没有初始化）
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-
-        // 获取Python的sys模块来设置argv
-        py::module_ sys = py::module_::import("sys");
-        
-        // 设置sys.argv
-        py::list argv;
-        argv.append(scriptPath);  // 脚本路径作为第一个参数
-        for (const auto &arg : pyArgs) {
-            argv.append(arg);
-        }
-        sys.attr("argv") = argv;
-
-        // 读取Python脚本文件内容
-        std::ifstream file(scriptPath);
-        if (!file.is_open()) {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit("run_phot: cannot open file: " + scriptPath);
-            frame.set(self, NullSlot);
-            return;
-        }
-
-        std::string scriptContent((std::istreambuf_iterator<char>(file)),
-                                  std::istreambuf_iterator<char>());
-        file.close();
-
-        // 创建全局命名空间
-        py::dict globals_dict = py::globals();
-        globals_dict["__file__"] = scriptPath;
-        globals_dict["__name__"] = "__main__";
-        
-        // 执行Python脚本
-        py::exec(scriptContent, globals_dict);
-
-        // 设置返回值为void
-        frame.set(self, NullSlot);
-    } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("run_phot Python error: ") + e.what());
-        frame.set(self, NullSlot);
-    } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("run_phot error: ") + e.what());
         frame.set(self, NullSlot);
     }
 }

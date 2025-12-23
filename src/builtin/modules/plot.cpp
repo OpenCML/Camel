@@ -53,32 +53,6 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "run_phot",
-            {
-                {
-                    ":plot/run_phot",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
-                        "(script_path: string, ...args: string[]) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
-                            // 检查参数数量：至少1个
-                            if (norm.size() < 1)
-                                return nullopt;
-                            // 第一个参数必须是字符串（脚本路径）
-                            if (norm[0]->code() != TypeCode::String)
-                                return nullopt;
-                            // 其他参数都必须是字符串
-                            for (size_t i = 1; i < norm.size(); ++i) {
-                                if (norm[i]->code() != TypeCode::String)
-                                    return nullopt;
-                            }
-                            // 返回void
-                            return Type::Void();
-                        }),
-                },
-            }),
     };
 
     return groups;

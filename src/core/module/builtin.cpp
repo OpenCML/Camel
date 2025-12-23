@@ -38,6 +38,7 @@
 #include "builtin/modules/this.h"
 #include "builtin/modules/time.h"
 #include "builtin/modules/plot.h"
+#include "builtin/modules/phot.h"
 
 std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories = {
@@ -57,6 +58,7 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"tensor", [](context_ptr_t ctx) { return TensorBuiltinModule::create(ctx); }},
         {"statistics", [](context_ptr_t ctx) { return StatisticsBuiltinModule::create(ctx); }},
         {"plot", [](context_ptr_t ctx) { return PlotBuiltinModule::create(ctx); }},
+        {"phot", [](context_ptr_t ctx) { return PhotBuiltinModule::create(ctx); }},
 
 #ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},
