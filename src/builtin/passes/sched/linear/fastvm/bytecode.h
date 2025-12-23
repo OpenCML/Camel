@@ -165,7 +165,7 @@ inline int computeWidth(data_idx_t value) {
     return width;
 }
 
-inline std::string formatIndex(size_t value, int maxwidth) {
+inline std::string formatIndex(int value, int maxwidth) {
     int width = computeWidth(value);
 
     if (width < maxwidth)

@@ -1,4 +1,4 @@
-module ex_photlang
+module phot_example
 
 import { config, gen_bits, modulation, up_sample, pulse_shaper, constellation_diagram } from phot
 
@@ -31,7 +31,7 @@ func main(): int sync {
 
     // Step 2: Modulation
     "Step 2: Modulating signals..." ->println
-    let signals = modulation(signal_bits, bits_per_symbol)
+    let signals = modulation<bits_per_symbol>(signal_bits)
     let (x_pol, y_pol) = signals
     let (real_before, imag_before) = x_pol
 
@@ -46,7 +46,7 @@ func main(): int sync {
     "Step 3: Upsampling x{}..."
         ->format<up_sampling_factor>
         ->println
-    let upsampled_signals = up_sample(signals, up_sampling_factor)
+    let upsampled_signals = up_sample<up_sampling_factor>(signals)
     let (x_pol_upsampled, y_pol_upsampled) = upsampled_signals
     let (real_upsampled, imag_upsampled) = x_pol_upsampled
     "  upsampled length: {}"
@@ -60,7 +60,7 @@ func main(): int sync {
     "Step 4: RRC pulse shaping (rolloff = {:.3f})..."
         ->format<roll_off>
         ->println
-    let shaped_signals = pulse_shaper(upsampled_signals, up_sampling_factor, roll_off, total_baud)
+    let shaped_signals = pulse_shaper<up_sampling_factor, roll_off, total_baud>(upsampled_signals)
     let (x_pol_final, y_pol_final) = shaped_signals
     let (real_final, imag_final) = x_pol_final
     "  first 5 shaped real: {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}"
@@ -69,7 +69,7 @@ func main(): int sync {
 
     // Step 5: Constellation plot
     "Step 5: Plotting constellation diagram..." ->println
-    constellation_diagram(shaped_signals, true, false)
+    constellation_diagram<true, false>(shaped_signals)
 
     return 0
 }
