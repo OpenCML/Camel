@@ -12,15 +12,22 @@
  * See the the MIT license for more details.
  *
  * Author: Yuxuan Zheng
- * Created: Dec. 19, 2025
+ * Created: Dec. 22, 2025
  * Updated: Dec. 22, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
-#include "core/operator.h"
+#include "core/module/builtin.h"
 
-void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
+class PhotBuiltinModule : public BuiltinModule {
+  public:
+    PhotBuiltinModule(context_ptr_t ctx);
+    virtual ~PhotBuiltinModule() = default;
+
+    virtual bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx);
+};
 

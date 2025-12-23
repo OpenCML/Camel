@@ -1,0 +1,80 @@
+module ex_photlang
+
+import { config, gen_bits, modulation, up_sample, pulse_shaper, constellation_diagram } from phot
+
+func main(): int sync {
+    // 配置phot库
+    config(true)
+    
+    // 系统参数
+    let num_symbols = 2^16  // 符号数目
+    // 2 for QPSK; 3 for 8QAM; 4 for 16QAM; 5 for 32QAM; 6 for 64QAM  设置调制格式
+    let bits_per_symbol = 3  // 8QAM
+    let total_baud = double(40.0e9)  // 信号波特率，符号率
+    let up_sampling_factor = 4  // 上采样倍数
+    let sampling_rate = double(up_sampling_factor) * total_baud  // 信号采样率
+    let reference_frequency = 193.1e12
+
+    // 发射端：首先产生发射端X/Y双偏振信号
+    let num_bits = num_symbols * bits_per_symbol
+    println("步骤 1: 计算比特数量...")
+    println("生成 ", num_bits," 个随机比特...")
+
+
+    let signal_bits = gen_bits(num_bits, bits_per_symbol)
+    let (bits_x, bits_y) = signal_bits
+
+    println("步骤 2: 比特序列生成完成")
+    println("  - signal_bits X 长度: ", len(bits_x))
+    println("  - signal_bits Y 长度: ", len(bits_y))
+    // println("  - bits_x 前5个: ", bits_x[0], ", ", bits_x[1], ", ", bits_x[2], ", ", bits_x[3], ", ", bits_x[4])
+    // println("  - bits_y 前5个: ", bits_y[0], ", ", bits_y[1], ", ", bits_y[2], ", ", bits_y[3], ", ", bits_y[4])
+
+
+    // 生成双偏振符号序列
+    let signals = modulation(signal_bits, bits_per_symbol)
+    let (x_pol, y_pol) = signals
+    let (real_before, imag_before) = x_pol  // 使用 X_Pol 进行后续处理
+
+    println("步骤 3: 调制完成")
+    println("  - 生成 ", len(real_before), " 个符号")
+    println("  - real_before 前5个: ", real_before[0], ", ", real_before[1], ", ", real_before[2], ", ", real_before[3], ", ", real_before[4])
+    println("  - imag_before 前5个: ", imag_before[0], ", ", imag_before[1], ", ", imag_before[2], ", ", imag_before[3], ", ", imag_before[4])
+    println()
+
+    // 上采样
+    let upsampled_signals = up_sample(signals, up_sampling_factor)
+    let (x_pol_upsampled, y_pol_upsampled) = upsampled_signals
+    let (real_upsampled, imag_upsampled) = x_pol_upsampled  // 使用 X_Pol 进行后续处理
+    println("步骤 4: 上采样完成")
+    println("  - 信号长度：", len(real_upsampled))
+    println("  - real_upsampled 前5个: ", real_upsampled[0], ", ", real_upsampled[1], ", ", real_upsampled[2], ", ", real_upsampled[3], ", ", real_upsampled[4])
+    println("  - imag_upsampled 前5个: ", imag_upsampled[0], ", ", imag_upsampled[1], ", ", imag_upsampled[2], ", ", imag_upsampled[3], ", ", imag_upsampled[4])
+
+    // RRC脉冲整形
+    let RRC_ROLL_OFF = double(0.01)
+    println("步骤 5: 进行RRC脉冲整形(rolloff=", RRC_ROLL_OFF, ")...")
+    let shaped_signals = pulse_shaper(upsampled_signals, up_sampling_factor, double(RRC_ROLL_OFF), double(total_baud))
+    let (x_pol_final, y_pol_final) = shaped_signals
+    let (real_final, imag_final) = x_pol_final  // 使用 X_Pol 进行后续处理
+
+    // println("步骤 5: RRC脉冲整形完成")
+    // println("  - 信号长度：", len(real_final))
+    println("  - real_final 前5个: ", real_final[0], ", ", real_final[1], ", ", real_final[2], ", ", real_final[3], ", ", real_final[4])
+    println("  - imag_final 前5个: ", imag_final[0], ", ", imag_final[1], ", ", imag_final[2], ", ", imag_final[3], ", ", imag_final[4])
+    // let mid_idx = len(real_final) / 2
+    // let mid_idx1 = mid_idx + 1
+    // let mid_idx2 = mid_idx + 2
+    // let mid_idx3 = mid_idx + 3
+    // let mid_idx4 = mid_idx + 4
+    // println("  - real_final 中间5个 (索引", mid_idx, "附近): ", real_final[mid_idx], ", ", real_final[mid_idx1], ", ", real_final[mid_idx2], ", ", real_final[mid_idx3], ", ", real_final[mid_idx4])
+    // println("  - imag_final 中间5个 (索引", mid_idx, "附近): ", imag_final[mid_idx], ", ", imag_final[mid_idx1], ", ", imag_final[mid_idx2], ", ", imag_final[mid_idx3], ", ", imag_final[mid_idx4])
+    // println()
+
+    // 分析器画星座图
+    // 注意：Python 代码中 constellation_diagram 接收的是 pulse_shaper 返回的结果
+    constellation_diagram(shaped_signals, true, false)
+
+    return 0
+}
+

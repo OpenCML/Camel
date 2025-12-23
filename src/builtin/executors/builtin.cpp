@@ -38,6 +38,7 @@
 #include "../operators/this.h"
 #include "../operators/time.h"
 #include "../operators/plot.h"
+#include "../operators/phot.h"
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
@@ -374,7 +375,14 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // plot
         {"plot/plot", __plot__},
-        {"plot/run_phot", __run_phot__},
+
+        // phot
+        {"phot/config", __phot_config__},
+        {"phot/gen_bits", __phot_gen_bits__},
+        {"phot/modulation", __phot_modulation__},
+        {"phot/up_sample", __phot_up_sample__},
+        {"phot/pulse_shaper", __phot_pulse_shaper__},
+        {"phot/constellation_diagram", __phot_constellation_diagram__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},
