@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,7 +44,7 @@ void __println__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     for (size_t i = 0; i < nargs.size; i++) {
         if (i > 0) {
-            std::cout << std::endl;
+            std::cout << " ";
         }
         TypeCode type = frame.typeAt(nargs[i]);
         slot_t data   = frame.get<slot_t>(nargs[i]);
