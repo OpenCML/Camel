@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -151,7 +151,7 @@ template <typename T> inline data_idx_t as_index(T value) {
     return static_cast<data_idx_t>(value);
 }
 
-inline std::string formatIndex(data_idx_t value) {
+inline int computeWidth(data_idx_t value) {
     int width = 0;
     if (value == 0) {
         width = 1;
@@ -161,12 +161,17 @@ inline std::string formatIndex(data_idx_t value) {
             temp /= 10;
             width++;
         }
-        if (value < 0) {
-            width++; // 负号占一位
-        }
     }
-    width = (width + 1) / 2 * 2;
-    return std::format("{:>{}}", value, width);
+    return width;
+}
+
+inline std::string formatIndex(size_t value, int maxwidth) {
+    int width = computeWidth(value);
+
+    if (width < maxwidth)
+        return std::format("{:>{}}", value, maxwidth);
+    else
+        return std::format("{}", value);
 }
 
 std::string to_string(const OpCode &op);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,4 +44,4 @@ compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &
 std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
 compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt);
 
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context);
+std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context);

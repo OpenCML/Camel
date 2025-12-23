@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -487,7 +487,7 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
     return {linked, graphs, offsetMap};
 }
 
-std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t &context) {
+std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
     if (hasDynamicOperands(bc.opcode)) {
         std::string operandStr;
 
@@ -530,17 +530,12 @@ std::string opCodeToString(const Bytecode &bc, size_t index, const context_ptr_t
         }
 
         return std::format(
-            "  [{}] {} | {} | {}",
-            formatIndex(index),
+            "{} | {} | {}",
             bc.toString(),
             operandStr,
             bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
                                       : bc.extra()->toString(bc.opcode));
     } else {
-        return std::format(
-            "  [{}] {} | {}",
-            formatIndex(index),
-            bc.toString(),
-            bc.extra()->toString(bc.opcode));
+        return std::format("{} | {}", bc.toString(), bc.extra()->toString(bc.opcode));
     }
 }

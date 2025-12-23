@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,8 +55,11 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             });
         os << g->mangledName() << ":\n";
 
+        int maxwidth = computeWidth(bytecodes.size());
+
         for (size_t i = 0; i < bytecodes.size();) {
-            os << opCodeToString(bytecodes[i], i, context_) << "\n";
+            os << "  [" << formatIndex(i, maxwidth) << "] ";
+            os << opCodeToString(bytecodes[i], context_) << "\n";
             i += bytecodes[i].opsize;
         }
 
@@ -78,10 +81,13 @@ graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) 
 
     os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
 
+    int maxwidth = computeWidth(codes.size());
+
     for (const auto &[offset, length, graph] : graphs) {
         os << graph->mangledName() << ":\n";
         for (size_t i = offset; i < offset + length;) {
-            os << opCodeToString(codes[i], i, context_) << "\n";
+            os << "  [" << formatIndex(i, maxwidth) << "] ";
+            os << opCodeToString(codes[i], context_) << "\n";
             i += codes[i].opsize;
         }
     }

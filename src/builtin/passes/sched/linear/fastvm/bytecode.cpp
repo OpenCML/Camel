@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -167,9 +167,9 @@ std::string BytecodeHeader::toString() const {
         "{} ({}) [{}] | [{}, {}]",
         to_string(opcode),
         opsize,
-        formatIndex(result),
-        formatIndex(fastop[0]),
-        formatIndex(fastop[1]));
+        formatIndex(result, 2),
+        formatIndex(fastop[0], 2),
+        formatIndex(fastop[1], 2));
 }
 
 std::string BytecodeExtra::toString(OpCode opcode) const {

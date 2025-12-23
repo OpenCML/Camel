@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -157,8 +157,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     JUMP();
 
 label_RETN: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
@@ -181,8 +180,7 @@ label_RETN: {
 }
 
 label_CAST: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     ASSERT(false, "CAST opcode not implemented in FastVM.");
@@ -191,8 +189,7 @@ label_CAST: {
 }
 
 label_COPY: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
@@ -208,8 +205,7 @@ label_COPY: {
 }
 
 label_ACCS: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
@@ -233,8 +229,7 @@ label_ACCS: {
 }
 
 label_JUMP: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     pc = static_cast<arr_size_t>(bc->fastop[0]);
@@ -243,8 +238,7 @@ label_JUMP: {
 }
 
 label_BRCH: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -297,8 +291,7 @@ label_BRCH: {
 }
 
 label_JOIN: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -314,8 +307,7 @@ label_JOIN: {
 }
 
 label_FILL: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -398,8 +390,7 @@ label_FILL: {
 }
 
 label_CALL: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -431,8 +422,7 @@ label_CALL: {
 }
 
 label_FUNC: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     // 保存当前程序计数器和栈帧
@@ -454,8 +444,7 @@ label_FUNC: {
 }
 
 label_TAIL: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     // 尾调用不保存程序计数器和栈帧
@@ -491,8 +480,7 @@ label_TAIL: {
 }
 
 label_OPER: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -507,8 +495,7 @@ label_OPER: {
 }
 
 label_SCHD: {
-    EXEC_WHEN_DEBUG(
-        l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, pc, context_)));
+    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();

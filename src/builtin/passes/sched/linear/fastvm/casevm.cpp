@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,7 +53,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     while (true) {
         const Bytecode &bc = bytecodes_[pc];
         EXEC_WHEN_DEBUG(
-            l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, pc, context_)));
+            l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, context_)));
 
 #ifdef OPPERF_ENABLED
         std::string tag;
