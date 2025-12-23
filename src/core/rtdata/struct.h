@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,8 +86,8 @@ class Struct : public Object {
 
         const Struct *otherStruct = reinterpret_cast<const Struct *>(other);
 
-        // 布局或字段数量不同则不相等
-        if (&layout_ != &otherStruct->layout_ || size_ != otherStruct->size_)
+        // 字段数量不同则不相等
+        if (size_ != otherStruct->size_)
             return false;
 
         const auto &types   = layout_->fieldTypes();

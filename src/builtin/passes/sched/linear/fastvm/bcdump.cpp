@@ -14,13 +14,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "bytecode.h"
+#include "bcdump.h"
 #include "builtin/algo/topo.h"
-#include "builtin/passes/sched/common/precompile.h"
+#include "compile.h"
 
 using namespace GraphIR;
 
@@ -45,16 +45,51 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             continue;
         visited.insert(g);
 
-        auto bytecodes = precompile(context_, g.get(), {});
-        optimizer_.optimize(bytecodes);
+        auto bytecodes = compile(
+            context_,
+            g.get(),
+            {
+                .enableTailCallDetection = true,
+                .enableInlineOperators   = true,
+                .optimizationStrategies  = OptimizationStrategyCode::All,
+            });
         os << g->mangledName() << ":\n";
 
+        int maxwidth = computeWidth(bytecodes.size());
+
         for (size_t i = 0; i < bytecodes.size();) {
-            os << opCodeToString(bytecodes[i], i, context_) << "\n";
+            os << "  [" << formatIndex(i, maxwidth) << "] ";
+            os << opCodeToString(bytecodes[i], context_) << "\n";
             i += bytecodes[i].opsize;
         }
 
         os << std::format("  [used: {}, allocated: {}]\n", bytecodes.size(), bytecodes.capacity());
+    }
+
+    return GraphIR::Graph::null();
+}
+
+graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+    const auto &[codes, graphs, _] = compileAndLink(
+        context_,
+        graph.get(),
+        {
+            .enableTailCallDetection = true,
+            .enableInlineOperators   = true,
+            .optimizationStrategies  = OptimizationStrategyCode::All,
+        });
+
+    os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
+
+    int maxwidth = computeWidth(codes.size());
+
+    for (const auto &[offset, length, graph] : graphs) {
+        os << graph->mangledName() << ":\n";
+        for (size_t i = offset; i < offset + length;) {
+            os << "  [" << formatIndex(i, maxwidth) << "] ";
+            os << opCodeToString(codes[i], context_) << "\n";
+            i += codes[i].opsize;
+        }
     }
 
     return GraphIR::Graph::null();

@@ -14,26 +14,26 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../trans.h"
-#include "builtin/passes/sched/common/optimize.h"
+#include "execute/trans.h"
 
 class BytecodeDumpPass : public GraphTranslatePass {
-    BytecodeOptimizer optimizer_;
-
   public:
-    BytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {
-        optimizer_.registerStrategy(std::make_unique<JumpToJumpStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JumpToNextStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JumpToRetnStrategy>());
-        optimizer_.registerStrategy(std::make_unique<JoinCleanupStrategy>());
-    };
+    BytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
     virtual ~BytecodeDumpPass() = default;
+
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+};
+
+class LinkedBytecodeDumpPass : public GraphTranslatePass {
+  public:
+    LinkedBytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
+    virtual ~LinkedBytecodeDumpPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };

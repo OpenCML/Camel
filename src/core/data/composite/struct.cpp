@@ -13,17 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "struct.h"
-#include "utils/scope.h"
-#include "utils/str.h"
 
-#include "../special/any.h"
-#include "../special/null.h"
 #include "../special/ref.h"
+#include "utils/str.h"
 
 using namespace std;
 
@@ -139,4 +136,11 @@ const string StructData::toString() const {
     });
     str += " }";
     return str;
+}
+
+data_ptr_t StructData::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return tt::as_shared<StructData>(shared_from_this());
+    }
+    return nullptr;
 }

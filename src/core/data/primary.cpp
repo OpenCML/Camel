@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "primary.h"
-#include "special/any.h"
 
 #include "utils/escape.h"
 
@@ -36,3 +35,10 @@ bool StringData::equals(const data_ptr_t &other) const {
 data_ptr_t StringData::clone(bool deep) const { return std::make_shared<StringData>(data_); }
 
 const std::string StringData::toString() const { return "\"" + encodeEscapes(data_) + "\""; }
+
+data_ptr_t StringData::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return shared_from_this();
+    }
+    return nullptr;
+}

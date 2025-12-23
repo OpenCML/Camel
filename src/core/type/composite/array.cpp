@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,9 +76,7 @@ type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
 
 bool ArrayType::resolved() const { return refs_.empty(); }
 
-string ArrayType::toString() const {
-    return (elemType_->code() == TypeCode::Void ? "" : elemType_->toString()) + "[]";
-}
+string ArrayType::toString() const { return elemType_->toString() + "[]"; }
 
 std::string ArrayType::mangle() const {
     std::string result = "A";
@@ -101,8 +99,7 @@ bool ArrayType::equals(const type_ptr_t &other) const {
         return false;
     }
     const ArrayType &otherArr = static_cast<const ArrayType &>(*other);
-    return elemType_->code() == TypeCode::Void || otherArr.elemType_->code() == TypeCode::Void ||
-           elemType_->equals(otherArr.elemType_);
+    return elemType_->equals(otherArr.elemType_);
 }
 
 CastSafety ArrayType::castSafetyTo(const Type &other) const {

@@ -13,18 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Oct. 09, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "execute/pass.h"
+#include "base.h"
 
-class GraphTranslatePass : public GraphIRPass {
+class GraphSchedulePass : public GraphIRPass {
   public:
-    GraphTranslatePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~GraphTranslatePass() = default;
+    GraphSchedulePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~GraphSchedulePass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
 };

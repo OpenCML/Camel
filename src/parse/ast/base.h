@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,7 +68,7 @@ class Load {
 
     void setTokenRange(size_t start, size_t end) {
         tokenRange_.start = start;
-        tokenRange_.end = end;
+        tokenRange_.end   = end;
     }
     void setTokenRange(TokenRange range) { tokenRange_ = range; }
 
@@ -92,6 +92,8 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
 
     LoadType type() const { return load_->type(); }
     std::string toString() const { return load_->toString(); }
+
+    size_t size() const { return children_.size(); }
 
     template <typename T> node_ptr_t atAs(size_t index) const {
         ASSERT(index < children_.size(), "Index out of bounds");

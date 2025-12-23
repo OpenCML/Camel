@@ -1,0 +1,28 @@
+module plot_test
+
+import { plot } from plot
+
+func main(): int sync {
+    // 测试1: 使用 float 数组绘制简单数据
+    let data1: float[] = [1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 1.0]
+    plot(data1, "test_plot1.png")
+    println("Test 1: Plot saved to test_plot1.png")
+    
+    // 测试2: 使用 int 数组
+    let data2: int[] = [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+    plot(data2, "test_plot2.png")
+    println("Test 2: Plot saved to test_plot2.png")
+    
+    // 测试3: 使用 double 数组绘制正弦波数据
+    let data3: double[] = [0.0, 0.5, 0.866, 1.0, 0.866, 0.5, 0.0, -0.5, -0.866, -1.0, -0.866, -0.5, 0.0]
+    plot(data3, "test_plot3.png")
+    println("Test 3: Plot saved to test_plot3.png")
+    
+    // 测试4: 使用默认文件名（plot.png）
+    let data4: float[] = [10.0, 20.0, 15.0, 25.0, 30.0, 20.0, 10.0]
+    plot(data4)
+    println("Test 4: Plot saved to plot.png (default filename)")
+    
+    return 0
+}
+

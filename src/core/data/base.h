@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,8 @@ class Data : public std::enable_shared_from_this<Data> {
     type_ptr_t type() const;
     static data_ptr_t null();
 
-    virtual bool equals(const data_ptr_t &other) const = 0;
-    virtual data_ptr_t clone(bool deep = false) const  = 0;
-    virtual const std::string toString() const         = 0;
+    virtual bool equals(const data_ptr_t &other) const   = 0;
+    virtual data_ptr_t clone(bool deep = false) const    = 0;
+    virtual const std::string toString() const           = 0;
+    virtual data_ptr_t convertTo(const type_ptr_t &type) = 0;
 };

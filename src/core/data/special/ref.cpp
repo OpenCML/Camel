@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "ref.h"
-#include "utils/assert.h"
 
 RefData::RefData(const std::string &ref) : Data(Type::Ref()), ref_(ref) {}
 
@@ -29,3 +28,10 @@ bool RefData::equals(const data_ptr_t &other) const { return false; }
 data_ptr_t RefData::clone(bool deep) const { return std::make_shared<RefData>(ref_); }
 
 const std::string RefData::toString() const { return "DREF<" + ref_ + ">"; }
+
+data_ptr_t RefData::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return std::make_shared<RefData>(ref_);
+    }
+    return nullptr;
+}

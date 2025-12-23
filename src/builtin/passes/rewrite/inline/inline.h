@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../rewrite.h"
+#include "execute/rewrite.h"
 
 class InlineRewritePass : public GraphRewritePass {
   public:

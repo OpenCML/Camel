@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 16, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,3 +68,24 @@ size_t findPrev(bytecode_vec_t &codes, size_t index) {
 }
 
 size_t findNext(bytecode_vec_t &codes, size_t index) { return index + codes[index].opsize; }
+
+const std::unordered_map<OptimizationStrategyCode, std::unique_ptr<IOptimizeStrategy>> &
+getGlobalOptimizationStrategyRegistry() {
+    static const auto reg = [] {
+        std::unordered_map<OptimizationStrategyCode, std::unique_ptr<IOptimizeStrategy>> m;
+        m.emplace(
+            OptimizationStrategyCode::JumpToJumpOptimization,
+            std::make_unique<JumpToJumpStrategy>());
+        m.emplace(
+            OptimizationStrategyCode::JumpToNextOptimization,
+            std::make_unique<JumpToNextStrategy>());
+        m.emplace(
+            OptimizationStrategyCode::JumpToRetnOptimization,
+            std::make_unique<JumpToRetnStrategy>());
+        m.emplace(
+            OptimizationStrategyCode::JoinCleanupOptimization,
+            std::make_unique<JoinCleanupStrategy>());
+        return m;
+    }();
+    return reg;
+}

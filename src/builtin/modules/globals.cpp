@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1409,10 +1409,18 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":io/print",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
-                        "(...args: any) => void",
+                        {{-1, {}}, {-1, {}}},
+                        "<fmt?: string> (...args: any) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> { return Type::Void(); }),
+                            -> optional<type_ptr_t> {
+                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
+                                return nullopt;
+                            }
+                            if (norm.size() < 1) {
+                                return Type::Void();
+                            }
+                            return norm[0];
+                        }),
                 },
             }),
         OperatorGroup::create(
@@ -1421,10 +1429,18 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":io/println",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
-                        "(...args: any) => void",
+                        {{-1, {}}, {-1, {}}},
+                        "<fmt?: string> (...args: any) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> { return Type::Void(); }),
+                            -> optional<type_ptr_t> {
+                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
+                                return nullopt;
+                            }
+                            if (norm.size() < 1) {
+                                return Type::Void();
+                            }
+                            return norm[0];
+                        }),
                 },
             }),
         // ======= OS =======

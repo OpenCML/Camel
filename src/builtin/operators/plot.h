@@ -11,24 +11,15 @@
  *
  * See the the MIT license for more details.
  *
- * Author: Zhenjie Wei
- * Created: Oct. 07, 2024
- * Updated: Dec. 11, 2025
+ * Author: Yuxuan Zheng
+ * Created: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/data/base.h"
+#include "core/context/frame.h"
+#include "core/operator.h"
 
-class AnyData : public Data {
-    data_ptr_t data_;
-
-  public:
-    AnyData(const data_ptr_t &data);
-    virtual ~AnyData() = default;
-
-    virtual bool equals(const data_ptr_t &other) const override;
-    virtual data_ptr_t clone(bool deep = false) const override;
-    virtual const std::string toString() const override;
-};
+void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);

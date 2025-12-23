@@ -1,0 +1,32 @@
+module phot_example
+
+import { config, gen_bits, modulation, up_sample, pulse_shaper, constellation_diagram } from phot
+
+func main(): int sync {
+    "Configuring phot library..." ->println
+    config(true)
+
+    let cfg = {
+        num_symbols: 2^16,
+        bits_per_symbol: 3,
+        roll_off: 0.01 as double,
+        total_baud: 40.0e9 as double,
+        up_sampling_factor: 4 as int,
+        reference_frequency: 193.1e12 as double
+    }
+    "configs: {}"->format<cfg>->println
+
+    let num_bits = cfg.num_symbols * cfg.bits_per_symbol
+    "total bits: {} ({} symbols x {} bits/symbol)"
+        ->format<num_bits, cfg.num_symbols, cfg.bits_per_symbol>
+        ->println
+
+    "Start emulating..." ->println
+    gen_bits(num_bits, cfg.bits_per_symbol)
+        ->modulation<cfg.bits_per_symbol>
+        ->up_sample<cfg.up_sampling_factor>
+        ->pulse_shaper<cfg.up_sampling_factor, cfg.roll_off, cfg.total_baud>
+        ->constellation_diagram<true, false>
+
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 15, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 // #define OPPERF_ENABLED
 
-#include "builtin/passes/sched/common/bytecode.h"
+#include "bytecode.h"
 
 #include <algorithm>
 #include <atomic>

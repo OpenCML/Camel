@@ -11,25 +11,22 @@
  *
  * See the the MIT license for more details.
  *
- * Author: Zhenjie Wei
- * Created: Oct. 07, 2024
- * Updated: Dec. 11, 2025
+ * Author: Yuxuan Zheng
+ * Created: Dec. 22, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "any.h"
-#include "null.h"
+#pragma once
 
-AnyData::AnyData(const data_ptr_t &data) : Data(Type::Any()) {
-    if (data) {
-        data_ = data;
-    } else {
-        data_ = Data::null();
-    }
-}
+#include "core/module/builtin.h"
 
-bool AnyData::equals(const data_ptr_t &other) const { return true; }
+class PhotBuiltinModule : public BuiltinModule {
+  public:
+    PhotBuiltinModule(context_ptr_t ctx);
+    virtual ~PhotBuiltinModule() = default;
 
-data_ptr_t AnyData::clone(bool deep) const { return std::make_shared<AnyData>(data_->clone(deep)); }
+    virtual bool load() override;
 
-const std::string AnyData::toString() const { return data_->toString(); }
+    static module_ptr_t create(context_ptr_t ctx);
+};

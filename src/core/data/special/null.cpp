@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "null.h"
-#include "any.h"
 
 NullData::NullData() : Data(Type::Void()) {}
 
@@ -27,3 +26,10 @@ bool NullData::equals(const data_ptr_t &other) const { return true; }
 data_ptr_t NullData::clone(bool deep) const { return Data::null(); }
 
 const std::string NullData::toString() const { return "null"; }
+
+data_ptr_t NullData::convertTo(const type_ptr_t &type) {
+    if (type->equals(type_)) {
+        return std::make_shared<NullData>();
+    }
+    return nullptr;
+}

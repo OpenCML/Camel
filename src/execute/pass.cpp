@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,14 @@
 #include "error/diagnostics/diagnostics.h"
 
 #include "builtin/passes/rewrite/inline/inline.h"
-#include "builtin/passes/rewrite/macro/macro.h"
+#include "builtin/passes/sched/linear/fastvm/bcdump.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
 #include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
-#include "builtin/passes/trans/bytecode/bytecode.h"
 #include "builtin/passes/trans/dot/graphviz.h"
 #include "builtin/passes/trans/tns/topo_node_seq.h"
+
+#include "macro/macro.h"
 
 using namespace GraphIR;
 
@@ -36,71 +37,93 @@ graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
     return Graph::null();
 }
 
-std::unordered_map<
-    std::string, std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>>
-    passRegistry = {
-        // Rewrite Passes
-        {
-            "std::inline",
-            [](const context_ptr_t &ctx) { return std::make_unique<InlineRewritePass>(ctx); },
-        },
-        {
-            "std::macro",
-            [](const context_ptr_t &ctx) { return std::make_unique<MacroRewritePass>(ctx); },
-        },
+using PassFactory = std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>;
 
-        // Schedule Passes
-        {
-            "std::linear",
-            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
-        },
-        {
-            "std::fastvm",
-            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
-        },
-        {
-            "std::nodevm",
-            [](const context_ptr_t &ctx) { return std::make_unique<NodeVMSchedPass>(ctx); },
-        },
-        {
-            "std::parallel",
-            [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
-        },
-        {
-            "std::taskflow",
-            [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
-        },
-        {
-            "std::default",
-            [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
-        },
-        {
-            "std::null",
-            [](const context_ptr_t &ctx) { return std::make_unique<NullGraphIRPass>(ctx); },
-        },
-
-        // Translate Passes
-        {
-            "std::dot",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
-        },
-        {
-            "std::graphviz",
-            [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
-        },
-        {
-            "std::bytecode",
-            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
-        },
-        {
-            "std::bc",
-            [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
-        },
-        {
-            "std::tns",
-            [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
-        },
+std::unordered_map<std::string, PassFactory> passRegistry = {
+    {
+        "std::null",
+        [](const context_ptr_t &ctx) { return std::make_unique<NullGraphIRPass>(ctx); },
+    },
+    {
+        "std::macro",
+        [](const context_ptr_t &ctx) { return std::make_unique<MacroRewritePass>(ctx); },
+    },
+    {
+        "std::graphviz",
+        [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
+    },
+    {
+        "std::topo_node_seq",
+        [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
+    },
+    {
+        "std::nodevm",
+        [](const context_ptr_t &ctx) { return std::make_unique<NodeVMSchedPass>(ctx); },
+    },
+    {
+        "std::fastvm",
+        [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
+    },
+    {
+        "std::inline",
+        [](const context_ptr_t &ctx) { return std::make_unique<InlineRewritePass>(ctx); },
+    },
+    {
+        "std::taskflow",
+        [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
+    },
+    {
+        "std::bytecode",
+        [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
+    },
+    {
+        "std::linked_bytecode",
+        [](const context_ptr_t &ctx) { return std::make_unique<LinkedBytecodeDumpPass>(ctx); },
+    },
 };
+
+std::unordered_map<std::string, std::string> passAliases = {
+    // 标准调度器
+    {"std::fallback", "std::fastvm"},
+    {"std::linear", "std::fastvm"},
+    {"std::parallel", "std::taskflow"},
+
+    // 常用vm缩写
+    {"std::lnr", "std::fastvm"},
+    {"std::prl", "std::taskflow"},
+    {"std::fvm", "std::fastvm"},
+    {"std::nvm", "std::nodevm"},
+    {"std::svm", "std::stackvm"},
+    {"std::tf", "std::taskflow"},
+
+    // 常用转译遍缩写
+    {"std::dot", "std::graphviz"},
+    {"std::gir", "std::graphviz"},
+    {"std::tns", "std::topo_node_seq"},
+    {"std::bc", "std::bytecode"},
+    {"std::lbc", "std::linked_bytecode"},
+};
+
+PassFactory findPassFactory(const std::string &name, std::ostream &os) {
+    std::string stdName = name;
+    auto aliasIt        = passAliases.find(name);
+    if (aliasIt != passAliases.end()) {
+        stdName = aliasIt->second;
+    }
+
+    auto regIt = passRegistry.find(stdName);
+    if (regIt != passRegistry.end()) {
+        return regIt->second;
+    }
+
+    os << std::format("Pass <{}> not found, available passes are:\n", name);
+    for (const auto &[alias, pass] : passAliases) {
+        os << std::format("  {} -> {}\n", alias, pass);
+    }
+    os << std::endl;
+
+    return nullptr;
+}
 
 int applyPasses(
     const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os) {
@@ -116,9 +139,9 @@ int applyPasses(
             return 0;
         }
 
-        auto it = passRegistry.find(p);
-        if (it != passRegistry.end()) {
-            auto pass = it->second(ctx);
+        auto factory = findPassFactory(p, os);
+        if (factory) {
+            auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
                 return 1;
@@ -129,12 +152,16 @@ int applyPasses(
     }
 
     if (graph != Graph::null()) {
-        ASSERT(
-            !graph->dirty(),
-            std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
-
-        auto fallback = std::make_unique<FastVMSchedPass>(ctx);
-        fallback->apply(graph, os);
+        auto factory = findPassFactory("std::fallback", os);
+        if (factory) {
+            auto pass = factory(ctx);
+            graph     = pass->apply(graph, os);
+            if (ctx->rtmDiags()->hasErrors()) {
+                return 1;
+            }
+        } else {
+            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit("std::default");
+        }
     }
 
     return 0;

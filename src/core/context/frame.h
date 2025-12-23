@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,11 +32,10 @@ struct FrameMeta {
 FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph);
 
 class FramePool;
+class FrameView;
 
 class Frame : public Object {
   public:
-    Frame() = delete;
-
     GraphIR::Graph *graph() { return graph_; }
     const GraphIR::Graph *graph() const { return graph_; }
 
@@ -209,16 +208,15 @@ class Frame : public Object {
 
   private:
     friend class FramePool;
-    // 只能由 FramePool 调用
+    friend class FrameView;
+
+    // 这个构造函数由栈帧池调用
     Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleTypeLayout *dynamicAreaLayout)
         : graph_(graph), staticArea_(staticArea), dynamicAreaLayout_(dynamicAreaLayout) {
-        EXEC_WHEN_DEBUG([&]() {
-            // 把 dynamic 区所有 slot 写成魔数，用于检测脏读
-            size_t n = dynamicAreaLayout_->size();
-            for (size_t i = 0; i < n; ++i) {
-                dynamicArea_[i] = kDebugUninitializedSlot;
-            }
-        }());
+        // 注意，这里不能在构造函数中初始化 dynamicArea_
+        // FastVM 的优化依赖于复用刚刚释放的栈帧数据
+        // 所以这里要尽量不去动 dynamicArea_，即便在 DEBUG 模式下
+        // 这会给 DEBUG 下脏读检测带来一定难度，不过总体来说还是利大于弊的
     }
 
     GraphIR::Graph *graph_;
@@ -226,6 +224,62 @@ class Frame : public Object {
     Tuple *staticArea_; // 外部提供的静态区
     const TupleTypeLayout *dynamicAreaLayout_;
     slot_t dynamicArea_[]; // 紧跟对象后存放动态区
+};
+
+class FrameView {
+  public:
+    FrameView(const Frame *frame)
+        : staticArea_(frame->staticArea_), dynamicArea_(const_cast<slot_t *>(frame->dynamicArea_)) {
+    }
+
+    template <typename T> T get(GraphIR::data_idx_t index) const {
+        ASSERT(index != 0, "Data index is invalid.");
+        T res;
+        if (index > 0) {
+            size_t idx = static_cast<size_t>(index);
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    dynamicArea_[idx] != kDebugUninitializedSlot,
+                    std::format("Accessing uninitialized slot: idx = {}", index));
+            }());
+            res = fromSlot<T>(dynamicArea_[idx]);
+        } else { // 静态区：index < 0
+            size_t idx = static_cast<size_t>(-index);
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < staticArea_->size(),
+                    std::format(
+                        "Invalid static data index, idx = {}, size = {}",
+                        idx,
+                        staticArea_->size()));
+            }());
+            res = staticArea_->get<T>(idx);
+        }
+        return res;
+    }
+
+    template <typename T> void set(GraphIR::data_idx_t index, T value) {
+        ASSERT(index != 0, "Data index is invalid.");
+        if (index > 0) {
+            size_t idx        = static_cast<size_t>(index);
+            dynamicArea_[idx] = toSlot(value);
+        } else { // 静态区
+            size_t idx = static_cast<size_t>(-index);
+            EXEC_WHEN_DEBUG([&]() {
+                ASSERT(
+                    idx < staticArea_->size(),
+                    std::format(
+                        "Invalid static data index, idx = {}, size = {}",
+                        idx,
+                        staticArea_->size()));
+            }());
+            staticArea_->set<T>(idx, value);
+        }
+    }
+
+  private:
+    Tuple *staticArea_;
+    slot_t *dynamicArea_;
 };
 
 class FramePool {
@@ -242,7 +296,7 @@ class FramePool {
 
     ~FramePool() { std::free(base_); }
 
-    Frame *acquire(GraphIR::Graph *graph) {
+    inline Frame *_acquire(GraphIR::Graph *graph) {
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(
@@ -257,11 +311,6 @@ class FramePool {
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (lastFrame->graph_ == graph) {
             EXEC_WHEN_DEBUG([&]() {
-                // 把 dynamic 区所有 slot 写成 魔数，用于检测脏读
-                size_t n = lastFrame->dynamicAreaLayout_->size();
-                for (size_t i = 0; i < n; ++i) {
-                    lastFrame->dynamicArea_[i] = kDebugUninitializedSlot;
-                }
                 l.in("FramePool")
                     .info(
                         "[{}] Reusing existing frame of graph <{}> at {}",
@@ -313,14 +362,21 @@ class FramePool {
         }());
 
         top_ += frameSize;
-        reinterpret_cast<Frame *>(top_)->graph_ = nullptr;
 
         EXEC_WHEN_DEBUG([&]() { frames_.push_back(frame); }());
 
         return frame;
     }
 
-    void release(Frame *frame) {
+    inline void _resetTop() { reinterpret_cast<Frame *>(top_)->graph_ = nullptr; }
+
+    inline Frame *acquire(GraphIR::Graph *graph) {
+        Frame *frame = _acquire(graph);
+        _resetTop();
+        return frame;
+    }
+
+    inline void release(Frame *frame) {
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
                 .info(

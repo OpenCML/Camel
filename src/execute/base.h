@@ -12,29 +12,40 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 05, 2025
+ * Created: Oct. 21, 2024
  * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "execute/trans.h"
+#include "compile/gir.h"
+#include "core/context/context.h"
 
-#include <ostream>
-#include <string>
-#include <unordered_map>
-
-class TopoNodeSeqDumpPass : public GraphTranslatePass {
-    bool showRawPtr = false;
-    std::unordered_map<std::string, size_t> ptrCnt_;
-    std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
-    std::string pointerToIdent(const void *ptr, const char *prefix = "N");
-    std::string getPtrRepr(const std::string &prefix, uintptr_t ptrVal, bool showRawPtr);
+class GraphIRPass {
+  protected:
+    context_ptr_t context_;
 
   public:
-    TopoNodeSeqDumpPass(const context_ptr_t &ctx);
-    virtual ~TopoNodeSeqDumpPass() = default;
+    GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
+    virtual ~GraphIRPass() = default;
+
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) = 0;
+};
+
+class NullGraphIRPass : public GraphIRPass {
+  protected:
+    context_ptr_t context_;
+
+  public:
+    NullGraphIRPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~NullGraphIRPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };
+
+extern std::unordered_map<
+    std::string, std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>>
+    passRegistry;
+
+int applyPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,6 +83,7 @@ class DataLoad : public Load {
   public:
     DataLoad(DataType type, bool notNull = false, bool waited = false)
         : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}
+
     const std::string toString() const override {
         std::string result = "DataLoad: " + to_string(dataType_) + this->status();
         return result;
@@ -117,6 +118,7 @@ class DataLoad : public Load {
 class UnaryExprLoad : public DataLoad {
   public:
     UnaryExprLoad(UnaryDataOp op) : DataLoad(DataType::UnaryExpr), op_(op) {}
+
     const std::string toString() const override {
         return "UnaryExpr: " + to_string(op_) + this->status();
     }
@@ -131,6 +133,7 @@ class UnaryExprLoad : public DataLoad {
 class BinaryExprLoad : public DataLoad {
   public:
     BinaryExprLoad(BinaryDataOp op) : DataLoad(DataType::BinaryExpr), op_(op) {}
+
     const std::string toString() const override {
         return "BinaryExpr: " + to_string(op_) + this->status();
     }
@@ -145,6 +148,7 @@ class BinaryExprLoad : public DataLoad {
 class ReservedExprLoad : public DataLoad {
   public:
     ReservedExprLoad(ReservedDataOp op) : DataLoad(DataType::ReservedExpr), op_(op) {}
+
     const std::string toString() const override {
         return "ReservedExpr: " + to_string(op_) + this->status();
     }
@@ -159,6 +163,7 @@ class ReservedExprLoad : public DataLoad {
 class IfExprLoad : public DataLoad {
   public:
     IfExprLoad() : DataLoad(DataType::IfExpr) {}
+
     const std::string toString() const override { return "IfExpr" + this->status(); }
     const std::string geneCode() const override;
 };
@@ -191,6 +196,7 @@ class MatchCaseLoad : public DataLoad {
 class TryExprLoad : public DataLoad {
   public:
     TryExprLoad() : DataLoad(DataType::TryExpr) {}
+
     const std::string toString() const override { return "TryExpr" + this->status(); }
     const std::string geneCode() const override;
 };
@@ -198,6 +204,7 @@ class TryExprLoad : public DataLoad {
 class LiteralLoad : public DataLoad {
   public:
     LiteralLoad(Literal value) : DataLoad(DataType::Literal), value_(value) {}
+
     const std::string toString() const override { return value_.toString() + this->status(); }
 
     const Literal &value() const { return value_; }
@@ -210,6 +217,7 @@ class LiteralLoad : public DataLoad {
 class ArrayDataLoad : public DataLoad {
   public:
     ArrayDataLoad() : DataLoad(DataType::Array) {}
+
     const std::string toString() const override { return "ArrayData" + this->status(); }
     const std::string geneCode() const override;
 };
@@ -217,6 +225,7 @@ class ArrayDataLoad : public DataLoad {
 class StructDataLoad : public DataLoad {
   public:
     StructDataLoad() : DataLoad(DataType::Struct) {}
+
     const std::string toString() const override { return "StructData" + this->status(); }
     const std::string geneCode() const override;
 };
@@ -224,6 +233,7 @@ class StructDataLoad : public DataLoad {
 class TupleDataLoad : public DataLoad {
   public:
     TupleDataLoad() : DataLoad(DataType::Tuple) {}
+
     const std::string toString() const override { return "TupleData" + this->status(); }
     const std::string geneCode() const override;
 };
@@ -232,6 +242,7 @@ class FuncDataLoad : public DataLoad {
   public:
     FuncDataLoad() : DataLoad(DataType::Func) {} // anonymous function
     FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
+
     const std::string toString() const override {
         return "FuncData: " + ref_.toString() + this->status();
     }
@@ -246,6 +257,7 @@ class FuncDataLoad : public DataLoad {
 class RefDataLoad : public DataLoad {
   public:
     RefDataLoad(const Reference &ref) : DataLoad(DataType::Ref), ref_(ref) {}
+
     const std::string toString() const override {
         return "RefData: " + ref_.toString() + this->status();
     }

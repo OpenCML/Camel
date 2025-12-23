@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include <iterator>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 template <typename InputIt, typename GetInDegreeFunc, typename GetOutputsFunc>
@@ -38,13 +39,9 @@ auto topoSort(
     std::queue<NodeType> zeroInDegreeQueue;
     std::vector<NodeType> sortedNodes;
 
-#ifndef NDEBUG
-    size_t count = std::distance(first, last);
-#endif
-
     for (auto it = first; it != last; ++it) {
-        NodeType node = *it;
-        size_t inDeg = getInDegree(node);
+        NodeType node   = *it;
+        size_t inDeg    = getInDegree(node);
         inDegrees[node] = inDeg;
         if (inDeg == 0) {
             zeroInDegreeQueue.push(node);
@@ -63,8 +60,9 @@ auto topoSort(
         }
     }
 
-    ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
     EXEC_WHEN_DEBUG([&]() {
+        size_t count = std::distance(first, last);
+        ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
         if (!allowUnreachable) {
             if (sortedNodes.size() != count) {
                 // Find unreachable nodes

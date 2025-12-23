@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 22, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Dec. 23, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":zen",
-                    StaticFuncTypeResolver::create({}, {}, Type::Void()),
+                    StaticFuncTypeResolver::create({}, {}, Type::String()),
                 },
             }),
     };
