@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Dec. 22, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,8 +42,8 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             // 检查数组元素类型是否支持（int, long, float, double）
                             TypeCode elemCode =
                                 tt::as_shared<ArrayType>(norm[0])->elemType()->code();
-                            if (elemCode != TypeCode::Int && elemCode != TypeCode::Long &&
-                                elemCode != TypeCode::Float && elemCode != TypeCode::Double)
+                            if (elemCode != TypeCode::Int32 && elemCode != TypeCode::Int64 &&
+                                elemCode != TypeCode::Float32 && elemCode != TypeCode::Float64)
                                 return nullopt;
                             // 第二个参数是可选的字符串（文件名）
                             if (norm.size() == 2 && norm[1]->code() != TypeCode::String)
@@ -58,8 +58,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     return groups;
 }
 
-PlotBuiltinModule::PlotBuiltinModule(context_ptr_t ctx)
-    : BuiltinModule("plot", ctx) {
+PlotBuiltinModule::PlotBuiltinModule(context_ptr_t ctx) : BuiltinModule("plot", ctx) {
     for (const auto &group : getOperatorGroups()) {
         exportEntity(group->name(), group);
     }
@@ -76,4 +75,3 @@ bool PlotBuiltinModule::load() {
     loaded_ = true;
     return true;
 }
-

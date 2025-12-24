@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@ static std::mt19937_64 g_rng;
 
 void __seed__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    auto seed_val = frame.get<Long>(nargs[0]);
+    auto seed_val = frame.get<Int64>(nargs[0]);
     g_rng.seed(seed_val);
 }
 
@@ -52,7 +52,7 @@ void __randint__(
     if (low > high)
         std::swap(low, high);
 
-    std::uniform_int_distribution<int32_t> dist(low, high);
+    std::uniform_int_distribution<int64_t> dist(low, high);
     frame.set(self, dist(g_rng));
 }
 
@@ -67,7 +67,7 @@ void __choice__(
     }
 
     std::uniform_int_distribution<size_t> dist(0, arr->size() - 1);
-    frame.set(self, arr->get<Long>(dist(g_rng)));
+    frame.set(self, arr->get<Int64>(dist(g_rng)));
 }
 
 // Fisher–Yates 洗牌（原地随机置换）
@@ -123,7 +123,7 @@ static inline Array *sampleArray(const Array *arr, int32_t n) {
 void __sample__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     Array *arr = frame.get<Array *>(nargs[0]);
-    int32_t n  = frame.get<Int>(nargs[1]);
+    Int n      = frame.get<Int>(nargs[1]);
 
     // 样本数量检查
     if (n < 0 || (size_t)n > arr->size()) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,8 @@
 #include "../operators/ops.h"
 #include "../operators/os.h"
 #include "../operators/other.h"
+#include "../operators/phot.h"
+#include "../operators/plot.h"
 #include "../operators/profiler.h"
 #include "../operators/rand.h"
 #include "../operators/statistics.h"
@@ -37,8 +39,6 @@
 #include "../operators/tensor.h"
 #include "../operators/this.h"
 #include "../operators/time.h"
-#include "../operators/plot.h"
-#include "../operators/phot.h"
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
@@ -143,31 +143,31 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/strict_eq", __builtin__strict_eq__},
         {"op/strict_ne", __builtin__strict_ne__},
 
-        {"op/lt_i", __builtin__lt__<Int>},
-        {"op/lt_l", __builtin__lt__<Long>},
-        {"op/lt_f", __builtin__lt__<Float>},
-        {"op/lt_d", __builtin__lt__<Double>},
+        {"op/lt_i", __builtin__lt__<Int32>},
+        {"op/lt_l", __builtin__lt__<Int64>},
+        {"op/lt_f", __builtin__lt__<Float32>},
+        {"op/lt_d", __builtin__lt__<Float64>},
         {"op/lt_s", __not_implemented__},
         {"op/lt", __not_implemented__},
 
-        {"op/le_i", __builtin__le__<Int>},
-        {"op/le_l", __builtin__le__<Long>},
-        {"op/le_f", __builtin__le__<Float>},
-        {"op/le_d", __builtin__le__<Double>},
+        {"op/le_i", __builtin__le__<Int32>},
+        {"op/le_l", __builtin__le__<Int64>},
+        {"op/le_f", __builtin__le__<Float32>},
+        {"op/le_d", __builtin__le__<Float64>},
         {"op/le_s", __not_implemented__},
         {"op/le", __not_implemented__},
 
-        {"op/gt_i", __builtin__gt__<Int>},
-        {"op/gt_l", __builtin__gt__<Long>},
-        {"op/gt_f", __builtin__gt__<Float>},
-        {"op/gt_d", __builtin__gt__<Double>},
+        {"op/gt_i", __builtin__gt__<Int32>},
+        {"op/gt_l", __builtin__gt__<Int64>},
+        {"op/gt_f", __builtin__gt__<Float32>},
+        {"op/gt_d", __builtin__gt__<Float64>},
         {"op/gt_s", __not_implemented__},
         {"op/gt", __not_implemented__},
 
-        {"op/ge_i", __builtin__ge__<Int>},
-        {"op/ge_l", __builtin__ge__<Long>},
-        {"op/ge_f", __builtin__ge__<Float>},
-        {"op/ge_d", __builtin__ge__<Double>},
+        {"op/ge_i", __builtin__ge__<Int32>},
+        {"op/ge_l", __builtin__ge__<Int64>},
+        {"op/ge_f", __builtin__ge__<Float32>},
+        {"op/ge_d", __builtin__ge__<Float64>},
         {"op/ge_s", __not_implemented__},
         {"op/ge", __not_implemented__},
 

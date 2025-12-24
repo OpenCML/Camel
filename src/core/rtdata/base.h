@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -116,12 +116,14 @@ template <typename T> constexpr T fromSlot(slot_t slot_value) noexcept {
     }
 }
 
-using Int    = int32_t;
-using Long   = int64_t;
-using Float  = float;
-using Double = double;
-using Bool   = bool;
-using Byte   = std::byte;
+using Int32   = int32_t;
+using Int64   = int64_t;
+using Int     = Int64;
+using Float32 = float;
+using Float64 = double;
+using Float   = Float64;
+using Bool    = bool;
+using Byte    = std::byte;
 
 inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
     if (obj) {
@@ -141,17 +143,17 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
     } else {
         // 非引用类型，根据 type code 输出
         switch (t) {
-        case TypeCode::Int:
-            os << fromSlot<Int>(data);
+        case TypeCode::Int32:
+            os << fromSlot<Int32>(data);
             break;
-        case TypeCode::Long:
-            os << fromSlot<Long>(data);
+        case TypeCode::Int64:
+            os << fromSlot<Int64>(data);
             break;
-        case TypeCode::Float:
-            os << fromSlot<Float>(data);
+        case TypeCode::Float32:
+            os << fromSlot<Float32>(data);
             break;
-        case TypeCode::Double:
-            os << fromSlot<Double>(data);
+        case TypeCode::Float64:
+            os << fromSlot<Float64>(data);
             break;
         case TypeCode::Bool:
             os << (fromSlot<Bool>(data) ? "true" : "false");

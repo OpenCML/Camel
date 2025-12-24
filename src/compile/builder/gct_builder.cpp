@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,15 +76,12 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
 
 void Builder::initInnerTypes() {
     typeScope_->clear();
-    typeScope_->insert(Reference("int"), Type::Int());
-    typeScope_->insert(Reference("i32"), Type::Int());
-    typeScope_->insert(Reference("long"), Type::Long());
-    typeScope_->insert(Reference("i64"), Type::Long());
-    typeScope_->insert(Reference("float"), Type::Float());
-    typeScope_->insert(Reference("f32"), Type::Float());
-    typeScope_->insert(Reference("double"), Type::Double());
-    typeScope_->insert(Reference("f64"), Type::Double());
-    typeScope_->insert(Reference("real"), Type::Double());
+    typeScope_->insert(Reference("i32"), Type::Int32());
+    typeScope_->insert(Reference("i64"), Type::Int64());
+    typeScope_->insert(Reference("int"), Type::Int64());
+    typeScope_->insert(Reference("f32"), Type::Float32());
+    typeScope_->insert(Reference("f64"), Type::Float64());
+    typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
     typeScope_->insert(Reference("any"), Type::Any());
@@ -1110,11 +1107,11 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     } break;
     case LiteralType::Integer: {
         // Parse the string as an integer and create a data object
-        data = makeDataFromLiteral(parseNumber<int32_t>(str));
+        data = makeDataFromLiteral(parseNumber<int64_t>(str));
     } break;
     case LiteralType::Real: {
         // Parse the string as a floating-point number and create a data object
-        data = makeDataFromLiteral(parseNumber<float>(str));
+        data = makeDataFromLiteral(parseNumber<double>(str));
     } break;
     case LiteralType::Boolean: {
         // Handle boolean literals ("true" or "false")

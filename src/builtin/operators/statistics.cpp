@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,14 +56,14 @@ template <typename T> static double __stdev_slots__(Array *arr) {
 static double
 __mean_with_type_code__(Array *arr, TypeCode code, Context &ctx, std::string_view fname) {
     switch (code) {
-    case TypeCode::Int:
-        return __mean_slots__<Int>(arr);
-    case TypeCode::Long:
-        return __mean_slots__<Long>(arr);
-    case TypeCode::Float:
-        return __mean_slots__<Float>(arr);
-    case TypeCode::Double:
-        return __mean_slots__<Double>(arr);
+    case TypeCode::Int32:
+        return __mean_slots__<Int32>(arr);
+    case TypeCode::Int64:
+        return __mean_slots__<Int64>(arr);
+    case TypeCode::Float32:
+        return __mean_slots__<Float32>(arr);
+    case TypeCode::Float64:
+        return __mean_slots__<Float64>(arr);
     default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
@@ -75,14 +75,14 @@ __mean_with_type_code__(Array *arr, TypeCode code, Context &ctx, std::string_vie
 static double
 __stdev_with_type_code__(Array *arr, TypeCode code, Context &ctx, std::string_view fname) {
     switch (code) {
-    case TypeCode::Int:
-        return __stdev_slots__<Int>(arr);
-    case TypeCode::Long:
-        return __stdev_slots__<Long>(arr);
-    case TypeCode::Float:
-        return __stdev_slots__<Float>(arr);
-    case TypeCode::Double:
-        return __stdev_slots__<Double>(arr);
+    case TypeCode::Int32:
+        return __stdev_slots__<Int32>(arr);
+    case TypeCode::Int64:
+        return __stdev_slots__<Int64>(arr);
+    case TypeCode::Float32:
+        return __stdev_slots__<Float32>(arr);
+    case TypeCode::Float64:
+        return __stdev_slots__<Float64>(arr);
     default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)

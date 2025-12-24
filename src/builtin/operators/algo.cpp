@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -129,17 +129,17 @@ static Array *__doSortWithTypeCode__(
     Array *result = nullptr;
 
     switch (code) {
-    case TypeCode::Int:
-        result = __doSortSlots__<Int>(inplace, arr, Algo, frame, ctx);
+    case TypeCode::Int32:
+        result = __doSortSlots__<Int32>(inplace, arr, Algo, frame, ctx);
         break;
-    case TypeCode::Long:
-        result = __doSortSlots__<Long>(inplace, arr, Algo, frame, ctx);
+    case TypeCode::Int64:
+        result = __doSortSlots__<Int64>(inplace, arr, Algo, frame, ctx);
         break;
-    case TypeCode::Float:
-        result = __doSortSlots__<Float>(inplace, arr, Algo, frame, ctx);
+    case TypeCode::Float32:
+        result = __doSortSlots__<Float32>(inplace, arr, Algo, frame, ctx);
         break;
-    case TypeCode::Double:
-        result = __doSortSlots__<Double>(inplace, arr, Algo, frame, ctx);
+    case TypeCode::Float64:
+        result = __doSortSlots__<Float64>(inplace, arr, Algo, frame, ctx);
         break;
     default:
         ctx.rtmDiags()
@@ -295,17 +295,17 @@ void __merge_sorted_arrays__(
     TypeCode code = lhs->elemType();
 
     switch (code) {
-    case TypeCode::Int:
-        merged = __merge_sorted_arrays_slots__<Int>(lhs, rhs, lhs->layout());
+    case TypeCode::Int32:
+        merged = __merge_sorted_arrays_slots__<Int32>(lhs, rhs, lhs->layout());
         break;
-    case TypeCode::Long:
-        merged = __merge_sorted_arrays_slots__<Long>(lhs, rhs, lhs->layout());
+    case TypeCode::Int64:
+        merged = __merge_sorted_arrays_slots__<Int64>(lhs, rhs, lhs->layout());
         break;
-    case TypeCode::Float:
-        merged = __merge_sorted_arrays_slots__<Float>(lhs, rhs, lhs->layout());
+    case TypeCode::Float32:
+        merged = __merge_sorted_arrays_slots__<Float32>(lhs, rhs, lhs->layout());
         break;
-    case TypeCode::Double:
-        merged = __merge_sorted_arrays_slots__<Double>(lhs, rhs, lhs->layout());
+    case TypeCode::Float64:
+        merged = __merge_sorted_arrays_slots__<Float64>(lhs, rhs, lhs->layout());
         break;
     default:
         ctx.rtmDiags()

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -284,7 +284,7 @@ label_BRCH: {
         }
     }
 
-    currFrame->set(bc->result, fromSlot<Int>(jumpIdx));
+    currFrame->set(bc->result, fromSlot<Int32>(jumpIdx));
     pc += bc->opsize + jumpIdx;
 
     JUMP();
@@ -506,55 +506,55 @@ label_SCHD: {
     NEXT();
 }
 
-    DEF_BIN_OP_LABEL(IADD, Int, +);
-    DEF_BIN_OP_LABEL(LADD, Long, +);
-    DEF_BIN_OP_LABEL(FADD, Float, +);
-    DEF_BIN_OP_LABEL(DADD, Double, +);
+    DEF_BIN_OP_LABEL(IADD, Int32, +);
+    DEF_BIN_OP_LABEL(LADD, Int64, +);
+    DEF_BIN_OP_LABEL(FADD, Float32, +);
+    DEF_BIN_OP_LABEL(DADD, Float64, +);
 
-    DEF_BIN_OP_LABEL(ISUB, Int, -);
-    DEF_BIN_OP_LABEL(LSUB, Long, -);
-    DEF_BIN_OP_LABEL(FSUB, Float, -);
-    DEF_BIN_OP_LABEL(DSUB, Double, -);
+    DEF_BIN_OP_LABEL(ISUB, Int32, -);
+    DEF_BIN_OP_LABEL(LSUB, Int64, -);
+    DEF_BIN_OP_LABEL(FSUB, Float32, -);
+    DEF_BIN_OP_LABEL(DSUB, Float64, -);
 
-    DEF_BIN_OP_LABEL(IMUL, Int, *);
-    DEF_BIN_OP_LABEL(LMUL, Long, *);
-    DEF_BIN_OP_LABEL(FMUL, Float, *);
-    DEF_BIN_OP_LABEL(DMUL, Double, *);
+    DEF_BIN_OP_LABEL(IMUL, Int32, *);
+    DEF_BIN_OP_LABEL(LMUL, Int64, *);
+    DEF_BIN_OP_LABEL(FMUL, Float32, *);
+    DEF_BIN_OP_LABEL(DMUL, Float64, *);
 
-    DEF_BIN_DIV_LABEL(IDIV, Int, 0);
-    DEF_BIN_DIV_LABEL(LDIV, Long, 0);
-    DEF_BIN_DIV_LABEL(FDIV, Float, 0.0f);
-    DEF_BIN_DIV_LABEL(DDIV, Double, 0.0);
+    DEF_BIN_DIV_LABEL(IDIV, Int32, 0);
+    DEF_BIN_DIV_LABEL(LDIV, Int64, 0);
+    DEF_BIN_DIV_LABEL(FDIV, Float32, 0.0f);
+    DEF_BIN_DIV_LABEL(DDIV, Float64, 0.0);
 
-    DEF_BIN_OP_LABEL(ILT, Int, <);
-    DEF_BIN_OP_LABEL(LLT, Long, <);
-    DEF_BIN_OP_LABEL(FLT, Float, <);
-    DEF_BIN_OP_LABEL(DLT, Double, <);
+    DEF_BIN_OP_LABEL(ILT, Int32, <);
+    DEF_BIN_OP_LABEL(LLT, Int64, <);
+    DEF_BIN_OP_LABEL(FLT, Float32, <);
+    DEF_BIN_OP_LABEL(DLT, Float64, <);
 
-    DEF_BIN_OP_LABEL(IGT, Int, >);
-    DEF_BIN_OP_LABEL(LGT, Long, >);
-    DEF_BIN_OP_LABEL(FGT, Float, >);
-    DEF_BIN_OP_LABEL(DGT, Double, >);
+    DEF_BIN_OP_LABEL(IGT, Int32, >);
+    DEF_BIN_OP_LABEL(LGT, Int64, >);
+    DEF_BIN_OP_LABEL(FGT, Float32, >);
+    DEF_BIN_OP_LABEL(DGT, Float64, >);
 
-    DEF_BIN_OP_LABEL(IEQ, Int, ==);
-    DEF_BIN_OP_LABEL(LEQ, Int, ==);
-    DEF_BIN_OP_LABEL(FEQ, Float, ==);
-    DEF_BIN_OP_LABEL(DEQ, Double, ==);
+    DEF_BIN_OP_LABEL(IEQ, Int32, ==);
+    DEF_BIN_OP_LABEL(LEQ, Int32, ==);
+    DEF_BIN_OP_LABEL(FEQ, Float32, ==);
+    DEF_BIN_OP_LABEL(DEQ, Float64, ==);
 
-    DEF_BIN_OP_LABEL(INE, Int, !=);
-    DEF_BIN_OP_LABEL(LNE, Long, !=);
-    DEF_BIN_OP_LABEL(FNE, Float, !=);
-    DEF_BIN_OP_LABEL(DNE, Double, !=);
+    DEF_BIN_OP_LABEL(INE, Int32, !=);
+    DEF_BIN_OP_LABEL(LNE, Int64, !=);
+    DEF_BIN_OP_LABEL(FNE, Float32, !=);
+    DEF_BIN_OP_LABEL(DNE, Float64, !=);
 
-    DEF_BIN_OP_LABEL(ILE, Int, <=);
-    DEF_BIN_OP_LABEL(LLE, Long, <=);
-    DEF_BIN_OP_LABEL(FLE, Float, <=);
-    DEF_BIN_OP_LABEL(DLE, Double, <=);
+    DEF_BIN_OP_LABEL(ILE, Int32, <=);
+    DEF_BIN_OP_LABEL(LLE, Int64, <=);
+    DEF_BIN_OP_LABEL(FLE, Float32, <=);
+    DEF_BIN_OP_LABEL(DLE, Float64, <=);
 
-    DEF_BIN_OP_LABEL(IGE, Int, >=);
-    DEF_BIN_OP_LABEL(LGE, Long, >=);
-    DEF_BIN_OP_LABEL(FGE, Float, >=);
-    DEF_BIN_OP_LABEL(DGE, Double, >=);
+    DEF_BIN_OP_LABEL(IGE, Int32, >=);
+    DEF_BIN_OP_LABEL(LGE, Int64, >=);
+    DEF_BIN_OP_LABEL(FGE, Float32, >=);
+    DEF_BIN_OP_LABEL(DGE, Float64, >=);
 }
 
 #endif // ENABLE_COMPUTED_GOTO

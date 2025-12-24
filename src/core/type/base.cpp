@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,14 +38,14 @@ const signed char primitiveTypeConvMatrix[8][8] = {
 
 string typeCodeToString(TypeCode code) {
     switch (code) {
-    case TypeCode::Int:
-        return "int";
-    case TypeCode::Long:
-        return "long";
-    case TypeCode::Float:
-        return "float";
-    case TypeCode::Double:
-        return "double";
+    case TypeCode::Int32:
+        return "i32";
+    case TypeCode::Int64:
+        return "i64";
+    case TypeCode::Float32:
+        return "f32";
+    case TypeCode::Float64:
+        return "f64";
     case TypeCode::Bool:
         return "bool";
     case TypeCode::Byte:
@@ -86,13 +86,13 @@ std::string Type::mangle() const {
     ASSERT(!::isOtherType(code_), "Other type cannot call Type::mangle");
 
     switch (code_) {
-    case TypeCode::Int:
+    case TypeCode::Int32:
         return "i";
-    case TypeCode::Long:
+    case TypeCode::Int64:
         return "l";
-    case TypeCode::Float:
+    case TypeCode::Float32:
         return "f";
-    case TypeCode::Double:
+    case TypeCode::Float64:
         return "d";
     case TypeCode::Bool:
         return "b";
@@ -167,11 +167,6 @@ bool Type::assignable(const type_ptr_t &type) const {
     if (code_ == TypeCode::Void)
         return false;
 
-    if (code_ == TypeCode::Function && type->code_ == TypeCode::Function) {
-        // TODO: 这里需要进一步设计
-        return true;
-    }
-
     // 复合类型目前需要完全相等才能赋值
     if (::isComposite(code_) && ::isComposite(type->code_)) {
         return this->equals(type);
@@ -187,37 +182,41 @@ bool Type::assignable(const type_ptr_t &type) const {
     return code_ == type->code_;
 }
 
-type_ptr_t Type::Int() {
+type_ptr_t Type::Int32() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Int);
+        type = make_shared<Type>(TypeCode::Int32);
     }
     return type;
 }
 
-type_ptr_t Type::Long() {
+type_ptr_t Type::Int64() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Long);
+        type = make_shared<Type>(TypeCode::Int64);
     }
     return type;
 }
 
-type_ptr_t Type::Float() {
+type_ptr_t Type::Int() { return Type::Int64(); }
+
+type_ptr_t Type::Float32() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Float);
+        type = make_shared<Type>(TypeCode::Float32);
     }
     return type;
 }
 
-type_ptr_t Type::Double() {
+type_ptr_t Type::Float64() {
     static type_ptr_t type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Double);
+        type = make_shared<Type>(TypeCode::Float64);
     }
     return type;
 }
+
+type_ptr_t Type::Float() { return Type::Float64(); }
 
 type_ptr_t Type::Bool() {
     static type_ptr_t type = nullptr;

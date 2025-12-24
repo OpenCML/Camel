@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,17 +39,17 @@ void __format__(
         TypeCode type = frame.typeAt(wargs[i]);
 
         switch (type) {
-        case TypeCode::Int:
-            store.push_back(frame.get<Int>(wargs[i]));
+        case TypeCode::Int32:
+            store.push_back(frame.get<Int32>(wargs[i]));
             break;
-        case TypeCode::Long:
-            store.push_back(frame.get<Long>(wargs[i]));
+        case TypeCode::Int64:
+            store.push_back(frame.get<Int64>(wargs[i]));
             break;
-        case TypeCode::Float:
-            store.push_back(frame.get<Float>(wargs[i]));
+        case TypeCode::Float32:
+            store.push_back(frame.get<Float32>(wargs[i]));
             break;
-        case TypeCode::Double:
-            store.push_back(frame.get<Double>(wargs[i]));
+        case TypeCode::Float64:
+            store.push_back(frame.get<Float64>(wargs[i]));
             break;
         default:
             // fallback to string

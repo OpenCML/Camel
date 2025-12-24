@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Dec. 22, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,17 +22,16 @@
 #include "core/context/frame.h"
 
 #include <pybind11/embed.h>
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <pybind11/numpy.h>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace py = pybind11;
 
 // 将Array转换为std::vector<double>
-template <typename T>
-static std::vector<double> __array_to_vector__(Array *arr) {
+template <typename T> static std::vector<double> __array_to_vector__(Array *arr) {
     size_t n = arr->size();
     std::vector<double> vec;
     vec.reserve(n);
@@ -45,14 +44,14 @@ static std::vector<double> __array_to_vector__(Array *arr) {
 static std::vector<double>
 __array_to_vector_with_type__(Array *arr, TypeCode code, Context &ctx, std::string_view fname) {
     switch (code) {
-    case TypeCode::Int:
-        return __array_to_vector__<Int>(arr);
-    case TypeCode::Long:
-        return __array_to_vector__<Long>(arr);
-    case TypeCode::Float:
-        return __array_to_vector__<Float>(arr);
-    case TypeCode::Double:
-        return __array_to_vector__<Double>(arr);
+    case TypeCode::Int32:
+        return __array_to_vector__<Int32>(arr);
+    case TypeCode::Int64:
+        return __array_to_vector__<Int64>(arr);
+    case TypeCode::Float32:
+        return __array_to_vector__<Float32>(arr);
+    case TypeCode::Float64:
+        return __array_to_vector__<Float64>(arr);
     default:
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
@@ -63,7 +62,7 @@ __array_to_vector_with_type__(Array *arr, TypeCode code, Context &ctx, std::stri
 
 void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     // 获取数组参数
-    Array *arr = frame.get<Array *>(nargs[0]);
+    Array *arr        = frame.get<Array *>(nargs[0]);
     TypeCode elemCode = arr->elemType();
 
     // 转换为vector
@@ -78,7 +77,7 @@ void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
     std::string filename = "plot.png";
     if (nargs.size > 1) {
         String *filenameObj = frame.get<String *>(nargs[1]);
-        filename = filenameObj->toString();
+        filename            = filenameObj->toString();
     }
 
     try {
@@ -89,7 +88,7 @@ void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
 
         // 导入matplotlib
         py::module_ plt = py::module_::import("matplotlib.pyplot");
-        py::module_ np = py::module_::import("numpy");
+        py::module_ np  = py::module_::import("numpy");
 
         // 将数据转换为numpy数组
         py::array_t<double> py_data = py::cast(data);
@@ -115,4 +114,3 @@ void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
         frame.set(self, NullSlot);
     }
 }
-

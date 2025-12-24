@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -122,18 +122,18 @@ static py::array __camel_array_to_py__(Array *arr, Context &ctx) {
     py::module_ np = py::module_::import("numpy");
 
     // 根据元素类型选择合适的数据类型
-    if (elemCode == TypeCode::Int || elemCode == TypeCode::Long) {
+    if (elemCode == TypeCode::Int32 || elemCode == TypeCode::Int64) {
         // 整数类型：转换为int64数组
         std::vector<int64_t> data;
         data.reserve(n);
 
-        if (elemCode == TypeCode::Int) {
+        if (elemCode == TypeCode::Int32) {
             for (size_t i = 0; i < n; ++i) {
-                data.push_back(static_cast<int64_t>(arr->get<Int>(i)));
+                data.push_back(static_cast<int64_t>(arr->get<Int32>(i)));
             }
         } else {
             for (size_t i = 0; i < n; ++i) {
-                data.push_back(static_cast<int64_t>(arr->get<Long>(i)));
+                data.push_back(static_cast<int64_t>(arr->get<Int64>(i)));
             }
         }
 
@@ -145,13 +145,13 @@ static py::array __camel_array_to_py__(Array *arr, Context &ctx) {
         std::vector<double> data;
         data.reserve(n);
 
-        if (elemCode == TypeCode::Float) {
+        if (elemCode == TypeCode::Float32) {
             for (size_t i = 0; i < n; ++i) {
-                data.push_back(static_cast<double>(arr->get<Float>(i)));
+                data.push_back(static_cast<double>(arr->get<Float32>(i)));
             }
-        } else if (elemCode == TypeCode::Double) {
+        } else if (elemCode == TypeCode::Float64) {
             for (size_t i = 0; i < n; ++i) {
-                data.push_back(arr->get<Double>(i));
+                data.push_back(arr->get<Float64>(i));
             }
         } else {
             ctx.rtmDiags()
@@ -214,8 +214,8 @@ __py_array_to_camel_complex__(py::array py_arr, type_ptr_t tupleTypePtr, Context
             Array *imagArr = Array::create(imagArrayType->layout(), mm::autoSpace(), n);
 
             for (size_t i = 0; i < n; ++i) {
-                realArr->set(i, static_cast<Double>(real_accessor(i)));
-                imagArr->set(i, static_cast<Double>(imag_accessor(i)));
+                realArr->set(i, static_cast<Float>(real_accessor(i)));
+                imagArr->set(i, static_cast<Float>(imag_accessor(i)));
             }
 
             return {realArr, imagArr};
@@ -230,7 +230,7 @@ __py_array_to_camel_complex__(py::array py_arr, type_ptr_t tupleTypePtr, Context
             Array *imagArr = Array::create(imagArrayType->layout(), mm::autoSpace(), n);
 
             for (size_t i = 0; i < n; ++i) {
-                realArr->set(i, static_cast<Double>(real_accessor(i)));
+                realArr->set(i, static_cast<Float>(real_accessor(i)));
                 imagArr->set(i, 0.0);
             }
 
@@ -529,8 +529,8 @@ void __phot_pulse_shaper__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
     Tuple *signals_tuple   = frame.get<Tuple *>(nargs[0]);
     Int up_sampling_factor = frame.get<Int>(wargs[0]);
-    Double rolloff         = frame.get<Double>(wargs[1]);
-    Double baud            = frame.get<Double>(wargs[2]);
+    Float rolloff          = frame.get<Float>(wargs[1]);
+    Float baud             = frame.get<Float>(wargs[2]);
 
     try {
         if (!Py_IsInitialized()) {

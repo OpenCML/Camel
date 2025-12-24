@@ -37,7 +37,7 @@ func main(): int sync {
     let bias = 0.5                      // b
 
     let output = forward(input, weights, bias)
-    'output: {}'->format<output>->println
+    'output: {:.6f}'->format<output>->println
 
     return 0
 }

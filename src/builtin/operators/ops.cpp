@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,8 +58,8 @@ void __builtin__assn__(
 
 void __builtin__assn_add_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int lhs = frame.get<Int>(nargs[0]);
-    Int rhs = frame.get<Int>(nargs[1]);
+    Int32 lhs = frame.get<Int32>(nargs[0]);
+    Int32 rhs = frame.get<Int32>(nargs[1]);
     lhs += rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -67,8 +67,8 @@ void __builtin__assn_add_i__(
 
 void __builtin__assn_add_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long lhs = frame.get<Long>(nargs[0]);
-    Long rhs = frame.get<Long>(nargs[1]);
+    Int64 lhs = frame.get<Int64>(nargs[0]);
+    Int64 rhs = frame.get<Int64>(nargs[1]);
     lhs += rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -76,8 +76,8 @@ void __builtin__assn_add_l__(
 
 void __builtin__assn_add_f__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float lhs = frame.get<Float>(nargs[0]);
-    Float rhs = frame.get<Float>(nargs[1]);
+    Float32 lhs = frame.get<Float32>(nargs[0]);
+    Float32 rhs = frame.get<Float32>(nargs[1]);
     lhs += rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -85,8 +85,8 @@ void __builtin__assn_add_f__(
 
 void __builtin__assn_add_d__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double lhs = frame.get<Double>(nargs[0]);
-    Double rhs = frame.get<Double>(nargs[1]);
+    Float64 lhs = frame.get<Float64>(nargs[0]);
+    Float64 rhs = frame.get<Float64>(nargs[1]);
     lhs += rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -94,8 +94,8 @@ void __builtin__assn_add_d__(
 
 void __builtin__assn_sub_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int lhs = frame.get<Int>(nargs[0]);
-    Int rhs = frame.get<Int>(nargs[1]);
+    Int32 lhs = frame.get<Int32>(nargs[0]);
+    Int32 rhs = frame.get<Int32>(nargs[1]);
     lhs -= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -103,8 +103,8 @@ void __builtin__assn_sub_i__(
 
 void __builtin__assn_sub_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long lhs = frame.get<Long>(nargs[0]);
-    Long rhs = frame.get<Long>(nargs[1]);
+    Int64 lhs = frame.get<Int64>(nargs[0]);
+    Int64 rhs = frame.get<Int64>(nargs[1]);
     lhs -= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -112,8 +112,8 @@ void __builtin__assn_sub_l__(
 
 void __builtin__assn_sub_f__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float lhs = frame.get<Float>(nargs[0]);
-    Float rhs = frame.get<Float>(nargs[1]);
+    Float32 lhs = frame.get<Float32>(nargs[0]);
+    Float32 rhs = frame.get<Float32>(nargs[1]);
     lhs -= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -121,8 +121,8 @@ void __builtin__assn_sub_f__(
 
 void __builtin__assn_sub_d__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double lhs = frame.get<Double>(nargs[0]);
-    Double rhs = frame.get<Double>(nargs[1]);
+    Float64 lhs = frame.get<Float64>(nargs[0]);
+    Float64 rhs = frame.get<Float64>(nargs[1]);
     lhs -= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -130,8 +130,8 @@ void __builtin__assn_sub_d__(
 
 void __builtin__assn_mul_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int lhs = frame.get<Int>(nargs[0]);
-    Int rhs = frame.get<Int>(nargs[1]);
+    Int32 lhs = frame.get<Int32>(nargs[0]);
+    Int32 rhs = frame.get<Int32>(nargs[1]);
     lhs *= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -139,8 +139,8 @@ void __builtin__assn_mul_i__(
 
 void __builtin__assn_mul_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long lhs = frame.get<Long>(nargs[0]);
-    Long rhs = frame.get<Long>(nargs[1]);
+    Int64 lhs = frame.get<Int64>(nargs[0]);
+    Int64 rhs = frame.get<Int64>(nargs[1]);
     lhs *= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -148,8 +148,8 @@ void __builtin__assn_mul_l__(
 
 void __builtin__assn_mul_f__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float lhs = frame.get<Float>(nargs[0]);
-    Float rhs = frame.get<Float>(nargs[1]);
+    Float32 lhs = frame.get<Float32>(nargs[0]);
+    Float32 rhs = frame.get<Float32>(nargs[1]);
     lhs *= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -157,8 +157,8 @@ void __builtin__assn_mul_f__(
 
 void __builtin__assn_mul_d__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double lhs = frame.get<Double>(nargs[0]);
-    Double rhs = frame.get<Double>(nargs[1]);
+    Float64 lhs = frame.get<Float64>(nargs[0]);
+    Float64 rhs = frame.get<Float64>(nargs[1]);
     lhs *= rhs;
     frame.set(nargs[0], lhs);
     frame.set(self, lhs);
@@ -166,8 +166,8 @@ void __builtin__assn_mul_d__(
 
 void __builtin__assn_div_i__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int lhs = frame.get<Int>(nargs[0]);
-    Int rhs = frame.get<Int>(nargs[1]);
+    Int32 lhs = frame.get<Int32>(nargs[0]);
+    Int32 rhs = frame.get<Int32>(nargs[1]);
 
     if (rhs == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
@@ -182,8 +182,8 @@ void __builtin__assn_div_i__(
 
 void __builtin__assn_div_l__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long lhs = frame.get<Long>(nargs[0]);
-    Long rhs = frame.get<Long>(nargs[1]);
+    Int64 lhs = frame.get<Int64>(nargs[0]);
+    Int64 rhs = frame.get<Int64>(nargs[1]);
 
     if (rhs == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
@@ -198,8 +198,8 @@ void __builtin__assn_div_l__(
 
 void __builtin__assn_div_f__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float lhs = frame.get<Float>(nargs[0]);
-    Float rhs = frame.get<Float>(nargs[1]);
+    Float32 lhs = frame.get<Float32>(nargs[0]);
+    Float32 rhs = frame.get<Float32>(nargs[1]);
 
     if (rhs == 0.0f) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
@@ -214,8 +214,8 @@ void __builtin__assn_div_f__(
 
 void __builtin__assn_div_d__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double lhs = frame.get<Double>(nargs[0]);
-    Double rhs = frame.get<Double>(nargs[1]);
+    Float64 lhs = frame.get<Float64>(nargs[0]);
+    Float64 rhs = frame.get<Float64>(nargs[1]);
 
     if (rhs == 0.0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
@@ -337,29 +337,29 @@ void __builtin__strict_ne__(
 
 void __builtin__add_ii__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int left  = frame.get<Int>(nargs[0]);
-    Int right = frame.get<Int>(nargs[1]);
+    Int32 left  = frame.get<Int32>(nargs[0]);
+    Int32 right = frame.get<Int32>(nargs[1]);
     frame.set(self, left + right);
 }
 
 void __builtin__add_ll__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long left  = frame.get<Long>(nargs[0]);
-    Long right = frame.get<Long>(nargs[1]);
+    Int64 left  = frame.get<Int64>(nargs[0]);
+    Int64 right = frame.get<Int64>(nargs[1]);
     frame.set(self, left + right);
 }
 
 void __builtin__add_ff__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float left  = frame.get<Float>(nargs[0]);
-    Float right = frame.get<Float>(nargs[1]);
+    Float32 left  = frame.get<Float32>(nargs[0]);
+    Float32 right = frame.get<Float32>(nargs[1]);
     frame.set(self, left + right);
 }
 
 void __builtin__add_dd__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double left  = frame.get<Double>(nargs[0]);
-    Double right = frame.get<Double>(nargs[1]);
+    Float64 left  = frame.get<Float64>(nargs[0]);
+    Float64 right = frame.get<Float64>(nargs[1]);
     frame.set(self, left + right);
 }
 
@@ -375,29 +375,29 @@ void __builtin__add_ss__(
 
 void __builtin__sub_ii__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int lhs = frame.get<Int>(nargs[0]);
-    Int rhs = frame.get<Int>(nargs[1]);
+    Int32 lhs = frame.get<Int32>(nargs[0]);
+    Int32 rhs = frame.get<Int32>(nargs[1]);
     frame.set(self, lhs - rhs);
 }
 
 void __builtin__sub_ll__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long lhs = frame.get<Long>(nargs[0]);
-    Long rhs = frame.get<Long>(nargs[1]);
+    Int64 lhs = frame.get<Int64>(nargs[0]);
+    Int64 rhs = frame.get<Int64>(nargs[1]);
     frame.set(self, lhs - rhs);
 }
 
 void __builtin__sub_ff__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float lhs = frame.get<Float>(nargs[0]);
-    Float rhs = frame.get<Float>(nargs[1]);
+    Float32 lhs = frame.get<Float32>(nargs[0]);
+    Float32 rhs = frame.get<Float32>(nargs[1]);
     frame.set(self, lhs - rhs);
 }
 
 void __builtin__sub_dd__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double lhs = frame.get<Double>(nargs[0]);
-    Double rhs = frame.get<Double>(nargs[1]);
+    Float64 lhs = frame.get<Float64>(nargs[0]);
+    Float64 rhs = frame.get<Float64>(nargs[1]);
     frame.set(self, lhs - rhs);
 }
 
@@ -406,30 +406,30 @@ void __builtin__mul__(
     TypeCode lhsType = frame.typeAt(nargs[0]);
 
     switch (lhsType) {
-    case TypeCode::Int: {
-        Int lhs = frame.get<Int>(nargs[0]);
-        Int rhs = frame.get<Int>(nargs[1]);
+    case TypeCode::Int32: {
+        Int32 lhs = frame.get<Int32>(nargs[0]);
+        Int32 rhs = frame.get<Int32>(nargs[1]);
         frame.set(self, lhs * rhs);
         break;
     }
 
-    case TypeCode::Long: {
-        Long lhs = frame.get<Long>(nargs[0]);
-        Long rhs = frame.get<Long>(nargs[1]);
+    case TypeCode::Int64: {
+        Int64 lhs = frame.get<Int64>(nargs[0]);
+        Int64 rhs = frame.get<Int64>(nargs[1]);
         frame.set(self, lhs * rhs);
         break;
     }
 
-    case TypeCode::Float: {
-        Float lhs = frame.get<Float>(nargs[0]);
-        Float rhs = frame.get<Float>(nargs[1]);
+    case TypeCode::Float32: {
+        Float32 lhs = frame.get<Float32>(nargs[0]);
+        Float32 rhs = frame.get<Float32>(nargs[1]);
         frame.set(self, lhs * rhs);
         break;
     }
 
-    case TypeCode::Double: {
-        Double lhs = frame.get<Double>(nargs[0]);
-        Double rhs = frame.get<Double>(nargs[1]);
+    case TypeCode::Float64: {
+        Float64 lhs = frame.get<Float64>(nargs[0]);
+        Float64 rhs = frame.get<Float64>(nargs[1]);
         frame.set(self, lhs * rhs);
         break;
     }
@@ -447,9 +447,9 @@ void __builtin__div__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     TypeCode lhsType = frame.typeAt(nargs[0]);
     switch (lhsType) {
-    case TypeCode::Int: {
-        Int lhs = frame.get<Int>(nargs[0]);
-        Int rhs = frame.get<Int>(nargs[1]);
+    case TypeCode::Int32: {
+        Int32 lhs = frame.get<Int32>(nargs[0]);
+        Int32 rhs = frame.get<Int32>(nargs[1]);
         if (rhs == 0) {
             ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
             frame.set(self, NullSlot);
@@ -459,9 +459,9 @@ void __builtin__div__(
         break;
     }
 
-    case TypeCode::Long: {
-        Long lhs = frame.get<Long>(nargs[0]);
-        Long rhs = frame.get<Long>(nargs[1]);
+    case TypeCode::Int64: {
+        Int64 lhs = frame.get<Int64>(nargs[0]);
+        Int64 rhs = frame.get<Int64>(nargs[1]);
         if (rhs == 0) {
             ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
             frame.set(self, NullSlot);
@@ -471,9 +471,9 @@ void __builtin__div__(
         break;
     }
 
-    case TypeCode::Float: {
-        Float lhs = frame.get<Float>(nargs[0]);
-        Float rhs = frame.get<Float>(nargs[1]);
+    case TypeCode::Float32: {
+        Float32 lhs = frame.get<Float32>(nargs[0]);
+        Float32 rhs = frame.get<Float32>(nargs[1]);
         if (rhs == 0.0f) {
             ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
             frame.set(self, NullSlot);
@@ -483,9 +483,9 @@ void __builtin__div__(
         break;
     }
 
-    case TypeCode::Double: {
-        Double lhs = frame.get<Double>(nargs[0]);
-        Double rhs = frame.get<Double>(nargs[1]);
+    case TypeCode::Float64: {
+        Float64 lhs = frame.get<Float64>(nargs[0]);
+        Float64 rhs = frame.get<Float64>(nargs[1]);
         if (rhs == 0.0) {
             ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
             frame.set(self, NullSlot);
@@ -508,9 +508,9 @@ void __builtin__mod__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     TypeCode lhsType = frame.typeAt(nargs[0]);
     switch (lhsType) {
-    case TypeCode::Int: {
-        Int lhs = frame.get<Int>(nargs[0]);
-        Int rhs = frame.get<Int>(nargs[1]);
+    case TypeCode::Int32: {
+        Int32 lhs = frame.get<Int32>(nargs[0]);
+        Int32 rhs = frame.get<Int32>(nargs[1]);
         if (rhs == 0) {
             ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
             frame.set(self, NullSlot);
@@ -520,9 +520,9 @@ void __builtin__mod__(
         break;
     }
 
-    case TypeCode::Long: {
-        Long lhs = frame.get<Long>(nargs[0]);
-        Long rhs = frame.get<Long>(nargs[1]);
+    case TypeCode::Int64: {
+        Int64 lhs = frame.get<Int64>(nargs[0]);
+        Int64 rhs = frame.get<Int64>(nargs[1]);
         if (rhs == 0) {
             ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
             frame.set(self, NullSlot);
@@ -551,30 +551,30 @@ void __builtin__pow__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     TypeCode lhsType = frame.typeAt(nargs[0]);
     switch (lhsType) {
-    case TypeCode::Int: {
-        Int base = frame.get<Int>(nargs[0]);
-        Int exp  = frame.get<Int>(nargs[1]);
-        frame.set(self, static_cast<Int>(std::pow(base, exp)));
+    case TypeCode::Int32: {
+        Int32 base = frame.get<Int32>(nargs[0]);
+        Int32 exp  = frame.get<Int32>(nargs[1]);
+        frame.set(self, static_cast<Int32>(std::pow(base, exp)));
         break;
     }
 
-    case TypeCode::Long: {
-        Long base = frame.get<Long>(nargs[0]);
-        Long exp  = frame.get<Long>(nargs[1]);
-        frame.set(self, static_cast<Long>(std::pow(base, exp)));
+    case TypeCode::Int64: {
+        Int64 base = frame.get<Int64>(nargs[0]);
+        Int64 exp  = frame.get<Int64>(nargs[1]);
+        frame.set(self, static_cast<Int64>(std::pow(base, exp)));
         break;
     }
 
-    case TypeCode::Float: {
-        Float base = frame.get<Float>(nargs[0]);
-        Float exp  = frame.get<Float>(nargs[1]);
-        frame.set(self, static_cast<Float>(std::pow(base, exp)));
+    case TypeCode::Float32: {
+        Float32 base = frame.get<Float32>(nargs[0]);
+        Float32 exp  = frame.get<Float32>(nargs[1]);
+        frame.set(self, static_cast<Float32>(std::pow(base, exp)));
         break;
     }
 
-    case TypeCode::Double: {
-        Double base = frame.get<Double>(nargs[0]);
-        Double exp  = frame.get<Double>(nargs[1]);
+    case TypeCode::Float64: {
+        Float64 base = frame.get<Float64>(nargs[0]);
+        Float64 exp  = frame.get<Float64>(nargs[1]);
         frame.set(self, std::pow(base, exp));
         break;
     }
@@ -595,12 +595,12 @@ void __builtin__idx__(
     TypeCode idxType = frame.typeAt(nargs[1]);
 
     // 数组索引：index 为 Int
-    if (idxType == TypeCode::Int) {
+    if (idxType == TypeCode::Int64) {
         TypeCode containerType = frame.typeAt(nargs[0]);
         switch (containerType) {
         case TypeCode::Tuple: {
             Tuple *tpl = frame.get<Tuple *>(nargs[0]);
-            size_t idx = static_cast<size_t>(frame.get<Int>(nargs[1]));
+            size_t idx = static_cast<size_t>(frame.get<Int64>(nargs[1]));
             if (idx >= tpl->size()) {
                 ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Tuple index out of bounds.");
                 frame.set(self, NullSlot);
@@ -611,7 +611,7 @@ void __builtin__idx__(
         }
         case TypeCode::Array: {
             Array *arr = frame.get<Array *>(nargs[0]);
-            size_t idx = static_cast<size_t>(frame.get<Int>(nargs[1]));
+            size_t idx = static_cast<size_t>(frame.get<Int64>(nargs[1]));
             if (idx >= arr->size()) {
                 ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Array index out of bounds.");
                 frame.set(self, NullSlot);
@@ -622,7 +622,7 @@ void __builtin__idx__(
         }
         case TypeCode::Struct: {
             Struct *st = frame.get<Struct *>(nargs[0]);
-            size_t idx = static_cast<size_t>(frame.get<Int>(nargs[1]));
+            size_t idx = static_cast<size_t>(frame.get<Int64>(nargs[1]));
             slot_t val = st->get<slot_t>(idx);
             frame.set(self, val);
             return;
@@ -668,26 +668,26 @@ void __builtin__neg__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     TypeCode t = frame.typeAt(nargs[0]);
     switch (t) {
-    case TypeCode::Int: {
-        Int v = frame.get<Int>(nargs[0]);
+    case TypeCode::Int32: {
+        Int32 v = frame.get<Int32>(nargs[0]);
         frame.set(self, -v);
         break;
     }
 
-    case TypeCode::Long: {
-        Long v = frame.get<Long>(nargs[0]);
+    case TypeCode::Int64: {
+        Int64 v = frame.get<Int64>(nargs[0]);
         frame.set(self, -v);
         break;
     }
 
-    case TypeCode::Float: {
-        Float v = frame.get<Float>(nargs[0]);
+    case TypeCode::Float32: {
+        Float32 v = frame.get<Float32>(nargs[0]);
         frame.set(self, -v);
         break;
     }
 
-    case TypeCode::Double: {
-        Double v = frame.get<Double>(nargs[0]);
+    case TypeCode::Float64: {
+        Float64 v = frame.get<Float64>(nargs[0]);
         frame.set(self, -v);
         break;
     }
@@ -705,14 +705,14 @@ void __builtin__inv__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     TypeCode t = frame.typeAt(nargs[0]);
     switch (t) {
-    case TypeCode::Int: {
-        Int v = frame.get<Int>(nargs[0]);
+    case TypeCode::Int32: {
+        Int32 v = frame.get<Int32>(nargs[0]);
         frame.set(self, ~v);
         break;
     }
 
-    case TypeCode::Long: {
-        Long v = frame.get<Long>(nargs[0]);
+    case TypeCode::Int64: {
+        Int64 v = frame.get<Int64>(nargs[0]);
         frame.set(self, ~v);
         break;
     }

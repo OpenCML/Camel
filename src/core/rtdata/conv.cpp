@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,17 +28,17 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     ASSERT(isPrimitive(typeCode), "Type is not primitive.");
 
     switch (typeCode) {
-    case TypeCode::Int: {
+    case TypeCode::Int32: {
         auto intData = tt::as_shared<IntData>(data);
         return static_cast<slot_t>(intData->data());
     }
 
-    case TypeCode::Long: {
+    case TypeCode::Int64: {
         auto longData = tt::as_shared<LongData>(data);
         return static_cast<slot_t>(longData->data());
     }
 
-    case TypeCode::Float: {
+    case TypeCode::Float32: {
         auto floatData = tt::as_shared<FloatData>(data);
         float f        = floatData->data();
         slot_t result;
@@ -46,7 +46,7 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
         return result;
     }
 
-    case TypeCode::Double: {
+    case TypeCode::Float64: {
         auto doubleData = tt::as_shared<DoubleData>(data);
         double d        = doubleData->data();
         slot_t result;

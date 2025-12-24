@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,9 +48,9 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":phot/gen_bits",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Int(), false}, {Type::Int(), false}},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
                         TupleType::create(
-                            {ArrayType::create(Type::Int()), ArrayType::create(Type::Int())})),
+                            {ArrayType::create(Type::Int64()), ArrayType::create(Type::Int64())})),
                 },
             }),
         OperatorGroup::create(
@@ -59,19 +59,19 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     ":phot/modulation",
                     StaticFuncTypeResolver::create(
-                        {{Type::Int(), false}},
+                        {{Type::Int64(), false}},
                         {{TupleType::create(
-                              {ArrayType::create(Type::Int()), ArrayType::create(Type::Int())}),
+                              {ArrayType::create(Type::Int64()), ArrayType::create(Type::Int64())}),
                           false}},
                         // 返回 ((double[], double[]), (double[], double[]))，即 X_Pol 和 Y_Pol
                         // 的实部和虚部
                         TupleType::create({
                             TupleType::create(
-                                {ArrayType::create(Type::Double()),
-                                 ArrayType::create(Type::Double())}), // X_Pol (real, imag)
+                                {ArrayType::create(Type::Float64()),
+                                 ArrayType::create(Type::Float64())}), // X_Pol (real, imag)
                             TupleType::create(
-                                {ArrayType::create(Type::Double()),
-                                 ArrayType::create(Type::Double())}) // Y_Pol (real, imag)
+                                {ArrayType::create(Type::Float64()),
+                                 ArrayType::create(Type::Float64())}) // Y_Pol (real, imag)
                         })),
                 },
             }),
@@ -81,27 +81,27 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     ":phot/up_sample",
                     StaticFuncTypeResolver::create(
-                        {{Type::Int(), false}},
+                        {{Type::Int64(), false}},
                         // 输入：((double[], double[]), (double[], double[])) 即 X_Pol 和 Y_Pol
                         // 的实部和虚部
                         {{TupleType::create({
                               TupleType::create(
-                                  {ArrayType::create(Type::Double()),
-                                   ArrayType::create(Type::Double())}), // X_Pol
+                                  {ArrayType::create(Type::Float64()),
+                                   ArrayType::create(Type::Float64())}), // X_Pol
                               TupleType::create(
-                                  {ArrayType::create(Type::Double()),
-                                   ArrayType::create(Type::Double())}) // Y_Pol
+                                  {ArrayType::create(Type::Float64()),
+                                   ArrayType::create(Type::Float64())}) // Y_Pol
                           }),
                           false}},
                         // 返回：((double[], double[]), (double[], double[])) 即 X_Pol 和 Y_Pol
                         // 的实部和虚部
                         TupleType::create({
                             TupleType::create(
-                                {ArrayType::create(Type::Double()),
-                                 ArrayType::create(Type::Double())}), // X_Pol
+                                {ArrayType::create(Type::Float64()),
+                                 ArrayType::create(Type::Float64())}), // X_Pol
                             TupleType::create(
-                                {ArrayType::create(Type::Double()),
-                                 ArrayType::create(Type::Double())}) // Y_Pol
+                                {ArrayType::create(Type::Float64()),
+                                 ArrayType::create(Type::Float64())}) // Y_Pol
                         })),
                 },
             }),
@@ -111,27 +111,29 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     ":phot/pulse_shaper",
                     StaticFuncTypeResolver::create(
-                        {{Type::Int(), false}, {Type::Double(), false}, {Type::Double(), false}},
+                        {{Type::Int64(), false},
+                         {Type::Float64(), false},
+                         {Type::Float64(), false}},
                         // 输入：((double[], double[]), (double[], double[])) 即 X_Pol 和 Y_Pol
                         // 的实部和虚部
                         {{TupleType::create({
                               TupleType::create(
-                                  {ArrayType::create(Type::Double()),
-                                   ArrayType::create(Type::Double())}), // X_Pol
+                                  {ArrayType::create(Type::Float64()),
+                                   ArrayType::create(Type::Float64())}), // X_Pol
                               TupleType::create(
-                                  {ArrayType::create(Type::Double()),
-                                   ArrayType::create(Type::Double())}) // Y_Pol
+                                  {ArrayType::create(Type::Float64()),
+                                   ArrayType::create(Type::Float64())}) // Y_Pol
                           }),
                           false}},
                         // 返回：((double[], double[]), (double[], double[])) 即 X_Pol 和 Y_Pol
                         // 的实部和虚部
                         TupleType::create({
                             TupleType::create(
-                                {ArrayType::create(Type::Double()),
-                                 ArrayType::create(Type::Double())}), // X_Pol
+                                {ArrayType::create(Type::Float64()),
+                                 ArrayType::create(Type::Float64())}), // X_Pol
                             TupleType::create(
-                                {ArrayType::create(Type::Double()),
-                                 ArrayType::create(Type::Double())}) // Y_Pol
+                                {ArrayType::create(Type::Float64()),
+                                 ArrayType::create(Type::Float64())}) // Y_Pol
                         })),
                 },
             }),

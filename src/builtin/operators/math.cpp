@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,23 +30,23 @@ void __abs__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Int: {
-        Int v = frame.get<Int>(nargs[0]);
+    case TypeCode::Int32: {
+        Int32 v = frame.get<Int32>(nargs[0]);
         frame.set(self, std::abs(v));
         break;
     }
-    case TypeCode::Long: {
-        Long v = frame.get<Long>(nargs[0]);
+    case TypeCode::Int64: {
+        Int64 v = frame.get<Int64>(nargs[0]);
         frame.set(self, std::abs(v));
         break;
     }
-    case TypeCode::Float: {
-        Float v = frame.get<Float>(nargs[0]);
+    case TypeCode::Float32: {
+        Float32 v = frame.get<Float32>(nargs[0]);
         frame.set(self, std::fabs(v));
         break;
     }
-    case TypeCode::Double: {
-        Double v = frame.get<Double>(nargs[0]);
+    case TypeCode::Float64: {
+        Float64 v = frame.get<Float64>(nargs[0]);
         frame.set(self, std::fabs(v));
         break;
     }
@@ -64,12 +64,12 @@ void __exp__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Float:
-        frame.set(self, std::exp(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::exp(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::exp(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::exp(frame.get<Float64>(nargs[0])));
         break;
 
     default:
@@ -84,12 +84,12 @@ void __round__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fr
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Float:
-        frame.set(self, std::round(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::round(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::round(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::round(frame.get<Float64>(nargs[0])));
         break;
 
     default:
@@ -104,12 +104,12 @@ void __ceil__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Float:
-        frame.set(self, std::ceil(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::ceil(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::ceil(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::ceil(frame.get<Float64>(nargs[0])));
         break;
 
     default:
@@ -124,12 +124,12 @@ void __floor__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fr
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Float:
-        frame.set(self, std::floor(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::floor(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::floor(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::floor(frame.get<Float64>(nargs[0])));
         break;
 
     default:
@@ -145,11 +145,11 @@ void __bin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
     int64_t number = 0;
 
     switch (tp) {
-    case TypeCode::Int:
-        number = static_cast<int64_t>(frame.get<Int>(nargs[0]));
+    case TypeCode::Int32:
+        number = static_cast<int64_t>(frame.get<Int32>(nargs[0]));
         break;
-    case TypeCode::Long:
-        number = static_cast<int64_t>(frame.get<Long>(nargs[0]));
+    case TypeCode::Int64:
+        number = static_cast<int64_t>(frame.get<Int64>(nargs[0]));
         break;
     default:
         ctx.rtmDiags()
@@ -172,7 +172,7 @@ void __bin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 void __oct__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     TypeCode tp = frame.typeAt(nargs[0]);
 
-    if (tp != TypeCode::Int && tp != TypeCode::Long) {
+    if (tp != TypeCode::Int32 && tp != TypeCode::Int64) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<oct> operator requires integer type");
@@ -182,10 +182,10 @@ void __oct__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 
     std::ostringstream oss;
     oss << "0o" << std::oct;
-    if (tp == TypeCode::Int)
-        oss << frame.get<Int>(nargs[0]);
+    if (tp == TypeCode::Int32)
+        oss << frame.get<Int32>(nargs[0]);
     else
-        oss << frame.get<Long>(nargs[0]);
+        oss << frame.get<Int64>(nargs[0]);
 
     String *result = String::from(oss.str(), mm::autoSpace());
     frame.set(self, result);
@@ -194,7 +194,7 @@ void __oct__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 void __hex__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
     TypeCode tp = frame.typeAt(nargs[0]);
 
-    if (tp != TypeCode::Int && tp != TypeCode::Long) {
+    if (tp != TypeCode::Int32 && tp != TypeCode::Int64) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<hex> operator requires integer type");
@@ -204,10 +204,10 @@ void __hex__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 
     std::ostringstream oss;
     oss << "0x" << std::hex << std::uppercase;
-    if (tp == TypeCode::Int)
-        oss << frame.get<Int>(nargs[0]);
+    if (tp == TypeCode::Int32)
+        oss << frame.get<Int32>(nargs[0]);
     else
-        oss << frame.get<Long>(nargs[0]);
+        oss << frame.get<Int64>(nargs[0]);
 
     String *result = String::from(oss.str(), mm::autoSpace());
     frame.set(self, result);
@@ -217,20 +217,20 @@ void __sqrt__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Int:
-        frame.set(self, std::sqrt(static_cast<Float>(frame.get<Int>(nargs[0]))));
+    case TypeCode::Int32:
+        frame.set(self, std::sqrt(static_cast<Float32>(frame.get<Int32>(nargs[0]))));
         break;
 
-    case TypeCode::Float:
-        frame.set(self, std::sqrt(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::sqrt(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Long:
-        frame.set(self, std::sqrt(static_cast<Float>(frame.get<Long>(nargs[0]))));
+    case TypeCode::Int64:
+        frame.set(self, std::sqrt(static_cast<Float64>(frame.get<Int64>(nargs[0]))));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::sqrt(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::sqrt(frame.get<Float64>(nargs[0])));
         break;
 
     default:
@@ -245,12 +245,12 @@ void __sin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Float:
-        frame.set(self, std::sin(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::sin(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::sin(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::sin(frame.get<Float64>(nargs[0])));
         break;
 
     default:
@@ -265,12 +265,12 @@ void __cos__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Float:
-        frame.set(self, std::cos(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::cos(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::cos(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::cos(frame.get<Float64>(nargs[0])));
         break;
 
     default:
@@ -285,12 +285,12 @@ void __tan__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
     TypeCode tp = frame.typeAt(nargs[0]);
 
     switch (tp) {
-    case TypeCode::Float:
-        frame.set(self, std::tan(frame.get<Float>(nargs[0])));
+    case TypeCode::Float32:
+        frame.set(self, std::tan(frame.get<Float32>(nargs[0])));
         break;
 
-    case TypeCode::Double:
-        frame.set(self, std::tan(frame.get<Double>(nargs[0])));
+    case TypeCode::Float64:
+        frame.set(self, std::tan(frame.get<Float64>(nargs[0])));
         break;
 
     default:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,7 +53,7 @@ void __now__(
 // -----------------------------------------------------------------------------
 void __strftime__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    double timestamp = frame.get<Double>(nargs[0]);
+    double timestamp = frame.get<Float64>(nargs[0]);
     String *fmt_obj  = frame.get<String *>(nargs[1]);
 
     bool as_local = false;

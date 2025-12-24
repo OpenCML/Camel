@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@ using namespace std;
 unordered_map<string, string> TensorType::staticMethods_;
 
 TensorType::TensorType(const vector<size_t> &shape)
-    : OtherType(typeCode()), shape_(shape), element_type_(Type::Float()) {
+    : OtherType(typeCode()), shape_(shape), element_type_(Type::Float32()) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
     }
@@ -63,7 +63,7 @@ type_ptr_t TensorType::Tensor(const std::vector<size_t> &shape) {
 }
 
 type_ptr_t TensorType::Default() {
-    return std::make_shared<TensorType>(Type::Float(), std::vector<size_t>{0});
+    return std::make_shared<TensorType>(Type::Float32(), std::vector<size_t>{0});
 }
 
 string TensorType::toString() const {
@@ -77,7 +77,7 @@ string TensorType::toString() const {
     }
     result += "]";
 
-    if (element_type_ && !element_type_->equals(Type::Double())) {
+    if (element_type_ && !element_type_->equals(Type::Float64())) {
         result += ", " + element_type_->toString();
     }
 

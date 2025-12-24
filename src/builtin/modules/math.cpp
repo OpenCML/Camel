@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,19 +28,19 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/abs_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::Int()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int32()),
                 },
                 {
                     ":math/abs_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::Long()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
                 },
                 {
                     ":math/abs_f",
-                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32()),
                 },
                 {
                     ":math/abs_d",
-                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -48,11 +48,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/exp_f",
-                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32()),
                 },
                 {
                     ":math/exp_d",
-                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -60,11 +60,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/round_f",
-                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32()),
                 },
                 {
                     ":math/round_d",
-                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -72,11 +72,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/ceil_f",
-                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32()),
                 },
                 {
                     ":math/ceil_d",
-                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -84,11 +84,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/floor_f",
-                    StaticFuncTypeResolver::create({}, {{Type::Float(), false}}, Type::Float()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32()),
                 },
                 {
                     ":math/floor_d",
-                    StaticFuncTypeResolver::create({}, {{Type::Double(), false}}, Type::Double()),
+                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -96,11 +96,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/bin_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
                 },
                 {
                     ":math/bin_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
                 },
             }),
         OperatorGroup::create(
@@ -108,11 +108,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/oct_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
                 },
                 {
                     ":math/oct_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
                 },
             }),
         OperatorGroup::create(
@@ -120,11 +120,11 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":math/hex_i",
-                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
                 },
                 {
                     ":math/hex_l",
-                    StaticFuncTypeResolver::create({}, {{Type::Long(), false}}, Type::String()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
                 },
             }),
         OperatorGroup::create(
@@ -138,10 +138,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<type_ptr_t> {
                             TypeCode tp = norm[0]->code();
-                            if (tp == TypeCode::Float || tp == TypeCode::Int)
-                                return Type::Float();
-                            if (tp == TypeCode::Double || tp == TypeCode::Long)
-                                return Type::Double();
+                            if (tp == TypeCode::Float32 || tp == TypeCode::Int32)
+                                return Type::Float32();
+                            if (tp == TypeCode::Float64 || tp == TypeCode::Int64)
+                                return Type::Float64();
                             return nullopt;
                         }),
                 },

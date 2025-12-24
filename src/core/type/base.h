@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,10 +60,10 @@ constexpr uint32_t makeTypeCode(TypeFlag flags, uint32_t id) {
 }
 
 enum class TypeCode : uint32_t {
-    Int      = makeTypeCode(TypeFlag::Primitive, 0x000),
-    Long     = makeTypeCode(TypeFlag::Primitive, 0x001),
-    Float    = makeTypeCode(TypeFlag::Primitive, 0x002),
-    Double   = makeTypeCode(TypeFlag::Primitive, 0x003),
+    Int32    = makeTypeCode(TypeFlag::Primitive, 0x000),
+    Int64    = makeTypeCode(TypeFlag::Primitive, 0x001),
+    Float32  = makeTypeCode(TypeFlag::Primitive, 0x002),
+    Float64  = makeTypeCode(TypeFlag::Primitive, 0x003),
     Bool     = makeTypeCode(TypeFlag::Primitive, 0x004),
     Byte     = makeTypeCode(TypeFlag::Primitive, 0x005),
     Void     = makeTypeCode(TypeFlag::Primitive, 0x006),
@@ -149,10 +149,12 @@ class Type {
     bool operator==(const type_ptr_t &other) const = delete;
     bool operator!=(const type_ptr_t &other) const = delete;
 
+    static type_ptr_t Int32();
+    static type_ptr_t Int64();
     static type_ptr_t Int();
-    static type_ptr_t Long();
+    static type_ptr_t Float32();
+    static type_ptr_t Float64();
     static type_ptr_t Float();
-    static type_ptr_t Double();
     static type_ptr_t Bool();
     static type_ptr_t Byte();
     static type_ptr_t Void();
