@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -224,25 +224,4 @@ bool StructType::equals(const type_ptr_t &type) const {
 
 CastSafety StructType::castSafetyTo(const Type &) const { return CastSafety::Unsafe; }
 
-bool StructType::assignable(const type_ptr_t &type) const {
-    if (!type || type->code() != TypeCode::Struct) {
-        return false;
-    }
-    auto other = tt::as_shared<const StructType>(type);
-    if (!other) {
-        return false;
-    }
-    for (const auto &kv : fields_) {
-        const auto &name    = kv.first;
-        const auto &lhsType = kv.second;
-
-        auto it = other->fields_.find(name);
-        if (it == other->fields_.end()) {
-            return false;
-        }
-        if (!lhsType || !it->second || !lhsType->assignable(it->second)) {
-            return false;
-        }
-    }
-    return true;
-}
+bool StructType::assignable(const type_ptr_t &type) const { return equals(type); }

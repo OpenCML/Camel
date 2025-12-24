@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 24, 2025
+ * Updated: Dec. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -248,23 +248,22 @@ bool FunctionType::assignable(const type_ptr_t &other) const {
         normTypes_.size() != otherFunc.normTypes_.size()) {
         return false;
     }
+
     for (size_t i = 0; i < withTypes_.size(); i++) {
         const auto &[type, isVar]           = withTypes_[i];
         const auto &[otherType, otherIsVar] = otherFunc.withTypes_[i];
         if (isVar != otherIsVar || !type->assignable(otherType))
             return false;
     }
+
     for (size_t i = 0; i < normTypes_.size(); i++) {
         const auto &[type, isVar]           = normTypes_[i];
         const auto &[otherType, otherIsVar] = otherFunc.normTypes_[i];
         if (isVar != otherIsVar || !type->assignable(otherType))
             return false;
     }
+
     if (exitType_ && otherFunc.exitType_) {
-        if (otherFunc.exitType_->code() == TypeCode::Void) {
-            // 允许赋值给返回值为void的函数类型
-            return true;
-        }
         if (!exitType_->assignable(otherFunc.exitType_))
             return false;
     } else if (exitType_ || otherFunc.exitType_) {

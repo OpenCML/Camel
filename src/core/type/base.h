@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 24, 2025
+ * Updated: Dec. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -144,7 +144,7 @@ class Type {
 
     virtual bool equals(const type_ptr_t &type) const;
     virtual CastSafety castSafetyTo(const Type &other) const;
-    virtual bool assignable(const type_ptr_t &type) const;
+    bool assignable(const type_ptr_t &type) const;
 
     bool operator==(const type_ptr_t &other) const = delete;
     bool operator!=(const type_ptr_t &other) const = delete;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Dec. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -109,4 +109,4 @@ CastSafety ArrayType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool ArrayType::assignable(const type_ptr_t &type) const { return this->equals(type); }
+bool ArrayType::assignable(const type_ptr_t &type) const { return equals(type); }

@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 31, 2025
+ * Updated: Dec. 24, 2025
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -27,6 +27,7 @@
 #include "builtin/passes/trans/tns/topo_node_seq.h"
 #include "codegen/source/generator.h"
 #include "config.h"
+#include "core/mm/mm.h"
 #include "core/module/userdef.h"
 #include "core/type/type.h"
 #include "error/base.h"
@@ -75,12 +76,12 @@ int main(int argc, char *argv[]) {
     std::unique_ptr<istream> input;
 
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
-        input = std::make_unique<istream>(std::cin.rdbuf());
+        input      = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
         EXEC_WHEN_DEBUG(l.in("Main").info("Reading from standard input."));
     } else {
         targetFile = Run::targetFiles[0];
-        auto file = std::make_unique<std::ifstream>(targetFile);
+        auto file  = std::make_unique<std::ifstream>(targetFile);
         if (!file->is_open()) {
             std::cerr << "Error: Cannot open file " << targetFile << endl;
             return 1;
@@ -91,7 +92,7 @@ int main(int argc, char *argv[]) {
     diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
     if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
         diagnostics->setConfig(DiagsConfig{
-            .total_limit = -1,
+            .total_limit         = -1,
             .per_severity_limits = {{Severity::Error, 0}},
         });
     }
@@ -106,7 +107,7 @@ int main(int argc, char *argv[]) {
 
     context_ptr_t ctx = Context::create(
         EntryConfig{
-            .entryDir = entryDir,
+            .entryDir  = entryDir,
             .entryFile = targetFile,
             .searchPaths =
                 {
@@ -117,22 +118,28 @@ int main(int argc, char *argv[]) {
                         .string(),
                     getEnv("CAMEL_PACKAGES"),
                     getEnv("CAMEL_HOME", camelPath.string()),
-                }},
+                },
+        },
         DiagsConfig{
-            .total_limit = -1,
+            .total_limit         = -1,
             .per_severity_limits = {{Severity::Error, 0}},
         });
 
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
-    auto mainModule = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
+    auto mainModule     = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
+
+    // Initialize memory management subsystems
+    (void)mm::autoSpace();
+    (void)mm::metaSpace();
+    (void)mm::permSpace();
 
     while (Run::repeat--) {
         try {
             parser->parse(*input);
 
             if (selectedCommand == Command::Format) {
-                auto formatter = Formatter(parser->getTokens());
+                auto formatter             = Formatter(parser->getTokens());
                 const string formattedCode = any_cast<string>(formatter.visit(parser->cst()));
                 os << formattedCode;
                 return 0;
@@ -143,7 +150,7 @@ int main(int argc, char *argv[]) {
                     parser->dumpTokens(os);
                 }
                 if (Inspect::dumpCST) {
-                    auto cst = parser->cst();
+                    auto cst     = parser->cst();
                     auto visitor = CSTDumpVisitor(os);
                     visitor.visit(cst);
                 }
@@ -185,7 +192,7 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
                     auto root = ctx->rootGraph();
-                    auto res = pass.apply(root, os);
+                    auto res  = pass.apply(root, os);
                 }
                 if (Inspect::dumpTNS && ctx->rootGraph()) {
                     auto entry = ctx->rootGraph();
@@ -212,7 +219,7 @@ int main(int argc, char *argv[]) {
                         profiler::AdvancedTracer::Config config;
                         config.enablePerfettoIntegration = true;
                         config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
-                        config.outputFile = "profile_reports/camel_trace.json";
+                        config.outputFile     = "profile_reports/camel_trace.json";
                         profiler::start_advanced_tracing(config);
                     }
                 }());

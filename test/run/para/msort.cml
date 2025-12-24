@@ -11,19 +11,19 @@ func merge(lhs: int[], rhs: int[]): int[] sync {
 
 func mergesort(arr: int[]): int[] sync {
     let start = now()
-    let res = if len(arr) <= 10000 then sort(arr) else {
+    let res = if len(arr) <= 1e5 then sort(arr) else {
         let mid = len(arr) / 2
         let lhs = arr->slice<0, mid>->mergesort
         let rhs = arr->slice<mid, len(arr)>->mergesort
         return merge(lhs, rhs)
     }
     let duration = now() - start
-    println('MergeSorted {} elements in {} seconds.'->format<len(arr), duration>)
+    println('MergeSorted {} elements in {:.2f} seconds.'->format<len(arr), duration>)
     return res
 }
 
 func main(): int sync {
-    let n = 10000000
+    let n = 1e8
     let m = 100
     let s = 1
 
@@ -43,6 +43,6 @@ func main(): int sync {
     'Sorted (first {} shown):'->format<m>->println
     sorted->slice<0, m>->println
 
-    'Mergesort completed in {} seconds'->format<duration>->println
+    'Mergesort completed in {:.2f} seconds'->format<duration>->println
     return 0
 }

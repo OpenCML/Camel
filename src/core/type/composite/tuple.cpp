@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Dec. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -182,4 +182,4 @@ CastSafety TupleType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool TupleType::assignable(const type_ptr_t &type) const { return this->equals(type); }
+bool TupleType::assignable(const type_ptr_t &type) const { return equals(type); }

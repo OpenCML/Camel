@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 24, 2025
+ * Updated: Dec. 25, 2025
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "base.h"
 
+#include "composite/composite.h"
 #include "other.h"
 #include "utils/type.h"
 
@@ -167,9 +168,10 @@ bool Type::assignable(const type_ptr_t &type) const {
     if (code_ == TypeCode::Void)
         return false;
 
-    // 复合类型目前需要完全相等才能赋值
-    if (::isComposite(code_) && ::isComposite(type->code_)) {
-        return this->equals(type);
+    // 复合类型需要重载 assignable 方法处理
+    if (::isComposite(code_)) {
+        const auto &self = static_cast<const CompositeType &>(*this);
+        return self.assignable(type);
     }
 
     // 第三方类型交由第三方自己重载的 assignable 方法处理
