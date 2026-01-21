@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,76 +44,6 @@
 #endif
 
 namespace py = pybind11;
-
-// 确保 Python 解释器能够找到虚拟环境中的包
-static void ensure_python_path() {
-    try {
-        if (!Py_IsInitialized()) {
-            return;
-        }
-
-        py::module_ sys  = py::module_::import("sys");
-        py::module_ site = py::module_::import("site");
-        py::module_ os   = py::module_::import("os");
-
-        // 尝试从环境变量获取虚拟环境路径
-        std::string venv_path;
-#ifdef _WIN32
-        char *venv_env = nullptr;
-        size_t len     = 0;
-        if (_dupenv_s(&venv_env, &len, "VIRTUAL_ENV") == 0 && venv_env != nullptr) {
-            venv_path = std::string(venv_env);
-            free(venv_env);
-        }
-#else
-        const char *venv_env = std::getenv("VIRTUAL_ENV");
-        if (venv_env) {
-            venv_path = std::string(venv_env);
-        }
-#endif
-
-        // 如果找到虚拟环境，设置 sys.executable 和 sys.prefix
-        if (!venv_path.empty()) {
-            std::string python_exe = venv_path;
-#ifdef _WIN32
-            python_exe += "\\Scripts\\python.exe";
-#else
-            python_exe += "/bin/python";
-#endif
-
-            if (os.attr("path").attr("exists")(python_exe).cast<bool>()) {
-                sys.attr("executable") = python_exe;
-                sys.attr("prefix")     = venv_path;
-            }
-        }
-
-        // 使用 site.main() 自动初始化虚拟环境（最重要）
-        site.attr("main")();
-
-        // 确保所有 site-packages 都在 sys.path 中
-        py::list site_packages = site.attr("getsitepackages")().cast<py::list>();
-        py::list path          = sys.attr("path");
-        for (size_t i = 0; i < site_packages.size(); ++i) {
-            std::string pkg_path = py::str(site_packages[i]).cast<std::string>();
-            bool exists          = false;
-            for (size_t j = 0; j < path.size(); ++j) {
-                std::string path_str = py::str(path[j]).cast<std::string>();
-                // 使用路径规范化比较（处理大小写和路径分隔符）
-                if (pkg_path == path_str ||
-                    os.attr("path").attr("normpath")(pkg_path).cast<std::string>() ==
-                        os.attr("path").attr("normpath")(path_str).cast<std::string>()) {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists && os.attr("path").attr("exists")(pkg_path).cast<bool>()) {
-                path.insert(0, pkg_path);
-            }
-        }
-    } catch (...) {
-        // 如果失败，继续尝试导入
-    }
-}
 
 static py::array __camel_array_to_py__(Array *arr, Context &ctx) {
     TypeCode elemCode = arr->elemType();
@@ -304,11 +234,6 @@ void __phot_config__(
     bool plot = frame.get<bool>(nargs[0]);
 
     try {
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-        ensure_python_path();
-
         if (plot) {
             try {
                 py::module_ matplotlib = py::module_::import("matplotlib");
@@ -339,11 +264,6 @@ void __phot_gen_bits__(
     Int bits_per_symbol = frame.get<Int>(nargs[1]);
 
     try {
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-        ensure_python_path();
-
         py::module_ phot = py::module_::import("phot");
         // phot.gen_bits 返回 [bits_x, bits_y]
         py::object result    = phot.attr("gen_bits")(num_bits, bits_per_symbol);
@@ -382,11 +302,6 @@ void __phot_modulation__(
     Int bits_per_symbol      = frame.get<Int>(wargs[0]);
 
     try {
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-        ensure_python_path();
-
         Array *bits_x = signal_bits_tuple->get<Array *>(0);
         Array *bits_y = signal_bits_tuple->get<Array *>(1);
 
@@ -450,11 +365,6 @@ void __phot_up_sample__(
     Int up_sampling_factor = frame.get<Int>(wargs[0]);
 
     try {
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-        ensure_python_path();
-
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
         Tuple *y_pol_tuple = signals_tuple->get<Tuple *>(1);
         Array *x_real_arr  = x_pol_tuple->get<Array *>(0);
@@ -533,11 +443,6 @@ void __phot_pulse_shaper__(
     Float baud             = frame.get<Float>(wargs[2]);
 
     try {
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-        ensure_python_path();
-
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
         Tuple *y_pol_tuple = signals_tuple->get<Tuple *>(1);
         Array *x_real_arr  = x_pol_tuple->get<Array *>(0);
@@ -616,11 +521,6 @@ void __phot_constellation_diagram__(
     bool isdata          = (wargs.size > 1) ? frame.get<bool>(wargs[1]) : false;
 
     try {
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-        ensure_python_path();
-
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
         Tuple *y_pol_tuple = signals_tuple->get<Tuple *>(1);
         Array *x_real_arr  = x_pol_tuple->get<Array *>(0);
