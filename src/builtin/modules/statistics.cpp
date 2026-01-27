@@ -18,6 +18,7 @@
  */
 
 #include "statistics.h"
+#include "utils/type.h"
 
 using namespace std;
 

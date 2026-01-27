@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
 #include "compile/gir.h"
+#include "core/context/frame.h"
 #include "utils/log.h"
 
 #include "../operators/algo.h"
@@ -413,23 +414,26 @@ void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Fram
             RuntimeExceptionCode::InvalidURI,
             std::format("Invalid URI: {}", uri));
     }
-    std::vector<GraphIR::data_idx_t> inputIndices;
+    std::vector<GraphIR::data_idx_t> normIndices;
     for (const auto &in : self->normInputs()) {
-        inputIndices.push_back(in->index());
+        normIndices.push_back(in->index());
     }
+    std::vector<GraphIR::data_idx_t> withIndices;
     for (const auto &in : self->withInputs()) {
-        inputIndices.push_back(in->index());
+        withIndices.push_back(in->index());
     }
-    return it->second(
-        self->index(),
-        data_arr_t{
-            inputIndices.data(),
-            self->normInputs().size(),
-        },
-        data_arr_t{
-            inputIndices.data() + self->normInputs().size(),
-            self->withInputs().size(),
-        },
-        frame,
-        *context_);
+
+    data_arr_t nargs = data_arr_t{
+        normIndices.data(),
+        static_cast<GraphIR::arr_size_t>(normIndices.size()),
+    };
+    data_arr_t wargs = data_arr_t{
+        withIndices.data(),
+        static_cast<GraphIR::arr_size_t>(withIndices.size()),
+    };
+
+    FrameArgsView withView(frame, wargs);
+    FrameArgsView normView(frame, nargs);
+    slot_t result = it->second(withView, normView, *context_);
+    frame.set(self->index(), result);
 };

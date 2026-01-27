@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "time.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
+#include "core/operator.h"
 #include "utils/strpt.h"
 
 namespace GIR = GraphIR;
@@ -36,14 +36,13 @@ namespace GIR = GraphIR;
 // -----------------------------------------------------------------------------
 // 获取当前 UTC 时间戳（以秒为单位，double）
 // -----------------------------------------------------------------------------
-void __now__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __now__(ArgsView &with, ArgsView &norm, Context &ctx) {
     using namespace std::chrono;
     auto now       = system_clock::now();
     auto epoch     = now.time_since_epoch();
     double seconds = duration_cast<duration<double>>(epoch).count(); // 秒为单位（double）
 
-    frame.set(self, seconds);
+    return toSlot(seconds);
 }
 
 // -----------------------------------------------------------------------------
@@ -51,14 +50,13 @@ void __now__(
 //   参数：timestamp (double, UTC 秒)，fmt (string)，可选 bool 参数 local
 //   - 如果 local==true，则显示为 UTC+8 时间
 // -----------------------------------------------------------------------------
-void __strftime__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    double timestamp = frame.get<Float64>(nargs[0]);
-    String *fmt_obj  = frame.get<String *>(nargs[1]);
+slot_t __strftime__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    double timestamp = norm.get<Float64>(0);
+    String *fmt_obj  = norm.get<String *>(1);
 
     bool as_local = false;
-    if (nargs.size > 2) {
-        as_local = frame.get<bool>(nargs[2]);
+    if (norm.size() > 2) {
+        as_local = norm.get<bool>(2);
     }
 
     std::time_t tt = static_cast<std::time_t>(timestamp);
@@ -76,8 +74,7 @@ void __strftime__(
             ctx.rtmDiags()
                 ->of(RuntimeDiag::RuntimeError)
                 .commit("<strftime> failed to convert UTC+8 time");
-            frame.set(self, NullSlot);
-            return;
+            return NullSlot;
         }
     } else {
         // 纯UTC时间
@@ -90,8 +87,7 @@ void __strftime__(
             ctx.rtmDiags()
                 ->of(RuntimeDiag::RuntimeError)
                 .commit("<strftime> failed to convert UTC time");
-            frame.set(self, NullSlot);
-            return;
+            return NullSlot;
         }
     }
 
@@ -102,21 +98,19 @@ void __strftime__(
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strftime> formatting failed (buffer too small or invalid format)");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
     String *result = String::from(buffer, mm::autoSpace());
-    frame.set(self, result);
+    return toSlot(result);
 }
 
 // -----------------------------------------------------------------------------
 // strptime：解析时间字符串（假设是“本地时间 UTC+8”）为 UTC 时间戳(double)
 // -----------------------------------------------------------------------------
-void __strptime__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *str_obj = frame.get<String *>(nargs[0]);
-    String *fmt_obj = frame.get<String *>(nargs[1]);
+slot_t __strptime__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *str_obj = norm.get<String *>(0);
+    String *fmt_obj = norm.get<String *>(1);
 
     const std::string &time_str = str_obj->toString();
     const std::string &fmt_str  = fmt_obj->toString();
@@ -126,8 +120,7 @@ void __strptime__(
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<strptime> failed to parse time string with format: " + fmt_str);
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
     // mktime() 认为 tm 是本地时间（例如系统为 UTC+8）
@@ -135,12 +128,11 @@ void __strptime__(
     std::time_t local_tt = std::mktime(&tm);
     if (local_tt == static_cast<std::time_t>(-1)) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strptime> mktime conversion failed");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
     // 转换成本地时间的 timestamp（假设输入字符串是北京时间），减 8 小时得到 UTC
     double utc_seconds = static_cast<double>(local_tt) - 8 * 3600.0;
 
-    frame.set(self, utc_seconds);
+    return toSlot(utc_seconds);
 }

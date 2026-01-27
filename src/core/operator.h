@@ -19,7 +19,9 @@
 
 #pragma once
 
-#include "core/data/data.h"
+#include "core/rtdata/base.h"
+#include "core/rtdata/data.h"
+#include "core/type/base.h"
 #include "core/type/resolver.h"
 #include "utils/rawarr.h"
 
@@ -43,7 +45,20 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 
 using data_arr_t = RawArray<const GraphIR::data_idx_t>;
 
-using operator_t = void (*)(GraphIR::data_idx_t, data_arr_t, data_arr_t, Frame &, Context &);
+class ArgsView {
+  public:
+    virtual ~ArgsView()                              = default;
+    virtual size_t size() const                      = 0;
+    virtual slot_t slot(size_t index) const          = 0;
+    virtual void setSlot(size_t index, slot_t value) = 0;
+    virtual TypeCode code(size_t index) const        = 0;
+    virtual Type *type(size_t index) const           = 0;
+
+    template <typename T> T get(size_t index) const { return fromSlot<T>(slot(index)); }
+    template <typename T> void set(size_t index, T value) { setSlot(index, toSlot(value)); }
+};
+
+using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, Context &ctx);
 
 using oper_idx_ptr_t     = std::shared_ptr<OperatorIndex>;
 using oper_idx_vec_t     = std::vector<oper_idx_ptr_t>;

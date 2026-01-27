@@ -13,14 +13,12 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Dec. 22, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
 #include "core/operator.h"
 
-void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
-
+slot_t __plot__(ArgsView &with, ArgsView &norm, Context &ctx);

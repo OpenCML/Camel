@@ -19,7 +19,7 @@
 
 #include "plot.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
+#include "core/operator.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/numpy.h>
@@ -60,23 +60,22 @@ __array_to_vector_with_type__(Array *arr, TypeCode code, Context &ctx, std::stri
     }
 }
 
-void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+slot_t __plot__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // 获取数组参数
-    Array *arr        = frame.get<Array *>(nargs[0]);
+    Array *arr        = norm.get<Array *>(0);
     TypeCode elemCode = arr->elemType();
 
     // 转换为vector
     std::vector<double> data = __array_to_vector_with_type__(arr, elemCode, ctx, "<plot>");
     if (data.empty() && arr->size() > 0) {
         // 转换失败
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
     // 获取可选的文件名参数
     std::string filename = "plot.png";
-    if (nargs.size > 1) {
-        String *filenameObj = frame.get<String *>(nargs[1]);
+    if (norm.size() > 1) {
+        String *filenameObj = norm.get<String *>(1);
         filename            = filenameObj->toString();
     }
 
@@ -101,11 +100,11 @@ void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
         plt.attr("close")();
 
         // 设置返回值为void
-        frame.set(self, NullSlot);
+        return NullSlot;
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("plot error: ") + e.what());
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }

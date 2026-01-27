@@ -18,6 +18,7 @@
  */
 
 #include "algo.h"
+#include "utils/type.h"
 
 using namespace std;
 

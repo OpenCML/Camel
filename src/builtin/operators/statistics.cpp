@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "statistics.h"
 #include "core/context/context.h"
+#include "core/operator.h"
 
 #include <cmath>
 
@@ -91,14 +92,14 @@ __stdev_with_type_code__(Array *arr, TypeCode code, Context &ctx, std::string_vi
     }
 }
 
-void __mean__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr    = frame.get<Array *>(nargs[0]);
+slot_t __mean__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr    = norm.get<Array *>(0);
     double result = __mean_with_type_code__(arr, arr->elemType(), ctx, "<mean>");
-    frame.set(self, result);
+    return toSlot(result);
 }
 
-void __stdev__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Array *arr    = frame.get<Array *>(nargs[0]);
+slot_t __stdev__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr    = norm.get<Array *>(0);
     double result = __stdev_with_type_code__(arr, arr->elemType(), ctx, "<stdev>");
-    frame.set(self, result);
+    return toSlot(result);
 }

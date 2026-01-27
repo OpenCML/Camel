@@ -483,13 +483,18 @@ label_OPER: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    const data_arr_t nargs = bc->nargs();
-    const data_arr_t wargs = bc->wargs();
-    auto func              = bc->extra()->func;
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-        "Executing operator {}.",
-        context_->execMgr().getNameOfAnOperator(func)));
-    func(bc->result, nargs, wargs, *currFrame, *context_);
+    {
+        const data_arr_t nargs = bc->nargs();
+        const data_arr_t wargs = bc->wargs();
+        auto func              = bc->extra()->func;
+        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+            "Executing operator {}.",
+            context_->execMgr().getNameOfAnOperator(func)));
+        FrameArgsView withView(*currFrame, wargs);
+        FrameArgsView normView(*currFrame, nargs);
+        slot_t result = func(withView, normView, *context_);
+        currFrame->set(bc->result, result);
+    }
 
     NEXT();
 }

@@ -13,21 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 22, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "this.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
+#include "core/operator.h"
 
 #include <iostream>
 
-void __zen__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __zen__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::string zen =
 #include "ZEN"
         ;
-    frame.set(self, String::from(zen, mm::autoSpace()));
+    String *str = String::from(zen, mm::autoSpace());
+    return toSlot(str);
 }

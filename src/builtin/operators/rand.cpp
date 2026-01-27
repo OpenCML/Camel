@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "rand.h"
 #include "core/context/context.h"
+#include "core/operator.h"
 
 #include <algorithm>
 #include <random>
@@ -26,48 +27,43 @@
 // 全局随机数生成器
 static std::mt19937_64 g_rng;
 
-void __seed__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    auto seed_val = frame.get<Int64>(nargs[0]);
+slot_t __seed__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    auto seed_val = norm.get<Int64>(0);
     g_rng.seed(seed_val);
+    return NullSlot;
 }
 
-void __rand__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __rand__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
-    frame.set(self, dist(g_rng));
+    return toSlot(dist(g_rng));
 }
 
-void __randn__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __randn__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::normal_distribution<double> dist(0.0, 1.0);
-    frame.set(self, dist(g_rng));
+    return toSlot(dist(g_rng));
 }
 
-void __randint__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int low  = frame.get<Int>(nargs[0]);
-    Int high = frame.get<Int>(nargs[1]);
+slot_t __randint__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int low  = norm.get<Int>(0);
+    Int high = norm.get<Int>(1);
 
     if (low > high)
         std::swap(low, high);
 
     std::uniform_int_distribution<int64_t> dist(low, high);
-    frame.set(self, dist(g_rng));
+    return toSlot(dist(g_rng));
 }
 
-void __choice__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Array *arr = frame.get<Array *>(nargs[0]);
+slot_t __choice__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr = norm.get<Array *>(0);
 
     if (arr->size() == 0) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<choice> array is empty");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
     std::uniform_int_distribution<size_t> dist(0, arr->size() - 1);
-    frame.set(self, arr->get<Int64>(dist(g_rng)));
+    return arr->get<Int64>(dist(g_rng));
 }
 
 // Fisher–Yates 洗牌（原地随机置换）
@@ -120,30 +116,27 @@ static inline Array *sampleArray(const Array *arr, int32_t n) {
     return res;
 }
 
-void __sample__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Array *arr = frame.get<Array *>(nargs[0]);
-    Int n      = frame.get<Int>(nargs[1]);
+slot_t __sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr = norm.get<Array *>(0);
+    Int n      = norm.get<Int>(1);
 
     // 样本数量检查
     if (n < 0 || (size_t)n > arr->size()) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<sample> size out of range");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
     Array *res = sampleArray(arr, n);
-    frame.set(self, res);
+    return toSlot(res);
 }
 
-void __shuffle__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Array *arr = frame.get<Array *>(nargs[0]);
+slot_t __shuffle__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr = norm.get<Array *>(0);
 
     Array *res = static_cast<Array *>(arr->clone(mm::autoSpace()));
 
     // 原地洗牌（Fisher–Yates）
     shuffleArray(res);
 
-    frame.set(self, res);
+    return toSlot(res);
 }

@@ -19,8 +19,8 @@
 
 #include "phot.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
 #include "core/mm/mm.h"
+#include "core/operator.h"
 #include "core/rtdata/array.h"
 #include "core/rtdata/tuple.h"
 #include "core/type/composite/array.h"
@@ -229,9 +229,8 @@ static Array *__py_array_to_camel_real__(py::array py_arr, Type *arrayType, Cont
 }
 
 // phot.config(plot: bool) => void
-void __phot_config__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    bool plot = frame.get<bool>(nargs[0]);
+slot_t __phot_config__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    bool plot = norm.get<bool>(0);
 
     try {
         if (plot) {
@@ -248,20 +247,19 @@ void __phot_config__(
         py::module_ phot = py::module_::import("phot");
         phot.attr("config")(py::arg("plot") = plot);
 
-        frame.set(self, NullSlot);
+        return NullSlot;
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("phot.config error: ") + e.what());
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
 // phot.gen_bits(num_bits: int, bits_per_symbol: int) => (int[], int[])
-void __phot_gen_bits__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int num_bits        = frame.get<Int>(nargs[0]);
-    Int bits_per_symbol = frame.get<Int>(nargs[1]);
+slot_t __phot_gen_bits__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int num_bits        = norm.get<Int>(0);
+    Int bits_per_symbol = norm.get<Int>(1);
 
     try {
         py::module_ phot = py::module_::import("phot");
@@ -272,34 +270,34 @@ void __phot_gen_bits__(
         py::array py_bits_y  = result_list[1].cast<py::array>();
 
         // 获取返回类型（应该是元组类型，包含两个数组）
-        auto resTupleType      = frame.typeAt<TupleType>(self);
-        auto bits_x_array_type = resTupleType->types()[0];
-        auto bits_y_array_type = resTupleType->types()[1];
+        auto resTupleType      = norm.type(0);
+        auto tupleType         = tt::as_ptr<TupleType>(resTupleType);
+        auto bits_x_array_type = tupleType->types()[0];
+        auto bits_y_array_type = tupleType->types()[1];
 
         // 转换为Camel数组
         Array *arr_x = __py_array_to_camel_real__(py_bits_x, bits_x_array_type, ctx);
         Array *arr_y = __py_array_to_camel_real__(py_bits_y, bits_y_array_type, ctx);
 
         if (arr_x && arr_y) {
-            Tuple *tuple = Tuple::create(resTupleType->layout(), mm::autoSpace());
+            Tuple *tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
             tuple->set(0, arr_x);
             tuple->set(1, arr_y);
-            frame.set(self, tuple);
+            return toSlot(tuple);
         } else {
-            frame.set(self, NullSlot);
+            return NullSlot;
         }
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("phot.gen_bits error: ") + e.what());
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __phot_modulation__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Tuple *signal_bits_tuple = frame.get<Tuple *>(nargs[0]);
-    Int bits_per_symbol      = frame.get<Int>(wargs[0]);
+slot_t __phot_modulation__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *signal_bits_tuple = norm.get<Tuple *>(0);
+    Int bits_per_symbol      = with.get<Int>(0);
 
     try {
         Array *bits_x = signal_bits_tuple->get<Array *>(0);
@@ -313,8 +311,9 @@ void __phot_modulation__(
         py::list mod_result = phot.attr("modulation")(bits_list, bits_per_symbol).cast<py::list>();
         py::module_ np      = py::module_::import("numpy");
 
-        auto resTupleType  = frame.typeAt<TupleType>(self);
-        auto xPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[0]);
+        auto resTupleType  = norm.type(0);
+        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
+        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[0]);
 
         py::object signal_obj_x = mod_result[0];
         if (!np.attr("iscomplexobj")(signal_obj_x).cast<bool>()) {
@@ -323,7 +322,7 @@ void __phot_modulation__(
         auto [realArr_x, imagArr_x] =
             __py_array_to_camel_complex__(signal_obj_x.cast<py::array>(), xPolTupleType, ctx);
 
-        auto yPolTupleType      = tt::as_ptr<TupleType>(resTupleType->types()[1]);
+        auto yPolTupleType      = tt::as_ptr<TupleType>(tupleType->types()[1]);
         py::object signal_obj_y = mod_result[1];
         if (!np.attr("iscomplexobj")(signal_obj_y).cast<bool>()) {
             signal_obj_y = np.attr("array")(signal_obj_y, py::arg("dtype") = np.attr("complex128"));
@@ -335,11 +334,10 @@ void __phot_modulation__(
             ctx.rtmDiags()
                 ->of(RuntimeDiag::RuntimeError)
                 .commit("phot.modulation: failed to convert arrays");
-            frame.set(self, NullSlot);
-            return;
+            return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(resTupleType->layout(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
         Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
@@ -350,19 +348,18 @@ void __phot_modulation__(
         outer_tuple->set(0, xPol_tuple);
         outer_tuple->set(1, yPol_tuple);
 
-        frame.set(self, outer_tuple);
+        return toSlot(outer_tuple);
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("phot.modulation error: ") + e.what());
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __phot_up_sample__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Tuple *signals_tuple   = frame.get<Tuple *>(nargs[0]);
-    Int up_sampling_factor = frame.get<Int>(wargs[0]);
+slot_t __phot_up_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *signals_tuple   = norm.get<Tuple *>(0);
+    Int up_sampling_factor = with.get<Int>(0);
 
     try {
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
@@ -395,9 +392,10 @@ void __phot_up_sample__(
         py::list py_result =
             phot.attr("up_sample")(signals_list, up_sampling_factor).cast<py::list>();
 
-        auto resTupleType  = frame.typeAt<TupleType>(self);
-        auto xPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[0]);
-        auto yPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[1]);
+        auto resTupleType  = norm.type(0);
+        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
+        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[0]);
+        auto yPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[1]);
 
         py::array py_result_x = py_result[0].cast<py::array>();
         py::array py_result_y = py_result[1].cast<py::array>();
@@ -411,11 +409,10 @@ void __phot_up_sample__(
             ctx.rtmDiags()
                 ->of(RuntimeDiag::RuntimeError)
                 .commit("phot.up_sample: failed to convert arrays");
-            frame.set(self, NullSlot);
-            return;
+            return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(resTupleType->layout(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
         Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
@@ -426,21 +423,20 @@ void __phot_up_sample__(
         outer_tuple->set(0, xPol_tuple);
         outer_tuple->set(1, yPol_tuple);
 
-        frame.set(self, outer_tuple);
+        return toSlot(outer_tuple);
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("phot.up_sample error: ") + e.what());
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __phot_pulse_shaper__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Tuple *signals_tuple   = frame.get<Tuple *>(nargs[0]);
-    Int up_sampling_factor = frame.get<Int>(wargs[0]);
-    Float rolloff          = frame.get<Float>(wargs[1]);
-    Float baud             = frame.get<Float>(wargs[2]);
+slot_t __phot_pulse_shaper__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *signals_tuple   = norm.get<Tuple *>(0);
+    Int up_sampling_factor = with.get<Int>(0);
+    Float rolloff          = with.get<Float>(1);
+    Float baud             = with.get<Float>(2);
 
     try {
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
@@ -477,9 +473,10 @@ void __phot_pulse_shaper__(
         py::array py_result_x = py_result[0].cast<py::array>();
         py::array py_result_y = py_result[1].cast<py::array>();
 
-        auto resTupleType  = frame.typeAt<TupleType>(self);
-        auto xPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[0]);
-        auto yPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[1]);
+        auto resTupleType  = norm.type(0);
+        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
+        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[0]);
+        auto yPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[1]);
 
         auto [realArr_x, imagArr_x] =
             __py_array_to_camel_complex__(py_result_x, xPolTupleType, ctx);
@@ -490,11 +487,10 @@ void __phot_pulse_shaper__(
             ctx.rtmDiags()
                 ->of(RuntimeDiag::RuntimeError)
                 .commit("phot.pulse_shaper: failed to convert arrays");
-            frame.set(self, NullSlot);
-            return;
+            return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(resTupleType->layout(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
         Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
@@ -505,20 +501,19 @@ void __phot_pulse_shaper__(
         outer_tuple->set(0, xPol_tuple);
         outer_tuple->set(1, yPol_tuple);
 
-        frame.set(self, outer_tuple);
+        return toSlot(outer_tuple);
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("phot.pulse_shaper error: ") + e.what());
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __phot_constellation_diagram__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Tuple *signals_tuple = frame.get<Tuple *>(nargs[0]);
-    bool is_plot         = (wargs.size > 0) ? frame.get<bool>(wargs[0]) : true;
-    bool isdata          = (wargs.size > 1) ? frame.get<bool>(wargs[1]) : false;
+slot_t __phot_constellation_diagram__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *signals_tuple = norm.get<Tuple *>(0);
+    bool is_plot         = (with.size() > 0) ? with.get<bool>(0) : true;
+    bool isdata          = (with.size() > 1) ? with.get<bool>(1) : false;
 
     try {
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
@@ -559,11 +554,11 @@ void __phot_constellation_diagram__(
             plt.attr("show")(py::arg("block") = true);
         }
 
-        frame.set(self, NullSlot);
+        return NullSlot;
     } catch (const std::exception &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("phot.constellation_diagram error: ") + e.what());
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }

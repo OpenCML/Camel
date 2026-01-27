@@ -18,6 +18,7 @@
  */
 
 #include "para.h"
+#include "utils/type.h"
 
 using namespace std;
 
