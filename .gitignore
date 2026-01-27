@@ -24,6 +24,7 @@ out/
 *.cmo
 camel
 camel.exe
+python311.dll
 result.json
 CMakeUserPresets.json
 perf.data

@@ -285,7 +285,14 @@ bool PhotBuiltinModule::load() {
     try {
         // 初始化 Python 解释器
         if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
+            try {
+                py::initialize_interpreter();
+            } catch (const std::exception &e) {
+                context_->rtmDiags()
+                    ->of(RuntimeDiag::RuntimeError)
+                    .commit(std::string("Failed to initialize Python interpreter: ") + e.what());
+                return false;
+            }
         }
         // 确保 Python 解释器能够找到虚拟环境中的包
         ensure_python_path();

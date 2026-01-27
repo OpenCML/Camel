@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,11 +81,6 @@ void __plot__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
     }
 
     try {
-        // 初始化Python解释器（如果还没有初始化）
-        if (!Py_IsInitialized()) {
-            py::initialize_interpreter();
-        }
-
         // 导入matplotlib
         py::module_ plt = py::module_::import("matplotlib.pyplot");
         py::module_ np  = py::module_::import("numpy");
