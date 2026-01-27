@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,14 @@
 
 #include "base.h"
 
+#include <algorithm>
+
 class Struct : public Object {
   public:
     Struct(const Struct &)            = delete;
     Struct &operator=(const Struct &) = delete;
 
-    static Struct *create(const StructTypeLayout &layout, IAllocator &allocator) {
-        size_t fieldCount = layout.fieldCount();
+    static Struct *create(size_t fieldCount, IAllocator &allocator) {
         size_t headerSize = sizeof(Struct);
         size_t dataSize   = sizeof(slot_t) * fieldCount;
         size_t totalSize  = headerSize + dataSize;
@@ -36,18 +37,20 @@ class Struct : public Object {
         if (!memory)
             throw std::bad_alloc();
 
-        Struct *s = new (memory) Struct(layout, fieldCount);
+        Struct *s = new (memory) Struct(fieldCount);
 
-        // 初始化所有引用类型的字段为 NullRef
-        Object **dataStart = reinterpret_cast<Object **>(s->data_);
-        std::fill(dataStart, dataStart + fieldCount, NullRef);
+        // 标准槽容器：全部初始化为 NullSlot（引用即 null，值类型由 set 覆盖）
+        std::fill(s->data_, s->data_ + fieldCount, NullSlot);
 
         return s;
     }
 
     size_t size() const { return size_; }
 
-    bool has(std::string_view name) const { return layout_->findField(name).has_value(); }
+    bool has(std::string_view name) const {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
+        return layout_->findField(name).has_value();
+    }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -55,6 +58,7 @@ class Struct : public Object {
     }
 
     template <typename T> T get(std::string_view name) const {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
         auto optIndex = layout_->findField(name);
         ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
         return get<T>(optIndex.value());
@@ -69,6 +73,7 @@ class Struct : public Object {
     }
 
     template <typename T> void set(std::string_view name, T value) {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
         auto optIndex = layout_->findField(name);
         ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
         set<T>(optIndex.value(), value);
@@ -76,11 +81,18 @@ class Struct : public Object {
 
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
-    const StructTypeLayout &layout() const { return *layout_; }
+    const StructTypeLayout &layout() const {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
+        return *layout_;
+    }
     void updateLayout(const StructTypeLayout *layout) { layout_ = layout; }
-    TypeCode typeAt(size_t index) const { return layout_->fieldType(index); }
+    TypeCode typeAt(size_t index) const {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
+        return layout_->fieldType(index);
+    }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
         if (!isOfSameCls(this, other))
             return false;
 
@@ -119,7 +131,9 @@ class Struct : public Object {
     }
 
     virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
-        Struct *newStruct = Struct::create(*layout_, allocator);
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
+        Struct *newStruct = Struct::create(size_, allocator);
+        newStruct->updateLayout(layout_);
 
         const auto &types = layout_->fieldTypes();
         const slot_t *src = data_;
@@ -151,6 +165,7 @@ class Struct : public Object {
     }
 
     virtual void print(std::ostream &os) const override {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
         if (size_ == 0) {
             os << "{}";
             return;
@@ -178,6 +193,7 @@ class Struct : public Object {
     }
 
     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
+        ASSERT(layout_, "Struct layout must be set via updateLayout before use");
         Object **refArr   = reinterpret_cast<Object **>(data_);
         const auto &types = layout_->fieldTypes();
         for (size_t i = 0; i < size_; ++i) {
@@ -190,10 +206,10 @@ class Struct : public Object {
     }
 
   private:
-    Struct(const StructTypeLayout &layout, size_t fieldCount)
-        : size_(static_cast<uint32_t>(fieldCount)), layout_(&layout) {}
+    explicit Struct(size_t fieldCount)
+        : size_(static_cast<uint32_t>(fieldCount)), layout_(nullptr) {}
 
     uint32_t size_;
-    const StructTypeLayout *layout_;
-    slot_t data_[]; // 灵活数组成员
+    const StructTypeLayout *layout_; // 使用时通过 updateLayout 设置
+    slot_t data_[];                  // 灵活数组成员
 };

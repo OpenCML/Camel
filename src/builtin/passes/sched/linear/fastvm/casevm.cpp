@@ -203,7 +203,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             case TypeCode::Tuple: {
                 const auto &type = currFrame->typeAt<TupleType>(bc.result);
                 auto t           = static_cast<Tuple *>(target);
-                const auto &refs = t->layout().refs();
+                const auto &refs = type->layout().refs();
                 ASSERT(
                     refs.size() == bc.withCnt(),
                     std::format(
@@ -213,13 +213,12 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
                     t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
-                t->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Array: {
                 const auto &type = currFrame->typeAt<ArrayType>(bc.result);
                 auto a           = static_cast<Array *>(target);
-                const auto &refs = a->layout().refs();
+                const auto &refs = type->layout().refs();
                 ASSERT(
                     refs.size() == bc.withCnt(),
                     std::format(
@@ -229,13 +228,12 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
                     a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
-                a->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Struct: {
                 const auto &type = currFrame->typeAt<StructType>(bc.result);
                 auto s           = static_cast<Struct *>(target);
-                const auto &refs = s->layout().refs();
+                const auto &refs = type->layout().refs();
                 ASSERT(
                     refs.size() == bc.withCnt(),
                     std::format(
@@ -245,7 +243,6 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
                     s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
-                s->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Function: {
@@ -348,13 +345,16 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::OPER: {
-            const data_arr_t nargs = bc.nargs();
-            const data_arr_t wargs = bc.wargs();
-            auto func              = bc.extra()->func;
+            const data_arr_t nargs = bc->nargs();
+            const data_arr_t wargs = bc->wargs();
+            auto func              = bc->extra()->func;
             EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                 "Executing operator {}.",
                 context_->execMgr().getNameOfAnOperator(func)));
-            func(bc.result, nargs, wargs, *currFrame, *context_);
+            FrameArgsView withView(*currFrame, wargs);
+            FrameArgsView normView(*currFrame, nargs);
+            slot_t result = func(withView, normView, *context_);
+            currFrame->set(bc.result, result);
         } break;
 
         case OpCode::SCHD: {

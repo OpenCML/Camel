@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -244,11 +244,10 @@ slot_t __merge_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 // ---------- 合并已排序数组 ----------
 
-template <typename T>
-static Array *__merge_sorted_arrays_slots__(Array *lhs, Array *rhs, const ArrayTypeLayout &layout) {
+template <typename T> static Array *__merge_sorted_arrays_slots__(Array *lhs, Array *rhs) {
     size_t nL     = lhs->size();
     size_t nR     = rhs->size();
-    Array *result = Array::create(layout, mm::autoSpace(), nL + nR);
+    Array *result = Array::create(mm::autoSpace(), nL + nR);
 
     size_t i = 0, j = 0, k = 0;
     while (i < nL && j < nR) {
@@ -276,16 +275,16 @@ slot_t __merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     switch (code) {
     case TypeCode::Int32:
-        merged = __merge_sorted_arrays_slots__<Int32>(lhs, rhs, lhs->layout());
+        merged = __merge_sorted_arrays_slots__<Int32>(lhs, rhs);
         break;
     case TypeCode::Int64:
-        merged = __merge_sorted_arrays_slots__<Int64>(lhs, rhs, lhs->layout());
+        merged = __merge_sorted_arrays_slots__<Int64>(lhs, rhs);
         break;
     case TypeCode::Float32:
-        merged = __merge_sorted_arrays_slots__<Float32>(lhs, rhs, lhs->layout());
+        merged = __merge_sorted_arrays_slots__<Float32>(lhs, rhs);
         break;
     case TypeCode::Float64:
-        merged = __merge_sorted_arrays_slots__<Float64>(lhs, rhs, lhs->layout());
+        merged = __merge_sorted_arrays_slots__<Float64>(lhs, rhs);
         break;
     default:
         ctx.rtmDiags()

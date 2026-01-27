@@ -81,23 +81,17 @@ static inline void shuffleArray(Array *arr) {
 }
 
 static inline Array *sampleArray(const Array *arr, int32_t n) {
-    const auto &layout = arr->layout();
-    Array *res         = Array::create(layout, mm::autoSpace());
-
     if (n <= 0)
-        return res; // 空数组
+        return Array::create(mm::autoSpace(), 0);
 
     size_t sz = arr->size();
     if (sz == 0)
-        return res;
+        return Array::create(mm::autoSpace(), 0);
 
-    // 限制 n 不超过源数组大小
     if ((size_t)n > sz)
         n = static_cast<int32_t>(sz);
 
-    // 创建目标数组并预分配容量 n
-    res->reserve(n);
-
+    Array *res        = Array::create(mm::autoSpace(), static_cast<size_t>(n));
     slot_t *dst       = reinterpret_cast<slot_t *>(res->data());
     const slot_t *src = reinterpret_cast<const slot_t *>(arr->data());
 

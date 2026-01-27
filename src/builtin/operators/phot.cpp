@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -116,9 +116,6 @@ __py_array_to_camel_complex__(py::array py_arr, Type *tupleTypePtr, Context &ctx
             return {nullptr, nullptr};
         }
 
-        auto realArrayType = tt::as_ptr<ArrayType>(tupleType->types()[0]);
-        auto imagArrayType = tt::as_ptr<ArrayType>(tupleType->types()[1]);
-
         py::object arr_obj = py::reinterpret_borrow<py::object>(py_arr);
         bool is_complex    = np.attr("iscomplexobj")(arr_obj).cast<bool>();
         arr_obj            = arr_obj.attr("ravel")();
@@ -140,8 +137,8 @@ __py_array_to_camel_complex__(py::array py_arr, Type *tupleTypePtr, Context &ctx
             auto imag_accessor           = imag_arr.unchecked<1>();
             size_t n                     = real_arr.size();
 
-            Array *realArr = Array::create(realArrayType->layout(), mm::autoSpace(), n);
-            Array *imagArr = Array::create(imagArrayType->layout(), mm::autoSpace(), n);
+            Array *realArr = Array::create(mm::autoSpace(), n);
+            Array *imagArr = Array::create(mm::autoSpace(), n);
 
             for (size_t i = 0; i < n; ++i) {
                 realArr->set(i, static_cast<Float>(real_accessor(i)));
@@ -156,8 +153,8 @@ __py_array_to_camel_complex__(py::array py_arr, Type *tupleTypePtr, Context &ctx
             auto real_accessor           = real_arr.unchecked<1>();
             size_t n                     = real_arr.size();
 
-            Array *realArr = Array::create(realArrayType->layout(), mm::autoSpace(), n);
-            Array *imagArr = Array::create(imagArrayType->layout(), mm::autoSpace(), n);
+            Array *realArr = Array::create(mm::autoSpace(), n);
+            Array *imagArr = Array::create(mm::autoSpace(), n);
 
             for (size_t i = 0; i < n; ++i) {
                 realArr->set(i, static_cast<Float>(real_accessor(i)));
@@ -194,8 +191,7 @@ static Array *__py_array_to_camel_real__(py::array py_arr, Type *arrayType, Cont
         auto buf = py_arr.request();
         size_t n = buf.size;
 
-        auto resArrayType = tt::as_ptr<ArrayType>(arrayType);
-        Array *result     = Array::create(resArrayType->layout(), mm::autoSpace(), n);
+        Array *result = Array::create(mm::autoSpace(), n);
 
         // 尝试转换为int数组（gen_bits返回的是int数组）
         if (py::isinstance<py::array_t<int32_t>>(py_arr)) {
@@ -280,7 +276,7 @@ slot_t __phot_gen_bits__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Array *arr_y = __py_array_to_camel_real__(py_bits_y, bits_y_array_type, ctx);
 
         if (arr_x && arr_y) {
-            Tuple *tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
+            Tuple *tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
             tuple->set(0, arr_x);
             tuple->set(1, arr_y);
             return toSlot(tuple);
@@ -337,11 +333,11 @@ slot_t __phot_modulation__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
-        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
+        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout().size(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
-        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout(), mm::autoSpace());
+        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout().size(), mm::autoSpace());
         yPol_tuple->set(0, realArr_y);
         yPol_tuple->set(1, imagArr_y);
 
@@ -412,11 +408,11 @@ slot_t __phot_up_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
-        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
+        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout().size(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
-        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout(), mm::autoSpace());
+        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout().size(), mm::autoSpace());
         yPol_tuple->set(0, realArr_y);
         yPol_tuple->set(1, imagArr_y);
 
@@ -490,11 +486,11 @@ slot_t __phot_pulse_shaper__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(tupleType->layout(), mm::autoSpace());
-        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
+        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout().size(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
-        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout(), mm::autoSpace());
+        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout().size(), mm::autoSpace());
         yPol_tuple->set(0, realArr_y);
         yPol_tuple->set(1, imagArr_y);
 

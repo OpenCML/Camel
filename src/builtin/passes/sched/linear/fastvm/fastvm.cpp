@@ -79,8 +79,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
     Function *func = currFrame.get<Function *>(wargs[0]);
     Tuple *closure = func->tuple();
 
-    const auto &retArrType = currFrame.typeAt<ArrayType>(self);
-    Array *res             = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
+    Array *res = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     slot_t *to   = res->data();
@@ -134,7 +133,9 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     Tuple *closure = func->tuple();
 
     const auto &retArrType = currFrame.typeAt<ArrayType>(self);
-    Array *filtered        = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
+    const auto &layout     = retArrType->layout();
+    Array *filtered        = Array::create(mm::autoSpace(), arr->size());
+    filtered->updateLayout(&layout);
 
     slot_t *from = arr->data();
     for (size_t i = 0; i < arr->size(); ++i) {

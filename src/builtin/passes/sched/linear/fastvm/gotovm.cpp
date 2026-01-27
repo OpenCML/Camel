@@ -323,7 +323,7 @@ label_FILL: {
     case TypeCode::Tuple: {
         const auto &type = currFrame->typeAt<TupleType>(bc->result);
         auto t           = static_cast<Tuple *>(target);
-        const auto &refs = t->layout().refs();
+        const auto &refs = type->layout().refs();
         ASSERT(
             refs.size() == bc->withCnt(),
             std::format(
@@ -333,13 +333,12 @@ label_FILL: {
         for (size_t j = 0; j < bc->withCnt(); ++j) {
             t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
         }
-        t->updateLayout(&type->layout());
     } break;
 
     case TypeCode::Array: {
         const auto &type = currFrame->typeAt<ArrayType>(bc->result);
         auto a           = static_cast<Array *>(target);
-        const auto &refs = a->layout().refs();
+        const auto &refs = type->layout().refs();
         ASSERT(
             refs.size() == bc->withCnt(),
             std::format(
@@ -349,13 +348,12 @@ label_FILL: {
         for (size_t j = 0; j < bc->withCnt(); ++j) {
             a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
         }
-        a->updateLayout(&type->layout());
     } break;
 
     case TypeCode::Struct: {
         const auto &type = currFrame->typeAt<StructType>(bc->result);
         auto s           = static_cast<Struct *>(target);
-        const auto &refs = s->layout().refs();
+        const auto &refs = type->layout().refs();
         ASSERT(
             refs.size() == bc->withCnt(),
             std::format(
@@ -365,7 +363,6 @@ label_FILL: {
         for (size_t j = 0; j < bc->withCnt(); ++j) {
             s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
         }
-        s->updateLayout(&type->layout());
     } break;
 
     case TypeCode::Function: {

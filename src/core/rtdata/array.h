@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+
+#include <algorithm>
 
 // FixedArray: 固定大小的数组，对象体和数据区在一块连续内存中
 class FixedArray : public Object {
@@ -28,35 +30,28 @@ class FixedArray : public Object {
     FixedArray(const FixedArray &)            = delete;
     FixedArray &operator=(const FixedArray &) = delete;
 
-    // 静态创建方法
-    static FixedArray *create(const ArrayTypeLayout &layout, size_t size, IAllocator &allocator) {
-        // 计算总内存大小：对象头 + 数组数据
+    // 静态创建方法（仅需槽个数，layout 通过 updateLayout 延后设置）
+    static FixedArray *create(size_t size, IAllocator &allocator) {
         size_t headerSize = sizeof(FixedArray);
         size_t dataSize   = size * sizeof(slot_t);
         size_t totalSize  = headerSize + dataSize;
 
-        // 分配连续内存
-        // alignof(FixedArray) 已经包含了 slot_t 的对齐要求（因为 data_ 的 alignas）
         void *memory = allocator.alloc(totalSize, alignof(FixedArray));
         if (!memory)
             throw std::bad_alloc();
 
-        // 在分配的内存上构造对象
-        FixedArray *array = new (memory) FixedArray(layout, size);
-
-        if (isGCTraced(layout.elemType())) {
-            // 数据区初始化为空，以免空数据区被当作对象引用
-            Object **dataStart = reinterpret_cast<Object **>(array->data_);
-            std::fill(dataStart, dataStart + size, NullRef);
-        }
-
+        FixedArray *array = new (memory) FixedArray(size);
+        std::fill(array->data_, array->data_ + size, NullSlot);
         return array;
     }
 
     size_t size() const { return size_; }
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
-    const ArrayTypeLayout *layout() const { return layout_; }
+    const ArrayTypeLayout *layout() const {
+        ASSERT(layout_, "FixedArray layout must be set via updateLayout before use");
+        return layout_;
+    }
     void updateLayout(const ArrayTypeLayout *layout) { layout_ = layout; }
 
     template <typename T> T get(size_t index) const {
@@ -73,6 +68,7 @@ class FixedArray : public Object {
     }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
+        ASSERT(layout_, "FixedArray layout must be set via updateLayout before use");
         if (this == other)
             return true;
         if (!isOfSameCls(this, other))
@@ -109,7 +105,9 @@ class FixedArray : public Object {
     }
 
     virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
-        FixedArray *newArray        = FixedArray::create(*layout_, size_, allocator);
+        ASSERT(layout_, "FixedArray layout must be set via updateLayout before use");
+        FixedArray *newArray = FixedArray::create(size_, allocator);
+        newArray->updateLayout(layout_);
         const Object *const *srcArr = reinterpret_cast<const Object *const *>(data_);
         const Object **dstArr       = reinterpret_cast<const Object **>(newArray->data_);
 
@@ -141,6 +139,7 @@ class FixedArray : public Object {
     }
 
     virtual void print(std::ostream &os) const override {
+        ASSERT(layout_, "FixedArray layout must be set via updateLayout before use");
         os << "[";
 
         TypeCode elemType     = layout_->elemType();
@@ -161,6 +160,7 @@ class FixedArray : public Object {
     }
 
     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
+        ASSERT(layout_, "FixedArray layout must be set via updateLayout before use");
         TypeCode type = layout_->elemType();
 
         if (!isGCTraced(type))
@@ -176,9 +176,9 @@ class FixedArray : public Object {
     }
 
   private:
-    FixedArray(const ArrayTypeLayout &layout, size_t size) : layout_(&layout), size_(size) {}
+    explicit FixedArray(size_t size) : layout_(nullptr), size_(size) {}
 
-    const ArrayTypeLayout *layout_;
+    const ArrayTypeLayout *layout_; // 使用时通过 updateLayout 设置
     size_t size_;
 
     // 灵活数组成员 (Flexible Array Member)
@@ -194,13 +194,12 @@ class Array : public Object {
     Array(const Array &)            = delete;
     Array &operator=(const Array &) = delete;
 
-    static Array *
-    create(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initSize = 0) {
+    static Array *create(IAllocator &allocator, size_t initSize = 0) {
         void *memory = allocator.alloc(sizeof(Array), alignof(Array));
         if (!memory)
             throw std::bad_alloc();
 
-        return new (memory) Array(layout, allocator, initSize);
+        return new (memory) Array(allocator, initSize);
     }
 
     size_t size() const { return size_; }
@@ -213,9 +212,19 @@ class Array : public Object {
     size_t capacity() const { return capacity_; }
     slot_t *data() { return static_cast<slot_t *>(dataPtr_); }
     const slot_t *data() const { return static_cast<const slot_t *>(dataPtr_); }
-    const ArrayTypeLayout &layout() const { return *layout_; }
-    void updateLayout(const ArrayTypeLayout *layout) { layout_ = layout; }
-    TypeCode elemType() const { return layout_->elemType(); }
+    const ArrayTypeLayout &layout() const {
+        ASSERT(layout_, "Array layout must be set via updateLayout before use");
+        return *layout_;
+    }
+    void updateLayout(const ArrayTypeLayout *layout) {
+        layout_ = layout;
+        if (fixedArray_)
+            fixedArray_->updateLayout(layout);
+    }
+    TypeCode elemType() const {
+        ASSERT(layout_, "Array layout must be set via updateLayout before use");
+        return layout_->elemType();
+    }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -231,16 +240,15 @@ class Array : public Object {
     }
 
     void reserve(size_t newCapacity) {
+        ASSERT(layout_, "Array layout must be set via updateLayout before reserve");
         if (newCapacity <= capacity_)
             return;
         reallocate(newCapacity);
     }
 
     template <typename T> void append(const T value) {
-        // 检查是否需要扩容
+        ASSERT(layout_, "Array layout must be set via updateLayout before append");
         if (size_ >= capacity_) {
-            // 类似std::vector，增长1.5倍或2倍
-            // capacity_ 初始化为 SMALL_ARRAY_SIZE，不会为0
             reserve(capacity_ * 3 / 2);
         }
 
@@ -262,12 +270,14 @@ class Array : public Object {
     }
 
     void shrinkToFit() {
+        ASSERT(layout_, "Array layout must be set via updateLayout before shrinkToFit");
         if (size_ == capacity_)
             return;
         reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
     }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
+        ASSERT(layout_, "Array layout must be set via updateLayout before use");
         if (!isOfSameCls(this, other))
             return false;
 
@@ -301,7 +311,9 @@ class Array : public Object {
     }
 
     virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
-        Array *newArray     = Array::create(*layout_, allocator);
+        ASSERT(layout_, "Array layout must be set via updateLayout before use");
+        Array *newArray = Array::create(allocator, 0);
+        newArray->updateLayout(layout_);
         newArray->size_     = size_;
         newArray->capacity_ = capacity_;
 
@@ -337,6 +349,7 @@ class Array : public Object {
     }
 
     virtual void print(std::ostream &os) const override {
+        ASSERT(layout_, "Array layout must be set via updateLayout before use");
         os << "[";
 
         TypeCode elemType     = layout_->elemType();
@@ -371,28 +384,22 @@ class Array : public Object {
   private:
     static constexpr size_t SMALL_ARRAY_SIZE = 10;
 
-    Array(const ArrayTypeLayout &layout, IAllocator &allocator, size_t initSize)
-        : allocator_(&allocator), layout_(&layout), fixedArray_(nullptr), size_(initSize) {
+    Array(IAllocator &allocator, size_t initSize)
+        : allocator_(&allocator), layout_(nullptr), fixedArray_(nullptr), size_(initSize) {
         if (initSize > SMALL_ARRAY_SIZE) {
-            // 使用外部数组
             capacity_   = initSize;
-            fixedArray_ = FixedArray::create(layout, capacity_, allocator);
+            fixedArray_ = FixedArray::create(capacity_, allocator);
             dataPtr_    = fixedArray_->data();
         } else {
-            // 使用内联存储
             capacity_ = SMALL_ARRAY_SIZE;
             dataPtr_  = inlineData_;
-            // 初始化内联数组
-            if (isGCTraced(layout_->elemType())) {
-                Object **refArr = reinterpret_cast<Object **>(inlineData_);
-                std::fill(refArr, refArr + SMALL_ARRAY_SIZE, NullRef);
-            }
+            std::fill(inlineData_, inlineData_ + SMALL_ARRAY_SIZE, NullSlot);
         }
     }
 
     void reallocate(size_t newCapacity) {
+        ASSERT(layout_, "Array layout must be set before reallocate");
         if (UNLIKELY(newCapacity <= SMALL_ARRAY_SIZE)) {
-            // 使用内联存储
             if (fixedArray_ != nullptr && size_ > 0) {
                 std::memcpy(inlineData_, dataPtr_, size_ * sizeof(slot_t));
             }
@@ -400,8 +407,8 @@ class Array : public Object {
             dataPtr_    = inlineData_;
             capacity_   = SMALL_ARRAY_SIZE;
         } else {
-            // 使用外部数组
-            FixedArray *newArray = FixedArray::create(*layout_, newCapacity, *allocator_);
+            FixedArray *newArray = FixedArray::create(newCapacity, *allocator_);
+            newArray->updateLayout(layout_);
             if (size_ > 0) {
                 std::memcpy(newArray->data(), dataPtr_, size_ * sizeof(slot_t));
             }
@@ -411,8 +418,8 @@ class Array : public Object {
         }
     }
 
-    IAllocator *allocator_;         // 分配器引用（8字节）
-    const ArrayTypeLayout *layout_; // 类型布局（8字节）
+    IAllocator *allocator_;
+    const ArrayTypeLayout *layout_; // 使用时通过 updateLayout 设置
     FixedArray *fixedArray_;        // 底层固定数组，nullptr表示使用内联存储（8字节）
 
     uint32_t size_;     // 逻辑元素个数（4字节）

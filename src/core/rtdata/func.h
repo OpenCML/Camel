@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,10 +36,9 @@ class Function : public Object {
         if (!mem)
             throw std::bad_alloc();
 
-        auto *fn = new (mem) Function(graph);
-
-        // 独立创建 tuple
-        fn->tuple_ = Tuple::create(layout, allocator);
+        auto *fn   = new (mem) Function(graph);
+        fn->tuple_ = Tuple::create(layout.size(), allocator);
+        fn->tuple_->updateLayout(&layout);
         return fn;
     }
 

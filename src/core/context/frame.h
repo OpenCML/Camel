@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "compile/gir.h"
+#include "core/rtdata/conv.h"
 #include "core/rtdata/data.h"
 #include "utils/log.h"
 
@@ -176,6 +177,14 @@ class Frame : public Object {
                         staticArea_->size()));
             }());
             staticArea_->set<T>(idx, value);
+        }
+        if constexpr (std::is_pointer_v<T>) {
+            auto *o = const_cast<Object *>(static_cast<const Object *>(value));
+            if (o) {
+                Type *ty = typeAt<Type>(index);
+                if (ty)
+                    attachLayoutFromType(o, ty);
+            }
         }
     }
 

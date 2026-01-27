@@ -47,10 +47,11 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto resArrayType = norm.type(0);
     auto arrType      = tt::as_ptr<ArrayType>(resArrayType);
     auto resTupleType = tt::as_ptr<TupleType>(arrType->elemType());
+    size_t tupSize    = resTupleType->layout().size();
 
-    Array *result = Array::create(arrType->layout(), mm::autoSpace(), n);
+    Array *result = Array::create(mm::autoSpace(), n);
     for (size_t i = 0; i < n; ++i) {
-        Tuple *t = Tuple::create(resTupleType->layout(), mm::autoSpace());
+        Tuple *t = Tuple::create(tupSize, mm::autoSpace());
         t->set(0, lhs->get<Int>(i));
         t->set(1, rhs->get<Int>(i));
         result->set(i, t);
@@ -71,11 +72,11 @@ slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     size_t n = arr->size();
     if (n <= 1) {
-        Array *empty = Array::create(arr->layout(), mm::autoSpace());
+        Array *empty = Array::create(mm::autoSpace(), 0);
         return toSlot(empty);
     }
 
-    Array *res = Array::create(arr->layout(), mm::autoSpace(), n - 1);
+    Array *res = Array::create(mm::autoSpace(), n - 1);
     for (size_t i = 1; i < n; ++i) {
         res->set(i - 1, arr->get<slot_t>(i));
     }
@@ -99,10 +100,7 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
             count = static_cast<size_t>((start - stop - 1) / (-step) + 1);
     }
 
-    auto resArrayType = norm.type(0);
-    auto arrType      = tt::as_ptr<ArrayType>(resArrayType);
-
-    Array *result = Array::create(arrType->layout(), mm::autoSpace(), count);
+    Array *result = Array::create(mm::autoSpace(), count);
 
     Int value = start;
     for (size_t i = 0; i < count; ++i, value += step)
@@ -126,10 +124,8 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (end < start)
         end = start;
 
-    size_t newSize    = static_cast<size_t>(end - start);
-    auto resArrayType = norm.type(0);
-    auto arrType      = tt::as_ptr<ArrayType>(resArrayType);
-    Array *res        = Array::create(arrType->layout(), mm::autoSpace(), newSize);
+    size_t newSize = static_cast<size_t>(end - start);
+    Array *res     = Array::create(mm::autoSpace(), newSize);
 
     for (size_t i = 0; i < newSize; ++i)
         res->set(i, arr->get<slot_t>(start + i));
@@ -142,9 +138,7 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *rhs = norm.get<Array *>(1);
 
     size_t n1 = lhs->size(), n2 = rhs->size();
-    auto resArrayType = norm.type(0);
-    auto arrType      = tt::as_ptr<ArrayType>(resArrayType);
-    Array *res        = Array::create(arrType->layout(), mm::autoSpace(), n1 + n2);
+    Array *res = Array::create(mm::autoSpace(), n1 + n2);
 
     for (size_t i = 0; i < n1; ++i)
         res->set(i, lhs->get<slot_t>(i));

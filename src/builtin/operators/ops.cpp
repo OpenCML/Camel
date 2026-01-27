@@ -239,6 +239,7 @@ slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
     ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Invalid tensor assignment operation");
+    return NullSlot;
 }
 
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -485,6 +486,7 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
     ASSERT(false, "mat operator not implemented");
+    return NullSlot;
 }
 
 // 幂运算

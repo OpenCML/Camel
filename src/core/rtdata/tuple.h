@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,28 +21,38 @@
 
 #include "base.h"
 
+#include <algorithm>
+
 class Tuple : public Object {
   public:
     Tuple(const Tuple &)            = delete;
     Tuple &operator=(const Tuple &) = delete;
 
-    /// 创建 Tuple 实例
-    static Tuple *create(const TupleTypeLayout &layout, IAllocator &allocator) {
+    /// 创建 Tuple 实例（仅需槽个数，layout 通过 updateLayout 延后设置）
+    static Tuple *create(size_t slotCount, IAllocator &allocator) {
         size_t headerSize = sizeof(Tuple);
-        size_t dataSize   = sizeof(slot_t) * layout.size();
+        size_t dataSize   = sizeof(slot_t) * slotCount;
         size_t totalSize  = headerSize + dataSize;
 
         void *memory = allocator.alloc(totalSize, alignof(Tuple));
         if (!memory)
             throw std::bad_alloc();
 
-        return new (memory) Tuple(&layout);
+        Tuple *t = new (memory) Tuple(slotCount);
+        std::fill(t->data_, t->data_ + slotCount, NullSlot);
+        return t;
     }
 
     size_t size() const { return size_; }
-    const TupleTypeLayout &layout() const { return *layout_; }
+    const TupleTypeLayout &layout() const {
+        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
+        return *layout_;
+    }
     void updateLayout(const TupleTypeLayout *layout) { layout_ = layout; }
-    TypeCode typeAt(size_t index) const { return layout_->typeAt(index); }
+    TypeCode typeAt(size_t index) const {
+        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
+        return layout_->typeAt(index);
+    }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -61,6 +71,7 @@ class Tuple : public Object {
     const slot_t *data() const { return data_; }
 
     virtual bool equals(const Object *other, bool deep = false) const override {
+        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
         if (!isOfSameCls(this, other))
             return false;
 
@@ -95,7 +106,9 @@ class Tuple : public Object {
     }
 
     virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
-        Tuple *newTuple   = Tuple::create(*layout_, allocator);
+        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
+        Tuple *newTuple = Tuple::create(size_, allocator);
+        newTuple->updateLayout(layout_);
         const auto &types = layout_->elemTypes();
 
         const slot_t *src = data_;
@@ -126,6 +139,7 @@ class Tuple : public Object {
     }
 
     virtual void print(std::ostream &os) const override {
+        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
         os << "(";
 
         const auto &types     = layout_->elemTypes();
@@ -143,6 +157,7 @@ class Tuple : public Object {
     virtual void onMoved() override {}
 
     virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
+        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
         const auto &types = layout_->elemTypes();
         Object **refArr   = reinterpret_cast<Object **>(data_);
 
@@ -156,10 +171,9 @@ class Tuple : public Object {
     }
 
   private:
-    Tuple(const TupleTypeLayout *layout)
-        : size_(static_cast<uint32_t>(layout->size())), layout_(layout) {}
+    explicit Tuple(size_t slotCount) : size_(static_cast<uint32_t>(slotCount)), layout_(nullptr) {}
 
     uint32_t size_;
-    const TupleTypeLayout *layout_;
+    const TupleTypeLayout *layout_; // 使用时通过 updateLayout 设置
     slot_t data_[];
 };

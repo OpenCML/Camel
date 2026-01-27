@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,3 +25,6 @@
 
 slot_t makeSlotFromPrimitiveData(const data_ptr_t &data);
 Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator);
+
+/** 根据类型为槽容器附着 layout，并递归处理嵌套的容器。仅当存储到带类型的 slot 时使用。 */
+void attachLayoutFromType(Object *obj, Type *type);
