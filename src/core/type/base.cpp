@@ -64,8 +64,6 @@ string typeCodeToString(TypeCode code) {
         return "struct";
     case TypeCode::Function:
         return "function";
-    case TypeCode::Frame:
-        return "frame";
     case TypeCode::Ref:
         return "ref";
     case TypeCode::Any:

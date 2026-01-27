@@ -37,8 +37,8 @@ void __print__(
 
         fmt::dynamic_format_arg_store<fmt::format_context> store;
         for (size_t i = 0; i < nargs.size; ++i) {
-            TypeCode type = frame.codeAt(nargs[i]);
-            switch (type) {
+            TypeCode code = frame.codeAt(nargs[i]);
+            switch (code) {
             case TypeCode::Int32:
                 store.push_back(frame.get<Int32>(wargs[i]));
                 break;
@@ -53,7 +53,7 @@ void __print__(
                 break;
             default:
                 std::ostringstream oss;
-                printSlot(oss, frame.get<slot_t>(wargs[i]), type);
+                printSlot(oss, frame.get<slot_t>(wargs[i]), code);
                 store.push_back(oss.str());
                 break;
             }
@@ -78,9 +78,9 @@ void __print__(
             } else {
                 result = frame.get<slot_t>(nargs[i]);
             }
-            TypeCode type = frame.codeAt(nargs[i]);
+            TypeCode code = frame.codeAt(nargs[i]);
             slot_t data   = frame.get<slot_t>(nargs[i]);
-            printSlot(std::cout, data, type);
+            printSlot(std::cout, data, code);
         }
     }
 
@@ -96,8 +96,8 @@ void __println__(
 
         fmt::dynamic_format_arg_store<fmt::format_context> store;
         for (size_t i = 0; i < nargs.size; ++i) {
-            TypeCode type = frame.codeAt(nargs[i]);
-            switch (type) {
+            TypeCode code = frame.codeAt(nargs[i]);
+            switch (code) {
             case TypeCode::Int32:
                 store.push_back(frame.get<Int32>(wargs[i]));
                 break;
@@ -112,7 +112,7 @@ void __println__(
                 break;
             default:
                 std::ostringstream oss;
-                printSlot(oss, frame.get<slot_t>(wargs[i]), type);
+                printSlot(oss, frame.get<slot_t>(wargs[i]), code);
                 store.push_back(oss.str());
                 break;
             }
@@ -137,9 +137,9 @@ void __println__(
             } else {
                 result = frame.get<slot_t>(nargs[i]);
             }
-            TypeCode type = frame.codeAt(nargs[i]);
+            TypeCode code = frame.codeAt(nargs[i]);
             slot_t data   = frame.get<slot_t>(nargs[i]);
-            printSlot(std::cout, data, type);
+            printSlot(std::cout, data, code);
         }
     }
 
@@ -155,9 +155,9 @@ void __input__(
         if (i > 0) {
             oss << " ";
         }
-        TypeCode type = frame.codeAt(nargs[i]);
+        TypeCode code = frame.codeAt(nargs[i]);
         slot_t data   = frame.get<slot_t>(nargs[i]);
-        printSlot(oss, data, type);
+        printSlot(oss, data, code);
     }
 
     std::cout << oss.str();

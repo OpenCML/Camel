@@ -72,10 +72,9 @@ enum class TypeCode : uint32_t {
     Tuple    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x009),
     Struct   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00A),
     Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00B),
-    Frame    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00C),
-    Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00D),
-    Any      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00E),
-    Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00F),
+    Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
+    Any      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00D),
+    Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
     Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 
