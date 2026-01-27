@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Jan. 21, 2026
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -97,7 +97,7 @@ static py::array __camel_array_to_py__(Array *arr, Context &ctx) {
 }
 
 static std::pair<Array *, Array *>
-__py_array_to_camel_complex__(py::array py_arr, type_ptr_t tupleTypePtr, Context &ctx) {
+__py_array_to_camel_complex__(py::array py_arr, Type *tupleTypePtr, Context &ctx) {
     try {
         py::module_ np = py::module_::import("numpy");
 
@@ -108,7 +108,7 @@ __py_array_to_camel_complex__(py::array py_arr, type_ptr_t tupleTypePtr, Context
             return {nullptr, nullptr};
         }
 
-        auto tupleType = tt::as_shared<TupleType>(tupleTypePtr);
+        auto tupleType = tt::as_ptr<TupleType>(tupleTypePtr);
         if (tupleType->types().size() != 2) {
             ctx.rtmDiags()
                 ->of(RuntimeDiag::RuntimeError)
@@ -116,8 +116,8 @@ __py_array_to_camel_complex__(py::array py_arr, type_ptr_t tupleTypePtr, Context
             return {nullptr, nullptr};
         }
 
-        auto realArrayType = tt::as_shared<ArrayType>(tupleType->types()[0]);
-        auto imagArrayType = tt::as_shared<ArrayType>(tupleType->types()[1]);
+        auto realArrayType = tt::as_ptr<ArrayType>(tupleType->types()[0]);
+        auto imagArrayType = tt::as_ptr<ArrayType>(tupleType->types()[1]);
 
         py::object arr_obj = py::reinterpret_borrow<py::object>(py_arr);
         bool is_complex    = np.attr("iscomplexobj")(arr_obj).cast<bool>();
@@ -179,7 +179,7 @@ __py_array_to_camel_complex__(py::array py_arr, type_ptr_t tupleTypePtr, Context
     }
 }
 
-static Array *__py_array_to_camel_real__(py::array py_arr, type_ptr_t arrayType, Context &ctx) {
+static Array *__py_array_to_camel_real__(py::array py_arr, Type *arrayType, Context &ctx) {
     try {
         py::module_ np = py::module_::import("numpy");
 
@@ -194,7 +194,7 @@ static Array *__py_array_to_camel_real__(py::array py_arr, type_ptr_t arrayType,
         auto buf = py_arr.request();
         size_t n = buf.size;
 
-        auto resArrayType = tt::as_shared<ArrayType>(arrayType);
+        auto resArrayType = tt::as_ptr<ArrayType>(arrayType);
         Array *result     = Array::create(resArrayType->layout(), mm::autoSpace(), n);
 
         // 尝试转换为int数组（gen_bits返回的是int数组）
@@ -272,7 +272,7 @@ void __phot_gen_bits__(
         py::array py_bits_y  = result_list[1].cast<py::array>();
 
         // 获取返回类型（应该是元组类型，包含两个数组）
-        auto resTupleType      = frame.typePtrAt<TupleType>(self);
+        auto resTupleType      = frame.typeAt<TupleType>(self);
         auto bits_x_array_type = resTupleType->types()[0];
         auto bits_y_array_type = resTupleType->types()[1];
 
@@ -313,8 +313,8 @@ void __phot_modulation__(
         py::list mod_result = phot.attr("modulation")(bits_list, bits_per_symbol).cast<py::list>();
         py::module_ np      = py::module_::import("numpy");
 
-        auto resTupleType  = frame.typePtrAt<TupleType>(self);
-        auto xPolTupleType = tt::as_shared<TupleType>(resTupleType->types()[0]);
+        auto resTupleType  = frame.typeAt<TupleType>(self);
+        auto xPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[0]);
 
         py::object signal_obj_x = mod_result[0];
         if (!np.attr("iscomplexobj")(signal_obj_x).cast<bool>()) {
@@ -323,7 +323,7 @@ void __phot_modulation__(
         auto [realArr_x, imagArr_x] =
             __py_array_to_camel_complex__(signal_obj_x.cast<py::array>(), xPolTupleType, ctx);
 
-        auto yPolTupleType      = tt::as_shared<TupleType>(resTupleType->types()[1]);
+        auto yPolTupleType      = tt::as_ptr<TupleType>(resTupleType->types()[1]);
         py::object signal_obj_y = mod_result[1];
         if (!np.attr("iscomplexobj")(signal_obj_y).cast<bool>()) {
             signal_obj_y = np.attr("array")(signal_obj_y, py::arg("dtype") = np.attr("complex128"));
@@ -395,9 +395,9 @@ void __phot_up_sample__(
         py::list py_result =
             phot.attr("up_sample")(signals_list, up_sampling_factor).cast<py::list>();
 
-        auto resTupleType  = frame.typePtrAt<TupleType>(self);
-        auto xPolTupleType = tt::as_shared<TupleType>(resTupleType->types()[0]);
-        auto yPolTupleType = tt::as_shared<TupleType>(resTupleType->types()[1]);
+        auto resTupleType  = frame.typeAt<TupleType>(self);
+        auto xPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[0]);
+        auto yPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[1]);
 
         py::array py_result_x = py_result[0].cast<py::array>();
         py::array py_result_y = py_result[1].cast<py::array>();
@@ -477,9 +477,9 @@ void __phot_pulse_shaper__(
         py::array py_result_x = py_result[0].cast<py::array>();
         py::array py_result_y = py_result[1].cast<py::array>();
 
-        auto resTupleType  = frame.typePtrAt<TupleType>(self);
-        auto xPolTupleType = tt::as_shared<TupleType>(resTupleType->types()[0]);
-        auto yPolTupleType = tt::as_shared<TupleType>(resTupleType->types()[1]);
+        auto resTupleType  = frame.typeAt<TupleType>(self);
+        auto xPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[0]);
+        auto yPolTupleType = tt::as_ptr<TupleType>(resTupleType->types()[1]);
 
         auto [realArr_x, imagArr_x] =
             __py_array_to_camel_complex__(py_result_x, xPolTupleType, ctx);

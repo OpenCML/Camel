@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -79,7 +79,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
     Function *func = currFrame.get<Function *>(wargs[0]);
     Tuple *closure = func->tuple();
 
-    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
+    const auto &retArrType = currFrame.typeAt<ArrayType>(self);
     Array *res             = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
@@ -133,7 +133,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     Function *func = currFrame.get<Function *>(wargs[0]);
     Tuple *closure = func->tuple();
 
-    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
+    const auto &retArrType = currFrame.typeAt<ArrayType>(self);
     Array *filtered        = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();

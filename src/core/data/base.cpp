@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,9 +24,9 @@ using namespace std;
 
 Data::Data() {};
 
-Data::Data(type_ptr_t type) : type_(type) {}
+Data::Data(Type *type) : type_(type) {}
 
-type_ptr_t Data::type() const { return type_; }
+Type *Data::type() const { return type_; }
 
 data_ptr_t Data::null() {
     static data_ptr_t nullData = nullptr;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@
 using namespace std;
 
 TupleData::TupleData(data_list_t data) : data_(data) {
-    std::vector<type_ptr_t> types;
+    std::vector<Type *> types;
     size_t i = 0;
     for (const auto &e : data) {
         types.push_back(e->type());
@@ -37,20 +37,19 @@ TupleData::TupleData(data_list_t data) : data_(data) {
         }
         i++;
     }
-    type_ = std::make_shared<TupleType>(types);
+    type_ = TupleType::create(types);
 }
 
-TupleData::TupleData(type_ptr_t type, data_vec_t &&data)
-    : CompositeData(type), data_(std::move(data)) {
+TupleData::TupleData(Type *type, data_vec_t &&data) : CompositeData(type), data_(std::move(data)) {
     ASSERT(type->code() == TypeCode::Tuple, "Type is not TupleType");
     ASSERT(
-        (*static_cast<TupleType *>(type_.get())).size() == data_.size(),
+        (*static_cast<TupleType *>(type_)).size() == data_.size(),
         "Data size does not match TupleType size");
 }
 
 void TupleData::emplace(const data_ptr_t &e) {
     data_.push_back(e);
-    TupleType &tupleType = *static_cast<TupleType *>(type_.get());
+    TupleType &tupleType = *static_cast<TupleType *>(type_);
     tupleType.add(e->type());
     if (e->type()->code() == TypeCode::Ref) {
         refIndices_.push_back(data_.size() - 1);
@@ -108,24 +107,25 @@ const string TupleData::toString() const {
     return str;
 }
 
-data_ptr_t TupleData::convertTo(const type_ptr_t &type) {
+data_ptr_t TupleData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return tt::as_shared<TupleData>(shared_from_this());
     }
     if (type->code() == TypeCode::Tuple) {
-        const auto &tupleType = tt::as_shared<TupleType>(type);
+        auto tupleType = tt::as_ptr<TupleType>(type);
+        ASSERT(tupleType != nullptr, "Failed to cast to TupleType");
         data_vec_t data;
         data.reserve(data_.size());
         for (size_t i = 0; i < data_.size(); i++) {
-            const auto &e    = data_[i];
-            const auto &type = tupleType->typeAt(i);
-            if (type) {
-                data.push_back(e->convertTo(*type));
+            const auto &e        = data_[i];
+            const auto &elemType = tupleType->typeAt(i);
+            if (elemType) {
+                data.push_back(e->convertTo(*elemType));
             } else {
                 data.push_back(nullptr);
             }
         }
-        return TupleData::create(tupleType, std::move(data));
+        return TupleData::create(type, std::move(data));
     }
     return nullptr;
 }

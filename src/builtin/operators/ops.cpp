@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -287,7 +287,7 @@ void __builtin__and__(
 
 void __builtin__eq__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    TypeCode lhsType = frame.typeAt(nargs[0]);
+    TypeCode lhsType = frame.codeAt(nargs[0]);
 
     if (isGCTraced(lhsType)) {
         Object *lhs = frame.get<Object *>(nargs[0]);
@@ -304,7 +304,7 @@ void __builtin__eq__(
 
 void __builtin__ne__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    TypeCode lhsType = frame.typeAt(nargs[0]);
+    TypeCode lhsType = frame.codeAt(nargs[0]);
 
     if (isGCTraced(lhsType)) {
         Object *lhs = frame.get<Object *>(nargs[0]);
@@ -403,7 +403,7 @@ void __builtin__sub_dd__(
 
 void __builtin__mul__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    TypeCode lhsType = frame.typeAt(nargs[0]);
+    TypeCode lhsType = frame.codeAt(nargs[0]);
 
     switch (lhsType) {
     case TypeCode::Int32: {
@@ -445,7 +445,7 @@ void __builtin__mul__(
 
 void __builtin__div__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode lhsType = frame.typeAt(nargs[0]);
+    TypeCode lhsType = frame.codeAt(nargs[0]);
     switch (lhsType) {
     case TypeCode::Int32: {
         Int32 lhs = frame.get<Int32>(nargs[0]);
@@ -506,7 +506,7 @@ void __builtin__div__(
 
 void __builtin__mod__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode lhsType = frame.typeAt(nargs[0]);
+    TypeCode lhsType = frame.codeAt(nargs[0]);
     switch (lhsType) {
     case TypeCode::Int32: {
         Int32 lhs = frame.get<Int32>(nargs[0]);
@@ -549,7 +549,7 @@ void __builtin__mat__(
 // 幂运算
 void __builtin__pow__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode lhsType = frame.typeAt(nargs[0]);
+    TypeCode lhsType = frame.codeAt(nargs[0]);
     switch (lhsType) {
     case TypeCode::Int32: {
         Int32 base = frame.get<Int32>(nargs[0]);
@@ -592,11 +592,11 @@ void __builtin__pow__(
 
 void __builtin__idx__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode idxType = frame.typeAt(nargs[1]);
+    TypeCode idxType = frame.codeAt(nargs[1]);
 
     // 数组索引：index 为 Int
     if (idxType == TypeCode::Int64) {
-        TypeCode containerType = frame.typeAt(nargs[0]);
+        TypeCode containerType = frame.codeAt(nargs[0]);
         switch (containerType) {
         case TypeCode::Tuple: {
             Tuple *tpl = frame.get<Tuple *>(nargs[0]);
@@ -666,7 +666,7 @@ void __builtin__not__(
 
 void __builtin__neg__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode t = frame.typeAt(nargs[0]);
+    TypeCode t = frame.codeAt(nargs[0]);
     switch (t) {
     case TypeCode::Int32: {
         Int32 v = frame.get<Int32>(nargs[0]);
@@ -703,7 +703,7 @@ void __builtin__neg__(
 
 void __builtin__inv__(
     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode t = frame.typeAt(nargs[0]);
+    TypeCode t = frame.codeAt(nargs[0]);
     switch (t) {
     case TypeCode::Int32: {
         Int32 v = frame.get<Int32>(nargs[0]);

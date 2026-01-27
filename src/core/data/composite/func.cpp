@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,7 @@ func_ptr_t FunctionData::create(GraphIR::Graph &graph) {
 
 std::string FunctionData::name() const { return graph_.name(); }
 
-func_type_ptr_t FunctionData::funcType() const { return dynamic_pointer_cast<FunctionType>(type_); }
+FunctionType *FunctionData::funcType() const { return tt::as_ptr<FunctionType>(type_); }
 
 std::vector<std::string> FunctionData::refs() const {
     std::vector<std::string> refNames;
@@ -62,7 +62,7 @@ bool FunctionData::equals(const data_ptr_t &other) const { return true; }
 data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<FunctionData>(graph_); }
 
 const std::string FunctionData::toString() const {
-    FunctionType *type = dynamic_cast<FunctionType *>(type_.get());
+    FunctionType *type = dynamic_cast<FunctionType *>(type_);
     return std::format(
         "{}: {} ({})",
         graph_.name(),
@@ -70,7 +70,7 @@ const std::string FunctionData::toString() const {
         strutil::join(refs(), ", ", [](const std::string &s) { return s; }));
 }
 
-data_ptr_t FunctionData::convertTo(const type_ptr_t &type) {
+data_ptr_t FunctionData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return tt::as_shared<FunctionData>(shared_from_this());
     }

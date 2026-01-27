@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -201,7 +201,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
             switch (targetType) {
             case TypeCode::Tuple: {
-                const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
+                const auto &type = currFrame->typeAt<TupleType>(bc.result);
                 auto t           = static_cast<Tuple *>(target);
                 const auto &refs = t->layout().refs();
                 ASSERT(
@@ -217,7 +217,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             } break;
 
             case TypeCode::Array: {
-                const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
+                const auto &type = currFrame->typeAt<ArrayType>(bc.result);
                 auto a           = static_cast<Array *>(target);
                 const auto &refs = a->layout().refs();
                 ASSERT(
@@ -233,7 +233,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             } break;
 
             case TypeCode::Struct: {
-                const auto &type = currFrame->typePtrAt<StructType>(bc.result);
+                const auto &type = currFrame->typeAt<StructType>(bc.result);
                 auto s           = static_cast<Struct *>(target);
                 const auto &refs = s->layout().refs();
                 ASSERT(
@@ -249,7 +249,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             } break;
 
             case TypeCode::Function: {
-                // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
+                // const auto &type   = currFrame->typeAt<FunctionType>(bc.result);
                 auto f             = static_cast<Function *>(target);
                 Tuple *closureData = f->tuple();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {

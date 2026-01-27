@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 25, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "func.h"
 
 #include "core/data/data.h"
+#include "core/mm/mm.h"
 #include "utils/str.h"
 
 #include <algorithm>
@@ -33,19 +34,19 @@ FunctionType::FunctionType()
 }
 
 FunctionType::FunctionType(
-    const param_init_list_t &withTypes, const param_init_list_t &normTypes,
-    const type_ptr_t &returnType, const ModifierSet &modifiers)
-    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
-      withTypes_(withTypes), normTypes_(normTypes), exitType_(returnType), hasCompileInfo_(false) {}
-
-FunctionType::FunctionType(
-    const param_vec_t &withTypes, const param_vec_t &normTypes, const type_ptr_t &returnType,
+    const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
     const ModifierSet &modifiers)
     : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
       withTypes_(withTypes), normTypes_(normTypes), exitType_(returnType), hasCompileInfo_(false) {}
 
 FunctionType::FunctionType(
-    const param_vec_t &&withTypes, const param_vec_t &&normTypes, const type_ptr_t &returnType,
+    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
+    const ModifierSet &modifiers)
+    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
+      withTypes_(withTypes), normTypes_(normTypes), exitType_(returnType), hasCompileInfo_(false) {}
+
+FunctionType::FunctionType(
+    const param_vec_t &&withTypes, const param_vec_t &&normTypes, Type *returnType,
     const ModifierSet &modifiers)
     : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
       withTypes_(std::move(withTypes)), normTypes_(std::move(normTypes)), exitType_(returnType),
@@ -57,7 +58,7 @@ const string &FunctionType::argNameAt(size_t idx) const {
     return argNames_[idx];
 }
 
-bool FunctionType::addWithArg(const string &ident, const type_ptr_t type, bool isVar) {
+bool FunctionType::addWithArg(const string &ident, Type *type, bool isVar) {
     ASSERT(hasCompileInfo_, "Cannot add argument to non-compile-info FunctionType");
     if (find(argNames_.begin(), argNames_.end(), ident) != argNames_.end()) {
         return false;
@@ -67,7 +68,7 @@ bool FunctionType::addWithArg(const string &ident, const type_ptr_t type, bool i
     return true;
 }
 
-bool FunctionType::addNormArg(const string &ident, const type_ptr_t type, bool isVar) {
+bool FunctionType::addNormArg(const string &ident, Type *type, bool isVar) {
     ASSERT(hasCompileInfo_, "Cannot add argument to non-compile-info FunctionType");
     if (find(argNames_.begin(), argNames_.end(), ident) != argNames_.end()) {
         return false;
@@ -83,7 +84,7 @@ bool FunctionType::addClosureRef(const string &ident) {
     return true;
 }
 
-type_ptr_t FunctionType::exitType() const {
+Type *FunctionType::exitType() const {
     // 如果没有返回值类型，默认为void
     // 但此时返回值仍然是未设置状态，以便编译器进行类型推导
     return exitType_ ? exitType_ : Type::Void();
@@ -91,24 +92,24 @@ type_ptr_t FunctionType::exitType() const {
 
 bool FunctionType::checkModifiers() const { return true; }
 
-vector<tuple<string, type_ptr_t, bool>> FunctionType::withArgsInfo() const {
+vector<tuple<string, Type *, bool>> FunctionType::withArgsInfo() const {
     ASSERT(hasCompileInfo_, "No compile info available");
     ASSERT(
         withTypes_.size() + normTypes_.size() == argNames_.size(),
         "Argument names size mismatch");
-    vector<tuple<string, type_ptr_t, bool>> result;
+    vector<tuple<string, Type *, bool>> result;
     for (size_t i = 0; i < withTypes_.size(); i++) {
         result.emplace_back(argNames_[i], withTypes_[i].first, withTypes_[i].second);
     }
     return result;
 }
 
-vector<tuple<string, type_ptr_t, bool>> FunctionType::normArgsInfo() const {
+vector<tuple<string, Type *, bool>> FunctionType::normArgsInfo() const {
     ASSERT(hasCompileInfo_, "No compile info available");
     ASSERT(
         withTypes_.size() + normTypes_.size() == argNames_.size(),
         "Argument names size mismatch");
-    vector<tuple<string, type_ptr_t, bool>> result;
+    vector<tuple<string, Type *, bool>> result;
     for (size_t i = 0; i < normTypes_.size(); i++) {
         size_t idx = i + withTypes_.size();
         result.emplace_back(argNames_[idx], normTypes_[i].first, normTypes_[i].second);
@@ -116,7 +117,7 @@ vector<tuple<string, type_ptr_t, bool>> FunctionType::normArgsInfo() const {
     return result;
 }
 
-type_ptr_t FunctionType::resolve(const type_vec_t &typeList) const {
+Type *FunctionType::resolve(const type_vec_t &typeList) const {
     ASSERT(false, "Not implemented");
     return nullptr;
 }
@@ -184,8 +185,39 @@ string FunctionType::mangle() const {
     return result;
 }
 
-type_ptr_t FunctionType::clone(bool deep /* = false */) const {
-    auto res             = std::make_shared<FunctionType>();
+FunctionType *FunctionType::create() {
+    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
+    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    return new (mem) FunctionType();
+}
+
+FunctionType *FunctionType::create(
+    const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
+    const ModifierSet &modifiers) {
+    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
+    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    return new (mem) FunctionType(withTypes, normTypes, returnType, modifiers);
+}
+
+FunctionType *FunctionType::create(
+    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
+    const ModifierSet &modifiers) {
+    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
+    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    return new (mem) FunctionType(withTypes, normTypes, returnType, modifiers);
+}
+
+FunctionType *FunctionType::create(
+    const param_vec_t &&withTypes, const param_vec_t &&normTypes, Type *returnType,
+    const ModifierSet &modifiers) {
+    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
+    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    return new (mem)
+        FunctionType(std::move(withTypes), std::move(normTypes), returnType, modifiers);
+}
+
+Type *FunctionType::clone(bool deep /* = false */) const {
+    auto res             = FunctionType::create();
     res->implMark_       = implMark_;
     res->modifiers_      = modifiers_;
     res->withTypes_      = withTypes_;
@@ -197,10 +229,10 @@ type_ptr_t FunctionType::clone(bool deep /* = false */) const {
     return res;
 }
 
-bool FunctionType::equals(const type_ptr_t &other) const {
-    if (this == other.get())
+bool FunctionType::equals(Type *other) const {
+    if (this == other)
         return true;
-    if (other->code() != TypeCode::Function)
+    if (!other || other->code() != TypeCode::Function)
         return false;
 
     const auto &otherFunc = static_cast<const FunctionType &>(*other);
@@ -236,10 +268,10 @@ CastSafety FunctionType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool FunctionType::assignable(const type_ptr_t &other) const {
-    if (this == other.get())
+bool FunctionType::assignable(Type *other) const {
+    if (this == other)
         return true;
-    if (other->code() != TypeCode::Function)
+    if (!other || other->code() != TypeCode::Function)
         return false;
 
     const auto &otherFunc = static_cast<const FunctionType &>(*other);

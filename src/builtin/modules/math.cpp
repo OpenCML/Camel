@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -136,7 +136,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(val: float | double) => float | double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             TypeCode tp = norm[0]->code();
                             if (tp == TypeCode::Float32 || tp == TypeCode::Int32)
                                 return Type::Float32();

@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "union.h"
+#include "core/mm/mm.h"
 #include "utils/assert.h"
 
 using namespace std;
@@ -35,20 +36,19 @@ void UnionType::insertUnion(const UnionType &other) {
 
 UnionType::UnionType() : CompositeType(TypeCode::Union) {}
 
-UnionType::UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs)
-    : CompositeType(TypeCode::Union) {
-    if (lhs->code() == TypeCode::Union)
+UnionType::UnionType(Type *lhs, Type *rhs) : CompositeType(TypeCode::Union) {
+    if (lhs && lhs->code() == TypeCode::Union)
         insertUnion(static_cast<const UnionType &>(*lhs));
-    else
+    else if (lhs)
         types_.insert(lhs);
 
-    if (rhs->code() == TypeCode::Union)
+    if (rhs && rhs->code() == TypeCode::Union)
         insertUnion(static_cast<const UnionType &>(*rhs));
-    else
+    else if (rhs)
         types_.insert(rhs);
 }
 
-UnionType::UnionType(const initializer_list<type_ptr_t> &types) : CompositeType(TypeCode::Union) {
+UnionType::UnionType(const initializer_list<Type *> &types) : CompositeType(TypeCode::Union) {
     for (const auto &type : types) {
         if (type->code() == TypeCode::Union)
             insertUnion(static_cast<const UnionType &>(*type));
@@ -57,7 +57,7 @@ UnionType::UnionType(const initializer_list<type_ptr_t> &types) : CompositeType(
     }
 }
 
-UnionType::UnionType(const vector<type_ptr_t> &types) : CompositeType(TypeCode::Union) {
+UnionType::UnionType(const vector<Type *> &types) : CompositeType(TypeCode::Union) {
     for (const auto &type : types) {
         if (type->code() == TypeCode::Union)
             insertUnion(static_cast<const UnionType &>(*type));
@@ -66,29 +66,41 @@ UnionType::UnionType(const vector<type_ptr_t> &types) : CompositeType(TypeCode::
     }
 }
 
-std::shared_ptr<UnionType> UnionType::create(const type_ptr_t &lhs, const type_ptr_t &rhs) {
-    return std::make_shared<UnionType>(lhs, rhs);
+UnionType *UnionType::create() {
+    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
+    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    return new (mem) UnionType();
 }
 
-std::shared_ptr<UnionType> UnionType::create(const std::initializer_list<type_ptr_t> &types) {
-    return std::make_shared<UnionType>(types);
+UnionType *UnionType::create(Type *lhs, Type *rhs) {
+    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
+    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    return new (mem) UnionType(lhs, rhs);
 }
 
-std::shared_ptr<UnionType> UnionType::create(const std::vector<type_ptr_t> &types) {
-    return std::make_shared<UnionType>(types);
+UnionType *UnionType::create(const std::initializer_list<Type *> &types) {
+    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
+    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    return new (mem) UnionType(types);
 }
 
-void UnionType::add(const type_ptr_t &type) {
-    if (type->code() == TypeCode::Union) {
+UnionType *UnionType::create(const std::vector<Type *> &types) {
+    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
+    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    return new (mem) UnionType(types);
+}
+
+void UnionType::add(Type *type) {
+    if (type && type->code() == TypeCode::Union) {
         insertUnion(static_cast<const UnionType &>(*type));
-    } else {
+    } else if (type) {
         types_.insert(type);
     }
 }
 
-bool UnionType::has(const type_ptr_t &type) const { return types_.find(type) != types_.end(); }
+bool UnionType::has(Type *type) const { return type && types_.find(type) != types_.end(); }
 
-type_ptr_t UnionType::resolve(const type_vec_t &typeList) const {
+Type *UnionType::resolve(const type_vec_t &typeList) const {
     ASSERT(false, "UnionType cannot be resolved");
     return nullptr;
 }
@@ -117,19 +129,19 @@ std::string UnionType::mangle() const {
     return result;
 }
 
-type_ptr_t UnionType::clone(bool deep /* = false */) const {
-    auto result = std::make_shared<UnionType>();
+Type *UnionType::clone(bool deep /* = false */) const {
+    auto result = UnionType::create();
     for (const auto &type : types_) {
-        result->types_.insert(deep ? type->clone(true) : type);
+        result->types_.insert(deep && type ? type->clone(true) : type);
     }
     return result;
 }
 
-bool UnionType::equals(const type_ptr_t &other) const {
-    if (this == other.get()) {
+bool UnionType::equals(Type *other) const {
+    if (this == other) {
         return true;
     }
-    if (other->code() != TypeCode::Union) {
+    if (!other || other->code() != TypeCode::Union) {
         return false;
     }
     const UnionType &otherUnion = static_cast<const UnionType &>(*other);
@@ -152,4 +164,4 @@ CastSafety UnionType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool UnionType::assignable(const type_ptr_t &type) const { return equals(type); }
+bool UnionType::assignable(Type *type) const { return equals(type); }

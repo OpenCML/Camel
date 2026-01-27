@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,7 +99,7 @@ template <typename T> class PrimaryData : public Data {
         }
     }
 
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
+    virtual data_ptr_t convertTo(Type *type) override;
 };
 
 using IntData    = PrimaryData<int32_t>;
@@ -109,7 +109,7 @@ using DoubleData = PrimaryData<double>;
 using BoolData   = PrimaryData<bool>;
 using ByteData   = PrimaryData<std::byte>;
 
-template <typename T> data_ptr_t PrimaryData<T>::convertTo(const type_ptr_t &type) {
+template <typename T> data_ptr_t PrimaryData<T>::convertTo(Type *type) {
     if (type->equals(type_)) {
         return shared_from_this();
     }
@@ -141,5 +141,5 @@ class StringData : public Data {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
+    virtual data_ptr_t convertTo(Type *type) override;
 };

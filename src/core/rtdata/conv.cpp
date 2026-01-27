@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,7 +88,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
 
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<ArrayData>(data);
-        const auto &arrayType = tt::as_shared<ArrayType>(arrayData->type());
+        const auto &arrayType = tt::as_ptr<ArrayType>(arrayData->type());
         Array *gcArray        = Array::create(arrayType->layout(), allocator);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
@@ -106,7 +106,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
 
     case TypeCode::Tuple: {
         auto tupleData        = tt::as_shared<TupleData>(data);
-        const auto &tupleType = tt::as_shared<TupleType>(tupleData->type());
+        const auto &tupleType = tt::as_ptr<TupleType>(tupleData->type());
         Tuple *gcTuple        = Tuple::create(tupleType->layout(), allocator);
         const auto &elems     = tupleData->raw();
         for (size_t i = 0; i < tupleData->size(); ++i) {
@@ -126,7 +126,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
 
     case TypeCode::Struct: {
         auto structData        = tt::as_shared<StructData>(data);
-        const auto &structType = tt::as_shared<StructType>(structData->type());
+        const auto &structType = tt::as_ptr<StructType>(structData->type());
         Struct *gcStruct       = Struct::create(structType->layout(), allocator);
         for (const auto &[name, data] : structData->raw()) {
             if (data->type()->isGCTraced()) {

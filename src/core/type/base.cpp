@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 25, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "base.h"
 
 #include "composite/composite.h"
+#include "core/mm/mm.h"
 #include "other.h"
 #include "utils/type.h"
 
@@ -115,15 +116,17 @@ std::string Type::mangle() const {
     return ""; // unknown
 }
 
-type_ptr_t Type::clone(bool deep) const {
+Type *Type::clone(bool deep) const {
     ASSERT(!::isComposite(code_), "Composite type cannot call Type::clone");
     ASSERT(!::isOtherType(code_), "Other type cannot call Type::clone");
-    return make_shared<Type>(code_);
+    return Type::create(code_);
 }
 
-bool Type::equals(const type_ptr_t &type) const {
+bool Type::equals(Type *type) const {
     ASSERT(!::isComposite(code_), "Composite type cannot call Type::equals");
     ASSERT(!::isOtherType(code_), "Other type cannot call Type::equals");
+    if (!type)
+        return false;
     return code_ == type->code_;
 }
 
@@ -147,10 +150,10 @@ CastSafety Type::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool Type::assignable(const type_ptr_t &type) const {
+bool Type::assignable(Type *type) const {
     if (!type)
         return false;
-    if (this == type.get())
+    if (this == type)
         return true;
 
     // 内置类型，含有 Ref 类型的复合类型必须 resolve 后才能赋值给其他类型
@@ -184,86 +187,92 @@ bool Type::assignable(const type_ptr_t &type) const {
     return code_ == type->code_;
 }
 
-type_ptr_t Type::Int32() {
-    static type_ptr_t type = nullptr;
+Type *Type::create(TypeCode code) {
+    void *mem = mm::permSpace().alloc(sizeof(Type), alignof(Type));
+    ASSERT(mem != nullptr, "Failed to allocate Type from permSpace");
+    return new (mem) Type(code);
+}
+
+Type *Type::Int32() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Int32);
+        type = Type::create(TypeCode::Int32);
     }
     return type;
 }
 
-type_ptr_t Type::Int64() {
-    static type_ptr_t type = nullptr;
+Type *Type::Int64() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Int64);
+        type = Type::create(TypeCode::Int64);
     }
     return type;
 }
 
-type_ptr_t Type::Int() { return Type::Int64(); }
+Type *Type::Int() { return Type::Int64(); }
 
-type_ptr_t Type::Float32() {
-    static type_ptr_t type = nullptr;
+Type *Type::Float32() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Float32);
+        type = Type::create(TypeCode::Float32);
     }
     return type;
 }
 
-type_ptr_t Type::Float64() {
-    static type_ptr_t type = nullptr;
+Type *Type::Float64() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Float64);
+        type = Type::create(TypeCode::Float64);
     }
     return type;
 }
 
-type_ptr_t Type::Float() { return Type::Float64(); }
+Type *Type::Float() { return Type::Float64(); }
 
-type_ptr_t Type::Bool() {
-    static type_ptr_t type = nullptr;
+Type *Type::Bool() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Bool);
+        type = Type::create(TypeCode::Bool);
     }
     return type;
 }
 
-type_ptr_t Type::Byte() {
-    static type_ptr_t type = nullptr;
+Type *Type::Byte() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Byte);
+        type = Type::create(TypeCode::Byte);
     }
     return type;
 }
 
-type_ptr_t Type::Void() {
-    static type_ptr_t type = nullptr;
+Type *Type::Void() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = std::make_shared<Type>(TypeCode::Void);
+        type = Type::create(TypeCode::Void);
     }
     return type;
 }
 
-type_ptr_t Type::String() {
-    static type_ptr_t type = nullptr;
+Type *Type::String() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::String);
+        type = Type::create(TypeCode::String);
     }
     return type;
 }
 
-type_ptr_t Type::Ref() {
-    static type_ptr_t type = nullptr;
+Type *Type::Ref() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Ref);
+        type = Type::create(TypeCode::Ref);
     }
     return type;
 }
 
-type_ptr_t Type::Any() {
-    static type_ptr_t type = nullptr;
+Type *Type::Any() {
+    static Type *type = nullptr;
     if (type == nullptr) {
-        type = make_shared<Type>(TypeCode::Any);
+        type = Type::create(TypeCode::Any);
     }
     return type;
 }

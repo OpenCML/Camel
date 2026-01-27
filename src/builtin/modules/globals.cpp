@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -259,7 +259,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -311,7 +311,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -356,7 +356,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -401,7 +401,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -446,7 +446,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -477,7 +477,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -494,7 +494,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -511,7 +511,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {true, false}}},
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -616,7 +616,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -675,7 +675,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1])) {
                                 return nullopt;
                             }
@@ -942,7 +942,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->assignable(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -993,7 +993,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -1037,7 +1037,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor | number, b: Tensor | number) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             TypeCode lhs = norm[0]->code();
                             TypeCode rhs = norm[1]->code();
                             if (lhs == TensorType::typeCode() && rhs == TensorType::typeCode()) {
@@ -1062,7 +1062,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -1113,7 +1113,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -1143,7 +1143,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -1187,7 +1187,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(base: Tensor, exponent: Tensor | number) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 (norm[1]->code() == TypeCode::Int32 ||
                                  norm[1]->code() == TypeCode::Int64 ||
@@ -1205,7 +1205,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(norm[1]))
                                 return nullopt;
                             return norm[0];
@@ -1232,11 +1232,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(arr: T[], index: int) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Int64)
                                 return nullopt;
-                            return tt::as_shared<ArrayType>(norm[0])->elemType();
+                            return tt::as_ptr<ArrayType>(norm[0])->elemType();
                         }),
                 },
                 {
@@ -1245,7 +1245,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(str: string, index: int) => string",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::String ||
                                 norm[1]->code() != TypeCode::Int64)
                                 return nullopt;
@@ -1258,7 +1258,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(t: Tensor, i: int) => double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->equals(Type::Int64())) {
                                 return Type::Float64();
@@ -1272,7 +1272,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {3, {false, false, false}}},
                         "(t: Tensor, i: int, j: int) => double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->equals(Type::Int64()) && norm[2]->equals(Type::Int64())) {
                                 return Type::Float64();
@@ -1315,7 +1315,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(self: typeas T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> { return norm[0]; }),
+                            -> optional<Type *> { return norm[0]; }),
                 },
             }),
         OperatorGroup::create(
@@ -1335,7 +1335,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(self: typeas T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> { return norm[0]; }),
+                            -> optional<Type *> { return norm[0]; }),
                 },
             }),
         // ======= IO =======
@@ -1348,7 +1348,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(prompt: string) => string",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(Type::String()))
                                 return nullopt;
                             return Type::String();
@@ -1364,7 +1364,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (...args: any) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (with.size() > 0 && with[0]->code() != TypeCode::String) {
                                 return nullopt;
                             }
@@ -1384,7 +1384,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (...args: any) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (with.size() > 0 && with[0]->code() != TypeCode::String) {
                                 return nullopt;
                             }
@@ -1422,7 +1422,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{-1, {}}, {1, {false}}},
                         "<...args: any> (fmt: string) => string",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!norm[0]->equals(Type::String()))
                                 return nullopt;
                             return Type::String();
@@ -1438,14 +1438,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {false}}},
                         "<sep: string> (vec: string[]) => string",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (!with[0]->equals(Type::String()))
                                 return nullopt;
                             const auto &type = norm[0];
                             if (type->code() != TypeCode::Array) {
                                 return nullopt;
                             }
-                            const auto &arrType = tt::as_shared<ArrayType>(type);
+                            const auto &arrType = tt::as_ptr<ArrayType>(type);
                             if (arrType->elemType()->code() != TypeCode::String) {
                                 return nullopt;
                             }
@@ -1467,7 +1467,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (arr: T[]) => int",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             return Type::Int64();
@@ -1483,7 +1483,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {-1, {}}},
                         "(...args: (typeas T)[]) => (T, T, ...)[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm.size() < 2)
                                 return nullopt;
                             for (const auto &t : norm) {
@@ -1492,8 +1492,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             }
                             type_vec_t tupleTypes;
                             for (size_t i = 0; i < norm.size(); i++) {
-                                const auto &elemType =
-                                    tt::as_shared<ArrayType>(norm[i])->elemType();
+                                const auto &elemType = tt::as_ptr<ArrayType>(norm[i])->elemType();
                                 tupleTypes.push_back(elemType);
                             }
                             return ArrayType::create(TupleType::create(std::move(tupleTypes)));
@@ -1509,10 +1508,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (arr: T[]) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             return arrType->elemType();
                         }),
                 },
@@ -1526,10 +1525,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (arr: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             return ArrayType::create(arrType->elemType());
                         }),
                 },
@@ -1543,7 +1542,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(start: int, end: int) => int[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Int64)
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Int64)
@@ -1561,14 +1560,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{2, {false, false}}, {1, {false}}},
                         "<start: int, end: int> (arr: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             if (with[0]->code() != TypeCode::Int64)
                                 return nullopt;
                             if (with[1]->code() != TypeCode::Int64)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             return arrType;
                         }),
                 },
@@ -1582,13 +1581,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "<> (arr: T[], other: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType      = tt::as_shared<ArrayType>(norm[0]);
-                            const auto &otherArrType = tt::as_shared<ArrayType>(norm[1]);
+                            const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
+                            const auto &otherArrType = tt::as_ptr<ArrayType>(norm[1]);
                             if (!arrType->elemType()->equals(otherArrType->elemType()))
                                 return nullopt;
                             return ArrayType::create(arrType->elemType());
@@ -1604,10 +1603,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {true}}},
                         "<value: T> (var arr: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             const auto &eleType = arrType->elemType();
                             if (eleType != Type::Void() && !eleType->equals(with[0]))
                                 return nullopt;
@@ -1624,13 +1623,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {true}}},
                         "<other: T[]> (var arr: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType      = tt::as_shared<ArrayType>(norm[0]);
-                            const auto &otherArrType = tt::as_shared<ArrayType>(with[0]);
+                            const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
+                            const auto &otherArrType = tt::as_ptr<ArrayType>(with[0]);
                             if (!arrType->equals(otherArrType))
                                 return nullopt;
                             return arrType;
@@ -1653,10 +1652,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {false}}},
                         "<value: T> (arr: T[]) => bool",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             if (!arrType->elemType()->equals(with[0]))
                                 return nullopt;
                             return Type::Bool();
@@ -1673,14 +1672,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {false}}},
                         "<f: (item: T) => U> (collect: T[]) => U[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType  = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType  = tt::as_ptr<ArrayType>(norm[0]);
                             const auto &elemType = arrType->elemType();
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_shared<FunctionType>(with[0]);
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypes().size() != 1)
                                 return nullopt;
                             const auto &normTypes = funcType->normTypes();
@@ -1700,14 +1699,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {true}}},
                         "<f: (item: T) => T> (var collect: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType  = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType  = tt::as_ptr<ArrayType>(norm[0]);
                             const auto &elemType = arrType->elemType();
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_shared<FunctionType>(with[0]);
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypes().size() != 1)
                                 return nullopt;
                             const auto &normTypes = funcType->normTypes();
@@ -1728,13 +1727,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {false}}},
                         "<f: (item: T) => bool> (collect: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             if (with[1]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_shared<FunctionType>(with[1]);
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[1]);
                             if (!funcType->assignable(FunctionType::create()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Bool()))
@@ -1752,13 +1751,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{2, {false, false}}, {1, {false}}},
                         "<f: (acc: U, item: T) => U, initial: U> (collect: T[]) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType  = tt::as_shared<FunctionType>(with[0]);
+                            const auto &funcType  = tt::as_ptr<FunctionType>(with[0]);
                             const auto &normTypes = funcType->normTypes();
                             if (!normTypes[1].first->equals(arrType->elemType()))
                                 return nullopt;
@@ -1779,13 +1778,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{1, {false}}, {1, {false}}},
                         "<f: (item: T) => void> (collect: T[]) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &arrType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_shared<FunctionType>(with[0]);
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypes().size() != 1)
                                 return nullopt;
                             const auto &normTypes = funcType->normTypes();
@@ -1805,13 +1804,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(lhs: (arg1: T1, arg2: T2, ...) => R, rhs: (arg: R) => U) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &lhsFuncType   = tt::as_shared<FunctionType>(norm[0]);
-                            const auto &rhsFuncType   = tt::as_shared<FunctionType>(norm[1]);
+                            const auto &lhsFuncType   = tt::as_ptr<FunctionType>(norm[0]);
+                            const auto &rhsFuncType   = tt::as_ptr<FunctionType>(norm[1]);
                             const auto &lhsReturnType = lhsFuncType->exitType();
                             const auto &rhsNormTypes  = rhsFuncType->normTypes();
                             if (rhsNormTypes.size() != 1)

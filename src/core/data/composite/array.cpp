@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,14 +24,14 @@
 
 using namespace std;
 
-ArrayData::ArrayData(type_ptr_t elemType, data_list_t data)
+ArrayData::ArrayData(Type *elemType, data_list_t data)
     : CompositeData(ArrayType::create(elemType)), data_(data) {
     for (const auto &e : data) {
         emplace(e);
     }
 }
 
-ArrayData::ArrayData(type_ptr_t elemType, const data_vec_t &data)
+ArrayData::ArrayData(Type *elemType, const data_vec_t &data)
     : CompositeData(ArrayType::create(elemType)) {
     ASSERT(type_->code() == TypeCode::Array, "Type is not ArrayType");
     for (const auto &e : data) {
@@ -42,13 +42,13 @@ ArrayData::ArrayData(type_ptr_t elemType, const data_vec_t &data)
 void ArrayData::emplace(const data_ptr_t &e) {
     if (e->type()->code() == TypeCode::Ref) {
         refs_.push_back(data_.size());
-        tt::as_shared<ArrayType>(type_)->addRef(data_.size());
+        tt::as_ptr<ArrayType>(type_)->addRef(data_.size());
     } else {
-        const auto &arrType = tt::as_shared<ArrayType>(type_);
+        const auto &arrType = tt::as_ptr<ArrayType>(type_);
         ASSERT(arrType, "ArrayData type is not ArrayType");
         const auto &elemType = arrType->elemType();
         if (elemType == Type::Void()) {
-            type_ = std::make_shared<ArrayType>(e->type());
+            type_ = ArrayType::create(e->type());
         } else if (!e->type()->assignable(elemType)) {
             throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
                 .commit("Array", e->type()->toString(), elemType->toString());
@@ -105,12 +105,12 @@ const string ArrayData::toString() const {
     return str;
 }
 
-data_ptr_t ArrayData::convertTo(const type_ptr_t &type) {
+data_ptr_t ArrayData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return tt::as_shared<ArrayData>(shared_from_this());
     }
     if (type->code() == TypeCode::Array) {
-        const auto &arrType = tt::as_shared<ArrayType>(type);
+        const auto &arrType = tt::as_ptr<ArrayType>(type);
         return ArrayData::from(arrType->elemType(), data_);
     }
     return nullptr;

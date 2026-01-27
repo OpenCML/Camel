@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,13 +28,13 @@ class TupleData : public CompositeData {
 
   public:
     TupleData(data_list_t data = {});
-    TupleData(type_ptr_t type, data_vec_t &&data);
+    TupleData(Type *type, data_vec_t &&data);
     virtual ~TupleData() = default;
 
     static std::shared_ptr<TupleData> create(data_list_t data = {}) {
         return std::make_shared<TupleData>(data);
     }
-    static std::shared_ptr<TupleData> create(type_ptr_t type, data_vec_t &&data) {
+    static std::shared_ptr<TupleData> create(Type *type, data_vec_t &&data) {
         return std::make_shared<TupleData>(type, std::move(data));
     }
 
@@ -51,5 +51,5 @@ class TupleData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
+    virtual data_ptr_t convertTo(Type *type) override;
 };

@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 25, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
+#include "core/mm/mm.h"
 #include "error/diagnostics/diagnostics.h"
 #include "utils/assert.h"
 #include "utils/type.h"
@@ -43,38 +44,46 @@ void TupleType::computeLayout() const {
 
 TupleType::TupleType() : CompositeType(TypeCode::Tuple) {}
 
-TupleType::TupleType(const initializer_list<type_ptr_t> &types)
+TupleType::TupleType(const initializer_list<Type *> &types)
     : CompositeType(TypeCode::Tuple), types_(types) {}
 
-TupleType::TupleType(const vector<type_ptr_t> &types)
-    : CompositeType(TypeCode::Tuple), types_(types) {}
+TupleType::TupleType(const vector<Type *> &types) : CompositeType(TypeCode::Tuple), types_(types) {}
 
-TupleType::TupleType(std::vector<type_ptr_t> &&types)
+TupleType::TupleType(std::vector<Type *> &&types)
     : CompositeType(TypeCode::Tuple), types_(std::move(types)) {}
 
-std::shared_ptr<TupleType> TupleType::create(const std::vector<type_ptr_t> &types) {
-    return std::make_shared<TupleType>(types);
+TupleType *TupleType::create() {
+    void *mem = mm::permSpace().alloc(sizeof(TupleType), alignof(TupleType));
+    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    return new (mem) TupleType();
 }
 
-std::shared_ptr<TupleType> TupleType::create(std::vector<type_ptr_t> &&types) {
-    return std::make_shared<TupleType>(std::move(types));
+TupleType *TupleType::create(const std::vector<Type *> &types) {
+    void *mem = mm::permSpace().alloc(sizeof(TupleType), alignof(TupleType));
+    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    return new (mem) TupleType(types);
 }
 
-void TupleType::add(const type_ptr_t &type) { types_.push_back(type); }
+TupleType *TupleType::create(std::vector<Type *> &&types) {
+    void *mem = mm::permSpace().alloc(sizeof(TupleType), alignof(TupleType));
+    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    return new (mem) TupleType(std::move(types));
+}
 
-void TupleType::set(size_t index, const type_ptr_t &type) { types_[index] = type; }
+void TupleType::add(Type *type) { types_.push_back(type); }
+
+void TupleType::set(size_t index, Type *type) { types_[index] = type; }
 
 size_t TupleType::size() const { return types_.size(); }
 
-const vector<type_ptr_t> &TupleType::types() const { return types_; }
+const vector<Type *> &TupleType::types() const { return types_; }
 
-std::shared_ptr<TupleType> TupleType::slice(size_t start, size_t end) const {
+TupleType *TupleType::slice(size_t start, size_t end) const {
     ASSERT(start <= end && end <= types_.size(), "TupleType slice indices out of range");
-    return std::make_shared<TupleType>(
-        std::vector<type_ptr_t>(types_.begin() + start, types_.begin() + end));
+    return TupleType::create(std::vector<Type *>(types_.begin() + start, types_.begin() + end));
 }
 
-std::optional<type_ptr_t> TupleType::typeAt(size_t idx) const {
+std::optional<Type *> TupleType::typeAt(size_t idx) const {
     if (idx >= types_.size()) {
         return std::nullopt;
     }
@@ -88,10 +97,10 @@ const TupleTypeLayout &TupleType::layout() const {
     return *layout_;
 }
 
-type_ptr_t TupleType::resolve(const type_vec_t &typeList) const {
+Type *TupleType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "TupleType is already resolved");
-    std::vector<type_ptr_t> types = types_;
+    std::vector<Type *> types = types_;
     size_t i = 0, j = 0;
     while (i < types.size() && j < typeList.size()) {
         if (types[i]->code() == TypeCode::Ref) {
@@ -141,10 +150,10 @@ std::string TupleType::mangle() const {
     return result;
 }
 
-type_ptr_t TupleType::clone(bool deep /* = false */) const {
-    std::shared_ptr<TupleType> res;
+Type *TupleType::clone(bool deep /* = false */) const {
+    TupleType *res;
     if (deep) {
-        std::vector<type_ptr_t> clonedTypes;
+        std::vector<Type *> clonedTypes;
         for (const auto &type : types_) {
             clonedTypes.push_back(type->clone(true));
         }
@@ -156,11 +165,11 @@ type_ptr_t TupleType::clone(bool deep /* = false */) const {
     return res;
 }
 
-bool TupleType::equals(const type_ptr_t &other) const {
-    if (this == other.get()) {
+bool TupleType::equals(Type *other) const {
+    if (this == other) {
         return true;
     }
-    if (other->code() != TypeCode::Tuple) {
+    if (!other || other->code() != TypeCode::Tuple) {
         return false;
     }
     const TupleType &otherTuple = static_cast<const TupleType &>(*other);
@@ -182,4 +191,4 @@ CastSafety TupleType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool TupleType::assignable(const type_ptr_t &type) const { return equals(type); }
+bool TupleType::assignable(Type *type) const { return equals(type); }

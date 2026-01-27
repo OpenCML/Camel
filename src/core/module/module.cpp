@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
     : loaded_(false), name_(name), path_(path), context_(ctx),
-      exportedTypeNS_(std::make_shared<Namespace<std::string, type_ptr_t>>()),
+      exportedTypeNS_(std::make_shared<Namespace<std::string, Type *>>()),
       exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()),
       importedRefModMap_() {};
 
@@ -33,9 +33,8 @@ void Module::importAllRefsFromMod(const module_ptr_t &mod) {
     }
     // Types
     auto typeNS = mod->exportedTypeNS();
-    typeNS->forEach([&](const Reference &ref, const type_ptr_t &type) {
-        importedRefModMap_[Reference(ref)] = mod;
-    });
+    typeNS->forEach(
+        [&](const Reference &ref, Type *type) { importedRefModMap_[Reference(ref)] = mod; });
     // Entities
     auto entNS = mod->exportedEntityNS();
     entNS->forEach([&](const Reference &ref, const entity &entity) {
@@ -51,7 +50,7 @@ bool Module::hasImportedRef(const Reference &ref) const {
     return importedRefModMap_.find(ref) != importedRefModMap_.end();
 }
 
-bool Module::exportType(const Reference &ref, const type_ptr_t &type) {
+bool Module::exportType(const Reference &ref, Type *type) {
     return exportedTypeNS_->insert(ref, type);
 }
 
@@ -59,7 +58,7 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
     return exportedEntityNS_->insert(ref, ent);
 }
 
-std::optional<type_ptr_t> Module::getImportedType(const Reference &ref) const {
+std::optional<Type *> Module::getImportedType(const Reference &ref) const {
     if (importedRefModMap_.find(ref) == importedRefModMap_.end()) {
         return std::nullopt;
     }
@@ -85,7 +84,7 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
     return mod->getExportedEntity(ref);
 };
 
-std::optional<type_ptr_t> Module::getExportedType(const Reference &ref) const {
+std::optional<Type *> Module::getExportedType(const Reference &ref) const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedTypeNS_->get(ref);
 };

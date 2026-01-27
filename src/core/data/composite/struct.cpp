@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,11 +24,11 @@
 
 using namespace std;
 
-StructData::StructData() : CompositeData(std::make_shared<StructType>()) {}
+StructData::StructData() : CompositeData(StructType::create()) {}
 
 StructData::StructData(initializer_list<pair<string, data_ptr_t>> data)
-    : CompositeData(make_shared<StructType>()) {
-    StructType &structType = *static_cast<StructType *>(type_.get());
+    : CompositeData(StructType::create()) {
+    StructType &structType = *static_cast<StructType *>(type_);
     for (const auto &e : data) {
         auto &[key, val] = e;
         data_[key]       = val;
@@ -40,10 +40,10 @@ StructData::StructData(initializer_list<pair<string, data_ptr_t>> data)
 }
 
 StructData::StructData(std::map<std::string, data_ptr_t> &&data)
-    : CompositeData(make_shared<StructType>()), data_(std::move(data)) {}
+    : CompositeData(StructType::create()), data_(std::move(data)) {}
 
 bool StructData::emplace(const std::string &key, const data_ptr_t &val) {
-    StructType &structType = *static_cast<StructType *>(type_.get());
+    StructType &structType = *static_cast<StructType *>(type_);
     if (structType.add(key, val->type())) {
         data_[key] = val;
         if (val->type()->code() == TypeCode::Ref) {
@@ -56,7 +56,7 @@ bool StructData::emplace(const std::string &key, const data_ptr_t &val) {
 
 bool StructData::add(const string &key, const data_ptr_t &val) {
     ASSERT(resolved(), "Cannot add data to unresolved StructData");
-    StructType &structType = *static_cast<StructType *>(type_.get());
+    StructType &structType = *static_cast<StructType *>(type_);
     if (structType.add(key, val->type())) {
         data_[key] = val;
         return true;
@@ -138,7 +138,7 @@ const string StructData::toString() const {
     return str;
 }
 
-data_ptr_t StructData::convertTo(const type_ptr_t &type) {
+data_ptr_t StructData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return tt::as_shared<StructData>(shared_from_this());
     }

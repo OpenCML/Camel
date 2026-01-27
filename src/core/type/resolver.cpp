@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 #include "utils/assert.h"
 
-std::optional<func_type_ptr_t> StaticFuncTypeResolver::resolve(
+std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
     ASSERT(funcType_, "FunctionType is null");
     const auto &withTypes = funcType_->withTypes();
@@ -42,7 +42,7 @@ std::optional<func_type_ptr_t> StaticFuncTypeResolver::resolve(
     return funcType_; // accept
 }
 
-std::optional<func_type_ptr_t> DynamicFuncTypeResolver::resolve(
+std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
     if (withVars_.first != -1 && static_cast<int>(with.size()) != withVars_.first) {
         return std::nullopt; // reject

@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Jan. 21, 2026
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -113,7 +113,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {-1, {}}},
                         "(plot: bool) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm.size() < 1 || norm.size() > 1)
                                 return nullopt;
                             if (norm[0]->code() != TypeCode::Bool)
@@ -228,24 +228,22 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         "<is_plot?: bool, isdata?: bool> (signals: ((double[], double[]), "
                         "(double[], double[]))) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (with.size() < 1 || with.size() > 3)
                                 return nullopt;
                             // 第一个参数必须是元组，包含两个元组（X_Pol 和
                             // Y_Pol），每个元组包含两个double数组（real 和 imag）
                             if (norm[0]->code() != TypeCode::Tuple)
                                 return nullopt;
-                            auto outerTupleType = tt::as_shared<TupleType>(norm[0]);
+                            auto outerTupleType = tt::as_ptr<TupleType>(norm[0]);
                             if (outerTupleType->types().size() != 2)
                                 return nullopt;
                             // 检查 X_Pol 和 Y_Pol 是否都是元组
                             if (outerTupleType->types()[0]->code() != TypeCode::Tuple ||
                                 outerTupleType->types()[1]->code() != TypeCode::Tuple)
                                 return nullopt;
-                            auto xPolTupleType =
-                                tt::as_shared<TupleType>(outerTupleType->types()[0]);
-                            auto yPolTupleType =
-                                tt::as_shared<TupleType>(outerTupleType->types()[1]);
+                            auto xPolTupleType = tt::as_ptr<TupleType>(outerTupleType->types()[0]);
+                            auto yPolTupleType = tt::as_ptr<TupleType>(outerTupleType->types()[1]);
                             // 检查每个元组是否包含两个数组（real 和 imag）
                             if (xPolTupleType->types().size() != 2 ||
                                 yPolTupleType->types().size() != 2)

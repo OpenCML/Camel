@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,11 +32,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(arr: (typeas T)[]) => double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            TypeCode elemCode =
-                                tt::as_shared<ArrayType>(norm[0])->elemType()->code();
+                            TypeCode elemCode = tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
                             if (elemCode == TypeCode::Int32 || elemCode == TypeCode::Int64 ||
                                 elemCode == TypeCode::Float32 || elemCode == TypeCode::Float64)
                                 return Type::Float64();
@@ -53,11 +52,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(arr: (typeas T)[]) => double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            TypeCode elemCode =
-                                tt::as_shared<ArrayType>(norm[0])->elemType()->code();
+                            TypeCode elemCode = tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
                             if (elemCode == TypeCode::Int32 || elemCode == TypeCode::Int64 ||
                                 elemCode == TypeCode::Float32 || elemCode == TypeCode::Float64)
                                 return Type::Float64();

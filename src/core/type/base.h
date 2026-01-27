@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 25, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,9 +117,7 @@ std::string typeCodeToString(TypeCode code);
 extern const signed char primitiveTypeConvMatrix[8][8];
 
 class Type;
-using type_ptr_t  = std::shared_ptr<Type>;
-using type_vec_t  = std::vector<type_ptr_t>;
-using type_wptr_t = std::weak_ptr<Type>;
+using type_vec_t = std::vector<Type *>;
 
 class Type {
   protected:
@@ -140,25 +138,26 @@ class Type {
 
     virtual std::string toString() const;
     virtual std::string mangle() const;
-    virtual type_ptr_t clone(bool deep = false) const;
+    virtual Type *clone(bool deep = false) const;
 
-    virtual bool equals(const type_ptr_t &type) const;
+    virtual bool equals(Type *type) const;
     virtual CastSafety castSafetyTo(const Type &other) const;
-    bool assignable(const type_ptr_t &type) const;
+    bool assignable(Type *type) const;
 
-    bool operator==(const type_ptr_t &other) const = delete;
-    bool operator!=(const type_ptr_t &other) const = delete;
+    bool operator==(Type *other) const = delete;
+    bool operator!=(Type *other) const = delete;
 
-    static type_ptr_t Int32();
-    static type_ptr_t Int64();
-    static type_ptr_t Int();
-    static type_ptr_t Float32();
-    static type_ptr_t Float64();
-    static type_ptr_t Float();
-    static type_ptr_t Bool();
-    static type_ptr_t Byte();
-    static type_ptr_t Void();
-    static type_ptr_t String();
-    static type_ptr_t Ref();
-    static type_ptr_t Any();
+    static Type *create(TypeCode code);
+    static Type *Int32();
+    static Type *Int64();
+    static Type *Int();
+    static Type *Float32();
+    static Type *Float64();
+    static Type *Float();
+    static Type *Bool();
+    static Type *Byte();
+    static Type *Void();
+    static Type *String();
+    static Type *Ref();
+    static Type *Any();
 };

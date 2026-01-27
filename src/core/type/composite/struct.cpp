@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 25, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "struct.h"
+#include "core/mm/mm.h"
 #include "utils/assert.h"
 #include "utils/type.h"
 
@@ -39,11 +40,15 @@ void StructType::computeLayout() const {
 
 StructType::StructType() : CompositeType(TypeCode::Struct) {}
 
-shared_ptr<StructType> StructType::create() { return make_shared<StructType>(); }
+StructType *StructType::create() {
+    void *mem = mm::permSpace().alloc(sizeof(StructType), alignof(StructType));
+    ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
+    return new (mem) StructType();
+}
 
 size_t StructType::size() const { return fields_.size(); }
 
-optional<type_ptr_t> StructType::typeOf(const string &idx) const {
+optional<Type *> StructType::typeOf(const string &idx) const {
     auto it = fields_.find(idx);
     if (it == fields_.end()) {
         return nullopt;
@@ -51,12 +56,12 @@ optional<type_ptr_t> StructType::typeOf(const string &idx) const {
     return it->second;
 }
 
-bool StructType::add(const string &name, const type_ptr_t &type) {
+bool StructType::add(const string &name, Type *type) {
     if (has(name)) {
         return false;
     }
     fields_.emplace(name, type);
-    if (type->code() == TypeCode::Ref) {
+    if (type && type->code() == TypeCode::Ref) {
         refs_.push_back(name);
     }
     return true;
@@ -64,7 +69,7 @@ bool StructType::add(const string &name, const type_ptr_t &type) {
 
 bool StructType::has(const string &name) const { return fields_.find(name) != fields_.end(); }
 
-std::optional<type_ptr_t> StructType::get(const string &name) const {
+std::optional<Type *> StructType::get(const string &name) const {
     auto it = fields_.find(name);
     if (it == fields_.end()) {
         return nullopt;
@@ -72,7 +77,7 @@ std::optional<type_ptr_t> StructType::get(const string &name) const {
     return it->second;
 }
 
-std::optional<type_ptr_t> StructType::get(const size_t &idx) const {
+std::optional<Type *> StructType::get(const size_t &idx) const {
     if (idx >= fields_.size()) {
         return nullopt;
     }
@@ -98,10 +103,10 @@ const StructTypeLayout &StructType::layout() const {
     return *layout_;
 }
 
-type_ptr_t StructType::operator|(const StructType &other) const {
+Type *StructType::operator|(const StructType &other) const {
     ASSERT(resolved() && other.resolved(), "StructType::operator| requires resolved operands");
 
-    auto result = make_shared<StructType>();
+    auto result = StructType::create();
 
     // 复制 lhs 的字段
     for (const auto &kv : fields_) {
@@ -115,33 +120,34 @@ type_ptr_t StructType::operator|(const StructType &other) const {
         const auto &name = kv.first;
         if (result->fields_.find(name) == result->fields_.end()) {
             const auto &type = kv.second;
-            result->fields_.emplace(name, type->clone());
+            result->fields_.emplace(name, type ? type->clone() : nullptr);
         }
     }
 
     return result;
 }
 
-type_ptr_t StructType::operator&(const StructType &other) const {
+Type *StructType::operator&(const StructType &other) const {
     ASSERT(resolved() && other.resolved(), "StructType::operator& requires resolved operands");
 
-    auto result = make_shared<StructType>();
+    auto result = StructType::create();
 
     for (const auto &kv : fields_) {
         const auto &name = kv.first;
         if (other.fields_.find(name) != other.fields_.end()) {
             const auto &type = kv.second;
-            result->fields_.emplace(name, type->clone());
+            result->fields_.emplace(name, type ? type->clone() : nullptr);
         }
     }
 
     return result;
 }
 
-type_ptr_t StructType::resolve(const type_vec_t &typeList) const {
+Type *StructType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() == refs_.size(), "StructType::resolve: typeList size mismatch");
 
-    auto resolvedStruct = tt::as_shared<StructType>(this->clone(false));
+    auto resolvedStruct = tt::as_ptr<StructType>(this->clone(false));
+    ASSERT(resolvedStruct != nullptr, "Failed to cast to StructType");
 
     for (size_t i = 0; i < refs_.size(); ++i) {
         const auto &fieldName              = refs_[i];
@@ -180,8 +186,8 @@ string StructType::mangle() const {
     return oss.str();
 }
 
-type_ptr_t StructType::clone(bool deep /* = false */) const {
-    auto result = make_shared<StructType>();
+Type *StructType::clone(bool deep /* = false */) const {
+    auto result = StructType::create();
 
     result->refs_   = refs_;
     result->layout_ = layout_;
@@ -189,17 +195,17 @@ type_ptr_t StructType::clone(bool deep /* = false */) const {
     for (const auto &kv : fields_) {
         const auto &name      = kv.first;
         const auto &fieldType = kv.second;
-        result->fields_.emplace(name, deep ? fieldType->clone(true) : fieldType);
+        result->fields_.emplace(name, deep && fieldType ? fieldType->clone(true) : fieldType);
     }
 
     return result;
 }
 
-bool StructType::equals(const type_ptr_t &type) const {
+bool StructType::equals(Type *type) const {
     if (!type || type->code() != TypeCode::Struct) {
         return false;
     }
-    auto other = tt::as_shared<const StructType>(type);
+    auto other = tt::as_ptr<const StructType>(type);
     if (!other) {
         return false;
     }
@@ -224,4 +230,4 @@ bool StructType::equals(const type_ptr_t &type) const {
 
 CastSafety StructType::castSafetyTo(const Type &) const { return CastSafety::Unsafe; }
 
-bool StructType::assignable(const type_ptr_t &type) const { return equals(type); }
+bool StructType::assignable(Type *type) const { return equals(type); }

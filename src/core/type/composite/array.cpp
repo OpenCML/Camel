@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 25, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
+#include "core/mm/mm.h"
 #include "error/diagnostics/diagnostics.h"
 #include "utils/assert.h"
 
@@ -29,21 +30,22 @@ void ArrayType::computeLayout() const {
     }
 }
 
-ArrayType::ArrayType(const type_ptr_t &elementType)
-    : CompositeType(TypeCode::Array), elemType_(elementType) {}
+ArrayType::ArrayType(Type *elementType) : CompositeType(TypeCode::Array), elemType_(elementType) {}
 
-std::shared_ptr<ArrayType> ArrayType::create(const type_ptr_t &elemType) {
+ArrayType *ArrayType::create(Type *elemType) {
     if (!elemType) {
-        return std::make_shared<ArrayType>(Type::Void());
+        elemType = Type::Void();
     }
-    return std::make_shared<ArrayType>(elemType);
+    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
+    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
+    return new (mem) ArrayType(elemType);
 }
 
 void ArrayType::addRef(size_t index) { refs_.push_back(index); }
 
 void ArrayType::setRefs(const std::vector<size_t> &refs) { refs_ = refs; }
 
-type_ptr_t ArrayType::elemType() const { return elemType_; }
+Type *ArrayType::elemType() const { return elemType_; }
 
 const ArrayTypeLayout &ArrayType::layout() const {
     if (!layout_) {
@@ -52,7 +54,7 @@ const ArrayTypeLayout &ArrayType::layout() const {
     return *layout_;
 }
 
-type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
+Type *ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "ArrayType is already resolved");
 
@@ -60,7 +62,7 @@ type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
         typeList.size() == refs_.size(),
         "Type list size does not match the number of references in ArrayType");
 
-    type_ptr_t newElemType = elemType_;
+    Type *newElemType = elemType_;
     for (const auto &type : typeList) {
         if (newElemType->code() == TypeCode::Void) {
             newElemType = type;
@@ -84,18 +86,18 @@ std::string ArrayType::mangle() const {
     return result;
 }
 
-type_ptr_t ArrayType::clone(bool deep /* = false */) const {
+Type *ArrayType::clone(bool deep /* = false */) const {
     auto newType     = ArrayType::create(deep ? elemType_->clone(true) : elemType_);
     newType->refs_   = refs_;
     newType->layout_ = layout_;
     return newType;
 }
 
-bool ArrayType::equals(const type_ptr_t &other) const {
-    if (this == other.get()) {
+bool ArrayType::equals(Type *other) const {
+    if (this == other) {
         return true;
     }
-    if (other->code() != TypeCode::Array) {
+    if (!other || other->code() != TypeCode::Array) {
         return false;
     }
     const ArrayType &otherArr = static_cast<const ArrayType &>(*other);
@@ -109,4 +111,4 @@ CastSafety ArrayType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool ArrayType::assignable(const type_ptr_t &type) const { return equals(type); }
+bool ArrayType::assignable(Type *type) const { return equals(type); }

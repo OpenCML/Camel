@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,8 +47,8 @@ void __zip__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
         return;
     }
 
-    auto resArrayType = frame.typePtrAt<ArrayType>(self);
-    auto resTupleType = tt::as_shared<TupleType>(resArrayType->elemType());
+    auto resArrayType = frame.typeAt<ArrayType>(self);
+    auto resTupleType = tt::as_ptr<TupleType>(resArrayType->elemType());
 
     Array *result = Array::create(resArrayType->layout(), mm::autoSpace(), n);
     for (size_t i = 0; i < n; ++i) {
@@ -106,7 +106,7 @@ void __range__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fr
             count = static_cast<size_t>((start - stop - 1) / (-step) + 1);
     }
 
-    auto resArrayType = frame.typePtrAt<ArrayType>(self);
+    auto resArrayType = frame.typeAt<ArrayType>(self);
 
     Array *result = Array::create(resArrayType->layout(), mm::autoSpace(), count);
 
@@ -134,7 +134,7 @@ void __slice_arr__(
         end = start;
 
     size_t newSize    = static_cast<size_t>(end - start);
-    auto resArrayType = frame.typePtrAt<ArrayType>(self);
+    auto resArrayType = frame.typeAt<ArrayType>(self);
     Array *res        = Array::create(resArrayType->layout(), mm::autoSpace(), newSize);
 
     for (size_t i = 0; i < newSize; ++i)
@@ -149,7 +149,7 @@ void __concat_arr__(
     Array *rhs = frame.get<Array *>(nargs[1]);
 
     size_t n1 = lhs->size(), n2 = rhs->size();
-    auto resArrayType = frame.typePtrAt<ArrayType>(self);
+    auto resArrayType = frame.typeAt<ArrayType>(self);
     Array *res        = Array::create(resArrayType->layout(), mm::autoSpace(), n1 + n2);
 
     for (size_t i = 0; i < n1; ++i)

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -260,7 +260,7 @@ enum class DeviceType : uint8_t {
 //     static std::string shape_to_string(const std::vector<size_t> &shape);
 
 //   public:
-//     TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape);
+//     TensorData(Type *elementType, const std::vector<size_t> &shape);
 //     ~TensorData();
 //     TensorData(TensorData &&other) noexcept;
 //     TensorData &operator=(TensorData &&other) noexcept;
@@ -286,7 +286,7 @@ enum class DeviceType : uint8_t {
 //     virtual void resolve(const data_vec_t &dataList) override;
 
 //     virtual bool equals(const data_ptr_t &other) const override;
-//     virtual data_ptr_t convert(type_ptr_t target, bool inplace = false) override;
+//     virtual data_ptr_t convert(Type * target, bool inplace = false) override;
 //     virtual data_ptr_t clone(bool deep = false) const override;
 //     virtual const std::string toString() const override;
 //     const std::string toFormattedString(size_t maxItemsPerDim = 6) const;

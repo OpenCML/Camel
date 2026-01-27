@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,14 +27,14 @@ class ArrayData : public CompositeData {
     std::vector<data_ptr_t> data_;
 
   public:
-    ArrayData(type_ptr_t elemType, data_list_t data = {});
-    ArrayData(type_ptr_t elemType, const data_vec_t &data);
+    ArrayData(Type *elemType, data_list_t data = {});
+    ArrayData(Type *elemType, const data_vec_t &data);
     virtual ~ArrayData() = default;
 
-    static std::shared_ptr<ArrayData> create(type_ptr_t elemType, data_list_t data = {}) {
+    static std::shared_ptr<ArrayData> create(Type *elemType, data_list_t data = {}) {
         return std::make_shared<ArrayData>(elemType, data);
     }
-    static std::shared_ptr<ArrayData> from(type_ptr_t elemType, const data_vec_t &data) {
+    static std::shared_ptr<ArrayData> from(Type *elemType, const data_vec_t &data) {
         return std::make_shared<ArrayData>(elemType, data);
     }
 
@@ -49,5 +49,5 @@ class ArrayData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
+    virtual data_ptr_t convertTo(Type *type) override;
 };

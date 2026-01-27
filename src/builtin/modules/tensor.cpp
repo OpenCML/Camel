@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,7 +93,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {-1, {}}},
                         "(start: float, stop: float, step?: float) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->equals(Type::Float32()) &&
                                 norm[1]->equals(Type::Float32())) {
                                 if (norm.size() == 2) {
@@ -115,9 +115,9 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {-1, {}}},
                         "(shape: int[], min?: float, max?: float) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TypeCode::Array) {
-                                auto arrType = tt::as_shared<ArrayType>(norm[0]);
+                                auto arrType = tt::as_ptr<ArrayType>(norm[0]);
                                 if (arrType->elemType()->equals(Type::Int64())) {
                                     if (norm.size() == 1) {
                                         return TensorType::Default();
@@ -142,9 +142,9 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {-1, {}}},
                         "(shape: int[], mean?: float, stddev?: float) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TypeCode::Array) {
-                                auto arrType = tt::as_shared<ArrayType>(norm[0]);
+                                auto arrType = tt::as_ptr<ArrayType>(norm[0]);
                                 if (arrType->elemType()->equals(Type::Int64())) {
                                     if (norm.size() == 1) {
                                         return TensorType::Default();
@@ -169,10 +169,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(a: Tensor) => int[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode()) {
                                 auto int32Type = Type::Int64();
-                                return std::make_shared<ArrayType>(int32Type);
+                                return ArrayType::create(int32Type);
                             }
                             return nullopt;
                         }),
@@ -188,7 +188,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor, b: Tensor) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
@@ -220,7 +220,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor, b: Tensor) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
@@ -253,7 +253,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor | number, b: Tensor | number) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             TypeCode lhs = norm[0]->code();
                             TypeCode rhs = norm[1]->code();
                             if (lhs == TensorType::typeCode() && rhs == TensorType::typeCode()) {
@@ -283,7 +283,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor, b: Tensor) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
@@ -315,7 +315,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor, b: Tensor) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->code() == TensorType::typeCode()) {
                                 return norm[0];
@@ -333,7 +333,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor, b: Tensor | number) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             // Tensor to Tensor power
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->code() == TensorType::typeCode()) {
@@ -367,10 +367,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "(a: Tensor, n: int) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode() &&
                                 norm[1]->equals(Type::Int64())) {
-                                auto tensor_type = std::dynamic_pointer_cast<TensorType>(norm[0]);
+                                auto tensor_type = tt::as_ptr<TensorType>(norm[0]);
                                 if (tensor_type && tensor_type->shape().size() == 2 &&
                                     tensor_type->shape()[0] == tensor_type->shape()[1]) {
                                     return norm[0];
@@ -400,9 +400,9 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(a: Tensor) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode()) {
-                                auto tensor_type = std::dynamic_pointer_cast<TensorType>(norm[0]);
+                                auto tensor_type = tt::as_ptr<TensorType>(norm[0]);
                                 if (tensor_type && tensor_type->shape().size() == 2) {
                                     auto shape = tensor_type->shape();
                                     std::swap(shape[0], shape[1]);
@@ -423,7 +423,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(a: Tensor) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode()) {
                                 return norm[0];
                             }
@@ -466,7 +466,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(a: Tensor) => float",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode()) {
                                 return Type::Float32();
                             }
@@ -483,7 +483,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(a: Tensor) => Tensor",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() == TensorType::typeCode()) {
                                 return TensorType::Default();
                             }

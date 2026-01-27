@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -192,7 +192,7 @@ label_COPY: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
+    TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
     if (isGCTraced(srcType)) {
         Object *srcData = currFrame->get<Object *>(bc->fastop[0]);
         currFrame->set(bc->result, srcData->clone(mm::autoSpace(), false));
@@ -208,7 +208,7 @@ label_ACCS: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
+    TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
     if (srcType == TypeCode::Tuple) {
         Tuple *t = currFrame->get<Tuple *>(bc->fastop[0]);
         ASSERT(
@@ -256,7 +256,7 @@ label_BRCH: {
     } else {
         // match-case，依次判断各分支
         size_t j          = 0;
-        TypeCode condType = currFrame->typeAt(nargs[0]);
+        TypeCode condType = currFrame->codeAt(nargs[0]);
 
         if (isGCTraced(condType)) {
             auto condData = currFrame->get<Object *>(nargs[0]);
@@ -313,7 +313,7 @@ label_FILL: {
     const data_arr_t nargs = bc->nargs();
     const data_arr_t wargs = bc->wargs();
 
-    TypeCode targetType = currFrame->typeAt(nargs[0]);
+    TypeCode targetType = currFrame->codeAt(nargs[0]);
     ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
 
     Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
@@ -321,7 +321,7 @@ label_FILL: {
 
     switch (targetType) {
     case TypeCode::Tuple: {
-        const auto &type = currFrame->typePtrAt<TupleType>(bc->result);
+        const auto &type = currFrame->typeAt<TupleType>(bc->result);
         auto t           = static_cast<Tuple *>(target);
         const auto &refs = t->layout().refs();
         ASSERT(
@@ -337,7 +337,7 @@ label_FILL: {
     } break;
 
     case TypeCode::Array: {
-        const auto &type = currFrame->typePtrAt<ArrayType>(bc->result);
+        const auto &type = currFrame->typeAt<ArrayType>(bc->result);
         auto a           = static_cast<Array *>(target);
         const auto &refs = a->layout().refs();
         ASSERT(
@@ -353,7 +353,7 @@ label_FILL: {
     } break;
 
     case TypeCode::Struct: {
-        const auto &type = currFrame->typePtrAt<StructType>(bc->result);
+        const auto &type = currFrame->typeAt<StructType>(bc->result);
         auto s           = static_cast<Struct *>(target);
         const auto &refs = s->layout().refs();
         ASSERT(

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,13 +38,13 @@ class Builder {
   public:
     Builder(const context_ptr_t &context, const module_ptr_t &module)
         : context_(context), module_(module) {
-        typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>();
+        typeScope_ = std::make_shared<Scope<Reference, Type *>>();
     };
     virtual ~Builder() = default;
 
     node_ptr_t build(AST::node_ptr_t node, diagnostics_ptr_t diags) {
         idIndex_ = 0;
-        diags_ = diags;
+        diags_   = diags;
         initInnerTypes();
         try {
             root_ = visitModule(node);
@@ -58,8 +58,8 @@ class Builder {
   private:
     node_ptr_t root_;
     size_t idIndex_ = 0;
-    scope_ptr_t<Reference, type_ptr_t> typeScope_;
-    std::unordered_map<void *, func_type_ptr_t> funcDecls_;
+    scope_ptr_t<Reference, Type *> typeScope_;
+    std::unordered_map<void *, FunctionType *> funcDecls_;
 
     context_ptr_t context_;
     module_ptr_t module_;
@@ -72,7 +72,7 @@ class Builder {
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
-    void pushScope() { typeScope_ = std::make_shared<Scope<Reference, type_ptr_t>>(typeScope_); }
+    void pushScope() { typeScope_ = std::make_shared<Scope<Reference, Type *>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
 
     // ast/base.h
@@ -106,17 +106,17 @@ class Builder {
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 
     // ast/type.h
-    type_ptr_t visitType(const AST::node_ptr_t &ast);
-    type_ptr_t visitNullableType(const AST::node_ptr_t &ast);
-    type_ptr_t visitTypeExpr(const AST::node_ptr_t &ast);
-    type_ptr_t visitArrayType(const AST::node_ptr_t &ast);
-    type_ptr_t visitStructType(const AST::node_ptr_t &ast);
-    type_ptr_t visitTupleType(const AST::node_ptr_t &ast);
-    type_ptr_t visitFuncType(const AST::node_ptr_t &ast);
-    type_ptr_t visitUnitType(const AST::node_ptr_t &ast);
-    type_ptr_t visitInferType(const AST::node_ptr_t &ast);
-    type_ptr_t visitDataType(const AST::node_ptr_t &ast);
-    type_ptr_t visitRefType(const AST::node_ptr_t &ast);
+    Type *visitType(const AST::node_ptr_t &ast);
+    Type *visitNullableType(const AST::node_ptr_t &ast);
+    Type *visitTypeExpr(const AST::node_ptr_t &ast);
+    Type *visitArrayType(const AST::node_ptr_t &ast);
+    Type *visitStructType(const AST::node_ptr_t &ast);
+    Type *visitTupleType(const AST::node_ptr_t &ast);
+    Type *visitFuncType(const AST::node_ptr_t &ast);
+    Type *visitUnitType(const AST::node_ptr_t &ast);
+    Type *visitInferType(const AST::node_ptr_t &ast);
+    Type *visitDataType(const AST::node_ptr_t &ast);
+    Type *visitRefType(const AST::node_ptr_t &ast);
 };
 
 } // namespace GraphConstructTree

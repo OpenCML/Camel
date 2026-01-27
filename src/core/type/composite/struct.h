@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -83,7 +83,7 @@ class StructTypeLayout {
 class StructType : public CompositeType {
   private:
     std::vector<std::string> refs_;
-    std::map<std::string, type_ptr_t> fields_;
+    std::map<std::string, Type *> fields_;
     mutable std::shared_ptr<StructTypeLayout> layout_;
 
     void computeLayout() const;
@@ -92,26 +92,26 @@ class StructType : public CompositeType {
     StructType();
     ~StructType() noexcept override = default;
 
-    static std::shared_ptr<StructType> create();
+    static StructType *create();
 
     size_t size() const;
-    std::optional<type_ptr_t> typeOf(const std::string &idx) const;
-    bool add(const std::string &name, const type_ptr_t &type);
+    std::optional<Type *> typeOf(const std::string &idx) const;
+    bool add(const std::string &name, Type *type);
     bool has(const std::string &name) const;
-    std::optional<type_ptr_t> get(const std::string &name) const;
-    std::optional<type_ptr_t> get(const size_t &idx) const;
+    std::optional<Type *> get(const std::string &name) const;
+    std::optional<Type *> get(const size_t &idx) const;
     std::optional<size_t> findField(const std::string_view &name) const;
     const StructTypeLayout &layout() const;
 
-    type_ptr_t operator|(const StructType &other) const;
-    type_ptr_t operator&(const StructType &other) const;
+    Type *operator|(const StructType &other) const;
+    Type *operator&(const StructType &other) const;
 
-    virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
+    virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
-    virtual type_ptr_t clone(bool deep = false) const override;
-    virtual bool equals(const type_ptr_t &type) const override;
+    virtual Type *clone(bool deep = false) const override;
+    virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyTo(const Type &other) const override;
-    virtual bool assignable(const type_ptr_t &type) const override;
+    virtual bool assignable(Type *type) const override;
 };

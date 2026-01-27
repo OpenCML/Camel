@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,30 +25,31 @@
 
 class UnionType : public CompositeType {
   private:
-    std::unordered_set<type_ptr_t> types_;
+    std::unordered_set<Type *> types_;
 
     void insertUnion(const UnionType &other);
 
   public:
     UnionType();
-    UnionType(const type_ptr_t &lhs, const type_ptr_t &rhs);
-    UnionType(const std::initializer_list<type_ptr_t> &types);
-    UnionType(const std::vector<type_ptr_t> &types);
+    UnionType(Type *lhs, Type *rhs);
+    UnionType(const std::initializer_list<Type *> &types);
+    UnionType(const std::vector<Type *> &types);
     ~UnionType() noexcept override = default;
 
-    static std::shared_ptr<UnionType> create(const type_ptr_t &lhs, const type_ptr_t &rhs);
-    static std::shared_ptr<UnionType> create(const std::initializer_list<type_ptr_t> &types);
-    static std::shared_ptr<UnionType> create(const std::vector<type_ptr_t> &types);
+    static UnionType *create();
+    static UnionType *create(Type *lhs, Type *rhs);
+    static UnionType *create(const std::initializer_list<Type *> &types);
+    static UnionType *create(const std::vector<Type *> &types);
 
-    void add(const type_ptr_t &type);
-    bool has(const type_ptr_t &type) const;
+    void add(Type *type);
+    bool has(Type *type) const;
 
-    virtual type_ptr_t resolve(const type_vec_t &typeList) const override;
+    virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
-    virtual type_ptr_t clone(bool deep = false) const override;
-    virtual bool equals(const type_ptr_t &type) const override;
+    virtual Type *clone(bool deep = false) const override;
+    virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyTo(const Type &other) const override;
-    virtual bool assignable(const type_ptr_t &type) const override;
+    virtual bool assignable(Type *type) const override;
 };

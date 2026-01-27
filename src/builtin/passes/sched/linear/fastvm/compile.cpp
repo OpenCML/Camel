@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -180,7 +180,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             case TypeCode::Tuple: {
                 ASSERT(accNode->isNum(), "ACCS index must be numeric.");
                 index                  = accNode->index<size_t>();
-                const auto &tupleType  = tt::as_shared<TupleType>(srcDataType);
+                const auto &tupleType  = tt::as_ptr<TupleType>(srcDataType);
                 const auto &optEleType = tupleType->typeAt(accNode->index<size_t>());
                 if (!optEleType.has_value()) {
                     ctx->rtmDiags()
@@ -191,7 +191,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             }
             case TypeCode::Struct: {
                 ASSERT(!accNode->isNum(), "ACCS index must be string.");
-                const auto &structType = tt::as_shared<StructType>(srcDataType);
+                const auto &structType = tt::as_ptr<StructType>(srcDataType);
                 const auto &optIndex   = structType->findField(accNode->index<std::string>());
                 if (!optIndex.has_value()) {
                     ctx->rtmDiags()

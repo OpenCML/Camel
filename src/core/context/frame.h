@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,7 @@ class Frame : public Object {
     GraphIR::Graph *graph() { return graph_; }
     const GraphIR::Graph *graph() const { return graph_; }
 
-    TypeCode typeAt(GraphIR::data_idx_t index) const {
+    TypeCode codeAt(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
@@ -64,7 +64,7 @@ class Frame : public Object {
         }
     }
 
-    template <typename T> std::shared_ptr<T> typePtrAt(GraphIR::data_idx_t index) const {
+    template <typename T> T *typeAt(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
@@ -77,7 +77,7 @@ class Frame : public Object {
                     dynamicAreaLayout_->size()));
             auto res = graph_->runtimeDataType()->typeAt(idx);
             ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
-            return tt::as_shared<T>(res.value());
+            return tt::as_ptr<T>(res.value());
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
@@ -89,7 +89,7 @@ class Frame : public Object {
                     staticArea_->size()));
             auto res = graph_->staticDataType()->typeAt(idx);
             ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
-            return tt::as_shared<T>(res.value());
+            return tt::as_ptr<T>(res.value());
         }
     }
 
@@ -129,13 +129,13 @@ class Frame : public Object {
         }
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
-            printSlot(oss, toSlot(res), typeAt(index));
+            printSlot(oss, toSlot(res), codeAt(index));
             l.in("Frame").info(
                 "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 formatAddress(const_cast<Frame *>(this), true),
                 graph_->name(),
                 index,
-                typeCodeToString(typeAt(index)),
+                typeCodeToString(codeAt(index)),
                 oss.str());
         }());
         return res;
@@ -145,13 +145,13 @@ class Frame : public Object {
         ASSERT(index != 0, "Data index is invalid.");
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
-            printSlot(oss, toSlot(value), typeAt(index));
+            printSlot(oss, toSlot(value), codeAt(index));
             l.in("Frame").info(
                 "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 formatAddress(this, true),
                 graph_->name(),
                 index,
-                typeCodeToString(typeAt(index)),
+                typeCodeToString(codeAt(index)),
                 oss.str());
         }());
         if (index > 0) {

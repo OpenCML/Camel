@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -184,7 +184,6 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
                            "    edge [minlen=2];\r\n");
     } else {
         // Non-root graph: collect port names and types
-        func_type_ptr_t type = graph->funcType();
         res += std::format("subgraph cluster_{} {{\r\n", funcId);
         res += std::format("{}{}label=\"{}\";\r\n", baseIndent_, indent_, funcName);
         res += std::format(

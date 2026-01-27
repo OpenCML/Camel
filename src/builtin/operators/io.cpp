@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ void __print__(
 
         fmt::dynamic_format_arg_store<fmt::format_context> store;
         for (size_t i = 0; i < nargs.size; ++i) {
-            TypeCode type = frame.typeAt(nargs[i]);
+            TypeCode type = frame.codeAt(nargs[i]);
             switch (type) {
             case TypeCode::Int32:
                 store.push_back(frame.get<Int32>(wargs[i]));
@@ -78,7 +78,7 @@ void __print__(
             } else {
                 result = frame.get<slot_t>(nargs[i]);
             }
-            TypeCode type = frame.typeAt(nargs[i]);
+            TypeCode type = frame.codeAt(nargs[i]);
             slot_t data   = frame.get<slot_t>(nargs[i]);
             printSlot(std::cout, data, type);
         }
@@ -96,7 +96,7 @@ void __println__(
 
         fmt::dynamic_format_arg_store<fmt::format_context> store;
         for (size_t i = 0; i < nargs.size; ++i) {
-            TypeCode type = frame.typeAt(nargs[i]);
+            TypeCode type = frame.codeAt(nargs[i]);
             switch (type) {
             case TypeCode::Int32:
                 store.push_back(frame.get<Int32>(wargs[i]));
@@ -137,7 +137,7 @@ void __println__(
             } else {
                 result = frame.get<slot_t>(nargs[i]);
             }
-            TypeCode type = frame.typeAt(nargs[i]);
+            TypeCode type = frame.codeAt(nargs[i]);
             slot_t data   = frame.get<slot_t>(nargs[i]);
             printSlot(std::cout, data, type);
         }
@@ -155,7 +155,7 @@ void __input__(
         if (i > 0) {
             oss << " ";
         }
-        TypeCode type = frame.typeAt(nargs[i]);
+        TypeCode type = frame.codeAt(nargs[i]);
         slot_t data   = frame.get<slot_t>(nargs[i]);
         printSlot(oss, data, type);
     }

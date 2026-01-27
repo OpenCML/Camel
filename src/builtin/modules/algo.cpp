@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,10 +32,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -50,10 +50,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {true}}},
                         "<> (var array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -68,10 +68,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -86,10 +86,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {true}}},
                         "<> (var array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -104,10 +104,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -121,10 +121,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {true}}},
                         "<> (var array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -139,10 +139,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -157,10 +157,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {true}}},
                         "<> (var array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -175,16 +175,16 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {2, {false, false}}},
                         "<> (lft: T[], rgt: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &lftElemType = tt::as_shared<ArrayType>(norm[0])->elemType();
-                            const auto &rgtElemType = tt::as_shared<ArrayType>(norm[1])->elemType();
+                            const auto &lftElemType = tt::as_ptr<ArrayType>(norm[0])->elemType();
+                            const auto &rgtElemType = tt::as_ptr<ArrayType>(norm[1])->elemType();
                             if (!lftElemType->equals(rgtElemType))
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@
 namespace GIR = GraphIR;
 
 void __abs__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Int32: {
@@ -61,7 +61,7 @@ void __abs__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 }
 
 void __exp__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Float32:
@@ -81,7 +81,7 @@ void __exp__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 }
 
 void __round__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Float32:
@@ -101,7 +101,7 @@ void __round__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fr
 }
 
 void __ceil__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Float32:
@@ -121,7 +121,7 @@ void __ceil__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
 }
 
 void __floor__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Float32:
@@ -141,7 +141,7 @@ void __floor__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fr
 }
 
 void __bin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp    = frame.typeAt(nargs[0]);
+    TypeCode tp    = frame.codeAt(nargs[0]);
     int64_t number = 0;
 
     switch (tp) {
@@ -170,7 +170,7 @@ void __bin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 }
 
 void __oct__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     if (tp != TypeCode::Int32 && tp != TypeCode::Int64) {
         ctx.rtmDiags()
@@ -192,7 +192,7 @@ void __oct__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 }
 
 void __hex__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     if (tp != TypeCode::Int32 && tp != TypeCode::Int64) {
         ctx.rtmDiags()
@@ -214,7 +214,7 @@ void __hex__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 }
 
 void __sqrt__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Int32:
@@ -242,7 +242,7 @@ void __sqrt__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fra
 }
 
 void __sin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Float32:
@@ -262,7 +262,7 @@ void __sin__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 }
 
 void __cos__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Float32:
@@ -282,7 +282,7 @@ void __cos__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fram
 }
 
 void __tan__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    TypeCode tp = frame.typeAt(nargs[0]);
+    TypeCode tp = frame.codeAt(nargs[0]);
 
     switch (tp) {
     case TypeCode::Float32:

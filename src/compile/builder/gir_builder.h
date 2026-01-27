@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,9 +32,9 @@ namespace GraphIR {
 
 using void_ptr_t = void *;
 
-using node_scope_t = Scope<std::string, node_ptr_t>;
-using node_scope_ptr_t = std::shared_ptr<node_scope_t>;
-using graph_scope_t = Scope<std::string, std::shared_ptr<graph_vec_t>>;
+using node_scope_t      = Scope<std::string, node_ptr_t>;
+using node_scope_ptr_t  = std::shared_ptr<node_scope_t>;
+using graph_scope_t     = Scope<std::string, std::shared_ptr<graph_vec_t>>;
 using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
 
 class Builder {
@@ -75,7 +75,7 @@ class Builder {
     bool insertNode(const std::string &name, const node_ptr_t &node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
 
-    graph_ptr_t enterScope(const func_type_ptr_t &funcType, const std::string &name = "");
+    graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
     void leaveScope();
 
     node_ptr_t
@@ -88,7 +88,7 @@ class Builder {
     void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
     graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
-    type_ptr_t visitTypeNode(const GCT::node_ptr_t &gct);
+    Type *visitTypeNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitNRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitCastNode(const GCT::node_ptr_t &gct);

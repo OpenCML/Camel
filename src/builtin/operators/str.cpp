@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 27, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ void __format__(
     fmt::dynamic_format_arg_store<fmt::format_context> store;
 
     for (size_t i = 0; i < wargs.size; ++i) {
-        TypeCode type = frame.typeAt(wargs[i]);
+        TypeCode type = frame.codeAt(wargs[i]);
 
         switch (type) {
         case TypeCode::Int32:
