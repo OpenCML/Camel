@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,7 +52,7 @@ slot_t __print__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 break;
             default:
                 std::ostringstream oss;
-                printSlot(oss, norm.slot(i), code);
+                printSlot(oss, norm.slot(i), norm.type(i));
                 store.push_back(oss.str());
                 break;
             }
@@ -77,9 +77,8 @@ slot_t __print__(ArgsView &with, ArgsView &norm, Context &ctx) {
             } else {
                 result = norm.slot(i);
             }
-            TypeCode code = norm.code(i);
-            slot_t data   = norm.slot(i);
-            printSlot(std::cout, data, code);
+            slot_t data = norm.slot(i);
+            printSlot(std::cout, data, norm.type(i));
         }
     }
 
@@ -110,7 +109,7 @@ slot_t __println__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 break;
             default:
                 std::ostringstream oss;
-                printSlot(oss, norm.slot(i), code);
+                printSlot(oss, norm.slot(i), norm.type(i));
                 store.push_back(oss.str());
                 break;
             }
@@ -135,9 +134,8 @@ slot_t __println__(ArgsView &with, ArgsView &norm, Context &ctx) {
             } else {
                 result = norm.slot(i);
             }
-            TypeCode code = norm.code(i);
-            slot_t data   = norm.slot(i);
-            printSlot(std::cout, data, code);
+            slot_t data = norm.slot(i);
+            printSlot(std::cout, data, norm.type(i));
         }
     }
 
@@ -152,9 +150,8 @@ slot_t __input__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (i > 0) {
             oss << " ";
         }
-        TypeCode code = norm.code(i);
-        slot_t data   = norm.slot(i);
-        printSlot(oss, data, code);
+        slot_t data = norm.slot(i);
+        printSlot(oss, data, norm.type(i));
     }
 
     std::cout << oss.str();

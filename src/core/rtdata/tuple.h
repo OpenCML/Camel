@@ -135,7 +135,6 @@ class Tuple : public Object {
     virtual void print(std::ostream &os, const Type *type) const override {
         ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
         const TupleType *tupleType = static_cast<const TupleType *>(type);
-        auto codes                 = tupleType->codes();
 
         os << "(";
 
@@ -144,7 +143,7 @@ class Tuple : public Object {
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
-            printSlot(os, dataPtr[i], codes[i]);
+            printSlot(os, dataPtr[i], tupleType->typeAt(i));
         }
 
         os << ")";
@@ -154,7 +153,8 @@ class Tuple : public Object {
 
     virtual void
     updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
+        if (!type || type->code() != TypeCode::Tuple)
+            return;
         const TupleType *tupleType = static_cast<const TupleType *>(type);
         auto codes                 = tupleType->codes();
         Object **refArr            = reinterpret_cast<Object **>(data_);

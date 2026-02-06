@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -268,9 +268,10 @@ slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
     TypeCode lhsType = norm.code(0);
 
     if (isGCTraced(lhsType)) {
-        Object *lhs = norm.get<Object *>(0);
-        Object *rhs = norm.get<Object *>(1);
-        Bool res    = lhs->equals(rhs, false);
+        Object *lhs    = norm.get<Object *>(0);
+        Object *rhs    = norm.get<Object *>(1);
+        const Type *ty = norm.type(0);
+        Bool res       = lhs->equals(rhs, ty, false);
         return toSlot(res);
     } else {
         slot_t lhs = norm.slot(0);
@@ -284,9 +285,10 @@ slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
     TypeCode lhsType = norm.code(0);
 
     if (isGCTraced(lhsType)) {
-        Object *lhs = norm.get<Object *>(0);
-        Object *rhs = norm.get<Object *>(1);
-        Bool res    = !lhs->equals(rhs, false);
+        Object *lhs    = norm.get<Object *>(0);
+        Object *rhs    = norm.get<Object *>(1);
+        const Type *ty = norm.type(0);
+        Bool res       = !lhs->equals(rhs, ty, false);
         return toSlot(res);
     } else {
         slot_t lhs = norm.slot(0);
@@ -571,13 +573,14 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Struct *st                  = norm.get<Struct *>(0);
         String *keyObj              = norm.get<String *>(1);
         const std::string_view &key = keyObj->view();
-        if (!st->has(key)) {
+        const Type *structType      = norm.type(0);
+        if (!st->has(key, structType)) {
             ctx.rtmDiags()
                 ->of(RuntimeDiag::RuntimeError)
                 .commit("Struct does not have field: " + std::string(key));
             return NullSlot;
         }
-        return st->get<slot_t>(key);
+        return st->get<slot_t>(key, structType);
     }
 
     // 不支持的索引类型

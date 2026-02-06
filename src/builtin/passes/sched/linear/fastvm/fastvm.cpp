@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -133,9 +133,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     Tuple *closure = func->tuple();
 
     const auto &retArrType = currFrame.typeAt<ArrayType>(self);
-    const auto &layout     = retArrType->layout();
     Array *filtered        = Array::create(mm::autoSpace(), arr->size());
-    filtered->updateLayout(&layout);
 
     slot_t *from = arr->data();
     for (size_t i = 0; i < arr->size(); ++i) {
@@ -152,11 +150,11 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
         framePool_.release(frame);
 
         if (fromSlot<bool>(result)) {
-            filtered->append(from[i]);
+            filtered->append(from[i], retArrType);
         }
     }
 
-    filtered->shrinkToFit();
+    filtered->shrinkToFit(retArrType);
 
     currFrame.set(self, filtered);
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "compile/gir.h"
 #include "core/context/context.h"
 #include "core/operator.h"
+#include "core/type/composite/array.h"
 
 #include "fmt/args.h"
 #include "fmt/core.h"
@@ -53,7 +54,7 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
         default:
             // fallback to string
             std::ostringstream oss;
-            printSlot(oss, with.slot(i), type);
+            printSlot(oss, with.slot(i), with.type(i));
             store.push_back(oss.str());
             break;
         }
@@ -79,14 +80,14 @@ slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     std::string separator = sepObj->toString();
 
-    Array *arrObj = norm.get<Array *>(0);
+    Array *arrObj            = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    Type *elemType           = arrType->elemType();
 
     std::ostringstream joined;
     size_t len = arrObj->size();
 
-    TypeCode elemType = arrObj->elemType();
-
-    if (isGCTraced(elemType)) {
+    if (elemType->isGCTraced()) {
         // 引用类型
         for (size_t i = 0; i < len; ++i) {
             if (i > 0)

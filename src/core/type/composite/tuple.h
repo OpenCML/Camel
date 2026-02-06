@@ -104,14 +104,12 @@ class TupleType : public CompositeType {
         ASSERT(index < size_, "TupleType: index out of range");
         return const_cast<Type *>(typesPtr_[index]);
     }
-    TypeCode typeCodeAt(size_t index) const {
+    TypeCode codeAt(size_t index) const {
         ASSERT(index < size_, "TupleType: index out of range");
         return typeCodesPtr_[index];
     }
-    std::span<Type *const> types() const override {
-        return std::span<Type *const>(typesPtr_, size_);
-    }
-    std::span<const TypeCode> codes() const override {
+    std::span<Type *const> types() const { return std::span<Type *const>(typesPtr_, size_); }
+    std::span<const TypeCode> codes() const {
         return std::span<const TypeCode>(typeCodesPtr_, size_);
     }
     size_t refCount() const { return refCount_; }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -296,7 +296,7 @@ node_ptr_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             type_vec_t refTypes;
             node_vec_t refNodes;
             for (const auto &ref : composedData->refs()) {
-                const auto &refNode = resolveNodeByRef(ref);
+                const auto &refNode = resolveNodeByRef(std::string(ref));
                 refTypes.push_back(refNode->dataType());
                 refNodes.push_back(refNode);
             }
@@ -456,7 +456,7 @@ node_ptr_t Builder::createFuncDataNode(
         } else {
             auto funcNode = FuncNode::create(*currGraph_, funcData);
             for (const auto &ref : funcData->refs()) {
-                const auto &refNode = resolveNodeByRef(ref);
+                const auto &refNode = resolveNodeByRef(std::string(ref));
                 Node::link(LinkType::With, refNode, funcNode);
             }
             funcData->graph().parametrizeClosure();
@@ -475,7 +475,7 @@ node_ptr_t Builder::createFuncDataNode(
             auto funcNode = FuncNode::create(*currGraph_, funcData);
             if (graph->parameterized()) {
                 for (const auto &ref : graph->funcType()->closureRefs()) {
-                    const auto &refNode = resolveNodeByRef(ref);
+                    const auto &refNode = resolveNodeByRef(std::string(ref));
                     Node::link(LinkType::With, refNode, funcNode);
                 }
             }
@@ -490,7 +490,7 @@ node_ptr_t Builder::createFuncDataNode(
     auto dataNode = DataNode::create(*currGraph_, funcData);
     node_vec_t refNodes;
     for (const auto &ref : funcData->refs()) {
-        const auto &refNode = resolveNodeByRef(ref);
+        const auto &refNode = resolveNodeByRef(std::string(ref));
         refNodes.push_back(refNode);
     }
 
@@ -664,11 +664,8 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
 
     for (size_t i = 0; i < withInputNodes.size(); i++) {
         const node_ptr_t &inputNode = withInputNodes[i];
-        bool isVar                  = false;
-        const auto &withTypes       = targetFuncType->withTypes();
-        if (i < withTypes.size()) {
-            isVar = withTypes[i].second;
-        }
+        bool isVar                  = (i < targetFuncType->withTypesCount()) &&
+                     targetFuncType->withIsVarAt(static_cast<size_t>(i));
         tryRemoveCtrlLink(inputNode, targetNode);
         Node::link(LinkType::With, inputNode, targetNode);
         if (nodeModifierMap_.count(inputNode.get())) {
@@ -690,9 +687,8 @@ node_ptr_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     for (size_t i = 0; i < normInputNodes.size(); i++) {
         const node_ptr_t &inputNode = normInputNodes[i];
         bool isVar                  = false;
-        const auto &normTypes       = targetFuncType->normTypes();
-        if (i < normTypes.size()) {
-            isVar = normTypes[i].second;
+        if (i < targetFuncType->normTypesCount()) {
+            isVar = targetFuncType->normIsVarAt(i);
         }
         tryRemoveCtrlLink(inputNode, targetNode);
         Node::link(LinkType::Norm, inputNode, targetNode);
@@ -776,13 +772,8 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
 
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
-        const auto &tupleType  = tt::as_ptr<TupleType>(tgtType);
-        const auto &optEleType = tupleType->typeAt(accsLoad->index<size_t>());
-        if (!optEleType.has_value()) {
-            diags_->of(SemanticDiag::InvalidAccessIndex).commit(accsLoad->index<std::string>());
-            throw BuildAbortException();
-        }
-        elemType = *optEleType;
+        const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
+        elemType              = tupleType->typeAt(accsLoad->index<size_t>());
         break;
     }
     case TypeCode::Array: {
@@ -792,12 +783,12 @@ node_ptr_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     }
     case TypeCode::Struct: {
         const auto &structType = tt::as_ptr<StructType>(tgtType);
-        const auto &optEleType = structType->get(accsLoad->index<std::string>());
-        if (!optEleType.has_value()) {
+        const auto &optIndex   = structType->findField(accsLoad->index<std::string>());
+        if (!optIndex.has_value()) {
             diags_->of(SemanticDiag::InvalidAccessIndex).commit(accsLoad->index<std::string>());
             throw BuildAbortException();
         }
-        elemType = *optEleType;
+        elemType = structType->typeAt(optIndex.value());
         break;
     }
     default:

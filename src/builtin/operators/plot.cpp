@@ -13,13 +13,15 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "plot.h"
 #include "core/context/context.h"
 #include "core/operator.h"
+#include "core/type/composite/array.h"
+#include "utils/type.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/numpy.h>
@@ -62,8 +64,9 @@ __array_to_vector_with_type__(Array *arr, TypeCode code, Context &ctx, std::stri
 
 slot_t __plot__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // 获取数组参数
-    Array *arr        = norm.get<Array *>(0);
-    TypeCode elemCode = arr->elemType();
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    TypeCode elemCode        = arrType->elemTypeCode();
 
     // 转换为vector
     std::vector<double> data = __array_to_vector_with_type__(arr, elemCode, ctx, "<plot>");

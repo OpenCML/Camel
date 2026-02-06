@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "statistics.h"
 #include "core/context/context.h"
 #include "core/operator.h"
+#include "core/type/composite/array.h"
+#include "utils/type.h"
 
 #include <cmath>
 
@@ -93,13 +95,15 @@ __stdev_with_type_code__(Array *arr, TypeCode code, Context &ctx, std::string_vi
 }
 
 slot_t __mean__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    double result = __mean_with_type_code__(arr, arr->elemType(), ctx, "<mean>");
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    double result            = __mean_with_type_code__(arr, arrType->elemTypeCode(), ctx, "<mean>");
     return toSlot(result);
 }
 
 slot_t __stdev__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    double result = __stdev_with_type_code__(arr, arr->elemType(), ctx, "<stdev>");
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    double result = __stdev_with_type_code__(arr, arrType->elemTypeCode(), ctx, "<stdev>");
     return toSlot(result);
 }

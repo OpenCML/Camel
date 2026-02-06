@@ -13,7 +13,7 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,8 +45,8 @@
 
 namespace py = pybind11;
 
-static py::array __camel_array_to_py__(Array *arr, Context &ctx) {
-    TypeCode elemCode = arr->elemType();
+static py::array __camel_array_to_py__(Array *arr, const ArrayType *arrayType, Context &ctx) {
+    TypeCode elemCode = arrayType->elemTypeCode();
     size_t n          = arr->size();
 
     py::module_ np = py::module_::import("numpy");
@@ -276,7 +276,7 @@ slot_t __phot_gen_bits__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Array *arr_y = __py_array_to_camel_real__(py_bits_y, bits_y_array_type, ctx);
 
         if (arr_x && arr_y) {
-            Tuple *tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
+            Tuple *tuple = Tuple::create(tupleType->size(), mm::autoSpace());
             tuple->set(0, arr_x);
             tuple->set(1, arr_y);
             return toSlot(tuple);
@@ -299,17 +299,25 @@ slot_t __phot_modulation__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Array *bits_x = signal_bits_tuple->get<Array *>(0);
         Array *bits_y = signal_bits_tuple->get<Array *>(1);
 
+        auto resTupleType     = norm.type(0);
+        auto tupleType        = tt::as_ptr<TupleType>(resTupleType);
+        Type *bits_x_array_ty = tupleType->typeAt(0);
+        Type *bits_y_array_ty = tupleType->typeAt(1);
+
         py::module_ phot = py::module_::import("phot");
         py::list bits_list;
-        bits_list.append(__camel_array_to_py__(bits_x, ctx));
-        bits_list.append(__camel_array_to_py__(bits_y, ctx));
+        bits_list.append(
+            __camel_array_to_py__(bits_x, tt::as_ptr<ArrayType>(bits_x_array_ty), ctx));
+        bits_list.append(
+            __camel_array_to_py__(bits_y, tt::as_ptr<ArrayType>(bits_y_array_ty), ctx));
 
         py::list mod_result = phot.attr("modulation")(bits_list, bits_per_symbol).cast<py::list>();
         py::module_ np      = py::module_::import("numpy");
 
-        auto resTupleType  = norm.type(0);
-        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
-        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[0]);
+        auto retTupleType  = norm.type(0);
+        auto retTuple      = tt::as_ptr<TupleType>(retTupleType);
+        auto xPolTupleType = tt::as_ptr<TupleType>(retTuple->typeAt(0));
+        auto yPolTupleType = tt::as_ptr<TupleType>(retTuple->typeAt(1));
 
         py::object signal_obj_x = mod_result[0];
         if (!np.attr("iscomplexobj")(signal_obj_x).cast<bool>()) {
@@ -318,7 +326,6 @@ slot_t __phot_modulation__(ArgsView &with, ArgsView &norm, Context &ctx) {
         auto [realArr_x, imagArr_x] =
             __py_array_to_camel_complex__(signal_obj_x.cast<py::array>(), xPolTupleType, ctx);
 
-        auto yPolTupleType      = tt::as_ptr<TupleType>(tupleType->types()[1]);
         py::object signal_obj_y = mod_result[1];
         if (!np.attr("iscomplexobj")(signal_obj_y).cast<bool>()) {
             signal_obj_y = np.attr("array")(signal_obj_y, py::arg("dtype") = np.attr("complex128"));
@@ -333,11 +340,11 @@ slot_t __phot_modulation__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
-        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout().size(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(retTuple->size(), mm::autoSpace());
+        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->size(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
-        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout().size(), mm::autoSpace());
+        Tuple *yPol_tuple = Tuple::create(yPolTupleType->size(), mm::autoSpace());
         yPol_tuple->set(0, realArr_y);
         yPol_tuple->set(1, imagArr_y);
 
@@ -358,6 +365,11 @@ slot_t __phot_up_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int up_sampling_factor = with.get<Int>(0);
 
     try {
+        auto resTupleType  = norm.type(0);
+        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
+        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->typeAt(0));
+        auto yPolTupleType = tt::as_ptr<TupleType>(tupleType->typeAt(1));
+
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
         Tuple *y_pol_tuple = signals_tuple->get<Tuple *>(1);
         Array *x_real_arr  = x_pol_tuple->get<Array *>(0);
@@ -368,14 +380,18 @@ slot_t __phot_up_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
         py::module_ np = py::module_::import("numpy");
         py::object j   = py::eval("1j");
 
-        py::array py_x_real = __camel_array_to_py__(x_real_arr, ctx);
-        py::array py_x_imag = __camel_array_to_py__(x_imag_arr, ctx);
+        py::array py_x_real =
+            __camel_array_to_py__(x_real_arr, tt::as_ptr<ArrayType>(xPolTupleType->typeAt(0)), ctx);
+        py::array py_x_imag =
+            __camel_array_to_py__(x_imag_arr, tt::as_ptr<ArrayType>(xPolTupleType->typeAt(1)), ctx);
         py::array py_x_complex =
             np.attr("array")(py_x_real + j * py_x_imag, py::arg("dtype") = np.attr("complex128"));
         py_x_complex = py_x_complex.attr("ravel")().cast<py::array>();
 
-        py::array py_y_real = __camel_array_to_py__(y_real_arr, ctx);
-        py::array py_y_imag = __camel_array_to_py__(y_imag_arr, ctx);
+        py::array py_y_real =
+            __camel_array_to_py__(y_real_arr, tt::as_ptr<ArrayType>(yPolTupleType->typeAt(0)), ctx);
+        py::array py_y_imag =
+            __camel_array_to_py__(y_imag_arr, tt::as_ptr<ArrayType>(yPolTupleType->typeAt(1)), ctx);
         py::array py_y_complex =
             np.attr("array")(py_y_real + j * py_y_imag, py::arg("dtype") = np.attr("complex128"));
         py_y_complex = py_y_complex.attr("ravel")().cast<py::array>();
@@ -387,11 +403,6 @@ slot_t __phot_up_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
         py::list py_result =
             phot.attr("up_sample")(signals_list, up_sampling_factor).cast<py::list>();
-
-        auto resTupleType  = norm.type(0);
-        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
-        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[0]);
-        auto yPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[1]);
 
         py::array py_result_x = py_result[0].cast<py::array>();
         py::array py_result_y = py_result[1].cast<py::array>();
@@ -408,11 +419,11 @@ slot_t __phot_up_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
-        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout().size(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->size(), mm::autoSpace());
+        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->size(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
-        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout().size(), mm::autoSpace());
+        Tuple *yPol_tuple = Tuple::create(yPolTupleType->size(), mm::autoSpace());
         yPol_tuple->set(0, realArr_y);
         yPol_tuple->set(1, imagArr_y);
 
@@ -435,6 +446,11 @@ slot_t __phot_pulse_shaper__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float baud             = with.get<Float>(2);
 
     try {
+        auto resTupleType  = norm.type(0);
+        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
+        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->typeAt(0));
+        auto yPolTupleType = tt::as_ptr<TupleType>(tupleType->typeAt(1));
+
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
         Tuple *y_pol_tuple = signals_tuple->get<Tuple *>(1);
         Array *x_real_arr  = x_pol_tuple->get<Array *>(0);
@@ -445,14 +461,18 @@ slot_t __phot_pulse_shaper__(ArgsView &with, ArgsView &norm, Context &ctx) {
         py::module_ np = py::module_::import("numpy");
         py::object j   = py::eval("1j");
 
-        py::array py_x_real = __camel_array_to_py__(x_real_arr, ctx);
-        py::array py_x_imag = __camel_array_to_py__(x_imag_arr, ctx);
+        py::array py_x_real =
+            __camel_array_to_py__(x_real_arr, tt::as_ptr<ArrayType>(xPolTupleType->typeAt(0)), ctx);
+        py::array py_x_imag =
+            __camel_array_to_py__(x_imag_arr, tt::as_ptr<ArrayType>(xPolTupleType->typeAt(1)), ctx);
         py::array py_x_complex =
             np.attr("array")(py_x_real + j * py_x_imag, py::arg("dtype") = np.attr("complex128"));
         py_x_complex = py_x_complex.attr("ravel")().cast<py::array>();
 
-        py::array py_y_real = __camel_array_to_py__(y_real_arr, ctx);
-        py::array py_y_imag = __camel_array_to_py__(y_imag_arr, ctx);
+        py::array py_y_real =
+            __camel_array_to_py__(y_real_arr, tt::as_ptr<ArrayType>(yPolTupleType->typeAt(0)), ctx);
+        py::array py_y_imag =
+            __camel_array_to_py__(y_imag_arr, tt::as_ptr<ArrayType>(yPolTupleType->typeAt(1)), ctx);
         py::array py_y_complex =
             np.attr("array")(py_y_real + j * py_y_imag, py::arg("dtype") = np.attr("complex128"));
         py_y_complex = py_y_complex.attr("ravel")().cast<py::array>();
@@ -469,11 +489,6 @@ slot_t __phot_pulse_shaper__(ArgsView &with, ArgsView &norm, Context &ctx) {
         py::array py_result_x = py_result[0].cast<py::array>();
         py::array py_result_y = py_result[1].cast<py::array>();
 
-        auto resTupleType  = norm.type(0);
-        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
-        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[0]);
-        auto yPolTupleType = tt::as_ptr<TupleType>(tupleType->types()[1]);
-
         auto [realArr_x, imagArr_x] =
             __py_array_to_camel_complex__(py_result_x, xPolTupleType, ctx);
         auto [realArr_y, imagArr_y] =
@@ -486,11 +501,11 @@ slot_t __phot_pulse_shaper__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return NullSlot;
         }
 
-        Tuple *outer_tuple = Tuple::create(tupleType->layout().size(), mm::autoSpace());
-        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->layout().size(), mm::autoSpace());
+        Tuple *outer_tuple = Tuple::create(tupleType->size(), mm::autoSpace());
+        Tuple *xPol_tuple  = Tuple::create(xPolTupleType->size(), mm::autoSpace());
         xPol_tuple->set(0, realArr_x);
         xPol_tuple->set(1, imagArr_x);
-        Tuple *yPol_tuple = Tuple::create(yPolTupleType->layout().size(), mm::autoSpace());
+        Tuple *yPol_tuple = Tuple::create(yPolTupleType->size(), mm::autoSpace());
         yPol_tuple->set(0, realArr_y);
         yPol_tuple->set(1, imagArr_y);
 
@@ -512,6 +527,11 @@ slot_t __phot_constellation_diagram__(ArgsView &with, ArgsView &norm, Context &c
     bool isdata          = (with.size() > 1) ? with.get<bool>(1) : false;
 
     try {
+        auto resTupleType  = norm.type(0);
+        auto tupleType     = tt::as_ptr<TupleType>(resTupleType);
+        auto xPolTupleType = tt::as_ptr<TupleType>(tupleType->typeAt(0));
+        auto yPolTupleType = tt::as_ptr<TupleType>(tupleType->typeAt(1));
+
         Tuple *x_pol_tuple = signals_tuple->get<Tuple *>(0);
         Tuple *y_pol_tuple = signals_tuple->get<Tuple *>(1);
         Array *x_real_arr  = x_pol_tuple->get<Array *>(0);
@@ -522,14 +542,18 @@ slot_t __phot_constellation_diagram__(ArgsView &with, ArgsView &norm, Context &c
         py::module_ np = py::module_::import("numpy");
         py::object j   = py::eval("1j");
 
-        py::array py_x_real = __camel_array_to_py__(x_real_arr, ctx);
-        py::array py_x_imag = __camel_array_to_py__(x_imag_arr, ctx);
+        py::array py_x_real =
+            __camel_array_to_py__(x_real_arr, tt::as_ptr<ArrayType>(xPolTupleType->typeAt(0)), ctx);
+        py::array py_x_imag =
+            __camel_array_to_py__(x_imag_arr, tt::as_ptr<ArrayType>(xPolTupleType->typeAt(1)), ctx);
         py::array py_x_complex =
             np.attr("array")(py_x_real + j * py_x_imag, py::arg("dtype") = np.attr("complex128"));
         py_x_complex = py_x_complex.attr("ravel")().cast<py::array>();
 
-        py::array py_y_real = __camel_array_to_py__(y_real_arr, ctx);
-        py::array py_y_imag = __camel_array_to_py__(y_imag_arr, ctx);
+        py::array py_y_real =
+            __camel_array_to_py__(y_real_arr, tt::as_ptr<ArrayType>(yPolTupleType->typeAt(0)), ctx);
+        py::array py_y_imag =
+            __camel_array_to_py__(y_imag_arr, tt::as_ptr<ArrayType>(yPolTupleType->typeAt(1)), ctx);
         py::array py_y_complex =
             np.attr("array")(py_y_real + j * py_y_imag, py::arg("dtype") = np.attr("complex128"));
         py_y_complex = py_y_complex.attr("ravel")().cast<py::array>();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,11 +39,12 @@ class Object {
     virtual void
     updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) = 0;
 
-    template <typename T> static T *clone(const T *obj, IAllocator &allocator, bool deep = false) {
+    template <typename T>
+    static T *clone(const T *obj, IAllocator &allocator, const Type *type, bool deep = false) {
         if (!obj) {
             return nullptr;
         }
-        return static_cast<T *>(obj->clone(allocator, deep));
+        return static_cast<T *>(obj->clone(allocator, type, deep));
     }
 
     // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
@@ -129,27 +130,15 @@ using Float   = Float64;
 using Bool    = bool;
 using Byte    = std::byte;
 
-// 注意：operator<< 需要 Type* 参数，但为了兼容性，提供一个重载版本
-// 实际使用时应该直接调用 obj->print(os, type)
-inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
-    if (obj) {
-        // 这个版本无法获取类型信息，输出占位符
-        os << "<Object>";
-    } else {
-        os << "null";
-    }
-    return os;
-}
-
-inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
+inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
     ASSERT(
         data != DeadSlot,
-        std::format("Accessing uninitialized slot in printSlot: {}", typeCodeToString(t)));
-    if (isGCTraced(t)) {
-        os << reinterpret_cast<const Object *>(data);
+        std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
+    if (t->isGCTraced()) {
+        reinterpret_cast<const Object *>(data)->print(os, t);
     } else {
         // 非引用类型，根据 type code 输出
-        switch (t) {
+        switch (t->code()) {
         case TypeCode::Int32:
             os << fromSlot<Int32>(data);
             break;
@@ -175,7 +164,7 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
             os << "ref";
             break;
         default:
-            os << std::format("<{}>", typeCodeToString(t));
+            os << std::format("<{}>", t->toString());
             break;
         }
     }

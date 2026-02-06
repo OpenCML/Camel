@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "rand.h"
 #include "core/context/context.h"
 #include "core/operator.h"
+#include "core/type/composite/array.h"
+#include "utils/type.h"
 
 #include <algorithm>
 #include <random>
@@ -127,7 +129,8 @@ slot_t __sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __shuffle__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
 
-    Array *res = static_cast<Array *>(arr->clone(mm::autoSpace()));
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    Array *res               = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
 
     // 原地洗牌（Fisher–Yates）
     shuffleArray(res);

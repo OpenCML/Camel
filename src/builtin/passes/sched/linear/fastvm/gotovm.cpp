@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -192,10 +192,11 @@ label_COPY: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
-    if (isGCTraced(srcType)) {
-        Object *srcData = currFrame->get<Object *>(bc->fastop[0]);
-        currFrame->set(bc->result, srcData->clone(mm::autoSpace(), false));
+    TypeCode srcCode = currFrame->codeAt(bc->fastop[0]);
+    if (isGCTraced(srcCode)) {
+        Object *srcData  = currFrame->get<Object *>(bc->fastop[0]);
+        Type *srcTypePtr = currFrame->typeAt<Type>(bc->fastop[0]);
+        currFrame->set(bc->result, srcData->clone(mm::autoSpace(), srcTypePtr, false));
     } else {
         slot_t srcData = currFrame->get<slot_t>(bc->fastop[0]);
         currFrame->set(bc->result, srcData);
@@ -259,10 +260,11 @@ label_BRCH: {
         TypeCode condType = currFrame->codeAt(nargs[0]);
 
         if (isGCTraced(condType)) {
-            auto condData = currFrame->get<Object *>(nargs[0]);
+            Type *condTypePtr = currFrame->typeAt<Type>(nargs[0]);
+            auto condData     = currFrame->get<Object *>(nargs[0]);
             for (; j < bc->withCnt(); ++j) {
                 auto caseData = currFrame->get<Object *>(wargs[j]);
-                if (condData->equals(caseData)) {
+                if (condData->equals(caseData, condTypePtr, false)) {
                     jumpIdx = j; // jump to matched case
                     break;
                 }
@@ -313,32 +315,31 @@ label_FILL: {
     const data_arr_t nargs = bc->nargs();
     const data_arr_t wargs = bc->wargs();
 
-    Object *srcObj   = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
     TypeCode srcCode = currFrame->codeAt(nargs[0]);
     Type *srcType    = currFrame->typeAt<Type>(nargs[0]);
     ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in FastVM.");
+    Object *srcObj = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
 
     ASSERT(srcObj != nullptr, "FILL target data is null.");
 
     switch (srcCode) {
     case TypeCode::Tuple: {
-        auto type        = tt::as_ptr<TupleType>(srcType);
-        auto tup         = tt::as_ptr<Tuple>(srcObj);
-        const auto &refs = type->layout().refs();
+        auto type = tt::as_ptr<TupleType>(srcType);
+        auto tup  = tt::as_ptr<Tuple>(srcObj);
         ASSERT(
-            refs.size() == bc->withCnt(),
+            type->refCount() == bc->withCnt(),
             std::format(
                 "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                 bc->withCnt(),
-                refs.size()));
+                type->refCount()));
+        const size_t *refs = type->refs();
         for (size_t j = 0; j < bc->withCnt(); ++j) {
             tup->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
         }
     } break;
 
     case TypeCode::Array: {
-        auto type = tt::as_ptr<ArrayType>(srcType);
-        auto arr  = tt::as_ptr<Array>(srcObj);
+        auto arr = tt::as_ptr<Array>(srcObj);
         // 对于数组，如果 elemType 是 Ref，所有元素都是 Ref，直接使用索引
         ASSERT(
             arr->size() >= bc->withCnt(),
@@ -352,15 +353,15 @@ label_FILL: {
     } break;
 
     case TypeCode::Struct: {
-        auto type        = tt::as_ptr<StructType>(srcType);
-        auto str         = tt::as_ptr<Struct>(srcObj);
-        const auto &refs = type->layout().refs();
+        auto type = tt::as_ptr<StructType>(srcType);
+        auto str  = tt::as_ptr<Struct>(srcObj);
         ASSERT(
-            refs.size() == bc->withCnt(),
+            type->refCount() == bc->withCnt(),
             std::format(
                 "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                 bc->withCnt(),
-                refs.size()));
+                type->refCount()));
+        const size_t *refs = type->refs();
         for (size_t j = 0; j < bc->withCnt(); ++j) {
             str->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
         }

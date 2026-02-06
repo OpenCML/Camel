@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,12 +22,22 @@
 #include "composite.h"
 
 #include <map>
+#include <memory>
+
+class StructDataFactory;
 
 class StructData : public CompositeData {
+    friend class StructDataFactory;
+
   private:
     std::vector<std::string> refIndices_;
     // 按字典序存储字段
     std::map<std::string, data_ptr_t> data_;
+
+    // 仅由 StructDataFactory::build() 使用，避免重复计算 Type
+    StructData(
+        Type *type, std::map<std::string, data_ptr_t> &&data,
+        std::vector<std::string> &&refIndices);
 
   public:
     StructData();
@@ -36,19 +46,12 @@ class StructData : public CompositeData {
     virtual ~StructData() = default;
 
     static std::shared_ptr<StructData>
-    create(std::initializer_list<std::pair<std::string, data_ptr_t>> data) {
-        return std::make_shared<StructData>(data);
-    }
-    static std::shared_ptr<StructData> create(std::map<std::string, data_ptr_t> &&data) {
-        return std::make_shared<StructData>(std::move(data));
-    }
+    create(std::initializer_list<std::pair<std::string, data_ptr_t>> data);
+    static std::shared_ptr<StructData> create(std::map<std::string, data_ptr_t> &&data);
 
-    bool emplace(const std::string &key, const data_ptr_t &val);
-
-    bool add(const std::string &key, const data_ptr_t &val);
     bool has(const std::string &key) const;
     data_ptr_t get(const std::string &key) const;
-    std::map<std::string, data_ptr_t> &raw() { return data_; }
+    const std::map<std::string, data_ptr_t> &raw() const { return data_; }
 
     virtual std::vector<std::string> refs() const override;
     virtual bool resolved() const override { return refIndices_.empty(); }
@@ -58,4 +61,18 @@ class StructData : public CompositeData {
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
     virtual data_ptr_t convertTo(Type *type) override;
+};
+
+// 工厂：收集字段后一次构建 Type 与 StructData，避免重复计算
+class StructDataFactory {
+  public:
+    StructDataFactory();
+    ~StructDataFactory();
+
+    StructDataFactory &add(const std::string &key, const data_ptr_t &val);
+    std::shared_ptr<StructData> build();
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };

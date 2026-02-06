@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,12 @@
 #include "core/rtdata/conv.h"
 
 FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
-    auto runtimeAreaLayout = &graph->runtimeDataType()->layout();
-    const auto &layout     = graph->staticDataType()->layout();
-    Tuple *staticArea      = Tuple::create(layout.size(), mm::permSpace());
-    staticArea->updateLayout(&layout);
-    const auto &staticDataArr = graph->staticDataArr();
+    const TupleType *runtimeDataType = graph->runtimeDataType();
+    const TupleType *staticDataType  = graph->staticDataType();
+    Tuple *staticArea                = Tuple::create(staticDataType->size(), mm::permSpace());
+    const auto &staticDataArr        = graph->staticDataArr();
 
-    for (size_t i = 1; i < layout.size(); ++i) {
+    for (size_t i = 1; i < staticDataType->size(); ++i) {
         const auto &elem = staticDataArr[i];
         if (elem->type()->isGCTraced()) {
             Object *elemRef = makeGCRefFromGCTracedData(elem, mm::permSpace());
@@ -40,10 +39,10 @@ FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
         }
     }
 
-    FrameMeta *meta         = constructAt<FrameMeta>(mm::metaSpace());
-    meta->frameSize         = sizeof(Frame) + sizeof(slot_t) * runtimeAreaLayout->size();
-    meta->runtimeAreaLayout = runtimeAreaLayout;
-    meta->staticArea        = staticArea;
+    FrameMeta *meta       = constructAt<FrameMeta>(mm::metaSpace());
+    meta->frameSize       = sizeof(Frame) + sizeof(slot_t) * runtimeDataType->size();
+    meta->runtimeDataType = runtimeDataType;
+    meta->staticArea      = staticArea;
 
     graph->setExtra<FrameMeta, 0>(meta);
 

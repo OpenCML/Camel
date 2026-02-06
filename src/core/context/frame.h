@@ -13,20 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "compile/gir.h"
-#include "core/rtdata/conv.h"
 #include "core/rtdata/data.h"
 #include "utils/log.h"
 
 struct FrameMeta {
     size_t frameSize;
-    const TupleTypeLayout *runtimeAreaLayout;
+    const TupleType *runtimeDataType;
     Tuple *staticArea;
 };
 
@@ -45,13 +44,13 @@ class Frame : public Object {
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(
-                idx < dynamicAreaLayout_->size(),
+                idx < dynamicAreaType_->size(),
                 std::format(
                     "[{}] Invalid argument index, idx = {}, size = {}",
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
-                    dynamicAreaLayout_->size()));
-            return dynamicAreaLayout_->typeAt(idx);
+                    dynamicAreaType_->size()));
+            return dynamicAreaType_->codeAt(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
@@ -61,7 +60,7 @@ class Frame : public Object {
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
-            return staticArea_->typeAt(idx);
+            return graph_->staticDataType()->codeAt(idx);
         }
     }
 
@@ -70,15 +69,15 @@ class Frame : public Object {
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(
-                idx < dynamicAreaLayout_->size(),
+                idx < dynamicAreaType_->size(),
                 std::format(
                     "[{}] Invalid argument index, idx = {}, size = {}",
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
-                    dynamicAreaLayout_->size()));
-            auto res = graph_->runtimeDataType()->typeAt(idx);
-            ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
-            return tt::as_ptr<T>(res.value());
+                    dynamicAreaType_->size()));
+            Type *res = graph_->runtimeDataType()->typeAt(idx);
+            ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
+            return tt::as_ptr<T>(res);
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
@@ -88,9 +87,9 @@ class Frame : public Object {
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
-            auto res = graph_->staticDataType()->typeAt(idx);
-            ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
-            return tt::as_ptr<T>(res.value());
+            Type *res = graph_->staticDataType()->typeAt(idx);
+            ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
+            return tt::as_ptr<T>(res);
         }
     }
 
@@ -101,12 +100,12 @@ class Frame : public Object {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG([&]() {
                 ASSERT(
-                    idx < dynamicAreaLayout_->size(),
+                    idx < dynamicAreaType_->size(),
                     std::format(
                         "[{}] Invalid argument index, idx = {}, size = {}",
                         formatAddress(const_cast<Frame *>(this), true),
                         idx,
-                        dynamicAreaLayout_->size()));
+                        dynamicAreaType_->size()));
                 ASSERT(
                     dynamicArea_[idx] != kDebugUninitializedSlot,
                     std::format(
@@ -130,7 +129,7 @@ class Frame : public Object {
         }
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
-            printSlot(oss, toSlot(res), codeAt(index));
+            printSlot(oss, toSlot(res), typeAt<Type>(index));
             l.in("Frame").info(
                 "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 formatAddress(const_cast<Frame *>(this), true),
@@ -146,7 +145,7 @@ class Frame : public Object {
         ASSERT(index != 0, "Data index is invalid.");
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
-            printSlot(oss, toSlot(value), codeAt(index));
+            printSlot(oss, toSlot(value), typeAt<Type>(index));
             l.in("Frame").info(
                 "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 formatAddress(this, true),
@@ -159,11 +158,11 @@ class Frame : public Object {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG([&]() {
                 ASSERT(
-                    idx < dynamicAreaLayout_->size(),
+                    idx < dynamicAreaType_->size(),
                     std::format(
                         "Invalid argument index, idx = {}, size = {}",
                         idx,
-                        dynamicAreaLayout_->size()));
+                        dynamicAreaType_->size()));
             }());
             dynamicArea_[idx] = toSlot(value);
         } else {
@@ -178,36 +177,32 @@ class Frame : public Object {
             }());
             staticArea_->set<T>(idx, value);
         }
-        if constexpr (std::is_pointer_v<T>) {
-            auto *o = const_cast<Object *>(static_cast<const Object *>(value));
-            if (o) {
-                Type *ty = typeAt<Type>(index);
-                if (ty)
-                    attachLayoutFromType(o, ty);
-            }
-        }
     }
 
-    virtual bool equals(const Object *other, bool deep = false) const override {
+    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
         return false; // Frame 没有实际意义的比较
     }
 
-    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
+    virtual Object *
+    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
         return nullptr; // 不支持克隆
     }
 
-    virtual void print(std::ostream &os) const override {
-        os << "Frame(dynamicSize=" << dynamicAreaLayout_->size()
+    virtual void print(std::ostream &os, const Type *type) const override {
+        (void)type;
+        os << "Frame(dynamicSize=" << dynamicAreaType_->size()
            << ", staticSize=" << staticArea_->size() << ")";
     }
 
     virtual void onMoved() override {}
 
-    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
-        const auto &types = dynamicAreaLayout_->elemTypes();
-        Object **refArr   = reinterpret_cast<Object **>(dynamicArea_);
-        for (size_t i = 0; i < dynamicAreaLayout_->size(); ++i) {
-            if (isGCTraced(types[i])) {
+    virtual void
+    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
+        (void)type;
+        auto codes      = dynamicAreaType_->codes();
+        Object **refArr = reinterpret_cast<Object **>(dynamicArea_);
+        for (size_t i = 0; i < dynamicAreaType_->size(); ++i) {
+            if (isGCTraced(codes[i])) {
                 if (Object *&ref = refArr[i]) {
                     ref = relocate(ref);
                 }
@@ -220,8 +215,8 @@ class Frame : public Object {
     friend class FrameView;
 
     // 这个构造函数由栈帧池调用
-    Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleTypeLayout *dynamicAreaLayout)
-        : graph_(graph), staticArea_(staticArea), dynamicAreaLayout_(dynamicAreaLayout) {
+    Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleType *dynamicAreaType)
+        : graph_(graph), staticArea_(staticArea), dynamicAreaType_(dynamicAreaType) {
         // 注意，这里不能在构造函数中初始化 dynamicArea_
         // FastVM 的优化依赖于复用刚刚释放的栈帧数据
         // 所以这里要尽量不去动 dynamicArea_，即便在 DEBUG 模式下
@@ -231,7 +226,7 @@ class Frame : public Object {
     GraphIR::Graph *graph_;
     Frame *next_;
     Tuple *staticArea_; // 外部提供的静态区
-    const TupleTypeLayout *dynamicAreaLayout_;
+    const TupleType *dynamicAreaType_;
     slot_t dynamicArea_[]; // 紧跟对象后存放动态区
 };
 
@@ -358,7 +353,7 @@ class FramePool {
             }());
             throw std::bad_alloc{};
         }
-        Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeAreaLayout);
+        Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeDataType);
 
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")

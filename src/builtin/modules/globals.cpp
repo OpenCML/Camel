@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1680,10 +1680,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypes().size() != 1)
+                            if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[0].first->equals(elemType))
+                            if (!funcType->normTypeAt(0)->equals(elemType))
                                 return nullopt;
                             ASSERT(funcType->hasExitType(), "Function must have exit type");
                             return ArrayType::create(funcType->exitType());
@@ -1707,10 +1706,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypes().size() != 1)
+                            if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[0].first->equals(elemType))
+                            if (!funcType->normTypeAt(0)->equals(elemType))
                                 return nullopt;
                             if (!funcType->exitType()->equals(elemType))
                                 return nullopt;
@@ -1757,11 +1755,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType  = tt::as_ptr<FunctionType>(with[0]);
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[1].first->equals(arrType->elemType()))
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
+                            if (funcType->normTypesCount() < 2)
                                 return nullopt;
-                            if (!normTypes[0].first->equals(with[1]))
+                            if (!funcType->normTypeAt(1)->equals(arrType->elemType()))
+                                return nullopt;
+                            if (!funcType->normTypeAt(0)->equals(with[1]))
                                 return nullopt;
                             if (!funcType->exitType()->equals(with[1]))
                                 return nullopt;
@@ -1785,10 +1784,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypes().size() != 1)
+                            if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[0].first->equals(arrType->elemType()))
+                            if (!funcType->normTypeAt(0)->equals(arrType->elemType()))
                                 return nullopt;
                             return Type::Void();
                         }),
@@ -1812,10 +1810,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             const auto &lhsFuncType   = tt::as_ptr<FunctionType>(norm[0]);
                             const auto &rhsFuncType   = tt::as_ptr<FunctionType>(norm[1]);
                             const auto &lhsReturnType = lhsFuncType->exitType();
-                            const auto &rhsNormTypes  = rhsFuncType->normTypes();
-                            if (rhsNormTypes.size() != 1)
+                            if (rhsFuncType->normTypesCount() != 1)
                                 return nullopt;
-                            if (!rhsNormTypes[0].first->equals(lhsReturnType))
+                            if (!rhsFuncType->normTypeAt(0)->equals(lhsReturnType))
                                 return nullopt;
                             return rhsFuncType->exitType();
                         }),

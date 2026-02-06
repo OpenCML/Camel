@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,11 +39,12 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             const auto &vecType = tt::as_ptr<ArrayType>(with[0]);
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType  = tt::as_ptr<FunctionType>(norm[0]);
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[1].first->equals(vecType->elemType()))
+                            const auto &funcType = tt::as_ptr<FunctionType>(norm[0]);
+                            if (funcType->normTypesCount() < 2)
                                 return nullopt;
-                            if (!normTypes[0].first->equals(norm[1]))
+                            if (!funcType->normTypeAt(1)->equals(vecType->elemType()))
+                                return nullopt;
+                            if (!funcType->normTypeAt(0)->equals(norm[1]))
                                 return nullopt;
                             if (!funcType->exitType()->equals(norm[1]))
                                 return nullopt;
@@ -67,10 +68,9 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_ptr<FunctionType>(norm[0]);
-                            if (funcType->normTypes().size() != 1)
+                            if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[0].first->equals(vecType->elemType()))
+                            if (!funcType->normTypeAt(0)->equals(vecType->elemType()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Void()))
                                 return nullopt;

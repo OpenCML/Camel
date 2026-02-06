@@ -19,6 +19,9 @@
 
 #include "gct_builder.h"
 
+#include "core/data/composite/array.h"
+#include "core/data/composite/struct.h"
+#include "core/data/composite/tuple.h"
 #include "parse/ast/type.h"
 #include "utils/escape.h"
 #include "utils/scope.h"
@@ -491,26 +494,25 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             node_ptr_t d         = visitData(dataNode);
             *exitNode << visitData(dataNode);
         } else {
-            // Case 2: Multiple data nodes
-            auto tupleData      = make_shared<TupleData>();
-            node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
+            // Case 2: Multiple data nodes — 用 Factory 一次构建，避免重复计算 Type
+            TupleDataFactory tupleFactory;
             bool dangling       = false;
             node_ptr_t execNode = createNodeAs<ExecLoad>();
 
-            // Process each data node and add it to the tuple
             for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
                 auto [data, _]      = extractData(dataNode, execNode, dangling);
-                tupleData->emplace(data);
+                tupleFactory.add(data);
             }
 
-            // If there are dangling nodes, attach them to the execution node
+            auto tupleData      = tupleFactory.build();
+            node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
+
             if (dangling) {
                 *execNode << dataNode;
                 dataNode = execNode;
             }
 
-            // Attach the processed tuple data to the exit node
             *exitNode << dataNode;
         }
     }
@@ -1147,23 +1149,21 @@ ArrayData() : Data* data ;
 */
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
-    // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
 
-    // Create an empty ArrayData object and wrap it in a DataLoad node
-    auto arrayData = ArrayData::create(nullptr, {});
-    node_ptr_t res = createNodeAs<DataLoad>(arrayData);
-
+    ArrayDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         auto [data, _]      = extractData(dataNode, execNode, dangling);
-        arrayData->emplace(data);
+        factory.add(data);
     }
 
-    // If there are dangling nodes, attach them to the execution node
+    auto arrayData = factory.build();
+    node_ptr_t res = createNodeAs<DataLoad>(arrayData);
+
     if (dangling) {
         *execNode << res;
         res = execNode;
@@ -1181,10 +1181,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
 
-    // Create an empty StructData object and wrap it in a DataLoad node
-    auto structData = std::make_shared<StructData>();
-    node_ptr_t res  = createNodeAs<DataLoad>(structData);
-
+    StructDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
@@ -1193,8 +1190,11 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
         const string &name    = namedPair->ref().ident();
         node_ptr_t dataNode   = visitData(child->atAs<AST::DataLoad>(0));
         auto [data, _]        = extractData(dataNode, execNode, dangling);
-        structData->emplace(name, data);
+        factory.add(name, data);
     }
+
+    auto structData = factory.build();
+    node_ptr_t res  = createNodeAs<DataLoad>(structData);
 
     // If there are dangling nodes, attach them to the execution node
     if (dangling) {
@@ -1213,18 +1213,18 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TupleData");
 
-    // Create an empty TupleData object and wrap it in a DataLoad node
-    auto tupleData = make_shared<TupleData>();
-    node_ptr_t res = createNodeAs<DataLoad>(tupleData);
-
+    TupleDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         auto [data, _]      = extractData(dataNode, execNode, dangling);
-        tupleData->emplace(data);
+        factory.add(data);
     }
+
+    auto tupleData = factory.build();
+    node_ptr_t res = createNodeAs<DataLoad>(tupleData);
 
     // If there are dangling nodes, attach them to the execution node
     if (dangling) {
@@ -1456,24 +1456,19 @@ Type *Builder::visitStructType(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StructType");
 
-    // Create an empty StructType object
-    auto res = StructType::create();
-
+    StructTypeFactory factory;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
         const string &name    = namedType->getRef().ident();
         Type *type            = visitType(child->atAs<AST::TypeLoad>(0));
 
-        // Attempt to add the field to the StructType object
-        data_ptr_t data = nullptr;
-        // If the field name is a duplicate, log a diagnostic and throw an exception
-        if (!res->add(name, type)) {
+        if (!factory.add(name, type)) {
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(name);
             throw BuildAbortException();
         }
     }
     LEAVE("StructType");
-    return res;
+    return factory.build();
 }
 /*
 TupleType() : Type* types ;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,7 +47,7 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto resArrayType = norm.type(0);
     auto arrType      = tt::as_ptr<ArrayType>(resArrayType);
     auto resTupleType = tt::as_ptr<TupleType>(arrType->elemType());
-    size_t tupSize    = resTupleType->layout().size();
+    size_t tupSize    = resTupleType->size();
 
     Array *result = Array::create(mm::autoSpace(), n);
     for (size_t i = 0; i < n; ++i) {
@@ -149,36 +149,42 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr  = norm.get<Array *>(0);
-    slot_t elem = with.get<slot_t>(0);
-    arr->append(elem);
+    Array *arr    = norm.get<Array *>(0);
+    slot_t elem   = with.get<slot_t>(0);
+    Type *arrType = norm.type(0);
+    arr->append(elem, tt::as_ptr<ArrayType>(arrType));
     return toSlot(arr);
 }
 
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr  = norm.get<Array *>(0);
-    Array *more = with.get<Array *>(0);
+    Array *arr    = norm.get<Array *>(0);
+    Array *more   = with.get<Array *>(0);
+    Type *arrType = norm.type(0);
+    auto *at      = tt::as_ptr<ArrayType>(arrType);
 
     size_t n1 = arr->size(), n2 = more->size();
-    arr->reserve(n1 + n2);
+    arr->reserve(n1 + n2, at);
 
     for (size_t i = 0; i < n2; ++i)
-        arr->append(more->get<slot_t>(i));
+        arr->append(more->get<slot_t>(i), at);
 
     return toSlot(arr);
 }
 
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr  = norm.get<Array *>(0);
-    slot_t item = with.get<slot_t>(0);
+    Array *arr            = norm.get<Array *>(0);
+    slot_t item           = with.get<slot_t>(0);
+    Type *arrType         = norm.type(0);
+    auto *at              = tt::as_ptr<ArrayType>(arrType);
+    TypeCode elemTypeCode = at->elemTypeCode();
 
-    Bool found        = false;
-    size_t n          = arr->size();
-    TypeCode elemType = arr->elemType();
+    Bool found = false;
+    size_t n   = arr->size();
 
-    if (isGCTraced(elemType)) {
+    if (isGCTraced(elemTypeCode)) {
+        Type *elemType = at->elemType();
         for (size_t i = 0; i < n; ++i) {
-            if (arr->get<Object *>(i)->equals(fromSlot<Object *>(item))) {
+            if (arr->get<Object *>(i)->equals(fromSlot<Object *>(item), elemType, false)) {
                 found = true;
                 break;
             }

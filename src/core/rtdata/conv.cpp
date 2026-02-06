@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,16 +93,15 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
         auto arrayData        = tt::as_shared<ArrayData>(data);
         const auto &arrayType = tt::as_ptr<ArrayType>(arrayData->type());
         Array *gcArray        = Array::create(allocator, 0);
-        gcArray->updateLayout(&arrayType->layout());
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                gcArray->append<Object *>(elemRef);
+                gcArray->append<Object *>(elemRef, arrayType);
             } else if (elem->type()->isPrimitive()) {
                 slot_t slot = makeSlotFromPrimitiveData(elem);
-                gcArray->append<slot_t>(slot);
+                gcArray->append<slot_t>(slot, arrayType);
             } else {
-                gcArray->append<slot_t>(NullSlot);
+                gcArray->append<slot_t>(NullSlot, arrayType);
             }
         }
         return gcArray;
@@ -111,10 +110,8 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     case TypeCode::Tuple: {
         auto tupleData        = tt::as_shared<TupleData>(data);
         const auto &tupleType = tt::as_ptr<TupleType>(tupleData->type());
-        const auto &layout    = tupleType->layout();
-        Tuple *gcTuple        = Tuple::create(layout.size(), allocator);
-        gcTuple->updateLayout(&layout);
-        const auto &elems = tupleData->raw();
+        Tuple *gcTuple        = Tuple::create(tupleType->size(), allocator);
+        const auto &elems     = tupleData->raw();
         for (size_t i = 0; i < tupleData->size(); ++i) {
             const auto &elem = elems[i];
             if (elem->type()->isGCTraced()) {
@@ -133,18 +130,16 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     case TypeCode::Struct: {
         auto structData        = tt::as_shared<StructData>(data);
         const auto &structType = tt::as_ptr<StructType>(structData->type());
-        const auto &layout     = structType->layout();
-        Struct *gcStruct       = Struct::create(layout.fieldCount(), allocator);
-        gcStruct->updateLayout(&layout);
+        Struct *gcStruct       = Struct::create(structType->size(), allocator);
         for (const auto &[name, data] : structData->raw()) {
             if (data->type()->isGCTraced()) {
                 Object *fieldRef = makeGCRefFromGCTracedData(data, allocator);
-                gcStruct->set<Object *>(name, fieldRef);
+                gcStruct->set<Object *>(name, fieldRef, structType);
             } else if (data->type()->isPrimitive()) {
                 slot_t slot = makeSlotFromPrimitiveData(data);
-                gcStruct->set<slot_t>(name, slot);
+                gcStruct->set<slot_t>(name, slot, structType);
             } else {
-                gcStruct->set<slot_t>(name, NullSlot);
+                gcStruct->set<slot_t>(name, NullSlot, structType);
             }
         }
         return gcStruct;
@@ -196,63 +191,5 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     default:
         ASSERT(false, "Unsupported GC traced type conversion.");
         return NullRef;
-    }
-}
-
-void attachLayoutFromType(Object *obj, Type *type) {
-    if (!obj || !type)
-        return;
-    switch (type->code()) {
-    case TypeCode::Array: {
-        auto *at   = tt::as_ptr<ArrayType>(type);
-        Array *arr = dynamic_cast<Array *>(obj);
-        if (!arr)
-            return;
-        arr->updateLayout(&at->layout());
-        if (!isGCTraced(at->elemType()->code()))
-            return;
-        for (size_t i = 0; i < arr->size(); ++i) {
-            Object *elem = arr->get<Object *>(i);
-            if (elem)
-                attachLayoutFromType(elem, at->elemType());
-        }
-        break;
-    }
-    case TypeCode::Tuple: {
-        auto *tt   = tt::as_ptr<TupleType>(type);
-        Tuple *tup = dynamic_cast<Tuple *>(obj);
-        if (!tup)
-            return;
-        tup->updateLayout(&tt->layout());
-        const auto &typs = tt->types();
-        const auto &refs = tt->layout().refs();
-        for (size_t ri : refs) {
-            if (ri >= typs.size())
-                continue;
-            Object *elem = tup->get<Object *>(ri);
-            if (elem && typs[ri])
-                attachLayoutFromType(elem, typs[ri]);
-        }
-        break;
-    }
-    case TypeCode::Struct: {
-        auto *st    = tt::as_ptr<StructType>(type);
-        Struct *st_ = dynamic_cast<Struct *>(obj);
-        if (!st_)
-            return;
-        st_->updateLayout(&st->layout());
-        for (size_t ri : st->layout().refs()) {
-            std::string name(st->layout().fieldName(ri));
-            auto ft = st->get(name);
-            if (!ft.has_value())
-                continue;
-            Object *elem = st_->get<Object *>(ri);
-            if (elem && ft.value())
-                attachLayoutFromType(elem, ft.value());
-        }
-        break;
-    }
-    default:
-        break;
     }
 }

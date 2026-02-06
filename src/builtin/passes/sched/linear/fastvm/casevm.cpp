@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,10 +94,11 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::COPY: {
-            TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
-            if (isGCTraced(srcType)) {
-                Object *srcData = currFrame->get<Object *>(bc.fastop[0]);
-                currFrame->set(bc.result, srcData->clone(mm::autoSpace(), false));
+            TypeCode srcCode = currFrame->codeAt(bc.fastop[0]);
+            if (isGCTraced(srcCode)) {
+                Object *srcData  = currFrame->get<Object *>(bc.fastop[0]);
+                Type *srcTypePtr = currFrame->typeAt<Type>(bc.fastop[0]);
+                currFrame->set(bc.result, srcData->clone(mm::autoSpace(), srcTypePtr, false));
             } else {
                 slot_t srcData = currFrame->get<slot_t>(bc.fastop[0]);
                 currFrame->set(bc.result, srcData);
@@ -105,7 +106,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::ACCS: {
-            TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
+            TypeCode srcType = currFrame->codeAt(bc.fastop[0]);
             if (srcType == TypeCode::Tuple) {
                 Tuple *t = currFrame->get<Tuple *>(bc.fastop[0]);
                 ASSERT(
@@ -149,8 +150,9 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 if (isGCTraced(condType)) {
                     auto condData = currFrame->get<Object *>(nargs[0]);
                     for (; j < bc.withCnt(); ++j) {
-                        auto caseData = currFrame->get<Object *>(wargs[j]);
-                        if (condData->equals(caseData)) {
+                        auto caseData     = currFrame->get<Object *>(wargs[j]);
+                        Type *condTypePtr = currFrame->typeAt<Type>(nargs[0]);
+                        if (condData->equals(caseData, condTypePtr, false)) {
                             jumpIdx = j; // jump to matched case
                             break;
                         }
@@ -193,25 +195,25 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
 
-            Object *srcObj =
-                currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
             TypeCode srcCode = currFrame->codeAt(nargs[0]);
             Type *srcType    = currFrame->typeAt<Type>(nargs[0]);
             ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in FastVM.");
+            Object *srcObj =
+                currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
 
             ASSERT(srcObj != nullptr, "FILL target data is null.");
 
             switch (srcCode) {
             case TypeCode::Tuple: {
-                auto type        = tt::as_ptr<TupleType>(srcType);
-                auto tup         = tt::as_ptr<Tuple>(srcObj);
-                const auto &refs = type->layout().refs();
+                auto type = tt::as_ptr<TupleType>(srcType);
+                auto tup  = tt::as_ptr<Tuple>(srcObj);
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    type->refCount() == bc.withCnt(),
                     std::format(
                         "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        type->refCount()));
+                const size_t *refs = type->refs();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
                     tup->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
@@ -233,15 +235,15 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             } break;
 
             case TypeCode::Struct: {
-                auto type        = tt::as_ptr<StructType>(srcType);
-                auto str         = tt::as_ptr<Struct>(srcObj);
-                const auto &refs = type->layout().refs();
+                auto type = tt::as_ptr<StructType>(srcType);
+                auto str  = tt::as_ptr<Struct>(srcObj);
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    type->refCount() == bc.withCnt(),
                     std::format(
                         "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        type->refCount()));
+                const size_t *refs = type->refs();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
                     str->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }

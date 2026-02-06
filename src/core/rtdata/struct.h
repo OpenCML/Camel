@@ -169,7 +169,6 @@ class Struct : public Object {
         }
 
         const StructType *structType = static_cast<const StructType *>(type);
-        auto codes                   = structType->codes();
 
         os << "{ ";
 
@@ -180,7 +179,7 @@ class Struct : public Object {
                 os << ", ";
 
             os << structType->fieldName(i) << ": ";
-            printSlot(os, dataPtr[i], codes[i]);
+            printSlot(os, dataPtr[i], structType->typeAt(i));
         }
 
         os << " }";
@@ -192,7 +191,8 @@ class Struct : public Object {
 
     virtual void
     updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        ASSERT(type && type->code() == TypeCode::Struct, "Type must be StructType");
+        if (!type || type->code() != TypeCode::Struct)
+            return;
         const StructType *structType = static_cast<const StructType *>(type);
         auto codes                   = structType->codes();
         Object **refArr              = reinterpret_cast<Object **>(data_);

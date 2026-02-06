@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -139,7 +139,7 @@ class FixedArray : public Object {
     virtual void print(std::ostream &os, const Type *type) const override {
         ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
         const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        TypeCode elemTypeCode      = arrayType->elemTypeCode();
+        Type *elemType             = arrayType->elemType();
 
         os << "[";
 
@@ -148,7 +148,7 @@ class FixedArray : public Object {
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
-            printSlot(os, dataPtr[i], elemTypeCode);
+            printSlot(os, dataPtr[i], elemType);
         }
 
         os << "]";
@@ -161,7 +161,8 @@ class FixedArray : public Object {
 
     virtual void
     updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
+        if (!type || type->code() != TypeCode::Array)
+            return;
         const ArrayType *arrayType = static_cast<const ArrayType *>(type);
         TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
@@ -345,7 +346,7 @@ class Array : public Object {
     virtual void print(std::ostream &os, const Type *type) const override {
         ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
         const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        TypeCode elemTypeCode      = arrayType->elemTypeCode();
+        Type *elemType             = arrayType->elemType();
 
         os << "[";
 
@@ -354,7 +355,7 @@ class Array : public Object {
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
-            printSlot(os, dataPtr[i], elemTypeCode);
+            printSlot(os, dataPtr[i], elemType);
         }
 
         os << "]";
@@ -370,7 +371,8 @@ class Array : public Object {
 
     virtual void
     updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
+        if (!type || type->code() != TypeCode::Array)
+            return;
         // 更新对FixedArray的引用
         if (fixedArray_) {
             Object *newPtr = relocate(fixedArray_);

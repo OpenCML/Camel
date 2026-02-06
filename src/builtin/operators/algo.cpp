@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "algo.h"
 #include "core/context/context.h"
 #include "core/operator.h"
+#include "core/type/composite/array.h"
+#include "utils/type.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -87,15 +89,16 @@ static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
 // ---------- 统一排序执行 ----------
 
 template <typename T>
-static Array *__doSortSlots__(bool inplace, Array *arr, SortAlgo algo, Context &ctx) {
+static Array *
+__doSortSlots__(bool inplace, Array *arr, SortAlgo algo, const ArrayType *arrType, Context &ctx) {
     size_t n = arr->size();
     if (n <= 1) {
         if (!inplace)
-            return Object::clone(arr, mm::autoSpace());
+            return static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
         return arr;
     }
 
-    Array *target = inplace ? arr : Object::clone(arr, mm::autoSpace());
+    Array *target = inplace ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     slot_t *slots = target->data();
     auto comp     = [](T a, T b) { return a < b; };
 
@@ -126,21 +129,22 @@ static Array *__doSortSlots__(bool inplace, Array *arr, SortAlgo algo, Context &
 
 template <SortAlgo Algo>
 static Array *__doSortWithTypeCode__(
-    bool inplace, Array *arr, TypeCode code, Context &ctx, std::string_view fname) {
+    bool inplace, Array *arr, const ArrayType *arrType, Context &ctx, std::string_view fname) {
+    TypeCode code = arrType->elemTypeCode();
     Array *result = nullptr;
 
     switch (code) {
     case TypeCode::Int32:
-        result = __doSortSlots__<Int32>(inplace, arr, Algo, ctx);
+        result = __doSortSlots__<Int32>(inplace, arr, Algo, arrType, ctx);
         break;
     case TypeCode::Int64:
-        result = __doSortSlots__<Int64>(inplace, arr, Algo, ctx);
+        result = __doSortSlots__<Int64>(inplace, arr, Algo, arrType, ctx);
         break;
     case TypeCode::Float32:
-        result = __doSortSlots__<Float32>(inplace, arr, Algo, ctx);
+        result = __doSortSlots__<Float32>(inplace, arr, Algo, arrType, ctx);
         break;
     case TypeCode::Float64:
-        result = __doSortSlots__<Float64>(inplace, arr, Algo, ctx);
+        result = __doSortSlots__<Float64>(inplace, arr, Algo, arrType, ctx);
         break;
     default:
         ctx.rtmDiags()
@@ -155,12 +159,13 @@ static Array *__doSortWithTypeCode__(
 // ---------- 实际内建函数实现 ----------
 
 slot_t __insert_sort__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     Array *result = __doSortWithTypeCode__<SortAlgo::Insertion>(
         /*inplace*/ false,
         arr,
-        arr->elemType(),
+        arrType,
         ctx,
         "<insert_sort>");
 
@@ -171,12 +176,13 @@ slot_t __insert_sort__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __insert_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     Array *result = __doSortWithTypeCode__<SortAlgo::Insertion>(
         /*inplace*/ true,
         arr,
-        arr->elemType(),
+        arrType,
         ctx,
         "<insert_sort_inplace>");
 
@@ -187,10 +193,11 @@ slot_t __insert_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __quick_sort__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     Array *result =
-        __doSortWithTypeCode__<SortAlgo::Quick>(false, arr, arr->elemType(), ctx, "<quick_sort>");
+        __doSortWithTypeCode__<SortAlgo::Quick>(false, arr, arrType, ctx, "<quick_sort>");
 
     if (!result)
         return NullSlot;
@@ -199,14 +206,11 @@ slot_t __quick_sort__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __quick_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
-    Array *result = __doSortWithTypeCode__<SortAlgo::Quick>(
-        true,
-        arr,
-        arr->elemType(),
-        ctx,
-        "<quick_sort_inplace>");
+    Array *result =
+        __doSortWithTypeCode__<SortAlgo::Quick>(true, arr, arrType, ctx, "<quick_sort_inplace>");
 
     if (!result)
         return NullSlot;
@@ -215,10 +219,11 @@ slot_t __quick_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __merge_sort__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     Array *result =
-        __doSortWithTypeCode__<SortAlgo::Merge>(false, arr, arr->elemType(), ctx, "<merge_sort>");
+        __doSortWithTypeCode__<SortAlgo::Merge>(false, arr, arrType, ctx, "<merge_sort>");
 
     if (!result)
         return NullSlot;
@@ -227,14 +232,11 @@ slot_t __merge_sort__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __merge_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
+    Array *arr               = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
-    Array *result = __doSortWithTypeCode__<SortAlgo::Merge>(
-        true,
-        arr,
-        arr->elemType(),
-        ctx,
-        "<merge_sort_inplace>");
+    Array *result =
+        __doSortWithTypeCode__<SortAlgo::Merge>(true, arr, arrType, ctx, "<merge_sort_inplace>");
 
     if (!result)
         return NullSlot;
@@ -271,7 +273,8 @@ slot_t __merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *rhs    = norm.get<Array *>(1);
     Array *merged = nullptr;
 
-    TypeCode code = lhs->elemType();
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    TypeCode code            = arrType->elemTypeCode();
 
     switch (code) {
     case TypeCode::Int32:

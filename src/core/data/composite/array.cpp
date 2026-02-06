@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,51 +22,101 @@
 #include "../special/ref.h"
 #include "core/type/composite/array.h"
 #include "error/diagnostics/diagnostics.h"
+#include "utils/type.h"
 
 using namespace std;
 
-ArrayData::ArrayData(Type *elemType, data_list_t data)
-    : CompositeData(ArrayType::create(elemType)), data_(data) {
-    for (const auto &e : data) {
-        emplace(e);
-    }
-}
+struct ArrayDataFactory::Impl {
+    Type *elemType = nullptr;
+    std::vector<size_t> refs;
+    std::vector<data_ptr_t> data;
+};
 
-ArrayData::ArrayData(Type *elemType, const data_vec_t &data)
-    : CompositeData(ArrayType::create(elemType)) {
-    ASSERT(type_->code() == TypeCode::Array, "Type is not ArrayType");
-    for (const auto &e : data) {
-        emplace(e);
-    }
-}
+ArrayDataFactory::ArrayDataFactory() : impl_(std::make_unique<Impl>()) {}
+ArrayDataFactory::~ArrayDataFactory() = default;
 
-void ArrayData::emplace(const data_ptr_t &e) {
+ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
+    if (!impl_->elemType) {
+        impl_->elemType = e->type();
+    } else if (!e->type()->assignable(impl_->elemType)) {
+        throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+            .commit("Array", e->type()->toString(), impl_->elemType->toString());
+    }
     if (e->type()->code() == TypeCode::Ref) {
-        refs_.push_back(data_.size());
-        // 需要重新构建 ArrayType，因为它是不可变的
-        const auto &arrType = tt::as_ptr<ArrayType>(type_);
-        ASSERT(arrType, "ArrayData type is not ArrayType");
-        ArrayTypeFactory factory;
-        factory.setElemType(arrType->elemType());
-        // 复制现有的 refs
-        for (size_t i = 0; i < arrType->refCount(); ++i) {
-            factory.addRef(arrType->refs()[i]);
-        }
-        // 添加新的 ref
-        factory.addRef(data_.size());
-        type_ = factory.build();
-    } else {
-        const auto &arrType = tt::as_ptr<ArrayType>(type_);
-        ASSERT(arrType, "ArrayData type is not ArrayType");
-        const auto &elemType = arrType->elemType();
-        if (elemType == Type::Void()) {
-            type_ = ArrayType::create(e->type());
-        } else if (!e->type()->assignable(elemType)) {
-            throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
-                .commit("Array", e->type()->toString(), elemType->toString());
-        }
+        impl_->refs.push_back(impl_->data.size());
     }
-    data_.push_back(e);
+    impl_->data.push_back(e);
+    return *this;
+}
+
+std::shared_ptr<ArrayData> ArrayDataFactory::build() {
+    ArrayTypeFactory typeFactory;
+    typeFactory.setElemType(impl_->elemType ? impl_->elemType : Type::Void());
+    for (size_t r : impl_->refs) {
+        typeFactory.addRef(r);
+    }
+    Type *type = typeFactory.build();
+    return std::shared_ptr<ArrayData>(new ArrayData(type, std::move(impl_->data)));
+}
+
+ArrayData::ArrayData(Type *arrayType, data_vec_t &&data)
+    : CompositeData(arrayType), data_(std::move(data)) {
+    const auto *arr = tt::as_ptr<ArrayType>(arrayType);
+    if (arr && arr->refCount() > 0) {
+        refs_.assign(arr->refs(), arr->refs() + arr->refCount());
+    }
+}
+
+ArrayData::ArrayData(Type *elemType, data_list_t data) : CompositeData(nullptr) {
+    if (data.size() == 0) {
+        type_ = ArrayType::create(elemType);
+        return;
+    }
+    ArrayDataFactory f;
+    for (const auto &e : data) {
+        f.add(e);
+    }
+    auto p = f.build();
+    type_  = p->type_;
+    data_  = std::move(p->data_);
+    refs_  = std::move(p->refs_);
+}
+
+ArrayData::ArrayData(Type *elemType, const data_vec_t &data) : CompositeData(nullptr) {
+    if (data.empty()) {
+        type_ = ArrayType::create(elemType);
+        return;
+    }
+    ArrayDataFactory f;
+    for (const auto &e : data) {
+        f.add(e);
+    }
+    auto p = f.build();
+    type_  = p->type_;
+    data_  = std::move(p->data_);
+    refs_  = std::move(p->refs_);
+}
+
+std::shared_ptr<ArrayData> ArrayData::create(Type *elemType, data_list_t data) {
+    if (data.size() == 0) {
+        return std::shared_ptr<ArrayData>(new ArrayData(ArrayType::create(elemType), data_vec_t{}));
+    }
+    ArrayDataFactory f;
+    for (const auto &e : data) {
+        f.add(e);
+    }
+    return f.build();
+}
+
+std::shared_ptr<ArrayData> ArrayData::from(Type *elemType, const data_vec_t &data) {
+    if (data.empty()) {
+        return std::shared_ptr<ArrayData>(new ArrayData(ArrayType::create(elemType), data_vec_t{}));
+    }
+    ArrayDataFactory f;
+    for (const auto &e : data) {
+        f.add(e);
+    }
+    return f.build();
 }
 
 bool ArrayData::equals(const data_ptr_t &other) const {
@@ -97,11 +147,14 @@ void ArrayData::resolve(const data_vec_t &dataList) {
 }
 
 data_ptr_t ArrayData::clone(bool deep) const {
-    auto vec = make_shared<ArrayData>(type_);
-    for (const auto &e : data_) {
-        vec->emplace(deep ? e->clone(deep) : e);
+    if (data_.empty()) {
+        return std::shared_ptr<ArrayData>(new ArrayData(type_, data_vec_t{}));
     }
-    return vec;
+    ArrayDataFactory f;
+    for (const auto &e : data_) {
+        f.add(deep ? e->clone(deep) : e);
+    }
+    return f.build();
 }
 
 const string ArrayData::toString() const {
