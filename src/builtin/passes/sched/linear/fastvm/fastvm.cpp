@@ -20,6 +20,10 @@
 #include "fastvm.h"
 #include "opperf.h"
 
+#if ENABLE_JIT
+#include "jit/backend/backend.h"
+#endif
+
 using namespace std;
 using namespace GraphIR;
 
@@ -34,6 +38,39 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
     pcStack_.clear();
     frameStack_.clear();
+
+#if ENABLE_JIT
+    if (!jitBackend_) {
+        jitBackend_ = camel::jit::createBackend();
+    }
+    GraphIR::Graph *entryGraph = graph.get();
+    size_t entryPc             = offsetMap_.at(entryGraph);
+    auto jitIt                 = jitCache_.find(entryGraph);
+    if (jitIt == jitCache_.end() && jitConfig_.policy != camel::jit::JitPolicy::Disabled) {
+        camel::jit::CompilationUnit unit{
+            .graph     = entryGraph,
+            .bytecodes = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
+            .entryPc   = entryPc,
+        };
+        auto compiled = jitBackend_->compile(unit);
+        if (compiled) {
+            camel::jit::JitEntryFn fn = jitBackend_->load(std::move(compiled));
+            if (fn) {
+                jitCache_[entryGraph] = fn;
+            }
+        }
+    }
+    jitIt = jitCache_.find(entryGraph);
+    if (jitIt != jitCache_.end()) {
+        Frame *frame = framePool_.acquire(entryGraph);
+        opperf::start();
+        [[maybe_unused]] slot_t result = jitIt->second(frame, nullptr);
+        opperf::stop();
+        opperf::report(std::cout);
+        framePool_.release(frame);
+        return Graph::null();
+    }
+#endif
 
     opperf::start();
 

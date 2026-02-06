@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,6 +63,12 @@ std::unordered_map<std::string, PassFactory> passRegistry = {
     {
         "std::fastvm",
         [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
+    },
+    {
+        "std::jit",
+        [](const context_ptr_t &ctx) {
+            return std::make_unique<FastVMSchedPass>(ctx, FastVMConfig{.enableJit = true});
+        },
     },
     {
         "std::inline",
