@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
 
 #include "../special/ref.h"
+#include "core/type/composite/array.h"
 #include "error/diagnostics/diagnostics.h"
 
 using namespace std;
@@ -42,7 +43,18 @@ ArrayData::ArrayData(Type *elemType, const data_vec_t &data)
 void ArrayData::emplace(const data_ptr_t &e) {
     if (e->type()->code() == TypeCode::Ref) {
         refs_.push_back(data_.size());
-        tt::as_ptr<ArrayType>(type_)->addRef(data_.size());
+        // 需要重新构建 ArrayType，因为它是不可变的
+        const auto &arrType = tt::as_ptr<ArrayType>(type_);
+        ASSERT(arrType, "ArrayData type is not ArrayType");
+        ArrayTypeFactory factory;
+        factory.setElemType(arrType->elemType());
+        // 复制现有的 refs
+        for (size_t i = 0; i < arrType->refCount(); ++i) {
+            factory.addRef(arrType->refs()[i]);
+        }
+        // 添加新的 ref
+        factory.addRef(data_.size());
+        type_ = factory.build();
     } else {
         const auto &arrType = tt::as_ptr<ArrayType>(type_);
         ASSERT(arrType, "ArrayData type is not ArrayType");

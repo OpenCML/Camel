@@ -13,14 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "func.h"
 #include "compile/gir.h"
 
-void Function::print(std::ostream &os) const {
+const TupleType *Function::tupleType() const { return graph_->closureType(); }
+
+void Function::print(std::ostream &os, const Type *type) const {
     os << "Function(graph=" << graph_->name() << ", tuple=";
-    tuple_->print(os);
+    if (tuple_) {
+        const TupleType *tupleTypePtr = tupleType();
+        tuple_->print(os, tupleTypePtr);
+    } else {
+        os << "null";
+    }
+    os << ")";
 }

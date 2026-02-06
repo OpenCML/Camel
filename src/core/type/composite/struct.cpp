@@ -13,164 +13,221 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "struct.h"
+#include "core/mm/alloc/allocator.h"
 #include "core/mm/mm.h"
 #include "utils/assert.h"
 #include "utils/type.h"
 
 #include <algorithm>
+#include <cstring>
 #include <sstream>
 
 using namespace std;
 
-void StructType::computeLayout() const {
-    std::vector<std::pair<std::string, TypeCode>> fieldList;
-    fieldList.reserve(fields_.size());
+namespace {
 
-    for (const auto &kv : fields_) {
-        fieldList.emplace_back(kv.first, kv.second->code());
-    }
-
-    layout_ = std::make_shared<StructTypeLayout>(fieldList, refs_);
+StructTypeLayout computeLayout(size_t size, size_t refCount, size_t fieldNamesDataSize) {
+    size_t typesSize       = size * sizeof(Type *);
+    size_t typeCodesSize   = size * sizeof(TypeCode);
+    size_t nameOffsetsSize = size * sizeof(size_t);
+    size_t refsSize        = refCount * sizeof(size_t);
+    size_t aTypes          = ::alignUp(typesSize, alignof(TypeCode));
+    size_t aTypeCodes      = ::alignUp(typeCodesSize, alignof(size_t));
+    size_t aNameOffsets    = ::alignUp(nameOffsetsSize, alignof(size_t));
+    size_t aRefs           = ::alignUp(refsSize, alignof(char));
+    size_t totalSize =
+        sizeof(StructType) + aTypes + aTypeCodes + aNameOffsets + aRefs + fieldNamesDataSize;
+    return StructTypeLayout{
+        .totalSize              = totalSize,
+        .size                   = size,
+        .refCount               = refCount,
+        .alignedTypesSize       = aTypes,
+        .alignedTypeCodesSize   = aTypeCodes,
+        .alignedNameOffsetsSize = aNameOffsets,
+        .alignedRefsSize        = aRefs,
+        .fieldNamesDataSize     = fieldNamesDataSize,
+    };
 }
 
-StructType::StructType() : CompositeType(TypeCode::Struct) {}
+} // namespace
+
+StructType *StructTypeFactory::build() { return StructType::fromFactory(*this); }
+
+StructType::StructType(
+    const StructTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
+    const size_t *nameOffsets, const char *fieldNamesData, const size_t *refs)
+    : CompositeType(TypeCode::Struct), size_(layout.size), refCount_(layout.refCount) {
+    auto p             = layout.ptrs(data_);
+    typesPtr_          = p.types;
+    typeCodesPtr_      = p.typeCodes;
+    nameOffsetsPtr_    = p.nameOffsets;
+    refsPtr_           = p.refs;
+    fieldNamesBasePtr_ = p.fieldNamesBase;
+    for (size_t i = 0; i < size_; ++i) {
+        p.types[i]       = const_cast<Type *>(types[i]);
+        p.typeCodes[i]   = typeCodes[i];
+        p.nameOffsets[i] = nameOffsets[i];
+    }
+    for (size_t i = 0; i < refCount_; ++i) {
+        p.refs[i] = refs[i];
+    }
+    if (layout.fieldNamesDataSize > 0 && fieldNamesData) {
+        std::memcpy(p.fieldNamesBase, fieldNamesData, layout.fieldNamesDataSize);
+    }
+}
 
 StructType *StructType::create() {
-    void *mem = mm::permSpace().alloc(sizeof(StructType), alignof(StructType));
+    StructTypeLayout layout = computeLayout(0, 0, 0);
+    void *mem               = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
-    return new (mem) StructType();
+    return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
-size_t StructType::size() const { return fields_.size(); }
-
-optional<Type *> StructType::typeOf(const string &idx) const {
-    auto it = fields_.find(idx);
-    if (it == fields_.end()) {
-        return nullopt;
-    }
-    return it->second;
+StructType *StructType::fromFactory(StructTypeFactory &factory) {
+    return fromFactoryData(factory.fields_, factory.refs_);
 }
 
-bool StructType::add(const string &name, Type *type) {
-    if (has(name)) {
-        return false;
+StructType *StructType::fromFactoryData(
+    const std::vector<std::pair<std::string, Type *>> &fields,
+    const std::vector<std::string> &refs) {
+    size_t size     = fields.size();
+    size_t refCount = refs.size();
+
+    std::vector<Type *> types;
+    std::vector<TypeCode> typeCodes;
+    std::vector<size_t> nameOffsets;
+    std::vector<size_t> refIndices;
+    std::string fieldNamesData;
+
+    types.reserve(size);
+    typeCodes.reserve(size);
+    nameOffsets.reserve(size);
+
+    size_t currentOffset = 0;
+    for (size_t i = 0; i < size; ++i) {
+        const auto &[name, type] = fields[i];
+        types.push_back(type);
+        typeCodes.push_back(type->code());
+        nameOffsets.push_back(currentOffset);
+        fieldNamesData += name;
+        fieldNamesData += '\0';
+        currentOffset += name.length() + 1;
     }
-    fields_.emplace(name, type);
-    if (type && type->code() == TypeCode::Ref) {
-        refs_.push_back(name);
+
+    for (const auto &refName : refs) {
+        auto it = std::find_if(fields.begin(), fields.end(), [&](const auto &p) {
+            return p.first == refName;
+        });
+        ASSERT(it != fields.end(), "Ref name not found in fields");
+        refIndices.push_back(std::distance(fields.begin(), it));
     }
-    return true;
+
+    StructTypeLayout layout = computeLayout(size, refCount, fieldNamesData.size());
+    void *mem               = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
+    ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
+    return new (mem) StructType(
+        layout,
+        types.data(),
+        typeCodes.data(),
+        nameOffsets.data(),
+        fieldNamesData.data(),
+        refIndices.data());
 }
 
-bool StructType::has(const string &name) const { return fields_.find(name) != fields_.end(); }
-
-std::optional<Type *> StructType::get(const string &name) const {
-    auto it = fields_.find(name);
-    if (it == fields_.end()) {
-        return nullopt;
+std::optional<size_t> StructType::findField(std::string_view name) const {
+    for (size_t i = 0; i < size_; ++i) {
+        if (fieldName(i) == name) {
+            return i;
+        }
     }
-    return it->second;
-}
-
-std::optional<Type *> StructType::get(const size_t &idx) const {
-    if (idx >= fields_.size()) {
-        return nullopt;
-    }
-    auto it = fields_.begin();
-    std::advance(it, idx);
-    return it->second;
-}
-
-std::optional<size_t> StructType::findField(const std::string_view &name) const {
-    auto it = std::find_if(fields_.begin(), fields_.end(), [&](const auto &kv) {
-        return kv.first == name;
-    });
-    if (it == fields_.end()) {
-        return std::nullopt;
-    }
-    return std::distance(fields_.begin(), it);
-}
-
-const StructTypeLayout &StructType::layout() const {
-    if (!layout_) {
-        computeLayout();
-    }
-    return *layout_;
+    return std::nullopt;
 }
 
 Type *StructType::operator|(const StructType &other) const {
     ASSERT(resolved() && other.resolved(), "StructType::operator| requires resolved operands");
 
-    auto result = StructType::create();
-
+    StructTypeFactory factory;
     // 复制 lhs 的字段
-    for (const auto &kv : fields_) {
-        const auto &name = kv.first;
-        const auto &type = kv.second;
-        result->fields_.emplace(name, type ? type->clone() : nullptr);
+    for (size_t i = 0; i < size_; ++i) {
+        factory.add(std::string(fieldName(i)), typeAt(i));
     }
-
     // 补齐 rhs 独有的字段
-    for (const auto &kv : other.fields_) {
-        const auto &name = kv.first;
-        if (result->fields_.find(name) == result->fields_.end()) {
-            const auto &type = kv.second;
-            result->fields_.emplace(name, type ? type->clone() : nullptr);
+    for (size_t i = 0; i < other.size_; ++i) {
+        std::string name(other.fieldName(i));
+        if (!factory.has(name)) {
+            factory.add(name, other.typeAt(i));
         }
     }
-
-    return result;
+    return factory.build();
 }
 
 Type *StructType::operator&(const StructType &other) const {
     ASSERT(resolved() && other.resolved(), "StructType::operator& requires resolved operands");
 
-    auto result = StructType::create();
-
-    for (const auto &kv : fields_) {
-        const auto &name = kv.first;
-        if (other.fields_.find(name) != other.fields_.end()) {
-            const auto &type = kv.second;
-            result->fields_.emplace(name, type ? type->clone() : nullptr);
+    StructTypeFactory factory;
+    for (size_t i = 0; i < size_; ++i) {
+        std::string name(fieldName(i));
+        auto optIdx = other.findField(name);
+        if (optIdx.has_value()) {
+            factory.add(name, typeAt(i));
         }
     }
-
-    return result;
+    return factory.build();
 }
 
 Type *StructType::resolve(const type_vec_t &typeList) const {
-    ASSERT(typeList.size() == refs_.size(), "StructType::resolve: typeList size mismatch");
+    ASSERT(typeList.size() == refCount_, "StructType::resolve: typeList size mismatch");
+    ASSERT(!resolved(), "StructType is already resolved");
 
-    auto resolvedStruct = tt::as_ptr<StructType>(this->clone(false));
-    ASSERT(resolvedStruct != nullptr, "Failed to cast to StructType");
-
-    for (size_t i = 0; i < refs_.size(); ++i) {
-        const auto &fieldName              = refs_[i];
-        const auto &resolvedType           = typeList[i];
-        resolvedStruct->fields_[fieldName] = resolvedType;
+    StructTypeFactory factory;
+    // 复制所有字段
+    for (size_t i = 0; i < size_; ++i) {
+        factory.add(std::string(fieldName(i)), typeAt(i));
     }
-
-    resolvedStruct->refs_.clear();
-    return resolvedStruct;
+    // 解析 refs
+    const size_t *refIndices = refs();
+    for (size_t i = 0; i < refCount_; ++i) {
+        size_t refIdx = refIndices[i];
+        // 更新对应字段的类型
+        // 注意：factory 需要支持更新已存在的字段
+        // 这里我们重新构建，因为 factory 不支持更新
+        std::string refName(fieldName(refIdx));
+        // 实际上我们需要重新构建整个 factory
+    }
+    // 简化：重新构建整个 struct
+    StructTypeFactory newFactory;
+    size_t typeListIdx = 0;
+    for (size_t i = 0; i < size_; ++i) {
+        Type *fieldType = typeAt(i);
+        if (fieldType->code() == TypeCode::Ref) {
+            if (typeListIdx < typeList.size()) {
+                newFactory.add(std::string(fieldName(i)), typeList[typeListIdx++]);
+            }
+        } else {
+            newFactory.add(std::string(fieldName(i)), fieldType);
+        }
+    }
+    return newFactory.build();
 }
 
-bool StructType::resolved() const { return refs_.empty(); }
+bool StructType::resolved() const { return refCount_ == 0; }
 
 string StructType::toString() const {
     ostringstream oss;
     oss << "{ ";
     bool first = true;
-    for (const auto &kv : fields_) {
+    for (size_t i = 0; i < size_; ++i) {
         if (!first) {
             oss << ", ";
         }
-        first = false;
-        oss << kv.first << ": " << (kv.second ? kv.second->toString() : "<null>");
+        first      = false;
+        Type *type = typeAt(i);
+        oss << fieldName(i) << ": " << (type ? type->toString() : "<null>");
     }
     oss << " }";
     return oss.str();
@@ -178,49 +235,43 @@ string StructType::toString() const {
 
 string StructType::mangle() const {
     ostringstream oss;
-    oss << "S" << fields_.size();
-    for (const auto &kv : fields_) {
-        oss << kv.first.length() << kv.first;
-        oss << (kv.second ? kv.second->mangle() : "N");
+    oss << "S" << size_;
+    for (size_t i = 0; i < size_; ++i) {
+        std::string name(fieldName(i));
+        Type *type = typeAt(i);
+        oss << name.length() << name;
+        oss << (type ? type->mangle() : "N");
     }
     return oss.str();
 }
 
 Type *StructType::clone(bool deep /* = false */) const {
-    auto result = StructType::create();
-
-    result->refs_   = refs_;
-    result->layout_ = layout_;
-
-    for (const auto &kv : fields_) {
-        const auto &name      = kv.first;
-        const auto &fieldType = kv.second;
-        result->fields_.emplace(name, deep && fieldType ? fieldType->clone(true) : fieldType);
+    StructTypeFactory factory;
+    for (size_t i = 0; i < size_; ++i) {
+        Type *fieldType = typeAt(i);
+        factory.add(
+            std::string(fieldName(i)),
+            deep && fieldType ? fieldType->clone(true) : fieldType);
     }
-
-    return result;
+    return factory.build();
 }
 
 bool StructType::equals(Type *type) const {
     if (!type || type->code() != TypeCode::Struct) {
         return false;
     }
-    auto other = tt::as_ptr<const StructType>(type);
-    if (!other) {
+    auto other = static_cast<const StructType *>(type);
+    if (size_ != other->size_) {
         return false;
     }
-    if (fields_.size() != other->fields_.size()) {
-        return false;
-    }
-    for (const auto &kv : fields_) {
-        const auto &name    = kv.first;
-        const auto &lhsType = kv.second;
-
-        auto it = other->fields_.find(name);
-        if (it == other->fields_.end()) {
+    for (size_t i = 0; i < size_; ++i) {
+        std::string name(fieldName(i));
+        auto optIdx = other->findField(name);
+        if (!optIdx.has_value()) {
             return false;
         }
-        const auto &rhsType = it->second;
+        Type *lhsType = typeAt(i);
+        Type *rhsType = other->typeAt(optIdx.value());
         if (!lhsType || !rhsType || !lhsType->equals(rhsType)) {
             return false;
         }

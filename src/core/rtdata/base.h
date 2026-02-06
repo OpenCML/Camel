@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 24, 2025
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,14 +26,18 @@
 #include <cstring> // for std::memcpy
 #include <functional>
 
+// 前向声明
+class Type;
+
 class Object {
   public:
-    virtual ~Object()                                                          = default;
-    virtual bool equals(const Object *other, bool deep = false) const          = 0;
-    virtual Object *clone(IAllocator &allocator, bool deep = false) const      = 0;
-    virtual void print(std::ostream &os) const                                 = 0;
-    virtual void onMoved()                                                     = 0;
-    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) = 0;
+    virtual ~Object()                                                                   = default;
+    virtual bool equals(const Object *other, const Type *type, bool deep = false) const = 0;
+    virtual Object *clone(IAllocator &allocator, const Type *type, bool deep = false) const = 0;
+    virtual void print(std::ostream &os, const Type *type) const                            = 0;
+    virtual void onMoved()                                                                  = 0;
+    virtual void
+    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) = 0;
 
     template <typename T> static T *clone(const T *obj, IAllocator &allocator, bool deep = false) {
         if (!obj) {
@@ -125,9 +129,12 @@ using Float   = Float64;
 using Bool    = bool;
 using Byte    = std::byte;
 
+// 注意：operator<< 需要 Type* 参数，但为了兼容性，提供一个重载版本
+// 实际使用时应该直接调用 obj->print(os, type)
 inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
     if (obj) {
-        obj->print(os);
+        // 这个版本无法获取类型信息，输出占位符
+        os << "<Object>";
     } else {
         os << "null";
     }

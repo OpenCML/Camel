@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "core/type/composite/tuple.h"
 
 #include <algorithm>
 
@@ -28,7 +29,7 @@ class Tuple : public Object {
     Tuple(const Tuple &)            = delete;
     Tuple &operator=(const Tuple &) = delete;
 
-    /// 创建 Tuple 实例（仅需槽个数，layout 通过 updateLayout 延后设置）
+    /// 创建 Tuple 实例
     static Tuple *create(size_t slotCount, IAllocator &allocator) {
         size_t headerSize = sizeof(Tuple);
         size_t dataSize   = sizeof(slot_t) * slotCount;
@@ -44,15 +45,6 @@ class Tuple : public Object {
     }
 
     size_t size() const { return size_; }
-    const TupleTypeLayout &layout() const {
-        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
-        return *layout_;
-    }
-    void updateLayout(const TupleTypeLayout *layout) { layout_ = layout; }
-    TypeCode typeAt(size_t index) const {
-        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
-        return layout_->typeAt(index);
-    }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -70,28 +62,29 @@ class Tuple : public Object {
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
 
-    virtual bool equals(const Object *other, bool deep = false) const override {
-        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
+    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
+        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
         if (!isOfSameCls(this, other))
             return false;
 
-        const Tuple *otherTuple = reinterpret_cast<const Tuple *>(other);
-        if (size_ != otherTuple->size_)
+        const TupleType *tupleType = static_cast<const TupleType *>(type);
+        const Tuple *otherTuple    = reinterpret_cast<const Tuple *>(other);
+        if (size_ != otherTuple->size_ || size_ != tupleType->size())
             return false;
 
-        const auto &types   = layout_->elemTypes();
+        auto codes          = tupleType->codes();
         const slot_t *dataA = data_;
         const slot_t *dataB = otherTuple->data_;
 
         if (deep) {
             // 深比较：引用类型递归比较，普通类型直接值比较
             for (size_t i = 0; i < size_; ++i) {
-                if (isGCTraced(types[i])) {
+                if (isGCTraced(codes[i])) {
                     const Object *refA = reinterpret_cast<const Object *const *>(dataA)[i];
                     const Object *refB = reinterpret_cast<const Object *const *>(dataB)[i];
                     if (refA == refB)
                         continue;
-                    if (!refA->equals(refB, true))
+                    if (!refA->equals(refB, tupleType->typeAt(i), true))
                         return false;
                 } else {
                     if (dataA[i] != dataB[i])
@@ -105,24 +98,25 @@ class Tuple : public Object {
         }
     }
 
-    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
-        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
-        Tuple *newTuple = Tuple::create(size_, allocator);
-        newTuple->updateLayout(layout_);
-        const auto &types = layout_->elemTypes();
+    virtual Object *
+    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
+        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
+        const TupleType *tupleType = static_cast<const TupleType *>(type);
+        auto codes                 = tupleType->codes();
 
+        Tuple *newTuple   = Tuple::create(size_, allocator);
         const slot_t *src = data_;
         slot_t *dst       = newTuple->data_;
 
         for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(types[i])) {
+            if (isGCTraced(codes[i])) {
                 const Object *oriRef = reinterpret_cast<const Object *const *>(src)[i];
                 Object *newRef       = NullRef;
 
                 if (oriRef) {
                     if (deep) {
                         // 深拷贝：递归克隆引用对象
-                        newRef = oriRef->clone(allocator, true);
+                        newRef = oriRef->clone(allocator, tupleType->typeAt(i), true);
                     } else {
                         // 浅拷贝：仅复制引用指针
                         newRef = const_cast<Object *>(oriRef);
@@ -138,17 +132,19 @@ class Tuple : public Object {
         return reinterpret_cast<Object *>(newTuple);
     }
 
-    virtual void print(std::ostream &os) const override {
-        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
+    virtual void print(std::ostream &os, const Type *type) const override {
+        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
+        const TupleType *tupleType = static_cast<const TupleType *>(type);
+        auto codes                 = tupleType->codes();
+
         os << "(";
 
-        const auto &types     = layout_->elemTypes();
         const slot_t *dataPtr = data_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
-            printSlot(os, dataPtr[i], types[i]);
+            printSlot(os, dataPtr[i], codes[i]);
         }
 
         os << ")";
@@ -156,13 +152,15 @@ class Tuple : public Object {
 
     virtual void onMoved() override {}
 
-    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
-        ASSERT(layout_, "Tuple layout must be set via updateLayout before use");
-        const auto &types = layout_->elemTypes();
-        Object **refArr   = reinterpret_cast<Object **>(data_);
+    virtual void
+    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
+        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
+        const TupleType *tupleType = static_cast<const TupleType *>(type);
+        auto codes                 = tupleType->codes();
+        Object **refArr            = reinterpret_cast<Object **>(data_);
 
         for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(types[i])) {
+            if (isGCTraced(codes[i])) {
                 if (Object *&ref = refArr[i]) {
                     ref = relocate(ref);
                 }
@@ -171,9 +169,8 @@ class Tuple : public Object {
     }
 
   private:
-    explicit Tuple(size_t slotCount) : size_(static_cast<uint32_t>(slotCount)), layout_(nullptr) {}
+    explicit Tuple(size_t slotCount) : size_(static_cast<uint32_t>(slotCount)) {}
 
     uint32_t size_;
-    const TupleTypeLayout *layout_; // 使用时通过 updateLayout 设置
     slot_t data_[];
 };

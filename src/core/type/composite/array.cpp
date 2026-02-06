@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Jan. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,34 +24,57 @@
 
 using namespace std;
 
-void ArrayType::computeLayout() const {
-    if (!layout_) {
-        layout_ = std::make_shared<ArrayTypeLayout>(elemType_->code(), refs_);
+ArrayType *ArrayTypeFactory::build() {
+    if (!elemType_) {
+        elemType_ = Type::Void();
     }
+    return ArrayType::fromFactory(*this);
 }
 
-ArrayType::ArrayType(Type *elementType) : CompositeType(TypeCode::Array), elemType_(elementType) {}
+ArrayType::ArrayType(Type *elemType, size_t refCount, const size_t *refs)
+    : CompositeType(TypeCode::Array), elemType_(elemType), elemTypeCode_(elemType->code()),
+      refCount_(refCount) {
+    // 复制 refs 到灵活数组
+    for (size_t i = 0; i < refCount; ++i) {
+        refs_[i] = refs[i];
+    }
+}
 
 ArrayType *ArrayType::create(Type *elemType) {
     if (!elemType) {
         elemType = Type::Void();
     }
-    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
+    // 计算所需内存大小
+    size_t baseSize  = sizeof(ArrayType);
+    size_t totalSize = baseSize; // 无 refs 时，refCount_ = 0
+
+    void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
     ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
-    return new (mem) ArrayType(elemType);
+    return new (mem) ArrayType(elemType, 0, nullptr);
 }
 
-void ArrayType::addRef(size_t index) { refs_.push_back(index); }
-
-void ArrayType::setRefs(const std::vector<size_t> &refs) { refs_ = refs; }
-
-Type *ArrayType::elemType() const { return elemType_; }
-
-const ArrayTypeLayout &ArrayType::layout() const {
-    if (!layout_) {
-        computeLayout();
+ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) {
+    if (!factory.elemType_) {
+        factory.elemType_ = Type::Void();
     }
-    return *layout_;
+    return fromData(factory.elemType_, factory.refs_.size(), factory.refs_.data());
+}
+
+ArrayType *ArrayType::fromData(Type *elemType, size_t refCount, const size_t *refs) {
+    if (!elemType) {
+        elemType = Type::Void();
+    }
+
+    // 计算所需内存大小：基础大小 + refs 数组
+    size_t baseSize  = sizeof(ArrayType);
+    size_t refsSize  = refCount * sizeof(size_t);
+    size_t totalSize = baseSize + refsSize;
+
+    void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
+    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
+
+    const size_t *refsPtr = refCount > 0 ? refs : nullptr;
+    return new (mem) ArrayType(elemType, refCount, refsPtr);
 }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
@@ -59,7 +82,7 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(!resolved(), "ArrayType is already resolved");
 
     ASSERT(
-        typeList.size() == refs_.size(),
+        typeList.size() == refCount_,
         "Type list size does not match the number of references in ArrayType");
 
     Type *newElemType = elemType_;
@@ -76,7 +99,7 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
     return newArray;
 }
 
-bool ArrayType::resolved() const { return refs_.empty(); }
+bool ArrayType::resolved() const { return refCount_ == 0; }
 
 string ArrayType::toString() const { return elemType_->toString() + "[]"; }
 
@@ -87,10 +110,9 @@ std::string ArrayType::mangle() const {
 }
 
 Type *ArrayType::clone(bool deep /* = false */) const {
-    auto newType     = ArrayType::create(deep ? elemType_->clone(true) : elemType_);
-    newType->refs_   = refs_;
-    newType->layout_ = layout_;
-    return newType;
+    Type *newElemType = deep ? elemType_->clone(true) : elemType_;
+    // 所有信息已知，直接使用 fromData 构建
+    return fromData(newElemType, refCount_, refs_);
 }
 
 bool ArrayType::equals(Type *other) const {

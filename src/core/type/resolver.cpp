@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,18 +24,18 @@
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
     ASSERT(funcType_, "FunctionType is null");
-    const auto &withTypes = funcType_->withTypes();
-    const auto &normTypes = funcType_->normTypes();
-    if (withTypes.size() != with.size() || normTypes.size() != norm.size()) {
+    const size_t withCount = funcType_->withTypesCount();
+    const size_t normCount = funcType_->normTypesCount();
+    if (withCount != with.size() || normCount != norm.size()) {
         return std::nullopt; // reject
     }
-    for (size_t i = 0; i < withTypes.size(); i++) {
-        if (!with[i]->assignable(withTypes[i].first)) {
+    for (size_t i = 0; i < withCount; i++) {
+        if (!with[i]->assignable(funcType_->withTypeAt(i))) {
             return std::nullopt; // reject
         }
     }
-    for (size_t i = 0; i < normTypes.size(); i++) {
-        if (!norm[i]->assignable(normTypes[i].first)) {
+    for (size_t i = 0; i < normCount; i++) {
+        if (!norm[i]->assignable(funcType_->normTypeAt(i))) {
             return std::nullopt; // reject
         }
     }

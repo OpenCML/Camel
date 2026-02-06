@@ -13,75 +13,186 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "func.h"
 
-#include "core/data/data.h"
+#include "core/mm/alloc/allocator.h"
 #include "core/mm/mm.h"
-#include "utils/str.h"
+#include "utils/assert.h"
 
-#include <algorithm>
+#include <cstring>
 
 using namespace std;
 
-FunctionType::FunctionType()
-    : CompositeType(TypeCode::Function), exitType_(nullptr), hasCompileInfo_(true) {
-    // 默认空构造函数，需要通过addWithArg和addNormArg添加参数
-    // 通过此方式构造的FunctionType，是有编译信息的
+namespace {
+
+FunctionTypeLayout computeLayout(size_t withCount, size_t normCount) {
+    size_t withTypesSize     = withCount * sizeof(Type *);
+    size_t withTypeCodesSize = withCount * sizeof(TypeCode);
+    size_t withIsVarSize     = withCount * sizeof(uint8_t);
+    size_t normTypesSize     = normCount * sizeof(Type *);
+    size_t normTypeCodesSize = normCount * sizeof(TypeCode);
+    size_t normIsVarSize     = normCount * sizeof(uint8_t);
+
+    size_t aWTypes  = ::alignUp(withTypesSize, alignof(TypeCode));
+    size_t aWCodes  = ::alignUp(withTypeCodesSize, alignof(uint8_t));
+    size_t aWVar    = ::alignUp(withIsVarSize, alignof(Type *));
+    size_t normBase = aWTypes + aWCodes + aWVar;
+    size_t aNTypes  = ::alignUp(normTypesSize, alignof(TypeCode));
+    size_t aNCodes  = ::alignUp(normTypeCodesSize, alignof(uint8_t));
+    size_t aNVar    = ::alignUp(normIsVarSize, alignof(uint8_t));
+
+    size_t dataSize  = normBase + aNTypes + aNCodes + aNVar;
+    size_t totalSize = sizeof(FunctionType) + dataSize;
+
+    return FunctionTypeLayout{
+        .totalSize                = totalSize,
+        .alignedWithTypesSize     = aWTypes,
+        .alignedWithTypeCodesSize = aWCodes,
+        .alignedWithIsVarSize     = aWVar,
+        .normBase                 = normBase,
+        .alignedNormTypesSize     = aNTypes,
+        .alignedNormTypeCodesSize = aNCodes,
+        .alignedNormIsVarSize     = aNVar,
+    };
 }
 
-FunctionType::FunctionType(
-    const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
-    const ModifierSet &modifiers)
-    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
-      withTypes_(withTypes), normTypes_(normTypes), exitType_(returnType), hasCompileInfo_(false) {}
+} // namespace
 
-FunctionType::FunctionType(
-    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
-    const ModifierSet &modifiers)
-    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
-      withTypes_(withTypes), normTypes_(normTypes), exitType_(returnType), hasCompileInfo_(false) {}
+// --- FunctionMetaInfo ---
 
-FunctionType::FunctionType(
-    const param_vec_t &&withTypes, const param_vec_t &&normTypes, Type *returnType,
-    const ModifierSet &modifiers)
-    : CompositeType(TypeCode::Function), implMark_(ImplMark::Graph), modifiers_(modifiers),
-      withTypes_(std::move(withTypes)), normTypes_(std::move(normTypes)), exitType_(returnType),
-      hasCompileInfo_(false) {}
+FunctionMetaInfo *
+FunctionMetaInfo::create(std::vector<std::string> argNames, std::vector<std::string> closureRefs) {
+    void *mem = mm::permSpace().alloc(sizeof(FunctionMetaInfo), alignof(FunctionMetaInfo));
+    ASSERT(mem != nullptr, "Failed to allocate FunctionMetaInfo");
+    return new (mem) FunctionMetaInfo(std::move(argNames), std::move(closureRefs));
+}
 
-const string &FunctionType::argNameAt(size_t idx) const {
-    ASSERT(!argNames_.empty(), "No argument names available");
+FunctionMetaInfo *FunctionMetaInfo::create(
+    std::span<const std::string_view> argNames, std::span<const std::string_view> closureRefs) {
+    std::vector<std::string> names(argNames.begin(), argNames.end());
+    std::vector<std::string> refs(closureRefs.begin(), closureRefs.end());
+    return create(std::move(names), std::move(refs));
+}
+
+FunctionMetaInfo::FunctionMetaInfo(
+    std::vector<std::string> argNames, std::vector<std::string> closureRefs)
+    : argNames_(std::move(argNames)), closureRefs_(std::move(closureRefs)) {
+    argNameViews_.reserve(argNames_.size());
+    for (const auto &s : argNames_)
+        argNameViews_.push_back(s);
+    closureRefViews_.reserve(closureRefs_.size());
+    for (const auto &s : closureRefs_)
+        closureRefViews_.push_back(s);
+}
+
+std::string_view FunctionMetaInfo::argNameAt(size_t idx) const {
     ASSERT(idx < argNames_.size(), "Index out of range");
     return argNames_[idx];
 }
 
-bool FunctionType::addWithArg(const string &ident, Type *type, bool isVar) {
-    ASSERT(hasCompileInfo_, "Cannot add argument to non-compile-info FunctionType");
-    if (find(argNames_.begin(), argNames_.end(), ident) != argNames_.end()) {
-        return false;
-    }
-    withTypes_.push_back({type, isVar});
-    argNames_.push_back(ident);
-    return true;
+std::string_view FunctionMetaInfo::closureRefAt(size_t idx) const {
+    ASSERT(idx < closureRefs_.size(), "Index out of range");
+    return closureRefs_[idx];
 }
 
-bool FunctionType::addNormArg(const string &ident, Type *type, bool isVar) {
-    ASSERT(hasCompileInfo_, "Cannot add argument to non-compile-info FunctionType");
-    if (find(argNames_.begin(), argNames_.end(), ident) != argNames_.end()) {
-        return false;
+// --- FunctionTypeFactory ---
+
+FunctionType *FunctionTypeFactory::build() { return FunctionType::fromFactory(*this); }
+
+// --- FunctionType ---
+
+// 从预计算 layout + 指针一次拷贝，不再重复计算布局
+FunctionType::FunctionType(
+    const FunctionTypeLayout &layout, size_t withCount, size_t normCount,
+    const Type *const *withTypes, const TypeCode *withTypeCodes, const bool *withIsVar,
+    const Type *const *normTypes, const TypeCode *normTypeCodes, const bool *normIsVar,
+    Type *exitType, ImplMark implMark, ModifierSet modifiers, const FunctionMetaInfo *metaInfo)
+    : CompositeType(TypeCode::Function), implMark_(implMark), modifiers_(modifiers),
+      exitType_(exitType), metaInfo_(const_cast<FunctionMetaInfo *>(metaInfo)) {
+    auto p         = layout.ptrs(data_);
+    withTypes_     = std::span(p.withTypes, withCount);
+    withTypeCodes_ = std::span(p.withTypeCodes, withCount);
+    withIsVar_     = std::span(p.withIsVar, withCount);
+    normTypes_     = std::span(p.normTypes, normCount);
+    normTypeCodes_ = std::span(p.normTypeCodes, normCount);
+    normIsVar_     = std::span(p.normIsVar, normCount);
+
+    for (size_t i = 0; i < withCount; ++i) {
+        p.withTypes[i]     = const_cast<Type *>(withTypes[i]);
+        p.withTypeCodes[i] = withTypeCodes[i];
+        p.withIsVar[i]     = withIsVar[i] ? 1 : 0;
     }
-    normTypes_.push_back({type, isVar});
-    argNames_.push_back(ident);
-    return true;
+    for (size_t i = 0; i < normCount; ++i) {
+        p.normTypes[i]     = const_cast<Type *>(normTypes[i]);
+        p.normTypeCodes[i] = normTypeCodes[i];
+        p.normIsVar[i]     = normIsVar[i] ? 1 : 0;
+    }
 }
 
-bool FunctionType::addClosureRef(const string &ident) {
-    ASSERT(hasCompileInfo_, "Cannot add closure ref to non-compile-info FunctionType");
-    closureRefs_.push_back(ident);
-    return true;
+// 从工厂直接写入 data_，一次遍历，无临时 vector
+FunctionType::FunctionType(
+    FunctionTypeFactory &factory, const FunctionTypeLayout &layout, Type *exitType,
+    ImplMark implMark, ModifierSet modifiers, const FunctionMetaInfo *metaInfo)
+    : CompositeType(TypeCode::Function), implMark_(implMark), modifiers_(modifiers),
+      exitType_(exitType), metaInfo_(const_cast<FunctionMetaInfo *>(metaInfo)) {
+    const size_t withCount = factory.withTypes_.size();
+    const size_t normCount = factory.normTypes_.size();
+    auto p                 = layout.ptrs(data_);
+
+    withTypes_     = std::span(p.withTypes, withCount);
+    withTypeCodes_ = std::span(p.withTypeCodes, withCount);
+    withIsVar_     = std::span(p.withIsVar, withCount);
+    normTypes_     = std::span(p.normTypes, normCount);
+    normTypeCodes_ = std::span(p.normTypeCodes, normCount);
+    normIsVar_     = std::span(p.normIsVar, normCount);
+
+    for (size_t i = 0; i < withCount; ++i) {
+        const auto &[type, isVar] = factory.withTypes_[i];
+        p.withTypes[i]            = type;
+        p.withTypeCodes[i]        = type->code();
+        p.withIsVar[i]            = isVar ? 1 : 0;
+    }
+    for (size_t i = 0; i < normCount; ++i) {
+        const auto &[type, isVar] = factory.normTypes_[i];
+        p.normTypes[i]            = type;
+        p.normTypeCodes[i]        = type->code();
+        p.normIsVar[i]            = isVar ? 1 : 0;
+    }
+}
+
+// 从 param_vec 一次遍历写入 data_，无临时 vector
+FunctionType::FunctionType(
+    const FunctionTypeLayout &layout, const param_vec_t &withTypes, const param_vec_t &normTypes,
+    Type *exitType, ImplMark implMark, ModifierSet modifiers)
+    : CompositeType(TypeCode::Function), implMark_(implMark), modifiers_(modifiers),
+      exitType_(exitType), metaInfo_(nullptr) {
+    const size_t withCount = withTypes.size();
+    const size_t normCount = normTypes.size();
+    auto p                 = layout.ptrs(data_);
+
+    withTypes_     = std::span(p.withTypes, withCount);
+    withTypeCodes_ = std::span(p.withTypeCodes, withCount);
+    withIsVar_     = std::span(p.withIsVar, withCount);
+    normTypes_     = std::span(p.normTypes, normCount);
+    normTypeCodes_ = std::span(p.normTypeCodes, normCount);
+    normIsVar_     = std::span(p.normIsVar, normCount);
+
+    for (size_t i = 0; i < withCount; ++i) {
+        const auto &[type, isVar] = withTypes[i];
+        p.withTypes[i]            = type;
+        p.withTypeCodes[i]        = type->code();
+        p.withIsVar[i]            = isVar ? 1 : 0;
+    }
+    for (size_t i = 0; i < normCount; ++i) {
+        const auto &[type, isVar] = normTypes[i];
+        p.normTypes[i]            = type;
+        p.normTypeCodes[i]        = type->code();
+        p.normIsVar[i]            = isVar ? 1 : 0;
+    }
 }
 
 Type *FunctionType::exitType() const {
@@ -92,29 +203,22 @@ Type *FunctionType::exitType() const {
 
 bool FunctionType::checkModifiers() const { return true; }
 
-vector<tuple<string, Type *, bool>> FunctionType::withArgsInfo() const {
-    ASSERT(hasCompileInfo_, "No compile info available");
-    ASSERT(
-        withTypes_.size() + normTypes_.size() == argNames_.size(),
-        "Argument names size mismatch");
-    vector<tuple<string, Type *, bool>> result;
-    for (size_t i = 0; i < withTypes_.size(); i++) {
-        result.emplace_back(argNames_[i], withTypes_[i].first, withTypes_[i].second);
-    }
-    return result;
+std::string_view FunctionType::argNameAt(size_t idx) const {
+    ASSERT(metaInfo_ != nullptr, "No meta info available");
+    return metaInfo_->argNameAt(idx);
 }
 
-vector<tuple<string, Type *, bool>> FunctionType::normArgsInfo() const {
-    ASSERT(hasCompileInfo_, "No compile info available");
-    ASSERT(
-        withTypes_.size() + normTypes_.size() == argNames_.size(),
-        "Argument names size mismatch");
-    vector<tuple<string, Type *, bool>> result;
-    for (size_t i = 0; i < normTypes_.size(); i++) {
-        size_t idx = i + withTypes_.size();
-        result.emplace_back(argNames_[idx], normTypes_[i].first, normTypes_[i].second);
-    }
-    return result;
+std::string_view FunctionType::closureRefAt(size_t index) const {
+    ASSERT(metaInfo_ != nullptr, "No meta info available");
+    return metaInfo_->closureRefAt(index);
+}
+
+std::span<const std::string_view> FunctionType::argNames() const {
+    return metaInfo_ ? metaInfo_->argNamesSpan() : std::span<const std::string_view>();
+}
+
+std::span<const std::string_view> FunctionType::closureRefs() const {
+    return metaInfo_ ? metaInfo_->closureRefsSpan() : std::span<const std::string_view>();
 }
 
 Type *FunctionType::resolve(const type_vec_t &typeList) const {
@@ -137,11 +241,11 @@ string FunctionType::toString() const {
         for (size_t i = 0; i < withTypes_.size(); i++) {
             if (i > 0)
                 result += ", ";
-            if (withTypes_[i].second)
+            if (withIsVarAt(i))
                 result += "var ";
-            if (hasCompileInfo_)
-                result += argNames_[i] + ": ";
-            result += withTypes_[i].first->toString();
+            if (metaInfo_)
+                result += string(argNameAt(i)) + ": ";
+            result += withTypes_[i]->toString();
         }
         result += "> ";
     }
@@ -149,13 +253,13 @@ string FunctionType::toString() const {
     for (size_t i = 0; i < normTypes_.size(); i++) {
         if (i > 0)
             result += ", ";
-        if (normTypes_[i].second)
+        if (normIsVarAt(i))
             result += "var ";
-        if (hasCompileInfo_) {
+        if (metaInfo_) {
             size_t idx = i + withTypes_.size();
-            result += argNames_[idx] + ": ";
+            result += string(argNameAt(idx)) + ": ";
         }
-        result += normTypes_[i].first->toString();
+        result += normTypes_[i]->toString();
     }
     result += ") => ";
     result += exitType_ ? exitType_->toString() : "<null>";
@@ -166,18 +270,18 @@ string FunctionType::mangle() const {
     string result = "F";
     if (!withTypes_.empty()) {
         result += "W" + to_string(withTypes_.size());
-        for (const auto &[type, isVar] : withTypes_) {
-            if (isVar)
+        for (size_t i = 0; i < withTypes_.size(); i++) {
+            if (withIsVarAt(i))
                 result += "V";
-            result += type->mangle();
+            result += withTypes_[i]->mangle();
         }
     }
     if (!normTypes_.empty()) {
         result += "N" + to_string(normTypes_.size());
-        for (const auto &[type, isVar] : normTypes_) {
-            if (isVar)
+        for (size_t i = 0; i < normTypes_.size(); i++) {
+            if (normIsVarAt(i))
                 result += "V";
-            result += type->mangle();
+            result += normTypes_[i]->mangle();
         }
     }
     result += "R";
@@ -186,47 +290,139 @@ string FunctionType::mangle() const {
 }
 
 FunctionType *FunctionType::create() {
-    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
-    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
-    return new (mem) FunctionType();
+    // 空 FunctionType，使用工厂构建
+    FunctionTypeFactory factory;
+    factory.setHasCompileInfo(true);
+    return factory.build();
 }
 
 FunctionType *FunctionType::create(
     const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
     const ModifierSet &modifiers) {
-    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
-    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
-    return new (mem) FunctionType(withTypes, normTypes, returnType, modifiers);
+    param_vec_t withVec(withTypes);
+    param_vec_t normVec(normTypes);
+    return create(withVec, normVec, returnType, modifiers);
 }
 
 FunctionType *FunctionType::create(
     const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
     const ModifierSet &modifiers) {
-    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
+    FunctionTypeLayout layout = computeLayout(withTypes.size(), normTypes.size());
+    void *mem                 = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
     ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
-    return new (mem) FunctionType(withTypes, normTypes, returnType, modifiers);
+    return new (mem)
+        FunctionType(layout, withTypes, normTypes, returnType, ImplMark::Graph, modifiers);
 }
 
 FunctionType *FunctionType::create(
     const param_vec_t &&withTypes, const param_vec_t &&normTypes, Type *returnType,
     const ModifierSet &modifiers) {
-    void *mem = mm::permSpace().alloc(sizeof(FunctionType), alignof(FunctionType));
+    return create(withTypes, normTypes, returnType, modifiers);
+}
+
+FunctionType *FunctionType::fromFactory(FunctionTypeFactory &factory) {
+    const size_t withCount    = factory.withTypes_.size();
+    const size_t normCount    = factory.normTypes_.size();
+    FunctionTypeLayout layout = computeLayout(withCount, normCount);
+
+    const FunctionMetaInfo *metaInfo = nullptr;
+    if (factory.hasCompileInfo_) {
+        metaInfo =
+            FunctionMetaInfo::create(std::move(factory.argNames_), std::move(factory.closureRefs_));
+    }
+
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
     ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
-    return new (mem)
-        FunctionType(std::move(withTypes), std::move(normTypes), returnType, modifiers);
+    return new (mem) FunctionType(
+        factory,
+        layout,
+        factory.exitType_,
+        factory.implMark_,
+        factory.modifiers_,
+        metaInfo);
+}
+
+FunctionType *FunctionType::fromData(
+    size_t withCount, size_t normCount, const Type *const *withTypes, const TypeCode *withTypeCodes,
+    const bool *withIsVar, const Type *const *normTypes, const TypeCode *normTypeCodes,
+    const bool *normIsVar, Type *exitType, ImplMark implMark, ModifierSet modifiers,
+    const FunctionMetaInfo *metaInfo) {
+    FunctionTypeLayout layout = computeLayout(withCount, normCount);
+    void *mem                 = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
+    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    return new (mem) FunctionType(
+        layout,
+        withCount,
+        normCount,
+        withTypes,
+        withTypeCodes,
+        withIsVar,
+        normTypes,
+        normTypeCodes,
+        normIsVar,
+        exitType,
+        implMark,
+        modifiers,
+        metaInfo);
+}
+
+void FunctionMetaInfo::addClosureRef(const std::string &ref) {
+    closureRefs_.push_back(ref);
+    closureRefViews_.push_back(closureRefs_.back());
+}
+
+void FunctionType::addClosureRef(const std::string &ref) {
+    if (metaInfo_)
+        metaInfo_->addClosureRef(ref);
 }
 
 Type *FunctionType::clone(bool deep /* = false */) const {
-    auto res             = FunctionType::create();
-    res->implMark_       = implMark_;
-    res->modifiers_      = modifiers_;
-    res->withTypes_      = withTypes_;
-    res->normTypes_      = normTypes_;
-    res->exitType_       = exitType_;
-    res->argNames_       = argNames_;
-    res->closureRefs_    = closureRefs_;
-    res->hasCompileInfo_ = hasCompileInfo_;
-    return res;
+    // 准备数据
+    std::vector<Type *> withTypePtrs;
+    std::vector<TypeCode> withTypeCodes;
+    std::vector<uint8_t> withIsVar;
+    std::vector<Type *> normTypePtrs;
+    std::vector<TypeCode> normTypeCodes;
+    std::vector<uint8_t> normIsVar;
+
+    withTypePtrs.reserve(withTypes_.size());
+    withTypeCodes.reserve(withTypes_.size());
+    withIsVar.reserve(withTypes_.size());
+    for (size_t i = 0; i < withTypes_.size(); ++i) {
+        withTypePtrs.push_back(deep ? withTypes_[i]->clone(true) : withTypes_[i]);
+        withTypeCodes.push_back(withTypeCodes_[i]);
+        withIsVar.push_back(withIsVar_[i]);
+    }
+
+    normTypePtrs.reserve(normTypes_.size());
+    normTypeCodes.reserve(normTypes_.size());
+    normIsVar.reserve(normTypes_.size());
+    for (size_t i = 0; i < normTypes_.size(); ++i) {
+        normTypePtrs.push_back(deep ? normTypes_[i]->clone(true) : normTypes_[i]);
+        normTypeCodes.push_back(normTypeCodes_[i]);
+        normIsVar.push_back(normIsVar_[i]);
+    }
+
+    Type *newExitType = deep && exitType_ ? exitType_->clone(true) : exitType_;
+
+    const FunctionMetaInfo *newMetaInfo = nullptr;
+    if (metaInfo_) {
+        newMetaInfo = FunctionMetaInfo::create(argNames(), closureRefs());
+    }
+
+    return fromData(
+        withTypes_.size(),
+        normTypes_.size(),
+        withTypePtrs.data(),
+        withTypeCodes.data(),
+        reinterpret_cast<const bool *>(withIsVar.data()),
+        normTypePtrs.data(),
+        normTypeCodes.data(),
+        reinterpret_cast<const bool *>(normIsVar.data()),
+        newExitType,
+        implMark_,
+        modifiers_,
+        newMetaInfo);
 }
 
 bool FunctionType::equals(Type *other) const {
@@ -235,22 +431,20 @@ bool FunctionType::equals(Type *other) const {
     if (!other || other->code() != TypeCode::Function)
         return false;
 
-    const auto &otherFunc = static_cast<const FunctionType &>(*other);
+    const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
     if (withTypes_.size() != otherFunc.withTypes_.size() ||
-        normTypes_.size() != otherFunc.normTypes_.size()) {
+        normTypes_.size() != otherFunc.normTypes_.size())
         return false;
-    }
+
     for (size_t i = 0; i < withTypes_.size(); i++) {
-        const auto &[type, isVar]           = withTypes_[i];
-        const auto &[otherType, otherIsVar] = otherFunc.withTypes_[i];
-        if (isVar != otherIsVar || !type->equals(otherType))
+        if (withIsVar_[i] != otherFunc.withIsVar_[i] ||
+            !withTypes_[i]->equals(otherFunc.withTypes_[i]))
             return false;
     }
     for (size_t i = 0; i < normTypes_.size(); i++) {
-        const auto &[type, isVar]           = normTypes_[i];
-        const auto &[otherType, otherIsVar] = otherFunc.normTypes_[i];
-        if (isVar != otherIsVar || !type->equals(otherType))
+        if (normIsVar_[i] != otherFunc.normIsVar_[i] ||
+            !normTypes_[i]->equals(otherFunc.normTypes_[i]))
             return false;
     }
     if (exitType_ && otherFunc.exitType_) {
@@ -274,24 +468,21 @@ bool FunctionType::assignable(Type *other) const {
     if (!other || other->code() != TypeCode::Function)
         return false;
 
-    const auto &otherFunc = static_cast<const FunctionType &>(*other);
+    const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
     if (withTypes_.size() != otherFunc.withTypes_.size() ||
-        normTypes_.size() != otherFunc.normTypes_.size()) {
+        normTypes_.size() != otherFunc.normTypes_.size())
         return false;
-    }
 
     for (size_t i = 0; i < withTypes_.size(); i++) {
-        const auto &[type, isVar]           = withTypes_[i];
-        const auto &[otherType, otherIsVar] = otherFunc.withTypes_[i];
-        if (isVar != otherIsVar || !type->assignable(otherType))
+        if (withIsVar_[i] != otherFunc.withIsVar_[i] ||
+            !withTypes_[i]->assignable(otherFunc.withTypes_[i]))
             return false;
     }
 
     for (size_t i = 0; i < normTypes_.size(); i++) {
-        const auto &[type, isVar]           = normTypes_[i];
-        const auto &[otherType, otherIsVar] = otherFunc.normTypes_[i];
-        if (isVar != otherIsVar || !type->assignable(otherType))
+        if (normIsVar_[i] != otherFunc.normIsVar_[i] ||
+            !normTypes_[i]->assignable(otherFunc.normTypes_[i]))
             return false;
     }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "core/type/base.h"
 
 #include <optional>
+#include <span>
 
 class CompositeType : public Type {
   public:
@@ -39,4 +40,8 @@ class CompositeType : public Type {
     virtual bool equals(Type *type) const override                    = 0;
     virtual CastSafety castSafetyTo(const Type &other) const override = 0;
     virtual bool assignable(Type *type) const                         = 0;
+
+    // 槽类型与 TypeCode 的只读 span（子类按需覆盖，默认空）
+    virtual std::span<Type *const> types() const { return {}; }
+    virtual std::span<const TypeCode> codes() const { return {}; }
 };

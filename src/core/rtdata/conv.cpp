@@ -153,7 +153,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     case TypeCode::Function: {
         auto funcData    = tt::as_shared<FunctionData>(data);
         auto &graph      = funcData->graph();
-        Function *gcFunc = Function::create(&graph, graph.closureType()->layout(), allocator);
+        Function *gcFunc = Function::create(&graph, graph.closureType(), allocator);
         Tuple *gcTuple   = gcFunc->tuple();
 
         if (gcTuple->size() == 0) {

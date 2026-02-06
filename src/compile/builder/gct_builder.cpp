@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1517,11 +1517,12 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         exitType = visitType(exitTypeNode);
     }
 
-    // Create a FunctionType object and set its properties
-    FunctionType *funcType = FunctionType::create();
-    funcType->setExitType(exitType);
-    funcType->setImplMark(typeLoad->implMark());
-    funcType->setModifiers(typeLoad->modifiers());
+    FunctionTypeFactory factory;
+    factory.setExitType(exitType);
+    factory.setImplMark(typeLoad->implMark());
+    factory.setModifiers(typeLoad->modifiers());
+
+    std::unordered_set<string> paramNames;
 
     // Process "with" parameters (context parameters)
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
@@ -1561,13 +1562,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
 
-        // Add the parameter to the function type
-        bool success = funcType->addWithArg(name, type, isVar);
-        if (!success) {
-            // Duplicate parameter names are not allowed
+        if (!paramNames.insert(name).second) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
+        factory.addWithArg(name, type, isVar);
     }
 
     // Process normal parameters
@@ -1608,17 +1607,15 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
 
-        // Add the parameter to the function type
-        bool success = funcType->addNormArg(name, type, isVar);
-        if (!success) {
-            // Duplicate parameter names are not allowed
+        if (!paramNames.insert(name).second) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
+        factory.addNormArg(name, type, isVar);
     }
 
     LEAVE("FuncType");
-    return funcType;
+    return factory.build();
 }
 
 /*
