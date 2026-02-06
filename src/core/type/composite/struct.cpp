@@ -21,6 +21,7 @@
 #include "core/mm/alloc/allocator.h"
 #include "core/mm/mm.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 #include "utils/type.h"
 
 #include <algorithm>
@@ -83,7 +84,9 @@ StructType::StructType(
 
 StructType *StructType::create() {
     StructTypeLayout layout = computeLayout(0, 0, 0);
-    void *mem               = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
+    EXEC_WHEN_DEBUG(
+        l.in("StructType").debug("Allocating StructType: (), size: {} bytes", layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -128,7 +131,13 @@ StructType *StructType::fromFactoryData(
     }
 
     StructTypeLayout layout = computeLayout(size, refCount, fieldNamesData.size());
-    void *mem               = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
+    EXEC_WHEN_DEBUG(l.in("StructType")
+                        .debug(
+                            "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
+                            size,
+                            refCount,
+                            layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(
         layout,

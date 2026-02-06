@@ -40,14 +40,14 @@ class Function : public Object {
         if (!mem)
             throw std::bad_alloc();
 
-        auto *fn   = new (mem) Function(graph);
-        fn->tuple_ = Tuple::create(tt->size(), allocator);
+        auto *fn     = new (mem) Function(graph);
+        fn->closure_ = Tuple::create(tt->size(), allocator);
         return fn;
     }
 
     GraphIR::Graph *graph() const { return graph_; }
-    Tuple *tuple() { return tuple_; }
-    const Tuple *tuple() const { return tuple_; }
+    Tuple *tuple() { return closure_; }
+    const Tuple *tuple() const { return closure_; }
 
     // 获取 tuple 的类型（从 graph 获取，实现在 .cpp 中）
     const TupleType *tupleType() const;
@@ -64,12 +64,12 @@ class Function : public Object {
             return false;
 
         const TupleType *tupleTypePtr = tupleType();
-        if (!tuple_ && !fnOther->tuple_)
+        if (!closure_ && !fnOther->closure_)
             return true;
-        if (!tuple_ || !fnOther->tuple_)
+        if (!closure_ || !fnOther->closure_)
             return false;
 
-        return tuple_->equals(fnOther->tuple_, tupleTypePtr, deep);
+        return closure_->equals(fnOther->closure_, tupleTypePtr, deep);
     }
 
     virtual Object *
@@ -80,12 +80,13 @@ class Function : public Object {
 
         Function *fnNew = new (mem) Function(graph_);
 
-        if (tuple_) {
+        if (closure_) {
             const TupleType *tupleTypePtr = tupleType();
-            fnNew->tuple_ =
-                deep ? static_cast<Tuple *>(tuple_->clone(allocator, tupleTypePtr, true)) : tuple_;
+            fnNew->closure_ =
+                deep ? static_cast<Tuple *>(closure_->clone(allocator, tupleTypePtr, true))
+                     : closure_;
         } else {
-            fnNew->tuple_ = nullptr;
+            fnNew->closure_ = nullptr;
         }
 
         return reinterpret_cast<Object *>(fnNew);
@@ -100,15 +101,15 @@ class Function : public Object {
 
     virtual void
     updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        if (tuple_) {
+        if (closure_) {
             const TupleType *tupleTypePtr = tupleType();
-            tuple_->updateRefs(relocate, tupleTypePtr);
+            closure_->updateRefs(relocate, tupleTypePtr);
         }
     }
 
   private:
-    explicit Function(GraphIR::Graph *g) : graph_(g), tuple_(nullptr) {}
+    explicit Function(GraphIR::Graph *g) : graph_(g), closure_(nullptr) {}
 
     GraphIR::Graph *graph_;
-    Tuple *tuple_;
+    Tuple *closure_;
 };

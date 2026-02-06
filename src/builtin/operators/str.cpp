@@ -87,21 +87,11 @@ slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::ostringstream joined;
     size_t len = arrObj->size();
 
-    if (elemType->isGCTraced()) {
-        // 引用类型
-        for (size_t i = 0; i < len; ++i) {
-            if (i > 0)
-                joined << separator;
-            joined << arrObj->get<Object *>(i);
-        }
-    } else {
-        // 非引用类型
-        for (size_t i = 0; i < len; ++i) {
-            if (i > 0)
-                joined << separator;
-            slot_t slot = arrObj->get<slot_t>(i);
-            printSlot(joined, slot, elemType);
-        }
+    for (size_t i = 0; i < len; ++i) {
+        if (i > 0)
+            joined << separator;
+        slot_t slot = arrObj->get<slot_t>(i);
+        printSlot(joined, slot, elemType);
     }
 
     String *resultObj = String::from(joined.str(), mm::autoSpace());

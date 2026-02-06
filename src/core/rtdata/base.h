@@ -135,6 +135,10 @@ inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
         data != DeadSlot,
         std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
     if (t->isGCTraced()) {
+        if (data == NullSlot) {
+            os << "null";
+            return;
+        }
         reinterpret_cast<const Object *>(data)->print(os, t);
     } else {
         // 非引用类型，根据 type code 输出

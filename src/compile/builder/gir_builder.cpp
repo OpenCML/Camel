@@ -175,6 +175,7 @@ node_ptr_t Builder::resolveCrossGraphRef(const node_ptr_t &node, const std::stri
 node_ptr_t Builder::resolveNodeByRef(const std::string &name) {
     auto optSrcNode = nodeAt(name);
     if (!optSrcNode.has_value()) {
+        EXEC_WHEN_DEBUG([&] { nodeScope_->dump(std::cerr, 0); }());
         diags_->of(SemanticDiag::UnresolvedReference).commit(name);
         throw BuildAbortException();
     }

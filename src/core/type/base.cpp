@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "composite/composite.h"
 #include "core/mm/mm.h"
 #include "other.h"
+#include "utils/log.h"
 #include "utils/type.h"
 
 using namespace std;
@@ -186,6 +187,10 @@ bool Type::assignable(Type *type) const {
 }
 
 Type *Type::create(TypeCode code) {
+    EXEC_WHEN_DEBUG(l.in("Type").debug(
+        "Allocating Type: {}, size: {} bytes",
+        typeCodeToString(code),
+        sizeof(Type)));
     void *mem = mm::permSpace().alloc(sizeof(Type), alignof(Type));
     ASSERT(mem != nullptr, "Failed to allocate Type from permSpace");
     return new (mem) Type(code);

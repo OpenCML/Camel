@@ -22,6 +22,7 @@
 #include "core/mm/mm.h"
 #include "error/diagnostics/diagnostics.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 #include "utils/type.h"
 
 using namespace std;
@@ -101,7 +102,9 @@ TupleType::TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &t
 
 TupleType *TupleType::create() {
     TupleTypeLayout layout = computeLayout(0, 0);
-    void *mem              = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    EXEC_WHEN_DEBUG(
+        l.in("TupleType").debug("Allocating TupleType: (), size: {} bytes", layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, nullptr, nullptr, nullptr);
 }
@@ -113,7 +116,13 @@ TupleType *TupleType::create(const std::vector<Type *> &types) {
             ++refCount;
     }
     TupleTypeLayout layout = computeLayout(types.size(), refCount);
-    void *mem              = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    EXEC_WHEN_DEBUG(l.in("TupleType")
+                        .debug(
+                            "Allocating TupleType: size={}, refCount={}, totalSize: {} bytes",
+                            layout.size,
+                            layout.refCount,
+                            layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, types);
 }
@@ -128,7 +137,14 @@ TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
             ++refCount;
     }
     TupleTypeLayout layout = computeLayout(size, refCount);
-    void *mem              = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    EXEC_WHEN_DEBUG(
+        l.in("TupleType")
+            .debug(
+                "Allocating TupleType(fromFactory): size={}, refCount={}, totalSize: {} bytes",
+                layout.size,
+                layout.refCount,
+                layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(factory, layout);
 }
@@ -137,7 +153,14 @@ TupleType *TupleType::fromFactoryData(
     const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
     size_t refCount) {
     TupleTypeLayout layout = computeLayout(size, refCount);
-    void *mem              = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    EXEC_WHEN_DEBUG(
+        l.in("TupleType")
+            .debug(
+                "Allocating TupleType(fromFactoryData): size={}, refCount={}, totalSize: {} bytes",
+                size,
+                refCount,
+                layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, types, typeCodes, refs);
 }

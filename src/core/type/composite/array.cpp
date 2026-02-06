@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Jan. 28, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "core/mm/mm.h"
 #include "error/diagnostics/diagnostics.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 
 using namespace std;
 
@@ -48,6 +49,10 @@ ArrayType *ArrayType::create(Type *elemType) {
     size_t baseSize  = sizeof(ArrayType);
     size_t totalSize = baseSize; // 无 refs 时，refCount_ = 0
 
+    EXEC_WHEN_DEBUG(
+        l.in("ArrayType")
+            .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
+
     void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
     ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
     return new (mem) ArrayType(elemType, 0, nullptr);
@@ -70,6 +75,10 @@ ArrayType *ArrayType::fromData(Type *elemType, size_t refCount, const size_t *re
     size_t refsSize  = refCount * sizeof(size_t);
     size_t totalSize = baseSize + refsSize;
 
+    EXEC_WHEN_DEBUG(
+        l.in("ArrayType")
+            .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
+
     void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
     ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
 
@@ -87,7 +96,8 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
 
     Type *newElemType = elemType_;
     for (const auto &type : typeList) {
-        if (newElemType->code() == TypeCode::Void) {
+        if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Any ||
+            newElemType->code() == TypeCode::Ref) {
             newElemType = type;
         } else if (!newElemType->equals(type)) {
             throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)

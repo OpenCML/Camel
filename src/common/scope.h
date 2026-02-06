@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Sep. 24, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,11 +25,41 @@
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "utils/template.h"
+
+template <typename T>
+concept HasToStringDirect = requires(const T &t) {
+    { t.toString() } -> std::convertible_to<std::string>;
+};
+
+template <typename T>
+concept HasToStringViaPtr = requires(const T &t) {
+    { t->toString() } -> std::convertible_to<std::string>;
+};
+
+template <typename T>
+concept HasToString = HasToStringDirect<T> || HasToStringViaPtr<T>;
+
+namespace detail {
+template <typename V>
+std::string valueToString(const V &value)
+    requires HasToStringDirect<V>
+{
+    return value.toString();
+}
+
+template <typename V>
+std::string valueToString(const V &value)
+    requires HasToStringViaPtr<V> && (!HasToStringDirect<V>)
+{
+    return value->toString();
+}
+} // namespace detail
 
 template <typename T>
 concept HasEmpty = requires(T t) {
@@ -163,7 +193,9 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
         return outer();
     }
 
-    void dump(std::ostream &os, int indentLevel = 0) const {
+    void dump(std::ostream &os, int indentLevel = 0) const
+        requires HasToString<Val>
+    {
         std::string indent(indentLevel * 2, ' ');
 
         os << indent << "Scope ";
@@ -179,7 +211,7 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
         }
 
         for (const auto &[key, value] : map_) {
-            os << indent << "  " << key << " : " << value << "\n";
+            os << indent << "  " << key << " : " << detail::valueToString(value) << "\n";
         }
 
         for (const auto &child : innerScopes_) {

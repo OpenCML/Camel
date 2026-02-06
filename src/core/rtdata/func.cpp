@@ -24,9 +24,9 @@ const TupleType *Function::tupleType() const { return graph_->closureType(); }
 
 void Function::print(std::ostream &os, const Type *type) const {
     os << "Function(graph=" << graph_->name() << ", tuple=";
-    if (tuple_) {
+    if (closure_) {
         const TupleType *tupleTypePtr = tupleType();
-        tuple_->print(os, tupleTypePtr);
+        closure_->print(os, tupleTypePtr);
     } else {
         os << "null";
     }
