@@ -137,6 +137,81 @@ class Encoder {
     // nop (padding)
     void nop() { emitByte(0x90); }
 
+    // cmp rax, imm8; setle al; movzx rax, al (result 0 or 1)
+    void cmpRaxImm8Setle() {
+        emitBytes({0x48, 0x83, 0xf8, 0x01}); // cmp rax, 1
+        emitBytes({0x0f, 0x9e, 0xc0});       // setle al
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0}); // movzx rax, al
+    }
+
+    // test rax, rax; jz rel32 (jump if cond is false)
+    void testRaxJzRel32(int32_t rel) {
+        emitBytes({0x48, 0x85, 0xc0}); // test rax, rax
+        emitBytes({0x0f, 0x84});       // jz rel32
+        emitBytes({
+            static_cast<uint8_t>(rel & 0xff),
+            static_cast<uint8_t>((rel >> 8) & 0xff),
+            static_cast<uint8_t>((rel >> 16) & 0xff),
+            static_cast<uint8_t>((rel >> 24) & 0xff),
+        });
+    }
+
+    // mov rax, imm64
+    void movRaxImm64(uint64_t imm) {
+        emitByte(0x48);
+        emitByte(0xb8);
+        emitBytes({
+            static_cast<uint8_t>(imm & 0xff),
+            static_cast<uint8_t>((imm >> 8) & 0xff),
+            static_cast<uint8_t>((imm >> 16) & 0xff),
+            static_cast<uint8_t>((imm >> 24) & 0xff),
+            static_cast<uint8_t>((imm >> 32) & 0xff),
+            static_cast<uint8_t>((imm >> 40) & 0xff),
+            static_cast<uint8_t>((imm >> 48) & 0xff),
+            static_cast<uint8_t>((imm >> 56) & 0xff),
+        });
+    }
+
+    // call [rax] - call through rax (used after movRaxImm64)
+    void callRax() {
+        emitBytes({0xff, 0xd0}); // call rax
+    }
+
+    // Windows x64: copy rcx->rdi, rdx->rsi (SysV convention for internal use)
+    void prologueWin64() {
+        emitBytes({0x48, 0x89, 0xcf}); // mov rdi, rcx
+        emitBytes({0x48, 0x89, 0xd6}); // mov rsi, rdx
+    }
+
+    // Windows x64: call trampoline(frame, ctx, pc). Assumes rdi=frame, rsi=ctx.
+    void callTrampolineWin64(uint32_t pc, uint64_t addr) {
+        emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi (arg1)
+        emitBytes({0x48, 0x89, 0xf2}); // mov rdx, rsi (arg2)
+        emitByte(0x41);
+        emitByte(0xb8);
+        emitBytes({
+            static_cast<uint8_t>(pc & 0xff),
+            static_cast<uint8_t>((pc >> 8) & 0xff),
+            static_cast<uint8_t>((pc >> 16) & 0xff),
+            static_cast<uint8_t>((pc >> 24) & 0xff),
+        }); // mov r8d, imm32 (arg3)
+        movRaxImm64(addr);
+        callRax();
+    }
+
+    // SysV x64: call trampoline(frame, ctx, pc). rdi, rsi already set; set rdx=pc.
+    void callTrampolineSysV(uint32_t pc, uint64_t addr) {
+        emitBytes({0x48, 0xc7, 0xc2}); // mov rdx, imm32
+        emitBytes({
+            static_cast<uint8_t>(pc & 0xff),
+            static_cast<uint8_t>((pc >> 8) & 0xff),
+            static_cast<uint8_t>((pc >> 16) & 0xff),
+            static_cast<uint8_t>((pc >> 24) & 0xff),
+        });
+        movRaxImm64(addr);
+        callRax();
+    }
+
   private:
     std::vector<uint8_t> &out_;
 };

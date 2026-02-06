@@ -117,4 +117,16 @@ class FastVMSchedPass : public LinearSchedPass {
     virtual ~FastVMSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+
+#if ENABLE_JIT
+    Frame *acquireFrameForCall(GraphIR::Graph *graph) { return framePool_.acquire(graph); }
+    void releaseFrameForCall(Frame *frame) { framePool_.release(frame); }
+    Frame *acquireFrameForTail(GraphIR::Graph *graph) {
+        Frame *f = framePool_._acquire(graph);
+        framePool_._resetTop();
+        return f;
+    }
+    void releaseFrameForTail(Frame *frame) { framePool_.release(frame); }
+    slot_t invokeCallOrJit(size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx);
+#endif
 };

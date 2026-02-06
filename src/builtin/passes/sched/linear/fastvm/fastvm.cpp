@@ -22,6 +22,7 @@
 
 #if ENABLE_JIT
 #include "jit/backend/backend.h"
+#include "jit/runtime/trampoline.h"
 #endif
 
 using namespace std;
@@ -43,28 +44,32 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     if (!jitBackend_) {
         jitBackend_ = camel::jit::createBackend();
     }
-    GraphIR::Graph *entryGraph = graph.get();
-    size_t entryPc             = offsetMap_.at(entryGraph);
-    auto jitIt                 = jitCache_.find(entryGraph);
-    if (jitIt == jitCache_.end() && jitConfig_.policy != camel::jit::JitPolicy::Disabled) {
-        camel::jit::CompilationUnit unit{
-            .graph     = entryGraph,
-            .bytecodes = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
-            .entryPc   = entryPc,
-        };
-        auto compiled = jitBackend_->compile(unit);
-        if (compiled) {
-            camel::jit::JitEntryFn fn = jitBackend_->load(std::move(compiled));
-            if (fn) {
-                jitCache_[entryGraph] = fn;
+    camel::jit::JitContext jitCtx{this, bytecodes_.data()};
+    if (jitConfig_.policy != camel::jit::JitPolicy::Disabled) {
+        for (const auto &[g, entryPc] : offsetMap_) {
+            if (jitCache_.count(g))
+                continue;
+            camel::jit::CompilationUnit unit{
+                .graph          = g,
+                .bytecodes      = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
+                .entryPc        = entryPc,
+                .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
+                .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+            };
+            auto compiled = jitBackend_->compile(unit);
+            if (compiled) {
+                camel::jit::JitEntryFn fn = jitBackend_->load(std::move(compiled));
+                if (fn)
+                    jitCache_[g] = fn;
             }
         }
     }
-    jitIt = jitCache_.find(entryGraph);
+    GraphIR::Graph *entryGraph = graph.get();
+    auto jitIt                 = jitCache_.find(entryGraph);
     if (jitIt != jitCache_.end()) {
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
-        [[maybe_unused]] slot_t result = jitIt->second(frame, nullptr);
+        [[maybe_unused]] slot_t result = jitIt->second(frame, &jitCtx);
         opperf::stop();
         opperf::report(std::cout);
         framePool_.release(frame);
@@ -259,3 +264,13 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     // foreach 无返回值
     currFrame.set(self, NullSlot);
 }
+
+#if ENABLE_JIT
+slot_t
+FastVMSchedPass::invokeCallOrJit(size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx) {
+    auto it = jitCache_.find(graph);
+    if (it != jitCache_.end())
+        return it->second(frame, jitCtx);
+    return call(pc, frame);
+}
+#endif

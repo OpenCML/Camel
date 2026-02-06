@@ -36,6 +36,8 @@ struct CompilationUnit {
     GraphIR::Graph *graph;
     std::span<const Bytecode> bytecodes;
     size_t entryPc;
+    void *trampolineFunc = nullptr; // FUNC trampoline
+    void *trampolineTail = nullptr; // TAIL trampoline
 };
 
 struct RelocInfo {

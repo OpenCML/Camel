@@ -83,29 +83,65 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
 
     // 第一遍：计算每条字节码对应的机器码偏移
     std::unordered_map<size_t, size_t> pcToOffset;
-    size_t offset = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    constexpr size_t kPrologueSize = 10; // mov rdi,rcx; mov rsi,rdx
+#else
+    constexpr size_t kPrologueSize = 0;
+#endif
+    size_t offset = kPrologueSize;
     for (size_t pc = entryPc; pc < pcEnd;) {
         pcToOffset[pc]     = offset;
         const Bytecode &bc = base[pc];
         switch (bc.opcode) {
         case OpCode::LADD:
         case OpCode::LSUB:
-            offset += 3 * 4; // mov+op+mov
+            offset += 3 * 4;
+            break;
+        case OpCode::LLE:
+            if (bc.fastop[1] != -1)
+                return false;        // 仅支持 n<=1 (rhs=常量1)
+            offset += 4 + 4 + 5 + 4; // mov + cmp/setle/movzx + mov
+            break;
+        case OpCode::BRCH:
+            if (bc.withCnt() != 0)
+                return false;    // 仅支持简单 if-else
+            offset += 4 + 3 + 6; // mov + test + jnz
+            break;
+        case OpCode::FUNC:
+            if (!unit.trampolineFunc)
+                return false;
+#if defined(_WIN32) || defined(_WIN64)
+            offset += 3 + 3 + 6 + 10 + 2 + 4; // callTrampolineWin64 + mov [rdi+disp],rax
+#else
+            offset += 7 + 10 + 2 + 4; // callTrampolineSysV + mov [rdi+disp],rax
+#endif
+            break;
+        case OpCode::TAIL:
+            if (!unit.trampolineTail)
+                return false;
+#if defined(_WIN32) || defined(_WIN64)
+            offset += 3 + 3 + 6 + 10 + 2 + 1; // callTrampolineWin64 + ret
+#else
+            offset += 7 + 10 + 2 + 1; // callTrampolineSysV + ret
+#endif
             break;
         case OpCode::JUMP:
-            offset += 5; // jmp rel32
+            offset += 5;
             break;
         case OpCode::RETN:
-            offset += 4 + 1; // mov rax + ret
+            offset += 4 + 1;
             break;
         default:
-            return false; // 含不支持的指令，放弃 JIT
+            return false;
         }
         pc += bc.opsize;
     }
 
     // 第二遍：发射机器码
     Encoder enc(code);
+#if defined(_WIN32) || defined(_WIN64)
+    enc.prologueWin64();
+#endif
     size_t baseOffset = 0;
 
     for (size_t pc = entryPc; pc < pcEnd;) {
@@ -128,6 +164,47 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
             enc.movRaxFromFrame(d0);
             enc.subRaxFromFrame(d1);
             enc.movFrameFromRax(dr);
+            break;
+        }
+        case OpCode::LLE: {
+            int d0 = slotDisp(bc.fastop[0]);
+            int dr = slotDisp(bc.result);
+            enc.movRaxFromFrame(d0);
+            enc.cmpRaxImm8Setle();
+            enc.movFrameFromRax(dr);
+            break;
+        }
+        case OpCode::BRCH: {
+            data_idx_t condIdx = bc.nargs()[0];
+            if (condIdx <= 0)
+                return false;
+            int dc    = slotDisp(condIdx);
+            size_t t1 = pc + bc.opsize + 1;
+            int32_t rel1 =
+                static_cast<int32_t>(pcToOffset[t1]) - static_cast<int32_t>(enc.here() + 4 + 3 + 6);
+            enc.movRaxFromFrame(dc);
+            enc.testRaxJzRel32(rel1);
+            break;
+        }
+        case OpCode::FUNC: {
+            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
+#if defined(_WIN32) || defined(_WIN64)
+            enc.callTrampolineWin64(static_cast<uint32_t>(pc), addr);
+#else
+            enc.callTrampolineSysV(static_cast<uint32_t>(pc), addr);
+#endif
+            int dr = slotDisp(bc.result);
+            enc.movFrameFromRax(dr);
+            break;
+        }
+        case OpCode::TAIL: {
+            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineTail);
+#if defined(_WIN32) || defined(_WIN64)
+            enc.callTrampolineWin64(static_cast<uint32_t>(pc), addr);
+#else
+            enc.callTrampolineSysV(static_cast<uint32_t>(pc), addr);
+#endif
+            enc.ret();
             break;
         }
         case OpCode::JUMP: {
