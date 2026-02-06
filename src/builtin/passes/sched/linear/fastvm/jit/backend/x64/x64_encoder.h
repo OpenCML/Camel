@@ -46,6 +46,13 @@ class Encoder {
         emitBytes({0x8b, 0x47, static_cast<uint8_t>(disp & 0xff)});
     }
 
+    // mov reg, [rdi + disp8] (reg: 0=rax, 1=rcx, 2=rdx, 3=rbx)
+    void movRegFromFrame(uint8_t reg, int disp) {
+        rexW();
+        emitBytes(
+            {0x8b, static_cast<uint8_t>(0x40 | (reg << 3) | 7), static_cast<uint8_t>(disp & 0xff)});
+    }
+
     // mov [rdi + disp8], r64 (reg: 0=rax, 1=rcx, ...)
     void movToFrame(int disp, uint8_t reg) {
         rexW();
@@ -57,6 +64,34 @@ class Encoder {
     void movFrameFromRax(int disp) {
         rexW();
         emitBytes({0x89, 0x47, static_cast<uint8_t>(disp & 0xff)});
+    }
+
+    // mov reg, rax (reg: 0=rax no-op, 1=rcx, 2=rdx, 3=rbx). 89 /r: mov r/m,reg; r/m=dest, reg=rax
+    void movRegFromRax(uint8_t reg) {
+        if (reg == 0)
+            return;
+        rexW();
+        emitBytes({0x89, 0xc0, static_cast<uint8_t>(0xc0 | reg)});
+    }
+
+    // mov rax, reg (reg: 1=rcx, 2=rdx, 3=rbx). 89 /r: r/m=rax, reg=src
+    void movRaxFromReg(uint8_t reg) {
+        if (reg == 0)
+            return;
+        rexW();
+        emitBytes({0x89, 0xc0, static_cast<uint8_t>(0xc0 | (reg << 3))});
+    }
+
+    // add rax, reg. 01 /r: add r/m,reg; r/m=rax
+    void addRaxFromReg(uint8_t reg) {
+        rexW();
+        emitBytes({0x01, 0xc0, static_cast<uint8_t>(0xc0 | (reg << 3))});
+    }
+
+    // sub rax, reg. 29 /r: sub r/m,reg
+    void subRaxFromReg(uint8_t reg) {
+        rexW();
+        emitBytes({0x29, 0xc0, static_cast<uint8_t>(0xc0 | (reg << 3))});
     }
 
     // add rax, [rdi + disp8]

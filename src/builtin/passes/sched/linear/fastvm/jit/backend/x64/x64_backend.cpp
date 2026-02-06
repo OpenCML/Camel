@@ -19,8 +19,10 @@
 
 #include "x64_backend.h"
 
+#include "builtin/passes/sched/linear/fastvm/jit/regalloc/regalloc.h"
 #include "core/context/frame.h"
 #include "core/rtdata/data.h"
+#include "utils/log.h"
 
 #include <cstring>
 
@@ -80,6 +82,25 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
     const Bytecode *base = unit.bytecodes.data();
     size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
+
+    // 寄存器分配：线性扫描将 slot 映射到物理寄存器
+    AllocationResult alloc = linearScanAllocate(unit.bytecodes, entryPc, pcEnd);
+
+    EXEC_WHEN_DEBUG(([&]() {
+        int inReg = 0, spilled = 0;
+        for (size_t i = 1; i < alloc.slotToReg.size(); ++i) {
+            if (alloc.slotToReg[i] >= 0)
+                ++inReg;
+            else
+                ++spilled;
+        }
+        l.in("JIT.Backend")
+            .debug(
+                "RegAlloc for graph '{}': {} slots in reg, {} spilled (rax/rcx/rdx/rbx)",
+                unit.graph->name(),
+                inReg,
+                spilled);
+    }()));
 
     // 第一遍：计算每条字节码对应的机器码偏移
     std::unordered_map<size_t, size_t> pcToOffset;
@@ -152,26 +173,58 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
             int d0 = slotDisp(bc.fastop[0]);
             int d1 = slotDisp(bc.fastop[1]);
             int dr = slotDisp(bc.result);
-            enc.movRaxFromFrame(d0);
-            enc.addRaxFromFrame(d1);
-            enc.movFrameFromRax(dr);
+            int r0 = alloc.regForSlot(bc.fastop[0]);
+            int r1 = alloc.regForSlot(bc.fastop[1]);
+            int rr = alloc.regForSlot(bc.result);
+            if (r0 >= 0)
+                enc.movRaxFromReg(static_cast<uint8_t>(r0));
+            else
+                enc.movRaxFromFrame(d0);
+            if (r1 >= 0)
+                enc.addRaxFromReg(static_cast<uint8_t>(r1));
+            else
+                enc.addRaxFromFrame(d1);
+            if (rr >= 0)
+                enc.movRegFromRax(static_cast<uint8_t>(rr));
+            else
+                enc.movFrameFromRax(dr);
             break;
         }
         case OpCode::LSUB: {
             int d0 = slotDisp(bc.fastop[0]);
             int d1 = slotDisp(bc.fastop[1]);
             int dr = slotDisp(bc.result);
-            enc.movRaxFromFrame(d0);
-            enc.subRaxFromFrame(d1);
-            enc.movFrameFromRax(dr);
+            int r0 = alloc.regForSlot(bc.fastop[0]);
+            int r1 = alloc.regForSlot(bc.fastop[1]);
+            int rr = alloc.regForSlot(bc.result);
+            if (r0 >= 0)
+                enc.movRaxFromReg(static_cast<uint8_t>(r0));
+            else
+                enc.movRaxFromFrame(d0);
+            if (r1 >= 0)
+                enc.subRaxFromReg(static_cast<uint8_t>(r1));
+            else
+                enc.subRaxFromFrame(d1);
+            if (rr >= 0)
+                enc.movRegFromRax(static_cast<uint8_t>(rr));
+            else
+                enc.movFrameFromRax(dr);
             break;
         }
         case OpCode::LLE: {
             int d0 = slotDisp(bc.fastop[0]);
             int dr = slotDisp(bc.result);
-            enc.movRaxFromFrame(d0);
+            int r0 = alloc.regForSlot(bc.fastop[0]);
+            int rr = alloc.regForSlot(bc.result);
+            if (r0 >= 0)
+                enc.movRaxFromReg(static_cast<uint8_t>(r0));
+            else
+                enc.movRaxFromFrame(d0);
             enc.cmpRaxImm8Setle();
-            enc.movFrameFromRax(dr);
+            if (rr >= 0)
+                enc.movRegFromRax(static_cast<uint8_t>(rr));
+            else
+                enc.movFrameFromRax(dr);
             break;
         }
         case OpCode::BRCH: {
@@ -179,10 +232,14 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
             if (condIdx <= 0)
                 return false;
             int dc    = slotDisp(condIdx);
+            int rc    = alloc.regForSlot(condIdx);
             size_t t1 = pc + bc.opsize + 1;
             int32_t rel1 =
                 static_cast<int32_t>(pcToOffset[t1]) - static_cast<int32_t>(enc.here() + 4 + 3 + 6);
-            enc.movRaxFromFrame(dc);
+            if (rc >= 0)
+                enc.movRaxFromReg(static_cast<uint8_t>(rc));
+            else
+                enc.movRaxFromFrame(dc);
             enc.testRaxJzRel32(rel1);
             break;
         }
@@ -216,7 +273,11 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
         }
         case OpCode::RETN: {
             int d0 = slotDisp(bc.fastop[0]);
-            enc.movRaxFromFrame(d0);
+            int r0 = alloc.regForSlot(bc.fastop[0]);
+            if (r0 >= 0)
+                enc.movRaxFromReg(static_cast<uint8_t>(r0));
+            else
+                enc.movRaxFromFrame(d0);
             enc.ret();
             break;
         }

@@ -19,10 +19,13 @@
 
 #include "fastvm.h"
 #include "opperf.h"
+#include "utils/log.h"
 
 #if ENABLE_JIT
 #include "jit/backend/backend.h"
 #include "jit/runtime/trampoline.h"
+
+#include <future>
 #endif
 
 using namespace std;
@@ -45,10 +48,23 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         jitBackend_ = camel::jit::createBackend();
     }
     camel::jit::JitContext jitCtx{this, bytecodes_.data()};
+    EXEC_WHEN_DEBUG(l.in("JIT").debug(
+        "JIT policy: {}",
+        jitConfig_.policy == camel::jit::JitPolicy::Disabled ? "Disabled" : "OnDemand"));
     if (jitConfig_.policy != camel::jit::JitPolicy::Disabled) {
+        EXEC_WHEN_DEBUG(l.in("JIT").info(
+            "JIT enabled, compiling {} graph(s) (policy=OnDemand, async)",
+            offsetMap_.size()));
+        // 异步并行编译：在 worker 线程执行 compile()，避免主线程阻塞
+        std::vector<std::pair<GraphIR::Graph *, std::future<camel::jit::CompiledCode *>>> futures;
         for (const auto &[g, entryPc] : offsetMap_) {
             if (jitCache_.count(g))
                 continue;
+            EXEC_WHEN_DEBUG(l.in("JIT").debug(
+                "Submitting async compile: graph '{}' entryPc={}",
+                g->name(),
+                entryPc));
+            auto *backend = jitBackend_.get();
             camel::jit::CompilationUnit unit{
                 .graph          = g,
                 .bytecodes      = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
@@ -56,17 +72,40 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
                 .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
             };
-            auto compiled = jitBackend_->compile(unit);
-            if (compiled) {
-                camel::jit::JitEntryFn fn = jitBackend_->load(std::move(compiled));
-                if (fn)
+            futures.emplace_back(
+                g,
+                std::async(std::launch::async, [backend, unit]() -> camel::jit::CompiledCode * {
+                    auto compiled = backend->compile(unit);
+                    return compiled.release(); // caller owns
+                }));
+        }
+        // 主线程收集编译结果并 load（load 涉及内存分配，顺序执行）
+        for (auto &[g, fut] : futures) {
+            camel::jit::CompiledCode *raw = fut.get();
+            if (raw) {
+                auto compiled                    = std::unique_ptr<camel::jit::CompiledCode>(raw);
+                [[maybe_unused]] size_t codeSize = compiled->code.size();
+                camel::jit::JitEntryFn fn        = jitBackend_->load(std::move(compiled));
+                if (fn) {
+                    std::lock_guard lock(jitCacheMutex_);
                     jitCache_[g] = fn;
+                    EXEC_WHEN_DEBUG(l.in("JIT").info(
+                        "Compiled & loaded: graph '{}' codeSize={} bytes",
+                        g->name(),
+                        codeSize));
+                } else {
+                    EXEC_WHEN_DEBUG(l.in("JIT").warn("Load failed for graph '{}'", g->name()));
+                }
+            } else {
+                EXEC_WHEN_DEBUG(
+                    l.in("JIT").debug("Compile failed/skipped for graph '{}'", g->name()));
             }
         }
     }
     GraphIR::Graph *entryGraph = graph.get();
     auto jitIt                 = jitCache_.find(entryGraph);
     if (jitIt != jitCache_.end()) {
+        EXEC_WHEN_DEBUG(l.in("JIT").info("Executing entry graph '{}' via JIT", entryGraph->name()));
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
         [[maybe_unused]] slot_t result = jitIt->second(frame, &jitCtx);
@@ -75,6 +114,9 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         framePool_.release(frame);
         return Graph::null();
     }
+    EXEC_WHEN_DEBUG(l.in("JIT").info(
+        "Entry graph '{}' not in JIT cache, falling back to interpreter",
+        entryGraph->name()));
 #endif
 
     opperf::start();
@@ -269,8 +311,13 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
 slot_t
 FastVMSchedPass::invokeCallOrJit(size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx) {
     auto it = jitCache_.find(graph);
-    if (it != jitCache_.end())
+    if (it != jitCache_.end()) {
+        EXEC_WHEN_DEBUG(
+            l.in("JIT").debug("invokeCallOrJit: graph '{}' pc={} -> JIT", graph->name(), pc));
         return it->second(frame, jitCtx);
+    }
+    EXEC_WHEN_DEBUG(
+        l.in("JIT").debug("invokeCallOrJit: graph '{}' pc={} -> interpreter", graph->name(), pc));
     return call(pc, frame);
 }
 #endif

@@ -27,6 +27,7 @@
 
 #if ENABLE_JIT
 #include "jit/jit.h"
+#include <mutex>
 #endif
 
 #define ENABLE_COMPUTED_GOTO
@@ -47,6 +48,7 @@ class FastVMSchedPass : public LinearSchedPass {
 #if ENABLE_JIT
     std::unique_ptr<camel::jit::IJitBackend> jitBackend_;
     std::unordered_map<GraphIR::Graph *, camel::jit::JitEntryFn> jitCache_;
+    std::mutex jitCacheMutex_; // protects jitCache_ when using async compilation
     camel::jit::JitConfig jitConfig_{};
 #endif
 

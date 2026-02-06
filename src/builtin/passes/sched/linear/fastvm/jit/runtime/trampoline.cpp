@@ -22,6 +22,7 @@
 #include "builtin/passes/sched/linear/fastvm/bytecode.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
 #include "core/context/frame.h"
+#include "utils/log.h"
 
 extern "C" {
 
@@ -33,9 +34,19 @@ slot_t trampolineFunc(Frame *frame, void *ctx, size_t pc) {
 
     GraphIR::Graph *targetGraph = bc.extra()->graph;
     size_t targetPc             = static_cast<size_t>(bc.fastop[1]);
+    size_t argsCnt              = bc.normCnt();
+
+    EXEC_WHEN_DEBUG(
+        l.in("JIT.Trampoline")
+            .debug(
+                "trampolineFunc: caller='{}' pc={} -> target='{}' targetPc={} argsCnt={}",
+                frame->graph()->name(),
+                pc,
+                targetGraph->name(),
+                targetPc,
+                argsCnt));
 
     Frame *newFrame = vm->acquireFrameForCall(targetGraph);
-    size_t argsCnt  = bc.normCnt();
     for (size_t i = 0; i < argsCnt; ++i) {
         newFrame->set(i + 1, frame->get<slot_t>(bc.operands()[i]));
     }
@@ -53,12 +64,22 @@ slot_t trampolineTail(Frame *frame, void *ctx, size_t pc) {
 
     GraphIR::Graph *targetGraph = bc.extra()->graph;
     size_t targetPc             = static_cast<size_t>(bc.fastop[1]);
+    size_t argsCnt              = bc.normCnt();
+
+    EXEC_WHEN_DEBUG(
+        l.in("JIT.Trampoline")
+            .debug(
+                "trampolineTail: caller='{}' pc={} -> target='{}' targetPc={} argsCnt={}",
+                frame->graph()->name(),
+                pc,
+                targetGraph->name(),
+                targetPc,
+                argsCnt));
 
     FrameView lastFrame(frame);
     vm->releaseFrameForTail(frame);
 
     Frame *newFrame = vm->acquireFrameForTail(targetGraph);
-    size_t argsCnt  = bc.normCnt();
     for (size_t i = 0; i < argsCnt; ++i) {
         newFrame->set(i + 1, lastFrame.get<slot_t>(bc.operands()[i]));
     }
