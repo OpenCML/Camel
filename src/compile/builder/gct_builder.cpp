@@ -13,12 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "gct_builder.h"
 
+#include "core/data/composite/array.h"
+#include "core/data/composite/struct.h"
+#include "core/data/composite/tuple.h"
 #include "parse/ast/type.h"
 #include "utils/escape.h"
 #include "utils/scope.h"
@@ -76,15 +79,12 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
 
 void Builder::initInnerTypes() {
     typeScope_->clear();
-    typeScope_->insert(Reference("int"), Type::Int());
-    typeScope_->insert(Reference("i32"), Type::Int());
-    typeScope_->insert(Reference("long"), Type::Long());
-    typeScope_->insert(Reference("i64"), Type::Long());
-    typeScope_->insert(Reference("float"), Type::Float());
-    typeScope_->insert(Reference("f32"), Type::Float());
-    typeScope_->insert(Reference("double"), Type::Double());
-    typeScope_->insert(Reference("f64"), Type::Double());
-    typeScope_->insert(Reference("real"), Type::Double());
+    typeScope_->insert(Reference("i32"), Type::Int32());
+    typeScope_->insert(Reference("i64"), Type::Int64());
+    typeScope_->insert(Reference("int"), Type::Int64());
+    typeScope_->insert(Reference("f32"), Type::Float32());
+    typeScope_->insert(Reference("f64"), Type::Float64());
+    typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
     typeScope_->insert(Reference("any"), Type::Any());
@@ -310,7 +310,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 
                 if (i < typeNodes->size()) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
-                    type_ptr_t type         = visitType(typeASTNode);
+                    Type *type              = visitType(typeASTNode);
                     // 先尝试做静态类型转换
                     if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
@@ -349,7 +349,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 
                 if (typeNodes->size() > 0) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
-                    type_ptr_t type         = visitType(typeASTNode);
+                    Type *type              = visitType(typeASTNode);
                     // 先尝试做静态类型转换
                     if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
@@ -436,7 +436,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ENTER("TypeDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
-    type_ptr_t type;
+    Type *type;
     ASSERT(typeNode, "TypeDecl must have a type");
     type                 = visitType(typeNode);
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
@@ -494,26 +494,25 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             node_ptr_t d         = visitData(dataNode);
             *exitNode << visitData(dataNode);
         } else {
-            // Case 2: Multiple data nodes
-            auto tupleData      = make_shared<TupleData>();
-            node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
+            // Case 2: Multiple data nodes — 用 Factory 一次构建，避免重复计算 Type
+            TupleDataFactory tupleFactory;
             bool dangling       = false;
             node_ptr_t execNode = createNodeAs<ExecLoad>();
 
-            // Process each data node and add it to the tuple
             for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
                 auto [data, _]      = extractData(dataNode, execNode, dangling);
-                tupleData->emplace(data);
+                tupleFactory.add(data);
             }
 
-            // If there are dangling nodes, attach them to the execution node
+            auto tupleData      = tupleFactory.build();
+            node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
+
             if (dangling) {
                 *execNode << dataNode;
                 dataNode = execNode;
             }
 
-            // Attach the processed tuple data to the exit node
             *exitNode << dataNode;
         }
     }
@@ -1110,11 +1109,11 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     } break;
     case LiteralType::Integer: {
         // Parse the string as an integer and create a data object
-        data = makeDataFromLiteral(parseNumber<int32_t>(str));
+        data = makeDataFromLiteral(parseNumber<int64_t>(str));
     } break;
     case LiteralType::Real: {
         // Parse the string as a floating-point number and create a data object
-        data = makeDataFromLiteral(parseNumber<float>(str));
+        data = makeDataFromLiteral(parseNumber<double>(str));
     } break;
     case LiteralType::Boolean: {
         // Handle boolean literals ("true" or "false")
@@ -1150,23 +1149,21 @@ ArrayData() : Data* data ;
 */
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
-    // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
 
-    // Create an empty ArrayData object and wrap it in a DataLoad node
-    auto arrayData = ArrayData::create(nullptr, {});
-    node_ptr_t res = createNodeAs<DataLoad>(arrayData);
-
+    ArrayDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         auto [data, _]      = extractData(dataNode, execNode, dangling);
-        arrayData->emplace(data);
+        factory.add(data);
     }
 
-    // If there are dangling nodes, attach them to the execution node
+    auto arrayData = factory.build();
+    node_ptr_t res = createNodeAs<DataLoad>(arrayData);
+
     if (dangling) {
         *execNode << res;
         res = execNode;
@@ -1184,10 +1181,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
 
-    // Create an empty StructData object and wrap it in a DataLoad node
-    auto structData = std::make_shared<StructData>();
-    node_ptr_t res  = createNodeAs<DataLoad>(structData);
-
+    StructDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
@@ -1196,8 +1190,11 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
         const string &name    = namedPair->ref().ident();
         node_ptr_t dataNode   = visitData(child->atAs<AST::DataLoad>(0));
         auto [data, _]        = extractData(dataNode, execNode, dangling);
-        structData->emplace(name, data);
+        factory.add(name, data);
     }
+
+    auto structData = factory.build();
+    node_ptr_t res  = createNodeAs<DataLoad>(structData);
 
     // If there are dangling nodes, attach them to the execution node
     if (dangling) {
@@ -1216,18 +1213,18 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TupleData");
 
-    // Create an empty TupleData object and wrap it in a DataLoad node
-    auto tupleData = make_shared<TupleData>();
-    node_ptr_t res = createNodeAs<DataLoad>(tupleData);
-
+    TupleDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>();
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         auto [data, _]      = extractData(dataNode, execNode, dangling);
-        tupleData->emplace(data);
+        factory.add(data);
     }
+
+    auto tupleData = factory.build();
+    node_ptr_t res = createNodeAs<DataLoad>(tupleData);
 
     // If there are dangling nodes, attach them to the execution node
     if (dangling) {
@@ -1246,8 +1243,8 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     ENTER("FuncData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
-    func_type_ptr_t funcType =
-        tt::as_shared<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    FunctionType *funcType =
+        tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
     node_ptr_t typeNode  = createNodeAs<TypeLoad>(funcType, funcType->implMark());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().ident());
@@ -1273,14 +1270,14 @@ Type(TypeType type) :=
     NullableType | TypeExpr | ArrayType | StructType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 */
-type_ptr_t Builder::visitType(const AST::node_ptr_t &ast) {
+Type *Builder::visitType(const AST::node_ptr_t &ast) {
     ENTER("Type");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for visitType");
 
     // Extract the type load from the AST node
     const auto &type = ast->loadAs<AST::TypeLoad>();
-    type_ptr_t res;
+    Type *res;
 
     // Handle different type categories based on the TypeType enumeration
     switch (type->typeType()) {
@@ -1325,10 +1322,10 @@ type_ptr_t Builder::visitType(const AST::node_ptr_t &ast) {
 /*
 NullableType : Type type ;
 */
-type_ptr_t Builder::visitNullableType(const AST::node_ptr_t &ast) {
+Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     ENTER("NullableType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for NullableType");
-    type_ptr_t type = visitType(ast->atAs<AST::TypeLoad>(0));
+    Type *type = visitType(ast->atAs<AST::TypeLoad>(0));
     LEAVE("NullableType");
     return type;
 }
@@ -1348,12 +1345,12 @@ enum TypeOp {
     TypeAs
 }
 */
-type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
+Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     ENTER("TypeExpr");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TypeExpr");
 
-    type_ptr_t res;
+    Type *res;
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
     AST::TypeOp op       = typeExpr->op();
 
@@ -1363,7 +1360,7 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         // Handle union types (e.g., T | U)
         const auto &lhsType = visitType(ast->atAs<AST::TypeLoad>(0));
         const auto &rhsType = visitType(ast->atAs<AST::TypeLoad>(1));
-        res                 = make_shared<UnionType>(lhsType, rhsType);
+        res                 = UnionType::create(lhsType, rhsType);
     } break;
 
     case AST::TypeOp::Inter: {
@@ -1440,12 +1437,12 @@ type_ptr_t Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 /*
 ArrayType(siz dim) : Type type ;
 */
-type_ptr_t Builder::visitArrayType(const AST::node_ptr_t &ast) {
+Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ENTER("ArrayType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
     // TODO: 这里的dims信息暂时没用到
     // const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
-    type_ptr_t type       = visitType(ast->atAs<AST::TypeLoad>(0));
+    Type *type            = visitType(ast->atAs<AST::TypeLoad>(0));
     const auto &arrayType = ArrayType::create(type);
     LEAVE("ArrayType");
     return arrayType;
@@ -1454,47 +1451,42 @@ type_ptr_t Builder::visitArrayType(const AST::node_ptr_t &ast) {
 /*
 StructType() : NamedType* types ;
 */
-type_ptr_t Builder::visitStructType(const AST::node_ptr_t &ast) {
+Type *Builder::visitStructType(const AST::node_ptr_t &ast) {
     ENTER("StructType");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StructType");
 
-    // Create an empty StructType object
-    auto res = make_shared<StructType>();
-
+    StructTypeFactory factory;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
         const string &name    = namedType->getRef().ident();
-        type_ptr_t type       = visitType(child->atAs<AST::TypeLoad>(0));
+        Type *type            = visitType(child->atAs<AST::TypeLoad>(0));
 
-        // Attempt to add the field to the StructType object
-        data_ptr_t data = nullptr;
-        // If the field name is a duplicate, log a diagnostic and throw an exception
-        if (!res->add(name, type)) {
+        if (!factory.add(name, type)) {
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(name);
             throw BuildAbortException();
         }
     }
     LEAVE("StructType");
-    return res;
+    return factory.build();
 }
 /*
 TupleType() : Type* types ;
 */
-type_ptr_t Builder::visitTupleType(const AST::node_ptr_t &ast) {
+Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
     ENTER("TupleType");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TupleType");
 
     // Create a vector to store the types of the tuple elements
-    vector<type_ptr_t> types;
+    vector<Type *> types;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
-        type_ptr_t type = visitType(child);
+        Type *type = visitType(child);
         types.push_back(type);
     }
     // Create a TupleType object using the collected types
-    type_ptr_t tupleType = TupleType::create(types);
+    Type *tupleType = TupleType::create(types);
     LEAVE("TupleType");
     return tupleType;
 }
@@ -1503,7 +1495,7 @@ type_ptr_t Builder::visitTupleType(const AST::node_ptr_t &ast) {
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 */
-type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
+Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
@@ -1512,7 +1504,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
     // Initialize the exit type (return type) as nullptr
-    type_ptr_t exitType = nullptr;
+    Type *exitType = nullptr;
 
     // Process the optional exit type node
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
@@ -1520,11 +1512,12 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
         exitType = visitType(exitTypeNode);
     }
 
-    // Create a FunctionType object and set its properties
-    func_type_ptr_t funcType = make_shared<FunctionType>();
-    funcType->setExitType(exitType);
-    funcType->setImplMark(typeLoad->implMark());
-    funcType->setModifiers(typeLoad->modifiers());
+    FunctionTypeFactory factory;
+    factory.setExitType(exitType);
+    factory.setImplMark(typeLoad->implMark());
+    factory.setModifiers(typeLoad->modifiers());
+
+    std::unordered_set<string> paramNames;
 
     // Process "with" parameters (context parameters)
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
@@ -1543,7 +1536,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
-        type_ptr_t type    = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        Type *type         = visitType(paramPair->atAs<AST::TypeLoad>(0));
         data_ptr_t data    = nullptr;
 
         // Process optional default values for parameters
@@ -1564,13 +1557,11 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
 
-        // Add the parameter to the function type
-        bool success = funcType->addWithArg(name, type, isVar);
-        if (!success) {
-            // Duplicate parameter names are not allowed
+        if (!paramNames.insert(name).second) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
+        factory.addWithArg(name, type, isVar);
     }
 
     // Process normal parameters
@@ -1590,7 +1581,7 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
-        type_ptr_t type    = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        Type *type         = visitType(paramPair->atAs<AST::TypeLoad>(0));
         data_ptr_t data    = nullptr;
 
         // Process optional default values for parameters
@@ -1611,23 +1602,21 @@ type_ptr_t Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
 
-        // Add the parameter to the function type
-        bool success = funcType->addNormArg(name, type, isVar);
-        if (!success) {
-            // Duplicate parameter names are not allowed
+        if (!paramNames.insert(name).second) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
+        factory.addNormArg(name, type, isVar);
     }
 
     LEAVE("FuncType");
-    return funcType;
+    return factory.build();
 }
 
 /*
 UnitType(Ref ref) : Type type ;
 */
-type_ptr_t Builder::visitUnitType(const AST::node_ptr_t &ast) {
+Type *Builder::visitUnitType(const AST::node_ptr_t &ast) {
     ENTER("UnitType");
     diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("UnitType");
     throw BuildAbortException();
@@ -1638,7 +1627,7 @@ type_ptr_t Builder::visitUnitType(const AST::node_ptr_t &ast) {
 /*
 InferType(Ref ref) ;
 */
-type_ptr_t Builder::visitInferType(const AST::node_ptr_t &ast) {
+Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
     ENTER("InferType");
     diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("InferType");
     throw BuildAbortException();
@@ -1649,7 +1638,7 @@ type_ptr_t Builder::visitInferType(const AST::node_ptr_t &ast) {
 /*
 DataType() : Data data ;
 */
-type_ptr_t Builder::visitDataType(const AST::node_ptr_t &ast) {
+Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
     ENTER("DataType");
     diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("DataType");
     throw BuildAbortException();
@@ -1660,7 +1649,7 @@ type_ptr_t Builder::visitDataType(const AST::node_ptr_t &ast) {
 /*
 RefType(Ref ref) ;
 */
-type_ptr_t Builder::visitRefType(const AST::node_ptr_t &ast) {
+Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     ENTER("RefType");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->load()->type() == AST::LoadType::Type, "Expected TypeLoad type for RefType");

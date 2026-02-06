@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -281,20 +281,22 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
                 Object *oldObj = payloadOf<Object>(oldHeader);
 
-                // 遍历更新老年代对象的引用
-                oldObj->updateRefs([this](Object *ref) -> Object * {
-                    if (!ref)
-                        return nullptr;
+                // 遍历更新老年代对象的引用（type 由各 Object 在创建时与 allocator 约定，此处暂无）
+                oldObj->updateRefs(
+                    [this](Object *ref) -> Object * {
+                        if (!ref)
+                            return nullptr;
 
-                    ObjectHeader *refHeader = headerOf(ref);
+                        ObjectHeader *refHeader = headerOf(ref);
 
-                    // 如果引用的是年轻代对象，需要复制
-                    if (inYoungGenSpace(refHeader)) {
-                        return forward(ref);
-                    }
+                        // 如果引用的是年轻代对象，需要复制
+                        if (inYoungGenSpace(refHeader)) {
+                            return forward(ref);
+                        }
 
-                    return ref;
-                });
+                        return ref;
+                    },
+                    nullptr);
             }
 
             // 清空记忆集（因为年轻代已被清空）
@@ -495,21 +497,24 @@ class GenerationalAllocatorWithGC : public IAllocator {
             // 获取实际对象
             Object *ref = reinterpret_cast<Object *>(payload);
 
-            // 遍历对象的所有引用字段，并转发它们
-            ref->updateRefs([this](Object *ref) -> Object * {
-                if (!ref)
-                    return nullptr;
+            // 遍历对象的所有引用字段，并转发它们（type 由各 Object 在创建时与 allocator
+            // 约定，此处暂无）
+            ref->updateRefs(
+                [this](Object *ref) -> Object * {
+                    if (!ref)
+                        return nullptr;
 
-                ObjectHeader *refHeader = headerOf(ref);
+                    ObjectHeader *refHeader = headerOf(ref);
 
-                // 老年代对象不需要移动
-                if (!inYoungGenSpace(refHeader)) {
-                    return ref;
-                }
+                    // 老年代对象不需要移动
+                    if (!inYoungGenSpace(refHeader)) {
+                        return ref;
+                    }
 
-                // 复制或获取转发地址
-                return forward(ref);
-            });
+                    // 复制或获取转发地址
+                    return forward(ref);
+                },
+                nullptr);
 
             // 移动到下一个对象
             scan += header->size();
@@ -563,13 +568,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
             // 标记当前对象
             header->mark();
 
-            // 收集所有引用的对象到栈中
-            current->updateRefs([&markStack](Object *ref) -> Object * {
-                if (ref) {
-                    markStack.push_back(ref);
-                }
-                return ref;
-            });
+            // 收集所有引用的对象到栈中（type 由各 Object 在创建时与 allocator 约定，此处暂无）
+            current->updateRefs(
+                [&markStack](Object *ref) -> Object * {
+                    if (ref) {
+                        markStack.push_back(ref);
+                    }
+                    return ref;
+                },
+                nullptr);
         }
     }
 

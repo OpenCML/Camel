@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/data/data.h"
+#include "core/rtdata/base.h"
+#include "core/rtdata/data.h"
+#include "core/type/base.h"
 #include "core/type/resolver.h"
 #include "utils/rawarr.h"
 
@@ -43,7 +45,20 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 
 using data_arr_t = RawArray<const GraphIR::data_idx_t>;
 
-using operator_t = void (*)(GraphIR::data_idx_t, data_arr_t, data_arr_t, Frame &, Context &);
+class ArgsView {
+  public:
+    virtual ~ArgsView()                              = default;
+    virtual size_t size() const                      = 0;
+    virtual slot_t slot(size_t index) const          = 0;
+    virtual void setSlot(size_t index, slot_t value) = 0;
+    virtual TypeCode code(size_t index) const        = 0;
+    virtual Type *type(size_t index) const           = 0;
+
+    template <typename T> T get(size_t index) const { return fromSlot<T>(slot(index)); }
+    template <typename T> void set(size_t index, T value) { setSlot(index, toSlot(value)); }
+};
+
+using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, Context &ctx);
 
 using oper_idx_ptr_t     = std::shared_ptr<OperatorIndex>;
 using oper_idx_vec_t     = std::vector<oper_idx_ptr_t>;
@@ -52,16 +67,16 @@ using oper_idx_vec_ptr_t = std::shared_ptr<oper_idx_vec_t>;
 class OperatorIndex {
   private:
     std::string name_;
-    func_type_ptr_t type_;
+    FunctionType *type_;
     std::string uri_;
 
   public:
-    OperatorIndex(const std::string &name, const func_type_ptr_t &&type, const std::string &uri)
+    OperatorIndex(const std::string &name, FunctionType *type, const std::string &uri)
         : name_(name), type_(std::move(type)), uri_(uri) {}
 
     const std::string &name() const { return name_; }
     const std::string &uri() const { return uri_; }
-    const func_type_ptr_t &funcType() const { return type_; }
+    FunctionType *funcType() const { return type_; }
 };
 
 using oper_group_ptr_t = std::shared_ptr<OperatorGroup>;

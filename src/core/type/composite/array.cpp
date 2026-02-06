@@ -13,56 +13,91 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "array.h"
+#include "core/mm/mm.h"
 #include "error/diagnostics/diagnostics.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 
 using namespace std;
 
-void ArrayType::computeLayout() const {
-    if (!layout_) {
-        layout_ = std::make_shared<ArrayTypeLayout>(elemType_->code(), refs_);
+ArrayType *ArrayTypeFactory::build() {
+    if (!elemType_) {
+        elemType_ = Type::Void();
+    }
+    return ArrayType::fromFactory(*this);
+}
+
+ArrayType::ArrayType(Type *elemType, size_t refCount, const size_t *refs)
+    : CompositeType(TypeCode::Array), elemType_(elemType), elemTypeCode_(elemType->code()),
+      refCount_(refCount) {
+    // 复制 refs 到灵活数组
+    for (size_t i = 0; i < refCount; ++i) {
+        refs_[i] = refs[i];
     }
 }
 
-ArrayType::ArrayType(const type_ptr_t &elementType)
-    : CompositeType(TypeCode::Array), elemType_(elementType) {}
-
-std::shared_ptr<ArrayType> ArrayType::create(const type_ptr_t &elemType) {
+ArrayType *ArrayType::create(Type *elemType) {
     if (!elemType) {
-        return std::make_shared<ArrayType>(Type::Void());
+        elemType = Type::Void();
     }
-    return std::make_shared<ArrayType>(elemType);
+    // 计算所需内存大小
+    size_t baseSize  = sizeof(ArrayType);
+    size_t totalSize = baseSize; // 无 refs 时，refCount_ = 0
+
+    EXEC_WHEN_DEBUG(
+        l.in("ArrayType")
+            .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
+
+    void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
+    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
+    return new (mem) ArrayType(elemType, 0, nullptr);
 }
 
-void ArrayType::addRef(size_t index) { refs_.push_back(index); }
-
-void ArrayType::setRefs(const std::vector<size_t> &refs) { refs_ = refs; }
-
-type_ptr_t ArrayType::elemType() const { return elemType_; }
-
-const ArrayTypeLayout &ArrayType::layout() const {
-    if (!layout_) {
-        computeLayout();
+ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) {
+    if (!factory.elemType_) {
+        factory.elemType_ = Type::Void();
     }
-    return *layout_;
+    return fromData(factory.elemType_, factory.refs_.size(), factory.refs_.data());
 }
 
-type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
+ArrayType *ArrayType::fromData(Type *elemType, size_t refCount, const size_t *refs) {
+    if (!elemType) {
+        elemType = Type::Void();
+    }
+
+    // 计算所需内存大小：基础大小 + refs 数组
+    size_t baseSize  = sizeof(ArrayType);
+    size_t refsSize  = refCount * sizeof(size_t);
+    size_t totalSize = baseSize + refsSize;
+
+    EXEC_WHEN_DEBUG(
+        l.in("ArrayType")
+            .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
+
+    void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
+    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
+
+    const size_t *refsPtr = refCount > 0 ? refs : nullptr;
+    return new (mem) ArrayType(elemType, refCount, refsPtr);
+}
+
+Type *ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "ArrayType is already resolved");
 
     ASSERT(
-        typeList.size() == refs_.size(),
+        typeList.size() == refCount_,
         "Type list size does not match the number of references in ArrayType");
 
-    type_ptr_t newElemType = elemType_;
+    Type *newElemType = elemType_;
     for (const auto &type : typeList) {
-        if (newElemType->code() == TypeCode::Void) {
+        if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Any ||
+            newElemType->code() == TypeCode::Ref) {
             newElemType = type;
         } else if (!newElemType->equals(type)) {
             throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
@@ -74,7 +109,7 @@ type_ptr_t ArrayType::resolve(const type_vec_t &typeList) const {
     return newArray;
 }
 
-bool ArrayType::resolved() const { return refs_.empty(); }
+bool ArrayType::resolved() const { return refCount_ == 0; }
 
 string ArrayType::toString() const { return elemType_->toString() + "[]"; }
 
@@ -84,18 +119,17 @@ std::string ArrayType::mangle() const {
     return result;
 }
 
-type_ptr_t ArrayType::clone(bool deep /* = false */) const {
-    auto newType     = ArrayType::create(deep ? elemType_->clone(true) : elemType_);
-    newType->refs_   = refs_;
-    newType->layout_ = layout_;
-    return newType;
+Type *ArrayType::clone(bool deep /* = false */) const {
+    Type *newElemType = deep ? elemType_->clone(true) : elemType_;
+    // 所有信息已知，直接使用 fromData 构建
+    return fromData(newElemType, refCount_, refs_);
 }
 
-bool ArrayType::equals(const type_ptr_t &other) const {
-    if (this == other.get()) {
+bool ArrayType::equals(Type *other) const {
+    if (this == other) {
         return true;
     }
-    if (other->code() != TypeCode::Array) {
+    if (!other || other->code() != TypeCode::Array) {
         return false;
     }
     const ArrayType &otherArr = static_cast<const ArrayType &>(*other);
@@ -109,4 +143,4 @@ CastSafety ArrayType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool ArrayType::assignable(const type_ptr_t &type) const { return this->equals(type); }
+bool ArrayType::assignable(Type *type) const { return equals(type); }

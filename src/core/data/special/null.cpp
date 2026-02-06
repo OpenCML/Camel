@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@ data_ptr_t NullData::clone(bool deep) const { return Data::null(); }
 
 const std::string NullData::toString() const { return "null"; }
 
-data_ptr_t NullData::convertTo(const type_ptr_t &type) {
+data_ptr_t NullData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return std::make_shared<NullData>();
     }

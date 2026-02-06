@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,20 +26,25 @@
 #include <cstring> // for std::memcpy
 #include <functional>
 
+// 前向声明
+class Type;
+
 class Object {
   public:
-    virtual ~Object()                                                          = default;
-    virtual bool equals(const Object *other, bool deep = false) const          = 0;
-    virtual Object *clone(IAllocator &allocator, bool deep = false) const      = 0;
-    virtual void print(std::ostream &os) const                                 = 0;
-    virtual void onMoved()                                                     = 0;
-    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) = 0;
+    virtual ~Object()                                                                   = default;
+    virtual bool equals(const Object *other, const Type *type, bool deep = false) const = 0;
+    virtual Object *clone(IAllocator &allocator, const Type *type, bool deep = false) const = 0;
+    virtual void print(std::ostream &os, const Type *type) const                            = 0;
+    virtual void onMoved()                                                                  = 0;
+    virtual void
+    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) = 0;
 
-    template <typename T> static T *clone(const T *obj, IAllocator &allocator, bool deep = false) {
+    template <typename T>
+    static T *clone(const T *obj, IAllocator &allocator, const Type *type, bool deep = false) {
         if (!obj) {
             return nullptr;
         }
-        return static_cast<T *>(obj->clone(allocator, deep));
+        return static_cast<T *>(obj->clone(allocator, type, deep));
     }
 
     // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
@@ -116,42 +121,39 @@ template <typename T> constexpr T fromSlot(slot_t slot_value) noexcept {
     }
 }
 
-using Int    = int32_t;
-using Long   = int64_t;
-using Float  = float;
-using Double = double;
-using Bool   = bool;
-using Byte   = std::byte;
+using Int32   = int32_t;
+using Int64   = int64_t;
+using Int     = Int64;
+using Float32 = float;
+using Float64 = double;
+using Float   = Float64;
+using Bool    = bool;
+using Byte    = std::byte;
 
-inline std::ostream &operator<<(std::ostream &os, const Object *obj) {
-    if (obj) {
-        obj->print(os);
-    } else {
-        os << "null";
-    }
-    return os;
-}
-
-inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
+inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
     ASSERT(
         data != DeadSlot,
-        std::format("Accessing uninitialized slot in printSlot: {}", typeCodeToString(t)));
-    if (isGCTraced(t)) {
-        os << reinterpret_cast<const Object *>(data);
+        std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
+    if (t->isGCTraced()) {
+        if (data == NullSlot) {
+            os << "null";
+            return;
+        }
+        reinterpret_cast<const Object *>(data)->print(os, t);
     } else {
         // 非引用类型，根据 type code 输出
-        switch (t) {
-        case TypeCode::Int:
-            os << fromSlot<Int>(data);
+        switch (t->code()) {
+        case TypeCode::Int32:
+            os << fromSlot<Int32>(data);
             break;
-        case TypeCode::Long:
-            os << fromSlot<Long>(data);
+        case TypeCode::Int64:
+            os << fromSlot<Int64>(data);
             break;
-        case TypeCode::Float:
-            os << fromSlot<Float>(data);
+        case TypeCode::Float32:
+            os << fromSlot<Float32>(data);
             break;
-        case TypeCode::Double:
-            os << fromSlot<Double>(data);
+        case TypeCode::Float64:
+            os << fromSlot<Float64>(data);
             break;
         case TypeCode::Bool:
             os << (fromSlot<Bool>(data) ? "true" : "false");
@@ -166,7 +168,7 @@ inline void printSlot(std::ostream &os, const slot_t data, TypeCode t) {
             os << "ref";
             break;
         default:
-            os << std::format("<{}>", typeCodeToString(t));
+            os << std::format("<{}>", t->toString());
             break;
         }
     }

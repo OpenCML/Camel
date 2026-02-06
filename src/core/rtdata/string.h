@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -137,7 +137,8 @@ class String : public Object {
         return cachedHash_;
     }
 
-    virtual bool equals(const Object *other, bool /*deep*/ = false) const override {
+    virtual bool
+    equals(const Object *other, const Type * /*type*/, bool /*deep*/ = false) const override {
         if (this == other)
             return true;
 
@@ -154,17 +155,19 @@ class String : public Object {
         return std::memcmp(data_, rhs->data_, size_) == 0;
     }
 
-    virtual Object *clone(IAllocator &allocator, bool /*deep*/ = false) const override {
+    virtual Object *
+    clone(IAllocator &allocator, const Type * /*type*/, bool /*deep*/ = false) const override {
         String *copy = String::create(size_, allocator);
         std::memcpy(copy->data_, data_, size_ + 1);
         copy->cachedHash_ = cachedHash_;
         return copy;
     }
 
-    virtual void print(std::ostream &os) const override { os << data_; }
+    virtual void print(std::ostream &os, const Type * /*type*/) const override { os << data_; }
 
     virtual void onMoved() override {}
-    virtual void updateRefs(const std::function<Object *(Object *)> &) override {}
+    virtual void
+    updateRefs(const std::function<Object *(Object *)> &, const Type * /*type*/) override {}
 
     static constexpr size_t npos = static_cast<size_t>(-1);
 

@@ -13,55 +13,88 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "struct.h"
 
 #include "../special/ref.h"
+#include "core/type/composite/struct.h"
 #include "utils/str.h"
+#include "utils/type.h"
 
 using namespace std;
 
-StructData::StructData() : CompositeData(std::make_shared<StructType>()) {}
+struct StructDataFactory::Impl {
+    StructTypeFactory typeFactory;
+    std::map<std::string, data_ptr_t> data;
+    std::vector<std::string> refIndices;
+};
 
-StructData::StructData(initializer_list<pair<string, data_ptr_t>> data)
-    : CompositeData(make_shared<StructType>()) {
-    StructType &structType = *static_cast<StructType *>(type_.get());
+StructDataFactory::StructDataFactory() : impl_(std::make_unique<Impl>()) {}
+StructDataFactory::~StructDataFactory() = default;
+
+StructDataFactory &StructDataFactory::add(const std::string &key, const data_ptr_t &val) {
+    if (!impl_->typeFactory.add(key, val->type())) {
+        return *this;
+    }
+    impl_->data[key] = val;
+    if (val->type()->code() == TypeCode::Ref) {
+        impl_->refIndices.push_back(key);
+    }
+    return *this;
+}
+
+std::shared_ptr<StructData> StructDataFactory::build() {
+    Type *type = impl_->typeFactory.build();
+    return std::shared_ptr<StructData>(
+        new StructData(type, std::move(impl_->data), std::move(impl_->refIndices)));
+}
+
+StructData::StructData(
+    Type *type, std::map<std::string, data_ptr_t> &&data, std::vector<std::string> &&refIndices)
+    : CompositeData(type), refIndices_(std::move(refIndices)), data_(std::move(data)) {}
+
+StructData::StructData() : CompositeData(StructType::create()) {}
+
+StructData::StructData(initializer_list<pair<string, data_ptr_t>> data) : CompositeData(nullptr) {
+    StructDataFactory f;
     for (const auto &e : data) {
-        auto &[key, val] = e;
-        data_[key]       = val;
-        structType.add(key, val->type());
-        if (val->type()->code() == TypeCode::Ref) {
-            refIndices_.push_back(key);
-        }
+        f.add(e.first, e.second);
     }
+    auto p      = f.build();
+    type_       = p->type_;
+    data_       = std::move(p->data_);
+    refIndices_ = std::move(p->refIndices_);
 }
 
-StructData::StructData(std::map<std::string, data_ptr_t> &&data)
-    : CompositeData(make_shared<StructType>()), data_(std::move(data)) {}
-
-bool StructData::emplace(const std::string &key, const data_ptr_t &val) {
-    StructType &structType = *static_cast<StructType *>(type_.get());
-    if (structType.add(key, val->type())) {
-        data_[key] = val;
-        if (val->type()->code() == TypeCode::Ref) {
-            refIndices_.push_back(key);
-        }
-        return true;
+std::shared_ptr<StructData>
+StructData::create(std::initializer_list<std::pair<std::string, data_ptr_t>> data) {
+    StructDataFactory f;
+    for (const auto &e : data) {
+        f.add(e.first, e.second);
     }
-    return false;
+    return f.build();
 }
 
-bool StructData::add(const string &key, const data_ptr_t &val) {
-    ASSERT(resolved(), "Cannot add data to unresolved StructData");
-    StructType &structType = *static_cast<StructType *>(type_.get());
-    if (structType.add(key, val->type())) {
-        data_[key] = val;
-        return true;
+StructData::StructData(std::map<std::string, data_ptr_t> &&data) : CompositeData(nullptr) {
+    StructDataFactory f;
+    for (auto &e : data) {
+        f.add(e.first, e.second);
     }
-    return false;
+    auto p      = f.build();
+    type_       = p->type_;
+    data_       = std::move(p->data_);
+    refIndices_ = std::move(p->refIndices_);
+}
+
+std::shared_ptr<StructData> StructData::create(std::map<std::string, data_ptr_t> &&data) {
+    StructDataFactory f;
+    for (auto &e : data) {
+        f.add(e.first, e.second);
+    }
+    return f.build();
 }
 
 bool StructData::has(const string &key) const {
@@ -119,11 +152,11 @@ void StructData::resolve(const data_vec_t &dataList) {
 }
 
 data_ptr_t StructData::clone(bool deep) const {
-    auto dict = make_shared<StructData>();
+    StructDataFactory f;
     for (const auto &[key, val] : data_) {
-        dict->emplace(key, deep ? val->clone(true) : val);
+        f.add(key, deep ? val->clone(true) : val);
     }
-    return dict;
+    return f.build();
 }
 
 const string StructData::toString() const {
@@ -138,7 +171,7 @@ const string StructData::toString() const {
     return str;
 }
 
-data_ptr_t StructData::convertTo(const type_ptr_t &type) {
+data_ptr_t StructData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return tt::as_shared<StructData>(shared_from_this());
     }

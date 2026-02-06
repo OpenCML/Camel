@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,8 +35,8 @@
 
 using namespace std;
 
-// TensorData::TensorData(const type_ptr_t &elementType, const std::vector<size_t> &shape)
-//     : OtherData(std::static_pointer_cast<Type>(std::make_shared<TensorType>(shape))),
+// TensorData::TensorData(Type *elementType, const std::vector<size_t> &shape)
+//     : OtherData(std::static_pointer_cast<Type>(TensorType::create(shape))),
 //       shape_(shape) {
 //     size_t total_size = 1;
 //     for (size_t dim : shape) {
@@ -177,7 +177,7 @@ using namespace std;
 //     // 顶层调用，初始缩进量 = "Tensor(" 的长度
 //     ss << "Tensor(";
 //     printDim(ss, 0, 0, std::string("Tensor(").size());
-//     const auto &dtype = tt::as_shared<TensorType>(type_)->dType();
+//     const auto &dtype = tt::as_ptr<TensorType>(type_)->dType();
 //     ss << ", dtype=" << dtype->toString() << ")";
 //     return ss.str();
 // }
@@ -317,7 +317,7 @@ using namespace std;
 // }
 // bool TensorData::equals(const data_ptr_t &other) const { return true; }
 
-// data_ptr_t TensorData::convert(type_ptr_t target, bool inplace) {
+// data_ptr_t TensorData::convert(Type * target, bool inplace) {
 //     if (target == type_ || (type_ && type_->equals(target))) {
 //         return shared_from_this();
 //     }
@@ -329,7 +329,7 @@ using namespace std;
 
 //     switch (target->code()) {
 //     case TypeCode::Array: {
-//         auto array_type = tt::as_shared<ArrayType>(target);
+//         auto array_type = tt::as_ptr<ArrayType>(target);
 //         if (array_type) {
 //             vector<data_ptr_t> elements;
 //             elements.reserve(static_cast<size_t>(data_.size()));
@@ -352,7 +352,7 @@ using namespace std;
 
 //     default:
 //         if (target->code() == TensorType::typeCode()) {
-//             auto tensor_type = tt::as_shared<TensorType>(target);
+//             auto tensor_type = tt::as_ptr<TensorType>(target);
 //             if (tensor_type) {
 //                 if (type_ && !type_->equals(tensor_type->dType())) {
 //                     auto result = make_shared<TensorData>(target, tensor_type->shape());

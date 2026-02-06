@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,11 +24,11 @@
 class OtherData : public Data {
   public:
     OtherData() = default;
-    OtherData(type_ptr_t type) : Data(type) {}
+    OtherData(Type *type) : Data(type) {}
     virtual ~OtherData() = default;
 
-    virtual bool equals(const data_ptr_t &other) const override   = 0;
-    virtual data_ptr_t clone(bool deep = false) const override    = 0;
-    virtual const std::string toString() const override           = 0;
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override = 0;
+    virtual bool equals(const data_ptr_t &other) const override = 0;
+    virtual data_ptr_t clone(bool deep = false) const override  = 0;
+    virtual const std::string toString() const override         = 0;
+    virtual data_ptr_t convertTo(Type *type) override           = 0;
 };

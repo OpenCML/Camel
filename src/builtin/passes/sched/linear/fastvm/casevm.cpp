@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,10 +94,11 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::COPY: {
-            TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
-            if (isGCTraced(srcType)) {
-                Object *srcData = currFrame->get<Object *>(bc.fastop[0]);
-                currFrame->set(bc.result, srcData->clone(mm::autoSpace(), false));
+            TypeCode srcCode = currFrame->codeAt(bc.fastop[0]);
+            if (isGCTraced(srcCode)) {
+                Object *srcData  = currFrame->get<Object *>(bc.fastop[0]);
+                Type *srcTypePtr = currFrame->typeAt<Type>(bc.fastop[0]);
+                currFrame->set(bc.result, srcData->clone(mm::autoSpace(), srcTypePtr, false));
             } else {
                 slot_t srcData = currFrame->get<slot_t>(bc.fastop[0]);
                 currFrame->set(bc.result, srcData);
@@ -105,7 +106,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::ACCS: {
-            TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
+            TypeCode srcType = currFrame->codeAt(bc.fastop[0]);
             if (srcType == TypeCode::Tuple) {
                 Tuple *t = currFrame->get<Tuple *>(bc.fastop[0]);
                 ASSERT(
@@ -149,8 +150,9 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 if (isGCTraced(condType)) {
                     auto condData = currFrame->get<Object *>(nargs[0]);
                     for (; j < bc.withCnt(); ++j) {
-                        auto caseData = currFrame->get<Object *>(wargs[j]);
-                        if (condData->equals(caseData)) {
+                        auto caseData     = currFrame->get<Object *>(wargs[j]);
+                        Type *condTypePtr = currFrame->typeAt<Type>(nargs[0]);
+                        if (condData->equals(caseData, condTypePtr, false)) {
                             jumpIdx = j; // jump to matched case
                             break;
                         }
@@ -193,65 +195,63 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
 
-            TypeCode targetType = currFrame->typeAt(nargs[0]);
-            ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+            TypeCode srcCode = currFrame->codeAt(nargs[0]);
+            Type *srcType    = currFrame->typeAt<Type>(nargs[0]);
+            ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in FastVM.");
+            Object *srcObj =
+                currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
 
-            Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
-            ASSERT(target != nullptr, "FILL target data is null.");
+            ASSERT(srcObj != nullptr, "FILL target data is null.");
 
-            switch (targetType) {
+            switch (srcCode) {
             case TypeCode::Tuple: {
-                const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
-                auto t           = static_cast<Tuple *>(target);
-                const auto &refs = t->layout().refs();
+                auto type = tt::as_ptr<TupleType>(srcType);
+                auto tup  = tt::as_ptr<Tuple>(srcObj);
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    type->refCount() == bc.withCnt(),
                     std::format(
                         "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        type->refCount()));
+                const size_t *refs = type->refs();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    tup->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
-                t->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Array: {
-                const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
-                auto a           = static_cast<Array *>(target);
-                const auto &refs = a->layout().refs();
+                auto type = tt::as_ptr<ArrayType>(srcType);
+                auto arr  = tt::as_ptr<Array>(srcObj);
+                // 对于数组，如果 elemType 是 Ref，所有元素都是 Ref，直接使用索引
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    arr->size() >= bc.withCnt(),
                     std::format(
-                        "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                        "Array size mismatch in FastVM. Expected at least {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        arr->size()));
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    arr->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
                 }
-                a->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Struct: {
-                const auto &type = currFrame->typePtrAt<StructType>(bc.result);
-                auto s           = static_cast<Struct *>(target);
-                const auto &refs = s->layout().refs();
+                auto type = tt::as_ptr<StructType>(srcType);
+                auto str  = tt::as_ptr<Struct>(srcObj);
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    type->refCount() == bc.withCnt(),
                     std::format(
                         "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        type->refCount()));
+                const size_t *refs = type->refs();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    str->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
-                s->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Function: {
-                // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
-                auto f             = static_cast<Function *>(target);
-                Tuple *closureData = f->tuple();
+                auto func          = tt::as_ptr<Function>(srcObj);
+                Tuple *closureData = func->tuple();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
                     closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
                 }
@@ -262,10 +262,10 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     false,
                     std::format(
                         "Unsupported FILL target type {} in FastVM.",
-                        typeCodeToString(targetType)));
+                        typeCodeToString(srcCode)));
             }
 
-            currFrame->set(bc.result, target);
+            currFrame->set(bc.result, srcObj);
         } break;
 
         case OpCode::CALL: {
@@ -348,13 +348,16 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::OPER: {
-            const data_arr_t nargs = bc.nargs();
-            const data_arr_t wargs = bc.wargs();
-            auto func              = bc.extra()->func;
+            const data_arr_t nargs = bc->nargs();
+            const data_arr_t wargs = bc->wargs();
+            auto func              = bc->extra()->func;
             EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                 "Executing operator {}.",
                 context_->execMgr().getNameOfAnOperator(func)));
-            func(bc.result, nargs, wargs, *currFrame, *context_);
+            FrameArgsView withView(*currFrame, wargs);
+            FrameArgsView normView(*currFrame, nargs);
+            slot_t result = func(withView, normView, *context_);
+            currFrame->set(bc.result, result);
         } break;
 
         case OpCode::SCHD: {

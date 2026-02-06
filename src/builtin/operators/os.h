@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,19 +22,11 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-void __exit__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __sleep__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __whoami__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __set_terminal_raw_mode__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __has_input__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __get_char__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __get_chars__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __clear_input_buffer__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __exit__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __sleep__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __whoami__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __has_input__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __get_char__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __get_chars__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __clear_input_buffer__(ArgsView &with, ArgsView &norm, Context &ctx);

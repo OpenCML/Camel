@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "random.h"
+#include "utils/type.h"
 
 using namespace std;
 
@@ -28,7 +29,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":rand/seed",
-                    StaticFuncTypeResolver::create({}, {{Type::Int(), false}}, Type::Void()),
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
         OperatorGroup::create(
@@ -36,7 +37,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":rand/rand",
-                    StaticFuncTypeResolver::create({}, {}, Type::Double()),
+                    StaticFuncTypeResolver::create({}, {}, Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -44,7 +45,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             {
                 {
                     ":rand/randn",
-                    StaticFuncTypeResolver::create({}, {}, Type::Double()),
+                    StaticFuncTypeResolver::create({}, {}, Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -54,8 +55,8 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     ":rand/randint",
                     StaticFuncTypeResolver::create(
                         {},
-                        {{Type::Int(), false}, {Type::Int(), false}},
-                        Type::Int()),
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Int64()),
                 },
             }),
         OperatorGroup::create(
@@ -67,10 +68,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType->elemType();
                         }),
                 },
@@ -84,10 +85,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },
@@ -101,10 +102,10 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(norm[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
                             return vecType;
                         }),
                 },

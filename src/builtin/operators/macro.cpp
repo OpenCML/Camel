@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,12 +21,9 @@
 
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
+#include "core/operator.h"
 #include "utils/assert.h"
 
 using namespace GraphIR;
 
-void __cmp__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    return;
-}
+slot_t __cmp__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }

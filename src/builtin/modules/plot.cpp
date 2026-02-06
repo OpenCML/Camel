@@ -13,11 +13,12 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 19, 2025
- * Updated: Dec. 22, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "plot.h"
+#include "utils/type.h"
 
 using namespace std;
 
@@ -32,7 +33,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {-1, {}}},
                         "(data: (typeas T)[], filename?: string) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             // 检查参数数量：至少1个，最多2个
                             if (norm.size() < 1 || norm.size() > 2)
                                 return nullopt;
@@ -40,10 +41,9 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             // 检查数组元素类型是否支持（int, long, float, double）
-                            TypeCode elemCode =
-                                tt::as_shared<ArrayType>(norm[0])->elemType()->code();
-                            if (elemCode != TypeCode::Int && elemCode != TypeCode::Long &&
-                                elemCode != TypeCode::Float && elemCode != TypeCode::Double)
+                            TypeCode elemCode = tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
+                            if (elemCode != TypeCode::Int32 && elemCode != TypeCode::Int64 &&
+                                elemCode != TypeCode::Float32 && elemCode != TypeCode::Float64)
                                 return nullopt;
                             // 第二个参数是可选的字符串（文件名）
                             if (norm.size() == 2 && norm[1]->code() != TypeCode::String)
@@ -58,8 +58,7 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     return groups;
 }
 
-PlotBuiltinModule::PlotBuiltinModule(context_ptr_t ctx)
-    : BuiltinModule("plot", ctx) {
+PlotBuiltinModule::PlotBuiltinModule(context_ptr_t ctx) : BuiltinModule("plot", ctx) {
     for (const auto &group : getOperatorGroups()) {
         exportEntity(group->name(), group);
     }
@@ -76,4 +75,3 @@ bool PlotBuiltinModule::load() {
     loaded_ = true;
     return true;
 }
-

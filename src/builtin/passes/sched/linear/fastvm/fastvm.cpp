@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -79,8 +79,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
     Function *func = currFrame.get<Function *>(wargs[0]);
     Tuple *closure = func->tuple();
 
-    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
-    Array *res             = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
+    Array *res = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     slot_t *to   = res->data();
@@ -133,8 +132,8 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     Function *func = currFrame.get<Function *>(wargs[0]);
     Tuple *closure = func->tuple();
 
-    const auto &retArrType = currFrame.typePtrAt<ArrayType>(self);
-    Array *filtered        = Array::create(retArrType->layout(), mm::autoSpace(), arr->size());
+    const auto &retArrType = currFrame.typeAt<ArrayType>(self);
+    Array *filtered        = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     for (size_t i = 0; i < arr->size(); ++i) {
@@ -151,11 +150,11 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
         framePool_.release(frame);
 
         if (fromSlot<bool>(result)) {
-            filtered->append(from[i]);
+            filtered->append(from[i], retArrType);
         }
     }
 
-    filtered->shrinkToFit();
+    filtered->shrinkToFit(retArrType);
 
     currFrame.set(self, filtered);
 }

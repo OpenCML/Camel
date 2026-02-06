@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,7 +47,7 @@ class FunctionData : public CompositeData {
 
     std::string name() const;
     GraphIR::Graph &graph() const { return graph_; }
-    func_type_ptr_t funcType() const;
+    FunctionType *funcType() const;
     const data_vec_t &closure() const { return closure_; }
 
     virtual std::vector<std::string> refs() const override;
@@ -57,5 +57,5 @@ class FunctionData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
+    virtual data_ptr_t convertTo(Type *type) override;
 };

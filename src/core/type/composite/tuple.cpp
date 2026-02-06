@@ -13,85 +13,176 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
+#include "core/mm/alloc/allocator.h"
+#include "core/mm/mm.h"
 #include "error/diagnostics/diagnostics.h"
 #include "utils/assert.h"
+#include "utils/log.h"
 #include "utils/type.h"
 
 using namespace std;
 
-void TupleType::computeLayout() const {
-    if (!layout_) {
-        std::vector<TypeCode> elemTypes;
-        std::vector<size_t> refs;
-        elemTypes.reserve(types_.size());
-        size_t i = 0;
-        for (const auto &t : types_) {
-            elemTypes.push_back(t->code());
-            if (t->code() == TypeCode::Ref) {
-                refs.push_back(i);
-            }
-            i++;
+namespace {
+
+TupleTypeLayout computeLayout(size_t size, size_t refCount) {
+    size_t typesSize     = size * sizeof(Type *);
+    size_t typeCodesSize = size * sizeof(TypeCode);
+    size_t refsSize      = refCount * sizeof(size_t);
+    size_t aTypes        = ::alignUp(typesSize, alignof(TypeCode));
+    size_t aTypeCodes    = ::alignUp(typeCodesSize, alignof(size_t));
+    size_t totalSize     = sizeof(TupleType) + aTypes + aTypeCodes + refsSize;
+    return TupleTypeLayout{
+        .totalSize            = totalSize,
+        .size                 = size,
+        .refCount             = refCount,
+        .alignedTypesSize     = aTypes,
+        .alignedTypeCodesSize = aTypeCodes,
+    };
+}
+
+} // namespace
+
+TupleType *TupleTypeFactory::build() { return TupleType::fromFactory(*this); }
+
+TupleType::TupleType(
+    const TupleTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
+    const size_t *refs)
+    : CompositeType(TypeCode::Tuple), size_(layout.size), refCount_(layout.refCount) {
+    auto p        = layout.ptrs(data_);
+    typesPtr_     = p.types;
+    typeCodesPtr_ = p.typeCodes;
+    refsPtr_      = p.refs;
+    for (size_t i = 0; i < size_; ++i) {
+        p.types[i]     = const_cast<Type *>(types[i]);
+        p.typeCodes[i] = typeCodes[i];
+    }
+    for (size_t i = 0; i < refCount_; ++i) {
+        p.refs[i] = refs[i];
+    }
+}
+
+TupleType::TupleType(TupleTypeFactory &factory, const TupleTypeLayout &layout)
+    : CompositeType(TypeCode::Tuple), size_(layout.size), refCount_(layout.refCount) {
+    auto p        = layout.ptrs(data_);
+    typesPtr_     = p.types;
+    typeCodesPtr_ = p.typeCodes;
+    refsPtr_      = p.refs;
+    size_t refIdx = 0;
+    for (size_t i = 0; i < size_; ++i) {
+        Type *t        = factory.types_[i];
+        p.types[i]     = t;
+        p.typeCodes[i] = t->code();
+        if (t->code() == TypeCode::Ref) {
+            p.refs[refIdx++] = i;
         }
-        layout_ = std::make_shared<TupleTypeLayout>(std::move(elemTypes), std::move(refs));
     }
 }
 
-TupleType::TupleType() : CompositeType(TypeCode::Tuple) {}
-
-TupleType::TupleType(const initializer_list<type_ptr_t> &types)
-    : CompositeType(TypeCode::Tuple), types_(types) {}
-
-TupleType::TupleType(const vector<type_ptr_t> &types)
-    : CompositeType(TypeCode::Tuple), types_(types) {}
-
-TupleType::TupleType(std::vector<type_ptr_t> &&types)
-    : CompositeType(TypeCode::Tuple), types_(std::move(types)) {}
-
-std::shared_ptr<TupleType> TupleType::create(const std::vector<type_ptr_t> &types) {
-    return std::make_shared<TupleType>(types);
-}
-
-std::shared_ptr<TupleType> TupleType::create(std::vector<type_ptr_t> &&types) {
-    return std::make_shared<TupleType>(std::move(types));
-}
-
-void TupleType::add(const type_ptr_t &type) { types_.push_back(type); }
-
-void TupleType::set(size_t index, const type_ptr_t &type) { types_[index] = type; }
-
-size_t TupleType::size() const { return types_.size(); }
-
-const vector<type_ptr_t> &TupleType::types() const { return types_; }
-
-std::shared_ptr<TupleType> TupleType::slice(size_t start, size_t end) const {
-    ASSERT(start <= end && end <= types_.size(), "TupleType slice indices out of range");
-    return std::make_shared<TupleType>(
-        std::vector<type_ptr_t>(types_.begin() + start, types_.begin() + end));
-}
-
-std::optional<type_ptr_t> TupleType::typeAt(size_t idx) const {
-    if (idx >= types_.size()) {
-        return std::nullopt;
+TupleType::TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &types)
+    : CompositeType(TypeCode::Tuple), size_(layout.size), refCount_(layout.refCount) {
+    auto p        = layout.ptrs(data_);
+    typesPtr_     = p.types;
+    typeCodesPtr_ = p.typeCodes;
+    refsPtr_      = p.refs;
+    size_t refIdx = 0;
+    for (size_t i = 0; i < size_; ++i) {
+        Type *t        = types[i];
+        p.types[i]     = t;
+        p.typeCodes[i] = t->code();
+        if (t->code() == TypeCode::Ref) {
+            p.refs[refIdx++] = i;
+        }
     }
-    return types_[idx];
 }
 
-const TupleTypeLayout &TupleType::layout() const {
-    if (!layout_) {
-        computeLayout();
+TupleType *TupleType::create() {
+    TupleTypeLayout layout = computeLayout(0, 0);
+    EXEC_WHEN_DEBUG(
+        l.in("TupleType").debug("Allocating TupleType: (), size: {} bytes", layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    return new (mem) TupleType(layout, nullptr, nullptr, nullptr);
+}
+
+TupleType *TupleType::create(const std::vector<Type *> &types) {
+    size_t refCount = 0;
+    for (Type *t : types) {
+        if (t && t->code() == TypeCode::Ref)
+            ++refCount;
     }
-    return *layout_;
+    TupleTypeLayout layout = computeLayout(types.size(), refCount);
+    EXEC_WHEN_DEBUG(l.in("TupleType")
+                        .debug(
+                            "Allocating TupleType: size={}, refCount={}, totalSize: {} bytes",
+                            layout.size,
+                            layout.refCount,
+                            layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    return new (mem) TupleType(layout, types);
 }
 
-type_ptr_t TupleType::resolve(const type_vec_t &typeList) const {
+TupleType *TupleType::create(std::vector<Type *> &&types) { return create(types); }
+
+TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
+    size_t size     = factory.types_.size();
+    size_t refCount = 0;
+    for (Type *t : factory.types_) {
+        if (t && t->code() == TypeCode::Ref)
+            ++refCount;
+    }
+    TupleTypeLayout layout = computeLayout(size, refCount);
+    EXEC_WHEN_DEBUG(
+        l.in("TupleType")
+            .debug(
+                "Allocating TupleType(fromFactory): size={}, refCount={}, totalSize: {} bytes",
+                layout.size,
+                layout.refCount,
+                layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    return new (mem) TupleType(factory, layout);
+}
+
+TupleType *TupleType::fromFactoryData(
+    const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
+    size_t refCount) {
+    TupleTypeLayout layout = computeLayout(size, refCount);
+    EXEC_WHEN_DEBUG(
+        l.in("TupleType")
+            .debug(
+                "Allocating TupleType(fromFactoryData): size={}, refCount={}, totalSize: {} bytes",
+                size,
+                refCount,
+                layout.totalSize));
+    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
+    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    return new (mem) TupleType(layout, types, typeCodes, refs);
+}
+
+TupleType *TupleType::slice(size_t start, size_t end) const {
+    ASSERT(start <= end && end <= size_, "TupleType slice indices out of range");
+    std::vector<Type *> slicedTypes;
+    slicedTypes.reserve(end - start);
+    for (size_t i = start; i < end; ++i) {
+        slicedTypes.push_back(typesPtr_[i]);
+    }
+    return TupleType::create(std::move(slicedTypes));
+}
+
+Type *TupleType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "TupleType is already resolved");
-    std::vector<type_ptr_t> types = types_;
+    std::vector<Type *> types;
+    types.reserve(size_);
+    for (size_t i = 0; i < size_; ++i) {
+        types.push_back(typesPtr_[i]);
+    }
     size_t i = 0, j = 0;
     while (i < types.size() && j < typeList.size()) {
         if (types[i]->code() == TypeCode::Ref) {
@@ -107,8 +198,8 @@ type_ptr_t TupleType::resolve(const type_vec_t &typeList) const {
 }
 
 bool TupleType::resolved() const {
-    for (const auto &type : types_) {
-        if (type->code() == TypeCode::Ref) {
+    for (size_t i = 0; i < size_; ++i) {
+        if (typesPtr_[i]->code() == TypeCode::Ref) {
             return false;
         }
     }
@@ -117,14 +208,15 @@ bool TupleType::resolved() const {
 
 string TupleType::toString() const {
     string result = "(";
-    for (const auto &type : types_) {
+    for (size_t i = 0; i < size_; ++i) {
+        Type *type = typesPtr_[i];
         if (type) {
             result += type->toString() + ", ";
         } else {
             result += "null, ";
         }
     }
-    if (!types_.empty()) {
+    if (size_ > 0) {
         result.pop_back();
         result.pop_back();
     }
@@ -134,41 +226,41 @@ string TupleType::toString() const {
 
 std::string TupleType::mangle() const {
     std::string result = "P";
-    result += std::to_string(types_.size());
-    for (const auto &type : types_) {
-        result += type->mangle();
+    result += std::to_string(size_);
+    for (size_t i = 0; i < size_; ++i) {
+        result += typesPtr_[i]->mangle();
     }
     return result;
 }
 
-type_ptr_t TupleType::clone(bool deep /* = false */) const {
-    std::shared_ptr<TupleType> res;
+Type *TupleType::clone(bool deep /* = false */) const {
+    std::vector<Type *> clonedTypes;
+    clonedTypes.reserve(size_);
     if (deep) {
-        std::vector<type_ptr_t> clonedTypes;
-        for (const auto &type : types_) {
-            clonedTypes.push_back(type->clone(true));
+        for (size_t i = 0; i < size_; ++i) {
+            clonedTypes.push_back(typesPtr_[i]->clone(true));
         }
-        res = TupleType::create(std::move(clonedTypes));
     } else {
-        res = TupleType::create(types_);
+        for (size_t i = 0; i < size_; ++i) {
+            clonedTypes.push_back(typesPtr_[i]);
+        }
     }
-    res->layout_ = layout_;
-    return res;
+    return TupleType::create(std::move(clonedTypes));
 }
 
-bool TupleType::equals(const type_ptr_t &other) const {
-    if (this == other.get()) {
+bool TupleType::equals(Type *other) const {
+    if (this == other) {
         return true;
     }
-    if (other->code() != TypeCode::Tuple) {
+    if (!other || other->code() != TypeCode::Tuple) {
         return false;
     }
     const TupleType &otherTuple = static_cast<const TupleType &>(*other);
-    if (types_.size() != otherTuple.types_.size()) {
+    if (size_ != otherTuple.size_) {
         return false;
     }
-    for (size_t i = 0; i < types_.size(); i++) {
-        if (!types_[i]->equals(otherTuple.types_[i])) {
+    for (size_t i = 0; i < size_; i++) {
+        if (!typesPtr_[i]->equals(otherTuple.typesPtr_[i])) {
             return false;
         }
     }
@@ -182,4 +274,4 @@ CastSafety TupleType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool TupleType::assignable(const type_ptr_t &type) const { return this->equals(type); }
+bool TupleType::assignable(Type *type) const { return equals(type); }

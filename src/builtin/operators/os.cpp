@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "os.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
+#include "core/operator.h"
 
 #include <memory>
 #include <thread>
@@ -161,15 +161,14 @@ void clearInputBuffer() {
 
 namespace GIR = GraphIR;
 
-void __sleep__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Int ms = frame.get<Int>(nargs[0]);
+slot_t __sleep__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int ms = norm.get<Int>(0);
 
     if (ms < 0) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit("<sleep> requires a non-negative integer");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
     try {
@@ -178,15 +177,13 @@ void __sleep__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &fr
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("<sleep> encountered an error: ") + e.what());
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 
-    frame.set(self, NullSlot);
+    return NullSlot;
 }
 
-void __whoami__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+slot_t __whoami__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::string username;
 
 #ifdef _WIN32
@@ -196,8 +193,7 @@ void __whoami__(
         username = buffer;
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 #else
     struct passwd *pw = getpwuid(getuid());
@@ -205,21 +201,20 @@ void __whoami__(
         username = pw->pw_name;
     } else {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed to get username");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
 #endif
 
-    frame.set(self, String::from(username, mm::autoSpace()));
+    String *str = String::from(username, mm::autoSpace());
+    return toSlot(str);
 }
 
-void __exit__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
+slot_t __exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
     throw CamelRuntimeException(RuntimeExceptionCode::ForceExit, "<exit> operator invoked");
 }
 
-void __set_terminal_raw_mode__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx) {
-    Bool enable  = frame.get<Bool>(nargs[0]);
+slot_t __set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Bool enable  = norm.get<Bool>(0);
     bool success = Terminal::setRawMode(enable);
 
     if (!success) {
@@ -228,29 +223,28 @@ void __set_terminal_raw_mode__(
             .commit("<set_terminal_raw_mode> failed to modify terminal mode");
     }
 
-    frame.set(self, NullSlot);
+    return NullSlot;
 }
 
-void __has_input__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
+slot_t __has_input__(ArgsView &with, ArgsView &norm, Context &) {
     Bool available = Terminal::hasInput();
-    frame.set(self, available);
+    return toSlot(available);
 }
 
-void __get_char__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
+slot_t __get_char__(ArgsView &with, ArgsView &norm, Context &) {
     std::string input = Terminal::readInput(1);
-    frame.set(self, String::from(input, mm::autoSpace()));
+    String *str       = String::from(input, mm::autoSpace());
+    return toSlot(str);
 }
 
-void __get_chars__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
-    Int maxChars      = frame.get<Int>(nargs[0]);
+slot_t __get_chars__(ArgsView &with, ArgsView &norm, Context &) {
+    Int maxChars      = norm.get<Int>(0);
     std::string input = Terminal::readInput(maxChars);
-    frame.set(self, String::from(input, mm::autoSpace()));
+    String *str       = String::from(input, mm::autoSpace());
+    return toSlot(str);
 }
 
-void __clear_input_buffer__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &) {
+slot_t __clear_input_buffer__(ArgsView &with, ArgsView &norm, Context &) {
     Terminal::clearInputBuffer();
-    frame.set(self, NullSlot);
+    return NullSlot;
 }

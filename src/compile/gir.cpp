@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,20 +82,29 @@ Graph
 */
 
 graph_ptr_t
-Graph::create(const func_type_ptr_t &funcType, const graph_ptr_t &graph, const std::string &name) {
-    ASSERT(funcType->hasCompileInfo(), "Trying to create a Graph with incomplete FunctionType.");
+Graph::create(FunctionType *funcType, const graph_ptr_t &graph, const std::string &name) {
+    ASSERT(funcType->hasMetaInfo(), "Trying to create a Graph with incomplete FunctionType.");
     static int anonymousIdx = 0;
     std::string graphName   = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
     const auto newGraph     = std::make_shared<Graph>(funcType, graph, graphName);
     if (graph) {
         graph->addSubGraph(newGraph);
     }
-    for (const auto &[name, type, isVar] : funcType->normArgsInfo()) {
-        node_ptr_t portNode = PortNode::create(*newGraph, type, name, isVar);
+    const size_t withCount = funcType->withTypesCount();
+    for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+        node_ptr_t portNode = PortNode::create(
+            *newGraph,
+            funcType->normTypeAt(i),
+            std::string(funcType->argNameAt(withCount + i)),
+            funcType->normIsVarAt(i));
         newGraph->addPort(portNode, false);
     }
-    for (const auto &[name, type, isVar] : funcType->withArgsInfo()) {
-        node_ptr_t portNode = PortNode::create(*newGraph, type, name, isVar);
+    for (size_t i = 0; i < withCount; ++i) {
+        node_ptr_t portNode = PortNode::create(
+            *newGraph,
+            funcType->withTypeAt(i),
+            std::string(funcType->argNameAt(i)),
+            funcType->withIsVarAt(i));
         newGraph->addPort(portNode, true);
     }
     return newGraph;
@@ -155,9 +164,9 @@ const node_ptr_t &Graph::outputNode() const {
 void Graph::setOutput(const node_ptr_t &node) {
     ASSERT(exitNode_ == nullptr, std::format("Graph {} already has an output node.", name_));
 
-    type_ptr_t actualExitType = node->dataType();
+    Type *actualExitType = node->dataType();
     if (funcType_->hasExitType()) {
-        type_ptr_t declaredExitType = funcType_->exitType();
+        Type *declaredExitType = funcType_->exitType();
         if (!actualExitType->assignable(declaredExitType)) {
             throw DiagnosticBuilder::of(SemanticDiag::ReturnTypeMismatch)
                 .commit(
@@ -166,7 +175,7 @@ void Graph::setOutput(const node_ptr_t &node) {
                     name_ + ": " + funcType_->toString());
         }
     } else {
-        // If the function has no declared return type, set it to the actual return type
+        // If the function has no declared return type, set the inferred exit type in place
         funcType_->setExitType(actualExitType);
     }
 
@@ -301,7 +310,7 @@ void Graph::delDependency(const graph_ptr_t &graph) {
 
 graph_ptr_t Graph::clone() const {
     graph_ptr_t newGraph =
-        Graph::create(tt::as_shared<FunctionType>(funcType_->clone()), outer_.lock(), name_);
+        Graph::create(tt::as_ptr<FunctionType>(funcType_->clone()), outer_.lock(), name_);
     newGraph->looped_        = looped_;
     newGraph->parameterized_ = parameterized_;
 

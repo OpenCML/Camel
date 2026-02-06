@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -107,12 +107,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     Graph &operator=(Graph &&other)      = delete; // Delete move assignment
 
     explicit Graph(
-        const func_type_ptr_t &funcType, const graph_ptr_t &graph = nullptr,
-        const std::string &name = "")
-        : name_(name), outer_(graph), funcType_(funcType),
-          staticDataType_(std::make_shared<TupleType>()),
-          runtimeDataType_(std::make_shared<TupleType>()),
-          closureType_(std::make_shared<TupleType>()) {
+        FunctionType *funcType, const graph_ptr_t &graph = nullptr, const std::string &name = "")
+        : name_(name), outer_(graph), funcType_(funcType), staticDataType_(TupleType::create()),
+          runtimeDataType_(TupleType::create()), closureType_(TupleType::create()) {
         EXEC_WHEN_DEBUG(
             l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
     }
@@ -122,8 +119,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     };
 
     static graph_ptr_t create(
-        const func_type_ptr_t &funcType, const graph_ptr_t &graph = nullptr,
-        const std::string &name = "");
+        FunctionType *funcType, const graph_ptr_t &graph = nullptr, const std::string &name = "");
 
     static graph_ptr_t null() { return nullptr; }
 
@@ -143,10 +139,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     std::string toString() const;
 
-    const func_type_ptr_t &funcType() const { return funcType_; }
-    const std::shared_ptr<TupleType> &staticDataType() const { return staticDataType_; }
-    const std::shared_ptr<TupleType> &runtimeDataType() const { return runtimeDataType_; }
-    const std::shared_ptr<TupleType> &closureType() const { return closureType_; }
+    FunctionType *funcType() const { return funcType_; }
+    const TupleType *staticDataType() const { return staticDataType_; }
+    const TupleType *runtimeDataType() const { return runtimeDataType_; }
+    const TupleType *closureType() const { return closureType_; }
 
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
     data_idx_t addStaticData(const data_ptr_t &data);
@@ -221,8 +217,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::unordered_set<graph_ptr_t> dependencies_;
     std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> dependents_;
 
-    func_type_ptr_t funcType_;
-    std::shared_ptr<TupleType> staticDataType_, runtimeDataType_, closureType_;
+    FunctionType *funcType_;
+    TupleType *staticDataType_, *runtimeDataType_, *closureType_;
     // Static data segment, index 0 is reserved as empty
     data_vec_t staticDataArr_ = {nullptr};
 
@@ -246,16 +242,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
 class Node : public std::enable_shared_from_this<Node> {
   public:
-    Node(Graph &graph, NodeType nodeType, const type_ptr_t &dataType, data_idx_t index)
+    Node(Graph &graph, NodeType nodeType, Type *dataType, data_idx_t index)
         : graph_(graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index) {}
     virtual ~Node() = default;
 
     NodeType type() const { return nodeType_; }
-    type_ptr_t dataType() const {
+    Type *dataType() const {
         ASSERT(dataType_ != nullptr, "Node has no data type.");
         return dataType_;
     }
-    void setDataType(const type_ptr_t &type) { dataType_ = type; }
+    void setDataType(Type *type) { dataType_ = type; }
     virtual std::string toString() const {
         return std::format("Node({}, {})", to_string(nodeType_), std::to_string(dataIndex_));
     }
@@ -339,7 +335,7 @@ class Node : public std::enable_shared_from_this<Node> {
     Graph &graph_;
 
     NodeType nodeType_;
-    type_ptr_t dataType_;
+    Type *dataType_;
     data_idx_t dataIndex_;
 
     node_vec_t normInputs_;
@@ -353,7 +349,7 @@ class Node : public std::enable_shared_from_this<Node> {
 
 class DataNode : public Node {
   public:
-    DataNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    DataNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::DATA, type, index) {}
     ~DataNode() = default;
 
@@ -384,13 +380,11 @@ class PortNode : public Node {
     bool isVar_;
 
   public:
-    PortNode(
-        Graph &graph, const type_ptr_t &type, data_idx_t index, const std::string &name, bool isVar)
+    PortNode(Graph &graph, Type *type, data_idx_t index, const std::string &name, bool isVar)
         : Node(graph, NodeType::PORT, type, index), name_(name), isVar_(isVar) {}
     ~PortNode() = default;
 
-    static node_ptr_t
-    create(Graph &graph, const type_ptr_t &type, const std::string &name, bool isVar) {
+    static node_ptr_t create(Graph &graph, Type *type, const std::string &name, bool isVar) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<PortNode>(graph, type, index, name, isVar);
         // This is not automatically called and needs to be added manually because the order of
@@ -417,11 +411,11 @@ class PortNode : public Node {
 
 class CastNode : public Node {
   public:
-    CastNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    CastNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::CAST, type, index) {}
     ~CastNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, Type *type) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<CastNode>(graph, type, index);
         graph.addNode(node);
@@ -439,11 +433,11 @@ class CastNode : public Node {
 
 class CopyNode : public Node {
   public:
-    CopyNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    CopyNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::COPY, type, index) {}
     ~CopyNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, Type *type) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<CopyNode>(graph, type, index);
         graph.addNode(node);
@@ -461,11 +455,11 @@ class CopyNode : public Node {
 
 class FillNode : public Node {
   public:
-    FillNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    FillNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::FILL, type, index) {}
     ~FillNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, Type *type) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<FillNode>(graph, type, index);
         graph.addNode(node);
@@ -484,13 +478,13 @@ class FillNode : public Node {
 class AccsNode : public Node {
   public:
     AccsNode(
-        Graph &graph, const type_ptr_t &type, data_idx_t index,
+        Graph &graph, Type *type, data_idx_t index,
         const std::variant<std::string, size_t> &accsIdx)
         : Node(graph, NodeType::ACCS, type, index), accsIndex_(accsIdx) {}
     ~AccsNode() = default;
 
     static node_ptr_t
-    create(Graph &graph, const type_ptr_t &type, const std::variant<std::string, size_t> &accsIdx) {
+    create(Graph &graph, Type *type, const std::variant<std::string, size_t> &accsIdx) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<AccsNode>(graph, type, index, accsIdx);
         graph.addNode(node);
@@ -521,11 +515,11 @@ class AccsNode : public Node {
 
 class BrchNode : public Node {
   public:
-    BrchNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    BrchNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::BRCH, type, index) {}
     ~BrchNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, Type *type) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<BrchNode>(graph, type, index);
         graph.addNode(node);
@@ -543,11 +537,11 @@ class BrchNode : public Node {
 
 class JoinNode : public Node {
   public:
-    JoinNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    JoinNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::JOIN, type, index) {}
     ~JoinNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, Type *type) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<JoinNode>(graph, type, index);
         graph.addNode(node);
@@ -565,11 +559,11 @@ class JoinNode : public Node {
 
 class CallNode : public Node {
   public:
-    CallNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    CallNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::CALL, type, index) {}
     ~CallNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, Type *type) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<CallNode>(graph, type, index);
         graph.addNode(node);
@@ -587,11 +581,11 @@ class CallNode : public Node {
 
 class BindNode : public Node {
   public:
-    BindNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    BindNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::BIND, type, index) {}
     ~BindNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type) {
+    static node_ptr_t create(Graph &graph, Type *type) {
         data_idx_t index = graph.addRuntimeData();
         auto node        = std::make_shared<BindNode>(graph, type, index);
         graph.addNode(node);
@@ -623,9 +617,9 @@ class FuncNode : public Node {
     }
 
     func_ptr_t func() const { return func_; }
-    func_type_ptr_t funcType() const {
+    FunctionType *funcType() const {
         ASSERT(func_, "Function is not set for FunctionNode.");
-        return std::dynamic_pointer_cast<FunctionType>(func_->type());
+        return tt::as_ptr<FunctionType>(func_->type());
     }
 
     virtual std::string toString() const override {
@@ -656,9 +650,9 @@ class OperNode : public Node {
     }
 
     oper_idx_ptr_t oper() const { return operator_; }
-    func_type_ptr_t funcType() const {
+    FunctionType *funcType() const {
         ASSERT(operator_, "Operator is not set for OperatorNode.");
-        return tt::as_shared<FunctionType>(operator_->funcType());
+        return tt::as_ptr<FunctionType>(operator_->funcType());
     }
 
     virtual std::string toString() const override {
@@ -678,11 +672,11 @@ class OperNode : public Node {
 
 class ExitNode : public Node {
   public:
-    ExitNode(Graph &graph, const type_ptr_t &type, data_idx_t index)
+    ExitNode(Graph &graph, Type *type, data_idx_t index)
         : Node(graph, NodeType::EXIT, type, index) {}
     ~ExitNode() = default;
 
-    static node_ptr_t create(Graph &graph, const type_ptr_t &type, data_idx_t index = 0) {
+    static node_ptr_t create(Graph &graph, Type *type, data_idx_t index = 0) {
         auto node = std::make_shared<ExitNode>(graph, type, index);
         return node;
     }

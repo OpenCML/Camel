@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,9 +22,6 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-void __now__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __strftime__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __strptime__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __now__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __strftime__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __strptime__(ArgsView &with, ArgsView &norm, Context &ctx);

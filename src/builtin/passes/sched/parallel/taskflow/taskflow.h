@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,54 +70,53 @@ class TaskflowExecSchedPass : public ParallelSchedPass {
     tf::Executor executor_;
 
     // 为一次图实例执行构建并运行任务流，返回 exit 值
-    data_ptr_t evalGraphTF(GraphIR::Graph *graph, const Frame *&frame);
+    data_ptr_t evalGraphTF(GraphIR::Graph *graph, Frame *frame);
 
     // 递归构建所有图的元信息
     void buildGraphsInfo(GraphIR::Graph *rootGraph);
 
     // 通用：在任意 flowLike(可为 Taskflow/Subflow) 中展开一次图实例
     template <typename FlowT>
-    void
-    instantiate_graph_instance_generic(FlowT &flowLike, GraphIR::Graph *graph, const Frame *&frame);
+    void instantiate_graph_instance_generic(FlowT &flowLike, GraphIR::Graph *graph, Frame *frame);
 
     // 分离的节点任务构建（每种类型一个函数）
     template <typename FlowT>
-    tf::Task buildExitTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildExitTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildDataTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildDataTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildPortTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildPortTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildCopyTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildCopyTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildFillTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildFillTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildAccsTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildAccsTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildFuncTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildFuncTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildCallTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildCallTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildOperTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, const Frame *&frame);
+    tf::Task buildOperTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     // BRCH-JOIN 区域处理（创建 selector/candidate/join 任务）
     template <typename FlowT>
     void buildBranchJoinRegion(
-        FlowT &flowLike, GraphIR::Graph *graph, const Frame *&frame,
+        FlowT &flowLike, GraphIR::Graph *graph, Frame *frame,
         std::unordered_map<GraphIR::Node *, tf::Task> &taskMap, const GraphIR::node_ptr_t &brch);
 
     // 构建非 BRCH-JOIN 的普通节点任务（含 ports）
     template <typename FlowT>
     void buildNormalNodeTasks(
-        FlowT &flowLike, GraphIR::Graph *graph, const Frame *&frame,
+        FlowT &flowLike, GraphIR::Graph *graph, Frame *frame,
         std::unordered_map<GraphIR::Node *, tf::Task> &taskMap);
 
     // 连接依赖边

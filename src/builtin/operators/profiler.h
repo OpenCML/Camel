@@ -13,20 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
 #include "core/operator.h"
 
-void __profiler_begin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __profiler_end__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __profiler_instant__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __profiler_enable__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __profiler_begin__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __profiler_end__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __profiler_instant__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __profiler_enable__(ArgsView &with, ArgsView &norm, Context &ctx);

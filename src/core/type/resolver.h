@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,14 +25,14 @@
 #include <functional>
 #include <optional>
 
-using ResolverFunc = std::function<std::optional<type_ptr_t>(
+using ResolverFunc = std::function<std::optional<Type *>(
     const type_vec_t &, const type_vec_t &, const ModifierSet &)>;
 
 class FuncTypeResolver {
   public:
     virtual ~FuncTypeResolver() = default;
 
-    virtual std::optional<func_type_ptr_t>
+    virtual std::optional<FunctionType *>
     resolve(const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const = 0;
 
     virtual std::string signature() const = 0;
@@ -42,30 +42,26 @@ using resolver_ptr_t = std::shared_ptr<FuncTypeResolver>;
 
 class StaticFuncTypeResolver : public FuncTypeResolver {
   public:
-    StaticFuncTypeResolver(const func_type_ptr_t &funcType) : funcType_(funcType) {}
-    StaticFuncTypeResolver(const func_type_ptr_t &&funcType) : funcType_(std::move(funcType)) {}
+    StaticFuncTypeResolver(FunctionType *funcType) : funcType_(funcType) {}
 
-    static resolver_ptr_t create(const func_type_ptr_t &funcType) {
+    static resolver_ptr_t create(FunctionType *funcType) {
         return std::make_unique<StaticFuncTypeResolver>(funcType);
     }
-    static resolver_ptr_t create(const func_type_ptr_t &&funcType) {
-        return std::make_unique<StaticFuncTypeResolver>(std::move(funcType));
-    }
     static resolver_ptr_t create(
-        const param_init_list_t &withTypes, const param_init_list_t &normTypes,
-        const type_ptr_t &returnType, const ModifierSet &modifiers = Modifier::None) {
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
+        const ModifierSet &modifiers = Modifier::None) {
         return std::make_unique<StaticFuncTypeResolver>(
             FunctionType::create(withTypes, normTypes, returnType, modifiers));
     }
 
-    std::optional<func_type_ptr_t> resolve(
+    std::optional<FunctionType *> resolve(
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 
     std::string signature() const override { return funcType_->toString(); }
 
   private:
-    func_type_ptr_t funcType_;
+    FunctionType *funcType_;
 };
 
 class DynamicFuncTypeResolver : public FuncTypeResolver {
@@ -96,7 +92,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
             std::move(resolver));
     }
 
-    std::optional<func_type_ptr_t> resolve(
+    std::optional<FunctionType *> resolve(
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 

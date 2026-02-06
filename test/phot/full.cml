@@ -10,10 +10,10 @@ func main(): int sync {
     // Parameters
     let num_symbols = 2^16
     let bits_per_symbol = 3
-    let roll_off: double = 0.01
-    let total_baud: double = 40.0e9
+    let roll_off = 0.01
+    let total_baud = 40.0e9
     let up_sampling_factor = 4
-    let sampling_rate = double(up_sampling_factor) * total_baud
+    let sampling_rate = float(up_sampling_factor) * total_baud
     let reference_frequency = 193.1e12
 
     // Step 1: Bit generation

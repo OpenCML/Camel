@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -528,7 +528,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &
     // auto funcData = currFrame.get(node->withInputs().front()->index());
 
     // auto func = funcData->as<FunctionData>(Type::Func());
-    // type_ptr_t funcRetType = func->funcType()->exitType();
+    // Type * funcRetType = func->funcType()->exitType();
 
     // auto applyMap = [&](const data_vec_t &inputVec) -> data_vec_t {
     //     data_vec_t res;

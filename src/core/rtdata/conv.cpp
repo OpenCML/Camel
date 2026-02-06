@@ -13,13 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "conv.h"
 #include "./data.h"
 #include "core/data/data.h"
+#include "core/type/composite/array.h"
+#include "core/type/composite/struct.h"
+#include "core/type/composite/tuple.h"
 
 slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     ASSERT(data != nullptr, "Data is null.");
@@ -28,17 +31,17 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     ASSERT(isPrimitive(typeCode), "Type is not primitive.");
 
     switch (typeCode) {
-    case TypeCode::Int: {
+    case TypeCode::Int32: {
         auto intData = tt::as_shared<IntData>(data);
         return static_cast<slot_t>(intData->data());
     }
 
-    case TypeCode::Long: {
+    case TypeCode::Int64: {
         auto longData = tt::as_shared<LongData>(data);
         return static_cast<slot_t>(longData->data());
     }
 
-    case TypeCode::Float: {
+    case TypeCode::Float32: {
         auto floatData = tt::as_shared<FloatData>(data);
         float f        = floatData->data();
         slot_t result;
@@ -46,7 +49,7 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
         return result;
     }
 
-    case TypeCode::Double: {
+    case TypeCode::Float64: {
         auto doubleData = tt::as_shared<DoubleData>(data);
         double d        = doubleData->data();
         slot_t result;
@@ -88,17 +91,17 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
 
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<ArrayData>(data);
-        const auto &arrayType = tt::as_shared<ArrayType>(arrayData->type());
-        Array *gcArray        = Array::create(arrayType->layout(), allocator);
+        const auto &arrayType = tt::as_ptr<ArrayType>(arrayData->type());
+        Array *gcArray        = Array::create(allocator, 0);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                gcArray->append<Object *>(elemRef);
+                gcArray->append<Object *>(elemRef, arrayType);
             } else if (elem->type()->isPrimitive()) {
                 slot_t slot = makeSlotFromPrimitiveData(elem);
-                gcArray->append<slot_t>(slot);
+                gcArray->append<slot_t>(slot, arrayType);
             } else {
-                gcArray->append<slot_t>(NullSlot);
+                gcArray->append<slot_t>(NullSlot, arrayType);
             }
         }
         return gcArray;
@@ -106,8 +109,8 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
 
     case TypeCode::Tuple: {
         auto tupleData        = tt::as_shared<TupleData>(data);
-        const auto &tupleType = tt::as_shared<TupleType>(tupleData->type());
-        Tuple *gcTuple        = Tuple::create(tupleType->layout(), allocator);
+        const auto &tupleType = tt::as_ptr<TupleType>(tupleData->type());
+        Tuple *gcTuple        = Tuple::create(tupleType->size(), allocator);
         const auto &elems     = tupleData->raw();
         for (size_t i = 0; i < tupleData->size(); ++i) {
             const auto &elem = elems[i];
@@ -126,17 +129,17 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
 
     case TypeCode::Struct: {
         auto structData        = tt::as_shared<StructData>(data);
-        const auto &structType = tt::as_shared<StructType>(structData->type());
-        Struct *gcStruct       = Struct::create(structType->layout(), allocator);
+        const auto &structType = tt::as_ptr<StructType>(structData->type());
+        Struct *gcStruct       = Struct::create(structType->size(), allocator);
         for (const auto &[name, data] : structData->raw()) {
             if (data->type()->isGCTraced()) {
                 Object *fieldRef = makeGCRefFromGCTracedData(data, allocator);
-                gcStruct->set<Object *>(name, fieldRef);
+                gcStruct->set<Object *>(name, fieldRef, structType);
             } else if (data->type()->isPrimitive()) {
                 slot_t slot = makeSlotFromPrimitiveData(data);
-                gcStruct->set<slot_t>(name, slot);
+                gcStruct->set<slot_t>(name, slot, structType);
             } else {
-                gcStruct->set<slot_t>(name, NullSlot);
+                gcStruct->set<slot_t>(name, NullSlot, structType);
             }
         }
         return gcStruct;
@@ -145,7 +148,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     case TypeCode::Function: {
         auto funcData    = tt::as_shared<FunctionData>(data);
         auto &graph      = funcData->graph();
-        Function *gcFunc = Function::create(&graph, graph.closureType()->layout(), allocator);
+        Function *gcFunc = Function::create(&graph, graph.closureType(), allocator);
         Tuple *gcTuple   = gcFunc->tuple();
 
         if (gcTuple->size() == 0) {

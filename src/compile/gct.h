@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,7 +70,7 @@ class Load {
 
     void setToken(size_t start, size_t end) {
         tokenStart_ = start;
-        tokenEnd_ = end;
+        tokenEnd_   = end;
     }
 
     LoadType type() const { return type_; }
@@ -130,12 +130,12 @@ class VariLoad : public Load {
 };
 
 class TypeLoad : public Load {
-    type_ptr_t dataType_;
+    Type *dataType_;
 
   public:
-    TypeLoad(type_ptr_t type, ImplMark impl, const std::string &uri = "")
+    TypeLoad(Type *type, ImplMark impl, const std::string &uri = "")
         : Load(LoadType::TYPE), dataType_(type), implMark_(impl), uri_(uri) {}
-    type_ptr_t dataType() const { return dataType_; }
+    Type *dataType() const { return dataType_; }
 
     ImplMark implMark() const { return implMark_; }
     const std::string &uri() const { return uri_; }
@@ -375,14 +375,14 @@ class CaseLoad : public Load {
 
 class CastLoad : public Load {
   public:
-    CastLoad(const type_ptr_t &targetType) : Load(LoadType::CAST), targetType_(targetType) {}
+    CastLoad(Type *targetType) : Load(LoadType::CAST), targetType_(targetType) {}
 
-    const type_ptr_t &targetType() const { return targetType_; }
+    Type *targetType() const { return targetType_; }
 
     const std::string toString() const override { return "CAST: " + targetType_->toString(); }
 
   private:
-    type_ptr_t targetType_;
+    Type *targetType_;
 };
 
 } // namespace GraphConstructTree

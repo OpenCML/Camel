@@ -13,22 +13,20 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Dec. 22, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
 #include "core/operator.h"
 
 // Phot configuration
-void __phot_config__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
+slot_t __phot_config__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Phot signal generation and processing
-void __phot_gen_bits__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
-void __phot_modulation__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
-void __phot_up_sample__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
-void __phot_pulse_shaper__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
-void __phot_constellation_diagram__(GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t, Frame &frame, Context &ctx);
-
+slot_t __phot_gen_bits__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __phot_modulation__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __phot_up_sample__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __phot_pulse_shaper__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __phot_constellation_diagram__(ArgsView &with, ArgsView &norm, Context &ctx);

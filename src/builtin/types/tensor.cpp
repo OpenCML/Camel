@@ -13,24 +13,26 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tensor.h"
+#include "core/mm/mm.h"
+#include "utils/assert.h"
 
 using namespace std;
 
 unordered_map<string, string> TensorType::staticMethods_;
 
 TensorType::TensorType(const vector<size_t> &shape)
-    : OtherType(typeCode()), shape_(shape), element_type_(Type::Float()) {
+    : OtherType(typeCode()), shape_(shape), element_type_(Type::Float32()) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
     }
 }
 
-TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shape)
+TensorType::TensorType(Type *elementType, const vector<size_t> &shape)
     : OtherType(typeCode()), shape_(shape), element_type_(elementType) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
@@ -39,7 +41,7 @@ TensorType::TensorType(const type_ptr_t &elementType, const vector<size_t> &shap
 
 vector<size_t> TensorType::shape() const { return shape_; }
 
-type_ptr_t TensorType::dType() const { return element_type_; }
+Type *TensorType::dType() const { return element_type_; }
 
 void TensorType::registerStaticMethod(
     const std::string &methodName, const std::string &operatorUri) {
@@ -58,13 +60,19 @@ bool TensorType::hasStaticMethod(const std::string &methodName) {
     return staticMethods_.find(methodName) != staticMethods_.end();
 }
 
-type_ptr_t TensorType::Tensor(const std::vector<size_t> &shape) {
-    return std::make_shared<TensorType>(shape);
+TensorType *TensorType::create(Type *elementType, const std::vector<size_t> &shape) {
+    void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
+    ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
+    return new (mem) TensorType(elementType, shape);
 }
 
-type_ptr_t TensorType::Default() {
-    return std::make_shared<TensorType>(Type::Float(), std::vector<size_t>{0});
+TensorType *TensorType::create(const std::vector<size_t> &shape) {
+    return TensorType::create(Type::Float32(), shape);
 }
+
+Type *TensorType::Tensor(const std::vector<size_t> &shape) { return TensorType::create(shape); }
+
+Type *TensorType::Default() { return TensorType::create(Type::Float32(), std::vector<size_t>{0}); }
 
 string TensorType::toString() const {
     string result = "Tensor<[";
@@ -77,7 +85,7 @@ string TensorType::toString() const {
     }
     result += "]";
 
-    if (element_type_ && !element_type_->equals(Type::Double())) {
+    if (element_type_ && !element_type_->equals(Type::Float64())) {
         result += ", " + element_type_->toString();
     }
 
@@ -104,16 +112,16 @@ std::string TensorType::mangle() const {
     return result;
 }
 
-type_ptr_t TensorType::clone(bool deep) const {
+Type *TensorType::clone(bool deep) const {
     ASSERT(false, "clone() not implemented");
     return nullptr;
 }
 
-bool TensorType::equals(const type_ptr_t &other) const {
-    if (this == other.get()) {
+bool TensorType::equals(Type *other) const {
+    if (this == other) {
         return true;
     }
-    if (other->code() != typeCode()) {
+    if (!other || other->code() != typeCode()) {
         return false;
     }
     const TensorType &otherMatrix = dynamic_cast<const TensorType &>(*other);
@@ -129,9 +137,9 @@ CastSafety TensorType::castSafetyTo(const Type &other) const {
     return CastSafety::Forbidden;
 }
 
-bool TensorType::assignable(const type_ptr_t &type) const {
+bool TensorType::assignable(Type *type) const {
     // 目标必须是 Tensor 类型
-    if (type->code() != typeCode()) {
+    if (!type || type->code() != typeCode()) {
         return false;
     }
     // 暂时先不考虑元素类型和形状的兼容性问题

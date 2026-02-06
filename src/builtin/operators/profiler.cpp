@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "profiler.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
 #include "core/data/data.h"
 #include "core/data/primary.h"
 #include "core/module/builtin.h"
+#include "core/operator.h"
 #include "service/profiler/core/trace.h"
 #include "utils/assert.h"
 #include "utils/log.h"
@@ -36,8 +36,7 @@
 #include <iostream>
 #include <string>
 
-void __profiler_begin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __profiler_begin__(ArgsView &with, ArgsView &norm, Context &ctx) {
 #ifndef NDEBUG
     const std::string name = "profiler_scope";
     bool is_tracing        = profiler::AdvancedTracer::getInstance().isTracing();
@@ -47,10 +46,10 @@ void __profiler_begin__(
     }
     std::cout << "[PROFILER] Begin: " << name << std::endl;
 #endif
+    return NullSlot;
 }
 
-void __profiler_end__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __profiler_end__(ArgsView &with, ArgsView &norm, Context &ctx) {
 #ifndef NDEBUG
     const std::string name = "profiler_scope";
     if (profiler::AdvancedTracer::getInstance().isTracing()) {
@@ -58,10 +57,10 @@ void __profiler_end__(
     }
     std::cout << "[PROFILER] End: " << name << std::endl;
 #endif
+    return NullSlot;
 }
 
-void __profiler_instant__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __profiler_instant__(ArgsView &with, ArgsView &norm, Context &ctx) {
 #ifndef NDEBUG
     const std::string name = "instant_event";
     if (profiler::AdvancedTracer::getInstance().isTracing()) {
@@ -69,10 +68,10 @@ void __profiler_instant__(
     }
     std::cout << "[PROFILER] Instant: " << name << std::endl;
 #endif
+    return NullSlot;
 }
 
-void __profiler_enable__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __profiler_enable__(ArgsView &with, ArgsView &norm, Context &ctx) {
 #ifndef NDEBUG
     profiler::AdvancedTracer::Config config;
     config.enablePerfettoIntegration = true;
@@ -82,4 +81,5 @@ void __profiler_enable__(
     profiler::AdvancedTracer::getInstance().startTracing();
     std::cout << "[PROFILER] Profiling enabled" << std::endl;
 #endif
+    return NullSlot;
 }

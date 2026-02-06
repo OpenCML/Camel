@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 20, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ data_ptr_t StringData::clone(bool deep) const { return std::make_shared<StringDa
 
 const std::string StringData::toString() const { return "\"" + encodeEscapes(data_) + "\""; }
 
-data_ptr_t StringData::convertTo(const type_ptr_t &type) {
+data_ptr_t StringData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return shared_from_this();
     }

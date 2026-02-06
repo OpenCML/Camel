@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,26 +22,15 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-void __len_str__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __len_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __len_str__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-void __zip__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __head_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tail_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __range__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __slice_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __concat_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __append_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __extend_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __contains_arr__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __head_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
