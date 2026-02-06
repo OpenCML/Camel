@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,19 +58,45 @@ void collectDefUse(
     };
 
     switch (bc.opcode) {
-    case OpCode::LADD:
-    case OpCode::LSUB:
+    // 定长：RETN, CAST, COPY, ACCS, JUMP
+    case OpCode::RETN:
+        useSlot(bc.fastop[0]);
+        break;
+    case OpCode::CAST:
+        useSlot(bc.fastop[0]);
+        defSlot(bc.result);
+        break;
+    case OpCode::COPY:
+        useSlot(bc.fastop[0]);
+        defSlot(bc.result);
+        break;
+    case OpCode::ACCS:
         useSlot(bc.fastop[0]);
         useSlot(bc.fastop[1]);
         defSlot(bc.result);
         break;
-    case OpCode::LLE:
-        useSlot(bc.fastop[0]);
+    case OpCode::JUMP:
+        break;
+
+    // 变长：BRCH, JOIN, FILL, CALL, FUNC, TAIL, OPER, SCHD
+    case OpCode::BRCH:
+        for (size_t i = 0; i < bc.normCnt(); ++i)
+            useSlot(bc.nargs()[i]);
+        break;
+    case OpCode::JOIN:
+        for (size_t i = 0; i < bc.argsCnt(); ++i)
+            useSlot(bc.operands()[i]);
         defSlot(bc.result);
         break;
-    case OpCode::BRCH:
-        if (bc.normCnt() > 0)
-            useSlot(bc.nargs()[0]);
+    case OpCode::FILL:
+        for (size_t i = 0; i < bc.argsCnt(); ++i)
+            useSlot(bc.operands()[i]);
+        defSlot(bc.result);
+        break;
+    case OpCode::CALL:
+        for (size_t i = 0; i < bc.argsCnt(); ++i)
+            useSlot(bc.operands()[i]);
+        defSlot(bc.result);
         break;
     case OpCode::FUNC:
     case OpCode::TAIL:
@@ -78,11 +104,69 @@ void collectDefUse(
             useSlot(bc.operands()[i]);
         defSlot(bc.result);
         break;
-    case OpCode::RETN:
+    case OpCode::OPER:
+        for (size_t i = 0; i < bc.argsCnt(); ++i)
+            useSlot(bc.operands()[i]);
+        defSlot(bc.result);
+        break;
+    case OpCode::SCHD:
+        for (size_t i = 0; i < bc.argsCnt(); ++i)
+            useSlot(bc.operands()[i]);
+        defSlot(bc.result);
+        break;
+
+    // 二元算术：use fastop[0], fastop[1]; def result
+    case OpCode::IADD:
+    case OpCode::LADD:
+    case OpCode::FADD:
+    case OpCode::DADD:
+    case OpCode::ISUB:
+    case OpCode::LSUB:
+    case OpCode::FSUB:
+    case OpCode::DSUB:
+    case OpCode::IMUL:
+    case OpCode::LMUL:
+    case OpCode::FMUL:
+    case OpCode::DMUL:
+    case OpCode::IDIV:
+    case OpCode::LDIV:
+    case OpCode::FDIV:
+    case OpCode::DDIV:
         useSlot(bc.fastop[0]);
+        useSlot(bc.fastop[1]);
+        defSlot(bc.result);
         break;
-    case OpCode::JUMP:
+
+    // 二元比较：use fastop[0], fastop[1]; def result
+    case OpCode::ILT:
+    case OpCode::LLT:
+    case OpCode::FLT:
+    case OpCode::DLT:
+    case OpCode::IGT:
+    case OpCode::LGT:
+    case OpCode::FGT:
+    case OpCode::DGT:
+    case OpCode::IEQ:
+    case OpCode::LEQ:
+    case OpCode::FEQ:
+    case OpCode::DEQ:
+    case OpCode::INE:
+    case OpCode::LNE:
+    case OpCode::FNE:
+    case OpCode::DNE:
+    case OpCode::ILE:
+    case OpCode::LLE:
+    case OpCode::FLE:
+    case OpCode::DLE:
+    case OpCode::IGE:
+    case OpCode::LGE:
+    case OpCode::FGE:
+    case OpCode::DGE:
+        useSlot(bc.fastop[0]);
+        useSlot(bc.fastop[1]);
+        defSlot(bc.result);
         break;
+
     default:
         break;
     }

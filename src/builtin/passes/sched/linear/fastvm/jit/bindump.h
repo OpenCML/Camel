@@ -22,13 +22,13 @@
 #include "execute/trans.h"
 
 /**
- * JitBytecodeDumpPass: 对所有图尝试 JIT 编译，并将生成的机器码可视化打印。
+ * JitBinaryDumpPass: 对所有图尝试 JIT 编译，并将生成的机器码可视化打印。
  * 参照 LinkedBytecodeDumpPass 的格式，输出每个图的机器码（十六进制）。
  */
-class JitBytecodeDumpPass : public GraphTranslatePass {
+class JitBinaryDumpPass : public GraphTranslatePass {
   public:
-    JitBytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
-    virtual ~JitBytecodeDumpPass() = default;
+    JitBinaryDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    virtual ~JitBinaryDumpPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };

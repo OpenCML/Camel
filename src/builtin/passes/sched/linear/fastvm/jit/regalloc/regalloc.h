@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,12 +28,12 @@
 
 namespace camel::jit {
 
-// 可分配的物理寄存器编号 (x64: rax=0, rcx=1, rdx=2, rbx=3)
-inline constexpr int kNumAllocatableRegs = 4;
+// 可分配的物理寄存器编号 (x64: rax=0, rcx=1, rdx=2, rbx=3, r8=4, r9=5, r10=6, r11=7)
+inline constexpr int kNumAllocatableRegs = 8;
 inline constexpr int kSpilled            = -1;
 
 /**
- * 分配结果：slot 索引 -> 物理寄存器 (0..4) 或 kSpilled
+ * 分配结果：slot 索引 -> 物理寄存器 (0..7) 或 kSpilled
  * slotRegs_[i] 表示 slot i 在存活区间内分配的寄存器
  */
 struct AllocationResult {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -96,7 +96,7 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
         }
         l.in("JIT.Backend")
             .debug(
-                "RegAlloc for graph '{}': {} slots in reg, {} spilled (rax/rcx/rdx/rbx)",
+                "RegAlloc for graph '{}': {} slots in reg, {} spilled (rax/rcx/rdx/rbx/r8-r11)",
                 unit.graph->name(),
                 inReg,
                 spilled);
@@ -158,8 +158,8 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
         pc += bc.opsize;
     }
 
-    // 第二遍：发射机器码
-    Encoder enc(code);
+    // 第二遍：发射机器码（可选同时输出汇编）
+    Encoder enc(code, unit.asmOut, 0);
 #if defined(_WIN32) || defined(_WIN64)
     enc.prologueWin64();
 #endif

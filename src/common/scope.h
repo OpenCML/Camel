@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,6 +94,12 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
             scopes.push_back(pair.second);
         }
         return scopes;
+    }
+
+    template <typename F> void forEachNamedInner(F &&f) const {
+        for (const auto &[name, scope] : innerScopeMap_) {
+            std::invoke(std::forward<F>(f), name, scope);
+        }
     }
     std::unordered_map<Key, Val> &map() { return map_; }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,8 @@
 #include "core/context/frame.h"
 #include "core/rtdata/data.h"
 
+#include <ostream>
+
 namespace camel::jit {
 
 struct CompilationUnit {
@@ -38,6 +40,7 @@ struct CompilationUnit {
     size_t entryPc;
     void *trampolineFunc = nullptr; // FUNC trampoline
     void *trampolineTail = nullptr; // TAIL trampoline
+    std::ostream *asmOut = nullptr; // 若设置，编译时输出汇编指令
 };
 
 struct RelocInfo {

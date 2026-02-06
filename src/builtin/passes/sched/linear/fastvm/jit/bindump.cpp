@@ -17,14 +17,14 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "jitbump.h"
-#include "compile.h"
-#include "jit/jit_config.h"
+#include "bindump.h"
+#include "../compile.h"
+#include "jit_config.h"
 
 #if ENABLE_FASTVM_JIT
-#include "bytecode.h"
-#include "jit/backend/backend.h"
-#include "jit/runtime/trampoline.h"
+#include "../bytecode.h"
+#include "backend/backend.h"
+#include "runtime/trampoline.h"
 #endif
 
 #include <iomanip>
@@ -54,7 +54,7 @@ static void dumpMachineCode(
 }
 #endif
 
-graph_ptr_t JitBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     const auto &[bytecodes, _, offsetMap] = compileAndLink(
         context_,

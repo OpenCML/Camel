@@ -32,6 +32,9 @@ macro(add_platform_option name description default platform_regex extra_on extra
 endmacro()
 
 # ========== FastVM 选项 ==========
+
+message(STATUS "============ Build options: ============")
+
 add_platform_option(
     ENABLE_FASTVM_JIT
     "Enable JIT compilation (x64 only)"
@@ -42,3 +45,5 @@ add_platform_option(
 )
 
 add_bool_option(ENABLE_FASTVM_COMPUTED_GOTO "Use computed goto in interpreter" ON)
+
+message(STATUS "========================================")
