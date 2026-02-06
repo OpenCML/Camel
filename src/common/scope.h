@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -198,13 +199,24 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
     {
         std::string indent(indentLevel * 2, ' ');
 
-        os << indent << "Scope ";
-        os << (isRoot() ? "[Root]" : "") << " {\n";
+        bool hasContent = !map_.empty();
+        for (const auto &child : innerScopes_) {
+            if (child && !child->empty()) {
+                hasContent = true;
+                break;
+            }
+        }
+        if (!hasContent) {
+            os << indent << "{}\n";
+            return;
+        }
+
+        os << indent << "{\n";
 
         if constexpr (HasEmpty<Name>) {
             for (const auto &[name, scope] : innerScopeMap_) {
                 if (scope.get() == this) {
-                    os << "(named: " << name << ") ";
+                    os << indent << "  (named: " << name << ")\n";
                     break;
                 }
             }
@@ -217,6 +229,48 @@ class Scope : public std::enable_shared_from_this<Scope<Key, Val, Name>> {
         for (const auto &child : innerScopes_) {
             if (child && !child->empty()) {
                 child->dump(os, indentLevel + 1);
+            }
+        }
+
+        os << indent << "}\n";
+    }
+
+    template <typename ValDumper>
+    void dump(std::ostream &os, ValDumper &&valDumper, int indentLevel = 0) const {
+        std::string indent(indentLevel * 2, ' ');
+
+        bool hasContent = !map_.empty();
+        for (const auto &child : innerScopes_) {
+            if (child && !child->empty()) {
+                hasContent = true;
+                break;
+            }
+        }
+        if (!hasContent) {
+            os << indent << "{}\n";
+            return;
+        }
+
+        os << indent << "{\n";
+
+        if constexpr (HasEmpty<Name>) {
+            for (const auto &[name, scope] : innerScopeMap_) {
+                if (scope.get() == this) {
+                    os << indent << "  (named: " << name << ")\n";
+                    break;
+                }
+            }
+        }
+
+        for (const auto &[key, value] : map_) {
+            os << indent << "  " << key << " : ";
+            std::invoke(std::forward<ValDumper>(valDumper), os, key, value);
+            os << "\n";
+        }
+
+        for (const auto &child : innerScopes_) {
+            if (child && !child->empty()) {
+                child->dump(os, std::forward<ValDumper>(valDumper), indentLevel + 1);
             }
         }
 

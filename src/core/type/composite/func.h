@@ -45,12 +45,11 @@ class FunctionMetaInfo {
 
     size_t argNamesCount() const { return argNames_.size(); }
     std::string_view argNameAt(size_t idx) const;
-    std::span<const std::string_view> argNamesSpan() const { return argNameViews_; }
+    std::vector<std::string_view> argNamesSpan() const;
     size_t closureRefsCount() const { return closureRefs_.size(); }
     std::string_view closureRefAt(size_t idx) const;
-    std::span<const std::string_view> closureRefsSpan() const { return closureRefViews_; }
+    std::vector<std::string_view> closureRefsSpan() const;
 
-    /** 编译期就地追加闭包引用名 */
     void addClosureRef(const std::string &ref);
 
   private:
@@ -58,8 +57,6 @@ class FunctionMetaInfo {
 
     std::vector<std::string> argNames_;
     std::vector<std::string> closureRefs_;
-    std::vector<std::string_view> argNameViews_;
-    std::vector<std::string_view> closureRefViews_;
 };
 
 // 工厂类：用于构造 FunctionType（可以使用 STL）
@@ -226,9 +223,9 @@ class FunctionType : public CompositeType {
     size_t closureRefsCount() const { return metaInfo_ ? metaInfo_->closureRefsCount() : 0; }
     std::string_view closureRefAt(size_t idx) const;
 
-    // 兼容性方法：返回编译期信息（如果需要 vector 形式）
-    std::span<const std::string_view> argNames() const;
-    std::span<const std::string_view> closureRefs() const;
+    // 兼容性方法：返回编译期信息（按需构造 views，无缓存）
+    std::vector<std::string_view> argNames() const;
+    std::vector<std::string_view> closureRefs() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;

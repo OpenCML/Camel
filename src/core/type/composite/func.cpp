@@ -84,14 +84,7 @@ FunctionMetaInfo *FunctionMetaInfo::create(
 
 FunctionMetaInfo::FunctionMetaInfo(
     std::vector<std::string> argNames, std::vector<std::string> closureRefs)
-    : argNames_(std::move(argNames)), closureRefs_(std::move(closureRefs)) {
-    argNameViews_.reserve(argNames_.size());
-    for (const auto &s : argNames_)
-        argNameViews_.push_back(s);
-    closureRefViews_.reserve(closureRefs_.size());
-    for (const auto &s : closureRefs_)
-        closureRefViews_.push_back(s);
-}
+    : argNames_(std::move(argNames)), closureRefs_(std::move(closureRefs)) {}
 
 std::string_view FunctionMetaInfo::argNameAt(size_t idx) const {
     ASSERT(idx < argNames_.size(), "Index out of range");
@@ -101,6 +94,14 @@ std::string_view FunctionMetaInfo::argNameAt(size_t idx) const {
 std::string_view FunctionMetaInfo::closureRefAt(size_t idx) const {
     ASSERT(idx < closureRefs_.size(), "Index out of range");
     return closureRefs_[idx];
+}
+
+std::vector<std::string_view> FunctionMetaInfo::argNamesSpan() const {
+    return std::vector<std::string_view>(argNames_.begin(), argNames_.end());
+}
+
+std::vector<std::string_view> FunctionMetaInfo::closureRefsSpan() const {
+    return std::vector<std::string_view>(closureRefs_.begin(), closureRefs_.end());
 }
 
 // --- FunctionTypeFactory ---
@@ -217,12 +218,12 @@ std::string_view FunctionType::closureRefAt(size_t index) const {
     return metaInfo_->closureRefAt(index);
 }
 
-std::span<const std::string_view> FunctionType::argNames() const {
-    return metaInfo_ ? metaInfo_->argNamesSpan() : std::span<const std::string_view>();
+std::vector<std::string_view> FunctionType::argNames() const {
+    return metaInfo_ ? metaInfo_->argNamesSpan() : std::vector<std::string_view>();
 }
 
-std::span<const std::string_view> FunctionType::closureRefs() const {
-    return metaInfo_ ? metaInfo_->closureRefsSpan() : std::span<const std::string_view>();
+std::vector<std::string_view> FunctionType::closureRefs() const {
+    return metaInfo_ ? metaInfo_->closureRefsSpan() : std::vector<std::string_view>();
 }
 
 Type *FunctionType::resolve(const type_vec_t &typeList) const {
@@ -391,10 +392,7 @@ FunctionType *FunctionType::fromData(
         metaInfo);
 }
 
-void FunctionMetaInfo::addClosureRef(const std::string &ref) {
-    closureRefs_.push_back(ref);
-    closureRefViews_.push_back(closureRefs_.back());
-}
+void FunctionMetaInfo::addClosureRef(const std::string &ref) { closureRefs_.push_back(ref); }
 
 void FunctionType::addClosureRef(const std::string &ref) {
     if (metaInfo_)
@@ -432,7 +430,10 @@ Type *FunctionType::clone(bool deep /* = false */) const {
 
     const FunctionMetaInfo *newMetaInfo = nullptr;
     if (metaInfo_) {
-        newMetaInfo = FunctionMetaInfo::create(argNames(), closureRefs());
+        auto an = argNames(), cr = closureRefs();
+        newMetaInfo = FunctionMetaInfo::create(
+            std::span<const std::string_view>(an),
+            std::span<const std::string_view>(cr));
     }
 
     return fromData(

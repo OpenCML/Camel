@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Jan. 27, 2026
+ * Updated: Feb. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,8 +67,28 @@ class Builder {
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastSyncedNode_;
 
-    std::optional<node_ptr_t> nodeAt(const std::string &name) { return nodeScope_->get(name); }
+    std::optional<node_ptr_t> nodeAt(const std::string &name) {
+        EXEC_WHEN_DEBUG([&] {
+            l.in("GIR Builder").debug("Accessing node '{}' from scope ", name);
+            nodeScope_->dump(std::cout, 0);
+        }());
+        return nodeScope_->get(name);
+    }
     std::optional<std::shared_ptr<graph_vec_t>> graphsAt(const std::string &name) {
+        EXEC_WHEN_DEBUG([&] {
+            l.in("GIR Builder").debug("Accessing graph '{}' from scope ", name);
+            graphScope_->dump(
+                std::cout,
+                [&](std::ostream &os,
+                    const std::string &key,
+                    const std::shared_ptr<graph_vec_t> &value) {
+                    os << "[" << key << "]";
+                    for (const auto &graph : *value) {
+                        os << graph->toString() << " ";
+                    }
+                },
+                0);
+        }());
         return graphScope_->get(name);
     }
 
