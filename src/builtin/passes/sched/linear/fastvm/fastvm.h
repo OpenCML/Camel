@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,12 +25,11 @@
 
 #include "jit/jit_config.h"
 
-#if ENABLE_JIT
+#if ENABLE_FASTVM_JIT
 #include "jit/jit.h"
+#include "jit/tier/tier_policy.h"
 #include <mutex>
 #endif
-
-#define ENABLE_COMPUTED_GOTO
 
 struct FastVMConfig {
     bool enableJit = false;
@@ -45,11 +44,14 @@ class FastVMSchedPass : public LinearSchedPass {
     bytecode_vec_t bytecodes_;
     std::unordered_map<GraphIR::Graph *, size_t> offsetMap_;
 
-#if ENABLE_JIT
+#if ENABLE_FASTVM_JIT
     std::unique_ptr<camel::jit::IJitBackend> jitBackend_;
     std::unordered_map<GraphIR::Graph *, camel::jit::JitEntryFn> jitCache_;
     std::mutex jitCacheMutex_; // protects jitCache_ when using async compilation
     camel::jit::JitConfig jitConfig_{};
+    camel::jit::TierPolicy tierPolicy_{jitConfig_};
+    void *currentJitCtx_{}; // 供解释器 FUNC/TAIL 调用 invokeCallOrJit 时使用
+    void compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc);
 #endif
 
     // 程序计数器栈和栈帧栈
@@ -105,7 +107,7 @@ class FastVMSchedPass : public LinearSchedPass {
   public:
     FastVMSchedPass(const context_ptr_t &ctx, const FastVMConfig &config = {})
         : LinearSchedPass(ctx)
-#if ENABLE_JIT
+#if ENABLE_FASTVM_JIT
           ,
           jitConfig_([&config]() {
               camel::jit::JitConfig c{};
@@ -120,7 +122,7 @@ class FastVMSchedPass : public LinearSchedPass {
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 
-#if ENABLE_JIT
+#if ENABLE_FASTVM_JIT
     Frame *acquireFrameForCall(GraphIR::Graph *graph) { return framePool_.acquire(graph); }
     void releaseFrameForCall(Frame *frame) { framePool_.release(frame); }
     Frame *acquireFrameForTail(GraphIR::Graph *graph) {

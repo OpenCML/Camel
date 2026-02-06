@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "builtin/passes/rewrite/inline/inline.h"
 #include "builtin/passes/sched/linear/fastvm/bcdump.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
+#include "builtin/passes/sched/linear/fastvm/jitbump.h"
 #include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
 #include "builtin/passes/trans/dot/graphviz.h"
@@ -77,6 +78,10 @@ std::unordered_map<std::string, PassFactory> passRegistry = {
     {
         "std::taskflow",
         [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
+    },
+    {
+        "std::jitb",
+        [](const context_ptr_t &ctx) { return std::make_unique<JitBytecodeDumpPass>(ctx); },
     },
     {
         "std::bytecode",

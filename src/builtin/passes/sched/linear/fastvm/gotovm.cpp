@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 
-#ifdef ENABLE_COMPUTED_GOTO
+#if ENABLE_FASTVM_COMPUTED_GOTO
 
 /**
  * Computed Goto implementation of FastVM.
@@ -422,58 +422,63 @@ label_FUNC: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    // 保存当前程序计数器和栈帧
+#if ENABLE_FASTVM_JIT
+    Graph *targetGraph     = bc->extra()->graph;
+    size_t targetPc        = static_cast<size_t>(bc->fastop[1]);
+    Frame *funcFrame       = framePool_.acquire(targetGraph);
+    size_t argsCnt         = bc->normCnt();
+    const data_idx_t *args = bc->operands();
+    for (size_t i = 0; i < argsCnt; ++i) {
+        funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+    }
+    slot_t result = invokeCallOrJit(targetPc, targetGraph, funcFrame, currentJitCtx_);
+    framePool_.release(funcFrame);
+    currFrame->set(bc->result, result);
+    NEXT();
+#else
     push(pc, currFrame);
-
-    // 创建新的栈帧并设置参数
     Frame *funcFrame       = framePool_.acquire(bc->extra()->graph);
     size_t argsCnt         = bc->normCnt();
     const data_idx_t *args = bc->operands();
     for (size_t i = 0; i < argsCnt; ++i) {
         funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
     }
-
-    // 切换到目标图的字节码位置和栈帧
     pc        = bc->fastop[1];
     currFrame = funcFrame;
-
     JUMP();
+#endif
 }
 
 label_TAIL: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    // 尾调用不保存程序计数器和栈帧
-    // 直接释放当前栈帧
-    // 如果当前栈帧和目标栈帧属于同一个图
-    // 栈帧池会自动复用
-    // 这间接实现了尾调用优化
+#if ENABLE_FASTVM_JIT
     FrameView lastFrame(currFrame);
     framePool_.release(currFrame);
-
-    // 创建新的栈帧并设置参数
-    // 对于刚刚释放的栈帧，栈帧池会自动复用
-    // 所以这里 currFrame 就是目标栈帧
+    Graph *targetGraph     = bc->extra()->graph;
+    size_t targetPc        = static_cast<size_t>(bc->fastop[1]);
+    Frame *newFrame        = framePool_._acquire(targetGraph);
+    size_t argsCnt         = bc->normCnt();
+    const data_idx_t *args = bc->operands();
+    for (size_t i = 0; i < argsCnt; ++i) {
+        newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+    }
+    framePool_._resetTop();
+    return invokeCallOrJit(targetPc, targetGraph, newFrame, currentJitCtx_);
+#else
+    FrameView lastFrame(currFrame);
+    framePool_.release(currFrame);
     currFrame              = framePool_._acquire(bc->extra()->graph);
     size_t argsCnt         = bc->normCnt();
     const data_idx_t *args = bc->operands();
     for (size_t i = 0; i < argsCnt; ++i) {
-        // 注意，这里的 currFrame 已经被释放了
-        // 但由于栈帧池不会对已经释放的栈帧进行格式化
-        // 所以这里仍然可以安全地获取原栈帧的数据
-        // 当然，需要通过 lastFrame 来获取数据
-        // lastFrame 中保存了原栈帧的静态数据区指针
         currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
     }
-    // 这里需要手动 resetTop，因为 _acquire 不会 resetTop
-    // 之所以延迟 resetTop，是为了避免 resetTop 破坏刚刚释放的栈帧的数据
     framePool_._resetTop();
-
-    // 切换到目标图的字节码位置
     pc = bc->fastop[1];
-
     JUMP();
+#endif
 }
 
 label_OPER: {
@@ -559,4 +564,4 @@ label_SCHD: {
     DEF_BIN_OP_LABEL(DGE, Float64, >=);
 }
 
-#endif // ENABLE_COMPUTED_GOTO
+#endif // ENABLE_FASTVM_COMPUTED_GOTO

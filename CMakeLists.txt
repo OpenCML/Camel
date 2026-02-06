@@ -113,6 +113,8 @@ target_link_options(${PROJECT_NAME} PRIVATE
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ANTLR4CPP_STATIC)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Options.cmake)
+
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${PROJECT_SOURCE_DIR}/include
 )

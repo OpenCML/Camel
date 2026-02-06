@@ -1,413 +1,226 @@
-# FastVM JIT 模块架构设计
+# FastVM JIT 模块架构（当前实现）
 
-## 1. 概述
-
-本文档描述为 Camel 语言 FastVM 虚拟机添加 JIT（Just-In-Time）编译能力的代码模块架构设计。JIT 将字节码在运行时动态编译为 x86-64 机器码，以实现热点代码加速；同时预留跨平台架构，便于未来支持 AArch64 等平台。
+本文档描述 Camel FastVM 的 **JIT 模块当前实现**：将字节码在运行时编译为 x86-64 机器码，并与解释器、trampoline 协同工作。跨平台通过 `IJitBackend` 抽象，非 x64 使用 Fallback 后端（始终走解释器）。
 
 ---
 
-## 2. 现状分析
+## 1. 概述与字节码背景
 
-### 2.1 字节码特性
+- **目标**：对热点或全量图做 JIT 编译，减少解释分派与 slot 访问开销。
+- **字节码**：约 50 种 opcode，定长（RETN, JUMP, LADD 等）与变长（FUNC, OPER, BRCH 等）；`slot_t = uint64_t`，Frame 的 `dynamicArea_[]` 按 `data_idx_t` 索引（正=动态区，负=静态区）。
+- **当前实现**：无第三方 JIT 库，x64 使用**手写编码器**（`x64_encoder.h`）生成机器码；字节码→机器码的 lowering 与寄存器分配均在 **X64Backend** 与 **regalloc** 内完成。
 
-- **指令集**：约 50 种 opcode，分为定长（RETN, JUMP, LADD 等）和变长（FUNC, OPER, BRCH 等）
-- **布局**：BytecodeHeader 8B + operands[] + BytecodeExtra 8B，每指令总长 `opsize * 8` 字节
-- **数据模型**：`slot_t = uint64_t`，Frame 的 `dynamicArea_[]` 为 slot 数组，索引为 `data_idx_t`（正=动态区，负=静态区）
+---
 
-### 2.2 当前执行模型
+## 2. 当前支持的指令与限制
 
-- **分发方式**：Computed Goto（`gotovm.cpp`），通过 dispatch table 间接跳转
-- **调用约定**：栈式调用（pcStack_、frameStack_），支持尾调用（TAIL）
-- **不可内联指令**：OPER（调用 `operator_t` C++ 函数）、CALL、部分 FUNC/TAIL 需与运行时协作
+### 2.1 已实现 JIT 的 opcode
 
-### 2.3 适合 JIT 的指令
-
-| 类别 | 指令 | 说明 |
+| 指令 | 说明 | 约束 |
 |------|------|------|
-| 算术 | IADD/LADD, ISUB/LSUB, IMUL/LMUL, IDIV/LDIV 等 | 纯计算，易直接翻译 |
-| 比较 | LLE, LLT, LEQ, LNE 等 | 分支条件生成 |
-| 控制流 | JUMP, BRCH（简单 if-else） | 跳转与分支 |
-| 数据 | COPY, RETN（简单路径） | slot 拷贝与返回 |
+| **LADD** / **LSUB** | 64 位加减 | 操作数/结果可为 slot 或分配寄存器 |
+| **LLE** | 64 位 ≤ 比较，结果 0/1 | 仅支持右操作数为常量 1（`fastop[1] == -1` 表示立即数 1） |
+| **BRCH** | 条件分支 | 仅支持简单 if-else（`withCnt() == 0`） |
+| **FUNC** | 普通调用 | 需 trampolineFunc，结果写回 Frame |
+| **TAIL** | 尾调用 | 需 trampolineTail，不返回当前帧 |
+| **JUMP** | 相对跳转 | 目标 pc 由第一遍扫描得到 |
+| **RETN** | 返回 | 从 slot/寄存器取返回值到 rax 后 ret |
 
-### 2.4 需运行时支持的指令
+遇到上述以外的 opcode 或约束不满足时，`X64Backend::compileBytecode` 返回 `false`，该图不会进入 JIT 缓存，执行时走解释器。
 
-- **OPER**：必须 trampoline 到 C++ `operator_t`
-- **FUNC/TAIL**：涉及 Frame 切换、pc/frame 栈
-- **ACCS, FILL**：依赖 `TypeCode`、`Object*` 等运行时类型信息
-- **CALL**：闭包与动态分发
+### 2.2 未内联、需运行时支持的指令
+
+- **OPER**：未在 JIT 中实现，若图内包含 OPER 则整图无法 JIT（当前实现会编译失败并回退解释器）。
+- **ACCS / FILL / CALL**：同上，依赖运行时类型与闭包，当前未做 trampoline 内联。
 
 ---
 
-## 3. 模块架构设计
-
-### 3.1 顶层目录结构
+## 3. 模块与目录结构（当前）
 
 ```
 src/builtin/passes/sched/linear/fastvm/
-├── bytecode.h/cpp          # (已有) 字节码定义
-├── fastvm.h/cpp            # (已有) FastVM 主逻辑
-├── gotovm.cpp              # (已有) 解释执行
-├── compile.h/cpp            # (已有) 编译与链接
+├── bytecode.h/cpp
+├── fastvm.h/cpp
+├── gotovm.cpp
+├── compile.h/cpp
 │
-├── jit/                    # 新增 JIT 模块根目录
-│   ├── jit.h               # JIT 公共接口与类型
-│   ├── jit_config.h        # 编译期 JIT 开关与平台检测
+├── jit/
+│   ├── jit.h                    # 聚合 backend + jit_config
+│   ├── jit_config.h             # ENABLE_JIT、JitPolicy、JitConfig
 │   │
-│   ├── backend/            # 机器码生成后端（平台相关）
-│   │   ├── backend.h       # 抽象后端接口
-│   │   ├── x64/            # x86-64 实现
-│   │   │   ├── x64_backend.h
-│   │   │   ├── x64_backend.cpp
-│   │   │   ├── x64_codegen.h
-│   │   │   └── x64_codegen.cpp
-│   │   └── fallback.h      # 无 JIT 时的占位实现
+│   ├── backend/
+│   │   ├── backend.h            # CompilationUnit、CompiledCode、RelocInfo、IJitBackend、createBackend
+│   │   ├── backend.cpp         # createBackend → X64Backend / FallbackBackend
+│   │   ├── fallback.h           # FallbackBackend（compile/load 返回空）
+│   │   └── x64/
+│   │       ├── x64_backend.h    # X64Backend
+│   │       ├── x64_backend.cpp  # compile → compileBytecode；load/unload；两遍编码 + regalloc
+│   │       └── x64_encoder.h    # 手写 x64 编码（Encoder 类，无独立 .cpp）
 │   │
-│   ├── compiler/           # 字节码 → IR / 机器码
-│   │   ├── bc_to_machine.h
-│   │   ├── bc_to_machine.cpp
-│   │   └── lowering.h      # 各 opcode 的 lowering 规则
+│   ├── regalloc/
+│   │   ├── regalloc.h           # AllocationResult、linearScanAllocate
+│   │   └── regalloc.cpp         # 线性扫描寄存器分配（def/use、LiveInterval、4 寄存器）
 │   │
-│   ├── runtime/            # JIT 运行时支持
-│   │   ├── trampoline.h    # OPER / CALL 等 trampoline
-│   │   ├── trampoline.cpp
-│   │   └── stub.inc        # 汇编 stub（可选，用于关键路径）
+│   ├── runtime/
+│   │   ├── trampoline.h         # JitContext、trampolineFunc / trampolineTail 声明（C linkage）
+│   │   └── trampoline.cpp       # FUNC/TAIL 的 trampoline 实现，调用 FastVMSchedPass
 │   │
-│   └── tier/               # 分层执行策略
-│       ├── tier_policy.h   # 何时触发 JIT
-│       └── tier_policy.cpp
-│
-└── (现有文件保持不变)
+│   └── tier/
+│       ├── tier_policy.h         # TierPolicy（shouldJit、recordCall）
+│       └── tier_policy.cpp      # 按 graph/pc 计数与阈值判断
+└── (其余 fastvm 文件不变)
 ```
 
-### 3.2 核心模块职责
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        FastVMSchedPass (现有)                         │
-│  apply() → precompile() → call() [解释 or JIT]                        │
-└─────────────────────────────────────────────────────────────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-        ┌───────────────────┐           ┌───────────────────────┐
-        │   Interpreter     │           │   JIT Execution       │
-        │   (gotovm.cpp)    │           │   (jit/compiler +     │
-        │                   │           │    backend)           │
-        └───────────────────┘           └───────────────────────┘
-                                                    │
-                                    ┌───────────────┼───────────────┐
-                                    ▼               ▼               ▼
-                            ┌──────────┐   ┌──────────────┐   ┌──────────┐
-                            │ Backend  │   │ BC→Machine   │   │ Runtime  │
-                            │ (x64)    │   │ Compiler     │   │ Stubs    │
-                            └──────────┘   └──────────────┘   └──────────┘
-```
+说明：**无独立 compiler/** 目录；字节码到机器码的转换在 **X64Backend::compileBytecode** 内完成，并依赖 **regalloc** 的 `linearScanAllocate`。
 
 ---
 
-## 4. 模块详细设计
+## 4. 核心数据结构与接口
 
-### 4.1 JIT 配置层 (`jit/jit_config.h`)
+### 4.1 JIT 配置（`jit_config.h`）
 
-```cpp
-#pragma once
+- **ENABLE_JIT**：在 `__x86_64__` / `_M_X64` / `__amd64__` 下为 1，否则为 0。
+- **JitPolicy**：`Disabled`（仅解释）、`OnDemand`（按热点触发）、`Always`（全量 JIT）。
+- **JitConfig**：`policy`、`hotThreshold`（默认 1000）、`maxCodeCacheSize`（默认 4MB）。
 
-#include <cstddef>
+### 4.2 编译单元与产物（`backend/backend.h`）
 
-// 编译期开关
-#ifndef ENABLE_JIT
-#  if defined(__x86_64__) || defined(_M_X64)
-#    define ENABLE_JIT 1
-#  else
-#    define ENABLE_JIT 0
-#  endif
-#endif
+- **CompilationUnit**：`graph`、`bytecodes`（span）、`entryPc`、**trampolineFunc**、**trampolineTail**（void*，由 FastVM 在构造时填入）。
+- **RelocInfo**：`offset`、`kind`、`target`（当前实现中未在 X64 路径使用，预留）。
+- **CompiledCode**：`code`（机器码）、`entryOffset`、`relocs`。
+- **JitEntryFn**：`slot_t (*)(Frame *frame, void *ctx)`；ctx 为 **JitContext***。
+- **IJitBackend**：`compile(unit)`、`registerTrampoline(name, addr)`、`load(compiled)`、`unload(fn)`。
 
-#if ENABLE_JIT
-#  define JIT_TARGET_X64 1
-#else
-#  define JIT_TARGET_X64 0
-#endif
+### 4.3 寄存器分配（`regalloc/`）
 
-namespace camel::jit {
-
-// 运行时 JIT 策略
-enum class JitPolicy {
-    Disabled,       // 始终解释执行
-    OnDemand,       // 热点触发 JIT
-    Always,         // 启动时全量 JIT（调试/基准）
-};
-
-struct JitConfig {
-    JitPolicy policy = JitPolicy::OnDemand;
-    size_t hotThreshold = 1000;   // 调用次数阈值
-    size_t maxCodeCacheSize = 4 * 1024 * 1024;  // 4MB
-};
-
-}  // namespace camel::jit
-```
-
-### 4.2 抽象后端接口 (`jit/backend/backend.h`)
-
-```cpp
-#pragma once
-
-#include <cstdint>
-#include <functional>
-#include <memory>
-#include <span>
-#include <vector>
-
-#include "bytecode.h"
-#include "compile/gir.h"
-#include "core/context/frame.h"
-
-namespace camel::jit {
-
-// 编译单元：一个 Graph 对应的字节码区间
-struct CompilationUnit {
-    GraphIR::Graph *graph;
-    std::span<const Bytecode> bytecodes;
-    size_t entryPc;
-};
-
-// 编译结果：可执行机器码 + 元信息
-struct CompiledCode {
-    std::vector<uint8_t> code;        // 机器码
-    size_t entryOffset;               // 入口在 code 中的偏移
-    std::vector<RelocInfo> relocs;    // 重定位（跨函数调用等）
-};
-
-// 跨平台后端抽象
-class IJitBackend {
-public:
-    virtual ~IJitBackend() = default;
-
-    // 编译字节码为机器码
-    virtual std::unique_ptr<CompiledCode> compile(const CompilationUnit &unit) = 0;
-
-    // 注册 trampoline 地址（OPER、Frame 分配等）
-    virtual void registerTrampoline(const char *name, void *addr) = 0;
-
-    // 将机器码加载为可执行内存，返回可调用入口
-    using EntryFn = slot_t (*)(Frame *frame, void *ctx);
-    virtual EntryFn load(std::unique_ptr<CompiledCode> code) = 0;
-
-    // 释放已加载代码
-    virtual void unload(EntryFn fn) = 0;
-};
-
-// 工厂：按平台返回对应后端
-std::unique_ptr<IJitBackend> createBackend();
-
-}  // namespace camel::jit
-```
-
-### 4.3 x86-64 后端 (`jit/backend/x64/`)
-
-**设计要点**：
-
-- 使用 **AsmJit** 或 **Xbyak** 作为 x64 汇编/机器码生成库（header-only 优先，减少构建依赖）
-- 若暂不引入第三方库，可先实现最小子集：手写常用指令编码（mov, add, sub, jmp, cmp, ret 等）
-
-**调用约定**（与 C 互操作）：
-
-- `Frame*` → `rdi`（Linux/macOS）或 `rcx`（Windows x64）
-- `Context*` 或 JIT 上下文 → `rsi` / `rdx`
-- 返回值 `slot_t` → `rax`
-
-**Slot 访问**：
-
-- `Frame::dynamicArea_` 相对于 `Frame` 的偏移固定（由 `FrameMeta` 确定）
-- `currFrame->get<T>(idx)` → `mov rax, [rdi + baseOffset + idx*8]`
-- `currFrame->set(idx, val)` → `mov [rdi + baseOffset + idx*8], rax`
-
-**简单指令 lowering 示例**（LADD）：
-
-```text
-LADD result, fastop[0], fastop[1]
-  →  mov rax, [frame + offset(fastop[0])]
-     add rax, [frame + offset(fastop[1])]
-     mov [frame + offset(result)], rax
-```
-
-### 4.4 字节码编译器 (`jit/compiler/bc_to_machine.cpp`)
-
-职责：遍历 `CompilationUnit.bytecodes`，按 `pc` 顺序为每条指令调用后端生成对应机器码。
-
-```cpp
-// 伪代码
-void BcCompiler::compile(IJitBackend &backend, const CompilationUnit &unit) {
-    for (size_t pc = unit.entryPc; pc < unit.bytecodes.size(); ) {
-        const Bytecode &bc = unit.bytecodes[pc];
-        switch (bc.opcode) {
-            case OpCode::LADD:
-                backend.emitLAdd(bc.result, bc.fastop[0], bc.fastop[1]);
-                break;
-            case OpCode::JUMP:
-                backend.emitJump(resolvePc(bc.fastop[0]));
-                break;
-            case OpCode::OPER:
-                backend.emitTrampolineCall(kTrampolineOper, pc, bc);
-                break;  // 无法内联，回退到 stub
-            // ...
-        }
-        pc += bc.opsize;
-    }
-}
-```
-
-对 `OPER`、`FUNC`、`TAIL`、`CALL` 等，生成 trampoline 调用而非内联代码。
-
-### 4.5 运行时 Trampoline (`jit/runtime/trampoline.cpp`)
-
-将 JIT 不可内联的指令桥接回 C++ 实现：
-
-```cpp
-// OPER trampoline: 从 JIT 回调到 operator_t
-slot_t trampolineOper(Frame *frame, size_t pc, const Bytecode *base, Context *ctx) {
-    const Bytecode &bc = base[pc];
-    // 复用现有 OPER 逻辑
-    FrameArgsView withView(*frame, bc.wargs());
-    FrameArgsView normView(*frame, bc.nargs());
-    return bc.extra()->func(withView, normView, *ctx);
-}
-
-// FUNC/TAIL: 切换到解释器执行目标函数，或递归 JIT
-slot_t trampolineFunc(Frame *frame, size_t targetPc, GraphIR::Graph *graph, ...);
-```
-
-JIT 生成的代码在遇到这些指令时，`call` 到对应 trampoline，trampoline 内部可再调用 `FastVMSchedPass::call()` 或解释器逻辑。
-
-### 4.6 分层策略 (`jit/tier/tier_policy.cpp`)
-
-```cpp
-class TierPolicy {
-public:
-    // 是否对给定 (graph, pc) 进行 JIT
-    bool shouldJit(GraphIR::Graph *graph, size_t pc) const;
-
-    // 记录调用计数，达到阈值时触发 JIT
-    void recordCall(GraphIR::Graph *graph, size_t pc);
-
-private:
-    std::unordered_map<std::pair<GraphIR::Graph*, size_t>, size_t> callCounts_;
-    size_t hotThreshold_;
-};
-```
-
-`FastVMSchedPass::call()` 在解释执行时，可先 `recordCall`；当 `shouldJit` 为真时，触发一次编译并缓存 `EntryFn`，后续直接调用 JIT 版本。
+- **可分配寄存器**：4 个，对应 x64 的 rax(0)、rcx(1)、rdx(2)、rbx(3)；rax 同时用作临时与返回值。
+- **AllocationResult**：`slotToReg[i]` 为 slot i 的寄存器编号，或 **kSpilled**（-1）表示溢出到 Frame。
+- **linearScanAllocate(bytecodes, entryPc, pcEnd)**：
+  - 对 LADD/LSUB/LLE/BRCH/FUNC/TAIL/RETN 做 def/use 收集，得到每个 slot 的 firstDef/lastUse；
+  - 构造 LiveInterval，按 start 排序，线性扫描分配寄存器，冲突时溢出到栈（当前实现中溢出 slot 仍通过 Frame 的 disp 访问）。
 
 ---
 
-## 5. 与 FastVM 集成
+## 5. x86-64 后端实现要点
 
-### 5.1 FastVMSchedPass 扩展
+### 5.1 调用约定与入口
 
-```cpp
-// fastvm.h 扩展
-class FastVMSchedPass : public LinearSchedPass {
-    // ... 现有成员 ...
+- **SysV**：`Frame*` → rdi，`void *ctx`（JitContext*）→ rsi；返回值 slot_t → rax。
+- **Windows x64**：入口为 rcx=Frame、rdx=ctx；**Prologue** 将 rcx→rdi、rdx→rsi，再与 SysV 一致。
+- **Frame 槽位**：`slotDisp(idx) = frameBaseOffset_ + idx * sizeof(slot_t)`；当前编码器使用 **disp8**（1 字节偏移），若槽位过多可能导致偏移超出 128，需后续扩展为 disp32。
 
-#if ENABLE_JIT
-    std::unique_ptr<jit::IJitBackend> jitBackend_;
-    std::unordered_map<GraphIR::Graph*, jit::EntryFn> jitCache_;
-    jit::TierPolicy tierPolicy_;
-#endif
+### 5.2 编码器（`x64_encoder.h`）
 
-    slot_t call(size_t pc, Frame *rootFrame);
-};
-```
+- **Encoder** 向 `std::vector<uint8_t>` 追加字节；无独立 .cpp，全部内联。
+- 提供：mov rax/reg ↔ Frame(disp8)、add/sub rax 与 reg/Frame、cmp rax 与 imm8 后 setle、test rax + jz rel32、jmp rel32、ret、mov rax imm64 + call rax；以及 **prologueWin64**、**callTrampolineWin64** / **callTrampolineSysV**（用于 FUNC/TAIL）。
 
-### 5.2 执行路径选择
+### 5.3 编译流程（`x64_backend.cpp`）
 
-```cpp
-slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
-#if ENABLE_JIT
-    GraphIR::Graph *graph = rootFrame->graph();
-    if (auto it = jitCache_.find(graph); it != jitCache_.end()) {
-        return it->second(rootFrame, /* jit context */);
-    }
-    tierPolicy_.recordCall(graph, pc);
-    if (tierPolicy_.shouldJit(graph, pc)) {
-        compileAndCacheJit(graph);
-        return jitCache_[graph](rootFrame, nullptr);
-    }
-#endif
-    // 回退到解释执行
-    return callInterpreter(pc, rootFrame);  // 原 gotovm 逻辑
-}
-```
+1. **寄存器分配**：`linearScanAllocate(unit.bytecodes, entryPc, pcEnd)` → `AllocationResult alloc`。
+2. **第一遍**：按 pc 顺序遍历字节码，根据 opcode 与约束计算每条指令的机器码长度，得到 **pcToOffset**；遇到不支持的指令或约束则返回 false。
+3. **第二遍**：若 Windows，先 **prologueWin64**；再按 pc 顺序 **emit**：
+   - LADD/LSUB：根据 alloc 取 slot 在 reg 或 Frame，用 rax 做运算，结果写回 reg 或 Frame。
+   - LLE：取操作数到 rax，cmp+setle+movzx，结果写回。
+   - BRCH：条件 slot 到 rax，test+jnz rel32 到 else 块入口。
+   - FUNC：callTrampolineWin64/SysV(pc, trampolineFunc)，再将 rax 写回 result slot。
+   - TAIL：callTrampoline + ret（不写回当前帧）。
+   - JUMP：jmp rel32 到 pcToOffset[target]。
+   - RETN：返回值 slot/reg → rax，ret。
+
+### 5.4 加载与卸载
+
+- **load**：按 4KB 对齐分配可执行内存（Windows：VirtualAlloc PAGE_EXECUTE_READWRITE；POSIX：mmap PROT_READ|PROT_WRITE|PROT_EXEC），将 `code` 拷贝进去，把首地址强转为 **JitEntryFn** 返回；并记录到 **allocatedPages_**。
+- **unload**：在 allocatedPages_ 中找到对应页，VirtualFree/munmap，并从表中移除。
 
 ---
 
-## 6. 跨平台架构
+## 6. 运行时 Trampoline（`runtime/`）
 
-```
-                    ┌─────────────────────┐
-                    │   IJitBackend       │
-                    │   (抽象接口)         │
-                    └──────────┬──────────┘
-                               │
-         ┌─────────────────────┼─────────────────────┐
-         ▼                     ▼                     ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│ X64Backend      │  │ AArch64Backend  │  │ FallbackBackend │
-│ (x86-64)        │  │ (未来)          │  │ (无 JIT)        │
-│ AsmJit/Xbyak    │  │ -               │  │ 直接走解释器    │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-```
+### 6.1 JitContext
 
-- **x64**：主平台，完整实现
-- **AArch64**：接口与 `BcCompiler` 共用，仅需新后端实现
-- **Fallback**：`compile()` 返回空，`load()` 返回 nullptr，上层始终走解释器
+- **JitContext**：`FastVMSchedPass *vm`、`const void *base`（Bytecode* 基址）。由 FastVM 在 apply 时构造，作为 JIT 入口的第二个参数传入。
+
+### 6.2 trampolineFunc（FUNC 指令）
+
+- **签名**：`extern "C" slot_t trampolineFunc(Frame *frame, void *ctx, size_t pc)`。
+- **逻辑**：从 ctx 取 vm、base；从 `base[pc].extra()` 取 targetGraph、从 fastop[1] 取 targetPc、normCnt；**acquireFrameForCall(targetGraph)**，按 operands 把当前 frame 的实参拷贝到新 frame；**invokeCallOrJit(targetPc, targetGraph, newFrame, ctx)**；**releaseFrameForCall(newFrame)**；返回结果。
+
+### 6.3 trampolineTail（TAIL 指令）
+
+- **签名**：`extern "C" slot_t trampolineTail(Frame *frame, void *ctx, size_t pc)`。
+- **逻辑**：同上取 targetGraph、targetPc、argsCnt；**FrameView** 保存当前 frame 引用；**releaseFrameForTail(frame)**；**acquireFrameForTail(targetGraph)**；把原 frame 的实参拷到新 frame；**return invokeCallOrJit(...)**（不再返回当前 JIT 帧，故无需 release 当前帧）。
 
 ---
 
-## 7. 实现阶段建议
+## 7. 与 FastVM 的集成
 
-| 阶段 | 内容 | 产出 |
-|------|------|------|
-| P0 | 搭建 jit/ 目录、JitConfig、IJitBackend 接口 | 可编译骨架 |
-| P1 | X64Backend + AsmJit 集成，实现 LADD/LSUB/LLE/JUMP/RETN | 最小可运行 JIT（如 fib 纯算术路径） |
-| P2 | OPER/FUNC/TAIL trampoline，与解释器互调 | fib 全路径可 JIT |
-| P3 | TierPolicy、jitCache、与 FastVMSchedPass 集成 | 分层执行 |
-| P4 | 更多 opcode、优化（寄存器分配、窥孔） | 性能提升 |
+### 7.1 FastVMSchedPass 中的 JIT 成员（`fastvm.h`）
 
----
+- **jitBackend_**：`std::unique_ptr<IJitBackend>`，在 apply 中若未初始化则 **createBackend()**。
+- **jitCache_**：`std::unordered_map<Graph*, JitEntryFn>`，图→已加载的 JIT 入口。
+- **jitCacheMutex_**：保护 jitCache_ 的并发写入（当前为多线程 compile、主线程 load 并写 cache）。
+- **jitConfig_**：从 **FastVMConfig::enableJit** 推导（true → OnDemand，false → Disabled）。
 
-## 8. 依赖与构建
+**未使用**：当前实现中未保存 **TierPolicy** 实例；启用 JIT 时采用「对 offsetMap_ 中全部图做预编译」，而非在 call() 中按热点 recordCall/shouldJit 再编译。
 
-### 8.1 可选依赖
+### 7.2 apply() 中的 JIT 流程（`fastvm.cpp`）
 
-- **AsmJit**（推荐）：header-only 或静态库，用于 x64 机器码生成
-- 或 **Xbyak**：轻量 x64 JIT，需在构建中启用
+1. **precompile** 后，若 `jitConfig_.policy != Disabled`：
+   - 对 **offsetMap_** 中每个 (graph, entryPc)，若该 graph 尚不在 **jitCache_**：
+     - 构造 **CompilationUnit**（graph、bytecodes、entryPc、**trampolineFunc**、**trampolineTail** 函数指针）；
+     - 使用 **std::async** 在后台调用 **backend->compile(unit)**；
+   - 主线程对每个 future **get()**，若 **compile** 返回非空，则 **load(compiled)**，在锁内写入 **jitCache_[graph]**。
+2. 构造 **JitContext**（this, bytecodes_.data()）。
+3. 若 **entryGraph** 在 **jitCache_** 中：**framePool_.acquire(entryGraph)**，调用 **jitCache_[entryGraph](frame, &jitCtx)**，release frame，return。
+4. 否则：按原解释路径执行（push/call/pop/release）。
 
-### 8.2 CMake / 构建集成
+### 7.3 invokeCallOrJit
 
-```cmake
-option(ENABLE_JIT "Enable JIT compilation" ON)
-if(ENABLE_JIT AND (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"))
-  add_subdirectory(third_party/asmjit)
-  target_sources(camel PRIVATE
-    src/builtin/passes/sched/linear/fastvm/jit/...
-  )
-  target_compile_definitions(camel PRIVATE ENABLE_JIT=1)
-endif()
-```
+- 在 trampoline 中调用：若 **graph** 在 **jitCache_** 中则执行 **jitCache_[graph](frame, jitCtx)**，否则 **call(pc, frame)**（解释执行）。从而实现 JIT 与解释器互调。
 
 ---
 
-## 9. 风险与约束
+## 8. 分层策略（tier/）与当前策略
 
-- **二进制可移植性**：JIT 生成的机器码与宿主 ABI 绑定，跨进程/跨机器不可直接复用
-- **GC 与 JIT**：若未来引入精确 GC，需在 JIT 代码中插入 GC 安全点（当前可忽略）
-- **调试**：JIT 代码需支持符号/映射，便于 Profiler 与调试器
+- **TierPolicy** 提供 **shouldJit(graph, pc)**（按 policy 与 callCounts_ 达到 hotThreshold）和 **recordCall(graph, pc)**。
+- **当前 FastVM 行为**：启用 JIT 时在 **apply()** 内对所有图做**异步并行编译 + 主线程 load**，不依赖 call() 中的 recordCall/shouldJit。因此 TierPolicy 目前未被 FastVM 使用，可留作日后「按热点延迟编译」时接入。
 
 ---
 
-## 10. 参考资料
+## 9. 跨平台与 Fallback
 
-- [AsmJit - Machine Code Generation](https://asmjit.com/)
-- [LuaJIT 2.0 SSA IR](https://wiki.luajit.org/SSA-IR-2.0)
-- [V8 Ignition → TurboFan pipeline](https://v8.dev/blog/ignition-interpreter)
+- **createBackend()**：在 JIT_TARGET_X64 时返回 **X64Backend**，否则返回 **FallbackBackend**。
+- **FallbackBackend**：**compile** 返回 nullptr，**load** 返回 nullptr，**registerTrampoline** / **unload** 空实现；上层若未得到 JIT 入口则走解释器。
+
+---
+
+## 10. 实现状态与后续可做
+
+| 项目 | 状态 |
+|------|------|
+| 目录与接口（backend、regalloc、runtime、tier） | ✅ 已实现 |
+| JitConfig、CompilationUnit、JitEntryFn、trampoline 签名 | ✅ 已实现 |
+| X64Backend + 手写 Encoder（LADD/LSUB/LLE/BRCH/JUMP/RETN/FUNC/TAIL） | ✅ 已实现 |
+| 线性扫描寄存器分配（4 寄存器，溢出到 Frame） | ✅ 已实现 |
+| FUNC/TAIL trampoline 与 invokeCallOrJit | ✅ 已实现 |
+| FastVM apply 中全图预编译与 jitCache_ | ✅ 已实现 |
+| OPER/ACCS/FILL/CALL 的 JIT 或 trampoline | ❌ 未实现 |
+| 热点计数 + TierPolicy 接入（OnDemand 延迟编译） | ❌ 未接入 |
+| disp8 → disp32、更多 opcode、窥孔优化 | 可选 |
+
+---
+
+## 11. 风险与约束
+
+- **ABI**：JIT 代码与宿主 ABI 绑定（SysV/Windows x64），不可跨进程/跨机器复用。
+- **GC**：若将来引入精确 GC，需在 JIT 代码中插入安全点。
+- **调试**：需维护 pc↔机器码映射或符号信息，便于调试器与 Profiler。
+- **Slot 偏移**：当前使用 disp8，Frame 槽位过多时需改为 disp32。
+
+---
+
+## 12. 参考资料
+
+- [AsmJit](https://asmjit.com/)（当前未用，可作扩展参考）
+- [LuaJIT 2.0 SSA-IR](https://wiki.luajit.org/SSA-IR-2.0)
+- [V8 Ignition → TurboFan](https://v8.dev/blog/ignition-interpreter)

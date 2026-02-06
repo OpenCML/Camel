@@ -1,7 +1,7 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
+ * You can use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:
  * [https://opensource.org/license/mit]
  *
@@ -19,23 +19,16 @@
 
 #pragma once
 
-#include <cstddef>
+#include "execute/trans.h"
 
-// ENABLE_FASTVM_JIT、ENABLE_FASTVM_COMPUTED_GOTO、JIT_TARGET_X64 由 CMake 统一设置。
-// 支持: cmake -DENABLE_FASTVM_JIT=OFF -DENABLE_FASTVM_COMPUTED_GOTO=OFF
+/**
+ * JitBytecodeDumpPass: 对所有图尝试 JIT 编译，并将生成的机器码可视化打印。
+ * 参照 LinkedBytecodeDumpPass 的格式，输出每个图的机器码（十六进制）。
+ */
+class JitBytecodeDumpPass : public GraphTranslatePass {
+  public:
+    JitBytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    virtual ~JitBytecodeDumpPass() = default;
 
-namespace camel::jit {
-
-enum class JitPolicy {
-    Disabled, // 始终解释执行
-    OnDemand, // 热点触发 JIT
-    Always,   // 启动时全量 JIT
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };
-
-struct JitConfig {
-    JitPolicy policy        = JitPolicy::OnDemand;
-    size_t hotThreshold     = 1000;
-    size_t maxCodeCacheSize = 4 * 1024 * 1024; // 4MB
-};
-
-} // namespace camel::jit
