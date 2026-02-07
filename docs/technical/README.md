@@ -6,8 +6,9 @@
 
 | 文档 | 说明 |
 |------|------|
+| [00_language_reference.md](00_language_reference.md) | **Camel 语言参考**（类 Python Language Reference：词法、类型、执行模型、表达式、语句、文法概要） |
 | [01_overview.md](01_overview.md) | 项目总览、设计哲学与核心概念 |
-| [02_language_spec.md](02_language_spec.md) | 语言规范（语法与语义，参考 test 推断） |
+| [02_language_spec.md](02_language_spec.md) | 语言规范摘要（语法与语义，参考 test 推断） |
 | [03_trees_and_structures.md](03_trees_and_structures.md) | 各种树与中间结构详解（CST、AST、GCT 及 GIR 视图） |
 | [04_compilation_pipeline.md](04_compilation_pipeline.md) | 编译流水线：从源码到图与字节码 |
 | [05_graph_ir.md](05_graph_ir.md) | 图中间表示（GIR）详解 |
@@ -16,6 +17,7 @@
 
 ## 相关文档（docs 目录）
 
+- [../language/README.md](../language/README.md) — **语言参考（详细版）**：按主题分章，含大量示例
 - [../setup.cn.md](../setup.cn.md) / [../setup.en.md](../setup.en.md) — 开发环境配置
 - [../cli.cn.md](../cli.cn.md) / [../cli.md](../cli.md) — CLI 使用说明
 - [../Camel.asdl](../Camel.asdl) — AST 结构定义（ASDL 格式，实现用）
