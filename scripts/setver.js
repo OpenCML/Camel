@@ -5,6 +5,9 @@ const ver = process.argv[2]
 if (!ver) {
     logDone(`No version provided, exit.`)
 }
+if (!/^\d+\.\d+\.\d+$/.test(ver)) {
+    logDone(`Invalid version format, exit.`)
+}
 logStep('Setting version to ' + ver)
 
 // update version in package.json
