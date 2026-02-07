@@ -12,13 +12,16 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 13, 2024
+ * Created: May. 05, 2024
  * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-/** GIR 聚合入口：转发到 compile/gir/ 目录下的实现。外部统一 #include "compile/gir.h" 即可。 */
+#include "compile/gct/load.h"
+#include "compile/gct/node.h"
+#include "compile/gct/types.h"
 
-#include "compile/gir/gir.h"
+namespace GraphConstructTree {}
+namespace GCT = GraphConstructTree;

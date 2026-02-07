@@ -12,13 +12,47 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Aug. 13, 2024
+ * Created: May. 05, 2024
  * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-/** GIR 聚合入口：转发到 compile/gir/ 目录下的实现。外部统一 #include "compile/gir.h" 即可。 */
+/** GCT 枚举与基础类型：LoadType、类型别名。 */
 
-#include "compile/gir/gir.h"
+#include <memory>
+#include <string>
+
+namespace GraphConstructTree {
+
+class Load;
+class Node;
+
+using load_ptr_t = std::shared_ptr<Load>;
+using node_ptr_t = std::shared_ptr<Node>;
+
+enum class LoadType {
+    DECL,
+    FUNC,
+    DATA,
+    TYPE,
+    NREF,
+    DREF,
+    VARI,
+    WAIT,
+    LINK,
+    WITH,
+    ACCS,
+    BRCH,
+    CASE,
+    CAST,
+    ANNO,
+    EXIT,
+    EXEC,
+    EXPT,
+};
+
+std::string to_string(LoadType type);
+
+} // namespace GraphConstructTree

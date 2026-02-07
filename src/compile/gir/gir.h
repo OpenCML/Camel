@@ -19,6 +19,6 @@
 
 #pragma once
 
-/** GIR 聚合入口：转发到 compile/gir/ 目录下的实现。外部统一 #include "compile/gir.h" 即可。 */
-
-#include "compile/gir/gir.h"
+#include "compile/gir/graph.h"
+#include "compile/gir/node.h"
+#include "compile/gir/types.h"

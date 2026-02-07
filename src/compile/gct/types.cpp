@@ -13,16 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include <iterator>
-
-#include "gct.h"
-#include "utils/scope.h"
-
-using namespace std;
+#include "compile/gct/types.h"
+#include "utils/assert.h"
 
 namespace GraphConstructTree {
 
@@ -65,54 +61,9 @@ std::string to_string(LoadType type) {
     case LoadType::EXPT:
         return "EXPT";
     default:
-        ASSERT(false, "Unknown NodeType");
+        ASSERT(false, "Unknown LoadType");
     }
     return "UNKNOWN";
 }
-
-inline std::string pointerToHex(const void *ptr) {
-    std::stringstream ss;
-    ss << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
-       << reinterpret_cast<uintptr_t>(ptr) << std::dec << std::nouppercase;
-    return ss.str();
-}
-
-const string DataLoad::toString() const {
-    stringstream ss;
-    ss << "DATA: " << pointerToHex(data_.get()) << ", ";
-    const auto &type = data_->type();
-    if (type) {
-        ss << type->toString();
-    } else {
-        ss << "null";
-    }
-    ss << ", " << data_->toString();
-    return ss.str();
-}
-
-const string TypeLoad::toString() const {
-    stringstream ss;
-    ss << "TYPE: " << dataType_->toString();
-    return ss.str();
-}
-
-const string DeclLoad::toString() const {
-    return "DECL: " + std::string(isFunc_ ? "func " : "type ") + ref_.toString();
-}
-
-const string FuncLoad::toString() const {
-    stringstream ss;
-    ss << "FUNC: ";
-    if (!name_.empty()) {
-        ss << name_;
-    } else {
-        ss << "(anonymous)";
-    }
-    return ss.str();
-}
-
-const string NRefLoad::toString() const { return "NREF: " + ref_.toString(); }
-
-const string DRefLoad::toString() const { return "DREF: " + ref_.toString(); }
 
 } // namespace GraphConstructTree
