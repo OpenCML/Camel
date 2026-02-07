@@ -47,7 +47,9 @@ class FastVMSchedPass : public LinearSchedPass {
 #if ENABLE_FASTVM_JIT
     std::unique_ptr<camel::jit::IJitBackend> jitBackend_;
     std::unordered_map<GraphIR::Graph *, camel::jit::JitEntryFn> jitCache_;
-    std::mutex jitCacheMutex_; // protects jitCache_ when using async compilation
+    std::unordered_map<camel::jit::JitEntryFn, GraphIR::Graph *>
+        jitFnToGraph_; // fn->graph 供 frame 创建
+    std::mutex jitCacheMutex_;
     camel::jit::JitConfig jitConfig_{};
     camel::jit::TierPolicy tierPolicy_{jitConfig_};
     void *currentJitCtx_{}; // 供解释器 FUNC/TAIL 调用 invokeCallOrJit 时使用
@@ -131,6 +133,12 @@ class FastVMSchedPass : public LinearSchedPass {
         return f;
     }
     void releaseFrameForTail(Frame *frame) { framePool_.release(frame); }
-    slot_t invokeCallOrJit(size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx);
+    Context &context() { return *context_; }
+    GraphIR::Graph *jitFnToGraph(camel::jit::JitEntryFn fn) const {
+        auto it = jitFnToGraph_.find(fn);
+        return it != jitFnToGraph_.end() ? it->second : nullptr;
+    }
+    slot_t invokeCallOrJit(
+        size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx, uint32_t callCount = 0);
 #endif
 };

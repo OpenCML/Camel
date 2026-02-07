@@ -37,7 +37,8 @@ namespace camel::jit {
 
 namespace {
 
-size_t getFrameDynamicAreaOffset() { return sizeof(Frame); }
+// JIT 接收 slot_t*（动态区基址），基址偏移为 0
+size_t getFrameDynamicAreaOffset() { return 0; }
 
 void *allocExecutable(size_t size) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -79,9 +80,17 @@ std::unique_ptr<CompiledCode> X64Backend::compile(const CompilationUnit &unit) {
 bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_t> &code) {
     using namespace x64;
 
-    const Bytecode *base = unit.bytecodes.data();
-    size_t pcEnd         = unit.bytecodes.size();
-    size_t entryPc       = unit.entryPc;
+    if (!unit.frameMeta) {
+        EXEC_WHEN_DEBUG(
+            l.in("JIT.Backend")
+                .error("compileBytecode: graph '{}' has no FrameMeta", unit.graph->name()));
+        return false;
+    }
+
+    const Bytecode *base    = unit.bytecodes.data();
+    size_t pcEnd            = unit.bytecodes.size();
+    size_t entryPc          = unit.entryPc;
+    size_t dynamicSlotCount = unit.frameMeta->runtimeDataType->size();
 
     // 寄存器分配：线性扫描将 slot 映射到物理寄存器
     AllocationResult alloc = linearScanAllocate(unit.bytecodes, entryPc, pcEnd);
@@ -102,6 +111,14 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
                 spilled);
     }()));
 
+    auto slotInRange = [&](data_idx_t idx) {
+        return idx <= 0 || static_cast<size_t>(idx) < dynamicSlotCount;
+    };
+    auto frameAccessSize = [&](int idx) {
+        int d = slotDisp(idx);
+        return x64::Encoder::fitsDisp8(d) ? 4 : 7;
+    };
+
     // 第一遍：计算每条字节码对应的机器码偏移
     std::unordered_map<size_t, size_t> pcToOffset;
 #if defined(_WIN32) || defined(_WIN64)
@@ -115,31 +132,52 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
         const Bytecode &bc = base[pc];
         switch (bc.opcode) {
         case OpCode::LADD:
-        case OpCode::LSUB:
-            offset += 3 * 4;
+        case OpCode::LSUB: {
+            if (!slotInRange(bc.fastop[0]) || !slotInRange(bc.fastop[1]) || !slotInRange(bc.result))
+                return false;
+            int r0 = alloc.regForSlot(bc.fastop[0]), r1 = alloc.regForSlot(bc.fastop[1]),
+                rr = alloc.regForSlot(bc.result);
+            offset += (r0 >= 0 ? 3 : frameAccessSize(bc.fastop[0])) +
+                      (r1 >= 0 ? 3 : frameAccessSize(bc.fastop[1])) +
+                      (rr >= 0 ? 3 : frameAccessSize(bc.result));
             break;
-        case OpCode::LLE:
+        }
+        case OpCode::LLE: {
             if (bc.fastop[1] != -1)
-                return false;        // 仅支持 n<=1 (rhs=常量1)
-            offset += 4 + 4 + 5 + 4; // mov + cmp/setle/movzx + mov
+                return false; // 仅支持 n<=1 (rhs=常量1)
+            if (!slotInRange(bc.fastop[0]) || !slotInRange(bc.result))
+                return false;
+            int r0 = alloc.regForSlot(bc.fastop[0]), rr = alloc.regForSlot(bc.result);
+            offset += (r0 >= 0 ? 3 : frameAccessSize(bc.fastop[0])) + 5 + 4 +
+                      (rr >= 0 ? 3 : frameAccessSize(bc.result)); // mov + cmp/setle/movzx + mov
             break;
-        case OpCode::BRCH:
+        }
+        case OpCode::BRCH: {
             if (bc.withCnt() != 0)
-                return false;    // 仅支持简单 if-else
-            offset += 4 + 3 + 6; // mov + test + jnz
+                return false; // 仅支持简单 if-else
+            if (!slotInRange(bc.nargs()[0]))
+                return false;
+            int rc = alloc.regForSlot(bc.nargs()[0]);
+            offset += (rc >= 0 ? 3 : frameAccessSize(bc.nargs()[0])) + 3 + 6; // mov + test + jnz
             break;
+        }
         case OpCode::FUNC:
             if (!unit.trampolineFunc)
                 return false;
+            if (!slotInRange(bc.result))
+                return false;
 #if defined(_WIN32) || defined(_WIN64)
-            offset += 3 + 3 + 6 + 10 + 2 + 4; // callTrampolineWin64 + mov [rdi+disp],rax
+            offset += 3 + 3 + 6 + 10 + 2 + frameAccessSize(bc.result); // callTrampolineWin64 + mov
 #else
-            offset += 7 + 10 + 2 + 4; // callTrampolineSysV + mov [rdi+disp],rax
+            offset += 7 + 10 + 2 + frameAccessSize(bc.result); // callTrampolineSysV + mov
 #endif
             break;
         case OpCode::TAIL:
             if (!unit.trampolineTail)
                 return false;
+            for (size_t i = 0; i < bc.normCnt(); ++i)
+                if (!slotInRange(bc.operands()[i]))
+                    return false;
 #if defined(_WIN32) || defined(_WIN64)
             offset += 3 + 3 + 6 + 10 + 2 + 1; // callTrampolineWin64 + ret
 #else
@@ -149,8 +187,25 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
         case OpCode::JUMP:
             offset += 5;
             break;
-        case OpCode::RETN:
-            offset += 4 + 1;
+        case OpCode::RETN: {
+            if (!slotInRange(bc.fastop[0]))
+                return false;
+            int r0 = alloc.regForSlot(bc.fastop[0]);
+            offset += (r0 >= 0 ? 3 : frameAccessSize(bc.fastop[0])) + 1;
+            break;
+        }
+        case OpCode::OPER:
+            if (!unit.trampolineOper)
+                return false;
+            if (!slotInRange(bc.result))
+                return false;
+#if defined(_WIN32) || defined(_WIN64)
+            offset += 3 + 3 + 6 + 10 + 10 + 2 +
+                      frameAccessSize(bc.result); // callTrampolineOperWin64 + mov
+#else
+            offset +=
+                4 + 4 + 10 + 10 + 2 + frameAccessSize(bc.result); // callTrampolineOperSysV + mov
+#endif
             break;
         default:
             return false;
@@ -279,6 +334,18 @@ bool X64Backend::compileBytecode(const CompilationUnit &unit, std::vector<uint8_
             else
                 enc.movRaxFromFrame(d0);
             enc.ret();
+            break;
+        }
+        case OpCode::OPER: {
+            uint64_t addr     = reinterpret_cast<uint64_t>(unit.trampolineOper);
+            uint64_t graphPtr = reinterpret_cast<uint64_t>(unit.graph);
+#if defined(_WIN32) || defined(_WIN64)
+            enc.callTrampolineOperWin64(static_cast<uint32_t>(pc), graphPtr, addr);
+#else
+            enc.callTrampolineOperSysV(static_cast<uint32_t>(pc), graphPtr, addr);
+#endif
+            int dr = slotDisp(bc.result);
+            enc.movFrameFromRax(dr);
             break;
         }
         default:

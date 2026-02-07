@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,7 @@
 
 #include "compile/gir.h"
 
-#include <cstddef>
-#include <unordered_map>
+#include <cstdint>
 
 namespace camel::jit {
 
@@ -32,12 +31,10 @@ class TierPolicy {
   public:
     explicit TierPolicy(const JitConfig &config) : config_(config) {}
 
-    bool shouldJit(GraphIR::Graph *graph, size_t pc) const;
-    void recordCall(GraphIR::Graph *graph, size_t pc);
+    bool shouldJit(uint32_t callCount) const;
 
   private:
     JitConfig config_;
-    std::unordered_map<GraphIR::Graph *, std::unordered_map<size_t, size_t>> callCounts_;
 };
 
 } // namespace camel::jit

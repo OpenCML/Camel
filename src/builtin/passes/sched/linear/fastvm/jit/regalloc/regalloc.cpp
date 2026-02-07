@@ -30,7 +30,12 @@ struct LiveInterval {
     int slot;
     size_t start;
     size_t end;
+    bool spansCall = false; // 跨越 FUNC/CALL/TAIL/OPER，caller-saved 寄存器会被破坏
 };
+
+inline bool isCallOpcode(OpCode op) {
+    return op == OpCode::FUNC || op == OpCode::TAIL || op == OpCode::CALL || op == OpCode::OPER;
+}
 
 void collectDefUse(
     const Bytecode &bc, size_t pc, std::vector<size_t> &firstDef, std::vector<size_t> &lastUse) {
@@ -177,18 +182,38 @@ void collectDefUse(
 AllocationResult
 linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t pcEnd) {
     std::vector<size_t> firstDef, lastUse;
+    std::vector<size_t> callPcs;
     const Bytecode *base = bytecodes.data();
 
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
         collectDefUse(bc, pc, firstDef, lastUse);
+        if (isCallOpcode(bc.opcode))
+            callPcs.push_back(pc);
         pc += bc.opsize;
     }
+
+    auto intervalSpansCall = [&callPcs](size_t start, size_t end) {
+        for (size_t cp : callPcs) {
+            if (start < cp && cp < end)
+                return true;
+        }
+        return false;
+    };
+    auto defAtCall = [&callPcs](size_t defPc) {
+        for (size_t cp : callPcs) {
+            if (defPc == cp)
+                return true;
+        }
+        return false;
+    };
 
     std::vector<LiveInterval> intervals;
     for (size_t i = 1; i < firstDef.size(); ++i) {
         if (firstDef[i] != static_cast<size_t>(-1) && lastUse[i] >= firstDef[i]) {
-            intervals.push_back({static_cast<int>(i), firstDef[i], lastUse[i]});
+            // 跨越 call 或 在 call 处定义：caller-saved 会被破坏，且 FUNC 结果总是存到内存
+            bool spans = intervalSpansCall(firstDef[i], lastUse[i]) || defAtCall(firstDef[i]);
+            intervals.push_back({static_cast<int>(i), firstDef[i], lastUse[i], spans});
         }
     }
     std::sort(intervals.begin(), intervals.end(), [](const LiveInterval &a, const LiveInterval &b) {
@@ -214,11 +239,13 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
         }
 
         int reg = -1;
-        for (int r = 0; r < kNumAllocatableRegs; ++r) {
-            if (freeRegs[r]) {
-                reg         = r;
-                freeRegs[r] = 0;
-                break;
+        if (!cur.spansCall) {
+            for (int r = 0; r < kNumAllocatableRegs; ++r) {
+                if (freeRegs[r]) {
+                    reg         = r;
+                    freeRegs[r] = 0;
+                    break;
+                }
             }
         }
         if (reg < 0) {

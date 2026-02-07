@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,5 +34,7 @@ struct JitContext {
 } // namespace camel::jit
 
 // C linkage for JIT call from machine code
-extern "C" slot_t trampolineFunc(Frame *frame, void *ctx, size_t pc);
-extern "C" slot_t trampolineTail(Frame *frame, void *ctx, size_t pc);
+// JIT 传入 slot_t*（调用方动态区），不再依赖 Frame
+extern "C" slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc);
+extern "C" slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc);
+extern "C" slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc, GraphIR::Graph *graph);

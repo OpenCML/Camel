@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -243,12 +243,34 @@ using Bytecode = BytecodeHeader;
 
 union BytecodeExtra {      // 8 bytes
     Type *pType;           // for CAST
-    GraphIR::Graph *graph; // for FUNC
+    GraphIR::Graph *graph; // for FUNC (低48位 ptr，高16位 call count)
     operator_t func;       // for OPER
     MarkOpCode mark;       // for SCHD
+    uint64_t raw;          // for FUNC packed: (count<<48)|(ptr&0xFFFF'FFFF'FFFF)
 
     std::string toString(OpCode opcode) const;
 };
+
+// FUNC extra 打包：低48位 ptr(Graph* 或 JitEntryFn)，高16位 call count
+inline constexpr uint64_t kFuncExtraPtrMask = 0x0000'FFFF'FFFF'FFFFULL;
+inline constexpr int kFuncExtraCountShift   = 48;
+
+inline void *getFuncExtraPtr(const BytecodeExtra &e) {
+    return reinterpret_cast<void *>(e.raw & kFuncExtraPtrMask);
+}
+inline uint32_t getFuncExtraCount(const BytecodeExtra &e) {
+    return static_cast<uint32_t>(e.raw >> kFuncExtraCountShift);
+}
+inline void setFuncExtraPacked(BytecodeExtra &e, void *ptr, uint32_t count) {
+    e.raw = (static_cast<uint64_t>(count) << kFuncExtraCountShift) |
+            (reinterpret_cast<uintptr_t>(ptr) & kFuncExtraPtrMask);
+}
+inline uint32_t incFuncExtraCount(BytecodeExtra &e) {
+    uint32_t c = getFuncExtraCount(e) + 1;
+    e.raw =
+        (e.raw & kFuncExtraPtrMask) | (static_cast<uint64_t>(c & 0xFFFFU) << kFuncExtraCountShift);
+    return c;
+}
 
 static_assert(sizeof(Bytecode) == 8, "Bytecode must be exactly 8 bytes");
 static_assert(sizeof(BytecodeHeader) == 8, "BytecodeHeader must be exactly 8 bytes");

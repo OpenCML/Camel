@@ -112,7 +112,7 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         EXEC_WHEN_DEBUG(l.in("JIT").info("Executing entry graph '{}' via JIT", entryGraph->name()));
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
-        [[maybe_unused]] slot_t result = jitIt->second(frame, &jitCtx);
+        [[maybe_unused]] slot_t result = jitIt->second(frame->slotBase(), &jitCtx);
         opperf::stop();
         opperf::report(std::cout);
         framePool_.release(frame);
@@ -340,34 +340,57 @@ void FastVMSchedPass::compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc
     std::lock_guard lock(jitCacheMutex_);
     if (jitCache_.count(graph))
         return;
+    FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
+    if (!meta)
+        meta = installFrameMetaInfoForGraph(graph);
+
     camel::jit::CompilationUnit unit{
         .graph          = graph,
+        .frameMeta      = meta,
         .bytecodes      = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
         .entryPc        = entryPc,
         .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
         .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+        .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
     };
     auto compiled = jitBackend_->compile(unit);
     if (!compiled)
         return;
     auto fn = jitBackend_->load(std::move(compiled));
     if (fn) {
-        jitCache_[graph] = fn;
+        jitCache_[graph]  = fn;
+        jitFnToGraph_[fn] = graph;
+        // 回写所有 FUNC 字节码：将 JIT 地址写入 extra，fastop[1]=0 标识已替换
+        auto fnPtr = reinterpret_cast<void *>(fn);
+        for (size_t pc = 0; pc < bytecodes_.size();) {
+            Bytecode &bc = bytecodes_[pc];
+            if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+                if (bc.fastop[1] != 0 &&
+                    getFuncExtraPtr(*bc.extra()) ==
+                        reinterpret_cast<void *>(
+                            reinterpret_cast<uintptr_t>(graph) & kFuncExtraPtrMask)) {
+                    uint32_t count = getFuncExtraCount(*bc.extra());
+                    setFuncExtraPacked(*bc.extra(), fnPtr, count);
+                    bc.fastop[1] = 0;
+                }
+            }
+            pc += bc.opsize;
+        }
         EXEC_WHEN_DEBUG(l.in("JIT").info("OnDemand: compiled & cached graph '{}'", graph->name()));
     }
 }
 
-slot_t
-FastVMSchedPass::invokeCallOrJit(size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx) {
+slot_t FastVMSchedPass::invokeCallOrJit(
+    size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx, uint32_t callCount) {
     currentJitCtx_ = jitCtx;
-    auto it        = jitCache_.find(graph);
+    // closure 等无 bytecode 路径仍走 jitCache_
+    auto it = jitCache_.find(graph);
     if (it != jitCache_.end()) {
         EXEC_WHEN_DEBUG(
             l.in("JIT").debug("invokeCallOrJit: graph '{}' pc={} -> JIT", graph->name(), pc));
-        return it->second(frame, jitCtx);
+        return it->second(frame->slotBase(), jitCtx);
     }
-    tierPolicy_.recordCall(graph, pc);
-    if (tierPolicy_.shouldJit(graph, pc)) {
+    if (tierPolicy_.shouldJit(callCount)) {
         compileAndCacheGraph(graph, pc);
         it = jitCache_.find(graph);
         if (it != jitCache_.end()) {
@@ -375,7 +398,7 @@ FastVMSchedPass::invokeCallOrJit(size_t pc, GraphIR::Graph *graph, Frame *frame,
                 "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
                 graph->name(),
                 pc));
-            return it->second(frame, jitCtx);
+            return it->second(frame->slotBase(), jitCtx);
         }
     }
     EXEC_WHEN_DEBUG(

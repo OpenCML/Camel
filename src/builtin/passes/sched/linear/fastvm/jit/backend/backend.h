@@ -36,10 +36,12 @@ namespace camel::jit {
 
 struct CompilationUnit {
     GraphIR::Graph *graph;
+    FrameMeta *frameMeta = nullptr; // 编译期使用的 Frame 布局，来自 graph->getExtra<FrameMeta,0>()
     std::span<const Bytecode> bytecodes;
     size_t entryPc;
     void *trampolineFunc = nullptr; // FUNC trampoline
     void *trampolineTail = nullptr; // TAIL trampoline
+    void *trampolineOper = nullptr; // OPER trampoline
     std::ostream *asmOut = nullptr; // 若设置，编译时输出汇编指令
 };
 
@@ -55,7 +57,7 @@ struct CompiledCode {
     std::vector<RelocInfo> relocs;
 };
 
-using JitEntryFn = slot_t (*)(Frame *frame, void *ctx);
+using JitEntryFn = slot_t (*)(slot_t *slots, void *ctx);
 
 class IJitBackend {
   public:

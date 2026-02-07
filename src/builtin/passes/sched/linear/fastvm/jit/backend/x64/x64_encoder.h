@@ -48,15 +48,30 @@ class Encoder {
             out_.push_back(b);
     }
 
+    static bool fitsDisp8(int disp) { return disp >= -128 && disp <= 127; }
+    void emitDisp32(int disp) {
+        emitBytes({
+            static_cast<uint8_t>(disp & 0xff),
+            static_cast<uint8_t>((disp >> 8) & 0xff),
+            static_cast<uint8_t>((disp >> 16) & 0xff),
+            static_cast<uint8_t>((disp >> 24) & 0xff),
+        });
+    }
+
     // REX.W prefix (48), REX.WR (4C) for Reg field extended, REX.WB (49) for R/M field extended
     void rexW() { emitByte(0x48); }
     void rexWR() { emitByte(0x4C); }
     void rexWB() { emitByte(0x49); }
 
-    // mov rax, [rdi + disp8]
+    // mov rax, [rdi + disp] (disp8 或 disp32)
     void movRaxFromFrame(int disp) {
         rexW();
-        emitBytes({0x8b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        if (fitsDisp8(disp)) {
+            emitBytes({0x8b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0x8b, 0x87});
+            emitDisp32(disp);
+        }
         asmLine("mov rax, [rdi+" + std::to_string(disp) + "]");
     }
 
@@ -65,38 +80,55 @@ class Encoder {
         return n[r & 7];
     }
 
-    // mov reg, [rdi + disp8] (reg: 0=rax..3=rbx, 4=r8..7=r11)
+    // mov reg, [rdi + disp] (reg: 0=rax..7=r11)
     void movRegFromFrame(uint8_t reg, int disp) {
         uint8_t regEnc = reg & 7;
-        uint8_t modrm  = static_cast<uint8_t>(0x40 | ((regEnc & 3) << 3) | 7);
-        if (regEnc < 4) {
-            rexW();
-        } else {
-            rexWR(); // REX.R for Reg field
-            modrm = static_cast<uint8_t>(0x40 | ((regEnc - 4) << 3) | 7);
-        }
-        emitBytes({0x8b, modrm, static_cast<uint8_t>(disp & 0xff)});
-        asmLine(std::string("mov ") + regName(reg) + ", [rdi+" + std::to_string(disp) + "]");
-    }
-
-    // mov [rdi + disp8], r64 (reg: 0=rax..7=r11)
-    void movToFrame(int disp, uint8_t reg) {
-        uint8_t regEnc = reg & 7;
-        uint8_t modrm  = static_cast<uint8_t>(0x40 | ((regEnc & 3) << 3) | 7);
+        uint8_t mod    = fitsDisp8(disp) ? 0x40 : 0x80;
+        uint8_t modrm  = static_cast<uint8_t>(mod | ((regEnc & 3) << 3) | 7);
         if (regEnc < 4) {
             rexW();
         } else {
             rexWR();
-            modrm = static_cast<uint8_t>(0x40 | ((regEnc - 4) << 3) | 7);
+            modrm = static_cast<uint8_t>(mod | ((regEnc - 4) << 3) | 7);
         }
-        emitBytes({0x89, modrm, static_cast<uint8_t>(disp & 0xff)});
+        emitByte(0x8b);
+        emitByte(modrm);
+        if (fitsDisp8(disp))
+            emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitDisp32(disp);
+        asmLine(std::string("mov ") + regName(reg) + ", [rdi+" + std::to_string(disp) + "]");
+    }
+
+    // mov [rdi + disp], r64 (reg: 0=rax..7=r11)
+    void movToFrame(int disp, uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t mod    = fitsDisp8(disp) ? 0x40 : 0x80;
+        uint8_t modrm  = static_cast<uint8_t>(mod | ((regEnc & 3) << 3) | 7);
+        if (regEnc < 4) {
+            rexW();
+        } else {
+            rexWR();
+            modrm = static_cast<uint8_t>(mod | ((regEnc - 4) << 3) | 7);
+        }
+        emitByte(0x89);
+        emitByte(modrm);
+        if (fitsDisp8(disp))
+            emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitDisp32(disp);
         asmLine(std::string("mov [rdi+") + std::to_string(disp) + "], " + regName(reg));
     }
 
-    // mov [rdi + disp8], rax
+    // mov [rdi + disp], rax
     void movFrameFromRax(int disp) {
         rexW();
-        emitBytes({0x89, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        if (fitsDisp8(disp)) {
+            emitBytes({0x89, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0x89, 0x87});
+            emitDisp32(disp);
+        }
         asmLine("mov [rdi+" + std::to_string(disp) + "], rax");
     }
 
@@ -160,17 +192,27 @@ class Encoder {
         asmLine(std::string("sub rax, ") + regName(reg));
     }
 
-    // add rax, [rdi + disp8]
+    // add rax, [rdi + disp]
     void addRaxFromFrame(int disp) {
         rexW();
-        emitBytes({0x03, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        if (fitsDisp8(disp)) {
+            emitBytes({0x03, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0x03, 0x87});
+            emitDisp32(disp);
+        }
         asmLine("add rax, [rdi+" + std::to_string(disp) + "]");
     }
 
-    // sub rax, [rdi + disp8]
+    // sub rax, [rdi + disp]
     void subRaxFromFrame(int disp) {
         rexW();
-        emitBytes({0x2b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        if (fitsDisp8(disp)) {
+            emitBytes({0x2b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0x2b, 0x87});
+            emitDisp32(disp);
+        }
         asmLine("sub rax, [rdi+" + std::to_string(disp) + "]");
     }
 
@@ -327,6 +369,65 @@ class Encoder {
             static_cast<uint8_t>((pc >> 24) & 0xff),
         }); // mov r8d, imm32 (arg3)
         asmLine("mov r8d, " + std::to_string(pc));
+        movRaxImm64(addr);
+        callRax();
+    }
+
+    // Windows x64: call trampolineOper(slots, ctx, pc, graph). rdi=slots, rsi=ctx.
+    void callTrampolineOperWin64(uint32_t pc, uint64_t graphPtr, uint64_t addr) {
+        emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi (arg1 slots)
+        asmLine("mov rcx, rdi");
+        emitBytes({0x48, 0x89, 0xf2}); // mov rdx, rsi (arg2 ctx)
+        asmLine("mov rdx, rsi");
+        emitByte(0x41);
+        emitByte(0xb8);
+        emitBytes({
+            static_cast<uint8_t>(pc & 0xff),
+            static_cast<uint8_t>((pc >> 8) & 0xff),
+            static_cast<uint8_t>((pc >> 16) & 0xff),
+            static_cast<uint8_t>((pc >> 24) & 0xff),
+        }); // mov r8d, imm32 (arg3 pc)
+        asmLine("mov r8d, " + std::to_string(pc));
+        emitByte(0x49);
+        emitByte(0xb9); // mov r9, imm64 (arg4 graph)
+        emitBytes({
+            static_cast<uint8_t>(graphPtr & 0xff),
+            static_cast<uint8_t>((graphPtr >> 8) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 16) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 24) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 32) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 40) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 48) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 56) & 0xff),
+        });
+        asmLine("mov r9, graph");
+        movRaxImm64(addr);
+        callRax();
+    }
+
+    // SysV x64: call trampolineOper(slots, ctx, pc, graph). rdi, rsi already set.
+    void callTrampolineOperSysV(uint32_t pc, uint64_t graphPtr, uint64_t addr) {
+        emitBytes({0x48, 0xc7, 0xc2}); // mov rdx, imm32 (arg3 pc)
+        emitBytes({
+            static_cast<uint8_t>(pc & 0xff),
+            static_cast<uint8_t>((pc >> 8) & 0xff),
+            static_cast<uint8_t>((pc >> 16) & 0xff),
+            static_cast<uint8_t>((pc >> 24) & 0xff),
+        });
+        asmLine("mov rdx, " + std::to_string(pc));
+        emitByte(0x48);
+        emitByte(0xb9); // mov rcx, imm64 (arg4 graph) - SysV 4th arg is rcx
+        emitBytes({
+            static_cast<uint8_t>(graphPtr & 0xff),
+            static_cast<uint8_t>((graphPtr >> 8) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 16) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 24) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 32) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 40) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 48) & 0xff),
+            static_cast<uint8_t>((graphPtr >> 56) & 0xff),
+        });
+        asmLine("mov rcx, graph");
         movRaxImm64(addr);
         callRax();
     }

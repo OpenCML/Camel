@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,23 +21,12 @@
 
 namespace camel::jit {
 
-bool TierPolicy::shouldJit(GraphIR::Graph *graph, size_t pc) const {
+bool TierPolicy::shouldJit(uint32_t callCount) const {
     if (config_.policy == JitPolicy::Disabled)
         return false;
     if (config_.policy == JitPolicy::Always)
         return true;
-
-    auto it = callCounts_.find(graph);
-    if (it == callCounts_.end())
-        return false;
-    auto jt = it->second.find(pc);
-    return jt != it->second.end() && jt->second >= config_.hotThreshold;
-}
-
-void TierPolicy::recordCall(GraphIR::Graph *graph, size_t pc) {
-    if (config_.policy != JitPolicy::OnDemand)
-        return;
-    callCounts_[graph][pc]++;
+    return callCount >= config_.hotThreshold;
 }
 
 } // namespace camel::jit
