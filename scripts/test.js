@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import { runCommand, BASEDIR, logStep, logDone, logFail } from './common.js'
+import { execSync } from 'child_process'
+import { BASEDIR, logStep, logDone, logFail } from './common.js'
 
 const C = {
     reset: '\x1b[0m',
@@ -8,6 +9,8 @@ const C = {
     cyan: '\x1b[36m',
     dim: '\x1b[2m'
 }
+
+const PANEL_LINES = 8 // 7 box + 1 "> " + 1 "\n" after key
 
 function getTermWidth() {
     const cols = process.stdout.columns
@@ -43,8 +46,15 @@ function getKeyPrompt(i, files) {
     return lines.join('\n')
 }
 
-function waitForAction(keyPrompt) {
+function writePanel(keyPrompt, isRedraw = false) {
+    if (isRedraw && process.stdout.isTTY) {
+        process.stdout.write(`\x1b[${PANEL_LINES}A\x1b[0J`)
+    }
     process.stdout.write(keyPrompt + '\n> ')
+}
+
+function waitForAction(keyPrompt, isRedraw = false) {
+    writePanel(keyPrompt, isRedraw)
 
     return new Promise((resolve) => {
         if (process.stdin.isTTY) {
@@ -79,7 +89,11 @@ const TEST_DIR = path.join(BASEDIR, 'test', 'run')
 function parseArgs() {
     const args = process.argv.slice(2)
     const suite = args[0] || 'linear'
-    let template = args.slice(1).join(' ').trim() || 'run {file}'
+    let template = args.slice(1).join(' ').trim()
+    if (!template && process.env.TEST_TEMPLATE) {
+        template = process.env.TEST_TEMPLATE.trim()
+    }
+    template = template || '{file}'
     if (!template.includes('{file}')) {
         template += ' {file}'
     }
@@ -113,15 +127,18 @@ async function main() {
     logStep(`Running ${files.length} tests in test/run/${suite}/`)
     logStep(`命令模板: camel ${template}`)
 
-    for (let i = 0; i < files.length; ) {
+    let isRedraw = false
+    for (let i = 0; i < files.length;) {
         let action
         do {
-            action = await waitForAction(getKeyPrompt(i, files))
+            action = await waitForAction(getKeyPrompt(i, files), isRedraw)
+            isRedraw = true
             if (action === 'quit') process.exit(0)
             if (action === 'clear') {
                 console.clear()
                 logStep(`[${i + 1}/${files.length}] ${files[i]}`)
                 logStep(`命令模板: camel ${template}`)
+                isRedraw = false
                 continue
             }
             if (action === 'next') {
@@ -135,11 +152,18 @@ async function main() {
         } while (action !== 'retry')
 
         // Enter: 执行当前
+        isRedraw = false
         const file = files[i]
         const filePath = path.join(dir, file)
         const cmd = fullTemplate.replace(/\{file\}/g, `"${filePath}"`).replace(/\s+/g, ' ').trim()
         logStep(`[${i + 1}/${files.length}] 即将执行: ${cmd}`)
-        runCommand(cmd)
+
+        try {
+            logStep(`Running: ${cmd}`)
+            execSync(cmd, { stdio: 'inherit' })
+        } catch (error) {
+            logFail(`Error executing command: ${cmd}\n${error}`)
+        }
     }
 
     logDone(`All ${files.length} tests passed.`)
