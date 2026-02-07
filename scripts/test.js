@@ -2,20 +2,49 @@ import fs from 'fs'
 import path from 'path'
 import { runCommand, BASEDIR, logStep, logDone, logFail } from './common.js'
 
+const C = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    cyan: '\x1b[36m',
+    dim: '\x1b[2m'
+}
+
+function getTermWidth() {
+    const cols = process.stdout.columns
+    return typeof cols === 'number' && cols > 0 ? Math.min(cols, 60) : 40
+}
+
+function padVis(s, n) {
+    const raw = s.replace(/\x1b\[[0-9;]*m/g, '')
+    if (raw.length >= n) return s
+    return s + ' '.repeat(n - raw.length)
+}
+
 function getKeyPrompt(i, files) {
-    const curr = files[i] ?? '(无)'
-    const next = i + 1 < files.length ? files[i + 1] : '(无)'
-    const prev = i > 0 ? files[i - 1] : '(无)'
-    return [
-        `Enter 执行: ${curr}`,
-        `n 下一个: ${next}`,
-        `b 上一个: ${prev}`,
-        'q 退出 | c 清屏'
-    ].join('\n')
+    const W = getTermWidth() - 2
+    const HL = Math.floor((W - 1) / 2)
+    const HR = W - 1 - HL
+    const curr = files[i] ?? '(none)'
+    const next = i + 1 < files.length ? files[i + 1] : '(none)'
+    const prev = i > 0 ? files[i - 1] : '(none)'
+    const currLine = `> ${curr}`
+    const k = (c) => `${C.bright}${C.cyan}${c}${C.reset}`
+    const nLine = padVis(`(${k('N')})ext ${next}`, HL - 2)
+    const pLine = padVis(`(${k('P')})rev ${prev}`, HR - 2)
+    const lines = [
+        `+${'-'.repeat(W)}+`,
+        `| ${C.bright}${C.cyan}${padVis(currLine, W - 2)}${C.reset} |`,
+        `+${'-'.repeat(HL)}+${'-'.repeat(HR)}+`,
+        `| ${nLine} | ${pLine} |`,
+        `+${'-'.repeat(HL)}+${'-'.repeat(HR)}+`,
+        `| ${padVis(`(${k('Q')})uit`, HL - 2)} | ${padVis(`(${k('C')})lear`, HR - 2)} |`,
+        `+${'-'.repeat(HL)}+${'-'.repeat(HR)}+`
+    ]
+    return lines.join('\n')
 }
 
 function waitForAction(keyPrompt) {
-    process.stdout.write(keyPrompt + '\n按键: ')
+    process.stdout.write(keyPrompt + '\n> ')
 
     return new Promise((resolve) => {
         if (process.stdin.isTTY) {
@@ -36,7 +65,7 @@ function waitForAction(keyPrompt) {
             if (key === '\r' || key === '\n' || k === '\r' || k === '\n') resolve('retry')
             else if (k === 'q') resolve('quit')
             else if (k === 'n') resolve('next')
-            else if (k === 'b') resolve('prev')
+            else if (k === 'p') resolve('prev')
             else if (k === 'c') resolve('clear')
             else resolve('retry')
         }
