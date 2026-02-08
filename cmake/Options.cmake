@@ -1,5 +1,6 @@
 # Camel 项目编译选项
-# 使用 cmake -DOPTION_NAME=OFF 覆盖默认值
+# 选项定义见 cmake/options.json，可用 npm run config 交互式配置
+# 用户覆盖保存在 .camel-opts.json，build/debug/profile 会自动读取
 
 include_guard(GLOBAL)
 

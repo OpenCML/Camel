@@ -15,6 +15,7 @@
         "codegen": "node ./scripts/codegen.js",
         "check": "node ./scripts/check.js",
         "test": "node ./scripts/test.js",
+        "config": "node ./scripts/config.js",
         "build": "node ./scripts/build.js",
         "debug": "node ./scripts/debug.js",
         "profile": "node ./scripts/profile.js",
