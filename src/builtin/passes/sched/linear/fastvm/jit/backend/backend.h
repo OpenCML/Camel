@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "builtin/passes/sched/linear/fastvm/bytecode.h"
@@ -63,7 +64,8 @@ class IJitBackend {
   public:
     virtual ~IJitBackend() = default;
 
-    virtual std::unique_ptr<CompiledCode> compile(const CompilationUnit &unit) = 0;
+    virtual std::unique_ptr<CompiledCode>
+    compile(const CompilationUnit &unit, std::string *failureReason = nullptr) = 0;
     virtual void registerTrampoline(const char *name, void *addr)              = 0;
     virtual JitEntryFn load(std::unique_ptr<CompiledCode> code)                = 0;
     virtual void unload(JitEntryFn fn)                                         = 0;

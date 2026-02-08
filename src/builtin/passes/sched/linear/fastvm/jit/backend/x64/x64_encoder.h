@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,7 +63,10 @@ class Encoder {
     void rexWR() { emitByte(0x4C); }
     void rexWB() { emitByte(0x49); }
 
-    // mov rax, [rdi + disp] (disp8 或 disp32)
+    // --- 标准槽模型：每槽一字（8 字节），以下所有 frame/静态区 访问均为 64 位（r64/m64 或 xmm
+    // 双精度）---
+
+    // mov rax, [rdi + disp] (disp8 或 disp32)，64 位加载一槽
     void movRaxFromFrame(int disp) {
         rexW();
         if (fitsDisp8(disp)) {
@@ -120,7 +123,7 @@ class Encoder {
         asmLine(std::string("mov [rdi+") + std::to_string(disp) + "], " + regName(reg));
     }
 
-    // mov [rdi + disp], rax
+    // mov [rdi + disp], rax，64 位写回一槽
     void movFrameFromRax(int disp) {
         rexW();
         if (fitsDisp8(disp)) {
@@ -216,7 +219,206 @@ class Encoder {
         asmLine("sub rax, [rdi+" + std::to_string(disp) + "]");
     }
 
-    // cmp [rdi + disp8], imm32 (signed)
+    // 从编译期常量地址加载/运算（用于静态区 slot，用 rbx 作临时）
+    void movRaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb); // mov rbx, imm64
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        rexW();
+        emitBytes({0x8b, 0x03}); // mov rax, [rbx]
+        asmLine("mov rax, [rbx]");
+    }
+    void subRaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        rexW();
+        emitBytes({0x2b, 0x03}); // sub rax, [rbx]
+        asmLine("sub rax, [rbx]");
+    }
+    void addRaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        rexW();
+        emitBytes({0x03, 0x03}); // add rax, [rbx]
+        asmLine("add rax, [rbx]");
+    }
+
+    // double (float64) 算术：用 xmm0，一槽 8 字节；与 LADD/LSUB 槽布局一致
+    void movXmm0FromFrame(int disp) {
+        emitBytes({0xf2, 0x0f, 0x10});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("movsd xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void addXmm0FromFrame(int disp) {
+        emitBytes({0xf2, 0x0f, 0x58});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("addsd xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void subXmm0FromFrame(int disp) {
+        emitBytes({0xf2, 0x0f, 0x5c});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("subsd xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void movFrameFromXmm0(int disp) {
+        emitBytes({0xf2, 0x0f, 0x11});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("movsd [rdi+" + std::to_string(disp) + "], xmm0");
+    }
+    void movXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        emitBytes({0xf2, 0x0f, 0x10, 0x03});
+        asmLine("movsd xmm0, [rbx]");
+    }
+    void addXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        emitBytes({0xf2, 0x0f, 0x58, 0x03});
+        asmLine("addsd xmm0, [rbx]");
+    }
+    void subXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        emitBytes({0xf2, 0x0f, 0x5c, 0x03});
+        asmLine("subsd xmm0, [rbx]");
+    }
+
+    // double 与 GPR 互转（reg 0..7 = rax..r11，与 regName 一致）
+    void movXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
+        if (regEnc < 4) {
+            emitBytes({0x66, 0x48, 0x0f, 0x6e, modrm});
+        } else {
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, modrm});
+        }
+        asmLine(std::string("movq xmm0, ") + regName(reg));
+    }
+    void addXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC8 | (regEnc & 7)); // xmm1 = dest of movq
+        if (regEnc < 4) {
+            emitBytes({0x66, 0x48, 0x0f, 0x6e, modrm});
+        } else {
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, modrm});
+        }
+        asmLine(std::string("movq xmm1, ") + regName(reg));
+        emitBytes({0xf2, 0x0f, 0x58, 0xc1});
+        asmLine("addsd xmm0, xmm1");
+    }
+    void subXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC8 | (regEnc & 7));
+        if (regEnc < 4) {
+            emitBytes({0x66, 0x48, 0x0f, 0x6e, modrm});
+        } else {
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, modrm});
+        }
+        asmLine(std::string("movq xmm1, ") + regName(reg));
+        emitBytes({0xf2, 0x0f, 0x5c, 0xc1});
+        asmLine("subsd xmm0, xmm1");
+    }
+    void movRegFromXmm0(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
+        if (regEnc < 4) {
+            emitBytes({0x66, 0x48, 0x0f, 0x7e, modrm});
+        } else {
+            emitBytes({0x66, 0x49, 0x0f, 0x7e, modrm});
+        }
+        asmLine(std::string("movq ") + regName(reg) + ", xmm0");
+    }
+
+    // cmp [rdi + disp8], imm32 (signed)，64 位比较一槽（REX.W）
     void cmpFrameWithImm(int disp, int32_t imm) {
         rexW();
         emitBytes({0x81, 0x7f, static_cast<uint8_t>(disp & 0xff)});
@@ -229,7 +431,7 @@ class Encoder {
         asmLine("cmp [rdi+" + std::to_string(disp) + "], " + std::to_string(imm));
     }
 
-    // cmp rax, [rdi + disp8]  then jcc
+    // cmp rax, [rdi + disp8] 64 位比较一槽
     void cmpRaxWithFrame(int disp) {
         rexW();
         emitBytes({0x3b, 0x47, static_cast<uint8_t>(disp & 0xff)});
@@ -305,6 +507,18 @@ class Encoder {
         asmLine("setle al");
         emitBytes({0x48, 0x0f, 0xb6, 0xc0}); // movzx rax, al
         asmLine("movzx rax, al");
+    }
+
+    // test rax, rax（设置 ZF，供后续 cmove 使用）
+    void testRaxRax() {
+        emitBytes({0x48, 0x85, 0xc0});
+        asmLine("test rax, rax");
+    }
+
+    // cmove rcx, rbx（ZF=1 时 rcx=rbx），用于 JOIN 根据分支索引选值
+    void cmoveRcxFromRbx() {
+        emitBytes({0x48, 0x0f, 0x44, 0xcb});
+        asmLine("cmove rcx, rbx");
     }
 
     // test rax, rax; jz rel32 (jump if cond is false)

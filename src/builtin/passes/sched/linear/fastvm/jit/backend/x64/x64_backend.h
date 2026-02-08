@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include <string>
 #include <unordered_map>
 
 #include "../backend.h"
@@ -30,13 +31,16 @@ class X64Backend : public IJitBackend {
   public:
     X64Backend();
 
-    std::unique_ptr<CompiledCode> compile(const CompilationUnit &unit) override;
+    std::unique_ptr<CompiledCode>
+    compile(const CompilationUnit &unit, std::string *failureReason = nullptr) override;
     void registerTrampoline(const char *name, void *addr) override;
     JitEntryFn load(std::unique_ptr<CompiledCode> code) override;
     void unload(JitEntryFn fn) override;
 
   private:
-    bool compileBytecode(const CompilationUnit &unit, std::vector<uint8_t> &code);
+    bool compileBytecode(
+        const CompilationUnit &unit, std::vector<uint8_t> &code,
+        std::string *failureReason = nullptr);
     int slotDisp(int idx) const;
 
     std::unordered_map<std::string, void *> trampolines_;

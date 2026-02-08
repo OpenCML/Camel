@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,12 @@ namespace camel::jit {
 
 class FallbackBackend : public IJitBackend {
   public:
-    std::unique_ptr<CompiledCode> compile(const CompilationUnit &) override { return nullptr; }
+    std::unique_ptr<CompiledCode>
+    compile(const CompilationUnit &, std::string *failureReason = nullptr) override {
+        if (failureReason)
+            *failureReason = "JIT disabled (fallback backend)";
+        return nullptr;
+    }
     void registerTrampoline(const char *, void *) override {}
     JitEntryFn load(std::unique_ptr<CompiledCode>) override { return nullptr; }
     void unload(JitEntryFn) override {}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,7 @@
 #if ENABLE_FASTVM_JIT
 #include "../bytecode.h"
 #include "backend/backend.h"
+#include "core/context/frame.h"
 #include "runtime/trampoline.h"
 #endif
 
@@ -52,19 +53,27 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
 
     for (const auto &[g, entryPc] : offsetMap) {
+        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
+        if (!meta)
+            meta = installFrameMetaInfoForGraph(g);
+
         camel::jit::CompilationUnit unit{
             .graph          = g,
+            .frameMeta      = meta,
             .bytecodes      = bcSpan,
             .entryPc        = entryPc,
             .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
             .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
             .asmOut         = &os,
         };
 
         os << g->mangledName() << ":\n";
-        auto compiled = backend->compile(unit);
+        std::string failureReason;
+        auto compiled = backend->compile(unit, &failureReason);
         if (!compiled) {
-            os << "  [compile failed]\n\n";
+            os << "  [compile failed] " << (failureReason.empty() ? "(unknown)" : failureReason)
+               << "\n\n";
             continue;
         }
         os << "\n";
