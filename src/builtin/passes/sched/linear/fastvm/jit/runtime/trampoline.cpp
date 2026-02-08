@@ -19,13 +19,19 @@
 
 #include "trampoline.h"
 
+#include "core/rtdata/data.h"
+
+#if ENABLE_FASTVM_JIT
 #include "builtin/passes/sched/linear/fastvm/bytecode.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
 #include "core/context/frame.h"
 #include "core/operator.h"
 #include "utils/log.h"
+#endif
 
 extern "C" {
+
+#if ENABLE_FASTVM_JIT
 
 slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
@@ -130,5 +136,12 @@ slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc, GraphIR::Graph *graph
     slots[result] = ret;
     return ret;
 }
+
+#else
+// JIT 关闭时仅提供占位符号，避免链接未定义；不应被调用
+slot_t trampolineFunc(slot_t *, void *, size_t) { return {}; }
+slot_t trampolineTail(slot_t *, void *, size_t) { return {}; }
+slot_t trampolineOper(slot_t *, void *, size_t, GraphIR::Graph *) { return {}; }
+#endif
 
 } // extern "C"
