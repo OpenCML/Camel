@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -124,17 +124,14 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
 #endif
 
     opperf::start();
-
     size_t pc    = offsetMap_.at(graph.get());
     Frame *frame = framePool_.acquire(graph.get());
     push(pc, frame);
     call(pc, frame);
     pop();
     framePool_.release(frame);
-
     opperf::stop();
     opperf::report(std::cout);
-
     return Graph::null();
 }
 
@@ -360,19 +357,11 @@ void FastVMSchedPass::compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc
     if (fn) {
         jitCache_[graph]  = fn;
         jitFnToGraph_[fn] = graph;
-        // 回写所有 FUNC 字节码：将 JIT 地址写入 extra，fastop[1]=0 标识已替换
-        auto fnPtr = reinterpret_cast<void *>(fn);
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
             if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-                if (bc.fastop[1] != 0 &&
-                    getFuncExtraPtr(*bc.extra()) ==
-                        reinterpret_cast<void *>(
-                            reinterpret_cast<uintptr_t>(graph) & kFuncExtraPtrMask)) {
-                    uint32_t count = getFuncExtraCount(*bc.extra());
-                    setFuncExtraPacked(*bc.extra(), fnPtr, count);
-                    bc.fastop[1] = 0;
-                }
+                if (bc.fastop[1] != 0 && getFuncExtraGraph(&bc) == graph)
+                    setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
             }
             pc += bc.opsize;
         }

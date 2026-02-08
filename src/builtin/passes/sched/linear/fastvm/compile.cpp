@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -278,9 +278,13 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                 normOps,
                 {},
                 true,
-                {
-                    .graph = &(funcNode->func()->graph()),
-                });
+                {.graph = &(funcNode->func()->graph())},
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+                2
+#else
+                1
+#endif
+            );
             break;
         }
 

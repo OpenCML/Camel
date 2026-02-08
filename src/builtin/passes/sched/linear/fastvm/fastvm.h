@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 
 #if ENABLE_FASTVM_JIT
 #include "jit/jit.h"
+#include "jit/runtime/trampoline.h"
 #include "jit/tier/tier_policy.h"
 #include <mutex>
 #endif
@@ -47,8 +48,7 @@ class FastVMSchedPass : public LinearSchedPass {
 #if ENABLE_FASTVM_JIT
     std::unique_ptr<camel::jit::IJitBackend> jitBackend_;
     std::unordered_map<GraphIR::Graph *, camel::jit::JitEntryFn> jitCache_;
-    std::unordered_map<camel::jit::JitEntryFn, GraphIR::Graph *>
-        jitFnToGraph_; // fn->graph 供 frame 创建
+    std::unordered_map<camel::jit::JitEntryFn, GraphIR::Graph *> jitFnToGraph_;
     std::mutex jitCacheMutex_;
     camel::jit::JitConfig jitConfig_{};
     camel::jit::TierPolicy tierPolicy_{jitConfig_};
@@ -72,8 +72,6 @@ class FastVMSchedPass : public LinearSchedPass {
         bytecodes_ = std::move(bytecodes);
         offsetMap_ = std::move(offsetMap);
     }
-
-    slot_t call(size_t pc, Frame *rootFrame);
 
     inline void push(size_t pc, Frame *frame) {
         pcStack_.push_back(pc);
@@ -123,6 +121,8 @@ class FastVMSchedPass : public LinearSchedPass {
     virtual ~FastVMSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+
+    slot_t call(size_t pc, Frame *rootFrame);
 
 #if ENABLE_FASTVM_JIT
     Frame *acquireFrameForCall(GraphIR::Graph *graph) { return framePool_.acquire(graph); }

@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "../backend/backend.h"
 #include "core/context/frame.h"
 #include "core/rtdata/data.h"
 

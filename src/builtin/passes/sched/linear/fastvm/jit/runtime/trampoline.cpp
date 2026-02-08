@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,23 +33,16 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
-    void *extraPtr  = getFuncExtraPtr(*bc.extra());
     size_t targetPc = static_cast<size_t>(bc.fastop[1]);
     size_t argsCnt  = bc.normCnt();
     uint32_t count  = 0;
     if (targetPc != 0)
-        count = incFuncExtraCount(*const_cast<BytecodeExtra *>(bc.extra()));
+        count = incFuncExtraCount(&bc);
 
     if (targetPc == 0) {
-        // 目标已 JIT：extra 存 JitEntryFn
-        auto fn           = reinterpret_cast<camel::jit::JitEntryFn>(extraPtr);
-        GraphIR::Graph *g = vm->jitFnToGraph(fn);
-        if (!g) {
-            EXEC_WHEN_DEBUG(
-                l.in("JIT.Trampoline").error("jitFnToGraph returned null for JIT->JIT call"));
-            return NullSlot;
-        }
-        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
+        GraphIR::Graph *g         = getFuncExtraGraph(&bc);
+        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+        FrameMeta *meta           = g->getExtra<FrameMeta, 0>();
         if (!meta)
             meta = installFrameMetaInfoForGraph(g);
         size_t calleeSlotCount = meta->runtimeDataType->size();
@@ -61,7 +54,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         return fn(calleeSlots, ctx);
     }
 
-    GraphIR::Graph *targetGraph = reinterpret_cast<GraphIR::Graph *>(extraPtr);
+    GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
     EXEC_WHEN_DEBUG(
         l.in("JIT.Trampoline")
             .debug("trampolineFunc: JIT->interpreter target='{}'", targetGraph->name()));
@@ -69,7 +62,8 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     Frame *newFrame = vm->acquireFrameForCall(targetGraph);
     for (size_t i = 0; i < argsCnt; ++i)
         newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
-    slot_t result = vm->invokeCallOrJit(targetPc, targetGraph, newFrame, ctx, count);
+    (void)count;
+    slot_t result = vm->call(targetPc, newFrame);
     vm->releaseFrameForCall(newFrame);
     return result;
 }
@@ -80,22 +74,16 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
-    void *extraPtr  = getFuncExtraPtr(*bc.extra());
     size_t targetPc = static_cast<size_t>(bc.fastop[1]);
     size_t argsCnt  = bc.normCnt();
     uint32_t count  = 0;
     if (targetPc != 0)
-        count = incFuncExtraCount(*const_cast<BytecodeExtra *>(bc.extra()));
+        count = incFuncExtraCount(&bc);
 
     if (targetPc == 0) {
-        auto fn           = reinterpret_cast<camel::jit::JitEntryFn>(extraPtr);
-        GraphIR::Graph *g = vm->jitFnToGraph(fn);
-        if (!g) {
-            EXEC_WHEN_DEBUG(
-                l.in("JIT.Trampoline").error("jitFnToGraph returned null for JIT->JIT tail call"));
-            return NullSlot;
-        }
-        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
+        GraphIR::Graph *g         = getFuncExtraGraph(&bc);
+        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+        FrameMeta *meta           = g->getExtra<FrameMeta, 0>();
         if (!meta)
             meta = installFrameMetaInfoForGraph(g);
         size_t calleeSlotCount = meta->runtimeDataType->size();
@@ -107,7 +95,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         return fn(calleeSlots, ctx);
     }
 
-    GraphIR::Graph *targetGraph = reinterpret_cast<GraphIR::Graph *>(extraPtr);
+    GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
     EXEC_WHEN_DEBUG(
         l.in("JIT.Trampoline")
             .debug("trampolineTail: JIT->interpreter target='{}'", targetGraph->name()));
@@ -115,7 +103,8 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     Frame *newFrame = vm->acquireFrameForTail(targetGraph);
     for (size_t i = 0; i < argsCnt; ++i)
         newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
-    return vm->invokeCallOrJit(targetPc, targetGraph, newFrame, ctx, count);
+    (void)count;
+    return vm->call(targetPc, newFrame);
 }
 
 slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc, GraphIR::Graph *graph) {

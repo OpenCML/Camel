@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -232,45 +232,65 @@ struct BytecodeHeader {                  // 8 bytes
         return reinterpret_cast<const data_idx_t *>(this + 1);
     }
 
-    inline BytecodeExtra *extra() { return reinterpret_cast<BytecodeExtra *>(this + opsize - 1); }
+    inline BytecodeExtra *extra() {
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL)
+            return reinterpret_cast<BytecodeExtra *>(this + opsize - 2);
+#endif
+        return reinterpret_cast<BytecodeExtra *>(this + opsize - 1);
+    }
 
     inline const BytecodeExtra *extra() const {
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL)
+            return reinterpret_cast<const BytecodeExtra *>(this + opsize - 2);
+#endif
         return reinterpret_cast<const BytecodeExtra *>(this + opsize - 1);
     }
+
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+    // 仅对 FUNC/TAIL 有效：第二块 extra 字（count 或 JitEntryFn）
+    inline uint64_t *extra2() { return reinterpret_cast<uint64_t *>(this + opsize - 1); }
+    inline const uint64_t *extra2() const {
+        return reinterpret_cast<const uint64_t *>(this + opsize - 1);
+    }
+#endif
 };
 
 using Bytecode = BytecodeHeader;
 
 union BytecodeExtra {      // 8 bytes
     Type *pType;           // for CAST
-    GraphIR::Graph *graph; // for FUNC (低48位 ptr，高16位 call count)
+    GraphIR::Graph *graph; // for FUNC/TAIL word0: Graph* only
     operator_t func;       // for OPER
     MarkOpCode mark;       // for SCHD
-    uint64_t raw;          // for FUNC packed: (count<<48)|(ptr&0xFFFF'FFFF'FFFF)
+    uint64_t raw;          // generic
 
     std::string toString(OpCode opcode) const;
 };
 
-// FUNC extra 打包：低48位 ptr(Graph* 或 JitEntryFn)，高16位 call count
-inline constexpr uint64_t kFuncExtraPtrMask = 0x0000'FFFF'FFFF'FFFFULL;
-inline constexpr int kFuncExtraCountShift   = 48;
+// FUNC/TAIL：第一块 extra 为 Graph*；启用了 JIT 时第二块 extra 为 count（未 JIT）或 JitEntryFn（已
+// JIT）
+inline GraphIR::Graph *getFuncExtraGraph(const BytecodeHeader *bc) { return bc->extra()->graph; }
 
-inline void *getFuncExtraPtr(const BytecodeExtra &e) {
-    return reinterpret_cast<void *>(e.raw & kFuncExtraPtrMask);
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+inline uint32_t getFuncExtraCount(BytecodeHeader *bc) {
+    return static_cast<uint32_t>(*bc->extra2());
 }
-inline uint32_t getFuncExtraCount(const BytecodeExtra &e) {
-    return static_cast<uint32_t>(e.raw >> kFuncExtraCountShift);
+inline void *getFuncExtraFn(BytecodeHeader *bc) { return reinterpret_cast<void *>(*bc->extra2()); }
+inline void *getFuncExtraFn(const BytecodeHeader *bc) {
+    return reinterpret_cast<void *>(*bc->extra2());
 }
-inline void setFuncExtraPacked(BytecodeExtra &e, void *ptr, uint32_t count) {
-    e.raw = (static_cast<uint64_t>(count) << kFuncExtraCountShift) |
-            (reinterpret_cast<uintptr_t>(ptr) & kFuncExtraPtrMask);
+inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
+    *bc->extra2() = reinterpret_cast<uint64_t>(fn);
+    bc->fastop[1] = 0;
 }
-inline uint32_t incFuncExtraCount(BytecodeExtra &e) {
-    uint32_t c = getFuncExtraCount(e) + 1;
-    e.raw =
-        (e.raw & kFuncExtraPtrMask) | (static_cast<uint64_t>(c & 0xFFFFU) << kFuncExtraCountShift);
-    return c;
+inline uint32_t incFuncExtraCount(BytecodeHeader *bc) {
+    uint64_t *p = bc->extra2();
+    *p          = *p + 1;
+    return static_cast<uint32_t>(*p);
 }
+#endif
 
 static_assert(sizeof(Bytecode) == 8, "Bytecode must be exactly 8 bytes");
 static_assert(sizeof(BytecodeHeader) == 8, "BytecodeHeader must be exactly 8 bytes");
@@ -284,4 +304,4 @@ Bytecode *appendBytecode(
     bytecode_vec_t &vec, OpCode opcode, data_idx_t result,
     const std::vector<data_idx_t> &fastops = {}, const std::vector<data_idx_t> &normOperands = {},
     const std::vector<data_idx_t> &withOperands = {}, bool hasExtra = false,
-    const BytecodeExtra &extra = {});
+    const BytecodeExtra &extra = {}, size_t extraUnits = 1);
