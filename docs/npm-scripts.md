@@ -55,4 +55,16 @@ npm run test -- linear "run {file} --pass-until 3"
 ### 注意事项
 
 1. 运行前需先执行 `npm run build` 生成 `camel` 可执行文件
-2. 使用 `npm run test` 时，`--` 后的参数会传给脚本；若需传递含 `--` 的参数，需用引号包裹整个 template
+2. **必须使用 `--`**：`npm run test -- linear "template"`，否则 npm 会消费 `-v`、`--log-level` 等参数
+3. 若 npm 仍消费参数，可用环境变量兜底：
+
+   ```powershell
+   # PowerShell
+   $env:TEST_TEMPLATE="-v --log-level debug {file} std::nvm"
+   npm run test -- linear
+   ```
+
+   ```bash
+   # Bash
+   TEST_TEMPLATE="-v --log-level debug {file} std::nvm" npm run test -- linear
+   ```

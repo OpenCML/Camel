@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -178,8 +178,12 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
         return std::format("{}", pType ? pType->toString() : "null");
     case OpCode::FUNC:
         [[fallthrough]];
-    case OpCode::TAIL:
-        return std::format("{}", graph ? graph->mangledName() : "null");
+    case OpCode::TAIL: {
+        void *ptr = getFuncExtraPtr(*this);
+        return std::format(
+            "{}",
+            ptr ? reinterpret_cast<GraphIR::Graph *>(ptr)->mangledName() : "null");
+    }
     case OpCode::OPER:
         return std::format("{}", reinterpret_cast<void *>(func));
     case OpCode::SCHD:
