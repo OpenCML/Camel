@@ -31,6 +31,7 @@
 #include "utils/log.h"
 
 #include <cstring>
+#include <string>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
@@ -158,6 +159,12 @@ bool X64Backend::compileBytecode(
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };
+    auto staticSlotAddrWithComment = [&](data_idx_t idx) -> uint64_t {
+        uint64_t a = staticSlotAddr(idx);
+        if (unit.mirOut && unit.mirSymbolNames)
+            (*unit.mirSymbolNames)[a] = "static slot[" + std::to_string(idx) + "]";
+        return a;
+    };
 
     // 构建 MIR → 优化 → 根据 MIR 计算 pcToOffset → 编码（L2 架构）
     x64::MirBuffer mirBuf;
@@ -183,13 +190,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovRegFromFrame(x64::kRegRax, d0);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitAddRaxFromReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitAddRaxFromFrame(d1);
             else
-                build.emitAddRaxFromMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitAddRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -208,13 +215,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovRegFromFrame(x64::kRegRax, d0);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitSubRaxFromReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitSubRaxFromFrame(d1);
             else
-                build.emitSubRaxFromMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitSubRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -233,13 +240,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitAddXmm0FromReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitAddXmm0FromFrame(d1);
             else
-                build.emitAddXmm0FromMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitAddXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
             else
@@ -258,13 +265,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitSubXmm0FromReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitSubXmm0FromFrame(d1);
             else
-                build.emitSubXmm0FromMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitSubXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
             else
@@ -283,13 +290,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitMulXmm0FromReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitMulXmm0FromFrame(d1);
             else
-                build.emitMulXmm0FromMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitMulXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
             else
@@ -308,13 +315,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitDivXmm0FromReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitDivXmm0FromFrame(d1);
             else
-                build.emitDivXmm0FromMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitDivXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
             else
@@ -333,13 +340,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitComisdXmm0RegSetb(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitComisdXmm0FrameSetb(d1);
             else
-                build.emitComisdXmm0MemAtSetb(staticSlotAddr(bc.fastop[1]));
+                build.emitComisdXmm0MemAtSetb(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -358,13 +365,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitComisdXmm0RegSeta(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitComisdXmm0FrameSeta(d1);
             else
-                build.emitComisdXmm0MemAtSeta(staticSlotAddr(bc.fastop[1]));
+                build.emitComisdXmm0MemAtSeta(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -383,13 +390,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitComisdXmm0RegSete(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitComisdXmm0FrameSete(d1);
             else
-                build.emitComisdXmm0MemAtSete(staticSlotAddr(bc.fastop[1]));
+                build.emitComisdXmm0MemAtSete(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -408,13 +415,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitComisdXmm0RegSetnz(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitComisdXmm0FrameSetnz(d1);
             else
-                build.emitComisdXmm0MemAtSetnz(staticSlotAddr(bc.fastop[1]));
+                build.emitComisdXmm0MemAtSetnz(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -433,13 +440,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitComisdXmm0RegSetbe(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitComisdXmm0FrameSetbe(d1);
             else
-                build.emitComisdXmm0MemAtSetbe(staticSlotAddr(bc.fastop[1]));
+                build.emitComisdXmm0MemAtSetbe(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -458,13 +465,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovXmm0FromFrame(d0);
             else
-                build.emitMovXmm0FromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitComisdXmm0RegSetae(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitComisdXmm0FrameSetae(d1);
             else
-                build.emitComisdXmm0MemAtSetae(staticSlotAddr(bc.fastop[1]));
+                build.emitComisdXmm0MemAtSetae(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -484,7 +491,7 @@ bool X64Backend::compileBytecode(
             else if (op > 0)                                                                       \
                 b.emitMovEaxFromFrame(d);                                                          \
             else                                                                                   \
-                b.emitMovEaxFromMemAt(staticSlotAddr(op));                                         \
+                b.emitMovEaxFromMemAt(staticSlotAddrWithComment(op));                              \
         },                                                                                         \
         loadRight,                                                                                 \
         [&](x64::MirBuilder &b, int rr, int dr) {                                                  \
@@ -500,7 +507,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitAddEaxFromFrame(d);
                 else
-                    b.emitAddEaxFromMemAt(staticSlotAddr(op));
+                    b.emitAddEaxFromMemAt(staticSlotAddrWithComment(op));
             });
             break;
         case OpCode::ISUB:
@@ -510,7 +517,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitSubEaxFromFrame(d);
                 else
-                    b.emitSubEaxFromMemAt(staticSlotAddr(op));
+                    b.emitSubEaxFromMemAt(staticSlotAddrWithComment(op));
             });
             break;
         case OpCode::IMUL:
@@ -520,7 +527,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitMulEaxFromFrame(d);
                 else
-                    b.emitMulEaxFromMemAt(staticSlotAddr(op));
+                    b.emitMulEaxFromMemAt(staticSlotAddrWithComment(op));
             });
             break;
         case OpCode::IDIV:
@@ -530,7 +537,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitIdivEaxByFrame(d);
                 else
-                    b.emitIdivEaxByMemAt(staticSlotAddr(op));
+                    b.emitIdivEaxByMemAt(staticSlotAddrWithComment(op));
             });
             break;
 #undef EMIT_BINARY_EAX
@@ -547,7 +554,7 @@ bool X64Backend::compileBytecode(
             else if (op > 0)                                                                       \
                 b.emitMovEaxFromFrame(d);                                                          \
             else                                                                                   \
-                b.emitMovEaxFromMemAt(staticSlotAddr(op));                                         \
+                b.emitMovEaxFromMemAt(staticSlotAddrWithComment(op));                              \
         },                                                                                         \
         [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
             if (r >= 0)                                                                            \
@@ -555,7 +562,7 @@ bool X64Backend::compileBytecode(
             else if (op > 0)                                                                       \
                 b.emitCmpFrame(d);                                                                 \
             else                                                                                   \
-                b.emitCmpMemAt(staticSlotAddr(op));                                                \
+                b.emitCmpMemAt(staticSlotAddrWithComment(op));                                     \
         })
         case OpCode::ILT:
             EMIT_CMP_EAX(emitCmpEaxFrameSetl, emitCmpEaxMemAtSetl, emitCmpEaxRegSetl);
@@ -589,7 +596,7 @@ bool X64Backend::compileBytecode(
             else if (op > 0)                                                                       \
                 b.emitMovSsXmm0FromFrame(d);                                                       \
             else                                                                                   \
-                b.emitMovSsXmm0FromMemAt(staticSlotAddr(op));                                      \
+                b.emitMovSsXmm0FromMemAt(staticSlotAddrWithComment(op));                           \
         },                                                                                         \
         loadRight,                                                                                 \
         [&](x64::MirBuilder &b, int rr, int dr) {                                                  \
@@ -605,7 +612,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitAddSsXmm0FromFrame(d);
                 else
-                    b.emitAddSsXmm0FromMemAt(staticSlotAddr(op));
+                    b.emitAddSsXmm0FromMemAt(staticSlotAddrWithComment(op));
             });
             break;
         case OpCode::FSUB:
@@ -615,7 +622,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitSubSsXmm0FromFrame(d);
                 else
-                    b.emitSubSsXmm0FromMemAt(staticSlotAddr(op));
+                    b.emitSubSsXmm0FromMemAt(staticSlotAddrWithComment(op));
             });
             break;
         case OpCode::FMUL:
@@ -625,7 +632,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitMulSsXmm0FromFrame(d);
                 else
-                    b.emitMulSsXmm0FromMemAt(staticSlotAddr(op));
+                    b.emitMulSsXmm0FromMemAt(staticSlotAddrWithComment(op));
             });
             break;
         case OpCode::FDIV:
@@ -635,7 +642,7 @@ bool X64Backend::compileBytecode(
                 else if (op > 0)
                     b.emitDivSsXmm0FromFrame(d);
                 else
-                    b.emitDivSsXmm0FromMemAt(staticSlotAddr(op));
+                    b.emitDivSsXmm0FromMemAt(staticSlotAddrWithComment(op));
             });
             break;
 #undef EMIT_BINARY_SS
@@ -652,7 +659,7 @@ bool X64Backend::compileBytecode(
             else if (op > 0)                                                                       \
                 b.emitMovSsXmm0FromFrame(d);                                                       \
             else                                                                                   \
-                b.emitMovSsXmm0FromMemAt(staticSlotAddr(op));                                      \
+                b.emitMovSsXmm0FromMemAt(staticSlotAddrWithComment(op));                           \
         },                                                                                         \
         [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
             if (r >= 0)                                                                            \
@@ -660,7 +667,7 @@ bool X64Backend::compileBytecode(
             else if (op > 0)                                                                       \
                 b.emitCmpFrame(d);                                                                 \
             else                                                                                   \
-                b.emitCmpMemAt(staticSlotAddr(op));                                                \
+                b.emitCmpMemAt(staticSlotAddrWithComment(op));                                     \
         })
         case OpCode::FLT:
             EMIT_CMP_SS(emitComissXmm0FrameSetb, emitComissXmm0MemAtSetb, emitComissXmm0RegSetb);
@@ -694,7 +701,7 @@ bool X64Backend::compileBytecode(
             if (bc.fastop[1] > 0)
                 build.emitCmpRaxFrameSetle(d1);
             else
-                build.emitCmpRaxMemAtSetle(staticSlotAddr(bc.fastop[1]));
+                build.emitCmpRaxMemAtSetle(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -714,7 +721,7 @@ bool X64Backend::compileBytecode(
             if (bc.fastop[1] > 0)
                 build.emitCmpRaxFrameSetl(d1);
             else
-                build.emitCmpRaxMemAtSetl(staticSlotAddr(bc.fastop[1]));
+                build.emitCmpRaxMemAtSetl(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -734,7 +741,7 @@ bool X64Backend::compileBytecode(
             if (bc.fastop[1] > 0)
                 build.emitCmpRaxFrameSetg(d1);
             else
-                build.emitCmpRaxMemAtSetg(staticSlotAddr(bc.fastop[1]));
+                build.emitCmpRaxMemAtSetg(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -754,7 +761,7 @@ bool X64Backend::compileBytecode(
             if (bc.fastop[1] > 0)
                 build.emitCmpRaxFrameSete(d1);
             else
-                build.emitCmpRaxMemAtSete(staticSlotAddr(bc.fastop[1]));
+                build.emitCmpRaxMemAtSete(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -774,7 +781,7 @@ bool X64Backend::compileBytecode(
             if (bc.fastop[1] > 0)
                 build.emitCmpRaxFrameSetne(d1);
             else
-                build.emitCmpRaxMemAtSetne(staticSlotAddr(bc.fastop[1]));
+                build.emitCmpRaxMemAtSetne(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -794,7 +801,7 @@ bool X64Backend::compileBytecode(
             if (bc.fastop[1] > 0)
                 build.emitCmpRaxFrameSetge(d1);
             else
-                build.emitCmpRaxMemAtSetge(staticSlotAddr(bc.fastop[1]));
+                build.emitCmpRaxMemAtSetge(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -813,13 +820,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovRegFromFrame(x64::kRegRax, d0);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitMulRaxFromReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitMulRaxFromFrame(d1);
             else
-                build.emitMulRaxFromMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitMulRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -838,13 +845,13 @@ bool X64Backend::compileBytecode(
             else if (bc.fastop[0] > 0)
                 build.emitMovRegFromFrame(x64::kRegRax, d0);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddr(bc.fastop[0]));
+                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
             if (r1 >= 0)
                 build.emitIdivRaxByReg(static_cast<uint8_t>(r1));
             else if (bc.fastop[1] > 0)
                 build.emitIdivRaxByFrame(d1);
             else
-                build.emitIdivRaxByMemAt(staticSlotAddr(bc.fastop[1]));
+                build.emitIdivRaxByMemAt(staticSlotAddrWithComment(bc.fastop[1]));
             if (rr >= 0)
                 build.emitMovRegFromRax(static_cast<uint8_t>(rr));
             else
@@ -894,21 +901,21 @@ bool X64Backend::compileBytecode(
             else if (w0 > 0)
                 build.emitMovRegFromFrame(x64::kRegRax, d0);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddr(w0));
+                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(w0));
             build.emitMovRegFromRax(3);
             if (r1 != 0 && r1 >= 0)
                 build.emitMovRaxFromReg(static_cast<uint8_t>(r1));
             else if (w1 > 0)
                 build.emitMovRegFromFrame(x64::kRegRax, d1);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddr(w1));
+                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(w1));
             build.emitMovRegFromRax(1);
             if (rIdx >= 0)
                 build.emitMovRaxFromReg(static_cast<uint8_t>(rIdx));
             else if (idxSlot > 0)
                 build.emitMovRegFromFrame(x64::kRegRax, dIdx);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddr(idxSlot));
+                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(idxSlot));
             build.emitTestRaxRax();
             build.emitCmoveRcxFromRbx();
             build.emitMovRaxFromReg(1);

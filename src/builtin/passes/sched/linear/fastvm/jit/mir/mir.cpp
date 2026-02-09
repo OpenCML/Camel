@@ -21,6 +21,7 @@
 
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace camel::jit::x64 {
 
@@ -46,13 +47,13 @@ std::string mirToString(const Mir &m) {
         os << "mov [rdi+" << m.disp << "], " << mirRegName(m.r0);
         break;
     case MirOp::MovRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; mov rax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmov rax, [rbx]";
         break;
     case MirOp::AddRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; add rax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nadd rax, [rbx]";
         break;
     case MirOp::SubRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; sub rax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsub rax, [rbx]";
         break;
     case MirOp::MovRaxFromReg:
         os << "mov rax, " << mirRegName(m.r0);
@@ -88,67 +89,67 @@ std::string mirToString(const Mir &m) {
         os << "movq xmm0, " << mirRegName(m.r0);
         break;
     case MirOp::AddXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; addsd xmm0, xmm1";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\naddsd xmm0, xmm1";
         break;
     case MirOp::SubXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; subsd xmm0, xmm1";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\nsubsd xmm0, xmm1";
         break;
     case MirOp::MovRegFromXmm0:
         os << "movq " << mirRegName(m.r0) << ", xmm0";
         break;
     case MirOp::MovXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; movsd xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmovsd xmm0, [rbx]";
         break;
     case MirOp::AddXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; addsd xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\naddsd xmm0, [rbx]";
         break;
     case MirOp::SubXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; subsd xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsubsd xmm0, [rbx]";
         break;
     case MirOp::CmpRaxImm8Setle:
-        os << "cmp rax, 1; setle al; movzx rax, al";
+        os << "cmp rax, 1\nsetle al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxFrameSetle:
-        os << "cmp rax, [rdi+" << m.disp << "]; setle al; movzx rax, al";
+        os << "cmp rax, [rdi+" << m.disp << "]\nsetle al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxMemAtSetle:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; cmp rax, [rbx]; setle al; movzx rax, al";
+           << "\ncmp rax, [rbx]\nsetle al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxFrameSetl:
-        os << "cmp rax, [rdi+" << m.disp << "]; setl al; movzx rax, al";
+        os << "cmp rax, [rdi+" << m.disp << "]\nsetl al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxMemAtSetl:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; cmp rax, [rbx]; setl al; movzx rax, al";
+           << "\ncmp rax, [rbx]\nsetl al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxFrameSetg:
-        os << "cmp rax, [rdi+" << m.disp << "]; setg al; movzx rax, al";
+        os << "cmp rax, [rdi+" << m.disp << "]\nsetg al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxMemAtSetg:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; cmp rax, [rbx]; setg al; movzx rax, al";
+           << "\ncmp rax, [rbx]\nsetg al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxFrameSete:
-        os << "cmp rax, [rdi+" << m.disp << "]; sete al; movzx rax, al";
+        os << "cmp rax, [rdi+" << m.disp << "]\nsete al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxMemAtSete:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; cmp rax, [rbx]; sete al; movzx rax, al";
+           << "\ncmp rax, [rbx]\nsete al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxFrameSetne:
-        os << "cmp rax, [rdi+" << m.disp << "]; setne al; movzx rax, al";
+        os << "cmp rax, [rdi+" << m.disp << "]\nsetne al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxMemAtSetne:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; cmp rax, [rbx]; setne al; movzx rax, al";
+           << "\ncmp rax, [rbx]\nsetne al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxFrameSetge:
-        os << "cmp rax, [rdi+" << m.disp << "]; setge al; movzx rax, al";
+        os << "cmp rax, [rdi+" << m.disp << "]\nsetge al\nmovzx rax, al";
         break;
     case MirOp::CmpRaxMemAtSetge:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; cmp rax, [rbx]; setge al; movzx rax, al";
+           << "\ncmp rax, [rbx]\nsetge al\nmovzx rax, al";
         break;
     case MirOp::MulRaxFromReg:
         os << "imul rax, " << mirRegName(m.r0);
@@ -157,94 +158,94 @@ std::string mirToString(const Mir &m) {
         os << "imul rax, [rdi+" << m.disp << "]";
         break;
     case MirOp::MulRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; imul rax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nimul rax, [rbx]";
         break;
     case MirOp::IdivRaxByReg:
-        os << "cqo; idiv " << mirRegName(m.r0);
+        os << "cqo\nidiv " << mirRegName(m.r0);
         break;
     case MirOp::IdivRaxByFrame:
-        os << "cqo; idiv qword [rdi+" << m.disp << "]";
+        os << "cqo\nidiv qword [rdi+" << m.disp << "]";
         break;
     case MirOp::IdivRaxByMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; cqo; idiv [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ncqo\nidiv [rbx]";
         break;
     case MirOp::MulXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; mulsd xmm0, xmm1";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\nmulsd xmm0, xmm1";
         break;
     case MirOp::MulXmm0FromFrame:
         os << "mulsd xmm0, [rdi+" << m.disp << "]";
         break;
     case MirOp::MulXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; mulsd xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmulsd xmm0, [rbx]";
         break;
     case MirOp::DivXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; divsd xmm0, xmm1";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\ndivsd xmm0, xmm1";
         break;
     case MirOp::DivXmm0FromFrame:
         os << "divsd xmm0, [rdi+" << m.disp << "]";
         break;
     case MirOp::DivXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; divsd xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ndivsd xmm0, [rbx]";
         break;
     case MirOp::ComisdXmm0FrameSetb:
-        os << "comisd xmm0, [rdi+" << m.disp << "]; setb al; movzx rax, al";
+        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetb al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0MemAtSetb:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; comisd xmm0, [rbx]; setb al; movzx rax, al";
+           << "\ncomisd xmm0, [rbx]\nsetb al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0RegSetb:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; comisd xmm0, xmm1; setb al; movzx rax, al";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetb al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0FrameSetbe:
-        os << "comisd xmm0, [rdi+" << m.disp << "]; setbe al; movzx rax, al";
+        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetbe al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0MemAtSetbe:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; comisd xmm0, [rbx]; setbe al; movzx rax, al";
+           << "\ncomisd xmm0, [rbx]\nsetbe al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0RegSetbe:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; comisd xmm0, xmm1; setbe al; movzx rax, al";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetbe al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0FrameSete:
-        os << "comisd xmm0, [rdi+" << m.disp << "]; sete al; movzx rax, al";
+        os << "comisd xmm0, [rdi+" << m.disp << "]\nsete al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0MemAtSete:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; comisd xmm0, [rbx]; sete al; movzx rax, al";
+           << "\ncomisd xmm0, [rbx]\nsete al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0RegSete:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; comisd xmm0, xmm1; sete al; movzx rax, al";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsete al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0FrameSeta:
-        os << "comisd xmm0, [rdi+" << m.disp << "]; seta al; movzx rax, al";
+        os << "comisd xmm0, [rdi+" << m.disp << "]\nseta al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0MemAtSeta:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; comisd xmm0, [rbx]; seta al; movzx rax, al";
+           << "\ncomisd xmm0, [rbx]\nseta al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0RegSeta:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; comisd xmm0, xmm1; seta al; movzx rax, al";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nseta al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0FrameSetae:
-        os << "comisd xmm0, [rdi+" << m.disp << "]; setae al; movzx rax, al";
+        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetae al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0MemAtSetae:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; comisd xmm0, [rbx]; setae al; movzx rax, al";
+           << "\ncomisd xmm0, [rbx]\nsetae al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0RegSetae:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; comisd xmm0, xmm1; setae al; movzx rax, al";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetae al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0FrameSetnz:
-        os << "comisd xmm0, [rdi+" << m.disp << "]; setnz al; movzx rax, al";
+        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetnz al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0MemAtSetnz:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; comisd xmm0, [rbx]; setnz al; movzx rax, al";
+           << "\ncomisd xmm0, [rbx]\nsetnz al\nmovzx rax, al";
         break;
     case MirOp::ComisdXmm0RegSetnz:
-        os << "movq xmm1, " << mirRegName(m.r0) << "; comisd xmm0, xmm1; setnz al; movzx rax, al";
+        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetnz al\nmovzx rax, al";
         break;
     case MirOp::MovEaxFromFrame:
         os << "mov eax, [rdi+" << m.disp << "]";
@@ -253,7 +254,7 @@ std::string mirToString(const Mir &m) {
         os << "mov eax, " << mirRegName(m.r0);
         break;
     case MirOp::MovEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; mov eax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmov eax, [rbx]";
         break;
     case MirOp::AddEaxFromFrame:
         os << "add eax, [rdi+" << m.disp << "]";
@@ -262,7 +263,7 @@ std::string mirToString(const Mir &m) {
         os << "add eax, " << mirRegName(m.r0);
         break;
     case MirOp::AddEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; add eax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nadd eax, [rbx]";
         break;
     case MirOp::SubEaxFromFrame:
         os << "sub eax, [rdi+" << m.disp << "]";
@@ -271,7 +272,7 @@ std::string mirToString(const Mir &m) {
         os << "sub eax, " << mirRegName(m.r0);
         break;
     case MirOp::SubEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; sub eax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsub eax, [rbx]";
         break;
     case MirOp::MulEaxFromFrame:
         os << "imul eax, [rdi+" << m.disp << "]";
@@ -280,16 +281,16 @@ std::string mirToString(const Mir &m) {
         os << "imul eax, " << mirRegName(m.r0);
         break;
     case MirOp::MulEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; imul eax, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nimul eax, [rbx]";
         break;
     case MirOp::IdivEaxByFrame:
-        os << "cdq; idiv dword [rdi+" << m.disp << "]";
+        os << "cdq\nidiv dword [rdi+" << m.disp << "]";
         break;
     case MirOp::IdivEaxByReg:
-        os << "cdq; idiv " << mirRegName(m.r0);
+        os << "cdq\nidiv " << mirRegName(m.r0);
         break;
     case MirOp::IdivEaxByMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; cdq; idiv [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ncdq\nidiv [rbx]";
         break;
     case MirOp::CmpEaxFrameSetl:
     case MirOp::CmpEaxFrameSetg:
@@ -297,7 +298,7 @@ std::string mirToString(const Mir &m) {
     case MirOp::CmpEaxFrameSetne:
     case MirOp::CmpEaxFrameSetle:
     case MirOp::CmpEaxFrameSetge:
-        os << "cmp eax, [rdi+" << m.disp << "]; setcc al; movzx rax, al";
+        os << "cmp eax, [rdi+" << m.disp << "]\nsetcc al\nmovzx rax, al";
         break;
     case MirOp::CmpEaxMemAtSetl:
     case MirOp::CmpEaxMemAtSetg:
@@ -306,7 +307,7 @@ std::string mirToString(const Mir &m) {
     case MirOp::CmpEaxMemAtSetle:
     case MirOp::CmpEaxMemAtSetge:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; cmp eax, [rbx]; setcc al; movzx rax, al";
+           << "\ncmp eax, [rbx]\nsetcc al\nmovzx rax, al";
         break;
     case MirOp::CmpEaxRegSetl:
     case MirOp::CmpEaxRegSetg:
@@ -314,7 +315,7 @@ std::string mirToString(const Mir &m) {
     case MirOp::CmpEaxRegSetne:
     case MirOp::CmpEaxRegSetle:
     case MirOp::CmpEaxRegSetge:
-        os << "cmp eax, " << mirRegName(m.r0) << "; setcc al; movzx rax, al";
+        os << "cmp eax, " << mirRegName(m.r0) << "\nsetcc al\nmovzx rax, al";
         break;
     case MirOp::MovSsXmm0FromFrame:
         os << "movss xmm0, [rdi+" << m.disp << "]";
@@ -323,43 +324,43 @@ std::string mirToString(const Mir &m) {
         os << "movd xmm0, " << mirRegName(m.r0);
         break;
     case MirOp::MovSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; movss xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmovss xmm0, [rbx]";
         break;
     case MirOp::AddSsXmm0FromFrame:
         os << "addss xmm0, [rdi+" << m.disp << "]";
         break;
     case MirOp::AddSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "; addss xmm0, xmm1";
+        os << "movd xmm1, " << mirRegName(m.r0) << "\naddss xmm0, xmm1";
         break;
     case MirOp::AddSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; addss xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\naddss xmm0, [rbx]";
         break;
     case MirOp::SubSsXmm0FromFrame:
         os << "subss xmm0, [rdi+" << m.disp << "]";
         break;
     case MirOp::SubSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "; subss xmm0, xmm1";
+        os << "movd xmm1, " << mirRegName(m.r0) << "\nsubss xmm0, xmm1";
         break;
     case MirOp::SubSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; subss xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsubss xmm0, [rbx]";
         break;
     case MirOp::MulSsXmm0FromFrame:
         os << "mulss xmm0, [rdi+" << m.disp << "]";
         break;
     case MirOp::MulSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "; mulss xmm0, xmm1";
+        os << "movd xmm1, " << mirRegName(m.r0) << "\nmulss xmm0, xmm1";
         break;
     case MirOp::MulSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; mulss xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmulss xmm0, [rbx]";
         break;
     case MirOp::DivSsXmm0FromFrame:
         os << "divss xmm0, [rdi+" << m.disp << "]";
         break;
     case MirOp::DivSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "; divss xmm0, xmm1";
+        os << "movd xmm1, " << mirRegName(m.r0) << "\ndivss xmm0, xmm1";
         break;
     case MirOp::DivSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "; divss xmm0, [rbx]";
+        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ndivss xmm0, [rbx]";
         break;
     case MirOp::MovSsFrameFromXmm0:
         os << "movss [rdi+" << m.disp << "], xmm0";
@@ -373,7 +374,7 @@ std::string mirToString(const Mir &m) {
     case MirOp::ComissXmm0FrameSeta:
     case MirOp::ComissXmm0FrameSetae:
     case MirOp::ComissXmm0FrameSetnz:
-        os << "comiss xmm0, [rdi+" << m.disp << "]; setcc al; movzx rax, al";
+        os << "comiss xmm0, [rdi+" << m.disp << "]\nsetcc al\nmovzx rax, al";
         break;
     case MirOp::ComissXmm0MemAtSetb:
     case MirOp::ComissXmm0MemAtSetbe:
@@ -382,7 +383,7 @@ std::string mirToString(const Mir &m) {
     case MirOp::ComissXmm0MemAtSetae:
     case MirOp::ComissXmm0MemAtSetnz:
         os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "; comiss xmm0, [rbx]; setcc al; movzx rax, al";
+           << "\ncomiss xmm0, [rbx]\nsetcc al\nmovzx rax, al";
         break;
     case MirOp::ComissXmm0RegSetb:
     case MirOp::ComissXmm0RegSetbe:
@@ -390,13 +391,13 @@ std::string mirToString(const Mir &m) {
     case MirOp::ComissXmm0RegSeta:
     case MirOp::ComissXmm0RegSetae:
     case MirOp::ComissXmm0RegSetnz:
-        os << "comiss xmm0, " << mirRegName(m.r0) << "; setcc al; movzx rax, al";
+        os << "comiss xmm0, " << mirRegName(m.r0) << "\nsetcc al\nmovzx rax, al";
         break;
     case MirOp::TestRaxRax:
         os << "test rax, rax";
         break;
     case MirOp::TestRaxJzRel32:
-        os << "test rax, rax; jz pc=" << m.imm32;
+        os << "test rax, rax\njz pc=" << m.imm32;
         break;
     case MirOp::CmoveRcxFromRbx:
         os << "cmove rcx, rbx";
@@ -424,6 +425,60 @@ std::string mirToString(const Mir &m) {
         break;
     }
     return os.str();
+}
+
+// 使用 imm64 作为静态地址的 op（*MemAt*、MovRegImm64），可带符号/static slot 注释
+static bool mirOpUsesImm64AsAddr(MirOp op) {
+    switch (op) {
+    case MirOp::MovRegImm64:
+    case MirOp::MovRaxFromMemAt:
+    case MirOp::AddRaxFromMemAt:
+    case MirOp::SubRaxFromMemAt:
+    case MirOp::MovXmm0FromMemAt:
+    case MirOp::AddXmm0FromMemAt:
+    case MirOp::SubXmm0FromMemAt:
+    case MirOp::CmpRaxMemAtSetle:
+    case MirOp::CmpRaxMemAtSetl:
+    case MirOp::CmpRaxMemAtSetg:
+    case MirOp::CmpRaxMemAtSete:
+    case MirOp::CmpRaxMemAtSetne:
+    case MirOp::CmpRaxMemAtSetge:
+    case MirOp::MulRaxFromMemAt:
+    case MirOp::IdivRaxByMemAt:
+    case MirOp::MulXmm0FromMemAt:
+    case MirOp::DivXmm0FromMemAt:
+    case MirOp::ComisdXmm0MemAtSetb:
+    case MirOp::ComisdXmm0MemAtSetbe:
+    case MirOp::ComisdXmm0MemAtSete:
+    case MirOp::ComisdXmm0MemAtSeta:
+    case MirOp::ComisdXmm0MemAtSetae:
+    case MirOp::ComisdXmm0MemAtSetnz:
+    case MirOp::MovEaxFromMemAt:
+    case MirOp::AddEaxFromMemAt:
+    case MirOp::SubEaxFromMemAt:
+    case MirOp::MulEaxFromMemAt:
+    case MirOp::IdivEaxByMemAt:
+    case MirOp::CmpEaxMemAtSetl:
+    case MirOp::CmpEaxMemAtSetg:
+    case MirOp::CmpEaxMemAtSete:
+    case MirOp::CmpEaxMemAtSetne:
+    case MirOp::CmpEaxMemAtSetle:
+    case MirOp::CmpEaxMemAtSetge:
+    case MirOp::MovSsXmm0FromMemAt:
+    case MirOp::AddSsXmm0FromMemAt:
+    case MirOp::SubSsXmm0FromMemAt:
+    case MirOp::MulSsXmm0FromMemAt:
+    case MirOp::DivSsXmm0FromMemAt:
+    case MirOp::ComissXmm0MemAtSetb:
+    case MirOp::ComissXmm0MemAtSetbe:
+    case MirOp::ComissXmm0MemAtSete:
+    case MirOp::ComissXmm0MemAtSeta:
+    case MirOp::ComissXmm0MemAtSetae:
+    case MirOp::ComissXmm0MemAtSetnz:
+        return true;
+    default:
+        return false;
+    }
 }
 
 // 仅用于帧访问的 op 才带 [rdi+disp]，需槽位注释
@@ -482,6 +537,45 @@ static bool mirOpUsesFrameDisp(MirOp op) {
     }
 }
 
+// 注释内容由 MIR 层决定，格式：frame slot[N]、static slot[-N] 或符号名由 opts 提供
+static std::string
+formatFrameSlotComment(int disp, const std::unordered_map<int, std::string> *slotNames) {
+    if (slotNames) {
+        auto it = slotNames->find(disp);
+        if (it != slotNames->end())
+            return std::string("  ; ") + it->second;
+    }
+    return "  ; frame slot[" + std::to_string(disp / 8) + "]";
+}
+
+static std::string
+formatSymbolComment(uint64_t imm64, const std::unordered_map<uint64_t, std::string> *symbolNames) {
+    if (!symbolNames)
+        return {};
+    auto it = symbolNames->find(imm64);
+    if (it == symbolNames->end())
+        return {};
+    return std::string("  ; ") + it->second;
+}
+
+// 返回 (行号, 注释) 列表，注释可挂在任意行；行号与 mirToString 展开行一致（0 起）
+static std::vector<std::pair<size_t, std::string>>
+mirCommentAssignments(const Mir &m, const MirPrintOptions &opts) {
+    std::vector<std::pair<size_t, std::string>> out;
+    const size_t commentLine = 0u; // 当前所有带注释的 op 其操作数均在首行
+    if (mirOpUsesFrameDisp(m.op)) {
+        std::string c = formatFrameSlotComment(m.disp, opts.slotNames);
+        if (!c.empty())
+            out.emplace_back(commentLine, std::move(c));
+    }
+    if (mirOpUsesImm64AsAddr(m.op)) {
+        std::string c = formatSymbolComment(m.imm64, opts.symbolNames);
+        if (!c.empty())
+            out.emplace_back(commentLine, std::move(c));
+    }
+    return out;
+}
+
 void mirPrint(const MirBuffer &buf, std::ostream &out, const MirPrintOptions &opts) {
     const size_t n = buf.size();
     // 该 pc 对应的首条 MIR 才在 [pc] 列显示数值
@@ -514,30 +608,48 @@ void mirPrint(const MirBuffer &buf, std::ostream &out, const MirPrintOptions &op
     if (idxWidth < 2)
         idxWidth = 2;
     for (size_t i = 0; i < n; ++i) {
-        const Mir &m = buf[i];
-        out << "  [";
-        if (firstPc[i])
-            out << std::setw(pcWidth) << m.pc << "]";
-        else
-            out << std::string(static_cast<size_t>(pcWidth), ' ') << "]";
-        out << "[" << std::setw(idxWidth) << i << "]  ";
-        out << mirToString(m);
-        if (opts.symbolNames && m.op == MirOp::MovRegImm64) {
-            auto it = opts.symbolNames->find(m.imm64);
-            if (it != opts.symbolNames->end())
-                out << "  ; " << it->second;
+        const Mir &m               = buf[i];
+        std::string linePrefixCont = std::string(pcWidth + idxWidth + 6, ' ') + "  ";
+        std::string text           = mirToString(m);
+        std::vector<std::pair<size_t, std::string>> assignments = mirCommentAssignments(m, opts);
+        // 按行收集注释（支持多行时注释在任意行）
+        std::vector<std::string> lineComments;
+        {
+            size_t numLines = 1u;
+            for (char ch : text)
+                if (ch == '\n')
+                    ++numLines;
+            lineComments.resize(numLines);
+            for (const auto &[lineIdx, comment] : assignments)
+                if (lineIdx < numLines)
+                    lineComments[lineIdx] = comment;
         }
-        if (mirOpUsesFrameDisp(m.op)) {
-            if (opts.slotNames) {
-                auto it = opts.slotNames->find(m.disp);
-                if (it != opts.slotNames->end())
-                    out << "  ; " << it->second;
+        size_t pos     = 0;
+        size_t lineIdx = 0;
+        for (bool first = true;; first = false) {
+            size_t next      = text.find('\n', pos);
+            bool isLast      = (next == std::string::npos);
+            std::string line = isLast ? text.substr(pos) : text.substr(pos, next - pos);
+            if (first) {
+                out << "  [";
+                if (firstPc[i])
+                    out << std::setw(pcWidth) << m.pc << "]";
                 else
-                    out << "  ; slot " << (m.disp / 8);
+                    out << std::string(static_cast<size_t>(pcWidth), ' ') << "]";
+                out << "[" << std::setw(idxWidth) << i << "]  ";
             } else
-                out << "  ; slot " << (m.disp / 8);
+                out << linePrefixCont;
+            out << line;
+            if (lineIdx < lineComments.size())
+                out << lineComments[lineIdx];
+            if (isLast) {
+                out << "\n";
+                break;
+            }
+            out << "\n";
+            pos = next + 1;
+            ++lineIdx;
         }
-        out << "\n";
     }
 }
 
