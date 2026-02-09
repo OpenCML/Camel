@@ -399,8 +399,14 @@ std::string mirToString(const Mir &m) {
     case MirOp::TestRaxJzRel32:
         os << "test rax, rax\njz pc=" << m.imm32;
         break;
+    case MirOp::JzRel32:
+        os << "jz pc=" << m.imm32;
+        break;
     case MirOp::CmoveRcxFromRbx:
         os << "cmove rcx, rbx";
+        break;
+    case MirOp::CmoveR8FromR9:
+        os << "cmove r8, r9";
         break;
     case MirOp::JmpRel32:
         os << "jmp pc=" << m.imm32;
@@ -845,7 +851,11 @@ size_t mirSizeBytes(const Mir &m) {
         return 3;
     case MirOp::TestRaxJzRel32:
         return 3 + 6; // test + jz rel32
+    case MirOp::JzRel32:
+        return 6; // jz rel32
     case MirOp::CmoveRcxFromRbx:
+        return 4;
+    case MirOp::CmoveR8FromR9:
         return 4;
     case MirOp::JmpRel32:
         return 5;

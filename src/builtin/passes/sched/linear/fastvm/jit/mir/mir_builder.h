@@ -649,7 +649,14 @@ class MirBuilder {
         m.imm32 = targetPc;
         push(m);
     }
+    void emitJzRel32(uint32_t targetPc) {
+        Mir m;
+        m.op    = MirOp::JzRel32;
+        m.imm32 = targetPc;
+        push(m);
+    }
     void emitCmoveRcxFromRbx() { push(MirOp::CmoveRcxFromRbx, 0, 0); }
+    void emitCmoveR8FromR9() { push(MirOp::CmoveR8FromR9, 0, 0); }
     void emitJmpRel32(uint32_t targetPc) {
         Mir m;
         m.op    = MirOp::JmpRel32;

@@ -876,17 +876,17 @@ bool X64Backend::compileBytecode(
             int rc    = alloc.regForSlot(condIdx);
             size_t t0 = pc + bc.opsize;     // true branch (jumpIdx=0)
             size_t t1 = pc + bc.opsize + 1; // false branch (jumpIdx=1)
-            // 先设 result=1（假定走 false 分支），再根据条件改 0 并跳 true，避免块内相对跳转
-            build.emitMovRegImm32(x64::kRegR8, 1);
-            build.emitMovFrameFromReg(dr, x64::kRegR8);
-            // 条件来自 condIdx（norm[0]）；若已在 rax(0) 则不必 mov rax, rax
+            // 用 cmov 只写一次 result：r8=0, r9=1，test 后 cmove r8,r9（ZF 则 r8=1），再 store
+            build.emitMovRegImm32(x64::kRegR8, 0);
+            build.emitMovRegImm32(x64::kRegR9, 1);
             if (rc > 0)
                 build.emitMovRaxFromReg(static_cast<uint8_t>(rc));
             else if (rc < 0)
                 build.emitMovRegFromFrame(x64::kRegRax, dc);
-            build.emitTestRaxJzRel32(static_cast<uint32_t>(t1));
-            build.emitMovRegImm32(x64::kRegR8, 0);
+            build.emitTestRaxRax();
+            build.emitCmoveR8FromR9();
             build.emitMovFrameFromReg(dr, x64::kRegR8);
+            build.emitJzRel32(static_cast<uint32_t>(t1));
             build.emitJmpRel32(static_cast<uint32_t>(t0));
             break;
         }

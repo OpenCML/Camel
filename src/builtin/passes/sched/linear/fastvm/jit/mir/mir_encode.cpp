@@ -483,8 +483,19 @@ void encodeMirBuffer(
             enc.testRaxJzRel32(rel);
             break;
         }
+        case MirOp::JzRel32: {
+            auto it = pcToOffset.find(static_cast<size_t>(m.imm32));
+            if (it == pcToOffset.end())
+                break;
+            int32_t rel = static_cast<int32_t>(it->second) - static_cast<int32_t>(enc.here() + 6);
+            enc.jzRel32(rel);
+            break;
+        }
         case MirOp::CmoveRcxFromRbx:
             enc.cmoveRcxFromRbx();
+            break;
+        case MirOp::CmoveR8FromR9:
+            enc.cmoveR8FromR9();
             break;
         case MirOp::JmpRel32: {
             auto it = pcToOffset.find(static_cast<size_t>(m.imm32));

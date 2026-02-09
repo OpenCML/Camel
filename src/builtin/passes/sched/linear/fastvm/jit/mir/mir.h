@@ -201,8 +201,10 @@ enum class MirOp : uint8_t {
     ComissXmm0MemAtSetnz,
     ComissXmm0RegSetnz,
     TestRaxRax,
-    TestRaxJzRel32, // targetPc 有效
+    TestRaxJzRel32, // targetPc 有效（含 test rax,rax）
+    JzRel32,        // targetPc 有效，仅 jz（ZF 已由前一条指令设置）
     CmoveRcxFromRbx,
+    CmoveR8FromR9, // ZF=1 时 r8=r9，用于 BRCH 单次写 result
     // 控制流（targetPc 或 rel 在 imm32/disp 中）
     JmpRel32, // targetPc 有效
     JleRel32, // targetPc 有效

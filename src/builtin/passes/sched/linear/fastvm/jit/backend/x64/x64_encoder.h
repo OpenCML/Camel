@@ -1433,10 +1433,21 @@ class Encoder {
         asmLine("cmove rcx, rbx");
     }
 
+    // cmove r8, r9（ZF=1 时 r8=r9），用于 BRCH 在 test rax,rax 后选 0/1
+    void cmoveR8FromR9() {
+        emitBytes({0x4d, 0x0f, 0x44, 0xc1}); // REX.WRB 0F 44 /r: reg=r8, r/m=r9
+        asmLine("cmove r8, r9");
+    }
+
     // test rax, rax; jz rel32 (jump if cond is false)
     void testRaxJzRel32(int32_t rel) {
         emitBytes({0x48, 0x85, 0xc0}); // test rax, rax
         asmLine("test rax, rax");
+        jzRel32(rel);
+    }
+
+    // 仅 jz rel32（ZF 已由前一条 test/cmov 等设置）
+    void jzRel32(int32_t rel) {
         emitBytes({0x0f, 0x84}); // jz rel32
         emitBytes({
             static_cast<uint8_t>(rel & 0xff),
