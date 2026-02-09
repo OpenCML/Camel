@@ -34,7 +34,8 @@ struct JumpPatch {
 
 void encodeMirBuffer(
     const MirBuffer &buf, std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
-    const ::camel::jit::VRegAllocation *vregAlloc) {
+    const ::camel::jit::VRegAllocation *vregAlloc,
+    std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries) {
     Encoder enc(code, asmOut, baseOffset);
     auto pregFor = [vregAlloc](VRegId v) -> int {
         if (!vregAlloc)
@@ -614,6 +615,17 @@ void encodeMirBuffer(
         enc.setAsmLineRel(p.asmLineIndex, rel);
     }
     enc.flushAsmTo(asmOut);
+    if (instructionBoundaries) {
+        instructionBoundaries->clear();
+        const auto &lines     = enc.getAsmLines();
+        const size_t codeSize = code.size();
+        for (size_t i = 0; i < lines.size(); ++i) {
+            size_t start = lines[i].first - baseOffset;
+            size_t end   = (i + 1 < lines.size()) ? (lines[i + 1].first - baseOffset) : codeSize;
+            size_t len   = (end > start) ? (end - start) : 0;
+            instructionBoundaries->emplace_back(start, len, lines[i].second);
+        }
+    }
 }
 
 } // namespace camel::jit::x64

@@ -38,17 +38,15 @@ class Encoder {
     size_t here() const { return out_.size(); }
 
     void emitByte(uint8_t b) { out_.push_back(b); }
-    // 缓冲 asm 行 (地址, 指令文本)，flush 时按实际最大地址宽度右对齐
-    void asmLine(const std::string &s) {
-        if (asmOut_)
-            asmLines_.emplace_back(baseAddr_ + here(), s);
-    }
+    // 缓冲 asm 行 (地址, 指令文本)，flush 时按实际最大地址宽度右对齐；始终记录以便取指令边界
+    void asmLine(const std::string &s) { asmLines_.emplace_back(baseAddr_ + here(), s); }
     // 用指令起始偏移记录 asm 行（用于跳转等，保证 [addr] 与下一指令间隔 = 本条指令长度）
     void asmLineAt(size_t instrStart, const std::string &s) {
-        if (asmOut_)
-            asmLines_.emplace_back(baseAddr_ + instrStart, s);
+        asmLines_.emplace_back(baseAddr_ + instrStart, s);
     }
     size_t getAsmLineCount() const { return asmLines_.size(); }
+    // 供 bindump 等按指令分解机器码：(baseAddr 相对) 起始偏移、长度、汇编文本
+    const std::vector<std::pair<size_t, std::string>> &getAsmLines() const { return asmLines_; }
     // 将缓冲中第 index 行的 rel32 显示改为 rel（用于 jz/jmp/jle 修补后）；rel=0 时注释标为 (next)
     // 避免误解为死循环
     void setAsmLineRel(size_t index, int32_t rel) {
@@ -1200,6 +1198,7 @@ class Encoder {
         asmLine("subsd xmm0, xmm1");
     }
     void movRegFromXmm0(uint8_t reg) {
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
         if (regEnc < 4) {
@@ -1207,7 +1206,7 @@ class Encoder {
         } else {
             emitBytes({0x66, 0x49, 0x0f, 0x7e, modrm});
         }
-        asmLine(std::string("movq ") + regName(reg) + ", xmm0");
+        asmLineAt(at, std::string("movq ") + regName(reg) + ", xmm0");
     }
 
     // cmp [rdi + disp8], imm32 (signed)，64 位比较一槽（REX.W）

@@ -763,7 +763,7 @@ bool X64Backend::compileBytecode(
     // 下标解析）
     VRegAllocation vregAlloc;
     linearScanVReg(mirBuf, &vregAlloc);
-    x64::encodeMirBuffer(mirBuf, code, unit.asmOut, 0, &vregAlloc);
+    x64::encodeMirBuffer(mirBuf, code, unit.asmOut, 0, &vregAlloc, unit.instructionBoundaries);
     return true;
 }
 

@@ -24,6 +24,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "builtin/passes/sched/linear/fastvm/bytecode.h"
@@ -45,6 +46,8 @@ struct CompilationUnit {
     void *trampolineTail = nullptr; // TAIL trampoline
     void *trampolineOper = nullptr; // OPER trampoline
     std::ostream *asmOut = nullptr; // 若设置，编译时输出汇编指令
+    // 若设置，编译后填入每条指令的 (起始偏移, 长度, 汇编文本)，供 bindump 按指令分解机器码
+    std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries = nullptr;
     std::ostream *mirOut = nullptr; // 若设置，仅输出 MIR 后返回（不编码机器码）
     bool mirSlotOnly = false; // 若 true 且 mirOut 设置：输出 rmir（未优化 vreg MIR）并立即返回；若
                               // false 且 mirOut：输出 mir（优化后 vreg MIR）并返回
