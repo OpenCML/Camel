@@ -13,18 +13,27 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 09, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin/passes/sched/linear/fastvm/jit/mir/mir_encode.h"
 #include "builtin/passes/sched/linear/fastvm/jit/regalloc/regalloc.h"
 
+#include <vector>
+
 namespace camel::jit::x64 {
 
+struct JumpPatch {
+    size_t jumpPos;        // 跳转指令起始偏移
+    size_t targetMirIndex; // 目标 MIR 下标（唯一对应 startOffset[targetMirIndex]）
+    int instrLen;          // 跳转指令长度（用于定位 rel32 写入位置：jmp=1, jz/jle=2）
+    size_t asmLineIndex;   // 对应 asm 行下标，修补后更新 rel 显示
+    size_t jumpEndPos;     // 编码后“下一条指令”偏移，rel = targetOffset - jumpEndPos
+};
+
 void encodeMirBuffer(
-    const MirBuffer &buf, const std::unordered_map<size_t, size_t> &pcToOffset,
-    std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
+    const MirBuffer &buf, std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
     const ::camel::jit::VRegAllocation *vregAlloc) {
     Encoder enc(code, asmOut, baseOffset);
     auto pregFor = [vregAlloc](VRegId v) -> int {
@@ -32,7 +41,18 @@ void encodeMirBuffer(
             return ::camel::jit::kSpilled;
         return vregAlloc->pregForVReg(v);
     };
-    for (const Mir &m : buf) {
+    std::vector<size_t> startOffset(buf.size());
+    // pc -> 首个带该 pc 的 MIR 下标，修补时用 startOffset[targetMirIndex] 作为唯一事实来源
+    std::unordered_map<size_t, size_t> pcToMirIndex;
+    for (size_t i = 0; i < buf.size(); ++i)
+        if (buf[i].hasPc() &&
+            pcToMirIndex.find(static_cast<size_t>(buf[i].pc)) == pcToMirIndex.end())
+            pcToMirIndex[static_cast<size_t>(buf[i].pc)] = i;
+
+    std::vector<JumpPatch> patches;
+    for (size_t i = 0; i < buf.size(); ++i) {
+        const Mir &m   = buf[i];
+        startOffset[i] = enc.here();
         switch (m.op) {
         case MirOp::VLoadFromFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
@@ -48,10 +68,8 @@ void encodeMirBuffer(
         }
         case MirOp::VLoadFromMemAt: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
-                enc.movRaxFromMemAt(m.imm64);
-                enc.emitMovRegReg(static_cast<uint8_t>(r), kRegRax);
-            }
+            if (r >= 0)
+                enc.movRegFromMemAt(static_cast<uint8_t>(r), m.imm64);
             break;
         }
         case MirOp::VCopy: {
@@ -63,11 +81,8 @@ void encodeMirBuffer(
         }
         case MirOp::VTest: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
-                if (r != 0)
-                    enc.movRaxFromReg(static_cast<uint8_t>(r));
-                enc.testRaxRax();
-            }
+            if (r >= 0)
+                enc.testRegReg(static_cast<uint8_t>(r));
             break;
         }
         case MirOp::VCmove: {
@@ -230,27 +245,36 @@ void encodeMirBuffer(
             break;
         }
         case MirOp::JzRel32: {
-            auto it = pcToOffset.find(static_cast<size_t>(m.imm32));
-            if (it == pcToOffset.end())
-                break;
-            int32_t rel = static_cast<int32_t>(it->second) - static_cast<int32_t>(enc.here() + 6);
-            enc.jzRel32(rel);
+            size_t ti = buf.size();
+            auto it   = pcToMirIndex.find(static_cast<size_t>(m.imm32));
+            if (it != pcToMirIndex.end())
+                ti = it->second;
+            patches.push_back({enc.here(), ti, 6, 0, 0});
+            enc.jzRel32(0);
+            patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
+            patches.back().jumpEndPos   = enc.here();
             break;
         }
         case MirOp::JmpRel32: {
-            auto it = pcToOffset.find(static_cast<size_t>(m.imm32));
-            if (it == pcToOffset.end())
-                break;
-            int32_t rel = static_cast<int32_t>(it->second) - static_cast<int32_t>(enc.here() + 5);
-            enc.jmpRel32(rel);
+            size_t ti = buf.size();
+            auto it   = pcToMirIndex.find(static_cast<size_t>(m.imm32));
+            if (it != pcToMirIndex.end())
+                ti = it->second;
+            patches.push_back({enc.here(), ti, 5, 0, 0});
+            enc.jmpRel32(0);
+            patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
+            patches.back().jumpEndPos   = enc.here();
             break;
         }
         case MirOp::JleRel32: {
-            auto it = pcToOffset.find(static_cast<size_t>(m.imm32));
-            if (it == pcToOffset.end())
-                break;
-            int32_t rel = static_cast<int32_t>(it->second) - static_cast<int32_t>(enc.here() + 6);
-            enc.jleRel32(rel);
+            size_t ti = buf.size();
+            auto it   = pcToMirIndex.find(static_cast<size_t>(m.imm32));
+            if (it != pcToMirIndex.end())
+                ti = it->second;
+            patches.push_back({enc.here(), ti, 6, 0, 0});
+            enc.jleRel32(0);
+            patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
+            patches.back().jumpEndPos   = enc.here();
             break;
         }
         case MirOp::JmpRel8:
@@ -572,6 +596,24 @@ void encodeMirBuffer(
         }
         }
     }
+    // 修补 rel32：目标 = startOffset[targetMirIndex]，nextIp = jumpPos + instrLen（x86：rel32
+    // 相对指令结束后的下一字节）
+    for (const auto &p : patches) {
+        if (p.targetMirIndex >= buf.size())
+            continue;
+        size_t targetOffset = startOffset[p.targetMirIndex];
+        size_t nextIp       = p.jumpPos + static_cast<size_t>(p.instrLen);
+        int32_t rel         = static_cast<int32_t>(targetOffset) - static_cast<int32_t>(nextIp);
+        size_t patchAt      = p.jumpPos + (p.instrLen == 5 ? 1u : 2u);
+        if (patchAt + 4 <= code.size()) {
+            code[patchAt]     = static_cast<uint8_t>(rel & 0xff);
+            code[patchAt + 1] = static_cast<uint8_t>((rel >> 8) & 0xff);
+            code[patchAt + 2] = static_cast<uint8_t>((rel >> 16) & 0xff);
+            code[patchAt + 3] = static_cast<uint8_t>((rel >> 24) & 0xff);
+        }
+        enc.setAsmLineRel(p.asmLineIndex, rel);
+    }
+    enc.flushAsmTo(asmOut);
 }
 
 } // namespace camel::jit::x64

@@ -13,16 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 09, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <cstdint>
+#include <iomanip>
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace camel::jit::x64 {
@@ -36,13 +38,46 @@ class Encoder {
     size_t here() const { return out_.size(); }
 
     void emitByte(uint8_t b) { out_.push_back(b); }
+    // 缓冲 asm 行 (地址, 指令文本)，flush 时按实际最大地址宽度右对齐
     void asmLine(const std::string &s) {
-        if (asmOut_) {
-            std::ostringstream hex;
-            hex << std::hex << (baseAddr_ + here());
-            *asmOut_ << "  [" << hex.str() << "]  " << s << "\n";
-        }
+        if (asmOut_)
+            asmLines_.emplace_back(baseAddr_ + here(), s);
     }
+    // 用指令起始偏移记录 asm 行（用于跳转等，保证 [addr] 与下一指令间隔 = 本条指令长度）
+    void asmLineAt(size_t instrStart, const std::string &s) {
+        if (asmOut_)
+            asmLines_.emplace_back(baseAddr_ + instrStart, s);
+    }
+    size_t getAsmLineCount() const { return asmLines_.size(); }
+    // 将缓冲中第 index 行的 rel32 显示改为 rel（用于 jz/jmp/jle 修补后）；rel=0 时注释标为 (next)
+    // 避免误解为死循环
+    void setAsmLineRel(size_t index, int32_t rel) {
+        if (index >= asmLines_.size())
+            return;
+        std::string &line = asmLines_[index].second;
+        size_t pos        = line.find(" .+");
+        if (pos == std::string::npos)
+            pos = line.find(" .-");
+        if (pos == std::string::npos)
+            return;
+        size_t end = line.find("  ;", pos);
+        if (end == std::string::npos)
+            end = line.size();
+        std::string repl = (rel >= 0 ? " .+" : " .") + std::to_string(rel);
+        line.replace(pos, end - pos, repl);
+    }
+    void flushAsmTo(std::ostream *out) {
+        if (!out || asmLines_.empty())
+            return;
+        size_t maxAddr = 0;
+        for (const auto &p : asmLines_)
+            if (p.first > maxAddr)
+                maxAddr = p.first;
+        int width = static_cast<int>(std::to_string(maxAddr).size());
+        for (const auto &p : asmLines_)
+            *out << "  [" << std::setw(width) << std::right << p.first << "]  " << p.second << "\n";
+    }
+
     void emitBytes(std::initializer_list<uint8_t> bytes) {
         for (uint8_t b : bytes)
             out_.push_back(b);
@@ -68,6 +103,7 @@ class Encoder {
 
     // mov rax, [rdi + disp] (disp8 或 disp32)，64 位加载一槽
     void movRaxFromFrame(int disp) {
+        size_t at = here();
         rexW();
         if (fitsDisp8(disp)) {
             emitBytes({0x8b, 0x47, static_cast<uint8_t>(disp & 0xff)});
@@ -75,7 +111,7 @@ class Encoder {
             emitBytes({0x8b, 0x87});
             emitDisp32(disp);
         }
-        asmLine("mov rax, [rdi+" + std::to_string(disp) + "]");
+        asmLineAt(at, "mov rax, [rdi+" + std::to_string(disp) + "]");
     }
 
     static const char *regName(uint8_t r) {
@@ -91,6 +127,7 @@ class Encoder {
 
     // mov reg, [rdi + disp] (reg: 0=rax..7=r11)
     void movRegFromFrame(uint8_t reg, int disp) {
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t mod    = fitsDisp8(disp) ? 0x40 : 0x80;
         uint8_t modrm  = static_cast<uint8_t>(mod | ((regEnc & 3) << 3) | 7);
@@ -106,11 +143,12 @@ class Encoder {
             emitByte(static_cast<uint8_t>(disp & 0xff));
         else
             emitDisp32(disp);
-        asmLine(std::string("mov ") + regName(reg) + ", [rdi+" + std::to_string(disp) + "]");
+        asmLineAt(at, std::string("mov ") + regName(reg) + ", [rdi+" + std::to_string(disp) + "]");
     }
 
     // mov [rdi + disp], r64 (reg: 0=rax..7=r11)
     void movToFrame(int disp, uint8_t reg) {
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t mod    = fitsDisp8(disp) ? 0x40 : 0x80;
         uint8_t modrm  = static_cast<uint8_t>(mod | ((regEnc & 3) << 3) | 7);
@@ -126,11 +164,12 @@ class Encoder {
             emitByte(static_cast<uint8_t>(disp & 0xff));
         else
             emitDisp32(disp);
-        asmLine(std::string("mov [rdi+") + std::to_string(disp) + "], " + regName(reg));
+        asmLineAt(at, std::string("mov [rdi+") + std::to_string(disp) + "], " + regName(reg));
     }
 
     // mov [rdi + disp], rax，64 位写回一槽
     void movFrameFromRax(int disp) {
+        size_t at = here();
         rexW();
         if (fitsDisp8(disp)) {
             emitBytes({0x89, 0x47, static_cast<uint8_t>(disp & 0xff)});
@@ -138,13 +177,14 @@ class Encoder {
             emitBytes({0x89, 0x87});
             emitDisp32(disp);
         }
-        asmLine("mov [rdi+" + std::to_string(disp) + "], rax");
+        asmLineAt(at, "mov [rdi+" + std::to_string(disp) + "], rax");
     }
 
     // mov reg, rax (reg: 0=rax no-op, 1..7=rcx..r11). 89 /r: r/m=dest, reg=rax
     void movRegFromRax(uint8_t reg) {
         if (reg == 0)
             return;
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 3));
         if (regEnc < 4) {
@@ -154,13 +194,14 @@ class Encoder {
             modrm = static_cast<uint8_t>(0xC0 | (regEnc - 4));
         }
         emitBytes({0x89, modrm});
-        asmLine(std::string("mov ") + regName(reg) + ", rax");
+        asmLineAt(at, std::string("mov ") + regName(reg) + ", rax");
     }
 
     // mov rax, reg (reg: 1..7=rcx..r11). 89 /r: r/m=rax, reg=src
     void movRaxFromReg(uint8_t reg) {
         if (reg == 0)
             return;
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t modrm  = static_cast<uint8_t>(0xC0 | ((regEnc & 3) << 3));
         if (regEnc < 4) {
@@ -170,11 +211,12 @@ class Encoder {
             modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
         }
         emitBytes({0x89, modrm});
-        asmLine(std::string("mov rax, ") + regName(reg));
+        asmLineAt(at, std::string("mov rax, ") + regName(reg));
     }
 
     // add rax, reg. 01 /r: r/m=rax, reg=src
     void addRaxFromReg(uint8_t reg) {
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t modrm  = static_cast<uint8_t>(0xC0 | ((regEnc & 3) << 3));
         if (regEnc < 4) {
@@ -184,11 +226,12 @@ class Encoder {
             modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
         }
         emitBytes({0x01, modrm});
-        asmLine(std::string("add rax, ") + regName(reg));
+        asmLineAt(at, std::string("add rax, ") + regName(reg));
     }
 
     // sub rax, reg. 29 /r: r/m=rax, reg=src
     void subRaxFromReg(uint8_t reg) {
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t modrm  = static_cast<uint8_t>(0xC0 | ((regEnc & 3) << 3));
         if (regEnc < 4) {
@@ -198,7 +241,7 @@ class Encoder {
             modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
         }
         emitBytes({0x29, modrm});
-        asmLine(std::string("sub rax, ") + regName(reg));
+        asmLineAt(at, std::string("sub rax, ") + regName(reg));
     }
 
     // add rax, [rdi + disp]
@@ -227,6 +270,7 @@ class Encoder {
 
     // 从编译期常量地址加载/运算（用于静态区 slot，用 rbx 作临时）
     void movRaxFromMemAt(uint64_t addr) {
+        size_t at1 = here();
         emitByte(0x48);
         emitByte(0xbb); // mov rbx, imm64
         emitBytes({
@@ -241,10 +285,43 @@ class Encoder {
         });
         std::ostringstream h;
         h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        asmLineAt(at1, h.str());
+        size_t at2 = here();
         rexW();
         emitBytes({0x8b, 0x03}); // mov rax, [rbx]
-        asmLine("mov rax, [rbx]");
+        asmLineAt(at2, "mov rax, [rbx]");
+    }
+    // 从编译期常量地址加载到任意 reg，不经过 rax（避免覆盖左操作数）
+    void movRegFromMemAt(uint8_t reg, uint64_t addr) {
+        if (reg == 0) {
+            movRaxFromMemAt(addr);
+            return;
+        }
+        size_t at1 = here();
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLineAt(at1, h.str());
+        size_t at2     = here();
+        uint8_t regEnc = (reg <= 3) ? reg : (reg >= 4 && reg <= 7) ? (reg - 4) : (reg == 8) ? 7 : 6;
+        uint8_t rex    = 0x48;
+        if (reg >= 4 && reg <= 7)
+            rex |= 4;
+        emitByte(rex);
+        emitByte(0x8b);
+        emitByte(0x03 | (regEnc << 3));
+        asmLineAt(at2, std::string("mov ") + regName(reg) + ", [rbx]");
     }
     void subRaxFromMemAt(uint64_t addr) {
         emitByte(0x48);
@@ -1148,6 +1225,7 @@ class Encoder {
 
     // cmp rax, reg（64 位，用于 VCmpSet* 两操作数均在 reg）
     void cmpRaxWithReg(uint8_t reg) {
+        size_t at      = here();
         uint8_t regEnc = reg & 7;
         uint8_t modrm;
         if (regEnc < 4) {
@@ -1158,32 +1236,40 @@ class Encoder {
             modrm = static_cast<uint8_t>(0xC0 | (regEnc - 4));
         }
         emitBytes({0x3b, modrm});
-        asmLine(std::string("cmp rax, ") + regName(reg));
+        asmLineAt(at, std::string("cmp rax, ") + regName(reg));
     }
 
     void setlAlMovzxRax() {
+        size_t at1 = here();
         emitBytes({0x0f, 0x9c, 0xc0});
-        asmLine("setl al");
+        asmLineAt(at1, "setl al");
+        size_t at2 = here();
         emitBytes({0x48, 0x0f, 0xb6, 0xc0});
-        asmLine("movzx rax, al");
+        asmLineAt(at2, "movzx rax, al");
     }
     void setleAlMovzxRax() {
+        size_t at1 = here();
         emitBytes({0x0f, 0x9e, 0xc0});
-        asmLine("setle al");
+        asmLineAt(at1, "setle al");
+        size_t at2 = here();
         emitBytes({0x48, 0x0f, 0xb6, 0xc0});
-        asmLine("movzx rax, al");
+        asmLineAt(at2, "movzx rax, al");
     }
     void setgAlMovzxRax() {
+        size_t at1 = here();
         emitBytes({0x0f, 0x9f, 0xc0});
-        asmLine("setg al");
+        asmLineAt(at1, "setg al");
+        size_t at2 = here();
         emitBytes({0x48, 0x0f, 0xb6, 0xc0});
-        asmLine("movzx rax, al");
+        asmLineAt(at2, "movzx rax, al");
     }
     void setgeAlMovzxRax() {
+        size_t at1 = here();
         emitBytes({0x0f, 0x9d, 0xc0});
-        asmLine("setge al");
+        asmLineAt(at1, "setge al");
+        size_t at2 = here();
         emitBytes({0x48, 0x0f, 0xb6, 0xc0});
-        asmLine("movzx rax, al");
+        asmLineAt(at2, "movzx rax, al");
     }
 
     // cmp rax, [rdi + disp] 64 位比较一槽（disp8 或 disp32）
@@ -1405,6 +1491,7 @@ class Encoder {
 
     // jmp rel32 (到 offset)
     void jmpRel32(int32_t rel) {
+        size_t at = here();
         emitByte(0xe9);
         emitBytes({
             static_cast<uint8_t>(rel & 0xff),
@@ -1412,11 +1499,12 @@ class Encoder {
             static_cast<uint8_t>((rel >> 16) & 0xff),
             static_cast<uint8_t>((rel >> 24) & 0xff),
         });
-        asmLine("jmp .+" + std::to_string(rel) + "  ; rel32");
+        asmLineAt(at, "jmp .+" + std::to_string(rel) + "  ; rel32");
     }
 
     // jle rel32
     void jleRel32(int32_t rel) {
+        size_t at = here();
         emitBytes({0x0f, 0x8e});
         emitBytes({
             static_cast<uint8_t>(rel & 0xff),
@@ -1424,7 +1512,7 @@ class Encoder {
             static_cast<uint8_t>((rel >> 16) & 0xff),
             static_cast<uint8_t>((rel >> 24) & 0xff),
         });
-        asmLine("jle .+" + std::to_string(rel) + "  ; rel32");
+        asmLineAt(at, "jle .+" + std::to_string(rel) + "  ; rel32");
     }
 
     // jmp rel8 (短跳转, -128..127)
@@ -1442,8 +1530,9 @@ class Encoder {
 
     // ret
     void ret() {
+        size_t at = here();
         emitByte(0xc3);
-        asmLine("ret");
+        asmLineAt(at, "ret");
     }
 
     // call rel32
@@ -1476,8 +1565,25 @@ class Encoder {
 
     // test rax, rax（设置 ZF，供后续 cmove 使用）
     void testRaxRax() {
+        size_t at = here();
         emitBytes({0x48, 0x85, 0xc0});
-        asmLine("test rax, rax");
+        asmLineAt(at, "test rax, rax");
+    }
+    // test reg, reg（不破坏 rax，用于 JOIN 的 vtest 后接 vcmovnz）
+    void testRegReg(uint8_t reg) {
+        if (reg == 0) {
+            testRaxRax();
+            return;
+        }
+        size_t at      = here();
+        uint8_t regEnc = (reg <= 3) ? reg : (reg >= 4 && reg <= 7) ? (reg - 4) : (reg == 8) ? 7 : 6;
+        uint8_t rex    = 0x48;
+        if (reg >= 4 && reg <= 7)
+            rex |= 4;
+        emitByte(rex);
+        emitByte(0x85);
+        emitByte(0xC0 | regEnc | (regEnc << 3));
+        asmLineAt(at, std::string("test ") + regName(reg) + ", " + regName(reg));
     }
 
     // cmove rcx, rbx（ZF=1 时 rcx=rbx），用于 JOIN 根据分支索引选值
@@ -1494,6 +1600,7 @@ class Encoder {
 
     // cmove/cmovnz 通用两寄存器（用于 VReg 分配后的 JOIN 等）
     void cmoveRegFromReg(uint8_t dst, uint8_t src) {
+        size_t at   = here();
         uint8_t rex = 0x48;
         if (dst >= 4 && dst <= 7)
             rex |= 1;
@@ -1501,9 +1608,10 @@ class Encoder {
             rex |= 4;
         emitByte(rex);
         emitBytes({0x0f, 0x44, static_cast<uint8_t>(0xC0 | ((src & 7) << 3) | (dst & 7))});
-        asmLine(std::string("cmove ") + regName(dst) + ", " + regName(src));
+        asmLineAt(at, std::string("cmove ") + regName(dst) + ", " + regName(src));
     }
     void cmovnzRegFromReg(uint8_t dst, uint8_t src) {
+        size_t at   = here();
         uint8_t rex = 0x48;
         if (dst >= 4 && dst <= 7)
             rex |= 1;
@@ -1511,7 +1619,7 @@ class Encoder {
             rex |= 4;
         emitByte(rex);
         emitBytes({0x0f, 0x45, static_cast<uint8_t>(0xC0 | ((src & 7) << 3) | (dst & 7))});
-        asmLine(std::string("cmovnz ") + regName(dst) + ", " + regName(src));
+        asmLineAt(at, std::string("cmovnz ") + regName(dst) + ", " + regName(src));
     }
 
     // test rax, rax; jz rel32 (jump if cond is false)
@@ -1523,6 +1631,7 @@ class Encoder {
 
     // 仅 jz rel32（ZF 已由前一条 test/cmov 等设置）
     void jzRel32(int32_t rel) {
+        size_t at = here();
         emitBytes({0x0f, 0x84}); // jz rel32
         emitBytes({
             static_cast<uint8_t>(rel & 0xff),
@@ -1530,11 +1639,12 @@ class Encoder {
             static_cast<uint8_t>((rel >> 16) & 0xff),
             static_cast<uint8_t>((rel >> 24) & 0xff),
         });
-        asmLine("jz .+" + std::to_string(rel) + "  ; rel32");
+        asmLineAt(at, "jz .+" + std::to_string(rel) + "  ; rel32");
     }
 
     // mov rax, imm64
     void movRaxImm64(uint64_t imm) {
+        size_t at = here();
         emitByte(0x48);
         emitByte(0xb8);
         emitBytes({
@@ -1549,17 +1659,21 @@ class Encoder {
         });
         std::ostringstream hex;
         hex << "0x" << std::hex << imm;
-        asmLine("mov rax, " + hex.str());
+        asmLineAt(at, "mov rax, " + hex.str());
     }
 
     // call [rax] - call through rax (used after movRaxImm64)
     void callRax() {
+        size_t at = here();
         emitBytes({0xff, 0xd0}); // call rax
-        asmLine("call rax");
+        asmLineAt(at, "call rax");
     }
 
     // 通用 mov r64, r64（用于 MIR 编码；reg 0-7=rax..r11，8=rdi，9=rsi）
     void emitMovRegReg(uint8_t dst, uint8_t src) {
+        if (dst == src)
+            return;
+        size_t at   = here();
         auto encReg = [](uint8_t r, uint8_t &rexExtra, uint8_t &modrmBits) {
             if (r <= 3) {
                 rexExtra  = 0;
@@ -1590,9 +1704,10 @@ class Encoder {
         emitByte(0x48 | rexB | rexR);
         emitByte(0x89);
         emitByte(0xC0 | rm | (reg << 3));
-        asmLine(std::string("mov ") + regName(dst) + ", " + regName(src));
+        asmLineAt(at, std::string("mov ") + regName(dst) + ", " + regName(src));
     }
     void emitMovRegImm32(uint8_t reg, uint32_t imm32) {
+        size_t at = here();
         if (reg == 4) { // r8d
             emitByte(0x41);
             emitByte(0xb8);
@@ -1615,13 +1730,14 @@ class Encoder {
             static_cast<uint8_t>((imm32 >> 16) & 0xff),
             static_cast<uint8_t>((imm32 >> 24) & 0xff),
         });
-        asmLine(std::string("mov ") + regName(reg) + ", " + std::to_string(imm32));
+        asmLineAt(at, std::string("mov ") + regName(reg) + ", " + std::to_string(imm32));
     }
     void emitMovRegImm64(uint8_t reg, uint64_t imm64) {
         if (reg == 0) {
             movRaxImm64(imm64);
             return;
         }
+        size_t at   = here();
         uint8_t rex = 0x48;
         uint8_t op  = 0xb8 | (reg & 7);
         if (reg >= 4 && reg <= 7) {
@@ -1653,15 +1769,17 @@ class Encoder {
         });
         std::ostringstream h;
         h << "mov " << regName(reg) << ", 0x" << std::hex << imm64;
-        asmLine(h.str());
+        asmLineAt(at, h.str());
     }
 
     // Windows x64: copy rcx->rdi, rdx->rsi (SysV convention for internal use)
     void prologueWin64() {
+        size_t at1 = here();
         emitBytes({0x48, 0x89, 0xcf}); // mov rdi, rcx
-        asmLine("mov rdi, rcx");
+        asmLineAt(at1, "mov rdi, rcx");
+        size_t at2 = here();
         emitBytes({0x48, 0x89, 0xd6}); // mov rsi, rdx
-        asmLine("mov rsi, rdx");
+        asmLineAt(at2, "mov rsi, rdx");
     }
 
     // Windows x64: call trampoline(frame, ctx, pc). Assumes rdi=frame, rsi=ctx.
@@ -1760,6 +1878,7 @@ class Encoder {
     std::vector<uint8_t> &out_;
     std::ostream *asmOut_ = nullptr;
     size_t baseAddr_      = 0;
+    std::vector<std::pair<size_t, std::string>> asmLines_;
 };
 
 } // namespace camel::jit::x64

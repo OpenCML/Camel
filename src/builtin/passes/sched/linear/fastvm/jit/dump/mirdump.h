@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Feb. 09, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "execute/trans.h"
 
 /**
- * JitRmirDumpPass: 输出 raw MIR（分配前，全部 slot 访问 [rdi+disp]，可读）。
+ * JitRmirDumpPass (std::rmir): 字节码直接编译得到的、基于虚拟寄存器的 MIR，未做优化。
  */
 class JitRmirDumpPass : public GraphTranslatePass {
   public:
@@ -32,7 +32,8 @@ class JitRmirDumpPass : public GraphTranslatePass {
 };
 
 /**
- * JitMirDumpPass: 输出 MIR（分配后，物理寄存器）。
+ * JitMirDumpPass (std::mir): 经过多遍优化后的最终 vreg MIR（优化遍入口在
+ * runMirOptimizationPasses）。
  */
 class JitMirDumpPass : public GraphTranslatePass {
   public:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 09, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -624,7 +624,9 @@ bool X64Backend::compileBytecode(
                 build.emitVLoadFromMemAt(v2, staticSlotAddrWithComment(idxSlot));
             build.emitVCopy(v3, v0); // v3 = w0 (default)
             build.emitVTest(v2);
-            build.emitVCmovnz(v3, v1); // if v2!=0 then v3 = v1
+            build.emitVCmove(
+                v3,
+                v1); // if v2==0 (n>1) then v3 = v1（递归结果）；n≤1 已走第一分支直接返回
             build.emitVStoreToFrame(dr, v3);
             break;
         }
@@ -657,6 +659,32 @@ bool X64Backend::compileBytecode(
         }
         case OpCode::JUMP: {
             size_t target = static_cast<size_t>(bc.fastop[0]);
+            // 若目标是 JOIN 且当前块是 BRCH 的“第一分支”（仅含此 JUMP），直接写回 w0 并跳到 JOIN
+            // 之后，避免经 JOIN 读未初始化的 w1
+            bool isFirstBranchToJoin = false;
+            if (target < pcEnd && base[target].opcode == OpCode::JOIN) {
+                for (size_t p = entryPc; p < pc; p += base[p].opsize) {
+                    if (base[p].opcode == OpCode::BRCH && p + base[p].opsize == pc) {
+                        isFirstBranchToJoin = true;
+                        break;
+                    }
+                }
+            }
+            if (isFirstBranchToJoin) {
+                const Bytecode &joinBc = base[target];
+                if (joinBc.withCnt() >= 1) {
+                    int d0         = slotDisp(joinBc.wargs()[0]);
+                    int dr         = slotDisp(joinBc.result);
+                    x64::VRegId v0 = nextVReg++;
+                    if (joinBc.wargs()[0] > 0)
+                        build.emitVLoadFromFrame(v0, d0);
+                    else
+                        build.emitVLoadFromMemAt(v0, staticSlotAddrWithComment(joinBc.wargs()[0]));
+                    build.emitVStoreToFrame(dr, v0);
+                    build.emitJmpRel32(static_cast<uint32_t>(target + joinBc.opsize));
+                    break;
+                }
+            }
             build.emitJmpRel32(static_cast<uint32_t>(target));
             break;
         }
@@ -692,31 +720,50 @@ bool X64Backend::compileBytecode(
         pc += bc.opsize;
     }
 
-    x64::optimizeMirBuffer(mirBuf);
-
-    // 虚拟寄存器统一分配（对 MIR 中的 V* 指令）
-    VRegAllocation vregAlloc;
-    linearScanVReg(mirBuf, &vregAlloc);
-
-    std::unordered_map<size_t, size_t> pcToOffset;
-    size_t offset = 0;
-    for (const auto &mi : mirBuf) {
-        if (mi.hasPc())
-            pcToOffset[static_cast<size_t>(mi.pc)] = offset;
-        offset += x64::mirSizeBytes(mi);
-    }
-
-    if (unit.mirOut) {
+    // rmir：字节码直接得到的 vreg MIR，未做优化，直接打印并返回
+    if (unit.mirOut && unit.mirSlotOnly) {
+        std::unordered_map<size_t, size_t> pcToOffset;
+        size_t offset = 0;
+        for (const auto &mi : mirBuf) {
+            if (mi.hasPc())
+                pcToOffset[static_cast<size_t>(mi.pc)] = offset;
+            offset += x64::mirSizeBytes(mi);
+        }
         x64::MirPrintOptions opts;
         opts.pcToOffset  = &pcToOffset;
         opts.symbolNames = unit.mirSymbolNames;
         opts.slotNames   = unit.mirSlotNames;
-        opts.vregAlloc   = static_cast<const void *>(&vregAlloc);
+        opts.vregAlloc   = nullptr;
         x64::mirPrint(mirBuf, *unit.mirOut, opts);
-        return true; // 仅打印 MIR，不编码
+        return true;
     }
-    // asm 遍只输出编码后的汇编，不输出 MIR
-    x64::encodeMirBuffer(mirBuf, pcToOffset, code, unit.asmOut, 0, &vregAlloc);
+
+    // 多遍优化（当前仅 Win64 冗余 mov 等，后续可扩展 CSE、死代码删除等）
+    x64::runMirOptimizationPasses(mirBuf);
+
+    // mir：优化后的 vreg MIR，打印并返回（不分配、不编码）
+    if (unit.mirOut) {
+        std::unordered_map<size_t, size_t> pcToOffset;
+        size_t offset = 0;
+        for (const auto &mi : mirBuf) {
+            if (mi.hasPc())
+                pcToOffset[static_cast<size_t>(mi.pc)] = offset;
+            offset += x64::mirSizeBytes(mi);
+        }
+        x64::MirPrintOptions opts;
+        opts.pcToOffset  = &pcToOffset;
+        opts.symbolNames = unit.mirSymbolNames;
+        opts.slotNames   = unit.mirSlotNames;
+        opts.vregAlloc   = nullptr;
+        x64::mirPrint(mirBuf, *unit.mirOut, opts);
+        return true;
+    }
+
+    // asm：优化后 MIR → 寄存器分配 + 指令派发 → 汇编/机器码（跳转目标在 encodeMirBuffer 内由 MIR
+    // 下标解析）
+    VRegAllocation vregAlloc;
+    linearScanVReg(mirBuf, &vregAlloc);
+    x64::encodeMirBuffer(mirBuf, code, unit.asmOut, 0, &vregAlloc);
     return true;
 }
 

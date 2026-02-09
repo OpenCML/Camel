@@ -29,10 +29,18 @@ void optimizeWin64RedundantArgSetup(MirBuffer &buf);
 // 删除 no-op：mov rax, rax（MovRegFromRax(0)）
 void optimizeRemoveNoopMovRaxRax(MirBuffer &buf);
 
-// 入口：可在此串联多个 pass，便于后续加死代码删除、peephole 等
+// 单遍：Win64 冗余 mov + noop 删除
 inline void optimizeMirBuffer(MirBuffer &buf) {
     optimizeWin64RedundantArgSetup(buf);
     optimizeRemoveNoopMovRaxRax(buf);
+}
+
+// 多遍优化入口：当前仅 optimizeMirBuffer，后续可在此串联 CSE、死代码删除、peephole 等
+inline void runMirOptimizationPasses(MirBuffer &buf) {
+    optimizeMirBuffer(buf);
+    // TODO: 更多优化遍，例如：
+    // optimizeMirCse(buf);
+    // optimizeMirDeadCode(buf);
 }
 
 } // namespace camel::jit::x64

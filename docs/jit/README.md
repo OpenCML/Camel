@@ -11,7 +11,7 @@
 
 ```bash
 camel test/run/linear/fib.cml std::inline std::lbc   # 链接后字节码
-camel test/run/linear/fib.cml std::inline std::rmir  # JIT MIR（带 pc/槽注释，优化+regalloc 后）
-camel test/run/linear/fib.cml std::inline std::asm   # JIT 汇编（最终机器码对应汇编）
-camel test/run/linear/fib.cml std::inline std::mir   # JIT MIR（优化后，不生成机器码）
+camel test/run/linear/fib.cml std::inline std::rmir  # 字节码直接编译得到的 vreg MIR（未优化）
+camel test/run/linear/fib.cml std::inline std::mir   # 多遍优化后的 vreg MIR（优化遍入口：runMirOptimizationPasses）
+camel test/run/linear/fib.cml std::inline std::asm   # 优化后 MIR 经寄存器分配 + 指令派发得到的汇编
 ```
