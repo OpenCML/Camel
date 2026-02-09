@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,7 @@
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
 #include "builtin/passes/sched/linear/fastvm/jit/asmdump.h"
 #include "builtin/passes/sched/linear/fastvm/jit/bindump.h"
+#include "builtin/passes/sched/linear/fastvm/jit/mirdump.h"
 #include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
 #include "builtin/passes/trans/dot/graphviz.h"
@@ -137,17 +138,21 @@ PassScopePtr initPassScope() {
                     {"fastvm",
                      def(PASS(FastVMSchedPass),
                          {
+                             {"bytecode", def(PASS(BytecodeDumpPass))},
+                             {"linked_bytecode", def(PASS(LinkedBytecodeDumpPass))},
                              {"jit",
                               def(PASS1(FastVMSchedPass, FastVMConfig{.enableJit = true}),
                                   {
-                                      {"bindump", def(PASS(JitBinaryDumpPass))},
-                                      {"asmdump", def(PASS(JitAsmDumpPass))},
+                                      {"dump",
+                                       scope({
+                                           {"asm", def(PASS(JitAsmDumpPass))},
+                                           {"bin", def(PASS(JitBinaryDumpPass))},
+                                           {"mir", def(PASS(JitMirDumpPass))},
+                                       })},
                                   })},
                          })},
                     {"inline", def(PASS(InlineRewritePass))},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
-                    {"bytecode", def(PASS(BytecodeDumpPass))},
-                    {"linked_bytecode", def(PASS(LinkedBytecodeDumpPass))},
                 }),
             },
         }));
@@ -178,10 +183,11 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
     {"std::tns", "std::topo_node_seq"},
-    {"std::bc", "std::bytecode"},
-    {"std::lbc", "std::linked_bytecode"},
-    {"std::bin", "std::fastvm::jit::bindump"},
-    {"std::asm", "std::fastvm::jit::asmdump"},
+    {"std::bc", "std::fastvm::bytecode"},
+    {"std::lbc", "std::fastvm::linked_bytecode"},
+    {"std::bin", "std::fastvm::jit::dump::bin"},
+    {"std::asm", "std::fastvm::jit::dump::asm"},
+    {"std::mir", "std::fastvm::jit::dump::mir"},
 };
 
 } // namespace

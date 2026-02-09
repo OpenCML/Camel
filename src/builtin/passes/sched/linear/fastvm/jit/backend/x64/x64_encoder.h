@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 08, 2026
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,7 +80,13 @@ class Encoder {
 
     static const char *regName(uint8_t r) {
         static const char *n[] = {"rax", "rcx", "rdx", "rbx", "r8", "r9", "r10", "r11"};
-        return n[r & 7];
+        if (r <= 7)
+            return n[r];
+        if (r == 8)
+            return "rdi";
+        if (r == 9)
+            return "rsi";
+        return "?";
     }
 
     // mov reg, [rdi + disp] (reg: 0=rax..7=r11)
@@ -558,6 +564,104 @@ class Encoder {
     void callRax() {
         emitBytes({0xff, 0xd0}); // call rax
         asmLine("call rax");
+    }
+
+    // 通用 mov r64, r64（用于 MIR 编码；reg 0-7=rax..r11，8=rdi，9=rsi）
+    void emitMovRegReg(uint8_t dst, uint8_t src) {
+        auto encReg = [](uint8_t r, uint8_t &rexExtra, uint8_t &modrmBits) {
+            if (r <= 3) {
+                rexExtra  = 0;
+                modrmBits = r;
+                return;
+            }
+            if (r == 8) {
+                rexExtra  = 0;
+                modrmBits = 7;
+                return; // rdi
+            }
+            if (r == 9) {
+                rexExtra  = 0;
+                modrmBits = 6;
+                return; // rsi
+            }
+            rexExtra  = (r >= 4 && r <= 7) ? 1 : 0;
+            modrmBits = (r >= 4 && r <= 7) ? (r - 4) : 0;
+        };
+        uint8_t rexB = 0, rexR = 0, rm = 0, reg = 0;
+        uint8_t e1, e2;
+        encReg(dst, e1, rm);
+        if (dst >= 4 && dst <= 7)
+            rexB = 1;
+        encReg(src, e2, reg);
+        if (src >= 4 && src <= 7)
+            rexR = 4;
+        emitByte(0x48 | rexB | rexR);
+        emitByte(0x89);
+        emitByte(0xC0 | rm | (reg << 3));
+        asmLine(std::string("mov ") + regName(dst) + ", " + regName(src));
+    }
+    void emitMovRegImm32(uint8_t reg, uint32_t imm32) {
+        if (reg == 4) { // r8d
+            emitByte(0x41);
+            emitByte(0xb8);
+        } else if (reg == 1) { // rcx
+            emitByte(0x48);
+            emitByte(0xc7);
+            emitByte(0xc1);
+        } else if (reg == 2) { // rdx
+            emitByte(0x48);
+            emitByte(0xc7);
+            emitByte(0xc2);
+        } else {
+            emitByte(0x48);
+            emitByte(0xc7);
+            emitByte(0xc0 | (reg & 7));
+        }
+        emitBytes({
+            static_cast<uint8_t>(imm32 & 0xff),
+            static_cast<uint8_t>((imm32 >> 8) & 0xff),
+            static_cast<uint8_t>((imm32 >> 16) & 0xff),
+            static_cast<uint8_t>((imm32 >> 24) & 0xff),
+        });
+        asmLine(std::string("mov ") + regName(reg) + ", " + std::to_string(imm32));
+    }
+    void emitMovRegImm64(uint8_t reg, uint64_t imm64) {
+        if (reg == 0) {
+            movRaxImm64(imm64);
+            return;
+        }
+        uint8_t rex = 0x48;
+        uint8_t op  = 0xb8 | (reg & 7);
+        if (reg >= 4 && reg <= 7) {
+            rex = 0x49;
+            op  = 0xb8 | (reg - 4);
+        } else if (reg == 3) {
+            rex = 0x48;
+            op  = 0xbb; // rbx
+        } else if (reg == 1) {
+            op = 0xb9; // rcx
+        } else if (reg == 2) {
+            op = 0xba; // rdx
+        } else if (reg == 8) {
+            op = 0xbf; // rdi
+        } else if (reg == 9) {
+            op = 0xbe; // rsi
+        }
+        emitByte(rex);
+        emitByte(op);
+        emitBytes({
+            static_cast<uint8_t>(imm64 & 0xff),
+            static_cast<uint8_t>((imm64 >> 8) & 0xff),
+            static_cast<uint8_t>((imm64 >> 16) & 0xff),
+            static_cast<uint8_t>((imm64 >> 24) & 0xff),
+            static_cast<uint8_t>((imm64 >> 32) & 0xff),
+            static_cast<uint8_t>((imm64 >> 40) & 0xff),
+            static_cast<uint8_t>((imm64 >> 48) & 0xff),
+            static_cast<uint8_t>((imm64 >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov " << regName(reg) << ", 0x" << std::hex << imm64;
+        asmLine(h.str());
     }
 
     // Windows x64: copy rcx->rdi, rdx->rsi (SysV convention for internal use)

@@ -24,12 +24,17 @@
 ```
 src/builtin/passes/sched/linear/fastvm/jit/
 ├── jit.h / jit_config.h      # 聚合入口、JitPolicy、JitConfig
+├── mir/                      # MIR 层（与 backend 并列的中端）
+│   ├── mir.h / mir.cpp       # 机器级 IR 定义、mirToString/mirPrint/mirSizeBytes
+│   ├── mir_builder.h         # MirBuilder：字节码→MIR buffer
+│   ├── mir_optimize.h/cpp    # 优化 pass（如 Win64 冗余 mov 删除）
+│   └── mir_encode.h/cpp      # MIR→字节（当前为 x64，依赖 backend/x64 Encoder）
 ├── backend/
 │   ├── backend.h             # CompilationUnit、CompiledCode、IJitBackend、JitEntryFn
 │   ├── backend.cpp           # createBackend → X64Backend / FallbackBackend
 │   ├── fallback.h            # FallbackBackend（compile/load 返回空）
 │   └── x64/
-│       ├── x64_backend.h/cpp # compileBytecode、load/unload、slotDisp
+│       ├── x64_backend.h/cpp # compileBytecode：构建 MIR → 优化 → 编码
 │       └── x64_encoder.h     # Encoder：x64 机器码编码（无独立 .cpp）
 ├── regalloc/
 │   ├── regalloc.h            # AllocationResult、linearScanAllocate

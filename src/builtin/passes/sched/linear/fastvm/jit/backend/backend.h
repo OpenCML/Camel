@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 08, 2026
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,7 @@
 #include "core/rtdata/data.h"
 
 #include <ostream>
+#include <unordered_map>
 
 namespace camel::jit {
 
@@ -44,6 +45,10 @@ struct CompilationUnit {
     void *trampolineTail = nullptr; // TAIL trampoline
     void *trampolineOper = nullptr; // OPER trampoline
     std::ostream *asmOut = nullptr; // 若设置，编译时输出汇编指令
+    std::ostream *mirOut = nullptr; // 若设置，仅输出 MIR 后返回（不编码机器码）
+    // MIR 可读打印：地址/常量 -> 符号名（如 trampolineFunc）；disp -> 槽位名（如 "n"）
+    const std::unordered_map<uint64_t, std::string> *mirSymbolNames = nullptr;
+    const std::unordered_map<int, std::string> *mirSlotNames        = nullptr;
 };
 
 struct RelocInfo {
