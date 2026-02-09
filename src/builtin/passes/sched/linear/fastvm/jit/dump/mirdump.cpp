@@ -31,10 +31,11 @@
 
 using namespace GraphIR;
 
-graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
+static graph_ptr_t applyMirDump(
+    const context_ptr_t &context, GraphIR::graph_ptr_t &graph, std::ostream &os, bool slotOnly) {
     const auto &[bytecodes, _, offsetMap] = compileAndLink(
-        context_,
+        context,
         graph.get(),
         {
             .enableTailCallDetection = true,
@@ -53,14 +54,16 @@ graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
     std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
     std::unordered_map<uint64_t, std::string> mirSymbolNames;
-    mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)] = "trampolineFunc";
-    mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineTail)] = "trampolineTail";
-    mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)] = "trampolineOper";
 
     for (const auto &[g, entryPc] : offsetMap) {
         FrameMeta *meta = g->getExtra<FrameMeta, 0>();
         if (!meta)
             meta = installFrameMetaInfoForGraph(g);
+
+        mirSymbolNames.clear();
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)] = "trampolineFunc";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineTail)] = "trampolineTail";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)] = "trampolineOper";
 
         camel::jit::CompilationUnit unit{
             .graph          = g,
@@ -72,22 +75,37 @@ graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
             .asmOut         = nullptr,
             .mirOut         = &os,
+            .mirSlotOnly    = slotOnly,
             .mirSymbolNames = &mirSymbolNames,
-            .mirSlotNames   = nullptr, // 可选：disp -> 槽位名，需从 graph/FrameMeta 解析
+            .mirSlotNames   = nullptr,
         };
 
         os << "\n" << g->mangledName() << ":\n";
         std::string failureReason;
-        auto compiled = backend->compile(unit, &failureReason);
-        if (!compiled) {
+        if (!backend->compile(unit, &failureReason)) {
             os << "  [compile failed] " << (failureReason.empty() ? "(unknown)" : failureReason)
                << "\n\n";
             continue;
         }
         os << "\n";
     }
-
     return Graph::null();
+}
+#endif
+
+graph_ptr_t JitRmirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+#if ENABLE_FASTVM_JIT
+    return applyMirDump(context_, graph, os, true);
+#else
+    (void)graph;
+    os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump rmir.\n";
+    return Graph::null();
+#endif
+}
+
+graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+#if ENABLE_FASTVM_JIT
+    return applyMirDump(context_, graph, os, false);
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump MIR.\n";

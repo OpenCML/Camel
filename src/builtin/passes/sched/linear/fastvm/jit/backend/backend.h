@@ -46,6 +46,7 @@ struct CompilationUnit {
     void *trampolineOper = nullptr; // OPER trampoline
     std::ostream *asmOut = nullptr; // 若设置，编译时输出汇编指令
     std::ostream *mirOut = nullptr; // 若设置，仅输出 MIR 后返回（不编码机器码）
+    bool mirSlotOnly = false; // 若 true，MIR 阶段全部按 slot 访问（不分配寄存器），便于可读 dump
     // MIR 可读打印：地址/常量 -> 符号名（如 trampolineFunc、static slot -1）；disp -> 槽位名（如
     // "n"） 当 mirOut 非空时，backend 可向 mirSymbolNames 写入静态槽注释（调用方传非 const 指针）
     std::unordered_map<uint64_t, std::string> *mirSymbolNames = nullptr;

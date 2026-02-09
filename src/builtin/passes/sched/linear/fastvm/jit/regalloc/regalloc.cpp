@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -269,6 +269,20 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
         }
     }
 
+    return result;
+}
+
+AllocationResult
+makeAllSpilledAlloc(std::span<const Bytecode> bytecodes, size_t entryPc, size_t pcEnd) {
+    std::vector<size_t> firstDef, lastUse;
+    const Bytecode *base = bytecodes.data();
+    for (size_t pc = entryPc; pc < pcEnd;) {
+        const Bytecode &bc = base[pc];
+        collectDefUse(bc, pc, firstDef, lastUse);
+        pc += bc.opsize;
+    }
+    AllocationResult result;
+    result.slotToReg.resize(firstDef.size(), kSpilled);
     return result;
 }
 

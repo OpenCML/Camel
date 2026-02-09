@@ -22,13 +22,21 @@
 #include "execute/trans.h"
 
 /**
- * JitMirDumpPass: 对所有图尝试 JIT 编译，仅输出优化后的 MIR（不生成机器码）。
- * 用于调试与查看字节码→MIR 的翻译结果。
+ * JitRmirDumpPass: 输出 raw MIR（分配前，全部 slot 访问 [rdi+disp]，可读）。
+ */
+class JitRmirDumpPass : public GraphTranslatePass {
+  public:
+    JitRmirDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    virtual ~JitRmirDumpPass() = default;
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+};
+
+/**
+ * JitMirDumpPass: 输出 MIR（分配后，物理寄存器）。
  */
 class JitMirDumpPass : public GraphTranslatePass {
   public:
     JitMirDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
     virtual ~JitMirDumpPass() = default;
-
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };

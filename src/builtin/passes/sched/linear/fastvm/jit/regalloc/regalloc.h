@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,5 +55,11 @@ struct AllocationResult {
  */
 AllocationResult
 linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t pcEnd);
+
+/**
+ * 生成“全部溢出”的分配结果，用于 MIR 可读 dump（所有 slot 均从 [rdi+disp] 访问）
+ */
+AllocationResult
+makeAllSpilledAlloc(std::span<const Bytecode> bytecodes, size_t entryPc, size_t pcEnd);
 
 } // namespace camel::jit

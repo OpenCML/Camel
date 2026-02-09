@@ -136,8 +136,9 @@ bool X64Backend::compileBytecode(
     size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
 
-    // 寄存器分配：线性扫描将 slot 映射到物理寄存器
-    AllocationResult alloc = linearScanAllocate(unit.bytecodes, entryPc, pcEnd);
+    // 寄存器分配：若 mirSlotOnly 则全部溢出，便于可读 MIR dump；否则线性扫描
+    AllocationResult alloc = unit.mirSlotOnly ? makeAllSpilledAlloc(unit.bytecodes, entryPc, pcEnd)
+                                              : linearScanAllocate(unit.bytecodes, entryPc, pcEnd);
 
     EXEC_WHEN_DEBUG(([&]() {
         int inReg = 0, spilled = 0;
@@ -871,13 +872,22 @@ bool X64Backend::compileBytecode(
                     "pc=" + std::to_string(pc) + " BRCH cond slot index must be positive, got " +
                     std::to_string(condIdx));
             int dc    = slotDisp(condIdx);
+            int dr    = slotDisp(bc.result);
             int rc    = alloc.regForSlot(condIdx);
-            size_t t1 = pc + bc.opsize + 1;
-            if (rc >= 0)
+            size_t t0 = pc + bc.opsize;     // true branch (jumpIdx=0)
+            size_t t1 = pc + bc.opsize + 1; // false branch (jumpIdx=1)
+            // 先设 result=1（假定走 false 分支），再根据条件改 0 并跳 true，避免块内相对跳转
+            build.emitMovRegImm32(x64::kRegR8, 1);
+            build.emitMovFrameFromReg(dr, x64::kRegR8);
+            // 条件来自 condIdx（norm[0]）；若已在 rax(0) 则不必 mov rax, rax
+            if (rc > 0)
                 build.emitMovRaxFromReg(static_cast<uint8_t>(rc));
-            else
+            else if (rc < 0)
                 build.emitMovRegFromFrame(x64::kRegRax, dc);
             build.emitTestRaxJzRel32(static_cast<uint32_t>(t1));
+            build.emitMovRegImm32(x64::kRegR8, 0);
+            build.emitMovFrameFromReg(dr, x64::kRegR8);
+            build.emitJmpRel32(static_cast<uint32_t>(t0));
             break;
         }
         case OpCode::JOIN: {

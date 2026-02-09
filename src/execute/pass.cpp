@@ -147,6 +147,7 @@ PassScopePtr initPassScope() {
                                        scope({
                                            {"asm", def(PASS(JitAsmDumpPass))},
                                            {"bin", def(PASS(JitBinaryDumpPass))},
+                                           {"rmir", def(PASS(JitRmirDumpPass))},
                                            {"mir", def(PASS(JitMirDumpPass))},
                                        })},
                                   })},
@@ -187,6 +188,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::lbc", "std::fastvm::linked_bytecode"},
     {"std::bin", "std::fastvm::jit::dump::bin"},
     {"std::asm", "std::fastvm::jit::dump::asm"},
+    {"std::rmir", "std::fastvm::jit::dump::rmir"},
     {"std::mir", "std::fastvm::jit::dump::mir"},
 };
 
