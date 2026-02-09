@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 08, 2026
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,7 +46,9 @@ enum class OpCode : uint8_t {
     OPER,
     SCHD, // 使用 fastop[0] 作为调度策略 ID
 
-    // 常用算子快捷指令（定长）
+    // 常用算子快捷指令（定长）：二元运算/比较，两个操作数均为 slot 索引
+    // fastop[0]、fastop[1]：>0 表示 Frame 槽，<0 表示静态区；result 为结果槽
+    // 算术：result = fastop[0] op fastop[1]；比较：result = (fastop[0] op fastop[1]) ? 1 : 0
     IADD,
     LADD,
     FADD,

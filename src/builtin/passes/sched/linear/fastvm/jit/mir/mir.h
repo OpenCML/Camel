@@ -1,7 +1,23 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
+ * You may use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
  *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Feb. 09, 2026
+ * Updated: Feb. 09, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+/**
  * Machine IR (MIR) 层：与 backend 并列的中端结构。当前实现为 x64 的机器级 IR（线性指令序列），
  * 便于优化与可读打印，并为 L3（基本块/def-use）预留扩展。后续可在此层引入与架构无关的抽象 MIR，
  * 或为其它 target 增加对应 MIR 变体。
@@ -67,8 +83,123 @@ enum class MirOp : uint8_t {
     MovXmm0FromMemAt,
     AddXmm0FromMemAt,
     SubXmm0FromMemAt,
-    // 比较与条件
+    // 比较与条件（Long 两 slot 比较，结果 0/1 入 rax）
     CmpRaxImm8Setle,
+    CmpRaxFrameSetle,
+    CmpRaxMemAtSetle,
+    CmpRaxFrameSetl,
+    CmpRaxMemAtSetl,
+    CmpRaxFrameSetg,
+    CmpRaxMemAtSetg,
+    CmpRaxFrameSete,
+    CmpRaxMemAtSete,
+    CmpRaxFrameSetne,
+    CmpRaxMemAtSetne,
+    CmpRaxFrameSetge,
+    CmpRaxMemAtSetge,
+    // Long 算术
+    MulRaxFromReg,
+    MulRaxFromFrame,
+    MulRaxFromMemAt,
+    IdivRaxByReg,
+    IdivRaxByFrame,
+    IdivRaxByMemAt,
+    // Double 算术
+    MulXmm0FromReg,
+    MulXmm0FromFrame,
+    MulXmm0FromMemAt,
+    DivXmm0FromReg,
+    DivXmm0FromFrame,
+    DivXmm0FromMemAt,
+    // Double 比较：comisd xmm0, op; setcc al; movzx rax, al
+    ComisdXmm0FrameSetb,
+    ComisdXmm0MemAtSetb,
+    ComisdXmm0RegSetb,
+    ComisdXmm0FrameSetbe,
+    ComisdXmm0MemAtSetbe,
+    ComisdXmm0RegSetbe,
+    ComisdXmm0FrameSete,
+    ComisdXmm0MemAtSete,
+    ComisdXmm0RegSete,
+    ComisdXmm0FrameSeta,
+    ComisdXmm0MemAtSeta,
+    ComisdXmm0RegSeta,
+    ComisdXmm0FrameSetae,
+    ComisdXmm0MemAtSetae,
+    ComisdXmm0RegSetae,
+    ComisdXmm0FrameSetnz,
+    ComisdXmm0MemAtSetnz,
+    ComisdXmm0RegSetnz,
+    // 32 位整型 (I*)
+    MovEaxFromFrame,
+    MovEaxFromReg,
+    MovEaxFromMemAt,
+    AddEaxFromFrame,
+    AddEaxFromReg,
+    AddEaxFromMemAt,
+    SubEaxFromFrame,
+    SubEaxFromReg,
+    SubEaxFromMemAt,
+    MulEaxFromFrame,
+    MulEaxFromReg,
+    MulEaxFromMemAt,
+    IdivEaxByFrame,
+    IdivEaxByReg,
+    IdivEaxByMemAt,
+    CmpEaxFrameSetl,
+    CmpEaxMemAtSetl,
+    CmpEaxRegSetl,
+    CmpEaxFrameSetg,
+    CmpEaxMemAtSetg,
+    CmpEaxRegSetg,
+    CmpEaxFrameSete,
+    CmpEaxMemAtSete,
+    CmpEaxRegSete,
+    CmpEaxFrameSetne,
+    CmpEaxMemAtSetne,
+    CmpEaxRegSetne,
+    CmpEaxFrameSetle,
+    CmpEaxMemAtSetle,
+    CmpEaxRegSetle,
+    CmpEaxFrameSetge,
+    CmpEaxMemAtSetge,
+    CmpEaxRegSetge,
+    // 32 位浮点 (F*)
+    MovSsXmm0FromFrame,
+    MovSsXmm0FromReg,
+    MovSsXmm0FromMemAt,
+    AddSsXmm0FromFrame,
+    AddSsXmm0FromReg,
+    AddSsXmm0FromMemAt,
+    SubSsXmm0FromFrame,
+    SubSsXmm0FromReg,
+    SubSsXmm0FromMemAt,
+    MulSsXmm0FromFrame,
+    MulSsXmm0FromReg,
+    MulSsXmm0FromMemAt,
+    DivSsXmm0FromFrame,
+    DivSsXmm0FromReg,
+    DivSsXmm0FromMemAt,
+    MovSsFrameFromXmm0,
+    MovSsRegFromXmm0,
+    ComissXmm0FrameSetb,
+    ComissXmm0MemAtSetb,
+    ComissXmm0RegSetb,
+    ComissXmm0FrameSetbe,
+    ComissXmm0MemAtSetbe,
+    ComissXmm0RegSetbe,
+    ComissXmm0FrameSete,
+    ComissXmm0MemAtSete,
+    ComissXmm0RegSete,
+    ComissXmm0FrameSeta,
+    ComissXmm0MemAtSeta,
+    ComissXmm0RegSeta,
+    ComissXmm0FrameSetae,
+    ComissXmm0MemAtSetae,
+    ComissXmm0RegSetae,
+    ComissXmm0FrameSetnz,
+    ComissXmm0MemAtSetnz,
+    ComissXmm0RegSetnz,
     TestRaxRax,
     TestRaxJzRel32, // targetPc 有效
     CmoveRcxFromRbx,

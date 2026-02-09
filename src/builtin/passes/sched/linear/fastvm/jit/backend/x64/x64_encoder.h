@@ -377,6 +377,702 @@ class Encoder {
         emitBytes({0xf2, 0x0f, 0x5c, 0x03});
         asmLine("subsd xmm0, [rbx]");
     }
+    void mulXmm0FromFrame(int disp) {
+        emitBytes({0xf2, 0x0f, 0x59});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("mulsd xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void mulXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC8 | (regEnc & 7)); // movq xmm1, r64
+        if (regEnc < 4)
+            emitBytes({0x66, 0x48, 0x0f, 0x6e, modrm});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, modrm});
+        asmLine(std::string("movq xmm1, ") + regName(reg));
+        emitBytes({0xf2, 0x0f, 0x59, 0xc1});
+        asmLine("mulsd xmm0, xmm1");
+    }
+    void mulXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        emitBytes({0xf2, 0x0f, 0x59, 0x03});
+        asmLine("mulsd xmm0, [rbx]");
+    }
+    void divXmm0FromFrame(int disp) {
+        emitBytes({0xf2, 0x0f, 0x5e});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("divsd xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void divXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC8 | (regEnc & 7));
+        if (regEnc < 4)
+            emitBytes({0x66, 0x48, 0x0f, 0x6e, modrm});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, modrm});
+        asmLine(std::string("movq xmm1, ") + regName(reg));
+        emitBytes({0xf2, 0x0f, 0x5e, 0xc1});
+        asmLine("divsd xmm0, xmm1");
+    }
+    void divXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        emitBytes({0xf2, 0x0f, 0x5e, 0x03});
+        asmLine("divsd xmm0, [rbx]");
+    }
+    // comisd xmm0, op; setcc al; movzx rax, al（D* 比较，op 在 frame/memat/reg）
+    void comisdXmm0WithFrame(int disp) {
+        emitBytes({0x66, 0x0f, 0x2f});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("comisd xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void comisdXmm0WithMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        emitBytes({0x66, 0x0f, 0x2f, 0x03});
+        asmLine("comisd xmm0, [rbx]");
+    }
+    void comisdXmm0WithReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC8 | (regEnc & 7));
+        if (regEnc < 4)
+            emitBytes({0x66, 0x48, 0x0f, 0x6e, modrm});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, modrm});
+        asmLine(std::string("movq xmm1, ") + regName(reg));
+        emitBytes({0x66, 0x0f, 0x2f, 0xc1});
+        asmLine("comisd xmm0, xmm1");
+    }
+    void setbAlMovzxRax() {
+        emitBytes({0x0f, 0x92, 0xc0});
+        asmLine("setb al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setbeAlMovzxRax() {
+        emitBytes({0x0f, 0x96, 0xc0});
+        asmLine("setbe al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setzAlMovzxRax() {
+        emitBytes({0x0f, 0x94, 0xc0});
+        asmLine("sete al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setaAlMovzxRax() {
+        emitBytes({0x0f, 0x97, 0xc0});
+        asmLine("seta al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setaeAlMovzxRax() {
+        emitBytes({0x0f, 0x93, 0xc0});
+        asmLine("setae al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setnzAlMovzxRax() {
+        emitBytes({0x0f, 0x95, 0xc0});
+        asmLine("setne al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+
+    // --- 32 位整型 (I*)：无 REX.W，操作数 32 位，结果零扩展到 rax ---
+    void movEaxFromFrame(int disp) {
+        if (fitsDisp8(disp)) {
+            emitBytes({0x8b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0x8b, 0x87});
+            emitDisp32(disp);
+        }
+        asmLine("mov eax, [rdi+" + std::to_string(disp) + "]");
+    }
+    void movEaxFromReg(uint8_t reg) {
+        if (reg == 0)
+            return;
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | ((regEnc & 3) << 3));
+        if (regEnc >= 4) {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0x8b, modrm});
+        asmLine(std::string("mov eax, ") + regName(reg));
+    }
+    void movEaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0x8b, 0x03});
+        asmLine("mov eax, [rbx]");
+    }
+    void addEaxFromFrame(int disp) {
+        if (fitsDisp8(disp))
+            emitBytes({0x03, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        else {
+            emitBytes({0x03, 0x87});
+            emitDisp32(disp);
+        }
+        asmLine("add eax, [rdi+" + std::to_string(disp) + "]");
+    }
+    void addEaxFromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | ((regEnc & 3) << 3));
+        if (regEnc >= 4) {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0x01, modrm});
+        asmLine(std::string("add eax, ") + regName(reg));
+    }
+    void addEaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0x03, 0x03});
+        asmLine("add eax, [rbx]");
+    }
+    void subEaxFromFrame(int disp) {
+        if (fitsDisp8(disp))
+            emitBytes({0x2b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        else {
+            emitBytes({0x2b, 0x87});
+            emitDisp32(disp);
+        }
+        asmLine("sub eax, [rdi+" + std::to_string(disp) + "]");
+    }
+    void subEaxFromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | ((regEnc & 3) << 3));
+        if (regEnc >= 4) {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0x29, modrm});
+        asmLine(std::string("sub eax, ") + regName(reg));
+    }
+    void subEaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0x2b, 0x03});
+        asmLine("sub eax, [rbx]");
+    }
+    void mulEaxFromFrame(int disp) {
+        if (fitsDisp8(disp))
+            emitBytes({0x0f, 0xaf, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        else {
+            emitBytes({0x0f, 0xaf, 0x87});
+            emitDisp32(disp);
+        }
+        asmLine("imul eax, [rdi+" + std::to_string(disp) + "]");
+    }
+    void mulEaxFromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
+        if (regEnc >= 4) {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0x0f, 0xaf, modrm});
+        asmLine(std::string("imul eax, ") + regName(reg));
+    }
+    void mulEaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0x0f, 0xaf, 0x03});
+        asmLine("imul eax, [rbx]");
+    }
+    void idivEaxByFrame(int disp) {
+        emitByte(0x99); // cdq
+        asmLine("cdq");
+        if (fitsDisp8(disp))
+            emitBytes({0xf7, 0x7f, static_cast<uint8_t>(disp & 0xff)});
+        else {
+            emitBytes({0xf7, 0xbf});
+            emitDisp32(disp);
+        }
+        asmLine("idiv dword [rdi+" + std::to_string(disp) + "]");
+    }
+    void idivEaxByReg(uint8_t reg) {
+        emitByte(0x99);
+        asmLine("cdq");
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xF8 | (regEnc & 7));
+        if (regEnc >= 4) {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xF8 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0xf7, modrm});
+        asmLine(std::string("idiv ") + regName(reg));
+    }
+    void idivEaxByMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitByte(0x99);
+        asmLine("cdq");
+        emitBytes({0xf7, 0x3b});
+        asmLine("idiv dword [rbx]");
+    }
+    void cmpEaxWithFrame(int disp) {
+        if (fitsDisp8(disp))
+            emitBytes({0x3b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        else {
+            emitBytes({0x3b, 0x87});
+            emitDisp32(disp);
+        }
+        asmLine("cmp eax, [rdi+" + std::to_string(disp) + "]");
+    }
+    void cmpEaxWithMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0x3b, 0x03});
+        asmLine("cmp eax, [rbx]");
+    }
+    void cmpEaxWithReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | ((regEnc & 3) << 3));
+        if (regEnc >= 4) {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0x3b, modrm});
+        asmLine(std::string("cmp eax, ") + regName(reg));
+    }
+    void cmpEaxFrameSetl(int disp) {
+        cmpEaxWithFrame(disp);
+        emitBytes({0x0f, 0x9c, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxFrameSetg(int disp) {
+        cmpEaxWithFrame(disp);
+        emitBytes({0x0f, 0x9f, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxFrameSete(int disp) {
+        cmpEaxWithFrame(disp);
+        emitBytes({0x0f, 0x94, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxFrameSetne(int disp) {
+        cmpEaxWithFrame(disp);
+        emitBytes({0x0f, 0x95, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxFrameSetle(int disp) {
+        cmpEaxWithFrame(disp);
+        emitBytes({0x0f, 0x9e, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxFrameSetge(int disp) {
+        cmpEaxWithFrame(disp);
+        emitBytes({0x0f, 0x9d, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxMemAtSetl(uint64_t addr) {
+        cmpEaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9c, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxMemAtSetg(uint64_t addr) {
+        cmpEaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9f, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxMemAtSete(uint64_t addr) {
+        cmpEaxWithMemAt(addr);
+        emitBytes({0x0f, 0x94, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxMemAtSetne(uint64_t addr) {
+        cmpEaxWithMemAt(addr);
+        emitBytes({0x0f, 0x95, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxMemAtSetle(uint64_t addr) {
+        cmpEaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9e, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxMemAtSetge(uint64_t addr) {
+        cmpEaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9d, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxRegSetl(uint8_t reg) {
+        cmpEaxWithReg(reg);
+        emitBytes({0x0f, 0x9c, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxRegSetg(uint8_t reg) {
+        cmpEaxWithReg(reg);
+        emitBytes({0x0f, 0x9f, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxRegSete(uint8_t reg) {
+        cmpEaxWithReg(reg);
+        emitBytes({0x0f, 0x94, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxRegSetne(uint8_t reg) {
+        cmpEaxWithReg(reg);
+        emitBytes({0x0f, 0x95, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxRegSetle(uint8_t reg) {
+        cmpEaxWithReg(reg);
+        emitBytes({0x0f, 0x9e, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+    void cmpEaxRegSetge(uint8_t reg) {
+        cmpEaxWithReg(reg);
+        emitBytes({0x0f, 0x9d, 0xc0});
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+    }
+
+    // --- 32 位浮点 (F*)：movss/addss/subss/mulss/divss/comiss，一槽仍 8 字节，低 4 字节为 float
+    // ---
+    void movSsXmm0FromFrame(int disp) {
+        emitBytes({0xf3, 0x0f, 0x10});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("movss xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void movSsXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
+        if (regEnc < 4)
+            emitBytes({0x66, 0x0f, 0x6e, modrm});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, static_cast<uint8_t>(0xC0 | (regEnc - 4))});
+        asmLine(std::string("movd xmm0, ") + regName(reg));
+    }
+    void movSsXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0xf3, 0x0f, 0x10, 0x03});
+        asmLine("movss xmm0, [rbx]");
+    }
+    void addSsXmm0FromFrame(int disp) {
+        emitBytes({0xf3, 0x0f, 0x58});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("addss xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void addSsXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        if (regEnc < 4)
+            emitBytes({0x66, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | regEnc)});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | (regEnc - 4))});
+        asmLine(std::string("movd xmm1, ") + regName(reg));
+        emitBytes({0xf3, 0x0f, 0x58, 0xc1});
+        asmLine("addss xmm0, xmm1");
+    }
+    void addSsXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0xf3, 0x0f, 0x58, 0x03});
+        asmLine("addss xmm0, [rbx]");
+    }
+    void subSsXmm0FromFrame(int disp) {
+        emitBytes({0xf3, 0x0f, 0x5c});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("subss xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void subSsXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        if (regEnc < 4)
+            emitBytes({0x66, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | regEnc)});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | (regEnc - 4))});
+        asmLine(std::string("movd xmm1, ") + regName(reg));
+        emitBytes({0xf3, 0x0f, 0x5c, 0xc1});
+        asmLine("subss xmm0, xmm1");
+    }
+    void subSsXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0xf3, 0x0f, 0x5c, 0x03});
+        asmLine("subss xmm0, [rbx]");
+    }
+    void mulSsXmm0FromFrame(int disp) {
+        emitBytes({0xf3, 0x0f, 0x59});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("mulss xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void mulSsXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        if (regEnc < 4)
+            emitBytes({0x66, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | regEnc)});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | (regEnc - 4))});
+        asmLine(std::string("movd xmm1, ") + regName(reg));
+        emitBytes({0xf3, 0x0f, 0x59, 0xc1});
+        asmLine("mulss xmm0, xmm1");
+    }
+    void mulSsXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0xf3, 0x0f, 0x59, 0x03});
+        asmLine("mulss xmm0, [rbx]");
+    }
+    void divSsXmm0FromFrame(int disp) {
+        emitBytes({0xf3, 0x0f, 0x5e});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("divss xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void divSsXmm0FromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        if (regEnc < 4)
+            emitBytes({0x66, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | regEnc)});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | (regEnc - 4))});
+        asmLine(std::string("movd xmm1, ") + regName(reg));
+        emitBytes({0xf3, 0x0f, 0x5e, 0xc1});
+        asmLine("divss xmm0, xmm1");
+    }
+    void divSsXmm0FromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0xf3, 0x0f, 0x5e, 0x03});
+        asmLine("divss xmm0, [rbx]");
+    }
+    void movSsFrameFromXmm0(int disp) {
+        emitBytes({0xf3, 0x0f, 0x11});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("movss [rdi+" + std::to_string(disp) + "], xmm0");
+    }
+    void movSsRegFromXmm0(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
+        if (regEnc < 4)
+            emitBytes({0x66, 0x0f, 0x7e, modrm});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x7e, static_cast<uint8_t>(0xC0 | (regEnc - 4))});
+        asmLine(std::string("movd ") + regName(reg) + ", xmm0");
+    }
+    void comissXmm0WithFrame(int disp) {
+        emitBytes({0x0f, 0x2f});
+        if (fitsDisp8(disp))
+            emitByte(0x47), emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitByte(0x87), emitDisp32(disp);
+        asmLine("comiss xmm0, [rdi+" + std::to_string(disp) + "]");
+    }
+    void comissXmm0WithMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        asmLine("mov rbx, 0x" + std::to_string(addr));
+        emitBytes({0x0f, 0x2f, 0x03});
+        asmLine("comiss xmm0, [rbx]");
+    }
+    void comissXmm0WithReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        if (regEnc < 4)
+            emitBytes({0x66, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | regEnc)});
+        else
+            emitBytes({0x66, 0x49, 0x0f, 0x6e, static_cast<uint8_t>(0xC8 | (regEnc - 4))});
+        asmLine(std::string("movd xmm1, ") + regName(reg));
+        emitBytes({0x0f, 0x2f, 0xc1});
+        asmLine("comiss xmm0, xmm1");
+    }
 
     // double 与 GPR 互转（reg 0..7 = rax..r11，与 regName 一致）
     void movXmm0FromReg(uint8_t reg) {
@@ -437,11 +1133,221 @@ class Encoder {
         asmLine("cmp [rdi+" + std::to_string(disp) + "], " + std::to_string(imm));
     }
 
-    // cmp rax, [rdi + disp8] 64 位比较一槽
+    // cmp rax, [rdi + disp] 64 位比较一槽（disp8 或 disp32）
     void cmpRaxWithFrame(int disp) {
         rexW();
-        emitBytes({0x3b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        if (fitsDisp8(disp)) {
+            emitBytes({0x3b, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0x3b, 0x87});
+            emitDisp32(disp);
+        }
         asmLine("cmp rax, [rdi+" + std::to_string(disp) + "]");
+    }
+
+    // cmp rax, [rdi+disp]; setle al; movzx rax, al（LLE 右操作数在 frame）
+    void cmpRaxFrameSetle(int disp) {
+        cmpRaxWithFrame(disp);
+        emitBytes({0x0f, 0x9e, 0xc0}); // setle al
+        asmLine("setle al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0}); // movzx rax, al
+        asmLine("movzx rax, al");
+    }
+
+    // mov rbx, addr; cmp rax, [rbx]; setle al; movzx rax, al（LLE 右操作数在静态区）
+    void cmpRaxMemAtSetle(uint64_t addr) {
+        cmpRaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9e, 0xc0}); // setle al
+        asmLine("setle al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0}); // movzx rax, al
+        asmLine("movzx rax, al");
+    }
+
+    // cmp rax, [addr]; setcc al; movzx（静态区右操作数），setcc: 0x9c=setl 0x9f=setg 0x94=sete
+    // 0x95=setne 0x9d=setge
+    void cmpRaxWithMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        rexW();
+        emitBytes({0x3b, 0x03}); // cmp rax, [rbx]
+        asmLine("cmp rax, [rbx]");
+    }
+    void cmpRaxFrameSetl(int disp) {
+        cmpRaxWithFrame(disp);
+        emitBytes({0x0f, 0x9c, 0xc0});
+        asmLine("setl al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxMemAtSetl(uint64_t addr) {
+        cmpRaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9c, 0xc0});
+        asmLine("setl al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxFrameSetg(int disp) {
+        cmpRaxWithFrame(disp);
+        emitBytes({0x0f, 0x9f, 0xc0});
+        asmLine("setg al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxMemAtSetg(uint64_t addr) {
+        cmpRaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9f, 0xc0});
+        asmLine("setg al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxFrameSete(int disp) {
+        cmpRaxWithFrame(disp);
+        emitBytes({0x0f, 0x94, 0xc0});
+        asmLine("sete al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxMemAtSete(uint64_t addr) {
+        cmpRaxWithMemAt(addr);
+        emitBytes({0x0f, 0x94, 0xc0});
+        asmLine("sete al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxFrameSetne(int disp) {
+        cmpRaxWithFrame(disp);
+        emitBytes({0x0f, 0x95, 0xc0});
+        asmLine("setne al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxMemAtSetne(uint64_t addr) {
+        cmpRaxWithMemAt(addr);
+        emitBytes({0x0f, 0x95, 0xc0});
+        asmLine("setne al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxFrameSetge(int disp) {
+        cmpRaxWithFrame(disp);
+        emitBytes({0x0f, 0x9d, 0xc0});
+        asmLine("setge al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void cmpRaxMemAtSetge(uint64_t addr) {
+        cmpRaxWithMemAt(addr);
+        emitBytes({0x0f, 0x9d, 0xc0});
+        asmLine("setge al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+
+    // imul rax, r/m64（LMUL）
+    void mulRaxFromReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
+        if (regEnc < 4) {
+            rexW();
+        } else {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xC0 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0x0f, 0xaf, modrm});
+        asmLine(std::string("imul rax, ") + regName(reg));
+    }
+    void mulRaxFromFrame(int disp) {
+        rexW();
+        if (fitsDisp8(disp)) {
+            emitBytes({0x0f, 0xaf, 0x47, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0x0f, 0xaf, 0x87});
+            emitDisp32(disp);
+        }
+        asmLine("imul rax, [rdi+" + std::to_string(disp) + "]");
+    }
+    void mulRaxFromMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        rexW();
+        emitBytes({0x0f, 0xaf, 0x03}); // imul rax, [rbx]
+        asmLine("imul rax, [rbx]");
+    }
+
+    // cqo; idiv r/m64（LDIV，被除数已在 rax）
+    void idivRaxByReg(uint8_t reg) {
+        emitBytes({0x48, 0x99}); // cqo
+        asmLine("cqo");
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xF8 | (regEnc & 7));
+        if (regEnc < 4) {
+            rexW();
+        } else {
+            rexWR();
+            modrm = static_cast<uint8_t>(0xF8 | ((regEnc - 4) << 3));
+        }
+        emitBytes({0xf7, modrm});
+        asmLine(std::string("idiv ") + regName(reg));
+    }
+    void idivRaxByFrame(int disp) {
+        emitBytes({0x48, 0x99});
+        asmLine("cqo");
+        rexW();
+        if (fitsDisp8(disp)) {
+            emitBytes({0xf7, 0x7f, static_cast<uint8_t>(disp & 0xff)});
+        } else {
+            emitBytes({0xf7, 0xbf});
+            emitDisp32(disp);
+        }
+        asmLine("idiv qword [rdi+" + std::to_string(disp) + "]");
+    }
+    void idivRaxByMemAt(uint64_t addr) {
+        emitByte(0x48);
+        emitByte(0xbb);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream h;
+        h << "mov rbx, 0x" << std::hex << addr;
+        asmLine(h.str());
+        emitBytes({0x48, 0x99});
+        asmLine("cqo");
+        rexW();
+        emitBytes({0xf7, 0x3b}); // idiv [rbx]
+        asmLine("idiv qword [rbx]");
     }
 
     // jmp rel32 (到 offset)
